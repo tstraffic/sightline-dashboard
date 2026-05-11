@@ -259,6 +259,26 @@ router.get('/:id/file', (req, res) => {
   return res.download(abs, swms.file_original_name || path.basename(abs));
 });
 
+// POST /swms/:id/archive — flip status to archived (or back to active if already archived).
+// Keeps the row on record but excludes it from the active register at a glance.
+router.post('/:id/archive', (req, res) => {
+  try {
+    const db = getDb();
+    const swms = db.prepare("SELECT * FROM swms WHERE id = ?").get(req.params.id);
+    if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/swms'); }
+    const nextStatus = swms.status === 'archived' ? 'active' : 'archived';
+    db.prepare("UPDATE swms SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(nextStatus, swms.id);
+    try { logActivity({ user: req.session.user, action: nextStatus === 'archived' ? 'archive' : 'restore', entityType: 'swms', entityId: swms.id, entityLabel: swms.title, details: '', ip: req.ip }); } catch (e) {}
+    req.flash('success', nextStatus === 'archived' ? 'SWMS archived.' : 'SWMS restored.');
+    const back = req.get('referer') || '/swms';
+    return res.redirect(back);
+  } catch (err) {
+    console.error('[swms archive]', err);
+    req.flash('error', 'Archive failed.');
+    return res.redirect('/swms');
+  }
+});
+
 // POST /swms/:id/delete
 router.post('/:id/delete', (req, res) => {
   try {
