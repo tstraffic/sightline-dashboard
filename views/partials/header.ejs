@@ -311,6 +311,19 @@
   window.toggleTheme = function() {
     var nowDark = document.body.classList.toggle('dark-glass');
     try { localStorage.setItem('ts-theme-2', nowDark ? 'dark' : 'light'); } catch(e) {}
+    // Re-apply the user's saved gradient + accent when switching back to dark,
+    // strip them when switching to light so light mode is always vanilla.
+    var grad = 'gradient-' + (localStorage.getItem('ts-theme-gradient') || 'midnight');
+    var accent = 'accent-' + (localStorage.getItem('ts-theme-accent') || 'blue');
+    if (nowDark) {
+      document.body.classList.add(grad);
+      document.body.classList.add(accent);
+    } else {
+      // Sweep all gradient-* and accent-* classes off the body.
+      document.body.className = document.body.className.split(/\s+/).filter(function(c){
+        return !/^(gradient|accent)-/.test(c);
+      }).join(' ');
+    }
     applyThemeIcons();
   };
 

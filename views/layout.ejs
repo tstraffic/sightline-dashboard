@@ -58,11 +58,27 @@
       }
     }
   </script>
-  <link rel="stylesheet" href="/css/custom.css?v=126">
+  <link rel="stylesheet" href="/css/custom.css?v=127">
   <link rel="stylesheet" href="/css/chat.css?v=3">
   <style>/* Hide Tailwind CDN dev indicator */#__tailwind_indicator,div[style*="z-index: 2147483647"]{display:none!important}</style>
-  <!-- Remove dark-glass early if user explicitly chose light mode -->
-  <script>(function(){try{if(localStorage.getItem('ts-theme-2')==='light'){document.addEventListener('DOMContentLoaded',function(){document.body.classList.remove('dark-glass');});}}catch(e){}})();</script>
+  <!-- Apply user theme prefs (mode + gradient + accent) as early as possible
+       so the page doesn't flash with the wrong gradient. Runs on DOMContentLoaded
+       since <body> isn't ready before this script. Light mode is intentionally
+       unaffected by gradient/accent classes. -->
+  <script>(function(){try{
+    var mode = localStorage.getItem('ts-theme-2');
+    var grad = localStorage.getItem('ts-theme-gradient') || 'midnight';
+    var accent = localStorage.getItem('ts-theme-accent') || 'blue';
+    document.addEventListener('DOMContentLoaded', function(){
+      var b = document.body;
+      if (mode === 'light') b.classList.remove('dark-glass');
+      // Only apply gradient/accent classes when dark mode is active.
+      if (b.classList.contains('dark-glass')) {
+        b.classList.add('gradient-' + grad);
+        b.classList.add('accent-' + accent);
+      }
+    });
+  }catch(e){}})();</script>
 </head>
 <body class="h-full text-gray-900 font-sans antialiased dark-glass">
   <div class="flex h-full">

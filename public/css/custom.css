@@ -3473,3 +3473,176 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
   border-color: rgba(255,255,255,0.1);
   border-top-color: #60a5fa;
 }
+
+/* ===========================================================================
+   USER THEME CUSTOMISATION (dark mode only)
+   --------------------------------------------------------------------------
+   The user picks a gradient + accent from their profile page. The chosen
+   values are persisted to localStorage (`ts-theme-gradient`, `ts-theme-accent`)
+   and applied as body classes by the early script in layout.ejs.
+
+   Light mode (no `dark-glass` class) is intentionally untouched — these rules
+   are all scoped to `body.dark-glass`.
+   ========================================================================= */
+
+/* --- Gradient variants (background image of <body>) --- */
+/* "midnight" is the default — no override needed; matches the original gradient
+   defined on body.dark-glass above. Keeping it here as an explicit selector
+   means the picker can highlight it without confusion. */
+body.dark-glass.gradient-midnight {
+  background: linear-gradient(135deg, #020817 0%, #0A1628 25%, #0F2847 50%, #0A1628 80%, #020817 100%) !important;
+}
+body.dark-glass.gradient-aurora {
+  background: linear-gradient(135deg, #0B0228 0%, #1A0A47 25%, #0A2A47 50%, #0F2847 80%, #1A0A47 100%) !important;
+}
+body.dark-glass.gradient-sunset {
+  background: linear-gradient(135deg, #1B0810 0%, #2D0E1F 25%, #1A1438 50%, #2D0E1F 80%, #1B0810 100%) !important;
+}
+body.dark-glass.gradient-forest {
+  background: linear-gradient(135deg, #021808 0%, #0A2818 25%, #0F4733 50%, #0A2818 80%, #021808 100%) !important;
+}
+body.dark-glass.gradient-mono {
+  background: linear-gradient(135deg, #0A0A0A 0%, #141414 50%, #0A0A0A 100%) !important;
+}
+body.dark-glass.gradient-ocean {
+  background: linear-gradient(135deg, #021A1F 0%, #0A2A38 25%, #103D4E 50%, #0A2A38 80%, #021A1F 100%) !important;
+}
+body.dark-glass.gradient-plum {
+  background: linear-gradient(135deg, #0F0B1E 0%, #1F1438 25%, #371F4E 50%, #1F1438 80%, #0F0B1E 100%) !important;
+}
+
+/* --- Accent variants (override the brand-X colours used for primary buttons,
+       focus rings, active states, etc., in dark mode only) ---
+
+   The brand palette is baked into Tailwind at page-load and can't be swapped
+   dynamically. Instead we override the most visible brand-X utility classes
+   for the duration of the dark theme + accent class. Light mode stays brand
+   blue. */
+body.dark-glass.accent-blue {
+  /* default — keeps current brand blue */
+}
+
+/* Purple accent */
+body.dark-glass.accent-purple .bg-brand-600 { background-color: #8b5cf6 !important; }
+body.dark-glass.accent-purple .bg-brand-500 { background-color: #a78bfa !important; }
+body.dark-glass.accent-purple .hover\:bg-brand-500:hover { background-color: #a78bfa !important; }
+body.dark-glass.accent-purple .hover\:bg-brand-700:hover { background-color: #7c3aed !important; }
+body.dark-glass.accent-purple .text-brand-600,
+body.dark-glass.accent-purple .text-brand-500,
+body.dark-glass.accent-purple .text-brand-700,
+body.dark-glass.accent-purple .text-brand-400,
+body.dark-glass.accent-purple .text-brand-200 { color: #c4b5fd !important; }
+body.dark-glass.accent-purple .hover\:text-brand-600:hover,
+body.dark-glass.accent-purple .hover\:text-brand-700:hover { color: #ddd6fe !important; }
+body.dark-glass.accent-purple .border-brand-500,
+body.dark-glass.accent-purple .border-brand-600,
+body.dark-glass.accent-purple .border-brand-300,
+body.dark-glass.accent-purple .border-brand-200 { border-color: #a78bfa !important; }
+body.dark-glass.accent-purple .ring-brand-500,
+body.dark-glass.accent-purple .ring-brand-300,
+body.dark-glass.accent-purple .focus\:ring-brand-500:focus,
+body.dark-glass.accent-purple .focus\:ring-brand-200:focus,
+body.dark-glass.accent-purple .focus\:border-brand-500:focus { box-shadow: 0 0 0 2px rgba(167,139,250,0.5) !important; border-color: #a78bfa !important; }
+body.dark-glass.accent-purple .bg-brand-50 { background-color: rgba(167,139,250,0.12) !important; }
+body.dark-glass.accent-purple .bg-brand-100 { background-color: rgba(167,139,250,0.18) !important; }
+body.dark-glass.accent-purple .hover\:bg-brand-50:hover { background-color: rgba(167,139,250,0.18) !important; }
+
+/* Pink / rose accent */
+body.dark-glass.accent-pink .bg-brand-600 { background-color: #ec4899 !important; }
+body.dark-glass.accent-pink .bg-brand-500 { background-color: #f472b6 !important; }
+body.dark-glass.accent-pink .hover\:bg-brand-500:hover { background-color: #f472b6 !important; }
+body.dark-glass.accent-pink .hover\:bg-brand-700:hover { background-color: #db2777 !important; }
+body.dark-glass.accent-pink .text-brand-600,
+body.dark-glass.accent-pink .text-brand-500,
+body.dark-glass.accent-pink .text-brand-700,
+body.dark-glass.accent-pink .text-brand-400,
+body.dark-glass.accent-pink .text-brand-200 { color: #f9a8d4 !important; }
+body.dark-glass.accent-pink .hover\:text-brand-600:hover,
+body.dark-glass.accent-pink .hover\:text-brand-700:hover { color: #fbcfe8 !important; }
+body.dark-glass.accent-pink .border-brand-500,
+body.dark-glass.accent-pink .border-brand-600,
+body.dark-glass.accent-pink .border-brand-300,
+body.dark-glass.accent-pink .border-brand-200 { border-color: #f472b6 !important; }
+body.dark-glass.accent-pink .ring-brand-500,
+body.dark-glass.accent-pink .ring-brand-300,
+body.dark-glass.accent-pink .focus\:ring-brand-500:focus,
+body.dark-glass.accent-pink .focus\:ring-brand-200:focus,
+body.dark-glass.accent-pink .focus\:border-brand-500:focus { box-shadow: 0 0 0 2px rgba(244,114,182,0.5) !important; border-color: #f472b6 !important; }
+body.dark-glass.accent-pink .bg-brand-50 { background-color: rgba(244,114,182,0.12) !important; }
+body.dark-glass.accent-pink .bg-brand-100 { background-color: rgba(244,114,182,0.18) !important; }
+body.dark-glass.accent-pink .hover\:bg-brand-50:hover { background-color: rgba(244,114,182,0.18) !important; }
+
+/* Emerald / green accent */
+body.dark-glass.accent-emerald .bg-brand-600 { background-color: #059669 !important; }
+body.dark-glass.accent-emerald .bg-brand-500 { background-color: #10b981 !important; }
+body.dark-glass.accent-emerald .hover\:bg-brand-500:hover { background-color: #10b981 !important; }
+body.dark-glass.accent-emerald .hover\:bg-brand-700:hover { background-color: #047857 !important; }
+body.dark-glass.accent-emerald .text-brand-600,
+body.dark-glass.accent-emerald .text-brand-500,
+body.dark-glass.accent-emerald .text-brand-700,
+body.dark-glass.accent-emerald .text-brand-400,
+body.dark-glass.accent-emerald .text-brand-200 { color: #6ee7b7 !important; }
+body.dark-glass.accent-emerald .hover\:text-brand-600:hover,
+body.dark-glass.accent-emerald .hover\:text-brand-700:hover { color: #a7f3d0 !important; }
+body.dark-glass.accent-emerald .border-brand-500,
+body.dark-glass.accent-emerald .border-brand-600,
+body.dark-glass.accent-emerald .border-brand-300,
+body.dark-glass.accent-emerald .border-brand-200 { border-color: #10b981 !important; }
+body.dark-glass.accent-emerald .ring-brand-500,
+body.dark-glass.accent-emerald .ring-brand-300,
+body.dark-glass.accent-emerald .focus\:ring-brand-500:focus,
+body.dark-glass.accent-emerald .focus\:ring-brand-200:focus,
+body.dark-glass.accent-emerald .focus\:border-brand-500:focus { box-shadow: 0 0 0 2px rgba(16,185,129,0.5) !important; border-color: #10b981 !important; }
+body.dark-glass.accent-emerald .bg-brand-50 { background-color: rgba(16,185,129,0.12) !important; }
+body.dark-glass.accent-emerald .bg-brand-100 { background-color: rgba(16,185,129,0.18) !important; }
+body.dark-glass.accent-emerald .hover\:bg-brand-50:hover { background-color: rgba(16,185,129,0.18) !important; }
+
+/* Amber accent */
+body.dark-glass.accent-amber .bg-brand-600 { background-color: #d97706 !important; }
+body.dark-glass.accent-amber .bg-brand-500 { background-color: #f59e0b !important; }
+body.dark-glass.accent-amber .hover\:bg-brand-500:hover { background-color: #f59e0b !important; }
+body.dark-glass.accent-amber .hover\:bg-brand-700:hover { background-color: #b45309 !important; }
+body.dark-glass.accent-amber .text-brand-600,
+body.dark-glass.accent-amber .text-brand-500,
+body.dark-glass.accent-amber .text-brand-700,
+body.dark-glass.accent-amber .text-brand-400,
+body.dark-glass.accent-amber .text-brand-200 { color: #fcd34d !important; }
+body.dark-glass.accent-amber .hover\:text-brand-600:hover,
+body.dark-glass.accent-amber .hover\:text-brand-700:hover { color: #fde68a !important; }
+body.dark-glass.accent-amber .border-brand-500,
+body.dark-glass.accent-amber .border-brand-600,
+body.dark-glass.accent-amber .border-brand-300,
+body.dark-glass.accent-amber .border-brand-200 { border-color: #f59e0b !important; }
+body.dark-glass.accent-amber .ring-brand-500,
+body.dark-glass.accent-amber .ring-brand-300,
+body.dark-glass.accent-amber .focus\:ring-brand-500:focus,
+body.dark-glass.accent-amber .focus\:ring-brand-200:focus,
+body.dark-glass.accent-amber .focus\:border-brand-500:focus { box-shadow: 0 0 0 2px rgba(245,158,11,0.5) !important; border-color: #f59e0b !important; }
+body.dark-glass.accent-amber .bg-brand-50 { background-color: rgba(245,158,11,0.12) !important; }
+body.dark-glass.accent-amber .bg-brand-100 { background-color: rgba(245,158,11,0.18) !important; }
+body.dark-glass.accent-amber .hover\:bg-brand-50:hover { background-color: rgba(245,158,11,0.18) !important; }
+
+/* Cyan accent */
+body.dark-glass.accent-cyan .bg-brand-600 { background-color: #0891b2 !important; }
+body.dark-glass.accent-cyan .bg-brand-500 { background-color: #06b6d4 !important; }
+body.dark-glass.accent-cyan .hover\:bg-brand-500:hover { background-color: #06b6d4 !important; }
+body.dark-glass.accent-cyan .hover\:bg-brand-700:hover { background-color: #0e7490 !important; }
+body.dark-glass.accent-cyan .text-brand-600,
+body.dark-glass.accent-cyan .text-brand-500,
+body.dark-glass.accent-cyan .text-brand-700,
+body.dark-glass.accent-cyan .text-brand-400,
+body.dark-glass.accent-cyan .text-brand-200 { color: #67e8f9 !important; }
+body.dark-glass.accent-cyan .hover\:text-brand-600:hover,
+body.dark-glass.accent-cyan .hover\:text-brand-700:hover { color: #a5f3fc !important; }
+body.dark-glass.accent-cyan .border-brand-500,
+body.dark-glass.accent-cyan .border-brand-600,
+body.dark-glass.accent-cyan .border-brand-300,
+body.dark-glass.accent-cyan .border-brand-200 { border-color: #06b6d4 !important; }
+body.dark-glass.accent-cyan .ring-brand-500,
+body.dark-glass.accent-cyan .ring-brand-300,
+body.dark-glass.accent-cyan .focus\:ring-brand-500:focus,
+body.dark-glass.accent-cyan .focus\:ring-brand-200:focus,
+body.dark-glass.accent-cyan .focus\:border-brand-500:focus { box-shadow: 0 0 0 2px rgba(6,182,212,0.5) !important; border-color: #06b6d4 !important; }
+body.dark-glass.accent-cyan .bg-brand-50 { background-color: rgba(6,182,212,0.12) !important; }
+body.dark-glass.accent-cyan .bg-brand-100 { background-color: rgba(6,182,212,0.18) !important; }
+body.dark-glass.accent-cyan .hover\:bg-brand-50:hover { background-color: rgba(6,182,212,0.18) !important; }
