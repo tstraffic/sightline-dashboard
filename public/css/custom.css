@@ -3716,65 +3716,39 @@ body.dark-glass.accent-cyan    #sidebar .text-brand-300 { color: rgba(165,243,25
 body.dark-glass.accent-cyan    #sidebar .text-brand-400 { color: rgba(165,243,252,0.50) !important; }
 body.dark-glass.accent-cyan    #sidebar .text-brand-400\/45 { color: rgba(165,243,252,0.35) !important; }
 
-/* --- Hero banner gradient matches the body theme ---
-   The dashboard hero (.hero-banner) ships as a fixed brand-blue gradient.
-   Each theme override uses three stacked images for depth:
-     1. A radial glow in the top-right (lighter, complementary hue)
-     2. A second radial glow in the bottom-left (deeper complementary hue)
-     3. A diagonal linear base in the family's natural ramp
-   Saturated, multi-hue, with edge falloff so the hero reads like a real
-   piece of UI instead of a flat sheet of colour.
+/* --- Hero banner (neutral dark slate, accent-tinted glow) ---
+   The hero used to recolour wholesale with each theme — under saturated
+   gradients (plum, sunset, ocean) the right side blew out into a very
+   bright wash. Replace those per-theme overrides with ONE neutral slate
+   base shared by every dark theme, plus a small accent-coloured glow
+   driven by the accent CSS variables. The colour identity comes from the
+   tinted glow + the text labels (already accent-aware), not from the
+   whole hero being one colour.
 
    Light mode is intentionally untouched. */
-body.dark-glass.gradient-midnight .hero-banner {
+body.dark-glass .hero-banner {
   background:
-    radial-gradient(ellipse 70% 90% at 100% 0%, rgba(56,189,248,0.30), transparent 60%),
-    radial-gradient(ellipse 55% 70% at 0% 100%, rgba(99,102,241,0.28), transparent 65%),
-    linear-gradient(135deg, #0B1F4D 0%, #1E40AF 45%, #2563EB 100%) !important;
-}
-body.dark-glass.gradient-aurora .hero-banner {
-  background:
-    radial-gradient(ellipse 70% 90% at 100% 0%, rgba(232,121,249,0.35), transparent 60%),
-    radial-gradient(ellipse 55% 70% at 0% 100%, rgba(99,102,241,0.30), transparent 65%),
-    linear-gradient(135deg, #2E1065 0%, #5B21B6 45%, #7C3AED 100%) !important;
-}
-body.dark-glass.gradient-sunset .hero-banner {
-  background:
-    radial-gradient(ellipse 70% 90% at 100% 0%, rgba(251,146,60,0.38), transparent 60%),
-    radial-gradient(ellipse 55% 70% at 0% 100%, rgba(244,63,94,0.30), transparent 65%),
-    linear-gradient(135deg, #4C1D2A 0%, #9F1239 45%, #E11D48 100%) !important;
-}
-body.dark-glass.gradient-forest .hero-banner {
-  background:
-    radial-gradient(ellipse 70% 90% at 100% 0%, rgba(132,204,22,0.30), transparent 60%),
-    radial-gradient(ellipse 55% 70% at 0% 100%, rgba(20,184,166,0.28), transparent 65%),
-    linear-gradient(135deg, #064E3B 0%, #047857 45%, #059669 100%) !important;
-}
-body.dark-glass.gradient-ocean .hero-banner {
-  background:
-    radial-gradient(ellipse 70% 90% at 100% 0%, rgba(34,211,238,0.35), transparent 60%),
-    radial-gradient(ellipse 55% 70% at 0% 100%, rgba(59,130,246,0.25), transparent 65%),
-    linear-gradient(135deg, #083344 0%, #0E7490 45%, #0891B2 100%) !important;
-}
-body.dark-glass.gradient-plum .hero-banner {
-  background:
-    radial-gradient(ellipse 70% 90% at 100% 0%, rgba(236,72,153,0.33), transparent 60%),
-    radial-gradient(ellipse 55% 70% at 0% 100%, rgba(168,85,247,0.28), transparent 65%),
-    linear-gradient(135deg, #2E1065 0%, #6B21A8 45%, #9333EA 100%) !important;
-}
-body.dark-glass.gradient-mono .hero-banner {
-  background:
-    radial-gradient(ellipse 70% 90% at 100% 0%, rgba(148,163,184,0.18), transparent 60%),
-    radial-gradient(ellipse 55% 70% at 0% 100%, rgba(71,85,105,0.22), transparent 65%),
-    linear-gradient(135deg, #1F2937 0%, #334155 45%, #475569 100%) !important;
+    radial-gradient(ellipse 60% 80% at 100% 0%, rgba(var(--hero-accent-rgb, 56,189,248), 0.22), transparent 60%),
+    radial-gradient(ellipse 45% 60% at 0% 100%, rgba(255,255,255,0.04), transparent 65%),
+    linear-gradient(135deg, #1E293B 0%, #111827 100%) !important;
 }
 
-/* When the user has picked a custom accent, the white-tinted decorative orbs
-   on the hero get lost on saturated gradients. Boost their opacity a touch
-   so the hero still has the soft highlight detail. */
-body.dark-glass .hero-banner .hero-orb { will-change: transform; }
-body.dark-glass[class*="gradient-"] .hero-banner > .hero-orb:first-of-type {
-  background: radial-gradient(ellipse at center, rgba(255,255,255,0.10), transparent 70%) !important;
+/* Accent-specific glow tint — overrides --hero-accent-rgb so the corner
+   glow matches whichever accent the user picked. Subtle (0.22 alpha) so
+   the hero doesn't get bright again. */
+body.dark-glass.accent-blue    { --hero-accent-rgb: 56,189,248; }
+body.dark-glass.accent-purple  { --hero-accent-rgb: 168,85,247; }
+body.dark-glass.accent-pink    { --hero-accent-rgb: 236,72,153; }
+body.dark-glass.accent-emerald { --hero-accent-rgb: 16,185,129; }
+body.dark-glass.accent-amber   { --hero-accent-rgb: 245,158,11; }
+body.dark-glass.accent-cyan    { --hero-accent-rgb: 6,182,212; }
+/* Custom accent — reuse the user's picked colour for the glow too */
+body.dark-glass.accent-custom  { --hero-accent-rgb: var(--accent-rgb); }
+
+/* Decorative orbs on the hero — soften the white-tinted ones so the
+   neutral base reads clean rather than dappled. */
+body.dark-glass .hero-banner > .hero-orb:first-of-type {
+  background: radial-gradient(ellipse at center, rgba(255,255,255,0.06), transparent 70%) !important;
 }
 
 /* Hero accent dots (e.g. .text-brand-300 on the KPI labels) — picked up by
