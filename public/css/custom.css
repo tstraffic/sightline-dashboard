@@ -3654,67 +3654,67 @@ body.dark-glass.accent-cyan .hover\:bg-brand-50:hover { background-color: rgba(6
    page so the sidebar reads as a distinct surface.
 
    Light mode is untouched (no `dark-glass` prefix). */
-body.dark-glass.gradient-midnight #sidebar {
+body.gradient-midnight #sidebar {
   background: linear-gradient(180deg, #020817 0%, #061327 50%, #0A1E3D 100%) !important;
 }
-body.dark-glass.gradient-aurora #sidebar {
+body.gradient-aurora #sidebar {
   background: linear-gradient(180deg, #07021A 0%, #120732 50%, #1F0F4E 100%) !important;
 }
-body.dark-glass.gradient-sunset #sidebar {
+body.gradient-sunset #sidebar {
   background: linear-gradient(180deg, #100408 0%, #1F0817 50%, #2D0F25 100%) !important;
 }
-body.dark-glass.gradient-forest #sidebar {
+body.gradient-forest #sidebar {
   background: linear-gradient(180deg, #010E04 0%, #051A0E 50%, #0B3322 100%) !important;
 }
-body.dark-glass.gradient-ocean #sidebar {
+body.gradient-ocean #sidebar {
   background: linear-gradient(180deg, #010E10 0%, #07232A 50%, #103D4E 100%) !important;
 }
-body.dark-glass.gradient-plum #sidebar {
+body.gradient-plum #sidebar {
   background: linear-gradient(180deg, #07051A 0%, #170E2E 50%, #2A1A47 100%) !important;
 }
-body.dark-glass.gradient-mono #sidebar {
+body.gradient-mono #sidebar {
   background: linear-gradient(180deg, #050505 0%, #0D0D0D 50%, #181818 100%) !important;
 }
 
 /* Mobile sidebar drawer header (top section that shows logo + close button on
    the mobile drawer) uses a separate gradient — match the body gradient at
    the top so the header feels like an extension of the sidebar. */
-body.dark-glass.gradient-aurora #sidebar > div:first-of-type { background: linear-gradient(180deg, #1F0F4E 0%, #120732 100%) !important; }
-body.dark-glass.gradient-sunset #sidebar > div:first-of-type { background: linear-gradient(180deg, #2D0F25 0%, #1F0817 100%) !important; }
-body.dark-glass.gradient-forest #sidebar > div:first-of-type { background: linear-gradient(180deg, #0B3322 0%, #051A0E 100%) !important; }
-body.dark-glass.gradient-ocean  #sidebar > div:first-of-type { background: linear-gradient(180deg, #103D4E 0%, #07232A 100%) !important; }
-body.dark-glass.gradient-plum   #sidebar > div:first-of-type { background: linear-gradient(180deg, #2A1A47 0%, #170E2E 100%) !important; }
-body.dark-glass.gradient-mono   #sidebar > div:first-of-type { background: linear-gradient(180deg, #181818 0%, #0D0D0D 100%) !important; }
+body.gradient-aurora #sidebar > div:first-of-type { background: linear-gradient(180deg, #1F0F4E 0%, #120732 100%) !important; }
+body.gradient-sunset #sidebar > div:first-of-type { background: linear-gradient(180deg, #2D0F25 0%, #1F0817 100%) !important; }
+body.gradient-forest #sidebar > div:first-of-type { background: linear-gradient(180deg, #0B3322 0%, #051A0E 100%) !important; }
+body.gradient-ocean  #sidebar > div:first-of-type { background: linear-gradient(180deg, #103D4E 0%, #07232A 100%) !important; }
+body.gradient-plum   #sidebar > div:first-of-type { background: linear-gradient(180deg, #2A1A47 0%, #170E2E 100%) !important; }
+body.gradient-mono   #sidebar > div:first-of-type { background: linear-gradient(180deg, #181818 0%, #0D0D0D 100%) !important; }
 
 /* --- Sidebar accent tint (active link ring + idle item text) ---
    The sidebar links use `text-brand-200` for the idle state and a Tailwind
    `ring-1 ring-white/10` for the active state. The text-brand-200 stays
    blueish regardless of accent — override it so the sidebar feels cohesive
    with the chosen accent in dark mode. */
-body.dark-glass.accent-purple  #sidebar .text-brand-200 { color: rgba(196,181,253,0.78) !important; }
-body.dark-glass.accent-purple  #sidebar .text-brand-300 { color: rgba(196,181,253,0.62) !important; }
-body.dark-glass.accent-purple  #sidebar .text-brand-400 { color: rgba(196,181,253,0.50) !important; }
-body.dark-glass.accent-purple  #sidebar .text-brand-400\/45 { color: rgba(196,181,253,0.35) !important; }
+body.accent-purple  #sidebar .text-brand-200 { color: rgba(196,181,253,0.78) !important; }
+body.accent-purple  #sidebar .text-brand-300 { color: rgba(196,181,253,0.62) !important; }
+body.accent-purple  #sidebar .text-brand-400 { color: rgba(196,181,253,0.50) !important; }
+body.accent-purple  #sidebar .text-brand-400\/45 { color: rgba(196,181,253,0.35) !important; }
 
-body.dark-glass.accent-pink    #sidebar .text-brand-200 { color: rgba(249,168,212,0.82) !important; }
-body.dark-glass.accent-pink    #sidebar .text-brand-300 { color: rgba(249,168,212,0.65) !important; }
-body.dark-glass.accent-pink    #sidebar .text-brand-400 { color: rgba(249,168,212,0.50) !important; }
-body.dark-glass.accent-pink    #sidebar .text-brand-400\/45 { color: rgba(249,168,212,0.35) !important; }
+body.accent-pink    #sidebar .text-brand-200 { color: rgba(249,168,212,0.82) !important; }
+body.accent-pink    #sidebar .text-brand-300 { color: rgba(249,168,212,0.65) !important; }
+body.accent-pink    #sidebar .text-brand-400 { color: rgba(249,168,212,0.50) !important; }
+body.accent-pink    #sidebar .text-brand-400\/45 { color: rgba(249,168,212,0.35) !important; }
 
-body.dark-glass.accent-emerald #sidebar .text-brand-200 { color: rgba(167,243,208,0.82) !important; }
-body.dark-glass.accent-emerald #sidebar .text-brand-300 { color: rgba(167,243,208,0.65) !important; }
-body.dark-glass.accent-emerald #sidebar .text-brand-400 { color: rgba(167,243,208,0.50) !important; }
-body.dark-glass.accent-emerald #sidebar .text-brand-400\/45 { color: rgba(167,243,208,0.35) !important; }
+body.accent-emerald #sidebar .text-brand-200 { color: rgba(167,243,208,0.82) !important; }
+body.accent-emerald #sidebar .text-brand-300 { color: rgba(167,243,208,0.65) !important; }
+body.accent-emerald #sidebar .text-brand-400 { color: rgba(167,243,208,0.50) !important; }
+body.accent-emerald #sidebar .text-brand-400\/45 { color: rgba(167,243,208,0.35) !important; }
 
-body.dark-glass.accent-amber   #sidebar .text-brand-200 { color: rgba(253,224,71,0.82) !important; }
-body.dark-glass.accent-amber   #sidebar .text-brand-300 { color: rgba(253,224,71,0.65) !important; }
-body.dark-glass.accent-amber   #sidebar .text-brand-400 { color: rgba(253,224,71,0.50) !important; }
-body.dark-glass.accent-amber   #sidebar .text-brand-400\/45 { color: rgba(253,224,71,0.35) !important; }
+body.accent-amber   #sidebar .text-brand-200 { color: rgba(253,224,71,0.82) !important; }
+body.accent-amber   #sidebar .text-brand-300 { color: rgba(253,224,71,0.65) !important; }
+body.accent-amber   #sidebar .text-brand-400 { color: rgba(253,224,71,0.50) !important; }
+body.accent-amber   #sidebar .text-brand-400\/45 { color: rgba(253,224,71,0.35) !important; }
 
-body.dark-glass.accent-cyan    #sidebar .text-brand-200 { color: rgba(165,243,252,0.82) !important; }
-body.dark-glass.accent-cyan    #sidebar .text-brand-300 { color: rgba(165,243,252,0.65) !important; }
-body.dark-glass.accent-cyan    #sidebar .text-brand-400 { color: rgba(165,243,252,0.50) !important; }
-body.dark-glass.accent-cyan    #sidebar .text-brand-400\/45 { color: rgba(165,243,252,0.35) !important; }
+body.accent-cyan    #sidebar .text-brand-200 { color: rgba(165,243,252,0.82) !important; }
+body.accent-cyan    #sidebar .text-brand-300 { color: rgba(165,243,252,0.65) !important; }
+body.accent-cyan    #sidebar .text-brand-400 { color: rgba(165,243,252,0.50) !important; }
+body.accent-cyan    #sidebar .text-brand-400\/45 { color: rgba(165,243,252,0.35) !important; }
 
 /* --- Hero banner — DARK MODE ONLY (light mode keeps its existing brand
    gradient untouched).
@@ -3818,7 +3818,7 @@ body.dark-glass.accent-custom .bg-brand-100 { background-color: rgba(var(--accen
 body.dark-glass.accent-custom .hover\:bg-brand-50:hover { background-color: rgba(var(--accent-rgb), 0.18) !important; }
 
 /* Sidebar text tints under custom accent */
-body.dark-glass.accent-custom #sidebar .text-brand-200,
-body.dark-glass.accent-custom #sidebar .text-brand-300,
-body.dark-glass.accent-custom #sidebar .text-brand-400,
-body.dark-glass.accent-custom #sidebar .text-brand-400\/45 { color: var(--accent-light) !important; }
+body.accent-custom #sidebar .text-brand-200,
+body.accent-custom #sidebar .text-brand-300,
+body.accent-custom #sidebar .text-brand-400,
+body.accent-custom #sidebar .text-brand-400\/45 { color: var(--accent-light) !important; }
