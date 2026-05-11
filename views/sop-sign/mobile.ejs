@@ -2,15 +2,22 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- Allow pinch-zoom on the PDF pages — without this workers can't zoom in
+       to read the fine print on iOS Safari / Android Chrome. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+  <meta name="theme-color" content="#1D6AE5">
   <title>SOP / SWMS Acknowledgement — T&S Traffic Control</title>
+  <link rel="icon" type="image/png" href="/images/logo-colour.png">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>tailwindcss.config={theme:{extend:{colors:{brand:{50:'#EBF3FF',100:'#D6E7FF',200:'#ADC9FF',300:'#85ABFF',400:'#5C8DFF',500:'#2B7FFF',600:'#1D6AE5',700:'#1554CC',800:'#0D3FB2',900:'#052A99',950:'#001A66'}}}}}</script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
-    canvas { touch-action: none; }
+    /* Only the SIGNATURE pad swallows touch events — every other canvas
+       (PDF page renders) must keep normal touch behaviour or the page can't
+       be scrolled past them on mobile. */
     #sig-canvas { touch-action: none; }
+    .pdf-render-target canvas { touch-action: pan-x pan-y pinch-zoom; }
     .ack-text { white-space: pre-wrap; }
     .step-panel { display: none; }
     .step-panel.active { display: block; animation: fadeIn 0.3s ease forwards; }
@@ -24,13 +31,18 @@
     .desc-html strong { font-weight: 700; color: #111827; }
     .desc-html a { color: #1D6AE5; text-decoration: underline; }
     .desc-html h3 { font-weight: 700; color: #111827; margin: 0.75rem 0 0.4rem; font-size: 1rem; }
+    /* T&S brand accent bar at the very top of the page */
+    .brand-bar { background: linear-gradient(90deg, #1554CC 0%, #2B7FFF 50%, #1554CC 100%); }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
+<div class="brand-bar h-1 w-full sticky top-0 z-30"></div>
 
 <% if (submitted) { %>
   <!-- Success screen -->
   <div class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+    <img src="/images/logo-colour.png" alt="T&S Traffic Control"
+         class="h-12 w-auto mb-6" onerror="this.onerror=null;this.src='/images/logo-colour.jpg';" />
     <div class="w-20 h-20 rounded-full bg-emerald-500 flex items-center justify-center mb-6 shadow-lg">
       <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
     </div>
@@ -91,9 +103,10 @@
   <% } %>
 
   <!-- Header -->
-  <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+  <header class="bg-white border-b border-gray-200 sticky top-1 z-10 shadow-sm">
     <div class="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-      <div class="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">T&S</div>
+      <img src="/images/logo-colour.png" alt="T&S Traffic Control"
+           class="h-9 w-auto flex-shrink-0" onerror="this.onerror=null;this.src='/images/logo-colour.jpg';" />
       <div class="flex-1 min-w-0">
         <h1 class="text-sm font-bold text-gray-900 leading-tight">SOP / SWMS Acknowledgement</h1>
         <p class="text-[11px] text-gray-500 truncate"><%= session.title || 'In-person sign-off' %></p>
@@ -410,35 +423,80 @@
       });
     });
 
-    // ── Client-side PDF rendering (renders every page as a canvas) ──
+    // ── Client-side PDF rendering ──
+    // Phones choke on big multi-page PDFs when each page is rendered at full
+    // DPR — memory pressure + main-thread blocking → scrolling janks or the
+    // whole page hangs. Two fixes here:
+    //   1) Cap the effective DPR at ~1.5x (still crisp, ~half the memory).
+    //   2) Render pages lazily via IntersectionObserver — pages below the
+    //      fold render only when scrolled near.
     async function renderPdfClientSide(target) {
       if (!window.pdfjsLib) {
         target.innerHTML = '<p class="text-xs text-red-600 text-center py-4">PDF viewer failed to load. <a href="' + target.dataset.pdfUrl + '" target="_blank" class="underline">Open the PDF directly.</a></p>';
         return;
       }
       const url = target.dataset.pdfUrl;
+      const isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+      const dprCap = isMobile ? 1.5 : 2;
+      const scaleCap = isMobile ? 1.4 : 2;
       try {
         const loadingTask = window.pdfjsLib.getDocument({ url, disableAutoFetch: false, disableStream: false });
         const pdf = await loadingTask.promise;
-        target.innerHTML = ''; // clear loading message
+        target.innerHTML = '';
         const containerWidth = target.clientWidth || 600;
+        const dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+
+        // Create canvas placeholders sized to each page's aspect ratio so the
+        // layout doesn't reflow when pages render in.
+        const pageCanvases = [];
         for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
           const page = await pdf.getPage(pageNum);
           const viewport = page.getViewport({ scale: 1 });
-          const scale = Math.min(2, containerWidth / viewport.width);
+          const scale = Math.min(scaleCap, containerWidth / viewport.width);
           const scaled = page.getViewport({ scale });
           const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          const dpr = window.devicePixelRatio || 1;
           canvas.width = scaled.width * dpr;
           canvas.height = scaled.height * dpr;
           canvas.style.width = '100%';
           canvas.style.height = 'auto';
           canvas.className = 'block w-full rounded-xl border border-gray-200 shadow-sm bg-white';
-          ctx.scale(dpr, dpr);
           target.appendChild(canvas);
-          await page.render({ canvasContext: ctx, viewport: scaled }).promise;
+          pageCanvases.push({ canvas, page, scaled, dpr, rendered: false });
         }
+
+        // Render eagerly only if there's no IntersectionObserver (older
+        // browsers) or for very short PDFs. Otherwise lazy-load.
+        const renderOne = async (entry) => {
+          if (entry.rendered) return;
+          entry.rendered = true;
+          const ctx = entry.canvas.getContext('2d');
+          ctx.scale(entry.dpr, entry.dpr);
+          try { await entry.page.render({ canvasContext: ctx, viewport: entry.scaled }).promise; }
+          catch (e) { console.error('Page render failed:', e); }
+        };
+
+        if (!('IntersectionObserver' in window) || pageCanvases.length <= 3) {
+          for (const entry of pageCanvases) await renderOne(entry);
+          return;
+        }
+
+        const io = new IntersectionObserver((entries) => {
+          entries.forEach(e => {
+            if (!e.isIntersecting) return;
+            const idx = pageCanvases.findIndex(p => p.canvas === e.target);
+            if (idx >= 0) {
+              renderOne(pageCanvases[idx]);
+              // Also pre-render the next page so scrolling stays smooth.
+              if (idx + 1 < pageCanvases.length) renderOne(pageCanvases[idx + 1]);
+              io.unobserve(e.target);
+            }
+          });
+        }, { rootMargin: '400px 0px' });
+
+        pageCanvases.forEach(p => io.observe(p.canvas));
+        // Always render the first page immediately so the worker sees content
+        // before any scrolling happens.
+        await renderOne(pageCanvases[0]);
       } catch (err) {
         console.error('PDF render failed:', err);
         target.innerHTML = '<p class="text-xs text-red-600 text-center py-4">Could not render PDF inline. <a href="' + target.dataset.pdfUrl + '" target="_blank" class="underline">Open the PDF directly.</a></p>';
