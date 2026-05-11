@@ -59,16 +59,25 @@ function loadFormChoices(db) {
   };
 }
 
-// GET /swms — register list (split into Templates + Job-linked sections by default)
+// GET /swms — register list. Two tab views:
+//   • active (default): Templates + Job-linked sections, archived rows hidden
+//   • archived: single combined table of everything archived
 router.get('/', (req, res) => {
   const db = getDb();
   const { status, job_id } = req.query;
-  // The register no longer filters by kind from query — both sections always
-  // render together so "templates vs job-linked" is visually obvious. The
-  // status / job_id filters still apply to both.
+  const view = req.query.view === 'archived' ? 'archived' : 'active';
+
   let where = '1=1';
   const params = [];
-  if (status && STATUS_VALUES.includes(status)) { where += ' AND s.status = ?'; params.push(status); }
+  if (view === 'archived') {
+    where += " AND s.status = 'archived'";
+  } else {
+    where += " AND s.status <> 'archived'";
+    // Status filter (Draft/Active) still applies within the active tab.
+    if (status && STATUS_VALUES.includes(status) && status !== 'archived') {
+      where += ' AND s.status = ?'; params.push(status);
+    }
+  }
   if (job_id) { where += ' AND s.job_id = ?'; params.push(parseInt(job_id, 10) || 0); }
 
   const sql = `
@@ -82,24 +91,28 @@ router.get('/', (req, res) => {
     ORDER BY s.created_at DESC
   `;
   const all = db.prepare(sql).all(...params);
-  const templates = all.filter(r => r.kind === 'template');
-  const jobLinked = all.filter(r => r.kind === 'job');
+  const templates = view === 'active' ? all.filter(r => r.kind === 'template') : [];
+  const jobLinked = view === 'active' ? all.filter(r => r.kind === 'job') : [];
+  const archived = view === 'archived' ? all : [];
 
+  // Expired / expiring counts exclude archived rows — once a SWMS is archived
+  // it's no longer in use, so it can't be overdue.
   const counts = db.prepare(`
     SELECT
       COUNT(*) AS total,
       SUM(CASE WHEN kind = 'template' THEN 1 ELSE 0 END) AS templates,
       SUM(CASE WHEN kind = 'job'      THEN 1 ELSE 0 END) AS job_linked,
-      SUM(CASE WHEN status = 'draft'  THEN 1 ELSE 0 END) AS drafts,
-      SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS active,
-      SUM(CASE WHEN expiry_date IS NOT NULL AND expiry_date < date('now')      THEN 1 ELSE 0 END) AS expired,
-      SUM(CASE WHEN expiry_date IS NOT NULL AND expiry_date BETWEEN date('now') AND date('now','+30 days') THEN 1 ELSE 0 END) AS expiring_soon
+      SUM(CASE WHEN status = 'draft'    THEN 1 ELSE 0 END) AS drafts,
+      SUM(CASE WHEN status = 'active'   THEN 1 ELSE 0 END) AS active,
+      SUM(CASE WHEN status = 'archived' THEN 1 ELSE 0 END) AS archived,
+      SUM(CASE WHEN status <> 'archived' AND expiry_date IS NOT NULL AND expiry_date < date('now')      THEN 1 ELSE 0 END) AS expired,
+      SUM(CASE WHEN status <> 'archived' AND expiry_date IS NOT NULL AND expiry_date BETWEEN date('now') AND date('now','+30 days') THEN 1 ELSE 0 END) AS expiring_soon
     FROM swms
   `).get();
 
   res.render('swms/index', {
     title: 'SWMS Register', currentPage: 'swms',
-    templates, jobLinked, counts,
+    templates, jobLinked, archived, view, counts,
     kindLabels: KIND_LABELS, statusLabels: STATUS_LABELS,
     filters: { status: status || 'all', job_id: job_id || '' },
   });
