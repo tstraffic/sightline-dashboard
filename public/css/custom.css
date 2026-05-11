@@ -3754,3 +3754,39 @@ body.dark-glass.accent-pink    .text-brand-300 { color: #f9a8d4 !important; }
 body.dark-glass.accent-emerald .text-brand-300 { color: #6ee7b7 !important; }
 body.dark-glass.accent-amber   .text-brand-300 { color: #fcd34d !important; }
 body.dark-glass.accent-cyan    .text-brand-300 { color: #67e8f9 !important; }
+
+/* --- CUSTOM accent (driven by CSS variables) ---
+   Activated when the user picks a colour from the wheel in their profile.
+   The early script in layout.ejs sets four CSS custom properties on <body>
+   (--accent-base / --accent-light / --accent-hover / --accent-rgb) so these
+   rules can resolve to the user's chosen colour. */
+body.dark-glass.accent-custom .bg-brand-600 { background-color: var(--accent-base) !important; }
+body.dark-glass.accent-custom .bg-brand-500,
+body.dark-glass.accent-custom .hover\:bg-brand-500:hover { background-color: var(--accent-hover) !important; }
+body.dark-glass.accent-custom .hover\:bg-brand-700:hover { background-color: var(--accent-dark) !important; }
+body.dark-glass.accent-custom .text-brand-600,
+body.dark-glass.accent-custom .text-brand-500,
+body.dark-glass.accent-custom .text-brand-700,
+body.dark-glass.accent-custom .text-brand-400,
+body.dark-glass.accent-custom .text-brand-300,
+body.dark-glass.accent-custom .text-brand-200 { color: var(--accent-light) !important; }
+body.dark-glass.accent-custom .hover\:text-brand-600:hover,
+body.dark-glass.accent-custom .hover\:text-brand-700:hover { color: var(--accent-light) !important; }
+body.dark-glass.accent-custom .border-brand-500,
+body.dark-glass.accent-custom .border-brand-600,
+body.dark-glass.accent-custom .border-brand-300,
+body.dark-glass.accent-custom .border-brand-200 { border-color: var(--accent-base) !important; }
+body.dark-glass.accent-custom .ring-brand-500,
+body.dark-glass.accent-custom .ring-brand-300,
+body.dark-glass.accent-custom .focus\:ring-brand-500:focus,
+body.dark-glass.accent-custom .focus\:ring-brand-200:focus,
+body.dark-glass.accent-custom .focus\:border-brand-500:focus { box-shadow: 0 0 0 2px rgba(var(--accent-rgb), 0.5) !important; border-color: var(--accent-base) !important; }
+body.dark-glass.accent-custom .bg-brand-50 { background-color: rgba(var(--accent-rgb), 0.12) !important; }
+body.dark-glass.accent-custom .bg-brand-100 { background-color: rgba(var(--accent-rgb), 0.18) !important; }
+body.dark-glass.accent-custom .hover\:bg-brand-50:hover { background-color: rgba(var(--accent-rgb), 0.18) !important; }
+
+/* Sidebar text tints under custom accent */
+body.dark-glass.accent-custom #sidebar .text-brand-200,
+body.dark-glass.accent-custom #sidebar .text-brand-300,
+body.dark-glass.accent-custom #sidebar .text-brand-400,
+body.dark-glass.accent-custom #sidebar .text-brand-400\/45 { color: var(--accent-light) !important; }
