@@ -33,16 +33,13 @@ if (typeof Chart !== 'undefined') {
 })();
 
 // ===== Sidebar Scroll Persistence =====
-// Saves sidebar scroll position so it doesn't jump to top on page navigation
+// The RESTORE half of this lives inline in views/partials/sidebar.ejs so it
+// runs synchronously before the browser paints (eliminating the "jump to top
+// then snap back" flash). This block is the SAVE half — runs when app.js
+// loads at end-of-body.
 (function() {
   var nav = document.querySelector('.sidebar-nav');
   if (!nav) return;
-
-  // Restore scroll position on page load
-  var saved = sessionStorage.getItem('sidebar-scroll');
-  if (saved) {
-    nav.scrollTop = parseInt(saved, 10);
-  }
 
   // Save scroll position before navigating away
   window.addEventListener('beforeunload', function() {

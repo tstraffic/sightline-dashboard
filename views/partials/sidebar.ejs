@@ -408,6 +408,16 @@
     <!-- Bottom spacer for safe area + scroll room -->
     <div class="h-20 lg:h-4"></div>
   </nav>
+  <!-- Restore sidebar scroll BEFORE the browser paints. The matching save
+       handler still lives in app.js (loaded later) — putting just the restore
+       here keeps the synchronous fast path tight, and stops the "jump to top
+       then snap back" flash on every navigation. -->
+  <script>(function(){try{
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (!saved) return;
+    var nav = document.querySelector('.sidebar-nav');
+    if (nav) nav.scrollTop = parseInt(saved, 10);
+  }catch(e){}})();</script>
 
   <!-- Mobile sign out — pinned at bottom -->
   <div class="lg:hidden px-4 py-3 border-t border-white/10 bg-brand-950/80 backdrop-blur-sm">
