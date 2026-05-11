@@ -3,48 +3,78 @@
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const monthLabel = monthNames[month - 1] + ' ' + year;
 
-  function fmtDate(s) {
-    if (!s) return '';
-    const d = new Date(s + 'T00:00:00Z');
-    if (isNaN(d.getTime())) return s;
-    return d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'UTC' });
-  }
-
+  // Status pill colour. -100 bg + -700 text both get the dashboard's dark-glass
+  // auto-overrides, so these read cleanly in both themes. Use purple (not
+  // violet — violet has no dark-glass override and renders washed-out).
   function statusColor(status) {
     const s = (status || '').toLowerCase();
-    if (s === 'hired') return 'bg-emerald-100 text-emerald-800';
-    if (s === 'inducted') return 'bg-blue-100 text-blue-800';
-    if (s === 'induction scheduled') return 'bg-violet-100 text-violet-800';
-    if (s === 'contacted') return 'bg-amber-100 text-amber-800';
-    if (s === 'not suitable' || s === 'withdrew' || s === 'no show') return 'bg-gray-200 text-gray-700';
+    if (s === 'hired')               return 'bg-emerald-100 text-emerald-700';
+    if (s === 'inducted')             return 'bg-blue-100 text-blue-700';
+    if (s === 'induction scheduled')  return 'bg-purple-100 text-purple-700';
+    if (s === 'contacted')            return 'bg-amber-100 text-amber-700';
+    if (s === 'not suitable' || s === 'withdrew' || s === 'no show')
+                                      return 'bg-gray-200 text-gray-700';
     return 'bg-gray-100 text-gray-700'; // New
   }
 
-  function bandColor(band) {
-    if (band === 'on') return 'bg-emerald-50 border-emerald-200 text-emerald-900';
-    if (band === 'over') return 'bg-red-50 border-red-200 text-red-900';
-    return 'bg-amber-50 border-amber-200 text-amber-900';
+  // Weekly band: keep -700 text + -200 ring so the dark-glass auto-overrides
+  // make the cards readable in dark mode.
+  function bandCard(band) {
+    if (band === 'on')   return 'bg-emerald-50 ring-emerald-200 text-emerald-700';
+    if (band === 'over') return 'bg-red-50 ring-red-200 text-red-700';
+    return                       'bg-amber-50 ring-amber-200 text-amber-700';
   }
+  function bandDot(band) {
+    if (band === 'on')   return 'bg-emerald-500';
+    if (band === 'over') return 'bg-red-500';
+    return                       'bg-amber-500';
+  }
+  function bandLabel(band) {
+    if (band === 'on')   return 'On target';
+    if (band === 'over') return 'Over';
+    return                       'Under';
+  }
+
+  // Summary cards: each uses a -700 number + neutral label, with a coloured
+  // icon chip. Avoids the dark-on-dark trap that -900 text caused before.
+  const summaryCards = [
+    { k:'total',      label:'Applicants',        icon:'users',     accent:'text-gray-700',     chip:'bg-gray-100 text-gray-700' },
+    { k:'called',     label:'Called',            icon:'phone',     accent:'text-amber-700',    chip:'bg-amber-100 text-amber-700' },
+    { k:'interested', label:'Interested',        icon:'thumb',     accent:'text-purple-700',   chip:'bg-purple-100 text-purple-700' },
+    { k:'booked',     label:'Booked',            icon:'calendar',  accent:'text-blue-700',     chip:'bg-blue-100 text-blue-700' },
+    { k:'hired',      label:'Hired',             icon:'check',     accent:'text-emerald-700',  chip:'bg-emerald-100 text-emerald-700' },
+  ];
 %>
 
-<div class="space-y-5">
+<style>
+  /* Make native date pickers readable in dark mode — without this the calendar
+     icon is invisible and the typed-in text is dark grey on dark grey. */
+  body.dark-glass .recruitment-inline input[type="date"] { color-scheme: dark; color: rgba(255,255,255,0.85); }
+  body.dark-glass .recruitment-inline select { color-scheme: dark; color: rgba(255,255,255,0.92); }
+  .recruitment-inline input[type="date"] { color-scheme: light; }
+  .recruitment-inline select.status-pill { font-weight: 600; }
+  /* Highlight the row when the focused cell is being saved */
+  .recruitment-inline tr.saving { opacity: 0.55; }
+</style>
+
+<div class="space-y-5 recruitment-inline">
 
   <!-- Header -->
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <div>
       <h1 class="text-2xl font-bold text-gray-900">Recruitment</h1>
-      <p class="text-sm text-gray-500 mt-1">Seek applicant call tracker · target <%= targetMin %>–<%= targetMax %> calls/week</p>
+      <p class="text-sm text-gray-500 mt-1">Seek applicant call tracker · target <%= targetMin %>–<%= targetMax %> calls / week</p>
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <form method="GET" action="/induction/admin/recruitment" class="flex items-center gap-2">
         <select name="year" onchange="this.form.submit()"
-          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           <% for (let y = year - 2; y <= year + 1; y++) { %>
             <option value="<%= y %>" <%= y === year ? 'selected' : '' %>><%= y %></option>
           <% } %>
         </select>
         <select name="month" onchange="this.form.submit()"
-          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           <% for (let m = 1; m <= 12; m++) { %>
             <option value="<%= m %>" <%= m === month ? 'selected' : '' %>><%= monthNames[m - 1] %></option>
           <% } %>
@@ -56,7 +86,7 @@
         Export CSV
       </a>
       <button type="button" onclick="document.getElementById('add-applicant-row').classList.toggle('hidden')"
-         class="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition">
+         class="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition shadow-sm">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
         Add applicant
       </button>
@@ -66,39 +96,54 @@
   <%- include('_registry-tabs', { tabActive: 'recruitment' }) %>
 
   <!-- Monthly summary cards -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-    <div class="flex items-baseline justify-between mb-3">
-      <h2 class="text-base font-bold text-gray-900"><%= monthLabel %> · Monthly Summary</h2>
-      <span class="text-xs text-gray-500">Updates live as you log calls</span>
+  <div>
+    <div class="flex items-baseline justify-between mb-2">
+      <h2 class="text-sm font-bold text-gray-700 uppercase tracking-widest"><%= monthLabel %> · Summary</h2>
+      <span class="text-[11px] text-gray-500">Updates live as you log calls</span>
     </div>
-    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
-      <% [
-        { k:'total',      label:'Applicants',  color:'bg-gray-50 text-gray-900 border-gray-200' },
-        { k:'called',     label:'Called',      color:'bg-amber-50 text-amber-900 border-amber-200' },
-        { k:'interested', label:'Interested',  color:'bg-violet-50 text-violet-900 border-violet-200' },
-        { k:'booked',     label:'Induction Booked', color:'bg-blue-50 text-blue-900 border-blue-200' },
-        { k:'hired',      label:'Hired',       color:'bg-emerald-50 text-emerald-900 border-emerald-200' },
-      ].forEach(s => { %>
-        <div class="rounded-xl border p-3 <%= s.color %>">
-          <p class="text-[10px] font-bold uppercase tracking-widest opacity-70"><%= s.label %></p>
-          <p class="text-2xl font-bold mt-1 tabular-nums"><%= stats[s.k] %></p>
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+      <% summaryCards.forEach(s => { %>
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3.5 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 <%= s.chip %>">
+            <% if (s.icon === 'users') { %>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <% } else if (s.icon === 'phone') { %>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
+            <% } else if (s.icon === 'thumb') { %>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 10h4.764a2 2 0 011.789 2.894l-3.5 7A2 2 0 0115.263 21h-4.017c-.163 0-.326-.02-.485-.06L7 20m7-10V5a2 2 0 00-2-2h-.095c-.5 0-.905.405-.905.905 0 .714-.211 1.412-.608 2.006L7 11v9m7-10h-2M7 20H5a2 2 0 01-2-2v-6a2 2 0 012-2h2.5"/></svg>
+            <% } else if (s.icon === 'calendar') { %>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+            <% } else { %>
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <% } %>
+          </div>
+          <div class="min-w-0">
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest"><%= s.label %></p>
+            <p class="text-2xl font-bold tabular-nums <%= s.accent %>"><%= stats[s.k] %></p>
+          </div>
         </div>
       <% }) %>
     </div>
   </div>
 
   <!-- Weekly calls -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-    <div class="flex items-baseline justify-between mb-3">
-      <h2 class="text-base font-bold text-gray-900">Weekly Calls</h2>
-      <span class="text-xs text-gray-500">Target <%= targetMin %>–<%= targetMax %>/week — Green = on target, Yellow = under, Red = over</span>
+  <div>
+    <div class="flex items-baseline justify-between mb-2">
+      <h2 class="text-sm font-bold text-gray-700 uppercase tracking-widest">Weekly Calls</h2>
+      <span class="text-[11px] text-gray-500">Target <%= targetMin %>–<%= targetMax %>/week · <span class="text-emerald-600 font-semibold">on</span> · <span class="text-amber-600 font-semibold">under</span> · <span class="text-red-600 font-semibold">over</span></span>
     </div>
     <div class="grid grid-cols-2 md:grid-cols-<%= weeks.length %> gap-3">
       <% weeks.forEach(w => { %>
-        <div class="rounded-xl border p-3 <%= bandColor(w.band) %>">
-          <p class="text-[10px] font-bold uppercase tracking-widest opacity-70"><%= w.label %></p>
-          <p class="text-[11px] opacity-70"><%= w.range %></p>
-          <p class="text-2xl font-bold mt-1 tabular-nums"><%= w.count %></p>
+        <div class="rounded-xl ring-1 p-3.5 <%= bandCard(w.band) %>">
+          <div class="flex items-center justify-between mb-1">
+            <p class="text-[10px] font-bold uppercase tracking-widest"><%= w.label %></p>
+            <span class="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider">
+              <span class="w-1.5 h-1.5 rounded-full <%= bandDot(w.band) %>"></span>
+              <%= bandLabel(w.band) %>
+            </span>
+          </div>
+          <p class="text-[11px] text-gray-500"><%= w.range %></p>
+          <p class="text-3xl font-bold tabular-nums mt-1"><%= w.count %></p>
         </div>
       <% }) %>
     </div>
@@ -107,156 +152,162 @@
   <!-- Applicants table -->
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
     <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
-      <h2 class="text-sm font-bold text-gray-800"><%= monthLabel %> · Applicants</h2>
+      <div>
+        <h2 class="text-sm font-bold text-gray-800"><%= monthLabel %> · Applicants</h2>
+        <p class="text-[11px] text-gray-500 mt-0.5">Tip: change a date or dropdown directly in the row — it saves automatically. Use Edit for name / phone / email / notes.</p>
+      </div>
       <p class="text-xs text-gray-500"><%= applicants.length %> total</p>
     </div>
 
-    <!-- Add-applicant inline form (hidden by default) -->
-    <div id="add-applicant-row" class="hidden border-b border-gray-100 bg-brand-50/30 p-4">
-      <form method="POST" action="/induction/admin/recruitment?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+    <!-- Add-applicant inline form -->
+    <div id="add-applicant-row" class="hidden border-b border-gray-200 bg-brand-50/40 p-4">
+      <form method="POST" action="/induction/admin/recruitment?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
         <%- include('../../partials/csrf') %>
         <div class="sm:col-span-2">
           <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name <span class="text-red-500">*</span></label>
           <input type="text" name="applicant_name" required placeholder="Full name"
-            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
         </div>
         <div>
           <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
           <input type="text" name="phone" placeholder="04xx xxx xxx"
-            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
         </div>
         <div>
           <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
           <input type="email" name="email" placeholder="name@example.com"
-            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
         </div>
         <div>
           <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Applied</label>
-          <input type="date" name="date_applied" value="<%= year + '-' + String(month).padStart(2,'0') + '-' + String(Math.min(new Date().getDate(), 28)).padStart(2,'0') %>"
-            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+          <input type="date" name="date_applied"
+            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
         </div>
         <div class="sm:col-span-3">
           <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
           <input type="text" name="notes" placeholder="Any context (tickets, availability, etc.)"
-            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
         </div>
         <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
           <button type="button" onclick="document.getElementById('add-applicant-row').classList.add('hidden')"
-            class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded">Cancel</button>
-          <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded">Save</button>
+            class="px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">Cancel</button>
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg shadow-sm">Save applicant</button>
         </div>
       </form>
     </div>
 
     <% if (applicants.length === 0) { %>
-      <div class="p-10 text-center text-gray-400">
-        <p class="font-medium">No applicants logged for <%= monthLabel %> yet</p>
-        <p class="text-sm mt-1">Hit "Add applicant" above to start tracking.</p>
+      <div class="p-12 text-center">
+        <div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
+          <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </div>
+        <p class="text-sm font-semibold text-gray-700">No applicants logged for <%= monthLabel %> yet</p>
+        <p class="text-xs text-gray-500 mt-1">Hit <strong>Add applicant</strong> above to start tracking.</p>
       </div>
     <% } else { %>
       <div class="overflow-x-auto">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 text-[10px] font-bold uppercase tracking-widest text-gray-500">
             <tr>
-              <th class="text-left px-3 py-2 w-8">#</th>
-              <th class="text-left px-3 py-2">Name</th>
-              <th class="text-left px-3 py-2">Phone</th>
-              <th class="text-left px-3 py-2">Date Applied</th>
-              <th class="text-left px-3 py-2">Date Called</th>
-              <th class="text-left px-3 py-2">Called?</th>
-              <th class="text-left px-3 py-2">Interested?</th>
-              <th class="text-left px-3 py-2">Booked?</th>
-              <th class="text-left px-3 py-2">Induction Date</th>
-              <th class="text-left px-3 py-2">Status</th>
-              <th class="text-left px-3 py-2">Notes</th>
-              <th class="text-right px-3 py-2"></th>
+              <th class="text-left px-3 py-2.5 w-8">#</th>
+              <th class="text-left px-3 py-2.5">Name</th>
+              <th class="text-left px-3 py-2.5">Phone</th>
+              <th class="text-left px-3 py-2.5">Applied</th>
+              <th class="text-left px-3 py-2.5">Called</th>
+              <th class="text-left px-3 py-2.5">Called?</th>
+              <th class="text-left px-3 py-2.5">Interested?</th>
+              <th class="text-left px-3 py-2.5">Booked?</th>
+              <th class="text-left px-3 py-2.5">Induction</th>
+              <th class="text-left px-3 py-2.5">Status</th>
+              <th class="text-left px-3 py-2.5 min-w-[160px]">Notes</th>
+              <th class="text-right px-3 py-2.5"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
             <% applicants.forEach((a, i) => { %>
-              <tr class="hover:bg-gray-50/60 align-top">
-                <td class="px-3 py-2 text-gray-400 tabular-nums"><%= i + 1 %></td>
-                <td class="px-3 py-2">
-                  <p class="font-semibold text-gray-900"><%= a.applicant_name %></p>
-                  <p class="text-[11px] text-gray-500"><%= a.email || '' %></p>
+              <tr id="row-<%= a.id %>" class="hover:bg-gray-50/60 align-middle">
+                <td class="px-3 py-2.5 text-gray-400 tabular-nums"><%= i + 1 %></td>
+                <td class="px-3 py-2.5">
+                  <p class="font-semibold text-gray-900 leading-tight"><%= a.applicant_name %></p>
+                  <% if (a.email) { %><p class="text-[11px] text-gray-500 leading-tight"><%= a.email %></p><% } %>
                 </td>
-                <td class="px-3 py-2 text-gray-700 whitespace-nowrap"><%= a.phone || '' %></td>
-                <td class="px-3 py-2 text-gray-700 whitespace-nowrap">
+                <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap tabular-nums"><%= a.phone || '—' %></td>
+                <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">
                   <input type="date" value="<%= a.date_applied || '' %>" data-applicant="<%= a.id %>" data-field="date_applied"
-                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent w-32" />
+                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-36" />
                 </td>
-                <td class="px-3 py-2 text-gray-700 whitespace-nowrap">
+                <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">
                   <input type="date" value="<%= a.date_called || '' %>" data-applicant="<%= a.id %>" data-field="date_called"
-                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent w-32" />
+                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-36" />
                 </td>
-                <td class="px-3 py-2">
+                <td class="px-3 py-2.5">
                   <select data-applicant="<%= a.id %>" data-field="called"
-                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent">
+                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-2 py-1 text-xs">
                     <% calledOpts.forEach(o => { %><option value="<%= o %>" <%= a.called === o ? 'selected' : '' %>><%= o || '—' %></option><% }) %>
                   </select>
                 </td>
-                <td class="px-3 py-2">
+                <td class="px-3 py-2.5">
                   <select data-applicant="<%= a.id %>" data-field="interested"
-                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent">
+                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-2 py-1 text-xs">
                     <% interestedOpts.forEach(o => { %><option value="<%= o %>" <%= a.interested === o ? 'selected' : '' %>><%= o || '—' %></option><% }) %>
                   </select>
                 </td>
-                <td class="px-3 py-2">
+                <td class="px-3 py-2.5">
                   <select data-applicant="<%= a.id %>" data-field="induction_booked"
-                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent">
+                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-2 py-1 text-xs">
                     <% bookedOpts.forEach(o => { %><option value="<%= o %>" <%= a.induction_booked === o ? 'selected' : '' %>><%= o || '—' %></option><% }) %>
                   </select>
                 </td>
-                <td class="px-3 py-2 text-gray-700 whitespace-nowrap">
+                <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">
                   <input type="date" value="<%= a.induction_date || '' %>" data-applicant="<%= a.id %>" data-field="induction_date"
-                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent w-32" />
+                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-36" />
                 </td>
-                <td class="px-3 py-2">
+                <td class="px-3 py-2.5">
                   <select data-applicant="<%= a.id %>" data-field="status"
-                    class="inline-edit px-2 py-1 text-[11px] font-semibold rounded <%= statusColor(a.status) %>">
+                    class="inline-edit status-pill rounded-full px-2.5 py-1 text-[11px] border-0 focus:ring-2 focus:ring-brand-300 <%= statusColor(a.status) %>">
                     <% statuses.forEach(s => { %><option value="<%= s %>" <%= a.status === s ? 'selected' : '' %>><%= s %></option><% }) %>
                   </select>
                 </td>
-                <td class="px-3 py-2 text-gray-700 max-w-xs">
-                  <span class="line-clamp-2 text-xs"><%= a.notes || '' %></span>
+                <td class="px-3 py-2.5 text-gray-700">
+                  <p class="line-clamp-2 text-xs leading-snug"><%= a.notes || '—' %></p>
                 </td>
-                <td class="px-3 py-2 text-right whitespace-nowrap">
+                <td class="px-3 py-2.5 text-right whitespace-nowrap">
                   <button type="button" onclick="document.getElementById('row-edit-<%= a.id %>').classList.toggle('hidden')"
-                    class="px-2 py-1 text-[11px] font-medium text-brand-600 hover:bg-brand-50 rounded">Edit</button>
+                    class="px-2 py-1 text-[11px] font-semibold text-brand-600 hover:bg-brand-50 rounded">Edit</button>
                   <form method="POST" action="/induction/admin/recruitment/<%= a.id %>/delete?year=<%= year %>&month=<%= month %>" class="inline" onsubmit="return confirm('Remove this applicant?')">
                     <%- include('../../partials/csrf') %>
-                    <button type="submit" class="px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 rounded">Delete</button>
+                    <button type="submit" class="px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded">Delete</button>
                   </form>
                 </td>
               </tr>
-              <tr id="row-edit-<%= a.id %>" class="hidden bg-brand-50/30">
-                <td colspan="12" class="px-3 py-3">
-                  <form method="POST" action="/induction/admin/recruitment/<%= a.id %>?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+              <tr id="row-edit-<%= a.id %>" class="hidden bg-brand-50/40">
+                <td colspan="12" class="px-4 py-3">
+                  <form method="POST" action="/induction/admin/recruitment/<%= a.id %>?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                     <%- include('../../partials/csrf') %>
                     <div>
                       <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name</label>
                       <input type="text" name="applicant_name" value="<%= a.applicant_name %>" required
-                        class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
                     </div>
                     <div>
                       <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
                       <input type="text" name="phone" value="<%= a.phone || '' %>"
-                        class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
                     </div>
                     <div class="sm:col-span-2">
                       <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
                       <input type="email" name="email" value="<%= a.email || '' %>"
-                        class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
                     </div>
                     <div class="sm:col-span-4">
                       <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
                       <textarea name="notes" rows="2"
-                        class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"><%= a.notes || '' %></textarea>
+                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= a.notes || '' %></textarea>
                     </div>
                     <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
                       <button type="button" onclick="document.getElementById('row-edit-<%= a.id %>').classList.add('hidden')"
-                        class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded">Cancel</button>
-                      <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded">Save</button>
+                        class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">Cancel</button>
+                      <button type="submit" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg shadow-sm">Save</button>
                     </div>
                   </form>
                 </td>
@@ -268,15 +319,13 @@
     <% } %>
   </div>
 
-  <p class="text-xs text-gray-400 text-center">Tip: change a date or dropdown directly in the row — it saves automatically. Use Edit for name / phone / email / notes.</p>
-
 </div>
 
 <script>
-  // Live-save inline edits (date pickers and dropdowns) without reloading the
-  // page. We POST as application/x-www-form-urlencoded — the server has a
-  // urlencoded body parser but NOT a multipart one on this route, so a
-  // FormData body would silently arrive empty and the update would no-op.
+  // Live-save inline edits — POST as application/x-www-form-urlencoded so the
+  // server's urlencoded body parser actually reads the field. After a
+  // successful save we soft-reload so the monthly summary + weekly stats
+  // recompute instantly.
   (function () {
     const csrf = document.querySelector('input[name="_csrf"]')?.value || '';
     document.querySelectorAll('.inline-edit').forEach(el => {
@@ -284,7 +333,8 @@
         const id = el.dataset.applicant;
         const field = el.dataset.field;
         const value = el.value;
-        el.classList.add('opacity-50');
+        const row = document.getElementById('row-' + id);
+        if (row) row.classList.add('saving');
         try {
           const body = new URLSearchParams();
           body.set(field, value);
@@ -298,15 +348,14 @@
             },
             body: body.toString(),
           });
-          if (!r.ok) throw new Error('Save failed: HTTP ' + r.status);
+          if (!r.ok) throw new Error('HTTP ' + r.status);
           const data = await r.json().catch(() => ({}));
           if (data && data.ok === false) throw new Error(data.error || 'Save failed');
-          // Refresh page so monthly stats / weekly counts update instantly.
           window.location.reload();
         } catch (err) {
           console.error('inline-edit save failed:', err);
           alert('Could not save — ' + (err.message || 'please try again.'));
-          el.classList.remove('opacity-50');
+          if (row) row.classList.remove('saving');
         }
       });
     });
