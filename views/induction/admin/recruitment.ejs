@@ -1,0 +1,306 @@
+<% locals.currentPage = 'induction' %>
+<%
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const monthLabel = monthNames[month - 1] + ' ' + year;
+
+  function fmtDate(s) {
+    if (!s) return '';
+    const d = new Date(s + 'T00:00:00Z');
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: '2-digit', timeZone: 'UTC' });
+  }
+
+  function statusColor(status) {
+    const s = (status || '').toLowerCase();
+    if (s === 'hired') return 'bg-emerald-100 text-emerald-800';
+    if (s === 'inducted') return 'bg-blue-100 text-blue-800';
+    if (s === 'induction scheduled') return 'bg-violet-100 text-violet-800';
+    if (s === 'contacted') return 'bg-amber-100 text-amber-800';
+    if (s === 'not suitable' || s === 'withdrew' || s === 'no show') return 'bg-gray-200 text-gray-700';
+    return 'bg-gray-100 text-gray-700'; // New
+  }
+
+  function bandColor(band) {
+    if (band === 'on') return 'bg-emerald-50 border-emerald-200 text-emerald-900';
+    if (band === 'over') return 'bg-red-50 border-red-200 text-red-900';
+    return 'bg-amber-50 border-amber-200 text-amber-900';
+  }
+%>
+
+<div class="space-y-5">
+
+  <!-- Header -->
+  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Recruitment</h1>
+      <p class="text-sm text-gray-500 mt-1">Seek applicant call tracker · target <%= targetMin %>–<%= targetMax %> calls/week</p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <form method="GET" action="/induction/admin/recruitment" class="flex items-center gap-2">
+        <select name="year" onchange="this.form.submit()"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <% for (let y = year - 2; y <= year + 1; y++) { %>
+            <option value="<%= y %>" <%= y === year ? 'selected' : '' %>><%= y %></option>
+          <% } %>
+        </select>
+        <select name="month" onchange="this.form.submit()"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <% for (let m = 1; m <= 12; m++) { %>
+            <option value="<%= m %>" <%= m === month ? 'selected' : '' %>><%= monthNames[m - 1] %></option>
+          <% } %>
+        </select>
+      </form>
+      <a href="/induction/admin/recruitment/export.csv?year=<%= year %>&month=<%= month %>"
+         class="inline-flex items-center gap-1.5 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg border border-emerald-200 transition">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5m0 0l5-5m-5 5V4"/></svg>
+        Export CSV
+      </a>
+      <button type="button" onclick="document.getElementById('add-applicant-row').classList.toggle('hidden')"
+         class="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        Add applicant
+      </button>
+    </div>
+  </div>
+
+  <%- include('_registry-tabs', { tabActive: 'recruitment' }) %>
+
+  <!-- Monthly summary cards -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-base font-bold text-gray-900"><%= monthLabel %> · Monthly Summary</h2>
+      <span class="text-xs text-gray-500">Updates live as you log calls</span>
+    </div>
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+      <% [
+        { k:'total',      label:'Applicants',  color:'bg-gray-50 text-gray-900 border-gray-200' },
+        { k:'called',     label:'Called',      color:'bg-amber-50 text-amber-900 border-amber-200' },
+        { k:'interested', label:'Interested',  color:'bg-violet-50 text-violet-900 border-violet-200' },
+        { k:'booked',     label:'Induction Booked', color:'bg-blue-50 text-blue-900 border-blue-200' },
+        { k:'hired',      label:'Hired',       color:'bg-emerald-50 text-emerald-900 border-emerald-200' },
+      ].forEach(s => { %>
+        <div class="rounded-xl border p-3 <%= s.color %>">
+          <p class="text-[10px] font-bold uppercase tracking-widest opacity-70"><%= s.label %></p>
+          <p class="text-2xl font-bold mt-1 tabular-nums"><%= stats[s.k] %></p>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+
+  <!-- Weekly calls -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div class="flex items-baseline justify-between mb-3">
+      <h2 class="text-base font-bold text-gray-900">Weekly Calls</h2>
+      <span class="text-xs text-gray-500">Target <%= targetMin %>–<%= targetMax %>/week — Green = on target, Yellow = under, Red = over</span>
+    </div>
+    <div class="grid grid-cols-2 md:grid-cols-<%= weeks.length %> gap-3">
+      <% weeks.forEach(w => { %>
+        <div class="rounded-xl border p-3 <%= bandColor(w.band) %>">
+          <p class="text-[10px] font-bold uppercase tracking-widest opacity-70"><%= w.label %></p>
+          <p class="text-[11px] opacity-70"><%= w.range %></p>
+          <p class="text-2xl font-bold mt-1 tabular-nums"><%= w.count %></p>
+        </div>
+      <% }) %>
+    </div>
+  </div>
+
+  <!-- Applicants table -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
+      <h2 class="text-sm font-bold text-gray-800"><%= monthLabel %> · Applicants</h2>
+      <p class="text-xs text-gray-500"><%= applicants.length %> total</p>
+    </div>
+
+    <!-- Add-applicant inline form (hidden by default) -->
+    <div id="add-applicant-row" class="hidden border-b border-gray-100 bg-brand-50/30 p-4">
+      <form method="POST" action="/induction/admin/recruitment?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end">
+        <%- include('../../partials/csrf') %>
+        <div class="sm:col-span-2">
+          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name <span class="text-red-500">*</span></label>
+          <input type="text" name="applicant_name" required placeholder="Full name"
+            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
+          <input type="text" name="phone" placeholder="04xx xxx xxx"
+            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
+          <input type="email" name="email" placeholder="name@example.com"
+            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Applied</label>
+          <input type="date" name="date_applied" value="<%= year + '-' + String(month).padStart(2,'0') + '-' + String(Math.min(new Date().getDate(), 28)).padStart(2,'0') %>"
+            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        </div>
+        <div class="sm:col-span-3">
+          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
+          <input type="text" name="notes" placeholder="Any context (tickets, availability, etc.)"
+            class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        </div>
+        <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
+          <button type="button" onclick="document.getElementById('add-applicant-row').classList.add('hidden')"
+            class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded">Cancel</button>
+          <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded">Save</button>
+        </div>
+      </form>
+    </div>
+
+    <% if (applicants.length === 0) { %>
+      <div class="p-10 text-center text-gray-400">
+        <p class="font-medium">No applicants logged for <%= monthLabel %> yet</p>
+        <p class="text-sm mt-1">Hit "Add applicant" above to start tracking.</p>
+      </div>
+    <% } else { %>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+            <tr>
+              <th class="text-left px-3 py-2 w-8">#</th>
+              <th class="text-left px-3 py-2">Name</th>
+              <th class="text-left px-3 py-2">Phone</th>
+              <th class="text-left px-3 py-2">Date Applied</th>
+              <th class="text-left px-3 py-2">Date Called</th>
+              <th class="text-left px-3 py-2">Called?</th>
+              <th class="text-left px-3 py-2">Interested?</th>
+              <th class="text-left px-3 py-2">Booked?</th>
+              <th class="text-left px-3 py-2">Induction Date</th>
+              <th class="text-left px-3 py-2">Status</th>
+              <th class="text-left px-3 py-2">Notes</th>
+              <th class="text-right px-3 py-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% applicants.forEach((a, i) => { %>
+              <tr class="hover:bg-gray-50/60 align-top">
+                <td class="px-3 py-2 text-gray-400 tabular-nums"><%= i + 1 %></td>
+                <td class="px-3 py-2">
+                  <p class="font-semibold text-gray-900"><%= a.applicant_name %></p>
+                  <p class="text-[11px] text-gray-500"><%= a.email || '' %></p>
+                </td>
+                <td class="px-3 py-2 text-gray-700 whitespace-nowrap"><%= a.phone || '' %></td>
+                <td class="px-3 py-2 text-gray-700 whitespace-nowrap">
+                  <input type="date" value="<%= a.date_applied || '' %>" data-applicant="<%= a.id %>" data-field="date_applied"
+                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent w-32" />
+                </td>
+                <td class="px-3 py-2 text-gray-700 whitespace-nowrap">
+                  <input type="date" value="<%= a.date_called || '' %>" data-applicant="<%= a.id %>" data-field="date_called"
+                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent w-32" />
+                </td>
+                <td class="px-3 py-2">
+                  <select data-applicant="<%= a.id %>" data-field="called"
+                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent">
+                    <% calledOpts.forEach(o => { %><option value="<%= o %>" <%= a.called === o ? 'selected' : '' %>><%= o || '—' %></option><% }) %>
+                  </select>
+                </td>
+                <td class="px-3 py-2">
+                  <select data-applicant="<%= a.id %>" data-field="interested"
+                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent">
+                    <% interestedOpts.forEach(o => { %><option value="<%= o %>" <%= a.interested === o ? 'selected' : '' %>><%= o || '—' %></option><% }) %>
+                  </select>
+                </td>
+                <td class="px-3 py-2">
+                  <select data-applicant="<%= a.id %>" data-field="induction_booked"
+                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent">
+                    <% bookedOpts.forEach(o => { %><option value="<%= o %>" <%= a.induction_booked === o ? 'selected' : '' %>><%= o || '—' %></option><% }) %>
+                  </select>
+                </td>
+                <td class="px-3 py-2 text-gray-700 whitespace-nowrap">
+                  <input type="date" value="<%= a.induction_date || '' %>" data-applicant="<%= a.id %>" data-field="induction_date"
+                    class="inline-edit border border-transparent hover:border-gray-300 focus:border-brand-500 rounded px-1 py-0.5 text-xs bg-transparent w-32" />
+                </td>
+                <td class="px-3 py-2">
+                  <select data-applicant="<%= a.id %>" data-field="status"
+                    class="inline-edit px-2 py-1 text-[11px] font-semibold rounded <%= statusColor(a.status) %>">
+                    <% statuses.forEach(s => { %><option value="<%= s %>" <%= a.status === s ? 'selected' : '' %>><%= s %></option><% }) %>
+                  </select>
+                </td>
+                <td class="px-3 py-2 text-gray-700 max-w-xs">
+                  <span class="line-clamp-2 text-xs"><%= a.notes || '' %></span>
+                </td>
+                <td class="px-3 py-2 text-right whitespace-nowrap">
+                  <button type="button" onclick="document.getElementById('row-edit-<%= a.id %>').classList.toggle('hidden')"
+                    class="px-2 py-1 text-[11px] font-medium text-brand-600 hover:bg-brand-50 rounded">Edit</button>
+                  <form method="POST" action="/induction/admin/recruitment/<%= a.id %>/delete?year=<%= year %>&month=<%= month %>" class="inline" onsubmit="return confirm('Remove this applicant?')">
+                    <%- include('../../partials/csrf') %>
+                    <button type="submit" class="px-2 py-1 text-[11px] font-medium text-red-600 hover:bg-red-50 rounded">Delete</button>
+                  </form>
+                </td>
+              </tr>
+              <tr id="row-edit-<%= a.id %>" class="hidden bg-brand-50/30">
+                <td colspan="12" class="px-3 py-3">
+                  <form method="POST" action="/induction/admin/recruitment/<%= a.id %>?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-2">
+                    <%- include('../../partials/csrf') %>
+                    <div>
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name</label>
+                      <input type="text" name="applicant_name" value="<%= a.applicant_name %>" required
+                        class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
+                      <input type="text" name="phone" value="<%= a.phone || '' %>"
+                        class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                    </div>
+                    <div class="sm:col-span-2">
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
+                      <input type="email" name="email" value="<%= a.email || '' %>"
+                        class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                    </div>
+                    <div class="sm:col-span-4">
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
+                      <textarea name="notes" rows="2"
+                        class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"><%= a.notes || '' %></textarea>
+                    </div>
+                    <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
+                      <button type="button" onclick="document.getElementById('row-edit-<%= a.id %>').classList.add('hidden')"
+                        class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded">Cancel</button>
+                      <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded">Save</button>
+                    </div>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+
+  <p class="text-xs text-gray-400 text-center">Tip: change a date or dropdown directly in the row — it saves automatically. Use Edit for name / phone / email / notes.</p>
+
+</div>
+
+<script>
+  // Live-save inline edits (date pickers and dropdowns) without reloading the
+  // page. Falls back to a full reload if the request fails so the user
+  // doesn't lose track of changes.
+  (function () {
+    const csrf = document.querySelector('input[name="_csrf"]')?.value || '';
+    document.querySelectorAll('.inline-edit').forEach(el => {
+      el.addEventListener('change', async () => {
+        const id = el.dataset.applicant;
+        const field = el.dataset.field;
+        const value = el.value;
+        el.classList.add('opacity-50');
+        try {
+          const fd = new FormData();
+          fd.set(field, value);
+          fd.set('_csrf', csrf);
+          const r = await fetch('/induction/admin/recruitment/' + encodeURIComponent(id), {
+            method: 'POST',
+            headers: { 'Accept': 'application/json' },
+            body: fd,
+          });
+          if (!r.ok) throw new Error('Save failed');
+          // Refresh page so monthly stats / weekly counts update instantly.
+          window.location.reload();
+        } catch (err) {
+          alert('Could not save — please try again.');
+          el.classList.remove('opacity-50');
+        }
+      });
+    });
+  })();
+</script>

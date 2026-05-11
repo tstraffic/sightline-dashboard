@@ -8439,6 +8439,42 @@ function runMigrations(db) {
     console.log('Migration 182 applied');
   }
 
+  // =============================================
+  // Migration 183: Seek applicant tracker
+  // Replaces the monthly Excel sheet admin used to keep for SEEK applicant
+  // calls. One row per applicant; status moves through New → Contacted →
+  // Induction Scheduled → Inducted → Hired (or Not Suitable / Withdrew /
+  // No Show). The recruitment page rolls these up into weekly call counts
+  // and monthly summary stats.
+  // =============================================
+  if (!isMigrationApplied.get(183)) {
+    console.log('Running migration 183: seek_applicants table');
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS seek_applicants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        applicant_name TEXT NOT NULL,
+        phone TEXT DEFAULT '',
+        email TEXT DEFAULT '',
+        date_applied DATE,
+        date_called DATE,
+        called TEXT DEFAULT '',
+        interested TEXT DEFAULT '',
+        induction_booked TEXT DEFAULT '',
+        induction_date DATE,
+        status TEXT NOT NULL DEFAULT 'New',
+        notes TEXT DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_by_id INTEGER REFERENCES users(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_seek_applied ON seek_applicants(date_applied);
+      CREATE INDEX IF NOT EXISTS idx_seek_called ON seek_applicants(date_called);
+      CREATE INDEX IF NOT EXISTS idx_seek_status ON seek_applicants(status);
+    `);
+    recordMigration.run(183, 'seek_applicants table');
+    console.log('Migration 183 applied');
+  }
+
   console.log('All migrations checked/applied.');
 }
 
