@@ -194,6 +194,7 @@
             { key:'forest',   label:'Forest',    preview:'linear-gradient(135deg,#021808,#0F4733,#021808)' },
             { key:'ocean',    label:'Ocean',     preview:'linear-gradient(135deg,#021A1F,#103D4E,#021A1F)' },
             { key:'plum',     label:'Plum',      preview:'linear-gradient(135deg,#0F0B1E,#371F4E,#0F0B1E)' },
+            { key:'crimson',  label:'Crimson',   preview:'linear-gradient(135deg,#1A0408,#4D1018,#1A0408)' },
             { key:'mono',     label:'Mono',      preview:'linear-gradient(135deg,#0A0A0A,#202020,#0A0A0A)' },
           ]; %>
           <% gradients.forEach(g => { %>
@@ -219,6 +220,7 @@
             { key:'blue',    label:'Brand Blue', swatch:'#2B7FFF' },
             { key:'purple',  label:'Purple',     swatch:'#8b5cf6' },
             { key:'pink',    label:'Pink',       swatch:'#ec4899' },
+            { key:'red',     label:'Red',        swatch:'#ef4444' },
             { key:'emerald', label:'Emerald',    swatch:'#10b981' },
             { key:'amber',   label:'Amber',      swatch:'#f59e0b' },
             { key:'cyan',    label:'Cyan',       swatch:'#06b6d4' },
@@ -284,7 +286,9 @@
 
       function applyGradient(key) {
         document.body.className = document.body.className.split(/\s+/).filter(function(c){ return !/^gradient-/.test(c); }).join(' ');
-        if (modeIsDark()) document.body.classList.add('gradient-' + key);
+        // Gradient class lives on the body in BOTH modes — CSS decides what
+        // each class affects per mode (sidebar in both, body bg dark-only).
+        document.body.classList.add('gradient-' + key);
         try { localStorage.setItem('ts-theme-gradient', key); } catch(e){}
       }
       // Compute light / hover / dark / rgb variants from a hex and stamp them
@@ -318,7 +322,7 @@
           if (swatch) swatch.style.background = hex;
           if (hexLabel) hexLabel.textContent = hex.toUpperCase();
         }
-        if (modeIsDark()) document.body.classList.add('accent-' + key);
+        document.body.classList.add('accent-' + key);
         try { localStorage.setItem('ts-theme-accent', key); } catch(e){}
       }
 
