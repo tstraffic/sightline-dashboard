@@ -75,6 +75,19 @@
     </div>
   </div>
 
+  <!-- Tabs: Active register vs Archived (off-list, kept on record) -->
+  <div class="border-b border-gray-200 flex items-center gap-1">
+    <a href="/swms" class="px-4 py-2 -mb-px border-b-2 text-sm font-semibold <%= view === 'active' ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      Active register
+      <span class="ml-1 px-1.5 py-0.5 text-[10px] rounded-full <%= view === 'active' ? 'bg-brand-50 text-brand-700' : 'bg-gray-100 text-gray-500' %>"><%= (counts.total || 0) - (counts.archived || 0) %></span>
+    </a>
+    <a href="/swms?view=archived" class="px-4 py-2 -mb-px border-b-2 text-sm font-semibold <%= view === 'archived' ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      Archived
+      <span class="ml-1 px-1.5 py-0.5 text-[10px] rounded-full <%= view === 'archived' ? 'bg-brand-50 text-brand-700' : 'bg-gray-100 text-gray-500' %>"><%= counts.archived || 0 %></span>
+    </a>
+  </div>
+
+  <% if (view === 'active') { %>
   <!-- Filters (status only — kind split is implicit via the two sections below) -->
   <form method="GET" action="/swms" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 flex flex-wrap items-end gap-3">
     <div>
@@ -83,12 +96,12 @@
         <option value="" <%= filters.status === 'all' ? 'selected' : '' %>>All</option>
         <option value="draft" <%= filters.status === 'draft' ? 'selected' : '' %>>Draft</option>
         <option value="active" <%= filters.status === 'active' ? 'selected' : '' %>>Active</option>
-        <option value="archived" <%= filters.status === 'archived' ? 'selected' : '' %>>Archived</option>
       </select>
     </div>
     <button type="submit" class="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg">Filter</button>
     <a href="/swms" class="px-3 py-2 text-gray-500 text-sm hover:text-gray-700">Clear</a>
   </form>
+  <% } %>
 
   <%
   // Render the same table for either section. Templates have no Job column
@@ -153,25 +166,80 @@
   <% } %>
   <% } %>
 
-  <!-- Templates section (3-month update cycle) -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between bg-blue-50/40">
-      <div>
-        <h2 class="text-sm font-bold text-blue-900">Templates <span class="text-blue-700/60 font-normal">(<%= templates.length %>)</span></h2>
-        <p class="text-xs text-blue-700/70 mt-0.5">Reusable SWMS that any job can pull from. Reviewed every 3 months.</p>
+  <% if (view === 'active') { %>
+    <!-- Templates section (3-month update cycle) -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between bg-blue-50/40">
+        <div>
+          <h2 class="text-sm font-bold text-blue-900">Templates <span class="text-blue-700/60 font-normal">(<%= templates.length %>)</span></h2>
+          <p class="text-xs text-blue-700/70 mt-0.5">Reusable SWMS that any job can pull from. Reviewed every 3 months.</p>
+        </div>
       </div>
+      <%- renderRows(templates, false) %>
     </div>
-    <%- renderRows(templates, false) %>
-  </div>
 
-  <!-- Job-linked section (6-month renewal cycle) -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between bg-purple-50/40">
-      <div>
-        <h2 class="text-sm font-bold text-purple-900">Job-linked <span class="text-purple-700/60 font-normal">(<%= jobLinked.length %>)</span></h2>
-        <p class="text-xs text-purple-700/70 mt-0.5">Tied to a specific job. Renew every 6 months.</p>
+    <!-- Job-linked section (6-month renewal cycle) -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between bg-purple-50/40">
+        <div>
+          <h2 class="text-sm font-bold text-purple-900">Job-linked <span class="text-purple-700/60 font-normal">(<%= jobLinked.length %>)</span></h2>
+          <p class="text-xs text-purple-700/70 mt-0.5">Tied to a specific job. Renew every 6 months.</p>
+        </div>
       </div>
+      <%- renderRows(jobLinked, true) %>
     </div>
-    <%- renderRows(jobLinked, true) %>
-  </div>
+  <% } else { %>
+    <!-- Archived: combined table, both kinds, no expiry / status columns -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200 bg-gray-50/60">
+        <h2 class="text-sm font-bold text-gray-800">Archived <span class="text-gray-500 font-normal">(<%= archived.length %>)</span></h2>
+        <p class="text-xs text-gray-500 mt-0.5">Off the active register, kept on record. Restore to bring back to Active.</p>
+      </div>
+      <% if (!archived.length) { %>
+        <div class="px-5 py-8 text-center text-sm text-gray-500">Nothing archived yet.</div>
+      <% } else { %>
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Title</th>
+              <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Kind</th>
+              <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Job</th>
+              <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Owner</th>
+              <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">File</th>
+              <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% archived.forEach(r => { %>
+              <tr class="hover:bg-gray-50/50">
+                <td class="px-3 py-2">
+                  <a href="/swms/<%= r.id %>" class="font-semibold text-gray-900 hover:text-brand-600"><%= r.title %></a>
+                  <% if (r.description) { %><p class="text-xs text-gray-500 mt-0.5 line-clamp-1"><%= r.description %></p><% } %>
+                </td>
+                <td class="px-2 py-2 text-xs text-gray-600"><%= kindLabels[r.kind] %></td>
+                <td class="px-2 py-2 text-xs text-gray-600"><% if (r.job_number) { %><a href="/jobs/<%= r.job_id %>" class="hover:text-brand-600"><%= r.job_number %></a><% } else { %>—<% } %></td>
+                <td class="px-2 py-2 text-xs text-gray-600"><%= r.owner_name || '—' %></td>
+                <td class="px-2 py-2 text-xs">
+                  <% if (r.file_path) { %>
+                    <a href="/swms/<%= r.id %>/file" class="text-brand-600 hover:underline"><%= r.file_original_name || 'Download' %></a>
+                  <% } else { %>
+                    <span class="text-gray-400">—</span>
+                  <% } %>
+                </td>
+                <td class="px-2 py-2 text-right">
+                  <form method="POST" action="/swms/<%= r.id %>/archive" class="inline" onsubmit="return confirm('Restore this SWMS to the active register?')">
+                    <%- include('../partials/csrf') %>
+                    <button type="submit" title="Restore" class="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-gray-600 hover:text-emerald-700 hover:bg-emerald-50 rounded ring-1 ring-gray-200 hover:ring-emerald-200">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                      Restore
+                    </button>
+                  </form>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+  <% } %>
 </div>

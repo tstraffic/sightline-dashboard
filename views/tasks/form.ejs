@@ -489,6 +489,16 @@
               </button>
             </form>
             <span class="text-sm flex-1 <%= s.completed ? 'text-gray-400 line-through' : 'text-gray-700' %>"><%= s.title %></span>
+            <!-- Assignee picker: changes fire the form via JS so users don't have to hit a separate button. -->
+            <form method="POST" action="/tasks/<%= task.id %>/subtasks/<%= s.id %>/assign" class="flex items-center">
+              <%- include('../partials/csrf') %>
+              <select name="assigned_to_id" onchange="this.form.submit()" class="text-xs border border-gray-200 rounded px-2 py-1 bg-white text-gray-700 max-w-[140px] focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+                <option value="">Unassigned</option>
+                <% users.forEach(u => { %>
+                  <option value="<%= u.id %>" <%= s.assigned_to_id == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+                <% }) %>
+              </select>
+            </form>
             <form method="POST" action="/tasks/<%= task.id %>/subtasks/<%= s.id %>/delete" class="opacity-0 group-hover:opacity-100 transition-opacity">
               <%- include('../partials/csrf') %>
               <button type="submit" class="text-gray-300 hover:text-red-500 transition-colors" title="Delete subtask"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
@@ -497,9 +507,15 @@
         <% }) %>
       </div>
     <% } %>
-    <form method="POST" action="/tasks/<%= task.id %>/subtasks" class="flex gap-2">
+    <form method="POST" action="/tasks/<%= task.id %>/subtasks" class="flex flex-wrap gap-2">
       <%- include('../partials/csrf') %>
-      <input type="text" name="title" placeholder="Add a subtask..." class="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" required>
+      <input type="text" name="title" placeholder="Add a subtask..." class="flex-1 min-w-[180px] text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none" required>
+      <select name="assigned_to_id" class="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white text-gray-700 max-w-[180px] focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none">
+        <option value="">Assign to… (optional)</option>
+        <% users.forEach(u => { %>
+          <option value="<%= u.id %>"><%= u.full_name %></option>
+        <% }) %>
+      </select>
       <button type="submit" class="flex-shrink-0 inline-flex items-center gap-1 px-4 py-1.5 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors shadow-sm">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
         Add
@@ -557,10 +573,12 @@
 
     <%
       // Build the list of tasks that are available to be added as dependencies
-      // (exclude current + already-linked). This lets us render a useful
-      // empty state when there's nothing to pick.
+      // (exclude current + already-linked + completed). Completed tasks crowd
+      // the list and aren't useful as new dependencies.
       const depsExisting = (typeof dependencies !== 'undefined' ? dependencies : []);
-      const pickable = (typeof allTasks !== 'undefined' ? allTasks : []).filter(t => !depsExisting.some(d => d.depends_on_id === t.id));
+      const pickable = (typeof allTasks !== 'undefined' ? allTasks : [])
+        .filter(t => t.status !== 'complete')
+        .filter(t => !depsExisting.some(d => d.depends_on_id === t.id));
       const hasNoDeps = depsExisting.length === 0 && (typeof dependents === 'undefined' || dependents.length === 0);
     %>
     <% if (pickable.length === 0) { %>

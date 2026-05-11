@@ -8475,6 +8475,24 @@ function runMigrations(db) {
     console.log('Migration 183 applied');
   }
 
+  // =============================================
+  // Migration 184: subtask assignee
+  // =============================================
+  if (!isMigrationApplied.get(184)) {
+    console.log('Running migration 184: subtask assignee');
+    try {
+      const cols = db.prepare("PRAGMA table_info(subtasks)").all().map(c => c.name);
+      if (!cols.includes('assigned_to_id')) {
+        db.exec("ALTER TABLE subtasks ADD COLUMN assigned_to_id INTEGER REFERENCES users(id)");
+      }
+      db.exec("CREATE INDEX IF NOT EXISTS idx_subtasks_assignee ON subtasks(assigned_to_id)");
+      recordMigration.run(184, 'subtask assignee');
+      console.log('Migration 184 applied');
+    } catch (e) {
+      console.error('Migration 184 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
