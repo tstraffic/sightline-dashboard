@@ -3,15 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>SOP Sign-Off — T&S Traffic Control</title>
+  <title>SOP / SWMS Acknowledgement — T&S Traffic Control</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script>tailwindcss.config={theme:{extend:{colors:{brand:{50:'#EBF3FF',100:'#D6E7FF',200:'#ADC9FF',300:'#85ABFF',400:'#5C8DFF',500:'#2B7FFF',600:'#1D6AE5',700:'#1554CC',800:'#0D3FB2',900:'#052A99',950:'#001A66'}}}}}</script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     body { font-family: 'Inter', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
     canvas { touch-action: none; }
+    #sig-canvas { touch-action: none; }
     .ack-text { white-space: pre-wrap; }
-    .step { display: none; }
-    .step.active { display: block; }
+    .step-panel { display: none; }
+    .step-panel.active { display: block; animation: fadeIn 0.3s ease forwards; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    /* Stepper scroll-snap on mobile so all circles stay reachable when there are many sections */
+    .stepper { scrollbar-width: none; -ms-overflow-style: none; }
+    .stepper::-webkit-scrollbar { display: none; }
+    .desc-html p { margin-bottom: 0.75rem; }
+    .desc-html ul { list-style: disc; padding-left: 1.25rem; margin-bottom: 0.75rem; }
+    .desc-html ol { list-style: decimal; padding-left: 1.25rem; margin-bottom: 0.75rem; }
+    .desc-html strong { font-weight: 700; color: #111827; }
+    .desc-html a { color: #1D6AE5; text-decoration: underline; }
+    .desc-html h3 { font-weight: 700; color: #111827; margin: 0.75rem 0 0.4rem; font-size: 1rem; }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -34,69 +46,94 @@
   </div>
 <% } else { %>
 
-  <% if (typeof previewMode !== 'undefined' && previewMode) { %>
-    <div class="bg-amber-500 text-white text-center text-xs font-bold uppercase tracking-widest py-2">
-      Preview · Nothing will be saved · <a href="/induction/admin/sop-documents" class="underline">Back to admin</a>
+  <%
+    const isPreview = (typeof previewMode !== 'undefined' && previewMode);
+    const isTargetBound = (typeof targetCrew !== 'undefined' && targetCrew);
+    // In preview mode admins skip the worker-pick step. Same when a session is
+    // bound to a specific person via email link (targetCrew set).
+    const skipWelcome = isPreview || isTargetBound;
+
+    const sections = (typeof documents !== 'undefined' && documents) ? documents : [];
+
+    // URL helpers — preview mode hits the admin-authed endpoint so the doc
+    // actually loads. Real sessions go through the public token-gated route.
+    function docUrl(secId) {
+      return isPreview
+        ? `/induction/admin/sop-documents/${secId}/file`
+        : `/sop-sign/${session.token}/document/${secId}`;
+    }
+    function pageUrl(secId, pageFile) {
+      // Page images aren't served by the admin endpoint, but server-side
+      // page renders only fire in normal flow anyway; preview will fall back
+      // to client-side PDF.js using the admin doc URL.
+      return `/sop-sign/${session.token}/document/${secId}/page/${encodeURIComponent(pageFile)}`;
+    }
+
+    // Build step list. Step 1 (Welcome / Pick yourself) is conditional.
+    const steps = [];
+    if (!skipWelcome) steps.push({ kind: 'welcome', label: 'You' });
+    sections.forEach((sec, i) => steps.push({ kind: 'section', section: sec, sectionIndex: i, label: sec.title }));
+    steps.push({ kind: 'signature', label: 'Sign' });
+    const totalSteps = steps.length;
+  %>
+
+  <% if (isPreview) { %>
+    <div class="bg-amber-500 text-white text-center text-[11px] font-bold uppercase tracking-widest py-1.5 px-3">
+      Preview · Nothing saved · <a href="/induction/admin/sop-documents" class="underline">Back to admin</a>
     </div>
   <% } %>
 
-  <%
-    // Build step list. We always have welcome + signature; SOP and docs are
-    // conditional on having any structured SOPs / uploaded PDFs.
-    const sops = (typeof structuredSops !== 'undefined' && structuredSops) ? structuredSops : [];
-    const allDocs = (typeof documents !== 'undefined' && documents) ? documents : [];
-    const pairedPdfIds = new Set(sops.filter(s => s.matchedPdf).map(s => s.matchedPdf.id));
-    const unpairedDocs = allDocs.filter(d => !pairedPdfIds.has(d.id));
-
-    const steps = [];
-    steps.push({ kind: 'welcome' });
-    sops.forEach((sop, i) => steps.push({ kind: 'sop', sop, sopIndex: i }));
-    if (allDocs.length > 0) steps.push({ kind: 'documents' });
-    steps.push({ kind: 'signature' });
-    const totalSteps = steps.length;
-
-    const calloutColors = {
-      critical: 'bg-red-50 border-red-300 text-red-900',
-      warning: 'bg-amber-50 border-amber-300 text-amber-900',
-      rule: 'bg-brand-50 border-brand-300 text-brand-900',
-      info: 'bg-gray-50 border-gray-300 text-gray-800',
-    };
-  %>
+  <% if (isTargetBound) { %>
+    <div class="bg-brand-50 border-b border-brand-100 px-5 py-2 text-center">
+      <p class="text-[10px] font-bold text-brand-700 uppercase tracking-widest">Signing as</p>
+      <p class="text-sm font-bold text-gray-900"><%= targetCrew.full_name %><% if (targetCrew.employee_id) { %> · <%= targetCrew.employee_id %><% } %></p>
+    </div>
+  <% } %>
 
   <!-- Header -->
-  <div class="bg-white border-b border-gray-200 px-5 py-3 sticky top-0 z-10">
-    <div class="flex items-center gap-3">
-      <div class="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-sm">T&S</div>
+  <header class="bg-white border-b border-gray-200 sticky top-0 z-10">
+    <div class="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
+      <div class="w-9 h-9 rounded-lg bg-brand-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">T&S</div>
       <div class="flex-1 min-w-0">
-        <h1 class="text-base font-bold text-gray-900 leading-tight">SOP Acknowledgement</h1>
-        <p class="text-xs text-gray-500 truncate"><%= session.title || 'In-person sign-off' %></p>
+        <h1 class="text-sm font-bold text-gray-900 leading-tight">SOP / SWMS Acknowledgement</h1>
+        <p class="text-[11px] text-gray-500 truncate"><%= session.title || 'In-person sign-off' %></p>
       </div>
-      <div class="text-xs font-semibold text-gray-500 tabular-nums whitespace-nowrap">
-        Step <span id="step-counter">1</span> / <%= totalSteps %>
+      <div class="text-[11px] font-semibold text-gray-500 tabular-nums whitespace-nowrap">
+        <span id="step-counter">1</span> / <%= totalSteps %>
       </div>
     </div>
-    <!-- Progress bar -->
-    <div class="mt-2.5 h-1 bg-gray-200 rounded-full overflow-hidden">
-      <div id="progress-bar" class="h-full bg-brand-500 transition-all" style="width: <%= Math.round(100 / totalSteps) %>%"></div>
-    </div>
-  </div>
 
-  <form id="signForm" method="POST" action="/sop-sign/<%= session.token %>/submit" class="p-5 pb-32 max-w-md mx-auto">
+    <!-- Progress Stepper (circles + labels) -->
+    <div class="max-w-2xl mx-auto px-3 pb-3">
+      <div id="stepper" class="stepper flex items-center overflow-x-auto">
+        <% steps.forEach((step, idx) => { %>
+          <div class="flex flex-col items-center step-indicator flex-shrink-0" style="min-width: 56px;" data-step="<%= idx %>">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300
+              <%= idx === 0 ? 'bg-brand-500 text-white border-brand-500' : 'bg-white text-gray-400 border-gray-300' %>"
+              id="stepCircle<%= idx %>">
+              <span id="stepNum<%= idx %>"><%= idx + 1 %></span>
+              <svg id="stepCheck<%= idx %>" class="hidden w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            </div>
+            <span class="text-[9px] mt-1 text-center leading-tight font-medium text-gray-400 max-w-[64px] truncate px-1" id="stepLabel<%= idx %>" title="<%= step.label %>"><%= step.label %></span>
+          </div>
+          <% if (idx < steps.length - 1) { %>
+            <div class="flex-1 h-0.5 bg-gray-200 mx-0.5 mt-[-14px] min-w-[16px] transition-all duration-300" id="stepLine<%= idx %>"></div>
+          <% } %>
+        <% }) %>
+      </div>
+    </div>
+  </header>
+
+  <form id="signForm" method="POST" action="/sop-sign/<%= session.token %>/submit" class="max-w-2xl mx-auto px-4 py-5 pb-32">
 
     <% steps.forEach((step, idx) => { %>
-      <div class="step <%= idx === 0 ? 'active' : '' %>" data-step="<%= idx %>" data-kind="<%= step.kind %>">
+      <div class="step-panel <%= idx === 0 ? 'active' : '' %>" data-step="<%= idx %>" data-kind="<%= step.kind %>">
 
         <% if (step.kind === 'welcome') { %>
-          <h2 class="text-xl font-bold text-gray-900 mb-1">Before you sign</h2>
-          <p class="text-gray-600 text-sm mb-5">You'll work through <strong><%= sops.length %></strong> Standard Operating Procedure<%= sops.length === 1 ? '' : 's' %><% if (allDocs.length > 0) { %>, view <strong><%= allDocs.length %></strong> reference document<%= allDocs.length === 1 ? '' : 's' %><% } %>, and then sign off.</p>
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h2 class="text-xl font-bold text-gray-900 mb-1">Who are you?</h2>
+            <p class="text-gray-600 text-sm mb-5">Pick your name from the list so we can record your sign-off against your profile. You'll go through <strong><%= sections.length %></strong> section<%= sections.length === 1 ? '' : 's' %> after this, then sign.</p>
 
-          <% if (typeof targetCrew !== 'undefined' && targetCrew) { %>
-            <div class="bg-brand-50 border border-brand-200 rounded-xl p-4">
-              <p class="text-[10px] font-bold text-brand-700 uppercase tracking-widest mb-1">Signing as</p>
-              <p class="text-base font-bold text-gray-900"><%= targetCrew.full_name %></p>
-              <% if (targetCrew.employee_id) { %><p class="text-xs text-gray-500 mt-0.5"><%= targetCrew.employee_id %></p><% } %>
-            </div>
-          <% } else { %>
             <div class="space-y-4">
               <div>
                 <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Pick your name</label>
@@ -123,140 +160,91 @@
                 </div>
               </details>
             </div>
-          <% } %>
 
-          <p id="welcome-error" class="hidden mt-3 text-red-500 text-xs font-medium">Please pick your name (or type it under "My name isn't on the list").</p>
+            <p id="welcome-error" class="hidden mt-3 text-red-500 text-xs font-medium">Please pick your name (or type it under "My name isn't on the list").</p>
+          </div>
         <% } %>
 
-        <% if (step.kind === 'sop') { %>
-          <% const sop = step.sop; %>
-          <% const showPdfPages = sop.matchedPdf && Array.isArray(sop.matchedPdf.pageRenders) && sop.matchedPdf.pageRenders.length > 0; %>
-          <p class="text-[10px] font-bold text-brand-600 uppercase tracking-widest mb-1">SOP <%= step.sopIndex + 1 %> of <%= sops.length %></p>
-          <h2 class="text-xl font-bold text-gray-900 mb-1 leading-tight"><%= sop.title %></h2>
-          <p class="text-xs text-gray-500 mb-4"><%= sop.code %> · v<%= sop.revision %></p>
-
-          <% if (showPdfPages) { %>
-            <!-- Inline PDF page renders — workers scroll through the actual SOP -->
-            <div class="space-y-3">
-              <% sop.matchedPdf.pageRenders.forEach((pageFile, pIdx) => { %>
-                <img src="/sop-sign/<%= session.token %>/document/<%= sop.matchedPdf.id %>/page/<%= encodeURIComponent(pageFile) %>"
-                     alt="Page <%= pIdx + 1 %> of <%= sop.title %>"
-                     loading="<%= pIdx === 0 ? 'eager' : 'lazy' %>"
-                     class="block w-full rounded-xl border border-gray-200 shadow-sm bg-white" />
-              <% }) %>
-            </div>
-            <p class="mt-3 text-xs text-gray-500 text-center">
-              <a href="/sop-sign/<%= session.token %>/document/<%= sop.matchedPdf.id %>" target="_blank" rel="noopener" class="text-brand-600 hover:underline font-medium">Open as PDF</a>
-            </p>
-          <% } else if (sop.matchedPdf) { %>
-            <!-- PDF couldn't be pre-rendered to images — fall back to an
-                 inline iframe so the worker still sees the document. -->
-            <div class="rounded-xl border border-gray-200 bg-white overflow-hidden">
-              <iframe src="/sop-sign/<%= session.token %>/document/<%= sop.matchedPdf.id %>#view=FitH"
-                      class="w-full block bg-white" style="height: 80vh; border: 0;"
-                      title="<%= sop.title %>"></iframe>
-            </div>
-            <p class="mt-3 text-xs text-gray-500 text-center">
-              Trouble viewing? <a href="/sop-sign/<%= session.token %>/document/<%= sop.matchedPdf.id %>" target="_blank" rel="noopener" class="text-brand-600 hover:underline font-medium">Open the PDF in a new tab</a>.
-            </p>
-          <% } else { %>
-            <% if (sop.summary) { %>
-              <p class="text-sm text-gray-700 mb-5 leading-relaxed"><%= sop.summary %></p>
+        <% if (step.kind === 'section') { %>
+          <% const sec = step.section; %>
+          <% const isPdf = (sec.mime_type || '').includes('pdf') || /\.pdf$/i.test(sec.original_name || ''); %>
+          <% const hasPageRenders = Array.isArray(sec.pageRenders) && sec.pageRenders.length > 0; %>
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <p class="text-[10px] font-bold text-brand-600 uppercase tracking-widest mb-1">Section <%= step.sectionIndex + 1 %> of <%= sections.length %></p>
+            <h2 class="text-xl font-bold text-gray-900 leading-tight mb-1"><%= sec.title %></h2>
+            <% if (sec.original_name) { %>
+              <p class="text-[11px] text-gray-500 mb-4"><%= sec.original_name %></p>
             <% } %>
-            <% sop.sections.forEach((sec, secIdx) => { %>
-            <section class="<%= secIdx > 0 ? 'mt-6 pt-6 border-t border-gray-200' : '' %>">
-              <h3 class="text-base font-bold text-gray-900 leading-tight"><%= sec.heading %></h3>
-              <% if (sec.body) { %>
-                <p class="text-sm text-gray-700 mt-2 leading-relaxed"><%= sec.body %></p>
-              <% } %>
-              <% if (sec.image && sec.image.file) { %>
-                <img src="<%= sop.imageFolder %>/<%= sec.image.file %>" alt="<%= sec.image.alt || '' %>"
-                     onerror="this.style.display='none'; if(this.nextElementSibling && this.nextElementSibling.tagName==='FIGCAPTION') this.nextElementSibling.style.display='none';"
-                     class="mt-3 w-full rounded-xl border border-gray-200" />
-                <% if (sec.image.caption) { %>
-                  <figcaption class="text-[11px] text-gray-500 italic mt-1 text-center"><%= sec.image.caption %></figcaption>
-                <% } %>
-              <% } %>
-              <% if (sec.items && sec.items.length > 0) { %>
-                <ul class="mt-3 space-y-2">
-                  <% sec.items.forEach(item => { const text = typeof item === 'string' ? item : (item && item.text) || ''; %>
-                    <li class="flex gap-2.5 text-sm text-gray-700 leading-relaxed">
-                      <span class="text-brand-500 mt-1 flex-shrink-0">●</span>
-                      <span><%- text %></span>
-                    </li>
-                  <% }) %>
-                </ul>
-              <% } %>
-              <% if (sec.callout) { %>
-                <% const cls = calloutColors[sec.callout.type] || calloutColors.info; %>
-                <div class="mt-3 rounded-lg border-l-4 px-3 py-2.5 text-xs font-medium leading-relaxed <%= cls %>">
-                  <%- sec.callout.text %>
-                </div>
-              <% } %>
-            </section>
-          <% }) %>
 
-            <% if (sop.matchedPdf) { %>
-              <div class="mt-6 pt-4 border-t border-gray-200">
-                <a href="/sop-sign/<%= session.token %>/document/<%= sop.matchedPdf.id %>" target="_blank" rel="noopener" class="inline-flex items-center gap-2 text-xs font-semibold text-brand-700 hover:text-brand-900">
-                  <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 16h-2v-2H9v-2h2v-2h-2v-2h6v2h-2v2h2v2h-2v2z"/></svg>
-                  View official PDF
-                </a>
+            <% if (sec.description) { %>
+              <div class="desc-html text-sm text-gray-700 leading-relaxed mb-5"><%- sec.description %></div>
+            <% } %>
+
+            <% if (isPdf && hasPageRenders && !isPreview) { %>
+              <!-- Server-side rendered page images (preferred when available). -->
+              <div class="space-y-3">
+                <% sec.pageRenders.forEach((pageFile, pIdx) => { %>
+                  <img src="<%= pageUrl(sec.id, pageFile) %>"
+                       alt="Page <%= pIdx + 1 %>"
+                       loading="<%= pIdx === 0 ? 'eager' : 'lazy' %>"
+                       class="block w-full rounded-xl border border-gray-200 shadow-sm bg-white" />
+                <% }) %>
               </div>
+              <p class="mt-3 text-xs text-gray-500 text-center">
+                <a href="<%= docUrl(sec.id) %>" target="_blank" rel="noopener" class="text-brand-600 hover:underline font-medium">Open as PDF</a>
+              </p>
+            <% } else if (isPdf) { %>
+              <!-- Client-side PDF.js renders ALL pages, regardless of whether
+                   server-side rendering succeeded. Avoids the iOS Safari
+                   "iframe shows page 1 only" issue. -->
+              <div class="pdf-render-target space-y-3"
+                   data-pdf-url="<%= docUrl(sec.id) %>"
+                   data-doc-id="<%= sec.id %>">
+                <div class="pdf-loading text-center text-xs text-gray-500 py-8">Loading PDF…</div>
+              </div>
+              <p class="mt-3 text-xs text-gray-500 text-center">
+                <a href="<%= docUrl(sec.id) %>" target="_blank" rel="noopener" class="text-brand-600 hover:underline font-medium">Open as PDF</a>
+              </p>
+            <% } else if (sec.id) { %>
+              <!-- Non-PDF (image/doc/xls) — just link out. -->
+              <a href="<%= docUrl(sec.id) %>" target="_blank" rel="noopener"
+                 class="block bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:bg-gray-100 transition">
+                <p class="text-sm font-semibold text-brand-600">Open document</p>
+                <p class="text-[11px] text-gray-500 mt-1"><%= sec.original_name %></p>
+              </a>
             <% } %>
-          <% } /* end !showPdfPages */ %>
 
-          <!-- Per-SOP acknowledgement at the end of this section -->
-          <label class="mt-6 flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 cursor-pointer">
-            <input type="checkbox" class="sop-ack w-5 h-5 rounded text-emerald-500 focus:ring-emerald-500" data-sop-slug="<%= sop.slug %>" />
-            <span class="text-sm text-emerald-900 font-semibold leading-snug">I have read and understood "<%= sop.title %>"</span>
-          </label>
-        <% } %>
-
-        <% if (step.kind === 'documents') { %>
-          <h2 class="text-xl font-bold text-gray-900 mb-1">Reference documents</h2>
-          <p class="text-gray-600 text-sm mb-5">These are the official PDFs for your records. Open any to view — no tick required.</p>
-          <ul class="space-y-2">
-            <% allDocs.forEach(d => { %>
-              <li class="bg-white border border-gray-300 rounded-xl p-3">
-                <div class="flex items-center gap-3">
-                  <div class="w-10 h-10 rounded-lg bg-red-50 text-red-600 flex items-center justify-center flex-shrink-0">
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 16h-2v-2H9v-2h2v-2h-2v-2h6v2h-2v2h2v2h-2v2z"/></svg>
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm font-semibold text-gray-900 truncate"><%= d.title %></p>
-                  </div>
-                  <a href="/sop-sign/<%= session.token %>/document/<%= d.id %>" target="_blank" rel="noopener"
-                     class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-md transition flex-shrink-0">
-                    Open
-                  </a>
-                </div>
-              </li>
-            <% }) %>
-          </ul>
+            <!-- Per-section acknowledgement -->
+            <label class="mt-6 flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 cursor-pointer">
+              <input type="checkbox" class="sop-ack w-5 h-5 rounded text-emerald-500 focus:ring-emerald-500" data-section-id="<%= sec.id %>" />
+              <span class="text-sm text-emerald-900 font-semibold leading-snug">I have read and understood "<%= sec.title %>"</span>
+            </label>
+          </div>
         <% } %>
 
         <% if (step.kind === 'signature') { %>
-          <h2 class="text-xl font-bold text-gray-900 mb-1">Sign off</h2>
-          <p class="text-gray-600 text-sm mb-5">You've reviewed the SOPs<% if (allDocs.length > 0) { %> and reference documents<% } %>. Sign below to record your acknowledgement.</p>
+          <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+            <h2 class="text-xl font-bold text-gray-900 mb-1">Sign off</h2>
+            <p class="text-gray-600 text-sm mb-5">You've reviewed all <%= sections.length %> section<%= sections.length === 1 ? '' : 's' %>. Sign below to record your acknowledgement.</p>
 
-          <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
-            <p class="text-[10px] font-bold text-amber-800 uppercase tracking-widest mb-2">Acknowledgement (SOP version <%= sopVersion %>)</p>
-            <p class="ack-text text-sm text-gray-800 leading-relaxed"><%= ackText %></p>
-          </div>
-
-          <div>
-            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Sign here</label>
-            <div id="sig-pad-wrap" class="relative rounded-xl border border-gray-300 bg-white overflow-hidden" style="background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 23px, rgba(0,0,0,0.04) 23px, rgba(0,0,0,0.04) 24px);">
-              <canvas id="sig-canvas" class="block w-full" style="height: 200px;"></canvas>
-              <span id="sig-placeholder" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">Sign with your finger</span>
-              <div class="flex items-center justify-between px-3 py-2 bg-gray-50 border-t border-gray-200">
-                <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Signature</span>
-                <button type="button" id="sig-clear" class="text-xs font-semibold text-gray-500 hover:text-gray-700">Clear</button>
-              </div>
+            <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
+              <p class="text-[10px] font-bold text-amber-800 uppercase tracking-widest mb-2">Acknowledgement (SOP version <%= sopVersion %>)</p>
+              <p class="ack-text text-sm text-gray-800 leading-relaxed"><%= ackText %></p>
             </div>
-            <input type="hidden" name="signature_data" id="signature_data">
-            <p id="errMsg" class="hidden text-red-500 text-xs font-medium mt-2"></p>
+
+            <div>
+              <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Sign here</label>
+              <div id="sig-pad-wrap" class="relative rounded-xl border border-gray-300 bg-white overflow-hidden" style="background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 23px, rgba(0,0,0,0.04) 23px, rgba(0,0,0,0.04) 24px);">
+                <canvas id="sig-canvas" class="block w-full" style="height: 220px;"></canvas>
+                <span id="sig-placeholder" class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">Sign with your finger</span>
+                <div class="flex items-center justify-between px-3 py-2 bg-gray-50 border-t border-gray-200">
+                  <span class="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">Signature</span>
+                  <button type="button" id="sig-clear" class="text-xs font-semibold text-gray-500 hover:text-gray-700">Clear</button>
+                </div>
+              </div>
+              <input type="hidden" name="signature_data" id="signature_data">
+              <p id="errMsg" class="hidden text-red-500 text-xs font-medium mt-2"></p>
+            </div>
           </div>
         <% } %>
 
@@ -265,45 +253,105 @@
 
   </form>
 
-  <!-- Sticky bottom nav -->
-  <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 z-20">
-    <div class="max-w-md mx-auto flex items-center gap-3">
-      <button type="button" id="prev-btn" class="px-5 py-3 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+  <!-- Sticky bottom nav (visible Back + Next/Submit) -->
+  <div class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 px-4 py-3 z-20 shadow-lg">
+    <div class="max-w-2xl mx-auto flex items-center gap-3">
+      <button type="button" id="prev-btn" class="inline-flex items-center justify-center gap-1.5 px-5 py-3 bg-white border-2 border-gray-300 hover:bg-gray-100 text-gray-700 text-sm font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed" disabled>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
         Back
       </button>
-      <button type="button" id="next-btn" class="flex-1 py-3 bg-brand-600 hover:bg-brand-500 text-white text-sm font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">
-        Next →
+      <button type="button" id="next-btn" class="flex-1 inline-flex items-center justify-center gap-1.5 py-3 bg-brand-600 hover:bg-brand-500 text-white text-sm font-bold rounded-xl transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed">
+        Next
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
       </button>
-      <button type="button" id="submit-btn" class="hidden flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-xl transition disabled:opacity-40 disabled:cursor-not-allowed">
+      <button type="button" id="submit-btn" class="hidden flex-1 inline-flex items-center justify-center gap-1.5 py-3 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-xl transition shadow-md disabled:opacity-40 disabled:cursor-not-allowed">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
         Sign &amp; Submit
       </button>
     </div>
   </div>
 
+  <!-- PDF.js (lazy-loaded — only initialised when a section actually needs client-side render) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <script>
+    // Configure PDF.js worker once on load.
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
     const TOTAL_STEPS = <%= totalSteps %>;
     const STEP_KINDS = <%- JSON.stringify(steps.map(s => s.kind)) %>;
     const PREVIEW_MODE = <%- JSON.stringify(typeof previewMode !== 'undefined' && previewMode) %>;
     let currentStep = 0;
 
-    const stepEls = document.querySelectorAll('.step');
+    const stepEls = document.querySelectorAll('.step-panel');
     const prevBtn = document.getElementById('prev-btn');
     const nextBtn = document.getElementById('next-btn');
     const submitBtn = document.getElementById('submit-btn');
     const counter = document.getElementById('step-counter');
-    const progress = document.getElementById('progress-bar');
+
+    // Track which sections have been client-rendered to avoid re-rendering on each nav
+    const renderedSectionIds = new Set();
 
     function showStep(n) {
       n = Math.max(0, Math.min(TOTAL_STEPS - 1, n));
       currentStep = n;
       stepEls.forEach(el => el.classList.toggle('active', parseInt(el.dataset.step, 10) === n));
       counter.textContent = (n + 1);
-      progress.style.width = Math.round(((n + 1) / TOTAL_STEPS) * 100) + '%';
+
+      // Stepper circles state
+      for (let i = 0; i < TOTAL_STEPS; i++) {
+        const circle = document.getElementById('stepCircle' + i);
+        const numEl = document.getElementById('stepNum' + i);
+        const check = document.getElementById('stepCheck' + i);
+        const label = document.getElementById('stepLabel' + i);
+        if (!circle) continue;
+        if (i < n) {
+          circle.className = 'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300 bg-emerald-500 text-white border-emerald-500';
+          if (numEl) numEl.classList.add('hidden');
+          if (check) check.classList.remove('hidden');
+          if (label) { label.classList.remove('text-gray-400', 'text-brand-600'); label.classList.add('text-emerald-600'); }
+        } else if (i === n) {
+          circle.className = 'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300 bg-brand-500 text-white border-brand-500';
+          if (numEl) numEl.classList.remove('hidden');
+          if (check) check.classList.add('hidden');
+          if (label) { label.classList.remove('text-gray-400', 'text-emerald-600'); label.classList.add('text-brand-600'); }
+        } else {
+          circle.className = 'w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold border-2 transition-all duration-300 bg-white text-gray-400 border-gray-300';
+          if (numEl) numEl.classList.remove('hidden');
+          if (check) check.classList.add('hidden');
+          if (label) { label.classList.remove('text-brand-600', 'text-emerald-600'); label.classList.add('text-gray-400'); }
+        }
+        if (i < TOTAL_STEPS - 1) {
+          const line = document.getElementById('stepLine' + i);
+          if (line) line.className = (i < n)
+            ? 'flex-1 h-0.5 mx-0.5 mt-[-14px] min-w-[16px] transition-all duration-300 bg-emerald-500'
+            : 'flex-1 h-0.5 mx-0.5 mt-[-14px] min-w-[16px] transition-all duration-300 bg-gray-200';
+        }
+      }
+
+      // Scroll active stepper circle into view
+      const activeCircle = document.getElementById('stepCircle' + n);
+      if (activeCircle && activeCircle.scrollIntoView) {
+        activeCircle.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+      }
+
       prevBtn.disabled = n === 0;
       const isFinal = n === TOTAL_STEPS - 1;
       nextBtn.classList.toggle('hidden', isFinal);
       submitBtn.classList.toggle('hidden', !isFinal);
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // If we just entered a section step, render its PDF (once).
+      const activePanel = stepEls[n];
+      if (activePanel) {
+        const pdfTarget = activePanel.querySelector('.pdf-render-target');
+        if (pdfTarget && !renderedSectionIds.has(pdfTarget.dataset.docId)) {
+          renderedSectionIds.add(pdfTarget.dataset.docId);
+          renderPdfClientSide(pdfTarget);
+        }
+      }
+      if (isFinal) sizeSignature();
       syncNextEnabled();
     }
 
@@ -313,23 +361,22 @@
       const kind = currentKind();
       let ok = true;
       if (kind === 'welcome') {
-        // Need name to advance (only if not target-bound)
         const picker = document.getElementById('crew-picker');
         if (picker) {
           const manual = document.getElementById('manual-name');
           const v = picker.value || (manual && manual.value.trim());
           ok = !!v;
         }
-      } else if (kind === 'sop') {
-        const sopEl = stepEls[currentStep];
-        const cb = sopEl.querySelector('.sop-ack');
+      } else if (kind === 'section') {
+        const panel = stepEls[currentStep];
+        const cb = panel && panel.querySelector('.sop-ack');
         ok = !!(cb && cb.checked);
       }
       nextBtn.disabled = !ok;
-      submitBtn.disabled = !(allSopsAcknowledged() && hasInk);
+      submitBtn.disabled = !(allSectionsAcked() && hasInk);
     }
 
-    function allSopsAcknowledged() {
+    function allSectionsAcked() {
       const cbs = document.querySelectorAll('.sop-ack');
       return Array.from(cbs).every(cb => cb.checked);
     }
@@ -349,12 +396,54 @@
     });
     prevBtn.addEventListener('click', () => showStep(currentStep - 1));
 
-    // Watch checkboxes + name picker so Next enables/disables live
     document.querySelectorAll('.sop-ack').forEach(cb => cb.addEventListener('change', syncNextEnabled));
     const picker = document.getElementById('crew-picker');
     if (picker) picker.addEventListener('change', syncNextEnabled);
     const manual = document.getElementById('manual-name');
     if (manual) manual.addEventListener('input', syncNextEnabled);
+
+    // Click on a stepper circle to jump (only backwards or to current).
+    document.querySelectorAll('.step-indicator').forEach(el => {
+      el.addEventListener('click', () => {
+        const target = parseInt(el.dataset.step, 10);
+        if (target <= currentStep) showStep(target);
+      });
+    });
+
+    // ── Client-side PDF rendering (renders every page as a canvas) ──
+    async function renderPdfClientSide(target) {
+      if (!window.pdfjsLib) {
+        target.innerHTML = '<p class="text-xs text-red-600 text-center py-4">PDF viewer failed to load. <a href="' + target.dataset.pdfUrl + '" target="_blank" class="underline">Open the PDF directly.</a></p>';
+        return;
+      }
+      const url = target.dataset.pdfUrl;
+      try {
+        const loadingTask = window.pdfjsLib.getDocument({ url, disableAutoFetch: false, disableStream: false });
+        const pdf = await loadingTask.promise;
+        target.innerHTML = ''; // clear loading message
+        const containerWidth = target.clientWidth || 600;
+        for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+          const page = await pdf.getPage(pageNum);
+          const viewport = page.getViewport({ scale: 1 });
+          const scale = Math.min(2, containerWidth / viewport.width);
+          const scaled = page.getViewport({ scale });
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          const dpr = window.devicePixelRatio || 1;
+          canvas.width = scaled.width * dpr;
+          canvas.height = scaled.height * dpr;
+          canvas.style.width = '100%';
+          canvas.style.height = 'auto';
+          canvas.className = 'block w-full rounded-xl border border-gray-200 shadow-sm bg-white';
+          ctx.scale(dpr, dpr);
+          target.appendChild(canvas);
+          await page.render({ canvasContext: ctx, viewport: scaled }).promise;
+        }
+      } catch (err) {
+        console.error('PDF render failed:', err);
+        target.innerHTML = '<p class="text-xs text-red-600 text-center py-4">Could not render PDF inline. <a href="' + target.dataset.pdfUrl + '" target="_blank" class="underline">Open the PDF directly.</a></p>';
+      }
+    }
 
     // ── Signature pad ──
     const canvas = document.getElementById('sig-canvas');
@@ -364,13 +453,14 @@
     let last = null;
     let hasInk = false;
 
-    function resize() {
+    function sizeSignature() {
       if (!canvas) return;
       const dpr = window.devicePixelRatio || 1;
       const rect = canvas.getBoundingClientRect();
-      if (rect.width === 0) return; // not visible yet
+      if (rect.width === 0) return;
       canvas.width = rect.width * dpr;
       canvas.height = rect.height * dpr;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.scale(dpr, dpr);
       ctx.lineWidth = 2.2;
       ctx.lineCap = 'round';
@@ -378,12 +468,7 @@
       ctx.strokeStyle = '#0f172a';
     }
     if (canvas) {
-      // Resize when the signature step becomes active too
-      const obs = new MutationObserver(() => { if (canvas.offsetParent) resize(); });
-      const sigStep = canvas.closest('.step');
-      if (sigStep) obs.observe(sigStep, { attributes: true, attributeFilter: ['class'] });
-      window.addEventListener('resize', () => { resize(); });
-
+      window.addEventListener('resize', sizeSignature);
       function getXY(e) {
         const rect = canvas.getBoundingClientRect();
         const t = e.touches ? e.touches[0] : e;
@@ -421,10 +506,10 @@
 
     // ── Submit ──
     const form = document.getElementById('signForm');
-    submitBtn.addEventListener('click', (e) => {
+    submitBtn.addEventListener('click', () => {
       const errMsg = document.getElementById('errMsg');
-      if (!allSopsAcknowledged()) {
-        errMsg.textContent = 'Please go back and tick each SOP.';
+      if (!allSectionsAcked()) {
+        errMsg.textContent = 'Please go back and tick each section.';
         errMsg.classList.remove('hidden');
         return;
       }
@@ -435,12 +520,12 @@
       }
       errMsg.classList.add('hidden');
       if (PREVIEW_MODE) {
-        alert('Preview mode — submission disabled. Drop into a real session to test signing.');
+        alert('Preview mode — submission disabled.');
         return;
       }
       document.getElementById('signature_data').value = canvas.toDataURL('image/png');
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Submitting…';
+      submitBtn.innerHTML = 'Submitting…';
       form.submit();
     });
 

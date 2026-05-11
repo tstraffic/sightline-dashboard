@@ -6,23 +6,9 @@ const path = require('path');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { currentVersion: currentSopVersion, ackText: sopAckText, activeDocuments: activeSopDocuments } = require('../lib/sop');
-const sopContent = require('../lib/sop-content');
 
 const SOP_DOC_DIR = path.join(__dirname, '..', 'data', 'uploads', 'sop-documents');
 const SOP_PAGE_DIR = path.join(SOP_DOC_DIR, 'page-renders');
-
-// Pair each structured SOP with the matching uploaded PDF.
-// Explicit sop_slug (set by admin via the upload dropdown) wins; regex on
-// filename / title is a fallback for older uploads.
-function pairContentWithPdfs(content, pdfDocs) {
-  return content.map(sop => {
-    let matchedPdf = pdfDocs.find(d => d.sop_slug === sop.slug);
-    if (!matchedPdf && sop.pdfFilenameMatch) {
-      matchedPdf = pdfDocs.find(d => !d.sop_slug && (sop.pdfFilenameMatch.test(d.original_name) || sop.pdfFilenameMatch.test(d.title)));
-    }
-    return { ...sop, matchedPdf: matchedPdf || null };
-  });
-}
 
 function loadSession(token) {
   return getDb().prepare('SELECT * FROM sop_signing_sessions WHERE token = ?').get(token);
@@ -78,7 +64,6 @@ router.get('/:token', (req, res) => {
 
   const attendees = session.target_crew_member_id ? [] : loadAttendeeList(session.id);
   const documents = activeSopDocuments(db);
-  const structuredSops = pairContentWithPdfs(sopContent.all(), documents);
 
   res.render('sop-sign/mobile', {
     layout: false,
@@ -86,7 +71,6 @@ router.get('/:token', (req, res) => {
     targetCrew,
     attendees,
     documents,
-    structuredSops,
     ackText: sopAckText(),
     sopVersion: currentSopVersion(),
     submitted: false,

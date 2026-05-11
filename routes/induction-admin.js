@@ -849,15 +849,7 @@ router.get('/acknowledgements', (req, res) => {
 // ============================================================
 router.get('/sop-preview', (req, res) => {
   const db = getDb();
-  const sopContent = require('../lib/sop-content');
   const documents = activeSopDocuments(db);
-  const structuredSops = sopContent.all().map(sop => {
-    let matchedPdf = null;
-    if (sop.pdfFilenameMatch) {
-      matchedPdf = documents.find(d => sop.pdfFilenameMatch.test(d.original_name) || sop.pdfFilenameMatch.test(d.title));
-    }
-    return { ...sop, matchedPdf: matchedPdf || null };
-  });
 
   res.render('sop-sign/mobile', {
     layout: false,
@@ -865,7 +857,6 @@ router.get('/sop-preview', (req, res) => {
     targetCrew: null,
     attendees: [],
     documents,
-    structuredSops,
     ackText: sopAckText(),
     sopVersion: currentSopVersion(),
     submitted: false,
@@ -888,14 +879,10 @@ router.get('/sop-documents', (req, res) => {
     ORDER BY d.active DESC, d.display_order ASC, d.id ASC
   `).all();
 
-  const sopContent = require('../lib/sop-content');
-  const sopOptions = sopContent.all().map(s => ({ slug: s.slug, title: s.title, code: s.code }));
-
   res.render('induction/admin/sop-documents', {
-    title: 'SOP / SWMS Documents',
+    title: 'SOP / SWMS Sections',
     currentPage: 'induction-presentations',
     docs,
-    sopOptions,
     sopVersion: currentSopVersion(),
   });
 });
@@ -911,10 +898,11 @@ router.post('/sop-documents', sopDocUpload.single('file'), async (req, res) => {
   const next = db.prepare('SELECT COALESCE(MAX(display_order), 0) + 1 as n FROM sop_documents').get();
 
   const sopSlug = (req.body.sop_slug || '').toString().trim() || null;
+  const description = (req.body.description || '').toString().trim().slice(0, 20000);
 
   const result = db.prepare(`
-    INSERT INTO sop_documents (title, filename, original_name, file_path, file_size, mime_type, display_order, active, created_by_id, sop_slug)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+    INSERT INTO sop_documents (title, filename, original_name, file_path, file_size, mime_type, display_order, active, created_by_id, sop_slug, description)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
   `).run(
     title,
     req.file.filename,
@@ -925,6 +913,7 @@ router.post('/sop-documents', sopDocUpload.single('file'), async (req, res) => {
     next.n,
     req.session.user.id,
     sopSlug,
+    description,
   );
 
   // Render PDF pages to PNGs so the mobile sign page can display them inline.
@@ -950,6 +939,22 @@ router.post('/sop-documents/:id/render', async (req, res) => {
   } else {
     req.flash('error', `Couldn't render "${doc.title}": ${error || 'unknown reason'}. The PDF will still display via the browser's PDF viewer on the sign page.`);
   }
+  res.redirect('/induction/admin/sop-documents');
+});
+
+// POST /induction/admin/sop-documents/:id/update — edit title + description.
+// Admin builds the section content here; HTML is allowed and rendered raw on
+// the sign page (admin-only input, no XSS surface — only authenticated admins
+// with the 'induction' permission can reach this route).
+router.post('/sop-documents/:id/update', (req, res) => {
+  const db = getDb();
+  const doc = db.prepare('SELECT id FROM sop_documents WHERE id = ?').get(req.params.id);
+  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
+  const title = (req.body.title || '').toString().trim().slice(0, 200);
+  const description = (req.body.description || '').toString().slice(0, 20000);
+  if (!title) { req.flash('error', 'Title is required.'); return res.redirect('/induction/admin/sop-documents'); }
+  db.prepare('UPDATE sop_documents SET title = ?, description = ? WHERE id = ?').run(title, description, doc.id);
+  req.flash('success', `Updated "${title}".`);
   res.redirect('/induction/admin/sop-documents');
 });
 

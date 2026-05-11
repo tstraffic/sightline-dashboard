@@ -8424,6 +8424,21 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 182: description column on sop_documents
+  // Lets admin write the section body (intro / bullets / context) shown above
+  // the inline PDF on the sign page. HTML allowed; rendered with EJS <%-.
+  // Each sop_documents row is treated as one section in the acknowledgement
+  // wizard, so admin can build the flow entirely from the admin UI without
+  // touching lib/sop-content.js.
+  // =============================================
+  if (!isMigrationApplied.get(182)) {
+    console.log('Running migration 182: description column on sop_documents');
+    try { db.exec("ALTER TABLE sop_documents ADD COLUMN description TEXT DEFAULT ''"); } catch (e) { /* may exist */ }
+    recordMigration.run(182, 'description column on sop_documents');
+    console.log('Migration 182 applied');
+  }
+
   console.log('All migrations checked/applied.');
 }
 
