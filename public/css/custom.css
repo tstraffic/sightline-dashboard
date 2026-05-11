@@ -3716,40 +3716,67 @@ body.dark-glass.accent-cyan    #sidebar .text-brand-300 { color: rgba(165,243,25
 body.dark-glass.accent-cyan    #sidebar .text-brand-400 { color: rgba(165,243,252,0.50) !important; }
 body.dark-glass.accent-cyan    #sidebar .text-brand-400\/45 { color: rgba(165,243,252,0.35) !important; }
 
-/* --- Hero banner (neutral dark slate, accent-tinted glow) ---
-   The hero used to recolour wholesale with each theme — under saturated
-   gradients (plum, sunset, ocean) the right side blew out into a very
-   bright wash. Replace those per-theme overrides with ONE neutral slate
-   base shared by every dark theme, plus a small accent-coloured glow
-   driven by the accent CSS variables. The colour identity comes from the
-   tinted glow + the text labels (already accent-aware), not from the
-   whole hero being one colour.
+/* --- Hero banner — DARK MODE ONLY (light mode keeps its existing brand
+   gradient untouched).
 
-   Light mode is intentionally untouched. */
+   Spirit: the card should sit one elevation level above the page background
+   and pick up its colour from the active accent via a subtle wash, NOT by
+   recolouring the whole surface. Equivalent to the shadcn pattern of
+   `bg-card` + `border-border/50` + a low-alpha `from-primary/10` overlay,
+   translated to the tokens we have here:
+
+     bg-card                → solid dark slate (#0F172A)
+     border-border/50       → 1px border at rgba(255,255,255,0.06)
+     from-primary/10        → linear-gradient using rgba(var(--accent-rgb), 0.10)
+     bg-muted/40 (kpi card) → rgba(255,255,255,0.04) inset panels
+     text-foreground        → white
+     text-muted-foreground  → rgba(255,255,255,0.60)
+
+   Net result: switching gradient or accent (or the user's custom hex) only
+   shifts the wash + the eyebrow text — never the whole hero. No saturated
+   right-side blowout. */
 body.dark-glass .hero-banner {
   background:
-    radial-gradient(ellipse 60% 80% at 100% 0%, rgba(var(--hero-accent-rgb, 56,189,248), 0.22), transparent 60%),
-    radial-gradient(ellipse 45% 60% at 0% 100%, rgba(255,255,255,0.04), transparent 65%),
-    linear-gradient(135deg, #1E293B 0%, #111827 100%) !important;
+    linear-gradient(135deg, rgba(var(--hero-accent-rgb, 56,189,248), 0.12) 0%, transparent 55%, rgba(var(--hero-accent-rgb, 56,189,248), 0.05) 100%),
+    linear-gradient(180deg, #131C30 0%, #0B1322 100%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.06) !important;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset, 0 8px 24px rgba(0,0,0,0.25) !important;
 }
 
-/* Accent-specific glow tint — overrides --hero-accent-rgb so the corner
-   glow matches whichever accent the user picked. Subtle (0.22 alpha) so
-   the hero doesn't get bright again. */
+/* Hide the white-tint decorative orbs in dark mode — they read as muddy
+   patches against the neutral base and fight the accent wash. */
+body.dark-glass .hero-banner > .hero-orb { display: none !important; }
+
+/* KPI tiles — inset panel look that works on any accent / gradient */
+body.dark-glass .hero-banner .hero-kpi-card {
+  background: rgba(255, 255, 255, 0.04) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow: none !important;
+  /* The Tailwind ring utility on the markup adds a coloured ring — neutralise
+     it so the border-only inset look wins. */
+  --tw-ring-color: transparent !important;
+}
+body.dark-glass .hero-banner .hero-kpi-card:hover {
+  background: rgba(255, 255, 255, 0.07) !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+}
+
+/* Accent token — drives the subtle wash colour. Set per accent class so
+   the hero picks up whichever accent the user chose. Custom inherits the
+   user's picked hex through the existing --accent-rgb. */
 body.dark-glass.accent-blue    { --hero-accent-rgb: 56,189,248; }
 body.dark-glass.accent-purple  { --hero-accent-rgb: 168,85,247; }
 body.dark-glass.accent-pink    { --hero-accent-rgb: 236,72,153; }
 body.dark-glass.accent-emerald { --hero-accent-rgb: 16,185,129; }
 body.dark-glass.accent-amber   { --hero-accent-rgb: 245,158,11; }
 body.dark-glass.accent-cyan    { --hero-accent-rgb: 6,182,212; }
-/* Custom accent — reuse the user's picked colour for the glow too */
 body.dark-glass.accent-custom  { --hero-accent-rgb: var(--accent-rgb); }
 
-/* Decorative orbs on the hero — soften the white-tinted ones so the
-   neutral base reads clean rather than dappled. */
-body.dark-glass .hero-banner > .hero-orb:first-of-type {
-  background: radial-gradient(ellipse at center, rgba(255,255,255,0.06), transparent 70%) !important;
-}
+/* Text inside the hero — translate the existing brand-X classes to the
+   foreground / muted-foreground roles in dark mode. The accent overrides
+   above already retint text-brand-200/300/400 per accent. */
+body.dark-glass .hero-banner .text-white { color: #FFFFFF !important; }
+body.dark-glass .hero-banner .text-brand-200\/80 { color: rgba(255,255,255,0.60) !important; }
 
 /* Hero accent dots (e.g. .text-brand-300 on the KPI labels) — picked up by
    accent rules below so KPI labels match the chosen accent. text-brand-300
