@@ -274,8 +274,9 @@
 
 <script>
   // Live-save inline edits (date pickers and dropdowns) without reloading the
-  // page. Falls back to a full reload if the request fails so the user
-  // doesn't lose track of changes.
+  // page. We POST as application/x-www-form-urlencoded — the server has a
+  // urlencoded body parser but NOT a multipart one on this route, so a
+  // FormData body would silently arrive empty and the update would no-op.
   (function () {
     const csrf = document.querySelector('input[name="_csrf"]')?.value || '';
     document.querySelectorAll('.inline-edit').forEach(el => {
@@ -285,19 +286,26 @@
         const value = el.value;
         el.classList.add('opacity-50');
         try {
-          const fd = new FormData();
-          fd.set(field, value);
-          fd.set('_csrf', csrf);
+          const body = new URLSearchParams();
+          body.set(field, value);
+          body.set('_csrf', csrf);
           const r = await fetch('/induction/admin/recruitment/' + encodeURIComponent(id), {
             method: 'POST',
-            headers: { 'Accept': 'application/json' },
-            body: fd,
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/x-www-form-urlencoded',
+              'X-CSRF-Token': csrf,
+            },
+            body: body.toString(),
           });
-          if (!r.ok) throw new Error('Save failed');
+          if (!r.ok) throw new Error('Save failed: HTTP ' + r.status);
+          const data = await r.json().catch(() => ({}));
+          if (data && data.ok === false) throw new Error(data.error || 'Save failed');
           // Refresh page so monthly stats / weekly counts update instantly.
           window.location.reload();
         } catch (err) {
-          alert('Could not save — please try again.');
+          console.error('inline-edit save failed:', err);
+          alert('Could not save — ' + (err.message || 'please try again.'));
           el.classList.remove('opacity-50');
         }
       });
