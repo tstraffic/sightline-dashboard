@@ -453,9 +453,17 @@ router.get('/:id/edit', (req, res) => {
   let tenders = [];
   try { tenders = db.prepare("SELECT id, tender_number, title, status FROM tenders ORDER BY id DESC").all(); } catch (e) {}
 
-  // Load subtasks
+  // Load subtasks (with assignee name)
   let subtasks = [];
-  try { subtasks = db.prepare('SELECT * FROM subtasks WHERE task_id = ? ORDER BY sort_order ASC').all(req.params.id); } catch (e) { /* table may not exist yet */ }
+  try {
+    subtasks = db.prepare(`
+      SELECT s.*, u.full_name AS assignee_name
+      FROM subtasks s
+      LEFT JOIN users u ON u.id = s.assigned_to_id
+      WHERE s.task_id = ?
+      ORDER BY s.sort_order ASC
+    `).all(req.params.id);
+  } catch (e) { /* table may not exist yet */ }
 
   // Load comments with user names
   let comments = [];
@@ -828,13 +836,75 @@ router.post('/:id/comments', (req, res) => {
 // Subtasks
 // =============================================
 
-// POST /:id/subtasks — Add a subtask
+// Send the same kind of "you've been assigned" notification we send for tasks,
+// but worded as a subtask. URL points back to the parent task page where the
+// subtask is shown.
+function notifySubtaskAssigned(db, parentTaskId, subtask, assigneeId, req) {
+  try {
+    if (!assigneeId) return;
+    const parent = db.prepare(`
+      SELECT t.*, j.job_number, j.client
+      FROM tasks t
+      LEFT JOIN jobs j ON j.id = t.job_id
+      WHERE t.id = ?
+    `).get(parentTaskId);
+    if (!parent) return;
+    const assignee = db.prepare('SELECT id, full_name, email FROM users WHERE id = ?').get(assigneeId);
+    if (!assignee) return;
+    const assignedByName = req.session.user ? req.session.user.full_name : '';
+    const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;
+    const jobLabel = parent.job_number ? `${parent.job_number} - ${parent.client}` : 'General';
+
+    // Reuse the existing assignment email — synthesise a task object so the
+    // recipient sees the subtask title clearly and gets the parent task URL.
+    const taskData = {
+      id: parent.id,
+      title: `Subtask: ${subtask.title} (on "${parent.title}")`,
+      description: parent.description || '',
+      due_date: parent.due_date,
+      priority: parent.priority,
+      task_type: 'subtask'
+    };
+    sendTaskAssignmentEmail(taskData, assignee, jobLabel, assignedByName, baseUrl)
+      .catch(e => console.error('[Subtasks] Email error:', e.message));
+    sendPushToUser(assigneeId, {
+      title: 'Subtask Assigned',
+      body: `${subtask.title} — part of "${parent.title}"${assignedByName ? ' · assigned by ' + assignedByName : ''}`,
+      url: '/tasks/' + parent.id + '/edit',
+      type: 'task_assignment'
+    });
+  } catch (e) {
+    console.error('[Subtasks] Notify error:', e.message);
+  }
+}
+
+// POST /:id/subtasks — Add a subtask (optionally assigned to a user)
 router.post('/:id/subtasks', (req, res) => {
   const db = getDb();
   const { title } = req.body;
   if (!title || !title.trim()) return res.redirect('/tasks/' + req.params.id + '/edit');
+  const assignedToId = req.body.assigned_to_id ? (parseInt(req.body.assigned_to_id, 10) || null) : null;
   const maxOrder = db.prepare('SELECT COALESCE(MAX(sort_order), 0) as m FROM subtasks WHERE task_id = ?').get(req.params.id).m;
-  db.prepare('INSERT INTO subtasks (task_id, title, sort_order) VALUES (?, ?, ?)').run(req.params.id, title.trim(), maxOrder + 1);
+  const r = db.prepare('INSERT INTO subtasks (task_id, title, sort_order, assigned_to_id) VALUES (?, ?, ?, ?)')
+    .run(req.params.id, title.trim(), maxOrder + 1, assignedToId);
+  if (assignedToId) {
+    notifySubtaskAssigned(db, req.params.id, { id: r.lastInsertRowid, title: title.trim() }, assignedToId, req);
+  }
+  res.redirect('/tasks/' + req.params.id + '/edit');
+});
+
+// POST /:id/subtasks/:sid/assign — Change a subtask's assignee
+router.post('/:id/subtasks/:sid/assign', (req, res) => {
+  const db = getDb();
+  const subtask = db.prepare('SELECT * FROM subtasks WHERE id = ? AND task_id = ?').get(req.params.sid, req.params.id);
+  if (!subtask) return res.redirect('/tasks/' + req.params.id + '/edit');
+  const newAssigneeId = req.body.assigned_to_id ? (parseInt(req.body.assigned_to_id, 10) || null) : null;
+  db.prepare('UPDATE subtasks SET assigned_to_id = ? WHERE id = ?').run(newAssigneeId, subtask.id);
+  // Only notify if the assignee actually changed to a non-null user (avoids
+  // re-notifying on unrelated edits or when clearing the field).
+  if (newAssigneeId && newAssigneeId !== subtask.assigned_to_id) {
+    notifySubtaskAssigned(db, req.params.id, subtask, newAssigneeId, req);
+  }
   res.redirect('/tasks/' + req.params.id + '/edit');
 });
 
