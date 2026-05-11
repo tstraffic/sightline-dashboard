@@ -889,43 +889,46 @@ router.get('/sop-documents', (req, res) => {
 
 // POST /induction/admin/sop-documents — upload a new doc
 router.post('/sop-documents', sopDocUpload.single('file'), async (req, res) => {
-  if (!req.file) {
-    req.flash('error', 'No file uploaded.');
-    return res.redirect('/induction/admin/sop-documents');
+  try {
+    if (!req.file) {
+      req.flash('error', 'No file uploaded.');
+      return res.redirect('/induction/admin/sop-documents');
+    }
+    const db = getDb();
+    const title = (req.body.title || req.file.originalname.replace(/\.[^.]+$/, '')).toString().trim().slice(0, 200);
+    const next = db.prepare('SELECT COALESCE(MAX(display_order), 0) + 1 as n FROM sop_documents').get();
+
+    const sopSlug = (req.body.sop_slug || '').toString().trim() || null;
+    const description = (req.body.description || '').toString().trim().slice(0, 20000);
+
+    // Build the INSERT dynamically based on which columns actually exist on
+    // this deploy. Older deploys may not have run migration 180 (sop_slug)
+    // or 182 (description) yet — without this check the INSERT throws and
+    // bubbles up as a generic 500 to the user.
+    const cols = new Set(db.prepare('PRAGMA table_info(sop_documents)').all().map(c => c.name));
+    const fields = ['title', 'filename', 'original_name', 'file_path', 'file_size', 'mime_type', 'display_order', 'active', 'created_by_id'];
+    const values = [title, req.file.filename, req.file.originalname, req.file.path, req.file.size, req.file.mimetype || '', next.n, 1, req.session.user.id];
+    if (cols.has('sop_slug'))    { fields.push('sop_slug');    values.push(sopSlug); }
+    if (cols.has('description')) { fields.push('description'); values.push(description); }
+
+    const placeholders = fields.map(() => '?').join(', ');
+    const result = db.prepare(`INSERT INTO sop_documents (${fields.join(', ')}) VALUES (${placeholders})`).run(...values);
+
+    // Render PDF pages to PNGs so the mobile sign page can display them inline.
+    // Best-effort — done synchronously here so the admin sees the result on
+    // redirect, but failures are non-fatal and caught inside the helper.
+    const docRow = db.prepare('SELECT * FROM sop_documents WHERE id = ?').get(result.lastInsertRowid);
+    const { pages, error } = await renderAndPersistPages(db, docRow);
+    let suffix = '';
+    if (pages.length > 0) suffix = ` — rendered ${pages.length} page${pages.length === 1 ? '' : 's'} for inline display.`;
+    else if (error) suffix = ` (Inline render failed: ${error}. The PDF will still display via the browser's PDF viewer.)`;
+    req.flash(pages.length > 0 || !error ? 'success' : 'error', `Uploaded "${title}".${suffix}`);
+    res.redirect('/induction/admin/sop-documents');
+  } catch (err) {
+    console.error('[sop-documents upload] failed:', err);
+    req.flash('error', `Upload failed: ${err.message}. The file may have been received but the section row could not be saved.`);
+    res.redirect('/induction/admin/sop-documents');
   }
-  const db = getDb();
-  const title = (req.body.title || req.file.originalname.replace(/\.[^.]+$/, '')).toString().trim().slice(0, 200);
-  const next = db.prepare('SELECT COALESCE(MAX(display_order), 0) + 1 as n FROM sop_documents').get();
-
-  const sopSlug = (req.body.sop_slug || '').toString().trim() || null;
-  const description = (req.body.description || '').toString().trim().slice(0, 20000);
-
-  const result = db.prepare(`
-    INSERT INTO sop_documents (title, filename, original_name, file_path, file_size, mime_type, display_order, active, created_by_id, sop_slug, description)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
-  `).run(
-    title,
-    req.file.filename,
-    req.file.originalname,
-    req.file.path,
-    req.file.size,
-    req.file.mimetype || '',
-    next.n,
-    req.session.user.id,
-    sopSlug,
-    description,
-  );
-
-  // Render PDF pages to PNGs so the mobile sign page can display them inline.
-  // Best-effort — done synchronously here so the admin sees the result on
-  // redirect, but failures are non-fatal.
-  const docRow = db.prepare('SELECT * FROM sop_documents WHERE id = ?').get(result.lastInsertRowid);
-  const { pages, error } = await renderAndPersistPages(db, docRow);
-  let suffix = '';
-  if (pages.length > 0) suffix = ` — rendered ${pages.length} page${pages.length === 1 ? '' : 's'} for inline display.`;
-  else if (error) suffix = ` (Inline render failed: ${error}. The PDF will still display via the browser's PDF viewer.)`;
-  req.flash(pages.length > 0 || !error ? 'success' : 'error', `Uploaded "${title}".${suffix}`);
-  res.redirect('/induction/admin/sop-documents');
 });
 
 // POST /induction/admin/sop-documents/:id/render — re-render pages (backfill or refresh)
@@ -947,15 +950,26 @@ router.post('/sop-documents/:id/render', async (req, res) => {
 // the sign page (admin-only input, no XSS surface — only authenticated admins
 // with the 'induction' permission can reach this route).
 router.post('/sop-documents/:id/update', (req, res) => {
-  const db = getDb();
-  const doc = db.prepare('SELECT id FROM sop_documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
-  const title = (req.body.title || '').toString().trim().slice(0, 200);
-  const description = (req.body.description || '').toString().slice(0, 20000);
-  if (!title) { req.flash('error', 'Title is required.'); return res.redirect('/induction/admin/sop-documents'); }
-  db.prepare('UPDATE sop_documents SET title = ?, description = ? WHERE id = ?').run(title, description, doc.id);
-  req.flash('success', `Updated "${title}".`);
-  res.redirect('/induction/admin/sop-documents');
+  try {
+    const db = getDb();
+    const doc = db.prepare('SELECT id FROM sop_documents WHERE id = ?').get(req.params.id);
+    if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
+    const title = (req.body.title || '').toString().trim().slice(0, 200);
+    const description = (req.body.description || '').toString().slice(0, 20000);
+    if (!title) { req.flash('error', 'Title is required.'); return res.redirect('/induction/admin/sop-documents'); }
+    const cols = new Set(db.prepare('PRAGMA table_info(sop_documents)').all().map(c => c.name));
+    if (cols.has('description')) {
+      db.prepare('UPDATE sop_documents SET title = ?, description = ? WHERE id = ?').run(title, description, doc.id);
+    } else {
+      db.prepare('UPDATE sop_documents SET title = ? WHERE id = ?').run(title, doc.id);
+    }
+    req.flash('success', `Updated "${title}".`);
+    res.redirect('/induction/admin/sop-documents');
+  } catch (err) {
+    console.error('[sop-documents update] failed:', err);
+    req.flash('error', `Update failed: ${err.message}`);
+    res.redirect('/induction/admin/sop-documents');
+  }
 });
 
 // POST /induction/admin/sop-documents/:id/link — change which SOP this doc belongs to
