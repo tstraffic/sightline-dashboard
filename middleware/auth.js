@@ -176,6 +176,17 @@ function requireLogin(req, res, next) {
     res.locals.user = req.session.user;
     return next();
   }
+  // For AJAX / API requests, return 401 instead of saving the URL as returnTo
+  // and redirecting. Otherwise a background poll (e.g. /chat/api/unread-count)
+  // that fires after the session expires will hijack the post-login redirect,
+  // landing the user on a raw JSON response after they sign back in.
+  const isApi = req.xhr
+    || req.path.startsWith('/api/')
+    || req.path.includes('/api/')
+    || (req.headers.accept && !req.headers.accept.includes('text/html'));
+  if (isApi) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
   req.session.returnTo = req.originalUrl;
   res.redirect('/login');
 }
