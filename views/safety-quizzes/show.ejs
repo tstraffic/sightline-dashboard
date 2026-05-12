@@ -1,0 +1,110 @@
+<% locals.currentPage = 'safety-quizzes' %>
+<%
+  const STATUS_BADGE = {
+    draft: 'bg-amber-50 text-amber-700 ring-amber-200',
+    published: 'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    archived: 'bg-gray-50 text-gray-600 ring-gray-200',
+  };
+  function fmt(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  function fmtDate(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  const total = stats.total_crew || 0;
+  const passed = stats.passed_workers || 0;
+  const pct = total > 0 ? Math.round((passed / total) * 100) : 0;
+  const avgScore = stats.avg_score != null ? Math.round(stats.avg_score) : null;
+%>
+
+<div class="max-w-4xl mx-auto space-y-5">
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <a href="/safety-quizzes" class="text-sm text-brand-600 hover:underline">← Safety Quizzes</a>
+      <h1 class="text-2xl font-bold text-gray-900 mt-1 flex items-center gap-2 flex-wrap">
+        <%= quiz.title %>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset <%= STATUS_BADGE[quiz.status] %>"><%= statusLabels[quiz.status] %></span>
+        <% if (quiz.is_mandatory) { %><span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-rose-50 text-rose-700 ring-rose-200">Mandatory</span><% } %>
+      </h1>
+      <% if (sourceLabel) { %>
+        <p class="text-xs text-gray-500 mt-1">Linked to <%= sourceLabels[quiz.source_type] %>: <%= sourceLabel %></p>
+      <% } %>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/safety-quizzes/<%= quiz.id %>/edit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Edit</a>
+      <a href="/safety-quizzes/<%= quiz.id %>/questions" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Questions (<%= questions.length %>)</a>
+      <% if (quiz.status === 'draft') { %>
+        <form method="POST" action="/safety-quizzes/<%= quiz.id %>/publish" class="inline">
+          <%- include('../partials/csrf') %>
+          <button type="submit" class="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg">Publish</button>
+        </form>
+      <% } %>
+      <% if (quiz.status !== 'archived') { %>
+        <form method="POST" action="/safety-quizzes/<%= quiz.id %>/archive" class="inline" onsubmit="return confirm('Archive this quiz?')">
+          <%- include('../partials/csrf') %>
+          <button type="submit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Archive</button>
+        </form>
+      <% } %>
+      <form method="POST" action="/safety-quizzes/<%= quiz.id %>/delete" class="inline" onsubmit="return confirm('Delete this quiz? This cannot be undone.')">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-300 hover:text-red-600 text-gray-700 text-sm font-semibold rounded-lg">Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="border-b border-gray-200 flex items-center gap-1">
+    <span class="px-4 py-2 -mb-px border-b-2 border-brand-600 text-brand-700 text-sm font-semibold">Details</span>
+    <a href="/safety-quizzes/<%= quiz.id %>/attempts" class="px-4 py-2 -mb-px border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-semibold">Attempts <span class="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-600"><%= stats.attempted_workers || 0 %></span></a>
+  </div>
+
+  <% if (quiz.status === 'published') { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Workers passed</p>
+      <p class="text-2xl font-bold text-gray-900"><%= passed %> <span class="text-gray-400 font-normal text-base">of <%= total %> · <%= pct %>%</span></p>
+      <% if (avgScore != null) { %><p class="text-xs text-gray-500 mt-1">Average score: <%= avgScore %>%</p><% } %>
+      <div class="w-full h-2 bg-gray-100 rounded-full mt-2">
+        <div class="h-2 bg-emerald-500 rounded-full" style="width: <%= pct %>%"></div>
+      </div>
+    </div>
+  <% } %>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pass mark</p>
+      <p class="text-sm font-semibold text-gray-900 mt-0.5"><%= quiz.pass_mark %>%</p>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Retakes</p>
+      <p class="text-sm font-semibold text-gray-900 mt-0.5"><%= quiz.retake_policy === 'limited' ? (quiz.retake_limit + ' allowed') : quiz.retake_policy.charAt(0).toUpperCase() + quiz.retake_policy.slice(1) %></p>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Deadline</p>
+      <p class="text-sm text-gray-700 mt-0.5"><%= fmtDate(quiz.deadline_at) %></p>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Published</p>
+      <p class="text-sm text-gray-700 mt-0.5"><%= quiz.status === 'published' ? fmt(quiz.published_at) : '—' %></p>
+    </div>
+  </div>
+
+  <% if (quiz.description) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Description</p>
+      <p class="text-sm text-gray-800 whitespace-pre-line leading-relaxed"><%= quiz.description %></p>
+    </div>
+  <% } %>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Questions (<%= questions.length %>)</p>
+    <% if (!questions.length) { %>
+      <p class="text-sm text-gray-500">No questions yet. <a href="/safety-quizzes/<%= quiz.id %>/questions" class="text-brand-600 hover:underline">Add some →</a></p>
+    <% } else { %>
+      <ol class="list-decimal list-inside space-y-1 text-sm text-gray-700">
+        <% questions.forEach(q => { %><li><%= q.question_text %></li><% }) %>
+      </ol>
+    <% } %>
+  </div>
+</div>

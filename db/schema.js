@@ -8750,6 +8750,98 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 190: safety_quizzes + questions + attempts + answers
+  // Phase 3a — knowledge-check quizzes (MCQ single + true/false in v1).
+  // Save-and-resume is supported by writing answers as the worker
+  // progresses; an attempt sits in_progress until they hit submit.
+  // =============================================
+  if (!isMigrationApplied.get(190)) {
+    console.log('Running migration 190: safety_quizzes + attempts');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS safety_quizzes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          pass_mark INTEGER NOT NULL DEFAULT 80,            -- percentage (0-100)
+          retake_policy TEXT NOT NULL DEFAULT 'unlimited'
+            CHECK(retake_policy IN ('none','unlimited','limited')),
+          retake_limit INTEGER,                              -- NULL when policy != 'limited'
+          deadline_at DATETIME,
+          is_mandatory INTEGER NOT NULL DEFAULT 0,
+          -- Optional source-content link. When source_type='toolbox' and the
+          -- worker passes, we INSERT OR IGNORE a 'caught_up' attendance row
+          -- so the quiz functions as a catch-up mechanism.
+          source_type TEXT
+            CHECK(source_type IN ('toolbox','swms','update') OR source_type IS NULL),
+          source_id INTEGER,
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK(status IN ('draft','published','archived')),
+          published_at DATETIME,
+          published_by_id INTEGER REFERENCES users(id),
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS safety_quiz_questions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quiz_id INTEGER NOT NULL REFERENCES safety_quizzes(id) ON DELETE CASCADE,
+          question_text TEXT NOT NULL,
+          question_type TEXT NOT NULL DEFAULT 'mcq_single'
+            CHECK(question_type IN ('mcq_single','true_false')),
+          -- For mcq_single: JSON array of {text, is_correct} objects (2-6 options).
+          -- For true_false: ignored on write; the route enforces 2 fixed options.
+          options_json TEXT NOT NULL DEFAULT '[]',
+          -- For true_false: 'true' or 'false'. For mcq_single: the index (0-based)
+          -- of the correct option. Stored alongside options_json so grading is
+          -- a simple equality check without re-parsing the JSON each time.
+          correct_value TEXT NOT NULL DEFAULT '',
+          explanation TEXT NOT NULL DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS safety_quiz_attempts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quiz_id INTEGER NOT NULL REFERENCES safety_quizzes(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          attempt_number INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'in_progress'
+            CHECK(status IN ('in_progress','submitted')),
+          score_pct INTEGER,                                  -- NULL until submitted
+          passed INTEGER,                                     -- NULL until submitted
+          started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          submitted_at DATETIME,
+          UNIQUE(quiz_id, crew_member_id, attempt_number)
+        );
+
+        CREATE TABLE IF NOT EXISTS safety_quiz_answers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          attempt_id INTEGER NOT NULL REFERENCES safety_quiz_attempts(id) ON DELETE CASCADE,
+          question_id INTEGER NOT NULL REFERENCES safety_quiz_questions(id) ON DELETE CASCADE,
+          -- The worker's answer. For mcq_single: the option index as a string.
+          -- For true_false: 'true' or 'false'.
+          answer_value TEXT DEFAULT '',
+          is_correct INTEGER,                                 -- NULL while in_progress
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(attempt_id, question_id)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quizzes_status ON safety_quizzes(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quizzes_source ON safety_quizzes(source_type, source_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_q_quiz ON safety_quiz_questions(quiz_id, sort_order)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_att_crew ON safety_quiz_attempts(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_att_quiz ON safety_quiz_attempts(quiz_id, status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_ans_attempt ON safety_quiz_answers(attempt_id)');
+      recordMigration.run(190, 'safety_quizzes + attempts');
+      console.log('Migration 190 applied');
+    } catch (e) {
+      console.error('Migration 190 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
