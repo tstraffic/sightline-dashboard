@@ -13,6 +13,14 @@
 
 body.worker-portal { background: linear-gradient(180deg, #020817, #0A1628); }
 
+/* The original portal background — kept as an explicit "Classic" option so
+   workers who liked the old look can pin it (and so it shows in the picker
+   as a real choice, not a hidden fallback). Matches the bare
+   body.worker-portal rule above. */
+body.worker-portal.gradient-classic {
+  background: linear-gradient(180deg, #020817, #0A1628);
+}
+
 body.worker-portal.gradient-midnight {
   background: linear-gradient(135deg, #020817 0%, #0A1628 25%, #0F2847 50%, #0A1628 80%, #020817 100%);
 }
