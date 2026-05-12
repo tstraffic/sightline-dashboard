@@ -70,6 +70,9 @@ const PERMISSIONS = {
   // ── SWMS register (Safety-led, ops/planning can view) ──
   swms:          ['admin', 'safety', 'operations', 'planning'],
 
+  // ── SOP register (Safety-led, ops/planning can view) ──
+  sop_register:  ['admin', 'safety', 'operations', 'planning'],
+
   // ── Safety Updates (bulletins published to the worker portal) ──
   safety_updates: ['admin', 'safety', 'operations', 'planning'],
 
@@ -85,6 +88,7 @@ const PERMISSIONS = {
   // ── Safety Reports (compliance + engagement dashboards; tighter than other
   //     Safety modules — admin/safety/management only, not ops/planning) ──
   safety_reports: ['admin', 'safety', 'management'],
+
 
   // ── Risk Assessment register (same access pattern as SWMS) ──
   risk_assessments: ['admin', 'safety', 'operations', 'planning'],

@@ -188,6 +188,52 @@ function generateNotifications() {
       console.error('SWMS expiry reminder error:', e.message);
     }
 
+    // 2c-bis. SOP register expiring within 30 days. Mirrors the SWMS block
+    // exactly — templates 3mo, job-linked 6mo, same recipient roles, same
+    // de-dupe via last_reminded_at.
+    try {
+      const sopAvailable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='sop_register'").get();
+      if (sopAvailable) {
+        const sopCols = db.prepare("PRAGMA table_info(sop_register)").all().map(c => c.name);
+        const hasReminder = sopCols.includes('last_reminded_at');
+        const expiringSop = db.prepare(`
+          SELECT s.id, s.title, s.kind, s.expiry_date, s.job_id, s.last_reminded_at,
+            j.job_number
+          FROM sop_register s
+          LEFT JOIN jobs j ON j.id = s.job_id
+          WHERE s.expiry_date IS NOT NULL
+            AND s.expiry_date <= date('now','+30 days')
+            AND s.status != 'archived'
+            ${hasReminder ? "AND (s.last_reminded_at IS NULL OR s.last_reminded_at < datetime('now','-7 days'))" : ''}
+        `).all();
+        if (expiringSop.length > 0) {
+          const recipients = db.prepare(`
+            SELECT id FROM users
+            WHERE active = 1 AND LOWER(role) IN ('admin','management','operations','safety')
+          `).all();
+          const stampReminded = hasReminder
+            ? db.prepare("UPDATE sop_register SET last_reminded_at = CURRENT_TIMESTAMP WHERE id = ?")
+            : null;
+          for (const s of expiringSop) {
+            const days = Math.round((new Date(s.expiry_date) - new Date(today)) / 86400000);
+            const isOverdue = days < 0;
+            const phrase = isOverdue ? `${Math.abs(days)} day${days === -1 ? '' : 's'} overdue` :
+                           days === 0 ? 'expires today' :
+                           `expires in ${days} day${days === 1 ? '' : 's'}`;
+            const title = `SOP ${isOverdue ? 'overdue' : 'expiring'}: ${s.title}`;
+            const cycleNote = s.kind === 'template' ? '3-month review' : '6-month renewal';
+            const msg = `${s.title} (${cycleNote})${s.job_number ? ' — ' + s.job_number : ''} ${phrase}.`;
+            for (const u of recipients) {
+              insertAndTrack(u.id, 'sop_expiring', title, msg, '/sop-register/' + s.id, s.job_id);
+            }
+            if (stampReminded) stampReminded.run(s.id);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('SOP expiry reminder error:', e.message);
+    }
+
     // 2d. Risk Assessments expiring within 30 days. Same cadence + recipient
     // set as SWMS — templates 3mo, job-linked 6mo. Mirrors the swms_expiring
     // notifier above so the two modules stay in lockstep.

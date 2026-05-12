@@ -8611,12 +8611,88 @@ function runMigrations(db) {
   }
 
   // =============================================
-  // Migration 188: toolbox_talks + attachments + attendance
-  // Phase 2 of the Safety module — archive of past toolbox talks with
-  // attendance tracking and a worker "Mark as caught up" flow.
+  // Migration 188: sop_register (Standard Operating Procedures register)
+  // Mirrors the swms table 1:1 — templates vs job-linked, draft/active/
+  // archived, expiry tracking, version_token. Lives alongside SWMS in the
+  // Safety section. Separate from sop_documents (induction sign-off).
   // =============================================
   if (!isMigrationApplied.get(188)) {
-    console.log('Running migration 188: toolbox_talks + attendance');
+    console.log('Running migration 188: sop_register');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sop_register (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'job' CHECK(kind IN ('template','job')),
+          status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','archived')),
+          job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          owner_id INTEGER REFERENCES users(id),
+          file_path TEXT DEFAULT '',
+          file_original_name TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          expiry_date DATE,
+          last_reminded_at DATETIME,
+          version_token TEXT DEFAULT '',
+          version_published_at DATETIME,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_kind    ON sop_register(kind)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_job     ON sop_register(job_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_status  ON sop_register(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_expiry  ON sop_register(expiry_date)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_version ON sop_register(version_token)');
+      recordMigration.run(188, 'sop_register');
+      console.log('Migration 188 applied');
+    } catch (e) {
+      console.error('Migration 188 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 189: sop_register_acknowledgements
+  // Mirrors swms_acknowledgements. Separate from sop_acknowledgements
+  // (induction sessions) by design — different lifecycle.
+  // =============================================
+  if (!isMigrationApplied.get(189)) {
+    console.log('Running migration 189: sop_register_acknowledgements');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sop_register_acknowledgements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sop_id INTEGER NOT NULL REFERENCES sop_register(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          version_token TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          signature_url TEXT DEFAULT '',
+          signed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          signed_via TEXT DEFAULT 'tap',
+          signed_ip TEXT DEFAULT '',
+          user_agent TEXT DEFAULT '',
+          UNIQUE(sop_id, crew_member_id, version_token)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_ack_crew    ON sop_register_acknowledgements(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_ack_sop_ver ON sop_register_acknowledgements(sop_id, version_token)');
+      recordMigration.run(189, 'sop_register_acknowledgements');
+      console.log('Migration 189 applied');
+    } catch (e) {
+      console.error('Migration 189 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 190: toolbox_talks + attachments + attendance
+  // Phase 2 of the Safety module — archive of past toolbox talks with
+  // attendance tracking and a worker "Mark as caught up" flow.
+  // (Originally authored as migration 188 on the safety phase chain;
+  // renumbered to 190 when merged after the SOP register landed on main.)
+  // =============================================
+  if (!isMigrationApplied.get(190)) {
+    console.log('Running migration 190: toolbox_talks + attendance');
     try {
       db.exec(`
         CREATE TABLE IF NOT EXISTS toolbox_talks (
@@ -8667,24 +8743,25 @@ function runMigrations(db) {
       db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_attach_tb ON toolbox_attachments(toolbox_id)');
       db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_att_crew ON toolbox_attendance(crew_member_id)');
       db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_att_tb ON toolbox_attendance(toolbox_id)');
-      recordMigration.run(188, 'toolbox_talks + attendance');
-      console.log('Migration 188 applied');
+      recordMigration.run(190, 'toolbox_talks + attendance');
+      console.log('Migration 190 applied');
     } catch (e) {
-      console.error('Migration 188 error:', e.message);
+      console.error('Migration 190 error:', e.message);
     }
   }
 
   // =============================================
-  // Migration 189: safety_comments + attachments + anonymous salt
+  // Migration 191: safety_comments + attachments + anonymous salt
   // Phase 2b — worker -> office channel for hazard flags, SWMS issues,
   // suggestions, equipment concerns, general comments. When the worker
   // submits anonymously, crew_member_id is NULL on the row and only the
   // deterministic submitter_token is stored. The salt for the token lives
   // in system_config under 'anonymous_comment_salt'; helpers in
   // lib/anonymousToken.js read it.
+  // (Originally authored as migration 189; renumbered to 191 on merge.)
   // =============================================
-  if (!isMigrationApplied.get(189)) {
-    console.log('Running migration 189: safety_comments + anonymous salt');
+  if (!isMigrationApplied.get(191)) {
+    console.log('Running migration 191: safety_comments + anonymous salt');
     try {
       db.exec(`
         CREATE TABLE IF NOT EXISTS safety_comments (
@@ -8740,24 +8817,25 @@ function runMigrations(db) {
           `).run(salt);
         }
       } catch (e) {
-        console.error('Migration 189 salt seed error:', e.message);
+        console.error('Migration 191 salt seed error:', e.message);
       }
 
-      recordMigration.run(189, 'safety_comments + anonymous salt');
-      console.log('Migration 189 applied');
+      recordMigration.run(191, 'safety_comments + anonymous salt');
+      console.log('Migration 191 applied');
     } catch (e) {
-      console.error('Migration 189 error:', e.message);
+      console.error('Migration 191 error:', e.message);
     }
   }
 
   // =============================================
-  // Migration 190: safety_quizzes + questions + attempts + answers
+  // Migration 192: safety_quizzes + questions + attempts + answers
   // Phase 3a — knowledge-check quizzes (MCQ single + true/false in v1).
   // Save-and-resume is supported by writing answers as the worker
   // progresses; an attempt sits in_progress until they hit submit.
+  // (Originally authored as migration 190; renumbered to 192 on merge.)
   // =============================================
-  if (!isMigrationApplied.get(190)) {
-    console.log('Running migration 190: safety_quizzes + attempts');
+  if (!isMigrationApplied.get(192)) {
+    console.log('Running migration 192: safety_quizzes + attempts');
     try {
       db.exec(`
         CREATE TABLE IF NOT EXISTS safety_quizzes (
@@ -8835,10 +8913,71 @@ function runMigrations(db) {
       db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_att_crew ON safety_quiz_attempts(crew_member_id)');
       db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_att_quiz ON safety_quiz_attempts(quiz_id, status)');
       db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_ans_attempt ON safety_quiz_answers(attempt_id)');
-      recordMigration.run(190, 'safety_quizzes + attempts');
-      console.log('Migration 190 applied');
+      recordMigration.run(192, 'safety_quizzes + attempts');
+      console.log('Migration 192 applied');
     } catch (e) {
-      console.error('Migration 190 error:', e.message);
+      console.error('Migration 192 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 193: sop_register safety net for phase-chain dev DBs
+  // Some dev databases ran the safety phase chain's original numbering
+  // (188 = toolbox, 189 = comments, 190 = quizzes) before this merge.
+  // On those DBs the new 188/189 blocks above are skipped because the
+  // migrations table already has rows for 188/189 — so sop_register and
+  // sop_register_acknowledgements would never get created. This runs the
+  // SOP register DDL as idempotent CREATE IF NOT EXISTS to catch them.
+  // No-op on a clean DB or on production (tables already exist).
+  // =============================================
+  if (!isMigrationApplied.get(193)) {
+    console.log('Running migration 193: sop_register safety net');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sop_register (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'job' CHECK(kind IN ('template','job')),
+          status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','archived')),
+          job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          owner_id INTEGER REFERENCES users(id),
+          file_path TEXT DEFAULT '',
+          file_original_name TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          expiry_date DATE,
+          last_reminded_at DATETIME,
+          version_token TEXT DEFAULT '',
+          version_published_at DATETIME,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS sop_register_acknowledgements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sop_id INTEGER NOT NULL REFERENCES sop_register(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          version_token TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          signature_url TEXT DEFAULT '',
+          signed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          signed_via TEXT DEFAULT 'tap',
+          signed_ip TEXT DEFAULT '',
+          user_agent TEXT DEFAULT '',
+          UNIQUE(sop_id, crew_member_id, version_token)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_kind    ON sop_register(kind)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_job     ON sop_register(job_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_status  ON sop_register(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_expiry  ON sop_register(expiry_date)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_version ON sop_register(version_token)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_ack_crew    ON sop_register_acknowledgements(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_ack_sop_ver ON sop_register_acknowledgements(sop_id, version_token)');
+      recordMigration.run(193, 'sop_register safety net');
+      console.log('Migration 193 applied');
+    } catch (e) {
+      console.error('Migration 193 error:', e.message);
     }
   }
 

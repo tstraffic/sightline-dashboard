@@ -1,15 +1,16 @@
 // /w/safety — worker-side Safety module.
 //
 // Sub-tabs:
-//   - /w/safety/swms       SWMS library (view + tap-to-acknowledge per version)
-//   - /w/safety/updates    Safety updates feed (view + auto mark-read)
-//   - /w/safety/toolboxes  Toolbox talks archive (view + mark caught up)
-//   - /w/safety/comments   Submit hazard flags / suggestions / etc. + view own
-//   - /w/safety/quizzes    Knowledge-check quizzes (save-and-resume, retakes)
+//   - /w/safety/swms         SWMS library (view + tap-to-acknowledge per version)
+//   - /w/safety/sop-register SOP library (view + tap-to-acknowledge per version)
+//   - /w/safety/updates      Safety updates feed (view + auto mark-read)
+//   - /w/safety/toolboxes    Toolbox talks archive (view + mark caught up)
+//   - /w/safety/comments     Submit hazard flags / suggestions / etc. + view own
+//   - /w/safety/quizzes      Knowledge-check quizzes (save-and-resume, retakes)
 //
-// All file downloads (SWMS PDFs, update attachments, toolbox slides, comment
-// photos) go through worker-side routes here rather than re-using the admin
-// auth-gated routes — never expose admin downloads to crew sessions.
+// All file downloads (SWMS / SOP PDFs, update attachments, toolbox slides,
+// comment photos) go through worker-side routes here rather than re-using the
+// admin auth-gated routes — never expose admin downloads to crew sessions.
 'use strict';
 
 const express = require('express');
@@ -164,6 +165,104 @@ router.get('/safety/swms/:id/file', (req, res) => {
     return res.redirect('/w/safety/swms/' + req.params.id);
   }
   return res.download(abs, swms.file_original_name || path.basename(abs));
+});
+
+// GET /w/safety/sop-register — list active SOPs with per-row needs-ack badge.
+router.get('/safety/sop-register', (req, res) => {
+  const db = getDb();
+  const workerId = req.session.worker.id;
+  const rows = db.prepare(`
+    SELECT s.id, s.title, s.description, s.kind, s.expiry_date,
+           s.version_token, s.version_published_at, s.file_path,
+           j.job_number, j.project_name,
+           a.id AS ack_id, a.signed_at, a.version_token AS acked_token
+    FROM sop_register s
+    LEFT JOIN jobs j ON j.id = s.job_id
+    LEFT JOIN sop_register_acknowledgements a
+      ON a.sop_id = s.id AND a.crew_member_id = ? AND a.version_token = s.version_token
+    WHERE s.status = 'active'
+    ORDER BY (a.id IS NULL) DESC, s.kind, s.title
+  `).all(workerId);
+  const needsAck = rows.filter(r => !r.ack_id);
+  const upToDate = rows.filter(r => !!r.ack_id);
+  res.render('worker/safety/sop-register-list', {
+    title: 'SOP — Safety', currentPage: 'safety',
+    subtab: 'sop-register', needsAck, upToDate,
+  });
+});
+
+// GET /w/safety/sop-register/:id — single SOP detail. Mirrors the SWMS
+// pattern: surfaces the worker's most-recent ack (any version) so we can
+// show an amber "updated since you last acknowledged it" banner.
+router.get('/safety/sop-register/:id', (req, res) => {
+  const db = getDb();
+  const workerId = req.session.worker.id;
+  const sop = db.prepare(`
+    SELECT s.*, j.job_number, j.client FROM sop_register s
+    LEFT JOIN jobs j ON j.id = s.job_id
+    WHERE s.id = ? AND s.status = 'active'
+  `).get(req.params.id);
+  if (!sop) {
+    req.flash('error', 'SOP not found or not active.');
+    return res.redirect('/w/safety/sop-register');
+  }
+  const currentAck = db.prepare(`
+    SELECT * FROM sop_register_acknowledgements
+    WHERE sop_id = ? AND crew_member_id = ? AND version_token = ?
+  `).get(sop.id, workerId, sop.version_token || '');
+  const lastAnyAck = db.prepare(`
+    SELECT * FROM sop_register_acknowledgements
+    WHERE sop_id = ? AND crew_member_id = ?
+    ORDER BY signed_at DESC LIMIT 1
+  `).get(sop.id, workerId);
+  res.render('worker/safety/sop-register-detail', {
+    title: sop.title, currentPage: 'safety',
+    subtab: 'sop-register', sop, currentAck, lastAnyAck,
+  });
+});
+
+// POST /w/safety/sop-register/:id/acknowledge — idempotent ack with version snapshot.
+router.post('/safety/sop-register/:id/acknowledge', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const sop = db.prepare("SELECT id, version_token, title, status FROM sop_register WHERE id = ?").get(req.params.id);
+  if (!sop || sop.status !== 'active') {
+    req.flash('error', 'SOP not available.');
+    return res.redirect('/w/safety/sop-register');
+  }
+  const fullName = worker.full_name || ('Employee #' + worker.id);
+  try {
+    db.prepare(`
+      INSERT OR IGNORE INTO sop_register_acknowledgements
+        (sop_id, crew_member_id, version_token, full_name, signed_via, signed_ip, user_agent)
+      VALUES (?, ?, ?, ?, 'tap', ?, ?)
+    `).run(
+      sop.id, worker.id, sop.version_token || '', fullName,
+      String(req.ip || ''),
+      String((req.get('user-agent') || '')).slice(0, 250)
+    );
+    req.flash('success', 'Acknowledged. Thanks ' + (worker.full_name || '').split(' ')[0] + '.');
+  } catch (e) {
+    console.error('[w/safety] sop ack error', e.message);
+    req.flash('error', 'Could not record acknowledgement.');
+  }
+  return res.redirect('/w/safety/sop-register/' + sop.id);
+});
+
+// GET /w/safety/sop-register/:id/file — auth-gated download (worker session).
+router.get('/safety/sop-register/:id/file', (req, res) => {
+  const db = getDb();
+  const sop = db.prepare("SELECT file_path, file_original_name, status FROM sop_register WHERE id = ?").get(req.params.id);
+  if (!sop || sop.status !== 'active' || !sop.file_path) {
+    req.flash('error', 'File unavailable.');
+    return res.redirect('/w/safety/sop-register/' + req.params.id);
+  }
+  const abs = path.join(__dirname, '..', '..', sop.file_path);
+  if (!fs.existsSync(abs)) {
+    req.flash('error', 'File missing on disk.');
+    return res.redirect('/w/safety/sop-register/' + req.params.id);
+  }
+  return res.download(abs, sop.file_original_name || path.basename(abs));
 });
 
 // GET /w/safety/updates — feed of published bulletins with unread flag.
