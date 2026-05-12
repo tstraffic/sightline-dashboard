@@ -160,6 +160,7 @@ app.use('/w', requireWorker, workerLocals, require('./routes/worker/profile'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/forms'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/custom-checklists'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/notifications'));
+app.use('/w', requireWorker, workerLocals, require('./routes/worker/safety'));
 app.get('/w/more', requireWorker, workerLocals, (req, res) => {
   res.locals.isManager = require('./middleware/managerAuth').isManager(req.session.worker);
   res.render('worker/more', { title: 'More', currentPage: 'more' });
@@ -229,6 +230,7 @@ app.use('/equipment/hire-dockets', requireLogin, requirePermission('equipment'),
 app.use('/equipment', requireLogin, requirePermission('equipment'), require('./routes/equipment'));
 app.use('/checklists', requireLogin, requirePermission('checklists'), require('./routes/checklists'));
 app.use('/swms', requireLogin, requirePermission('swms'), require('./routes/swms'));
+app.use('/safety-updates', requireLogin, requirePermission('safety_updates'), require('./routes/safety-updates'));
 app.use('/risk-assessments', requireLogin, requirePermission('risk_assessments'), require('./routes/risk-assessments'));
 app.use('/exports', requireLogin, requirePermission('exports'), require('./routes/exports'));
 app.use('/reports', requireLogin, requirePermission('reports'), require('./routes/reports'));

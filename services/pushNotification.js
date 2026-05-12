@@ -208,6 +208,23 @@ async function sendPushToCrew(crewMemberId, payload) {
   return Promise.allSettled(results);
 }
 
+/**
+ * Fan-out a push to every crew member that has at least one active
+ * subscription. Used by Safety publish flows (new bulletin, new SWMS
+ * version) where the audience is "all workers". Sequential iteration is
+ * fine at low-hundreds scale; switch to batched Promise.allSettled if
+ * the crew count climbs above ~500.
+ */
+async function sendPushToAllActiveCrew(payload) {
+  if (!vapidConfigured) return;
+  const db = getDb();
+  const rows = db.prepare('SELECT DISTINCT crew_member_id FROM worker_push_subscriptions').all();
+  for (const r of rows) {
+    try { await sendPushToCrew(r.crew_member_id, payload); }
+    catch (e) { console.error('[Push] fan-out crew', r.crew_member_id, e.message); }
+  }
+}
+
 module.exports = {
   initVapid,
   getVapidPublicKey,
@@ -218,4 +235,5 @@ module.exports = {
   saveWorkerSubscription,
   removeWorkerSubscription,
   sendPushToCrew,
+  sendPushToAllActiveCrew,
 };

@@ -16,6 +16,24 @@ const path = require('path');
 const fs = require('fs');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
+const { sendPushToAllActiveCrew } = require('../services/pushNotification');
+
+// Opaque version token. Rotates whenever a SWMS file is replaced or the row
+// transitions draft -> active. Workers store this token on their ack rows;
+// when it changes they must re-acknowledge. Title typos / notes edits do NOT
+// rotate the token (handled at the route level, not by the schema).
+function newVersionToken() {
+  return 'v' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+}
+
+function notifyCrewSwmsUpdate(swmsRow) {
+  sendPushToAllActiveCrew({
+    title: 'SWMS updated: ' + swmsRow.title,
+    body: 'A new version requires your acknowledgement.',
+    url: '/w/safety/swms/' + swmsRow.id,
+    type: 'swms_update',
+  }).catch(e => console.error('[swms] push fan-out error:', e.message));
+}
 
 const SWMS_DIR = path.join(__dirname, '..', 'data', 'uploads', 'swms');
 if (!fs.existsSync(SWMS_DIR)) fs.mkdirSync(SWMS_DIR, { recursive: true });
@@ -151,9 +169,13 @@ router.post('/', swmsUpload.single('swms_file'), (req, res) => {
 
     // Expiry: respect the admin's input if any, otherwise default to today + cycle.
     const expiryDate = (b.expiry_date && /^\d{4}-\d{2}-\d{2}$/.test(b.expiry_date)) ? b.expiry_date : defaultExpiryFor(kind);
+    // Mint a version token on every create so the very first worker ack is
+    // anchored to a stable value (rather than empty string).
+    const versionToken = newVersionToken();
+    const versionPublishedAt = status === 'active' ? new Date().toISOString() : null;
     const r = db.prepare(`
-      INSERT INTO swms (title, description, kind, status, job_id, owner_id, file_path, file_original_name, notes, expiry_date, created_by_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO swms (title, description, kind, status, job_id, owner_id, file_path, file_original_name, notes, expiry_date, created_by_id, version_token, version_published_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       title,
       String(b.description || '').trim(),
@@ -163,9 +185,16 @@ router.post('/', swmsUpload.single('swms_file'), (req, res) => {
       filePath, fileName,
       String(b.notes || '').trim(),
       expiryDate,
-      req.session.user ? req.session.user.id : null
+      req.session.user ? req.session.user.id : null,
+      versionToken,
+      versionPublishedAt
     );
     try { logActivity({ user: req.session.user, action: 'create', entityType: 'swms', entityId: r.lastInsertRowid, entityLabel: title, details: kind, ip: req.ip }); } catch (e) {}
+    // Fan-out to workers when an active SWMS is created (typically via the
+    // "Import template" + file-upload path).
+    if (status === 'active') {
+      notifyCrewSwmsUpdate({ id: r.lastInsertRowid, title });
+    }
     req.flash('success', kind === 'template' ? 'SWMS template imported.' : 'SWMS created.');
     return res.redirect('/swms/' + r.lastInsertRowid);
   } catch (err) {
@@ -175,7 +204,8 @@ router.post('/', swmsUpload.single('swms_file'), (req, res) => {
   }
 });
 
-// GET /swms/:id — detail
+// GET /swms/:id — detail. Surfaces a small ack summary so the show view can
+// link straight to the acknowledgements tab without an extra query in EJS.
 router.get('/:id', (req, res) => {
   const db = getDb();
   const swms = db.prepare(`
@@ -188,9 +218,42 @@ router.get('/:id', (req, res) => {
     WHERE s.id = ?
   `).get(req.params.id);
   if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/swms'); }
+  const ackSummary = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM crew_members WHERE active = 1) AS total_crew,
+      (SELECT COUNT(DISTINCT crew_member_id) FROM swms_acknowledgements
+        WHERE swms_id = ? AND version_token = ?) AS acked_current
+  `).get(swms.id, swms.version_token || '');
   res.render('swms/show', {
     title: swms.title, currentPage: 'swms',
-    swms,
+    swms, ackSummary,
+    kindLabels: KIND_LABELS, statusLabels: STATUS_LABELS,
+  });
+});
+
+// GET /swms/:id/acknowledgements — admin view, per-worker ack status against
+// the current version_token. Outstanding rows surface first.
+router.get('/:id/acknowledgements', (req, res) => {
+  const db = getDb();
+  const swms = db.prepare(`
+    SELECT s.*, j.job_number, j.client FROM swms s
+    LEFT JOIN jobs j ON j.id = s.job_id
+    WHERE s.id = ?
+  `).get(req.params.id);
+  if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/swms'); }
+  const rows = db.prepare(`
+    SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
+           a.signed_at, a.version_token AS acked_token, a.signed_via
+    FROM crew_members cm
+    LEFT JOIN swms_acknowledgements a
+      ON a.crew_member_id = cm.id AND a.swms_id = ? AND a.version_token = ?
+    WHERE cm.active = 1
+    ORDER BY (a.id IS NULL) DESC, cm.full_name
+  `).all(swms.id, swms.version_token || '');
+  const acked = rows.filter(r => !!r.signed_at).length;
+  res.render('swms/acknowledgements', {
+    title: swms.title + ' — Acknowledgements', currentPage: 'swms',
+    swms, rows, acked, total: rows.length,
     kindLabels: KIND_LABELS, statusLabels: STATUS_LABELS,
   });
 });
@@ -236,9 +299,21 @@ router.post('/:id', swmsUpload.single('swms_file'), (req, res) => {
       expiryDate = b.expiry_date;
     }
     const expiryChanged = String(expiryDate || '') !== String(swms.expiry_date || '');
+    // Bump version_token only on file replacement or status promotion to
+    // active. Title/notes/expiry edits keep the existing token so workers
+    // don't have to re-acknowledge for cosmetic changes.
+    const becameActive = (status === 'active' && swms.status !== 'active');
+    const fileReplaced = !!req.file;
+    let versionToken = swms.version_token;
+    let versionPublishedAt = swms.version_published_at;
+    if (fileReplaced || becameActive) {
+      versionToken = newVersionToken();
+      versionPublishedAt = new Date().toISOString();
+    }
     db.prepare(`
       UPDATE swms SET title = ?, description = ?, kind = ?, status = ?, job_id = ?, owner_id = ?,
         file_path = ?, file_original_name = ?, notes = ?, expiry_date = ?,
+        version_token = ?, version_published_at = ?,
         last_reminded_at = CASE WHEN ? = 1 THEN NULL ELSE last_reminded_at END,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
@@ -249,10 +324,14 @@ router.post('/:id', swmsUpload.single('swms_file'), (req, res) => {
       filePath, fileName,
       String(b.notes || '').trim(),
       expiryDate,
+      versionToken, versionPublishedAt,
       expiryChanged ? 1 : 0,
       swms.id
     );
     try { logActivity({ user: req.session.user, action: 'update', entityType: 'swms', entityId: swms.id, entityLabel: title, details: '', ip: req.ip }); } catch (e) {}
+    if (versionToken !== swms.version_token) {
+      notifyCrewSwmsUpdate({ id: swms.id, title });
+    }
     req.flash('success', 'SWMS updated.');
     return res.redirect('/swms/' + swms.id);
   } catch (err) {

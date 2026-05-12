@@ -8493,6 +8493,123 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 185: safety_updates + safety_update_reads
+  // First half of the worker Safety module — feed of bulletins / alerts.
+  // audience_roles is reserved for Phase 2 targeting; empty = visible to all.
+  // =============================================
+  if (!isMigrationApplied.get(185)) {
+    console.log('Running migration 185: safety_updates + reads');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS safety_updates (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          body TEXT NOT NULL DEFAULT '',
+          category TEXT NOT NULL DEFAULT 'general'
+            CHECK(category IN ('general','alert','reminder','toolbox','policy_change')),
+          attachment_path TEXT DEFAULT '',
+          attachment_original_name TEXT DEFAULT '',
+          audience_roles TEXT DEFAULT '',
+          audience_job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK(status IN ('draft','published','archived')),
+          published_at DATETIME,
+          published_by_id INTEGER REFERENCES users(id),
+          pinned INTEGER NOT NULL DEFAULT 0,
+          expires_at DATETIME,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS safety_update_reads (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          safety_update_id INTEGER NOT NULL REFERENCES safety_updates(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          read_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          read_via TEXT DEFAULT 'web',
+          read_ip TEXT DEFAULT '',
+          UNIQUE(safety_update_id, crew_member_id)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_updates_status ON safety_updates(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_updates_pinned ON safety_updates(pinned, published_at)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sur_crew ON safety_update_reads(crew_member_id)');
+      recordMigration.run(185, 'safety_updates + reads');
+      console.log('Migration 185 applied');
+    } catch (e) {
+      console.error('Migration 185 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 186: swms.version_token + back-fill
+  // Token rotates whenever a SWMS file is replaced OR status flips
+  // draft -> active. Worker acks are keyed on (swms_id, version_token)
+  // so a new token forces a re-ack. Minor edits (title/notes) do NOT
+  // rotate the token — that's handled by the route, not the schema.
+  // =============================================
+  if (!isMigrationApplied.get(186)) {
+    console.log('Running migration 186: swms.version_token');
+    try {
+      const cols = db.prepare("PRAGMA table_info(swms)").all().map(c => c.name);
+      if (!cols.includes('version_token')) {
+        db.exec("ALTER TABLE swms ADD COLUMN version_token TEXT DEFAULT ''");
+      }
+      if (!cols.includes('version_published_at')) {
+        db.exec("ALTER TABLE swms ADD COLUMN version_published_at DATETIME");
+      }
+      db.exec(`
+        UPDATE swms
+        SET version_token = printf('v%d-%s', id, COALESCE(strftime('%s', updated_at), strftime('%s','now')))
+        WHERE COALESCE(version_token, '') = ''
+      `);
+      db.exec(`
+        UPDATE swms
+        SET version_published_at = COALESCE(updated_at, created_at)
+        WHERE version_published_at IS NULL AND status = 'active'
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_swms_version ON swms(version_token)');
+      recordMigration.run(186, 'swms.version_token');
+      console.log('Migration 186 applied');
+    } catch (e) {
+      console.error('Migration 186 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 187: swms_acknowledgements
+  // Modelled on sop_acknowledgements. Snapshots full_name so a later
+  // crew_member rename doesn't rewrite the audit trail.
+  // =============================================
+  if (!isMigrationApplied.get(187)) {
+    console.log('Running migration 187: swms_acknowledgements');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS swms_acknowledgements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          swms_id INTEGER NOT NULL REFERENCES swms(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          version_token TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          signature_url TEXT DEFAULT '',
+          signed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          signed_via TEXT DEFAULT 'tap',
+          signed_ip TEXT DEFAULT '',
+          user_agent TEXT DEFAULT '',
+          UNIQUE(swms_id, crew_member_id, version_token)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_swms_ack_crew ON swms_acknowledgements(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_swms_ack_swms_ver ON swms_acknowledgements(swms_id, version_token)');
+      recordMigration.run(187, 'swms_acknowledgements');
+      console.log('Migration 187 applied');
+    } catch (e) {
+      console.error('Migration 187 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

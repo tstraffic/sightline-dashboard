@@ -174,6 +174,27 @@ router.get('/home', async (req, res) => {
 
   const compliance = member ? getComplianceStatus(member, today) : null;
 
+  // Safety counts: unread Safety Updates + SWMS that need acknowledgement
+  // against their current version. The widget on the home screen renders
+  // silent when both are zero. Wrapped so a missing migration on an old
+  // DB doesn't 500 the home screen.
+  let safetyCounts = { unread: 0, swmsNeedsAck: 0 };
+  try {
+    safetyCounts = db.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM safety_updates u
+          WHERE u.status='published'
+            AND (u.expires_at IS NULL OR u.expires_at > datetime('now'))
+            AND NOT EXISTS (SELECT 1 FROM safety_update_reads r
+                            WHERE r.safety_update_id=u.id AND r.crew_member_id=?)) AS unread,
+        (SELECT COUNT(*) FROM swms s
+          WHERE s.status='active'
+            AND NOT EXISTS (SELECT 1 FROM swms_acknowledgements a
+                            WHERE a.swms_id=s.id AND a.crew_member_id=?
+                              AND a.version_token=s.version_token)) AS swmsNeedsAck
+    `).get(worker.id, worker.id) || safetyCounts;
+  } catch (e) { /* tables may not exist on stale databases */ }
+
   // Greeting + subtext
   // Greeting hour is in Sydney too — todayDate is anchored to midnight,
   // so use a fresh Sydney-local hour instead of getHours() which would
@@ -304,6 +325,7 @@ router.get('/home', async (req, res) => {
     todaysShifts, upcomingShifts, weekDays, stats, onShift,
     recentClocks, compliance, member, employee, today,
     cards, streaks, prefs, timeline, weather, jobPackNudge,
+    safetyCounts,
   });
 });
 
