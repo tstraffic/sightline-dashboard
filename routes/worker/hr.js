@@ -40,26 +40,84 @@ router.get('/hr', (req, res) => {
   });
 });
 
-// GET /w/hr/certs — My Certifications
+// GET /w/hr/certs — My Certifications (worker "wallet")
+//
+// Surfaces everything the office has on file for this worker:
+//   - crew_members.licence_type / licence_expiry (the traffic-control ticket)
+//   - employee_competencies rows (structured cert records)
+//   - employee_documents rows (uploaded files — licences, white card, RSA,
+//     anything attached via the recruitment-registry approval flow OR via
+//     manual upload on the crew profile). Both intake paths write into the
+//     same employee_documents table, so reading it here makes the wallet a
+//     single source of truth.
 router.get('/hr/certs', (req, res) => {
   const db = getDb();
   const worker = req.session.worker;
   const employee = db.prepare('SELECT * FROM employees WHERE linked_crew_member_id = ?').get(worker.id);
 
   let certs = [];
+  let documents = [];
   if (employee) {
     certs = db.prepare('SELECT * FROM employee_competencies WHERE employee_id = ? ORDER BY expiry_date ASC').all(employee.id);
+    documents = db.prepare(`
+      SELECT id, document_type, document_name, original_name, filename,
+             issue_date, expiry_date, verification_status, mandatory, notes, created_at
+      FROM employee_documents
+      WHERE employee_id = ?
+      ORDER BY
+        CASE WHEN expiry_date IS NULL THEN 1 ELSE 0 END,
+        expiry_date ASC,
+        created_at DESC
+    `).all(employee.id);
   }
 
   // Also get crew_member licence info
   const member = db.prepare('SELECT licence_type, licence_expiry, induction_date FROM crew_members WHERE id = ?').get(worker.id);
 
   res.render('worker/hr-certs', {
-    title: 'My Certifications',
+    title: 'My Wallet',
     currentPage: 'more',
     certs,
+    documents,
     member,
   });
+});
+
+// GET /w/hr/documents/:id — Stream a worker's own uploaded document.
+//
+// Worker-scoped equivalent of the admin /hr/documents/:id/download route.
+// The admin route requires the hr_documents permission, so workers can't
+// hit it. Here we re-check that the document belongs to the worker's own
+// linked employee record before serving the file.
+router.get('/hr/documents/:id', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const employee = db.prepare('SELECT id FROM employees WHERE linked_crew_member_id = ?').get(worker.id);
+  if (!employee) return res.status(404).send('Not found');
+
+  const doc = db.prepare('SELECT * FROM employee_documents WHERE id = ? AND employee_id = ?')
+    .get(req.params.id, employee.id);
+  if (!doc) return res.status(404).send('Not found');
+
+  if (!fs.existsSync(doc.file_path)) return res.status(404).send('File missing');
+
+  const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg|avif|heic|heif)$/i.test(doc.original_name || doc.filename);
+  const ext = path.extname(doc.original_name || doc.filename).toLowerCase();
+  const mimeTypes = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+    '.svg': 'image/svg+xml', '.avif': 'image/avif', '.pdf': 'application/pdf',
+  };
+  const mime = mimeTypes[ext] || 'application/octet-stream';
+
+  if (req.query.inline || isImage || ext === '.pdf') {
+    res.setHeader('Content-Type', mime);
+    res.setHeader('Content-Disposition', `inline; filename="${doc.original_name || doc.filename}"`);
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    return res.sendFile(path.resolve(doc.file_path));
+  }
+
+  res.download(doc.file_path, doc.original_name);
 });
 
 // Helper: format a Date using local Y-M-D (avoid toISOString timezone shift)
