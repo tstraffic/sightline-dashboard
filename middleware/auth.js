@@ -82,6 +82,10 @@ const PERMISSIONS = {
   // ── Safety Quizzes (knowledge-check builder; office authors, workers take) ──
   safety_quizzes: ['admin', 'safety', 'operations', 'planning'],
 
+  // ── Safety Reports (compliance + engagement dashboards; tighter than other
+  //     Safety modules — admin/safety/management only, not ops/planning) ──
+  safety_reports: ['admin', 'safety', 'management'],
+
   // ── Risk Assessment register (same access pattern as SWMS) ──
   risk_assessments: ['admin', 'safety', 'operations', 'planning'],
 
