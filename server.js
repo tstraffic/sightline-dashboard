@@ -232,6 +232,10 @@ app.use('/checklists', requireLogin, requirePermission('checklists'), require('.
 app.use('/swms', requireLogin, requirePermission('swms'), require('./routes/swms'));
 app.use('/sop-register', requireLogin, requirePermission('sop_register'), require('./routes/sop-register'));
 app.use('/safety-updates', requireLogin, requirePermission('safety_updates'), require('./routes/safety-updates'));
+app.use('/toolbox-talks', requireLogin, requirePermission('toolbox_talks'), require('./routes/toolbox-talks'));
+app.use('/safety-comments', requireLogin, requirePermission('safety_comments'), require('./routes/safety-comments'));
+app.use('/safety-quizzes', requireLogin, requirePermission('safety_quizzes'), require('./routes/safety-quizzes'));
+app.use('/safety-reports', requireLogin, requirePermission('safety_reports'), require('./routes/safety-reports'));
 app.use('/risk-assessments', requireLogin, requirePermission('risk_assessments'), require('./routes/risk-assessments'));
 app.use('/exports', requireLogin, requirePermission('exports'), require('./routes/exports'));
 app.use('/reports', requireLogin, requirePermission('reports'), require('./routes/reports'));

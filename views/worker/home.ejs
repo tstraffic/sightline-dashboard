@@ -504,7 +504,7 @@
   </div>
 <% } %>
 
-<% if (section === 'safety' && !hidden.includes('safety') && safetyCounts && (safetyCounts.unread > 0 || safetyCounts.swmsNeedsAck > 0 || safetyCounts.sopNeedsAck > 0)) { %>
+<% if (section === 'safety' && !hidden.includes('safety') && safetyCounts && (safetyCounts.unread > 0 || safetyCounts.swmsNeedsAck > 0 || safetyCounts.sopNeedsAck > 0 || safetyCounts.quizzesOutstanding > 0)) { %>
   <div class="wh-section-head"><span class="wh-section-title">Safety</span></div>
   <div style="display: flex; flex-direction: column; gap: 8px;">
     <% if (safetyCounts.swmsNeedsAck > 0) { %>
@@ -527,6 +527,18 @@
         <div style="flex: 1; min-width: 0;">
           <p style="font-size: 0.85rem; font-weight: 700; color: #fff;"><%= safetyCounts.sopNeedsAck %> SOP<%= safetyCounts.sopNeedsAck === 1 ? '' : 's' %> need<%= safetyCounts.sopNeedsAck === 1 ? 's' : '' %> your acknowledgement</p>
           <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px;">Tap to review and confirm</p>
+        </div>
+        <svg width="18" height="18" fill="none" stroke="rgba(255,255,255,0.4)" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+      </a>
+    <% } %>
+    <% if (safetyCounts.quizzesOutstanding > 0) { %>
+      <a href="/w/safety/quizzes" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: rgba(139,92,246,0.10); border: 1px solid rgba(139,92,246,0.25); border-radius: 12px; text-decoration: none; color: #fff;">
+        <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(139,92,246,0.18); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg width="18" height="18" fill="none" stroke="#c4b5fd" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        </div>
+        <div style="flex: 1; min-width: 0;">
+          <p style="font-size: 0.85rem; font-weight: 700; color: #fff;"><%= safetyCounts.quizzesOutstanding %> quiz<%= safetyCounts.quizzesOutstanding === 1 ? '' : 'zes' %> to complete</p>
+          <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px;">Quick knowledge checks</p>
         </div>
         <svg width="18" height="18" fill="none" stroke="rgba(255,255,255,0.4)" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
       </a>

@@ -8684,6 +8684,303 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 190: toolbox_talks + attachments + attendance
+  // Phase 2 of the Safety module — archive of past toolbox talks with
+  // attendance tracking and a worker "Mark as caught up" flow.
+  // (Originally authored as migration 188 on the safety phase chain;
+  // renumbered to 190 when merged after the SOP register landed on main.)
+  // =============================================
+  if (!isMigrationApplied.get(190)) {
+    console.log('Running migration 190: toolbox_talks + attendance');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS toolbox_talks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          held_at DATE NOT NULL,
+          presenter TEXT DEFAULT '',
+          key_points TEXT NOT NULL DEFAULT '',
+          slides_path TEXT DEFAULT '',
+          slides_original_name TEXT DEFAULT '',
+          signon_path TEXT DEFAULT '',
+          signon_original_name TEXT DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK(status IN ('draft','published','archived')),
+          published_at DATETIME,
+          published_by_id INTEGER REFERENCES users(id),
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS toolbox_attachments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          file_path TEXT NOT NULL,
+          file_original_name TEXT DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'photo'
+            CHECK(kind IN ('photo','doc')),
+          uploaded_by_id INTEGER REFERENCES users(id),
+          uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS toolbox_attendance (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'attended'
+            CHECK(status IN ('attended','caught_up')),
+          -- recorded_by_id is NULL when the worker self-marks "caught up";
+          -- populated with the admin user_id when an office user marks attendance.
+          recorded_by_id INTEGER REFERENCES users(id),
+          recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(toolbox_id, crew_member_id)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_talks_status ON toolbox_talks(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_talks_held ON toolbox_talks(held_at)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_attach_tb ON toolbox_attachments(toolbox_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_att_crew ON toolbox_attendance(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_att_tb ON toolbox_attendance(toolbox_id)');
+      recordMigration.run(190, 'toolbox_talks + attendance');
+      console.log('Migration 190 applied');
+    } catch (e) {
+      console.error('Migration 190 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 191: safety_comments + attachments + anonymous salt
+  // Phase 2b — worker -> office channel for hazard flags, SWMS issues,
+  // suggestions, equipment concerns, general comments. When the worker
+  // submits anonymously, crew_member_id is NULL on the row and only the
+  // deterministic submitter_token is stored. The salt for the token lives
+  // in system_config under 'anonymous_comment_salt'; helpers in
+  // lib/anonymousToken.js read it.
+  // (Originally authored as migration 189; renumbered to 191 on merge.)
+  // =============================================
+  if (!isMigrationApplied.get(191)) {
+    console.log('Running migration 191: safety_comments + anonymous salt');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS safety_comments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          -- NULL on anonymous rows. Joining to crew_members must never
+          -- happen on a row where is_anonymous=1.
+          crew_member_id INTEGER REFERENCES crew_members(id) ON DELETE SET NULL,
+          -- Deterministic hash of (crew_member_id + salt). Set on every row
+          -- (anon or not) so the worker portal can list its own submissions
+          -- without re-using crew_member_id on anon rows.
+          submitter_token TEXT NOT NULL,
+          is_anonymous INTEGER NOT NULL DEFAULT 0,
+          category TEXT NOT NULL DEFAULT 'general'
+            CHECK(category IN ('hazard','swms_issue','suggestion','equipment','general')),
+          body TEXT NOT NULL,
+          job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          status TEXT NOT NULL DEFAULT 'submitted'
+            CHECK(status IN ('submitted','acknowledged','under_review','closed')),
+          assigned_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          internal_notes TEXT DEFAULT '',                -- office-only, never returned to worker
+          office_response TEXT DEFAULT '',               -- visible to worker
+          response_at DATETIME,
+          response_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          submitted_ip TEXT DEFAULT '',
+          user_agent TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS safety_comment_attachments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          comment_id INTEGER NOT NULL REFERENCES safety_comments(id) ON DELETE CASCADE,
+          file_path TEXT NOT NULL,
+          file_original_name TEXT DEFAULT '',
+          uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comments_status ON safety_comments(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comments_token ON safety_comments(submitter_token)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comments_crew ON safety_comments(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comments_created ON safety_comments(created_at)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comment_attach ON safety_comment_attachments(comment_id)');
+
+      // Generate and store the anonymous-token salt if not present. system_config
+      // is already used for VAPID + push subscriptions; reuse it here.
+      try {
+        const existing = db.prepare("SELECT config_value FROM system_config WHERE config_key = 'anonymous_comment_salt'").get();
+        if (!existing || !existing.config_value) {
+          const salt = require('crypto').randomBytes(32).toString('hex');
+          db.prepare(`
+            INSERT OR IGNORE INTO system_config (config_key, config_value, config_type, description)
+            VALUES ('anonymous_comment_salt', ?, 'secret', 'Salt used to derive worker submitter_token on safety_comments rows. Never log or expose.')
+          `).run(salt);
+        }
+      } catch (e) {
+        console.error('Migration 191 salt seed error:', e.message);
+      }
+
+      recordMigration.run(191, 'safety_comments + anonymous salt');
+      console.log('Migration 191 applied');
+    } catch (e) {
+      console.error('Migration 191 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 192: safety_quizzes + questions + attempts + answers
+  // Phase 3a — knowledge-check quizzes (MCQ single + true/false in v1).
+  // Save-and-resume is supported by writing answers as the worker
+  // progresses; an attempt sits in_progress until they hit submit.
+  // (Originally authored as migration 190; renumbered to 192 on merge.)
+  // =============================================
+  if (!isMigrationApplied.get(192)) {
+    console.log('Running migration 192: safety_quizzes + attempts');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS safety_quizzes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          pass_mark INTEGER NOT NULL DEFAULT 80,            -- percentage (0-100)
+          retake_policy TEXT NOT NULL DEFAULT 'unlimited'
+            CHECK(retake_policy IN ('none','unlimited','limited')),
+          retake_limit INTEGER,                              -- NULL when policy != 'limited'
+          deadline_at DATETIME,
+          is_mandatory INTEGER NOT NULL DEFAULT 0,
+          -- Optional source-content link. When source_type='toolbox' and the
+          -- worker passes, we INSERT OR IGNORE a 'caught_up' attendance row
+          -- so the quiz functions as a catch-up mechanism.
+          source_type TEXT
+            CHECK(source_type IN ('toolbox','swms','update') OR source_type IS NULL),
+          source_id INTEGER,
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK(status IN ('draft','published','archived')),
+          published_at DATETIME,
+          published_by_id INTEGER REFERENCES users(id),
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS safety_quiz_questions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quiz_id INTEGER NOT NULL REFERENCES safety_quizzes(id) ON DELETE CASCADE,
+          question_text TEXT NOT NULL,
+          question_type TEXT NOT NULL DEFAULT 'mcq_single'
+            CHECK(question_type IN ('mcq_single','true_false')),
+          -- For mcq_single: JSON array of {text, is_correct} objects (2-6 options).
+          -- For true_false: ignored on write; the route enforces 2 fixed options.
+          options_json TEXT NOT NULL DEFAULT '[]',
+          -- For true_false: 'true' or 'false'. For mcq_single: the index (0-based)
+          -- of the correct option. Stored alongside options_json so grading is
+          -- a simple equality check without re-parsing the JSON each time.
+          correct_value TEXT NOT NULL DEFAULT '',
+          explanation TEXT NOT NULL DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS safety_quiz_attempts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quiz_id INTEGER NOT NULL REFERENCES safety_quizzes(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          attempt_number INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'in_progress'
+            CHECK(status IN ('in_progress','submitted')),
+          score_pct INTEGER,                                  -- NULL until submitted
+          passed INTEGER,                                     -- NULL until submitted
+          started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          submitted_at DATETIME,
+          UNIQUE(quiz_id, crew_member_id, attempt_number)
+        );
+
+        CREATE TABLE IF NOT EXISTS safety_quiz_answers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          attempt_id INTEGER NOT NULL REFERENCES safety_quiz_attempts(id) ON DELETE CASCADE,
+          question_id INTEGER NOT NULL REFERENCES safety_quiz_questions(id) ON DELETE CASCADE,
+          -- The worker's answer. For mcq_single: the option index as a string.
+          -- For true_false: 'true' or 'false'.
+          answer_value TEXT DEFAULT '',
+          is_correct INTEGER,                                 -- NULL while in_progress
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(attempt_id, question_id)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quizzes_status ON safety_quizzes(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quizzes_source ON safety_quizzes(source_type, source_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_q_quiz ON safety_quiz_questions(quiz_id, sort_order)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_att_crew ON safety_quiz_attempts(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_att_quiz ON safety_quiz_attempts(quiz_id, status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_quiz_ans_attempt ON safety_quiz_answers(attempt_id)');
+      recordMigration.run(192, 'safety_quizzes + attempts');
+      console.log('Migration 192 applied');
+    } catch (e) {
+      console.error('Migration 192 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 193: sop_register safety net for phase-chain dev DBs
+  // Some dev databases ran the safety phase chain's original numbering
+  // (188 = toolbox, 189 = comments, 190 = quizzes) before this merge.
+  // On those DBs the new 188/189 blocks above are skipped because the
+  // migrations table already has rows for 188/189 — so sop_register and
+  // sop_register_acknowledgements would never get created. This runs the
+  // SOP register DDL as idempotent CREATE IF NOT EXISTS to catch them.
+  // No-op on a clean DB or on production (tables already exist).
+  // =============================================
+  if (!isMigrationApplied.get(193)) {
+    console.log('Running migration 193: sop_register safety net');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sop_register (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'job' CHECK(kind IN ('template','job')),
+          status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','archived')),
+          job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          owner_id INTEGER REFERENCES users(id),
+          file_path TEXT DEFAULT '',
+          file_original_name TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          expiry_date DATE,
+          last_reminded_at DATETIME,
+          version_token TEXT DEFAULT '',
+          version_published_at DATETIME,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS sop_register_acknowledgements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sop_id INTEGER NOT NULL REFERENCES sop_register(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          version_token TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          signature_url TEXT DEFAULT '',
+          signed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          signed_via TEXT DEFAULT 'tap',
+          signed_ip TEXT DEFAULT '',
+          user_agent TEXT DEFAULT '',
+          UNIQUE(sop_id, crew_member_id, version_token)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_kind    ON sop_register(kind)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_job     ON sop_register(job_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_status  ON sop_register(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_expiry  ON sop_register(expiry_date)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_version ON sop_register(version_token)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_ack_crew    ON sop_register_acknowledgements(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_ack_sop_ver ON sop_register_acknowledgements(sop_id, version_token)');
+      recordMigration.run(193, 'sop_register safety net');
+      console.log('Migration 193 applied');
+    } catch (e) {
+      console.error('Migration 193 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -1,0 +1,131 @@
+<% locals.currentPage = 'safety-quizzes' %>
+<%
+  const TYPE_LABELS = { mcq_single: 'Single-choice', true_false: 'True / False' };
+%>
+<style>
+  /* Toggle which option fields show based on type, no JS framework needed. */
+  .q-mcq, .q-tf { display: none; }
+  .q-type-mcq_single .q-mcq { display: block; }
+  .q-type-true_false .q-tf { display: block; }
+</style>
+<script>
+function setType(formId, type) {
+  const f = document.getElementById(formId);
+  if (!f) return;
+  f.classList.remove('q-type-mcq_single','q-type-true_false');
+  f.classList.add('q-type-' + type);
+}
+function addOption(buttonEl) {
+  const list = buttonEl.previousElementSibling;
+  const idx = list.querySelectorAll('.q-opt-row').length;
+  const row = document.createElement('div');
+  row.className = 'q-opt-row flex items-center gap-2 mb-1';
+  row.innerHTML =
+    '<input type="radio" name="correct_index" value="' + idx + '" class="w-4 h-4 text-brand-600">' +
+    '<input type="text" name="option_text" placeholder="Option text" class="flex-1 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm">';
+  list.appendChild(row);
+}
+</script>
+
+<div class="max-w-3xl mx-auto space-y-5">
+  <div>
+    <a href="/safety-quizzes/<%= quiz.id %>" class="text-sm text-brand-600 hover:underline">← <%= quiz.title %></a>
+    <h1 class="text-2xl font-bold text-gray-900 mt-1">Questions</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Add at least one question before publishing. Single-choice and true/false supported in this version.</p>
+  </div>
+
+  <!-- Existing questions -->
+  <% if (questions.length) { %>
+    <% questions.forEach((q, idx) => { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-3 mb-3">
+          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Question <%= idx + 1 %> · <%= TYPE_LABELS[q.question_type] %></p>
+          <form method="POST" action="/safety-quizzes/<%= quiz.id %>/questions/<%= q.id %>/delete" onsubmit="return confirm('Remove this question?')" class="inline">
+            <%- include('../partials/csrf') %>
+            <button type="submit" class="text-xs text-rose-600 hover:text-rose-700">Remove</button>
+          </form>
+        </div>
+        <form method="POST" action="/safety-quizzes/<%= quiz.id %>/questions/<%= q.id %>" id="q-form-<%= q.id %>" class="space-y-3 q-type-<%= q.question_type %>">
+          <%- include('../partials/csrf') %>
+          <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <select name="question_type" onchange="setType('q-form-<%= q.id %>', this.value)" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+              <option value="mcq_single" <%= q.question_type === 'mcq_single' ? 'selected' : '' %>>Single-choice</option>
+              <option value="true_false" <%= q.question_type === 'true_false' ? 'selected' : '' %>>True / False</option>
+            </select>
+            <input type="text" name="question_text" required value="<%= q.question_text %>" class="sm:col-span-3 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+          </div>
+          <div class="q-mcq">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Options (select the correct one)</p>
+            <div>
+              <% (q.options || []).forEach((opt, i) => { %>
+                <div class="q-opt-row flex items-center gap-2 mb-1">
+                  <input type="radio" name="correct_index" value="<%= i %>" <%= String(q.correct_value) === String(i) ? 'checked' : '' %> class="w-4 h-4 text-brand-600">
+                  <input type="text" name="option_text" value="<%= opt.text || '' %>" placeholder="Option text" class="flex-1 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm">
+                </div>
+              <% }) %>
+            </div>
+            <button type="button" onclick="addOption(this)" class="text-xs text-brand-600 hover:underline">+ Add option</button>
+          </div>
+          <div class="q-tf">
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Correct answer</p>
+            <label class="inline-flex items-center gap-1 mr-3"><input type="radio" name="correct_value" value="true"  <%= q.correct_value === 'true'  ? 'checked' : '' %>> True</label>
+            <label class="inline-flex items-center gap-1"><input type="radio" name="correct_value" value="false" <%= q.correct_value === 'false' ? 'checked' : '' %>> False</label>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Explanation (shown after submit)</label>
+            <input type="text" name="explanation" value="<%= q.explanation %>" placeholder="Why is this the correct answer?" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+          </div>
+          <div class="text-right">
+            <button type="submit" class="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded">Save</button>
+          </div>
+        </form>
+      </div>
+    <% }) %>
+  <% } %>
+
+  <!-- New question -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Add question</p>
+    <form method="POST" action="/safety-quizzes/<%= quiz.id %>/questions" id="q-form-new" class="space-y-3 q-type-mcq_single">
+      <%- include('../partials/csrf') %>
+      <div class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <select name="question_type" onchange="setType('q-form-new', this.value)" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+          <option value="mcq_single">Single-choice</option>
+          <option value="true_false">True / False</option>
+        </select>
+        <input type="text" name="question_text" required placeholder="Question text" class="sm:col-span-3 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+      </div>
+      <div class="q-mcq">
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Options (select the correct one)</p>
+        <div>
+          <% [0,1,2,3].forEach(i => { %>
+            <div class="q-opt-row flex items-center gap-2 mb-1">
+              <input type="radio" name="correct_index" value="<%= i %>" <%= i === 0 ? 'checked' : '' %> class="w-4 h-4 text-brand-600">
+              <input type="text" name="option_text" placeholder="Option <%= i + 1 %>" class="flex-1 px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-sm">
+            </div>
+          <% }) %>
+        </div>
+        <button type="button" onclick="addOption(this)" class="text-xs text-brand-600 hover:underline">+ Add option</button>
+      </div>
+      <div class="q-tf">
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Correct answer</p>
+        <label class="inline-flex items-center gap-1 mr-3"><input type="radio" name="correct_value" value="true" checked> True</label>
+        <label class="inline-flex items-center gap-1"><input type="radio" name="correct_value" value="false"> False</label>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Explanation (shown after submit)</label>
+        <input type="text" name="explanation" placeholder="Why is this the correct answer?" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+      </div>
+      <div class="text-right">
+        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">Add question</button>
+      </div>
+    </form>
+  </div>
+
+  <% if (quiz.status === 'draft' && questions.length) { %>
+    <form method="POST" action="/safety-quizzes/<%= quiz.id %>/publish" class="text-right">
+      <%- include('../partials/csrf') %>
+      <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg">Publish quiz</button>
+    </form>
+  <% } %>
+</div>

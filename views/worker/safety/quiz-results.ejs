@@ -1,0 +1,81 @@
+<%
+  function fmt(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  const score = attempt.score_pct || 0;
+  const passed = !!attempt.passed;
+%>
+<style>
+  .qr-wrap { color: #fff; padding: 0 0 24px; }
+  .qr-back { display: inline-flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.55); font-size: 0.8rem; text-decoration: none; margin: 4px 0 8px; }
+  .qr-title { font-size: 1.4rem; font-weight: 800; margin: 4px 0 4px; }
+  .qr-hero {
+    border-radius: 14px; padding: 18px; text-align: center; margin: 12px 0 16px;
+  }
+  .qr-hero.pass { background: linear-gradient(135deg, rgba(16,185,129,0.25), rgba(52,211,153,0.15)); border: 1px solid rgba(16,185,129,0.4); }
+  .qr-hero.fail { background: linear-gradient(135deg, rgba(244,63,94,0.20), rgba(251,146,60,0.10)); border: 1px solid rgba(244,63,94,0.4); }
+  .qr-score-num { font-size: 3rem; font-weight: 900; line-height: 1; }
+  .qr-status { font-size: 0.95rem; font-weight: 700; margin-top: 4px; }
+  .qr-q-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 10px;
+  }
+  .qr-q-correct { border-left: 3px solid #34D399; }
+  .qr-q-wrong { border-left: 3px solid #f87171; }
+  .qr-q-text { font-size: 0.92rem; font-weight: 700; }
+  .qr-q-yours, .qr-q-correctv { font-size: 0.78rem; margin-top: 6px; color: rgba(255,255,255,0.7); }
+  .qr-q-explain { font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-top: 6px; font-style: italic; }
+  .qr-cta {
+    display: block; text-align: center; width: 100%; padding: 14px; border-radius: 12px;
+    font-size: 0.95rem; font-weight: 700; text-decoration: none;
+    background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
+    box-shadow: 0 6px 20px rgba(29,106,229,0.35);
+    margin-top: 14px;
+  }
+</style>
+
+<div class="qr-wrap">
+  <a href="/w/safety/quizzes" class="qr-back">← Safety / Quizzes</a>
+  <div class="qr-title"><%= quiz.title %></div>
+
+  <div class="qr-hero <%= passed ? 'pass' : 'fail' %>">
+    <div class="qr-score-num"><%= score %>%</div>
+    <div class="qr-status"><%= passed ? '✓ Passed' : 'Not yet — need ' + quiz.pass_mark + '%' %></div>
+    <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 6px;">Submitted <%= fmt(attempt.submitted_at) %></p>
+  </div>
+
+  <% questions.forEach((q, i) => {
+    const a = answers.get(q.id);
+    const isCorrect = a && a.is_correct;
+    let yourLabel = '(no answer)';
+    let correctLabel = '';
+    if (q.question_type === 'true_false') {
+      yourLabel = a && a.answer_value ? (a.answer_value === 'true' ? 'True' : 'False') : '(no answer)';
+      correctLabel = q.correct_value === 'true' ? 'True' : 'False';
+    } else {
+      const opts = q.options || [];
+      const givenIdx = a && a.answer_value !== '' ? parseInt(a.answer_value, 10) : -1;
+      yourLabel = (givenIdx >= 0 && opts[givenIdx]) ? opts[givenIdx].text : '(no answer)';
+      const correctIdx = parseInt(q.correct_value, 10);
+      correctLabel = (opts[correctIdx] || {}).text || '';
+    }
+  %>
+    <div class="qr-q-card <%= isCorrect ? 'qr-q-correct' : 'qr-q-wrong' %>">
+      <div class="qr-q-text"><%= i + 1 %>. <%= q.question_text %></div>
+      <div class="qr-q-yours"><strong><%= isCorrect ? '✓' : '✗' %> Your answer:</strong> <%= yourLabel %></div>
+      <% if (!isCorrect) { %>
+        <div class="qr-q-correctv"><strong>Correct:</strong> <%= correctLabel %></div>
+      <% } %>
+      <% if (q.explanation) { %>
+        <div class="qr-q-explain">💡 <%= q.explanation %></div>
+      <% } %>
+    </div>
+  <% }) %>
+
+  <% if (!passed && canRetake) { %>
+    <a href="/w/safety/quizzes/<%= quiz.id %>" class="qr-cta">Try again</a>
+  <% } else { %>
+    <a href="/w/safety/quizzes" class="qr-cta">Back to quizzes</a>
+  <% } %>
+</div>
