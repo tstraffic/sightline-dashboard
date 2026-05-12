@@ -1,0 +1,81 @@
+<% locals.currentPage = 'toolbox-talks' %>
+<%
+  function fmt(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  const allocatedSet = new Set(allocatedIds);
+%>
+
+<div class="max-w-5xl mx-auto space-y-5">
+  <div>
+    <a href="/toolbox-talks/<%= toolbox.id %>" class="text-sm text-brand-600 hover:underline">← <%= toolbox.title %></a>
+    <h1 class="text-2xl font-bold text-gray-900 mt-1">Attendance</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Tick everyone who was there. "Caught up" rows are self-claimed by workers and aren't overwritten by this form.</p>
+  </div>
+
+  <!-- Tabs -->
+  <div class="border-b border-gray-200 flex items-center gap-1">
+    <a href="/toolbox-talks/<%= toolbox.id %>" class="px-4 py-2 -mb-px border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-semibold">Details</a>
+    <span class="px-4 py-2 -mb-px border-b-2 border-brand-600 text-brand-700 text-sm font-semibold">Attendance</span>
+  </div>
+
+  <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/attendance" class="bg-white border border-gray-200 rounded-xl shadow-sm">
+    <%- include('../partials/csrf') %>
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+      <div class="flex items-center gap-3 flex-wrap text-xs text-gray-500">
+        <span><%= allocatedIds.length %> workers were allocated on <%= toolbox.held_at %></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" onclick="document.querySelectorAll('.tb-att-row input[type=checkbox]').forEach(c => c.checked = false)" class="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded">Clear all</button>
+        <% if (allocatedIds.length) { %>
+          <button type="button" onclick="document.querySelectorAll('.tb-att-row[data-allocated=&quot;1&quot;] input[type=checkbox]').forEach(c => c.checked = true)" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded">Tick allocated on this date</button>
+        <% } %>
+        <button type="submit" class="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded">Save attendance</button>
+      </div>
+    </div>
+    <table class="min-w-full text-sm">
+      <thead class="bg-gray-50 border-b border-gray-200">
+        <tr>
+          <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest w-12">Attended</th>
+          <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Worker</th>
+          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Employee ID</th>
+          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</th>
+          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Recorded</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        <% rows.forEach(r => {
+          const isAllocated = allocatedSet.has(r.crew_id);
+          const isAttended = r.attendance_status === 'attended';
+          const isCaughtUp = r.attendance_status === 'caught_up';
+        %>
+          <tr class="tb-att-row hover:bg-gray-50/50" data-allocated="<%= isAllocated ? '1' : '0' %>">
+            <td class="px-3 py-2">
+              <% if (isCaughtUp) { %>
+                <span class="text-xs text-violet-700" title="Worker self-claimed caught up">↻</span>
+              <% } else { %>
+                <input type="checkbox" name="attended_crew_ids" value="<%= r.crew_id %>" <%= isAttended ? 'checked' : '' %> class="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500">
+              <% } %>
+            </td>
+            <td class="px-3 py-2 text-sm font-medium text-gray-900">
+              <%= r.full_name %>
+              <% if (isAllocated) { %><span class="ml-1 text-[10px] text-emerald-600">· allocated</span><% } %>
+            </td>
+            <td class="px-2 py-2 text-xs text-gray-500"><%= r.employee_id || '—' %></td>
+            <td class="px-2 py-2">
+              <% if (isAttended) { %>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200">Attended</span>
+              <% } else if (isCaughtUp) { %>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-violet-50 text-violet-700 ring-violet-200">Caught up</span>
+              <% } else { %>
+                <span class="text-xs text-gray-400">—</span>
+              <% } %>
+            </td>
+            <td class="px-2 py-2 text-xs text-gray-500 tabular-nums"><%= fmt(r.recorded_at) %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </form>
+</div>

@@ -1,0 +1,416 @@
+// /toolbox-talks — office CRUD for Toolbox Talks.
+//
+// Workers consume via /w/safety/toolboxes. Files (slides, sign-on sheets,
+// photo gallery) live under data/uploads/toolbox/ outside /public, served
+// through auth-gated download routes here + on the worker side.
+'use strict';
+
+const express = require('express');
+const router = express.Router();
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { getDb } = require('../db/database');
+const { logActivity } = require('../middleware/audit');
+const { sendPushToAllActiveCrew } = require('../services/pushNotification');
+
+const UPLOAD_DIR = path.join(__dirname, '..', 'data', 'uploads', 'toolbox');
+if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+
+const uploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const stamp = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, stamp + path.extname(file.originalname));
+  }
+});
+const upload = multer({
+  storage: uploadStorage,
+  // 15MB per file — toolbox decks and sign-on scans can be chunky.
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /\.(pdf|docx?|jpg|jpeg|png|webp|heic)$/i.test(file.originalname);
+    cb(null, ok);
+  }
+});
+// Accept the create/edit form's three file fields in one go.
+const formUploads = upload.fields([
+  { name: 'slides', maxCount: 1 },
+  { name: 'signon', maxCount: 1 },
+  { name: 'photos', maxCount: 12 },
+]);
+
+const STATUS_VALUES = ['draft', 'published', 'archived'];
+const STATUS_LABELS = { draft: 'Draft', published: 'Published', archived: 'Archived' };
+
+function rel(p) {
+  return p.replace(/\\/g, '/');
+}
+function relFromRepo(absPath) {
+  return rel(path.relative(path.join(__dirname, '..'), absPath));
+}
+
+function announcePublished(req, toolbox) {
+  sendPushToAllActiveCrew({
+    title: 'Toolbox: ' + toolbox.title,
+    body: 'New toolbox talk posted — tap to review.',
+    url: '/w/safety/toolboxes/' + toolbox.id,
+    type: 'toolbox_talk',
+  }).catch(e => console.error('[toolbox-talks] push error:', e.message));
+  try {
+    logActivity({
+      user: req.session.user,
+      action: 'publish',
+      entityType: 'toolbox_talk',
+      entityId: toolbox.id,
+      entityLabel: toolbox.title,
+      ip: req.ip,
+    });
+  } catch (e) {}
+}
+
+// GET /toolbox-talks — list with status tabs + counts
+router.get('/', (req, res) => {
+  const db = getDb();
+  const status = STATUS_VALUES.includes(req.query.status) ? req.query.status : 'published';
+  const rows = db.prepare(`
+    SELECT t.*, u.full_name AS created_by_name,
+      (SELECT COUNT(*) FROM toolbox_attendance a WHERE a.toolbox_id = t.id AND a.status = 'attended') AS attended_count,
+      (SELECT COUNT(*) FROM toolbox_attendance a WHERE a.toolbox_id = t.id AND a.status = 'caught_up') AS caught_count
+    FROM toolbox_talks t
+    LEFT JOIN users u ON u.id = t.created_by_id
+    WHERE t.status = ?
+    ORDER BY t.held_at DESC, t.created_at DESC
+  `).all(status);
+  const counts = db.prepare(`
+    SELECT
+      SUM(CASE WHEN status='draft'     THEN 1 ELSE 0 END) AS draft,
+      SUM(CASE WHEN status='published' THEN 1 ELSE 0 END) AS published,
+      SUM(CASE WHEN status='archived'  THEN 1 ELSE 0 END) AS archived
+    FROM toolbox_talks
+  `).get();
+  res.render('toolbox-talks/index', {
+    title: 'Toolbox Talks', currentPage: 'toolbox-talks',
+    rows, counts, status, statusLabels: STATUS_LABELS,
+  });
+});
+
+// GET /toolbox-talks/new — create form
+router.get('/new', (req, res) => {
+  res.render('toolbox-talks/form', {
+    title: 'New Toolbox Talk', currentPage: 'toolbox-talks',
+    toolbox: null, photos: [], isEdit: false,
+  });
+});
+
+// POST /toolbox-talks — create. Accepts slides + sign-on + multi-photo upload.
+router.post('/', formUploads, (req, res) => {
+  try {
+    const db = getDb();
+    const b = req.body;
+    const title = String(b.title || '').trim();
+    if (!title) {
+      req.flash('error', 'Title is required.');
+      return res.redirect('/toolbox-talks/new');
+    }
+    const heldAt = (b.held_at && /^\d{4}-\d{2}-\d{2}$/.test(b.held_at)) ? b.held_at : new Date().toISOString().slice(0, 10);
+    const wantsPublish = b.action === 'publish';
+    const status = wantsPublish ? 'published' : 'draft';
+    const userId = req.session.user ? req.session.user.id : null;
+    const now = new Date().toISOString();
+
+    const slidesFile = req.files && req.files.slides && req.files.slides[0];
+    const signonFile = req.files && req.files.signon && req.files.signon[0];
+    const slidesPath = slidesFile ? relFromRepo(slidesFile.path) : '';
+    const slidesName = slidesFile ? slidesFile.originalname : '';
+    const signonPath = signonFile ? relFromRepo(signonFile.path) : '';
+    const signonName = signonFile ? signonFile.originalname : '';
+
+    const r = db.prepare(`
+      INSERT INTO toolbox_talks
+        (title, held_at, presenter, key_points,
+         slides_path, slides_original_name, signon_path, signon_original_name,
+         status, published_at, published_by_id, created_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      title, heldAt,
+      String(b.presenter || '').trim(),
+      String(b.key_points || '').trim(),
+      slidesPath, slidesName, signonPath, signonName,
+      status,
+      wantsPublish ? now : null,
+      wantsPublish ? userId : null,
+      userId
+    );
+
+    // Persist photo attachments separately so each one is downloadable.
+    const photoFiles = (req.files && req.files.photos) || [];
+    if (photoFiles.length) {
+      const ins = db.prepare(`
+        INSERT INTO toolbox_attachments (toolbox_id, file_path, file_original_name, kind, uploaded_by_id)
+        VALUES (?, ?, ?, 'photo', ?)
+      `);
+      for (const f of photoFiles) {
+        ins.run(r.lastInsertRowid, relFromRepo(f.path), f.originalname, userId);
+      }
+    }
+
+    try {
+      logActivity({
+        user: req.session.user, action: 'create', entityType: 'toolbox_talk',
+        entityId: r.lastInsertRowid, entityLabel: title, details: status, ip: req.ip,
+      });
+    } catch (e) {}
+    if (wantsPublish) announcePublished(req, { id: r.lastInsertRowid, title });
+    req.flash('success', wantsPublish ? 'Toolbox talk published.' : 'Draft saved.');
+    return res.redirect('/toolbox-talks/' + r.lastInsertRowid);
+  } catch (err) {
+    console.error('[toolbox-talks POST]', err);
+    req.flash('error', 'Could not create toolbox: ' + (err && err.message || 'unknown'));
+    return res.redirect('/toolbox-talks/new');
+  }
+});
+
+// GET /toolbox-talks/:id — show with attendance summary
+router.get('/:id', (req, res) => {
+  const db = getDb();
+  const toolbox = db.prepare(`
+    SELECT t.*, u.full_name AS created_by_name, pu.full_name AS published_by_name
+    FROM toolbox_talks t
+    LEFT JOIN users u ON u.id = t.created_by_id
+    LEFT JOIN users pu ON pu.id = t.published_by_id
+    WHERE t.id = ?
+  `).get(req.params.id);
+  if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  const photos = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
+  const summary = db.prepare(`
+    SELECT
+      (SELECT COUNT(*) FROM crew_members WHERE active = 1) AS total_crew,
+      (SELECT COUNT(*) FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'attended') AS attended,
+      (SELECT COUNT(*) FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'caught_up') AS caught_up
+  `).get(toolbox.id, toolbox.id);
+  res.render('toolbox-talks/show', {
+    title: toolbox.title, currentPage: 'toolbox-talks',
+    toolbox, photos, summary, statusLabels: STATUS_LABELS,
+  });
+});
+
+// GET /toolbox-talks/:id/edit
+router.get('/:id/edit', (req, res) => {
+  const db = getDb();
+  const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  const photos = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
+  res.render('toolbox-talks/form', {
+    title: 'Edit Toolbox Talk', currentPage: 'toolbox-talks',
+    toolbox, photos, isEdit: true,
+  });
+});
+
+// POST /toolbox-talks/:id — update. Replaces slides / sign-on if a new file
+// is uploaded; appends new photos to the existing gallery (doesn't replace).
+router.post('/:id', formUploads, (req, res) => {
+  try {
+    const db = getDb();
+    const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
+    if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
+    const b = req.body;
+    const title = String(b.title || '').trim() || toolbox.title;
+    const heldAt = (b.held_at && /^\d{4}-\d{2}-\d{2}$/.test(b.held_at)) ? b.held_at : toolbox.held_at;
+
+    let slidesPath = toolbox.slides_path;
+    let slidesName = toolbox.slides_original_name;
+    let signonPath = toolbox.signon_path;
+    let signonName = toolbox.signon_original_name;
+    const slidesFile = req.files && req.files.slides && req.files.slides[0];
+    const signonFile = req.files && req.files.signon && req.files.signon[0];
+    if (slidesFile) { slidesPath = relFromRepo(slidesFile.path); slidesName = slidesFile.originalname; }
+    if (signonFile) { signonPath = relFromRepo(signonFile.path); signonName = signonFile.originalname; }
+
+    db.prepare(`
+      UPDATE toolbox_talks
+      SET title = ?, held_at = ?, presenter = ?, key_points = ?,
+          slides_path = ?, slides_original_name = ?,
+          signon_path = ?, signon_original_name = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      title, heldAt,
+      String(b.presenter || '').trim(),
+      String(b.key_points || '').trim(),
+      slidesPath, slidesName, signonPath, signonName,
+      toolbox.id
+    );
+
+    const photoFiles = (req.files && req.files.photos) || [];
+    if (photoFiles.length) {
+      const ins = db.prepare(`
+        INSERT INTO toolbox_attachments (toolbox_id, file_path, file_original_name, kind, uploaded_by_id)
+        VALUES (?, ?, ?, 'photo', ?)
+      `);
+      const uid = req.session.user ? req.session.user.id : null;
+      for (const f of photoFiles) {
+        ins.run(toolbox.id, relFromRepo(f.path), f.originalname, uid);
+      }
+    }
+
+    try {
+      logActivity({
+        user: req.session.user, action: 'update', entityType: 'toolbox_talk',
+        entityId: toolbox.id, entityLabel: title, ip: req.ip,
+      });
+    } catch (e) {}
+    req.flash('success', 'Toolbox saved.');
+    return res.redirect('/toolbox-talks/' + toolbox.id);
+  } catch (err) {
+    console.error('[toolbox-talks PUT]', err);
+    req.flash('error', 'Update failed: ' + (err && err.message || 'unknown'));
+    return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
+  }
+});
+
+// POST /toolbox-talks/:id/publish — transition draft -> published + push.
+router.post('/:id/publish', (req, res) => {
+  const db = getDb();
+  const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
+  if (toolbox.status === 'published') {
+    req.flash('error', 'Already published.');
+    return res.redirect('/toolbox-talks/' + toolbox.id);
+  }
+  const userId = req.session.user ? req.session.user.id : null;
+  db.prepare(`
+    UPDATE toolbox_talks
+    SET status='published', published_at=CURRENT_TIMESTAMP, published_by_id=?, updated_at=CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(userId, toolbox.id);
+  announcePublished(req, toolbox);
+  req.flash('success', 'Toolbox talk published.');
+  return res.redirect('/toolbox-talks/' + toolbox.id);
+});
+
+// POST /toolbox-talks/:id/archive
+router.post('/:id/archive', (req, res) => {
+  const db = getDb();
+  const tb = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!tb) return res.redirect('/toolbox-talks');
+  db.prepare("UPDATE toolbox_talks SET status='archived', updated_at=CURRENT_TIMESTAMP WHERE id = ?").run(tb.id);
+  try { logActivity({ user: req.session.user, action: 'archive', entityType: 'toolbox_talk', entityId: tb.id, entityLabel: tb.title, ip: req.ip }); } catch (e) {}
+  req.flash('success', 'Toolbox archived.');
+  return res.redirect('/toolbox-talks');
+});
+
+// POST /toolbox-talks/:id/delete
+router.post('/:id/delete', (req, res) => {
+  const db = getDb();
+  const tb = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!tb) return res.redirect('/toolbox-talks');
+  db.prepare('DELETE FROM toolbox_talks WHERE id = ?').run(tb.id);
+  try { logActivity({ user: req.session.user, action: 'delete', entityType: 'toolbox_talk', entityId: tb.id, entityLabel: tb.title, ip: req.ip }); } catch (e) {}
+  req.flash('success', 'Toolbox deleted.');
+  return res.redirect('/toolbox-talks');
+});
+
+// GET /toolbox-talks/:id/attendance — manage attendees
+router.get('/:id/attendance', (req, res) => {
+  const db = getDb();
+  const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
+  const rows = db.prepare(`
+    SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
+           a.status AS attendance_status, a.recorded_at, a.recorded_by_id
+    FROM crew_members cm
+    LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
+    WHERE cm.active = 1
+    ORDER BY cm.full_name
+  `).all(toolbox.id);
+  // Workers allocated on the toolbox's held_at date — "select all from this
+  // day" shortcut on the form. Sourced from crew_allocations OR booking_crew.
+  let allocatedIds = [];
+  try {
+    allocatedIds = db.prepare(`
+      SELECT DISTINCT crew_member_id FROM crew_allocations
+      WHERE allocation_date = ? AND status != 'cancelled'
+    `).all(toolbox.held_at).map(r => r.crew_member_id);
+  } catch (e) {}
+  res.render('toolbox-talks/attendance', {
+    title: toolbox.title + ' — Attendance', currentPage: 'toolbox-talks',
+    toolbox, rows, allocatedIds,
+  });
+});
+
+// POST /toolbox-talks/:id/attendance — bulk replace attendance.
+// Accepts an array `attended_crew_ids[]` (checkboxes); each marks attendance
+// as recorded by the current admin user. Workers' self-marked "caught_up"
+// rows are preserved unless explicitly checked here.
+router.post('/:id/attendance', (req, res) => {
+  const db = getDb();
+  const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
+  const ids = []
+    .concat(req.body.attended_crew_ids || [])
+    .map(n => parseInt(n, 10))
+    .filter(n => n > 0);
+  const userId = req.session.user ? req.session.user.id : null;
+  const tx = db.transaction(() => {
+    // Wipe office-recorded attendance for this toolbox, then re-insert from
+    // the form. We deliberately leave 'caught_up' rows alone so the worker's
+    // self-claim doesn't get overwritten by an admin who only ticked off
+    // attendees.
+    db.prepare(`DELETE FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'attended'`).run(toolbox.id);
+    if (ids.length) {
+      const ins = db.prepare(`
+        INSERT OR REPLACE INTO toolbox_attendance
+          (toolbox_id, crew_member_id, status, recorded_by_id, recorded_at)
+        VALUES (?, ?, 'attended', ?, CURRENT_TIMESTAMP)
+      `);
+      for (const cid of ids) ins.run(toolbox.id, cid, userId);
+    }
+  });
+  tx();
+  try { logActivity({ user: req.session.user, action: 'attendance_updated', entityType: 'toolbox_talk', entityId: toolbox.id, entityLabel: toolbox.title, details: ids.length + ' attendees', ip: req.ip }); } catch (e) {}
+  req.flash('success', 'Attendance saved (' + ids.length + ' attendees).');
+  return res.redirect('/toolbox-talks/' + toolbox.id + '/attendance');
+});
+
+// GET /toolbox-talks/:id/slides — auth-gated slides download
+router.get('/:id/slides', (req, res) => {
+  const db = getDb();
+  const tb = db.prepare('SELECT slides_path, slides_original_name FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!tb || !tb.slides_path) { req.flash('error', 'No slides attached.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  const abs = path.join(__dirname, '..', tb.slides_path);
+  if (!fs.existsSync(abs)) { req.flash('error', 'File missing.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  return res.download(abs, tb.slides_original_name || path.basename(abs));
+});
+
+// GET /toolbox-talks/:id/signon — auth-gated sign-on sheet download
+router.get('/:id/signon', (req, res) => {
+  const db = getDb();
+  const tb = db.prepare('SELECT signon_path, signon_original_name FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!tb || !tb.signon_path) { req.flash('error', 'No sign-on sheet attached.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  const abs = path.join(__dirname, '..', tb.signon_path);
+  if (!fs.existsSync(abs)) { req.flash('error', 'File missing.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  return res.download(abs, tb.signon_original_name || path.basename(abs));
+});
+
+// GET /toolbox-talks/:id/photos/:photoId — auth-gated single photo serve.
+// Streams inline rather than as a download so the office show page can
+// display the gallery via <img>.
+router.get('/:id/photos/:photoId', (req, res) => {
+  const db = getDb();
+  const ph = db.prepare(`SELECT file_path, file_original_name FROM toolbox_attachments WHERE id = ? AND toolbox_id = ?`).get(req.params.photoId, req.params.id);
+  if (!ph || !ph.file_path) return res.status(404).send('not found');
+  const abs = path.join(__dirname, '..', ph.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('missing');
+  return res.sendFile(abs);
+});
+
+// POST /toolbox-talks/:id/photos/:photoId/delete
+router.post('/:id/photos/:photoId/delete', (req, res) => {
+  const db = getDb();
+  db.prepare('DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ?').run(req.params.photoId, req.params.id);
+  req.flash('success', 'Photo removed.');
+  return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
+});
+
+module.exports = router;

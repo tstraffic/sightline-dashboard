@@ -199,4 +199,105 @@ router.get('/safety/updates/:id/file', (req, res) => {
   return res.download(abs, row.attachment_original_name || path.basename(abs));
 });
 
+// =============================================
+// Toolbox Talks
+// =============================================
+
+// GET /w/safety/toolboxes — archive of published toolboxes. Each row shows
+// the worker's own attendance status (Attended / Caught up / Missed).
+router.get('/safety/toolboxes', (req, res) => {
+  const db = getDb();
+  const workerId = req.session.worker.id;
+  const rows = db.prepare(`
+    SELECT t.id, t.title, t.held_at, t.presenter, t.key_points,
+           a.status AS my_status, a.recorded_at AS my_recorded_at
+    FROM toolbox_talks t
+    LEFT JOIN toolbox_attendance a ON a.toolbox_id = t.id AND a.crew_member_id = ?
+    WHERE t.status = 'published'
+    ORDER BY t.held_at DESC, t.created_at DESC
+    LIMIT 200
+  `).all(workerId);
+  res.render('worker/safety/toolboxes-list', {
+    title: 'Toolbox Talks', currentPage: 'safety',
+    subtab: 'toolboxes', rows,
+  });
+});
+
+// GET /w/safety/toolboxes/:id — toolbox detail + worker attendance status.
+router.get('/safety/toolboxes/:id', (req, res) => {
+  const db = getDb();
+  const workerId = req.session.worker.id;
+  const toolbox = db.prepare(`
+    SELECT * FROM toolbox_talks WHERE id = ? AND status = 'published'
+  `).get(req.params.id);
+  if (!toolbox) {
+    req.flash('error', 'Toolbox not found.');
+    return res.redirect('/w/safety/toolboxes');
+  }
+  const myAttendance = db.prepare(`
+    SELECT * FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?
+  `).get(toolbox.id, workerId);
+  const photos = db.prepare(`SELECT id FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
+  res.render('worker/safety/toolbox-detail', {
+    title: toolbox.title, currentPage: 'safety',
+    subtab: 'toolboxes', toolbox, myAttendance, photos,
+  });
+});
+
+// POST /w/safety/toolboxes/:id/caught-up — worker self-claim. Idempotent via
+// UNIQUE(toolbox_id, crew_member_id); won't overwrite an existing 'attended'
+// record since INSERT OR IGNORE matches on the unique constraint.
+router.post('/safety/toolboxes/:id/caught-up', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
+  if (!toolbox || toolbox.status !== 'published') {
+    req.flash('error', 'Toolbox not available.');
+    return res.redirect('/w/safety/toolboxes');
+  }
+  try {
+    db.prepare(`
+      INSERT OR IGNORE INTO toolbox_attendance
+        (toolbox_id, crew_member_id, status, recorded_by_id)
+      VALUES (?, ?, 'caught_up', NULL)
+    `).run(toolbox.id, worker.id);
+    req.flash('success', 'Marked as caught up. Thanks for reviewing.');
+  } catch (e) {
+    console.error('[w/safety] toolbox caught-up error', e.message);
+    req.flash('error', 'Could not record.');
+  }
+  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+});
+
+// GET /w/safety/toolboxes/:id/slides — worker-auth slides download.
+router.get('/safety/toolboxes/:id/slides', (req, res) => {
+  const db = getDb();
+  const row = db.prepare("SELECT slides_path, slides_original_name, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
+  if (!row || row.status !== 'published' || !row.slides_path) {
+    req.flash('error', 'Slides unavailable.');
+    return res.redirect('/w/safety/toolboxes/' + req.params.id);
+  }
+  const abs = path.join(__dirname, '..', '..', row.slides_path);
+  if (!fs.existsSync(abs)) {
+    req.flash('error', 'File missing on disk.');
+    return res.redirect('/w/safety/toolboxes/' + req.params.id);
+  }
+  return res.download(abs, row.slides_original_name || path.basename(abs));
+});
+
+// GET /w/safety/toolboxes/:id/photos/:photoId — inline serve for the gallery.
+// Sign-on sheets are intentionally NOT exposed to workers.
+router.get('/safety/toolboxes/:id/photos/:photoId', (req, res) => {
+  const db = getDb();
+  const ph = db.prepare(`
+    SELECT a.file_path FROM toolbox_attachments a
+    JOIN toolbox_talks t ON t.id = a.toolbox_id
+    WHERE a.id = ? AND a.toolbox_id = ? AND a.kind = 'photo' AND t.status = 'published'
+  `).get(req.params.photoId, req.params.id);
+  if (!ph || !ph.file_path) return res.status(404).send('not found');
+  const abs = path.join(__dirname, '..', '..', ph.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('missing');
+  return res.sendFile(abs);
+});
+
 module.exports = router;

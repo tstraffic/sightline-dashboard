@@ -106,7 +106,7 @@
          whose role can hit at least one of audits / incidents / checklists
          / swms / risk_assessments. Each link inside is still gated by its
          own canAccess so users only see the modules they can open. */%>
-    <% if (canAccess(user, 'audits') || canAccess(user, 'incidents') || canAccess(user, 'checklists') || canAccess(user, 'swms') || canAccess(user, 'risk_assessments') || canAccess(user, 'safety_updates')) { %>
+    <% if (canAccess(user, 'audits') || canAccess(user, 'incidents') || canAccess(user, 'checklists') || canAccess(user, 'swms') || canAccess(user, 'risk_assessments') || canAccess(user, 'safety_updates') || canAccess(user, 'toolbox_talks')) { %>
     <div class="pt-3 mt-2 border-t border-white/10">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Safety</p>
     </div>
@@ -139,6 +139,12 @@
     <a href="/safety-updates" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'safety-updates' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
       <span class="flex-1">Safety Updates</span>
+    </a>
+    <% } %>
+    <% if (canAccess(user, 'toolbox_talks')) { %>
+    <a href="/toolbox-talks" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'toolbox-talks' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+      <span class="flex-1">Toolbox Talks</span>
     </a>
     <% } %>
     <% if (canAccess(user, 'risk_assessments')) { %>
