@@ -27,6 +27,22 @@ function canModifyTask(task, user) {
   return false;
 }
 
+/**
+ * Check if current user can VIEW a task (read-only access counts).
+ * Superset of canModifyTask: also lets watchers (people @mentioned on the
+ * task or manually added by an owner) open the detail page and comment.
+ */
+function canViewTask(task, user) {
+  if (canModifyTask(task, user)) return true;
+  if (!user) return false;
+  try {
+    const db = getDb();
+    const isWatcher = db.prepare('SELECT 1 FROM task_watchers WHERE task_id = ? AND user_id = ?').get(task.id, user.id);
+    if (isWatcher) return true;
+  } catch (e) { /* table may not exist yet */ }
+  return false;
+}
+
 /** Helper: sync task_owners junction table for a task */
 function syncTaskOwners(db, taskId, ownerIds) {
   db.prepare('DELETE FROM task_owners WHERE task_id = ?').run(taskId);
@@ -88,17 +104,19 @@ router.get('/', (req, res) => {
   }
   else if (owner === 'all' || (!owner && isAdminRole)) { /* show all tasks */ }
   else if (!owner && isPlanningRole) {
-    // Planning sees: their own tasks + planning division tasks + compliance-linked tasks
-    baseWhere += " AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?) OR t.division = 'planning' OR t.compliance_id IS NOT NULL)";
-    params.push(req.session.user.id, req.session.user.id);
+    // Planning sees: their own tasks + planning division tasks + compliance-linked
+    // tasks + anything they're watching (so @mentions don't go to a dead end).
+    baseWhere += " AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?) OR t.id IN (SELECT task_id FROM task_watchers WHERE user_id = ?) OR t.division = 'planning' OR t.compliance_id IS NOT NULL)";
+    params.push(req.session.user.id, req.session.user.id, req.session.user.id);
   }
   else if (owner === 'me' || (!owner && !isAdminRole)) {
-    baseWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?))';
-    params.push(req.session.user.id, req.session.user.id);
+    // Own tasks, co-owned tasks, plus tasks the user is watching (@mention recipients).
+    baseWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?) OR t.id IN (SELECT task_id FROM task_watchers WHERE user_id = ?))';
+    params.push(req.session.user.id, req.session.user.id, req.session.user.id);
   }
   else if (owner) {
-    baseWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?))';
-    params.push(owner, owner);
+    baseWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?) OR t.id IN (SELECT task_id FROM task_watchers WHERE user_id = ?))';
+    params.push(owner, owner, owner);
   }
   if (priority && priority !== 'all') { baseWhere += ' AND t.priority = ?'; params.push(priority); }
   if (division && division !== 'all') { baseWhere += ' AND t.division = ?'; params.push(division); }
@@ -153,12 +171,12 @@ router.get('/', (req, res) => {
   }
   else if (owner === 'all' || (!owner && isAdminRole)) { /* count all */ }
   else if (owner === 'me' || (!owner && !isAdminRole)) {
-    countWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?))';
-    countParams.push(req.session.user.id, req.session.user.id);
+    countWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?) OR t.id IN (SELECT task_id FROM task_watchers WHERE user_id = ?))';
+    countParams.push(req.session.user.id, req.session.user.id, req.session.user.id);
   }
   else if (owner) {
-    countWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?))';
-    countParams.push(owner, owner);
+    countWhere += ' AND (t.owner_id = ? OR t.id IN (SELECT task_id FROM task_owners WHERE user_id = ?) OR t.id IN (SELECT task_id FROM task_watchers WHERE user_id = ?))';
+    countParams.push(owner, owner, owner);
   }
   if (priority && priority !== 'all') { countWhere += ' AND t.priority = ?'; countParams.push(priority); }
   if (division && division !== 'all') { countWhere += ' AND t.division = ?'; countParams.push(division); }
@@ -438,15 +456,22 @@ router.get('/:id/edit', (req, res) => {
     return res.redirect('/tasks/deleted');
   }
 
-  // Admin-division tasks are private to the admin team — hide from everyone else.
+  // Watchers (people @mentioned on the task or manually added by an owner)
+  // get read-only access. canModifyTask remains the writable gate.
+  const editable = canModifyTask(task, req.session.user);
+  const viewable = editable || canViewTask(task, req.session.user);
+
+  // Admin-division tasks are private to the admin team — hide from everyone
+  // else UNLESS they've been explicitly invited via a mention/manual watcher.
   // Return the same "not found" message so non-admins can't probe for task existence.
-  if (task.division === 'admin' && !isAdminRole(req.session.user)) {
+  if (task.division === 'admin' && !isAdminRole(req.session.user) && !viewable) {
     req.flash('error', 'Task not found.');
     return res.redirect('/tasks');
   }
-
-  // Check ownership — non-owners can view but form will be read-only
-  const editable = canModifyTask(task, req.session.user);
+  if (!viewable && !isAdminRole(req.session.user)) {
+    req.flash('error', 'You don\'t have access to this task.');
+    return res.redirect('/tasks');
+  }
 
   const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs WHERE status NOT IN ('closed','completed','cancelled') ORDER BY job_number").all();
   const users = db.prepare("SELECT id, full_name, role FROM users WHERE active = 1 AND username != 'admin' ORDER BY full_name").all();
@@ -465,13 +490,45 @@ router.get('/:id/edit', (req, res) => {
     `).all(req.params.id);
   } catch (e) { /* table may not exist yet */ }
 
-  // Load comments with user names
+  // Load comments with user names + the list of users mentioned on each
+  // comment, so the view can render @-pills + an "x, y mentioned" footer.
   let comments = [];
   try {
     comments = db.prepare(`
       SELECT tc.*, u.full_name as user_name FROM task_comments tc
       JOIN users u ON tc.user_id = u.id
       WHERE tc.task_id = ? ORDER BY tc.created_at DESC
+    `).all(req.params.id);
+    if (comments.length) {
+      const ids = comments.map(c => c.id);
+      let mentionRows = [];
+      try {
+        mentionRows = db.prepare(`
+          SELECT tcm.comment_id, mu.id, mu.full_name
+          FROM task_comment_mentions tcm
+          JOIN users mu ON mu.id = tcm.mentioned_user_id
+          WHERE tcm.comment_id IN (${ids.map(() => '?').join(',')})
+        `).all(...ids);
+      } catch (e) { mentionRows = []; }
+      const byComment = new Map();
+      for (const r of mentionRows) {
+        const arr = byComment.get(r.comment_id) || [];
+        arr.push({ id: r.id, full_name: r.full_name });
+        byComment.set(r.comment_id, arr);
+      }
+      for (const c of comments) c.mentions = byComment.get(c.id) || [];
+    }
+  } catch (e) { /* table may not exist yet */ }
+
+  // Load watchers for the "Watching" section + an "add watcher" picker.
+  let watchers = [];
+  try {
+    watchers = db.prepare(`
+      SELECT tw.user_id, tw.source, tw.added_at, u.full_name, u.role
+      FROM task_watchers tw
+      JOIN users u ON u.id = tw.user_id
+      WHERE tw.task_id = ?
+      ORDER BY u.full_name
     `).all(req.params.id);
   } catch (e) { /* table may not exist yet */ }
 
@@ -525,7 +582,7 @@ router.get('/:id/edit', (req, res) => {
   }
   task.owners = taskOwners;
 
-  res.render('tasks/form', { title: 'Edit Task', task, jobs, users, tenders, user: req.session.user, prefillJobId: '', prefillTenderId: '', editable, subtasks, comments, dependencies, dependents, allTasks, activityLog, linkedCompliance });
+  res.render('tasks/form', { title: 'Edit Task', task, jobs, users, tenders, user: req.session.user, prefillJobId: '', prefillTenderId: '', editable, viewable, subtasks, comments, watchers, dependencies, dependents, allTasks, activityLog, linkedCompliance });
 });
 
 // POST /:id — Update task
@@ -818,18 +875,207 @@ router.post('/:id/renotify', (req, res) => {
 // Comments
 // =============================================
 
-// POST /:id/comments — Add a comment
+// POST /:id/comments — Add a comment, optionally with @mentions.
+//
+// Notifications fan-out (de-duplicated, excluding the commenter):
+//   - primary owner (tasks.owner_id)
+//   - co-owners (task_owners junction)
+//   - everyone who has previously commented on this task
+//   - everyone @mentioned in THIS comment (also gets bumped to a watcher row
+//     so they can open the task even if they aren't an owner)
+// All recipients get an in-app notification row (bell icon) and a push.
 router.post('/:id/comments', (req, res) => {
   const db = getDb();
+  const taskId = parseInt(req.params.id, 10);
   const { comment } = req.body;
-  if (!comment || !comment.trim()) return res.redirect('/tasks/' + req.params.id + '/edit');
-  db.prepare('INSERT INTO task_comments (task_id, user_id, comment) VALUES (?, ?, ?)').run(req.params.id, req.session.user.id, comment.trim());
-  const task = db.prepare('SELECT title FROM tasks WHERE id = ?').get(req.params.id);
-  if (task) {
-    const { logActivity } = require('../middleware/audit');
-    logActivity({ user: req.session.user, action: 'update', entityType: 'task', entityId: parseInt(req.params.id), entityLabel: task.title, details: 'Added comment', ip: req.ip });
+  if (!comment || !comment.trim()) return res.redirect('/tasks/' + taskId + '/edit');
+
+  const task = db.prepare(`
+    SELECT t.id, t.title, t.owner_id, t.job_id, t.division
+    FROM tasks t WHERE t.id = ?
+  `).get(taskId);
+  if (!task) { req.flash('error', 'Task not found.'); return res.redirect('/tasks'); }
+  // Anyone with view rights can comment (owners, co-owners, watchers, admin).
+  if (!canViewTask(task, req.session.user)) {
+    req.flash('error', 'You can\'t comment on this task.');
+    return res.redirect('/tasks');
   }
-  res.redirect('/tasks/' + req.params.id + '/edit');
+
+  const body = comment.trim();
+  const commenterId = req.session.user.id;
+  const commenterName = req.session.user.full_name || 'Someone';
+
+  // mentioned_user_ids[] comes from the hidden picker field (chat-style).
+  // Accept both array and CSV string forms so a simple form still works.
+  let mentionedIds = [];
+  const raw = req.body.mentioned_user_ids;
+  if (Array.isArray(raw)) mentionedIds = raw;
+  else if (typeof raw === 'string' && raw.trim()) mentionedIds = raw.split(',');
+  mentionedIds = mentionedIds.map(x => parseInt(x, 10)).filter(n => Number.isFinite(n) && n > 0);
+  mentionedIds = Array.from(new Set(mentionedIds));
+
+  // Insert the comment first so we have its id for mention rows.
+  const ins = db.prepare('INSERT INTO task_comments (task_id, user_id, comment) VALUES (?, ?, ?)').run(taskId, commenterId, body);
+  const commentId = Number(ins.lastInsertRowid);
+
+  // Persist mention rows + promote each mentioned user to a watcher.
+  // INSERT OR IGNORE on both — duplicate mentions or repeat watchers are
+  // expected and shouldn't error.
+  let validMentioned = [];
+  if (mentionedIds.length > 0) {
+    try {
+      const valid = db.prepare(`SELECT id FROM users WHERE active = 1 AND id IN (${mentionedIds.map(() => '?').join(',')})`).all(...mentionedIds);
+      validMentioned = valid.map(r => r.id);
+      const mentionIns = db.prepare('INSERT OR IGNORE INTO task_comment_mentions (comment_id, mentioned_user_id) VALUES (?, ?)');
+      const watcherIns = db.prepare("INSERT OR IGNORE INTO task_watchers (task_id, user_id, source, added_by_id) VALUES (?, ?, 'mention', ?)");
+      for (const uid of validMentioned) {
+        mentionIns.run(commentId, uid);
+        watcherIns.run(taskId, uid, commenterId);
+      }
+    } catch (e) { console.error('[Tasks] mention insert error:', e.message); }
+  }
+
+  // Audit trail (same as before — keep the legacy hook so existing reports work).
+  try {
+    const { logActivity } = require('../middleware/audit');
+    logActivity({ user: req.session.user, action: 'update', entityType: 'task', entityId: taskId, entityLabel: task.title, details: 'Added comment', ip: req.ip });
+  } catch (e) {}
+
+  // Build the recipient set: owners + previous commenters + mentioned users, minus self.
+  const recipients = new Map(); // userId -> { isMentioned }
+  function add(uid, isMentioned) {
+    const n = parseInt(uid, 10);
+    if (!Number.isFinite(n) || n === commenterId) return;
+    const existing = recipients.get(n);
+    if (!existing) recipients.set(n, { isMentioned: !!isMentioned });
+    else if (isMentioned) existing.isMentioned = true;
+  }
+  if (task.owner_id) add(task.owner_id, false);
+  try {
+    db.prepare('SELECT user_id FROM task_owners WHERE task_id = ?').all(taskId).forEach(r => add(r.user_id, false));
+  } catch (e) {}
+  try {
+    db.prepare('SELECT DISTINCT user_id FROM task_comments WHERE task_id = ?').all(taskId).forEach(r => add(r.user_id, false));
+  } catch (e) {}
+  // Watchers follow progress too — both mention-sourced and manually added.
+  try {
+    db.prepare('SELECT user_id FROM task_watchers WHERE task_id = ?').all(taskId).forEach(r => add(r.user_id, false));
+  } catch (e) {}
+  for (const uid of validMentioned) add(uid, true);
+
+  // Insert in-app notifications + send push for each recipient.
+  // Admin-division tasks are private to admin/management — don't leak details
+  // to ops/planning recipients (the only way they'd be on this list is via
+  // a mention, which is explicit consent, so we still let them through but
+  // keep the title generic).
+  const preview = body.length > 80 ? body.substring(0, 80) + '…' : body;
+  const insertNotif = db.prepare(`
+    INSERT INTO notifications (user_id, type, title, message, link, job_id)
+    VALUES (?, 'general', ?, ?, ?, ?)
+  `);
+  const link = '/tasks/' + taskId + '/edit';
+  for (const [userId, meta] of recipients) {
+    const title = meta.isMentioned
+      ? `${commenterName} mentioned you on "${task.title}"`
+      : `New comment on "${task.title}"`;
+    const message = `${commenterName}: ${preview}`;
+    try { insertNotif.run(userId, title, message, link, task.job_id || null); } catch (e) { console.error('[Tasks] notif insert error:', e.message); }
+    try {
+      sendPushToUser(userId, {
+        title,
+        body: preview,
+        url: link,
+        type: meta.isMentioned ? 'task_mention' : 'task_comment',
+      }).catch(e => console.error('[Tasks] push error:', e.message));
+    } catch (e) { /* sendPushToUser shouldn't throw, but defensive */ }
+  }
+
+  res.redirect('/tasks/' + taskId + '/edit');
+});
+
+// POST /:id/watchers — manually add a watcher (owners + admin only).
+router.post('/:id/watchers', (req, res) => {
+  const db = getDb();
+  const taskId = parseInt(req.params.id, 10);
+  const task = db.prepare('SELECT id, owner_id, title FROM tasks WHERE id = ?').get(taskId);
+  if (!task) { req.flash('error', 'Task not found.'); return res.redirect('/tasks'); }
+  if (!canModifyTask(task, req.session.user)) {
+    req.flash('error', 'Only task owners can manage watchers.');
+    return res.redirect('/tasks/' + taskId + '/edit');
+  }
+  const userId = parseInt(req.body.user_id, 10);
+  if (!userId) { req.flash('error', 'Pick a user to add.'); return res.redirect('/tasks/' + taskId + '/edit'); }
+  const u = db.prepare('SELECT id, full_name FROM users WHERE id = ? AND active = 1').get(userId);
+  if (!u) { req.flash('error', 'User not found.'); return res.redirect('/tasks/' + taskId + '/edit'); }
+  try {
+    db.prepare("INSERT OR IGNORE INTO task_watchers (task_id, user_id, source, added_by_id) VALUES (?, ?, 'manual', ?)").run(taskId, userId, req.session.user.id);
+    // Friendly heads-up so the new watcher knows they were added.
+    try {
+      db.prepare(`
+        INSERT INTO notifications (user_id, type, title, message, link, job_id)
+        VALUES (?, 'general', ?, ?, ?, NULL)
+      `).run(userId, `${req.session.user.full_name} added you as a watcher`, `You can now follow "${task.title}".`, '/tasks/' + taskId + '/edit');
+      sendPushToUser(userId, {
+        title: 'Watching: ' + task.title,
+        body: `${req.session.user.full_name} added you as a watcher.`,
+        url: '/tasks/' + taskId + '/edit',
+        type: 'task_watcher_added',
+      }).catch(e => console.error('[Tasks] watcher push error:', e.message));
+    } catch (e) {}
+    req.flash('success', `${u.full_name} is now watching this task.`);
+  } catch (e) {
+    console.error('[Tasks] watcher add error:', e.message);
+    req.flash('error', 'Could not add watcher.');
+  }
+  res.redirect('/tasks/' + taskId + '/edit');
+});
+
+// POST /:id/watchers/:userId/remove — drop a watcher (owners + admin, OR self).
+router.post('/:id/watchers/:userId/remove', (req, res) => {
+  const db = getDb();
+  const taskId = parseInt(req.params.id, 10);
+  const userId = parseInt(req.params.userId, 10);
+  const task = db.prepare('SELECT id, owner_id FROM tasks WHERE id = ?').get(taskId);
+  if (!task) { req.flash('error', 'Task not found.'); return res.redirect('/tasks'); }
+  const isSelf = req.session.user && req.session.user.id === userId;
+  if (!isSelf && !canModifyTask(task, req.session.user)) {
+    req.flash('error', 'You can\'t change watchers on this task.');
+    return res.redirect('/tasks/' + taskId + '/edit');
+  }
+  try {
+    db.prepare('DELETE FROM task_watchers WHERE task_id = ? AND user_id = ?').run(taskId, userId);
+    req.flash('success', isSelf ? 'You stopped watching this task.' : 'Watcher removed.');
+  } catch (e) {
+    console.error('[Tasks] watcher remove error:', e.message);
+    req.flash('error', 'Could not remove watcher.');
+  }
+  // Self-remove may revoke view rights — bounce to /tasks rather than the now-forbidden page.
+  res.redirect(isSelf ? '/tasks' : '/tasks/' + taskId + '/edit');
+});
+
+// GET /api/mention-search?q= — search active office users for the @mention picker.
+// Returns id + full_name + role. Excludes the requester themselves.
+router.get('/api/mention-search', (req, res) => {
+  const db = getDb();
+  const q = String(req.query.q || '').trim().toLowerCase();
+  const me = req.session.user ? req.session.user.id : 0;
+  let rows = [];
+  try {
+    if (q) {
+      rows = db.prepare(`
+        SELECT id, full_name, role FROM users
+        WHERE active = 1 AND id != ? AND LOWER(full_name) LIKE ?
+        ORDER BY full_name LIMIT 8
+      `).all(me, '%' + q + '%');
+    } else {
+      rows = db.prepare(`
+        SELECT id, full_name, role FROM users
+        WHERE active = 1 AND id != ?
+        ORDER BY full_name LIMIT 8
+      `).all(me);
+    }
+  } catch (e) { rows = []; }
+  res.json({ users: rows });
 });
 
 // =============================================

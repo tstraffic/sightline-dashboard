@@ -605,12 +605,54 @@
   </div>
 
   <!-- Comments -->
+  <%
+    // Build a regex to highlight @<name> spans for users who were actually
+    // mentioned on each comment. We avoid a global @-everything regex so a
+    // commenter typing "email me @ 3pm" doesn't get a bogus pill.
+    function renderCommentBody(body, mentions) {
+      const escape = (s) => String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+      let html = escape(body);
+      if (mentions && mentions.length) {
+        // Longest name first so "Alice Smith" wins over "Alice".
+        const names = mentions.map(m => m.full_name).sort((a, b) => b.length - a.length);
+        for (const n of names) {
+          const safe = escape(n);
+          // Escape regex metacharacters in the name.
+          const pattern = new RegExp('@' + safe.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+          html = html.replace(pattern, '<span class="task-mention">@' + safe + '</span>');
+        }
+      }
+      return html;
+    }
+  %>
+  <style>
+    .task-mention { background: #EFF6FF; color: #1D4ED8; padding: 1px 4px; border-radius: 4px; font-weight: 600; }
+    .tm-wrap { position: relative; }
+    .tm-dropdown { position: absolute; left: 0; right: 0; top: calc(100% + 4px); background: #fff; border: 1px solid #E5E7EB; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); z-index: 50; max-height: 240px; overflow-y: auto; }
+    .tm-dropdown.hidden { display: none; }
+    .tm-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; font-size: 0.85rem; cursor: pointer; }
+    .tm-item:hover, .tm-item.active { background: #EFF6FF; }
+    .tm-name { font-weight: 600; color: #111827; }
+    .tm-role { font-size: 0.7rem; color: #6B7280; text-transform: capitalize; }
+    .tm-pills { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
+    .tm-pills.hidden { display: none; }
+    .tm-pill { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px 2px 8px; background: #EFF6FF; color: #1D4ED8; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+    .tm-pill-x { background: transparent; border: 0; color: #1D4ED8; font-size: 0.9rem; cursor: pointer; line-height: 1; padding: 0 2px; }
+    .tm-pill-x:hover { color: #DC2626; }
+  </style>
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mt-5">
     <h3 class="text-sm font-bold text-gray-900 mb-3">Activity & Comments</h3>
-    <form method="POST" action="/tasks/<%= task.id %>/comments" class="mb-4">
+    <form id="taskCommentForm" method="POST" action="/tasks/<%= task.id %>/comments" class="mb-4">
       <%- include('../partials/csrf') %>
-      <textarea name="comment" rows="2" placeholder="Add a comment..." class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none resize-none" required></textarea>
-      <div class="flex justify-end mt-2">
+      <div class="tm-wrap">
+        <textarea id="taskCommentInput" name="comment" rows="2" placeholder="Add a comment… type @ to tag someone" class="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none resize-none" required></textarea>
+        <div id="taskMentionDropdown" class="tm-dropdown hidden"></div>
+      </div>
+      <div id="taskMentionPills" class="tm-pills hidden"></div>
+      <div class="flex items-center justify-between mt-2">
+        <p class="text-xs text-gray-400">Tag someone with <code class="px-1 bg-gray-100 rounded text-[10px]">@name</code> — they'll be notified and added as a watcher.</p>
         <button type="submit" class="px-4 py-1.5 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors">Post Comment</button>
       </div>
     </form>
@@ -626,7 +668,7 @@
                 <span class="text-sm font-semibold text-gray-900"><%= c.user_name %></span>
                 <span class="text-xs text-gray-400"><%= new Date(c.created_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) %></span>
               </div>
-              <p class="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap"><%= c.comment %></p>
+              <p class="text-sm text-gray-600 mt-0.5 whitespace-pre-wrap"><%- renderCommentBody(c.comment, c.mentions) %></p>
             </div>
           </div>
         <% }) %>
@@ -635,6 +677,52 @@
       <p class="text-sm text-gray-400 text-center py-3">No comments yet</p>
     <% } %>
   </div>
+
+  <!-- Watchers -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mt-5">
+    <div class="flex items-center justify-between mb-2">
+      <h3 class="text-sm font-bold text-gray-900">Watching <span class="text-gray-400 font-normal">(<%= (typeof watchers !== 'undefined' ? watchers.length : 0) %>)</span></h3>
+    </div>
+    <p class="text-xs text-gray-500 mb-3">Watchers can open this task and post comments without being an owner. People you @mention in a comment are added here automatically.</p>
+    <% if (typeof watchers !== 'undefined' && watchers.length > 0) { %>
+      <ul class="space-y-1.5">
+        <% watchers.forEach(w => { %>
+          <li class="flex items-center justify-between gap-2 text-sm">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="w-6 h-6 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
+                <%= w.full_name ? w.full_name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'U' %>
+              </div>
+              <span class="text-sm text-gray-800 truncate"><%= w.full_name %></span>
+              <span class="text-[10px] uppercase tracking-wide text-gray-400"><%= w.source === 'mention' ? 'mentioned' : 'added' %></span>
+            </div>
+            <% const canRemove = editable || (user && user.id === w.user_id); %>
+            <% if (canRemove) { %>
+              <form method="POST" action="/tasks/<%= task.id %>/watchers/<%= w.user_id %>/remove" class="inline">
+                <%- include('../partials/csrf') %>
+                <button type="submit" class="text-xs text-gray-400 hover:text-red-600">Remove</button>
+              </form>
+            <% } %>
+          </li>
+        <% }) %>
+      </ul>
+    <% } else { %>
+      <p class="text-sm text-gray-400">No watchers yet.</p>
+    <% } %>
+    <% if (editable) { %>
+      <form method="POST" action="/tasks/<%= task.id %>/watchers" class="flex gap-2 mt-3 pt-3 border-t border-gray-100">
+        <%- include('../partials/csrf') %>
+        <select name="user_id" required class="flex-1 min-w-0 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none bg-white">
+          <option value="">Add a watcher…</option>
+          <% (typeof users !== 'undefined' ? users : []).forEach(u => { %>
+            <option value="<%= u.id %>"><%= u.full_name %><% if (u.role) { %> — <%= u.role %><% } %></option>
+          <% }) %>
+        </select>
+        <button type="submit" class="flex-shrink-0 inline-flex items-center gap-1 px-4 py-1.5 text-sm font-medium bg-brand-600 hover:bg-brand-500 text-white rounded-lg transition-colors shadow-sm">Add</button>
+      </form>
+    <% } %>
+  </div>
+
+  <script src="/js/task-mentions.js" defer></script>
   <% } %>
 
   <% if (typeof activityLog !== 'undefined' && activityLog.length > 0) { %>
