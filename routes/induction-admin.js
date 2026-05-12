@@ -143,6 +143,85 @@ function allocateEmployeeId(db) {
   throw new Error('Could not allocate a free employee_id after 1000 attempts');
 }
 
+// Import induction file uploads as employee_documents AND create the matching
+// employee_competencies rows so the worker's wallet shows both the file and
+// the structured cert record. Used by both the "approve" and the manual
+// "convert" routes — kept identical between them so the two paths can never
+// drift.
+//
+// Mapping (induction field → document type → competency):
+//   white_card_photo   → white_card     → "SafeWork NSW White Card"
+//   tc_licence_photo   → tc_licence     → "Traffic Control and IMP Licenses"
+//   drivers_licence_*  → drivers_licence_* (file only; not a competency)
+function importInductionDocsAndCompetencies(db, submission, newEmpId, userId) {
+  const inductionUploadsDir = path.resolve(__dirname, '..', 'data', 'uploads', 'inductions');
+  const hrUploadsBase = path.resolve(__dirname, '..', 'data', 'uploads', 'hr');
+
+  const docMappings = [
+    { field: 'white_card_photo', type: 'white_card', name: 'White Card', mandatory: 1,
+      competency: { type: 'white_card', name: 'SafeWork NSW White Card',
+                    issue_date: null, level: submission.white_card_number || '' } },
+    { field: 'tc_licence_photo', type: 'tc_licence', name: 'TC Licence', mandatory: 1,
+      competency: { type: 'traffic_ticket', name: 'Traffic Control and IMP Licenses',
+                    issue_date: submission.tc_licence_date_of_issue || null,
+                    level: [submission.tc_licence_number, submission.tc_licence_state].filter(Boolean).join(' · ') } },
+    { field: 'drivers_licence_photo', type: 'drivers_licence_front', name: "Driver's Licence (Front)", mandatory: 1 },
+    { field: 'drivers_licence_back_photo', type: 'drivers_licence_back', name: "Driver's Licence (Back)", mandatory: 1 },
+  ];
+
+  const insertDoc = db.prepare(`
+    INSERT INTO employee_documents (employee_id, document_type, document_name, filename, original_name, file_path, file_size,
+      issue_date, mandatory, verification_status, notes, uploaded_by_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+  `);
+  const insertComp = db.prepare(`
+    INSERT INTO employee_competencies (employee_id, competency_type, competency_name, competency_level,
+      issue_date, status, mandatory_for_role, linked_document_id, notes)
+    VALUES (?, ?, ?, ?, ?, 'valid', 1, ?, ?)
+  `);
+
+  for (const mapping of docMappings) {
+    const srcFilename = submission[mapping.field];
+    if (!srcFilename) continue;
+
+    try {
+      const srcPath = path.join(inductionUploadsDir, srcFilename);
+      if (!fs.existsSync(srcPath)) continue;
+
+      const destDir = path.join(hrUploadsBase, `emp_${newEmpId}`, mapping.type);
+      fs.mkdirSync(destDir, { recursive: true });
+      const destFilename = `${Date.now()}-${srcFilename}`;
+      const destPath = path.join(destDir, destFilename);
+      fs.copyFileSync(srcPath, destPath);
+      const stats = fs.statSync(destPath);
+
+      const docIssueDate = mapping.competency ? mapping.competency.issue_date : null;
+      const docResult = insertDoc.run(
+        newEmpId, mapping.type, mapping.name, destFilename, srcFilename, destPath, stats.size,
+        docIssueDate || null, mapping.mandatory,
+        `Auto-imported from induction #${submission.id}`, userId
+      );
+      const docId = docResult.lastInsertRowid;
+
+      // Create matching competency for white_card / tc_licence. Skipped for
+      // driver's licence (it's an identity doc, not a working competency).
+      if (mapping.competency && docId) {
+        try {
+          insertComp.run(
+            newEmpId, mapping.competency.type, mapping.competency.name,
+            mapping.competency.level || '', mapping.competency.issue_date || null,
+            docId, `Auto-created from induction #${submission.id}`
+          );
+        } catch (compErr) {
+          console.error(`Failed to create competency for ${mapping.field}:`, compErr.message);
+        }
+      }
+    } catch (docErr) {
+      console.error(`Failed to copy induction doc ${mapping.field}:`, docErr);
+    }
+  }
+}
+
 // GET /induction/admin/submissions — list all submissions with filtering
 router.get('/submissions', (req, res) => {
   const { status, payment_type, search, date_from, date_to } = req.query;
@@ -354,53 +433,10 @@ router.post('/submissions/:id/status', (req, res) => {
         } catch (e) { console.error('Seed payroll from induction failed:', e.message); }
       }
 
-      // 4. Auto-create employee documents from induction uploads
+      // 4. Auto-import induction uploads as employee_documents + matching
+      //    employee_competencies (white card + TC ticket). See helper above.
       if (newEmpId) {
-        const inductionUploadsDir = path.resolve(__dirname, '..', 'data', 'uploads', 'inductions');
-        const hrUploadsBase = path.resolve(__dirname, '..', 'data', 'uploads', 'hr');
-
-        const docMappings = [
-          { field: 'white_card_photo', type: 'white_card', name: 'White Card', mandatory: 1 },
-          { field: 'tc_licence_photo', type: 'tc_licence', name: 'TC Licence', mandatory: 1 },
-          { field: 'drivers_licence_photo', type: 'drivers_licence_front', name: "Driver's Licence (Front)", mandatory: 1 },
-          { field: 'drivers_licence_back_photo', type: 'drivers_licence_back', name: "Driver's Licence (Back)", mandatory: 1 },
-        ];
-
-        for (const mapping of docMappings) {
-          const srcFilename = s[mapping.field];
-          if (!srcFilename) continue;
-
-          try {
-            // Source path (induction uploads)
-            const srcPath = path.join(inductionUploadsDir, srcFilename);
-            if (!fs.existsSync(srcPath)) continue;
-
-            // Destination directory for this employee + doc type
-            const destDir = path.join(hrUploadsBase, `emp_${newEmpId}`, mapping.type);
-            fs.mkdirSync(destDir, { recursive: true });
-
-            // Copy file to HR uploads
-            const destFilename = `${Date.now()}-${srcFilename}`;
-            const destPath = path.join(destDir, destFilename);
-            fs.copyFileSync(srcPath, destPath);
-
-            // Get file size
-            const stats = fs.statSync(destPath);
-
-            // Insert document record
-            db.prepare(`
-              INSERT INTO employee_documents (employee_id, document_type, document_name, filename, original_name, file_path, file_size,
-                mandatory, verification_status, notes, uploaded_by_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-            `).run(
-              newEmpId, mapping.type, mapping.name, destFilename, srcFilename, destPath, stats.size,
-              mapping.mandatory, `Auto-imported from induction #${s.id}`, req.session.user.id
-            );
-          } catch (docErr) {
-            console.error(`Failed to copy induction doc ${mapping.field}:`, docErr);
-            // Continue with other docs even if one fails
-          }
-        }
+        importInductionDocsAndCompetencies(db, s, newEmpId, req.session.user.id);
       }
 
       // 5. Update submission with link to crew member (stay as 'approved' — conversion tracked by linked_crew_member_id)
@@ -486,31 +522,7 @@ router.post('/submissions/:id/convert', (req, res) => {
     }
 
     if (newEmpId) {
-      const inductionUploadsDir = path.resolve(__dirname, '..', 'data', 'uploads', 'inductions');
-      const hrUploadsBase = path.resolve(__dirname, '..', 'data', 'uploads', 'hr');
-      const docMappings = [
-        { field: 'white_card_photo', type: 'white_card', name: 'White Card', mandatory: 1 },
-        { field: 'tc_licence_photo', type: 'tc_licence', name: 'TC Licence', mandatory: 1 },
-        { field: 'drivers_licence_photo', type: 'drivers_licence_front', name: "Driver's Licence (Front)", mandatory: 1 },
-        { field: 'drivers_licence_back_photo', type: 'drivers_licence_back', name: "Driver's Licence (Back)", mandatory: 1 },
-      ];
-      for (const mapping of docMappings) {
-        const srcFilename = s[mapping.field];
-        if (!srcFilename) continue;
-        try {
-          const srcPath = path.join(inductionUploadsDir, srcFilename);
-          if (!fs.existsSync(srcPath)) continue;
-          const destDir = path.join(hrUploadsBase, `emp_${newEmpId}`, mapping.type);
-          fs.mkdirSync(destDir, { recursive: true });
-          const destFilename = `${Date.now()}-${srcFilename}`;
-          const destPath = path.join(destDir, destFilename);
-          fs.copyFileSync(srcPath, destPath);
-          const stats = fs.statSync(destPath);
-          db.prepare(`INSERT INTO employee_documents (employee_id, document_type, document_name, filename, original_name, file_path, file_size, mandatory, verification_status, notes, uploaded_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)`).run(
-            newEmpId, mapping.type, mapping.name, destFilename, srcFilename, destPath, stats.size, mapping.mandatory, `Auto-imported from induction #${s.id}`, req.session.user.id
-          );
-        } catch (docErr) { console.error(`Failed to copy induction doc ${mapping.field}:`, docErr); }
-      }
+      importInductionDocsAndCompetencies(db, s, newEmpId, req.session.user.id);
     }
 
     db.prepare("UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime('now') WHERE id = ?").run(crewMemberId, s.id);
