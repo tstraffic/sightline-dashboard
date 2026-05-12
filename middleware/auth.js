@@ -73,6 +73,9 @@ const PERMISSIONS = {
   // ── Safety Updates (bulletins published to the worker portal) ──
   safety_updates: ['admin', 'safety', 'operations', 'planning'],
 
+  // ── Toolbox Talks (archive + attendance tracking; office records, workers view) ──
+  toolbox_talks: ['admin', 'safety', 'operations', 'planning'],
+
   // ── Risk Assessment register (same access pattern as SWMS) ──
   risk_assessments: ['admin', 'safety', 'operations', 'planning'],
 

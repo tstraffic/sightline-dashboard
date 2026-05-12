@@ -231,6 +231,7 @@ app.use('/equipment', requireLogin, requirePermission('equipment'), require('./r
 app.use('/checklists', requireLogin, requirePermission('checklists'), require('./routes/checklists'));
 app.use('/swms', requireLogin, requirePermission('swms'), require('./routes/swms'));
 app.use('/safety-updates', requireLogin, requirePermission('safety_updates'), require('./routes/safety-updates'));
+app.use('/toolbox-talks', requireLogin, requirePermission('toolbox_talks'), require('./routes/toolbox-talks'));
 app.use('/risk-assessments', requireLogin, requirePermission('risk_assessments'), require('./routes/risk-assessments'));
 app.use('/exports', requireLogin, requirePermission('exports'), require('./routes/exports'));
 app.use('/reports', requireLogin, requirePermission('reports'), require('./routes/reports'));

@@ -8610,6 +8610,70 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 188: toolbox_talks + attachments + attendance
+  // Phase 2 of the Safety module — archive of past toolbox talks with
+  // attendance tracking and a worker "Mark as caught up" flow.
+  // =============================================
+  if (!isMigrationApplied.get(188)) {
+    console.log('Running migration 188: toolbox_talks + attendance');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS toolbox_talks (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          held_at DATE NOT NULL,
+          presenter TEXT DEFAULT '',
+          key_points TEXT NOT NULL DEFAULT '',
+          slides_path TEXT DEFAULT '',
+          slides_original_name TEXT DEFAULT '',
+          signon_path TEXT DEFAULT '',
+          signon_original_name TEXT DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK(status IN ('draft','published','archived')),
+          published_at DATETIME,
+          published_by_id INTEGER REFERENCES users(id),
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS toolbox_attachments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          file_path TEXT NOT NULL,
+          file_original_name TEXT DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'photo'
+            CHECK(kind IN ('photo','doc')),
+          uploaded_by_id INTEGER REFERENCES users(id),
+          uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS toolbox_attendance (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'attended'
+            CHECK(status IN ('attended','caught_up')),
+          -- recorded_by_id is NULL when the worker self-marks "caught up";
+          -- populated with the admin user_id when an office user marks attendance.
+          recorded_by_id INTEGER REFERENCES users(id),
+          recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(toolbox_id, crew_member_id)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_talks_status ON toolbox_talks(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_talks_held ON toolbox_talks(held_at)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_attach_tb ON toolbox_attachments(toolbox_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_att_crew ON toolbox_attendance(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_att_tb ON toolbox_attendance(toolbox_id)');
+      recordMigration.run(188, 'toolbox_talks + attendance');
+      console.log('Migration 188 applied');
+    } catch (e) {
+      console.error('Migration 188 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
