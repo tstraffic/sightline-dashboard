@@ -154,17 +154,19 @@ function allocateEmployeeId(db) {
 //   tc_licence_photo   → tc_licence     → "Traffic Control and IMP Licenses"
 //   drivers_licence_*  → drivers_licence_* (file only; not a competency)
 function importInductionDocsAndCompetencies(db, submission, newEmpId, userId) {
+  const { ensureCompetencyForDoc } = require('../lib/competencyMap');
   const inductionUploadsDir = path.resolve(__dirname, '..', 'data', 'uploads', 'inductions');
   const hrUploadsBase = path.resolve(__dirname, '..', 'data', 'uploads', 'hr');
 
+  // Per-mapping competency_level captures the cert/ID number from the
+  // induction form so it shows alongside the competency. document_type values
+  // here MUST match the keys in lib/competencyMap.js for the mirror to fire.
   const docMappings = [
     { field: 'white_card_photo', type: 'white_card', name: 'White Card', mandatory: 1,
-      competency: { type: 'white_card', name: 'SafeWork NSW White Card',
-                    issue_date: null, level: submission.white_card_number || '' } },
+      level: submission.white_card_number || '', issueDate: null },
     { field: 'tc_licence_photo', type: 'tc_licence', name: 'TC Licence', mandatory: 1,
-      competency: { type: 'traffic_ticket', name: 'Traffic Control and IMP Licenses',
-                    issue_date: submission.tc_licence_date_of_issue || null,
-                    level: [submission.tc_licence_number, submission.tc_licence_state].filter(Boolean).join(' · ') } },
+      level: [submission.tc_licence_number, submission.tc_licence_state].filter(Boolean).join(' · '),
+      issueDate: submission.tc_licence_date_of_issue || null },
     { field: 'drivers_licence_photo', type: 'drivers_licence_front', name: "Driver's Licence (Front)", mandatory: 1 },
     { field: 'drivers_licence_back_photo', type: 'drivers_licence_back', name: "Driver's Licence (Back)", mandatory: 1 },
   ];
@@ -173,11 +175,6 @@ function importInductionDocsAndCompetencies(db, submission, newEmpId, userId) {
     INSERT INTO employee_documents (employee_id, document_type, document_name, filename, original_name, file_path, file_size,
       issue_date, mandatory, verification_status, notes, uploaded_by_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-  `);
-  const insertComp = db.prepare(`
-    INSERT INTO employee_competencies (employee_id, competency_type, competency_name, competency_level,
-      issue_date, status, mandatory_for_role, linked_document_id, notes)
-    VALUES (?, ?, ?, ?, ?, 'valid', 1, ?, ?)
   `);
 
   for (const mapping of docMappings) {
@@ -195,26 +192,24 @@ function importInductionDocsAndCompetencies(db, submission, newEmpId, userId) {
       fs.copyFileSync(srcPath, destPath);
       const stats = fs.statSync(destPath);
 
-      const docIssueDate = mapping.competency ? mapping.competency.issue_date : null;
       const docResult = insertDoc.run(
         newEmpId, mapping.type, mapping.name, destFilename, srcFilename, destPath, stats.size,
-        docIssueDate || null, mapping.mandatory,
+        mapping.issueDate || null, mapping.mandatory,
         `Auto-imported from induction #${submission.id}`, userId
       );
-      const docId = docResult.lastInsertRowid;
 
-      // Create matching competency for white_card / tc_licence. Skipped for
-      // driver's licence (it's an identity doc, not a working competency).
-      if (mapping.competency && docId) {
-        try {
-          insertComp.run(
-            newEmpId, mapping.competency.type, mapping.competency.name,
-            mapping.competency.level || '', mapping.competency.issue_date || null,
-            docId, `Auto-created from induction #${submission.id}`
-          );
-        } catch (compErr) {
-          console.error(`Failed to create competency for ${mapping.field}:`, compErr.message);
-        }
+      try {
+        ensureCompetencyForDoc(db, {
+          employeeId:   newEmpId,
+          documentId:   docResult.lastInsertRowid,
+          documentType: mapping.type,
+          issueDate:    mapping.issueDate || null,
+          expiryDate:   null,
+          level:        mapping.level || '',
+          source:       `Auto-created from induction #${submission.id}`,
+        });
+      } catch (compErr) {
+        console.error(`Competency mirror failed for ${mapping.field}:`, compErr.message);
       }
     } catch (docErr) {
       console.error(`Failed to copy induction doc ${mapping.field}:`, docErr);
