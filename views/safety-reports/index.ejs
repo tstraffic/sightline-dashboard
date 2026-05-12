@@ -1,0 +1,175 @@
+<% locals.currentPage = 'safety-reports' %>
+<%
+  function pct(v) { return v == null ? '—' : v + '%'; }
+  function bar(v) {
+    if (v == null) return '';
+    const colour = v >= 80 ? 'bg-emerald-500' : v >= 60 ? 'bg-amber-500' : 'bg-rose-500';
+    return `<div class="w-full h-1.5 bg-gray-100 rounded-full mt-1"><div class="h-1.5 ${colour} rounded-full" style="width:${v}%"></div></div>`;
+  }
+  const CATEGORY_LABELS = {
+    hazard: 'Hazard', swms_issue: 'SWMS issue', suggestion: 'Suggestion',
+    equipment: 'Equipment', general: 'General',
+  };
+%>
+
+<div class="max-w-7xl mx-auto space-y-5">
+  <!-- Header + range filter -->
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Safety Reports</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Compliance + engagement across SWMS, Toolboxes, Quizzes, Updates, and Flags. Filter by date range. <a href="/safety-reports/workers.csv?range=<%= rangeKey %>" class="text-brand-600 hover:underline">Download CSV →</a></p>
+    </div>
+    <form method="GET" action="/safety-reports" class="flex items-center gap-2">
+      <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Range</label>
+      <select name="range" onchange="this.form.submit()" class="px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white">
+        <% Object.entries(ranges).forEach(([k, r]) => { %>
+          <option value="<%= k %>" <%= rangeKey === k ? 'selected' : '' %>><%= r.label %></option>
+        <% }) %>
+      </select>
+    </form>
+  </div>
+
+  <!-- Top-line stat cards -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">SWMS ack</p>
+      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= pct(stats.swms.rate) %></p>
+      <p class="text-[11px] text-gray-500 mt-0.5"><%= stats.swms.acked %>/<%= stats.swms.denom %> ack pairs · <%= stats.swms.total %> SWMS</p>
+      <%- bar(stats.swms.rate) %>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <p class="text-[10px] font-bold text-violet-500 uppercase tracking-widest">Quiz pass</p>
+      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= pct(stats.quizzes.rate) %></p>
+      <p class="text-[11px] text-gray-500 mt-0.5"><%= stats.quizzes.passed %>/<%= stats.quizzes.denom %> · <%= stats.quizzes.total %> quizzes</p>
+      <%- bar(stats.quizzes.rate) %>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <p class="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Toolbox coverage</p>
+      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= pct(stats.toolboxes.rate) %></p>
+      <p class="text-[11px] text-gray-500 mt-0.5"><%= stats.toolboxes.covered %>/<%= stats.toolboxes.denom %> · <%= stats.toolboxes.total %> talks</p>
+      <%- bar(stats.toolboxes.rate) %>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">Update read</p>
+      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= pct(stats.updates.rate) %></p>
+      <p class="text-[11px] text-gray-500 mt-0.5"><%= stats.updates.read %>/<%= stats.updates.denom %> · <%= stats.updates.total %> bulletins</p>
+      <%- bar(stats.updates.rate) %>
+    </div>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <p class="text-[10px] font-bold text-rose-500 uppercase tracking-widest">Open flags</p>
+      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= stats.flags.open %></p>
+      <p class="text-[11px] text-gray-500 mt-0.5">of <%= stats.flags.total %> total · <a href="/safety-comments?status=submitted" class="text-brand-600 hover:underline">inbox →</a></p>
+    </div>
+  </div>
+
+  <!-- Worker engagement table -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between bg-gray-50/60">
+      <div>
+        <h2 class="text-sm font-bold text-gray-800">Worker engagement</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Composite score weights SWMS 40% · Quiz 25% · Toolbox 20% · Updates 15%. Below <%= disengagedThreshold %>% flagged amber.</p>
+      </div>
+      <div class="text-xs text-gray-500"><%= workers.length %> active worker<%= workers.length === 1 ? '' : 's' %></div>
+    </div>
+    <% if (!workers.length) { %>
+      <div class="px-5 py-8 text-center text-sm text-gray-500">No active crew yet.</div>
+    <% } else { %>
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Worker</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Score</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">SWMS</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Quiz</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Toolbox</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Updates</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <% workers.forEach(w => { %>
+            <tr class="hover:bg-gray-50/50 <%= w.disengaged ? 'bg-amber-50/40' : '' %>">
+              <td class="px-3 py-2">
+                <a href="/safety-reports/workers/<%= w.id %>?range=<%= rangeKey %>" class="font-semibold text-gray-900 hover:text-brand-600"><%= w.full_name %></a>
+                <% if (w.employee_id) { %><span class="text-xs text-gray-400 ml-1">· <%= w.employee_id %></span><% } %>
+              </td>
+              <td class="px-2 py-2">
+                <% if (w.composite == null) { %>
+                  <span class="text-xs text-gray-400">—</span>
+                <% } else { %>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold ring-1 ring-inset <%= w.disengaged ? 'bg-amber-50 text-amber-700 ring-amber-200' : w.composite >= 80 ? 'bg-emerald-50 text-emerald-700 ring-emerald-200' : 'bg-gray-50 text-gray-700 ring-gray-200' %>"><%= w.composite %>%</span>
+                <% } %>
+              </td>
+              <td class="px-2 py-2 text-xs text-gray-700"><%= w.swms.rate == null ? '—' : w.swms.acked + '/' + w.swms.total + ' · ' + w.swms.rate + '%' %></td>
+              <td class="px-2 py-2 text-xs text-gray-700"><%= w.quizzes.rate == null ? '—' : w.quizzes.passed + '/' + w.quizzes.total + ' · ' + w.quizzes.rate + '%' %></td>
+              <td class="px-2 py-2 text-xs text-gray-700"><%= w.toolboxes.rate == null ? '—' : w.toolboxes.covered + '/' + w.toolboxes.total + ' · ' + w.toolboxes.rate + '%' %></td>
+              <td class="px-2 py-2 text-xs text-gray-700"><%= w.updates.rate == null ? '—' : w.updates.read + '/' + w.updates.total + ' · ' + w.updates.rate + '%' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+  <!-- Insights row -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <!-- SWMS laggers -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200 bg-rose-50/40">
+        <h3 class="text-sm font-bold text-rose-900">SWMS with lowest acknowledgement</h3>
+        <p class="text-xs text-rose-700/70 mt-0.5">Where the audit risk is concentrated.</p>
+      </div>
+      <% if (!insights.swmsLaggers.length) { %>
+        <div class="px-5 py-6 text-sm text-gray-500 text-center">No active SWMS to rank yet.</div>
+      <% } else { %>
+        <ul class="divide-y divide-gray-100">
+          <% insights.swmsLaggers.forEach(s => { %>
+            <li class="px-5 py-3 flex items-center justify-between gap-2">
+              <a href="/swms/<%= s.id %>/acknowledgements" class="text-sm text-gray-900 hover:text-brand-600 flex-1 truncate"><%= s.title %></a>
+              <span class="text-xs text-gray-500 tabular-nums whitespace-nowrap"><%= s.acked %>/<%= s.total %> · <%= s.rate == null ? '—' : s.rate + '%' %></span>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </div>
+
+    <!-- Most-wrong quiz questions -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200 bg-violet-50/40">
+        <h3 class="text-sm font-bold text-violet-900">Most-wrong quiz questions</h3>
+        <p class="text-xs text-violet-700/70 mt-0.5">Training gaps surfacing in real attempts.</p>
+      </div>
+      <% if (!insights.wrongQuestions.length) { %>
+        <div class="px-5 py-6 text-sm text-gray-500 text-center">No graded attempts yet.</div>
+      <% } else { %>
+        <ul class="divide-y divide-gray-100">
+          <% insights.wrongQuestions.forEach(q => { %>
+            <li class="px-5 py-3">
+              <a href="/safety-quizzes/<%= q.quiz_id %>/questions" class="text-sm text-gray-900 hover:text-brand-600 line-clamp-2"><%= q.question_text %></a>
+              <p class="text-xs text-gray-500 mt-1"><%= q.wrong_count %>/<%= q.answered_count %> wrong · <%= q.quiz_title %></p>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </div>
+
+    <!-- Top flag categories -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200 bg-amber-50/40">
+        <h3 class="text-sm font-bold text-amber-900">Flags by category</h3>
+        <p class="text-xs text-amber-700/70 mt-0.5">What workers are raising most.</p>
+      </div>
+      <% if (!insights.topCategories.length) { %>
+        <div class="px-5 py-6 text-sm text-gray-500 text-center">No flags yet.</div>
+      <% } else { %>
+        <ul class="divide-y divide-gray-100">
+          <% insights.topCategories.forEach(c => { %>
+            <li class="px-5 py-3 flex items-center justify-between">
+              <a href="/safety-comments?category=<%= c.category %>" class="text-sm text-gray-900 hover:text-brand-600"><%= CATEGORY_LABELS[c.category] || c.category %></a>
+              <span class="text-xs text-gray-500"><%= c.n %></span>
+            </li>
+          <% }) %>
+        </ul>
+      <% } %>
+    </div>
+  </div>
+</div>
