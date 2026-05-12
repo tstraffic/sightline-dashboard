@@ -34,6 +34,23 @@
     </div>
   </div>
 
+  <!-- Sub-tabs: Details vs Acknowledgements (per-version) -->
+  <div class="border-b border-gray-200 flex items-center gap-1">
+    <span class="px-4 py-2 -mb-px border-b-2 border-brand-600 text-brand-700 text-sm font-semibold">Details</span>
+    <a href="/swms/<%= swms.id %>/acknowledgements" class="px-4 py-2 -mb-px border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-semibold">
+      Acknowledgements
+      <% if (typeof ackSummary !== 'undefined') { %>
+        <span class="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-600"><%= ackSummary.acked_current || 0 %>/<%= ackSummary.total_crew || 0 %></span>
+      <% } %>
+    </a>
+  </div>
+
+  <% if (swms.status === 'active') { %>
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+      Replacing the file or re-publishing this SWMS will mint a new version and require every worker to re-acknowledge.
+    </div>
+  <% } %>
+
   <%
     // Expiry styling — same logic as the register so colours match.
     let expiryCls = 'text-gray-700';
