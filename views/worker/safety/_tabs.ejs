@@ -1,7 +1,8 @@
 <%
-  // Shared sub-tab strip for the Safety section. Pass subtab = 'swms' or 'updates'.
+  // Shared sub-tab strip for the Safety section. Pass subtab = 'swms', 'sop-register', or 'updates'.
 %>
 <div style="display:flex; gap:0; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 12px;">
   <a href="/w/safety/swms" style="padding: 10px 16px; font-size: 0.85rem; font-weight: 600; text-decoration: none; border-bottom: 2px solid <%= subtab === 'swms' ? '#00D2BE' : 'transparent' %>; color: <%= subtab === 'swms' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">SWMS Library</a>
+  <a href="/w/safety/sop-register" style="padding: 10px 16px; font-size: 0.85rem; font-weight: 600; text-decoration: none; border-bottom: 2px solid <%= subtab === 'sop-register' ? '#00D2BE' : 'transparent' %>; color: <%= subtab === 'sop-register' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">SOP Library</a>
   <a href="/w/safety/updates" style="padding: 10px 16px; font-size: 0.85rem; font-weight: 600; text-decoration: none; border-bottom: 2px solid <%= subtab === 'updates' ? '#00D2BE' : 'transparent' %>; color: <%= subtab === 'updates' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">Updates</a>
 </div>

@@ -174,11 +174,11 @@ router.get('/home', async (req, res) => {
 
   const compliance = member ? getComplianceStatus(member, today) : null;
 
-  // Safety counts: unread Safety Updates + SWMS that need acknowledgement
+  // Safety counts: unread Safety Updates + SWMS / SOP rows that need ack
   // against their current version. The widget on the home screen renders
-  // silent when both are zero. Wrapped so a missing migration on an old
-  // DB doesn't 500 the home screen.
-  let safetyCounts = { unread: 0, swmsNeedsAck: 0 };
+  // silent when all three are zero. Wrapped so a missing migration on an
+  // old DB doesn't 500 the home screen.
+  let safetyCounts = { unread: 0, swmsNeedsAck: 0, sopNeedsAck: 0 };
   try {
     safetyCounts = db.prepare(`
       SELECT
@@ -191,8 +191,13 @@ router.get('/home', async (req, res) => {
           WHERE s.status='active'
             AND NOT EXISTS (SELECT 1 FROM swms_acknowledgements a
                             WHERE a.swms_id=s.id AND a.crew_member_id=?
-                              AND a.version_token=s.version_token)) AS swmsNeedsAck
-    `).get(worker.id, worker.id) || safetyCounts;
+                              AND a.version_token=s.version_token)) AS swmsNeedsAck,
+        (SELECT COUNT(*) FROM sop_register s
+          WHERE s.status='active'
+            AND NOT EXISTS (SELECT 1 FROM sop_register_acknowledgements a
+                            WHERE a.sop_id=s.id AND a.crew_member_id=?
+                              AND a.version_token=s.version_token)) AS sopNeedsAck
+    `).get(worker.id, worker.id, worker.id) || safetyCounts;
   } catch (e) { /* tables may not exist on stale databases */ }
 
   // Greeting + subtext

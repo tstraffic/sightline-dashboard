@@ -70,6 +70,9 @@ const PERMISSIONS = {
   // ── SWMS register (Safety-led, ops/planning can view) ──
   swms:          ['admin', 'safety', 'operations', 'planning'],
 
+  // ── SOP register (Safety-led, ops/planning can view) ──
+  sop_register:  ['admin', 'safety', 'operations', 'planning'],
+
   // ── Safety Updates (bulletins published to the worker portal) ──
   safety_updates: ['admin', 'safety', 'operations', 'planning'],
 

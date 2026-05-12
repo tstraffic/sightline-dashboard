@@ -1,0 +1,55 @@
+<style>
+  .saf-wrap { padding: 0; color: #fff; }
+  .saf-h1 { font-size: 1.5rem; font-weight: 800; padding: 6px 4px 8px; letter-spacing: -0.01em; }
+  .saf-section-h { font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.08em; margin: 16px 4px 8px; }
+  .saf-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 8px; display: block; color: inherit; text-decoration: none;
+    transition: background 0.15s;
+  }
+  .saf-card:active { background: rgba(255,255,255,0.07); }
+  .saf-card-title { font-size: 0.95rem; font-weight: 700; color: #fff; }
+  .saf-card-meta { font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .saf-chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 0.65rem; font-weight: 700; }
+  .saf-chip-needs { background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3); }
+  .saf-chip-done { background: rgba(16,185,129,0.15); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.28); }
+  .saf-chip-kind { background: rgba(99,102,241,0.15); color: #c7d2fe; border: 1px solid rgba(99,102,241,0.25); }
+  .saf-empty { text-align: center; padding: 32px 16px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
+</style>
+
+<div class="saf-wrap">
+  <h1 class="saf-h1">Safety</h1>
+  <%- include('./_tabs') %>
+
+  <% if (needsAck.length === 0 && upToDate.length === 0) { %>
+    <div class="saf-empty">No active SOPs in the register yet.</div>
+  <% } else { %>
+    <% if (needsAck.length > 0) { %>
+      <div class="saf-section-h" style="color: #fda4af;">Needs acknowledgement (<%= needsAck.length %>)</div>
+      <% needsAck.forEach(r => { %>
+        <a href="/w/safety/sop-register/<%= r.id %>" class="saf-card">
+          <div class="saf-card-title"><%= r.title %></div>
+          <div class="saf-card-meta">
+            <span class="saf-chip saf-chip-needs">Needs ack</span>
+            <span class="saf-chip saf-chip-kind"><%= r.kind === 'template' ? 'Template' : 'Job-linked' %></span>
+            <% if (r.job_number) { %><span>· <%= r.job_number %></span><% } %>
+          </div>
+        </a>
+      <% }) %>
+    <% } %>
+
+    <% if (upToDate.length > 0) { %>
+      <div class="saf-section-h">Up to date (<%= upToDate.length %>)</div>
+      <% upToDate.forEach(r => { %>
+        <a href="/w/safety/sop-register/<%= r.id %>" class="saf-card">
+          <div class="saf-card-title"><%= r.title %></div>
+          <div class="saf-card-meta">
+            <span class="saf-chip saf-chip-done">Acknowledged</span>
+            <span class="saf-chip saf-chip-kind"><%= r.kind === 'template' ? 'Template' : 'Job-linked' %></span>
+            <% if (r.job_number) { %><span>· <%= r.job_number %></span><% } %>
+          </div>
+        </a>
+      <% }) %>
+    <% } %>
+  <% } %>
+</div>
