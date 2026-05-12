@@ -8981,6 +8981,48 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 194: task_comment_mentions + task_watchers
+  // Lets office users @mention each other in task comments and watch a
+  // task without being assigned to it. Mention insert ALSO inserts the
+  // watcher row so the mentioned person can open the task and follow
+  // progress. Watchers can be added/removed manually by an owner/admin.
+  // =============================================
+  if (!isMigrationApplied.get(194)) {
+    console.log('Running migration 194: task_comment_mentions + task_watchers');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS task_comment_mentions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          comment_id INTEGER NOT NULL REFERENCES task_comments(id) ON DELETE CASCADE,
+          mentioned_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(comment_id, mentioned_user_id)
+        );
+        CREATE TABLE IF NOT EXISTS task_watchers (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          task_id INTEGER NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
+          user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          -- 'mention' = auto-added because they were @mentioned;
+          -- 'manual'  = explicitly added by an owner / admin.
+          source TEXT NOT NULL DEFAULT 'mention'
+            CHECK(source IN ('mention','manual')),
+          added_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(task_id, user_id)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_task_comment_mentions_user ON task_comment_mentions(mentioned_user_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_task_comment_mentions_comment ON task_comment_mentions(comment_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_task_watchers_user ON task_watchers(user_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_task_watchers_task ON task_watchers(task_id)');
+      recordMigration.run(194, 'task_comment_mentions + task_watchers');
+      console.log('Migration 194 applied');
+    } catch (e) {
+      console.error('Migration 194 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
