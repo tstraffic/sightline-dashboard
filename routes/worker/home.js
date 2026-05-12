@@ -396,4 +396,11 @@ router.get('/home/customise', (req, res) => {
   });
 });
 
+// GET /w/theme — Pick a portal background gradient.
+// The preference is fully client-side (localStorage on the worker's
+// device), so this route just renders the picker — no DB read/write.
+router.get('/theme', (req, res) => {
+  res.render('worker/theme', { title: 'Theme', currentPage: 'more' });
+});
+
 module.exports = router;

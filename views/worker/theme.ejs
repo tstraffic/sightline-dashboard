@@ -1,0 +1,104 @@
+<div class="space-y-5">
+  <a href="/w/more" class="inline-flex items-center text-sm text-brand-600 font-medium">
+    <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    Back to More
+  </a>
+
+  <div>
+    <h1 class="text-xl font-bold text-gray-900">Theme</h1>
+    <p class="text-xs text-gray-500 mt-0.5">Pick a background for the worker portal. Saved on this device.</p>
+  </div>
+
+  <!-- Live preview strip — shows the current gradient applied to <body> -->
+  <div class="rounded-2xl overflow-hidden border border-gray-200 shadow-sm">
+    <div id="theme-preview" class="h-28 transition-all"></div>
+    <div class="bg-white px-4 py-2.5 text-xs text-gray-500 flex items-center justify-between">
+      <span>Active background</span>
+      <span id="theme-current-label" class="font-semibold text-gray-800">Midnight</span>
+    </div>
+  </div>
+
+  <!-- Gradient grid -->
+  <div>
+    <p class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Background gradient</p>
+    <div class="grid grid-cols-2 gap-3" id="gradient-picker">
+      <% const gradients = [
+        { key:'midnight', label:'Midnight',  preview:'linear-gradient(135deg,#020817,#0F2847,#020817)' },
+        { key:'aurora',   label:'Aurora',    preview:'linear-gradient(135deg,#0B0228,#1A0A47,#0A2A47)' },
+        { key:'sunset',   label:'Sunset',    preview:'linear-gradient(135deg,#1B0810,#2D0E1F,#1A1438)' },
+        { key:'forest',   label:'Forest',    preview:'linear-gradient(135deg,#021808,#0F4733,#021808)' },
+        { key:'ocean',    label:'Ocean',     preview:'linear-gradient(135deg,#021A1F,#103D4E,#021A1F)' },
+        { key:'plum',     label:'Plum',      preview:'linear-gradient(135deg,#0F0B1E,#371F4E,#0F0B1E)' },
+        { key:'crimson',  label:'Crimson',   preview:'linear-gradient(135deg,#1A0408,#4D1018,#1A0408)' },
+        { key:'mono',     label:'Mono',      preview:'linear-gradient(135deg,#0A0A0A,#202020,#0A0A0A)' },
+      ]; %>
+      <% gradients.forEach(g => { %>
+        <button type="button" data-gradient="<%= g.key %>" data-preview="<%= g.preview %>"
+          class="theme-tile group relative overflow-hidden rounded-xl border-2 border-gray-200 active:scale-[0.98] transition text-left">
+          <div class="h-20" style="background: <%= g.preview %>;"></div>
+          <div class="px-3 py-2 bg-white">
+            <p class="text-xs font-semibold text-gray-800"><%= g.label %></p>
+          </div>
+          <span class="theme-tile-check absolute top-2 right-2 hidden w-5 h-5 rounded-full bg-brand-600 text-white items-center justify-center shadow-sm">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          </span>
+        </button>
+      <% }) %>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-lg p-3 text-xs text-gray-600 flex items-start gap-2">
+    <svg class="w-4 h-4 mt-0.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    <span>Theme is saved in your browser on this device. Other devices keep their own choice.</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  var STORAGE_KEY = 'w-theme-gradient';
+  var DEFAULT = 'midnight';
+
+  function applyGradient(key, previewCss, label) {
+    document.body.className = document.body.className
+      .split(/\s+/).filter(function(c){ return !/^gradient-/.test(c); }).join(' ');
+    document.body.classList.add('gradient-' + key);
+    try { localStorage.setItem(STORAGE_KEY, key); } catch (e) {}
+
+    var preview = document.getElementById('theme-preview');
+    if (preview && previewCss) preview.style.background = previewCss;
+    var lbl = document.getElementById('theme-current-label');
+    if (lbl && label) lbl.textContent = label;
+
+    document.querySelectorAll('#gradient-picker [data-gradient]').forEach(function (btn) {
+      var active = btn.getAttribute('data-gradient') === key;
+      btn.classList.toggle('border-brand-500', active);
+      btn.classList.toggle('ring-2', active);
+      btn.classList.toggle('ring-brand-200', active);
+      btn.classList.toggle('border-gray-200', !active);
+      var check = btn.querySelector('.theme-tile-check');
+      if (check) check.style.display = active ? 'inline-flex' : 'none';
+    });
+  }
+
+  document.querySelectorAll('#gradient-picker [data-gradient]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      applyGradient(
+        btn.getAttribute('data-gradient'),
+        btn.getAttribute('data-preview'),
+        btn.querySelector('p').textContent.trim()
+      );
+    });
+  });
+
+  var saved = (function(){ try { return localStorage.getItem(STORAGE_KEY); } catch(e){ return null; } })() || DEFAULT;
+  var savedBtn = document.querySelector('#gradient-picker [data-gradient="' + saved + '"]')
+              || document.querySelector('#gradient-picker [data-gradient="' + DEFAULT + '"]');
+  if (savedBtn) {
+    applyGradient(
+      savedBtn.getAttribute('data-gradient'),
+      savedBtn.getAttribute('data-preview'),
+      savedBtn.querySelector('p').textContent.trim()
+    );
+  }
+})();
+</script>

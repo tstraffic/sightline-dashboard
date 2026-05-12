@@ -50,9 +50,18 @@
   </script>
   <link rel="stylesheet" href="/css/custom.css?v=2">
   <link rel="stylesheet" href="/css/worker.css?v=4">
+  <link rel="stylesheet" href="/css/worker-theme.css?v=1">
   <link rel="stylesheet" href="/css/chat.css?v=3">
 </head>
-<body class="h-full font-sans antialiased flex flex-col" style="background: linear-gradient(180deg, #020817, #0A1628); color: rgba(255,255,255,0.92);">
+<body class="worker-portal h-full font-sans antialiased flex flex-col" style="color: rgba(255,255,255,0.92);">
+<script>(function(){try{
+  // Apply the worker's saved gradient before paint to avoid a flash of the
+  // default background. Mirrors the admin theme boot script in
+  // views/layout.ejs but uses worker-portal-scoped CSS classes from
+  // public/css/worker-theme.css.
+  var grad = localStorage.getItem('w-theme-gradient') || 'midnight';
+  document.body.classList.add('gradient-' + grad);
+}catch(e){}})();</script>
 
   <!-- Top Header (Traffio-style: initials + title + refresh) -->
   <header class="shrink-0 safe-area-top" style="background: rgba(10,22,40,0.95); border-bottom: 1px solid rgba(255,255,255,0.06);">
