@@ -52,8 +52,12 @@
     </div>
   </a>
 
-  <!-- Scrollable nav area -->
-  <nav class="flex-1 overflow-y-auto overscroll-contain py-3 px-3 space-y-0.5 sidebar-nav">
+  <!-- Scrollable nav area.
+       visibility:hidden until the inline restore script (at the bottom of
+       this nav) sets scrollTop. Without this the browser briefly paints the
+       nav at scrollTop=0 before the script runs — that's the "jump to top
+       then snap back" flash on every navigation. -->
+  <nav style="visibility:hidden" class="flex-1 overflow-y-auto overscroll-contain py-3 px-3 space-y-0.5 sidebar-nav">
 
     <% if (canAccess(user, 'dashboard')) { %>
     <a href="/dashboard" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'dashboard' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
@@ -449,11 +453,17 @@
        here keeps the synchronous fast path tight, and stops the "jump to top
        then snap back" flash on every navigation. -->
   <script>(function(){try{
-    var saved = sessionStorage.getItem('sidebar-scroll');
-    if (!saved) return;
     var nav = document.querySelector('.sidebar-nav');
-    if (nav) nav.scrollTop = parseInt(saved, 10);
-  }catch(e){}})();</script>
+    if (!nav) return;
+    var saved = sessionStorage.getItem('sidebar-scroll');
+    if (saved) nav.scrollTop = parseInt(saved, 10);
+    // Reveal only after scrollTop is applied so the browser never paints
+    // the nav at its default scroll position.
+    nav.style.visibility = '';
+  }catch(e){
+    var n = document.querySelector('.sidebar-nav');
+    if (n) n.style.visibility = '';
+  }})();</script>
 
   <!-- Mobile sign out — pinned at bottom -->
   <div class="lg:hidden px-4 py-3 border-t border-white/10 bg-brand-950/80 backdrop-blur-sm">
