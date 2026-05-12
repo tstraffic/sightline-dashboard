@@ -1108,16 +1108,35 @@ router.post('/employees/:id/documents/upload', requirePermission('hr_documents')
   if (!employee || !req.file) { req.flash('error', 'Upload failed.'); return res.redirect('back'); }
 
   const b = req.body;
-  db.prepare(`
+  const docType = b.document_type || 'other';
+  const issueDate = b.issue_date || null;
+  const expiryDate = b.expiry_date || null;
+
+  const docResult = db.prepare(`
     INSERT INTO employee_documents (employee_id, document_type, document_name, filename, original_name, file_path, file_size,
       issue_date, expiry_date, mandatory, notes, uploaded_by_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
-    employee.id, b.document_type || 'other', b.document_name || req.file.originalname,
+    employee.id, docType, b.document_name || req.file.originalname,
     req.file.filename, req.file.originalname, req.file.path, req.file.size,
-    b.issue_date || null, b.expiry_date || null, b.mandatory ? 1 : 0,
+    issueDate, expiryDate, b.mandatory ? 1 : 0,
     b.notes || '', req.session.user.id
   );
+
+  // Mirror licence/ticket uploads into employee_competencies so they show
+  // up in compliance views, expiry alerts and the worker wallet — same
+  // behaviour as induction approval. Idempotent.
+  try {
+    const { ensureCompetencyForDoc } = require('../lib/competencyMap');
+    ensureCompetencyForDoc(db, {
+      employeeId:   employee.id,
+      documentId:   docResult.lastInsertRowid,
+      documentType: docType,
+      issueDate,
+      expiryDate,
+      source: `Auto-created from manual document upload by ${req.session.user.username || 'admin'}`,
+    });
+  } catch (e) { console.error('competency auto-create failed:', e.message); }
 
   req.flash('success', 'Document uploaded.');
   res.redirect(`/hr/employees/${employee.id}#documents`);

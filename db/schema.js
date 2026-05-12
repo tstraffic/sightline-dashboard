@@ -9023,6 +9023,70 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 195: Backfill employee_competencies from existing
+  // licence / ticket documents.
+  //
+  // employee_documents has held white_card and tc_licence uploads for a
+  // while, but only induction-approval submissions (and now manual HR
+  // uploads, going forward) create the matching employee_competencies
+  // row. Workers / employees added before that change have the file but
+  // no competency, so they don't appear in the licences register, the
+  // expiry tracker, or the worker wallet's certifications list.
+  //
+  // This migration mirrors any existing white_card / tc_licence document
+  // into a competency row, skipping employees that already have one of
+  // that type so we don't duplicate hand-keyed records. Mapping matches
+  // lib/competencyMap.js.
+  // =============================================
+  if (!isMigrationApplied.get(195)) {
+    console.log('Running migration 195: backfill competencies from existing licence/ticket docs');
+    try {
+      const result = db.prepare(`
+        INSERT INTO employee_competencies (
+          employee_id, competency_type, competency_name, competency_level,
+          issue_date, expiry_date, status, mandatory_for_role,
+          linked_document_id, notes
+        )
+        SELECT
+          ed.employee_id,
+          CASE ed.document_type
+            WHEN 'white_card' THEN 'white_card'
+            WHEN 'tc_licence' THEN 'traffic_ticket'
+          END,
+          CASE ed.document_type
+            WHEN 'white_card' THEN 'SafeWork NSW White Card'
+            WHEN 'tc_licence' THEN 'Traffic Control and IMP Licenses'
+          END,
+          '',
+          ed.issue_date,
+          ed.expiry_date,
+          CASE
+            WHEN ed.expiry_date IS NOT NULL AND ed.expiry_date < DATE('now') THEN 'expired'
+            WHEN ed.expiry_date IS NOT NULL AND ed.expiry_date <= DATE('now', '+30 days') THEN 'expiring_soon'
+            ELSE 'valid'
+          END,
+          1,
+          ed.id,
+          'Backfilled from existing document (migration 195)'
+        FROM employee_documents ed
+        WHERE ed.document_type IN ('white_card', 'tc_licence')
+          AND NOT EXISTS (
+            SELECT 1 FROM employee_competencies ec
+            WHERE ec.employee_id = ed.employee_id
+              AND ec.competency_type = CASE ed.document_type
+                WHEN 'white_card' THEN 'white_card'
+                WHEN 'tc_licence' THEN 'traffic_ticket'
+              END
+          )
+      `).run();
+      console.log(`Migration 195: backfilled ${result.changes} competency rows from existing documents`);
+      recordMigration.run(195, 'backfill competencies from existing licence/ticket docs');
+    } catch (e) {
+      console.error('Migration 195 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
