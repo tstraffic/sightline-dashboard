@@ -15,7 +15,10 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
+  // 25MB — traffic plan PDFs (TGS/TMP) routinely run 15–20MB. The previous
+  // 10MB cap was rejecting real plans and surfacing as a confusing
+  // "Unexpected token '<'" because Express returned an HTML error page.
+  limits: { fileSize: 25 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
     const allowed = /jpeg|jpg|png|gif|pdf|webp/;
     const ext = allowed.test(path.extname(file.originalname).toLowerCase());

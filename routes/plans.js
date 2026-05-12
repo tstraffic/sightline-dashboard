@@ -4,6 +4,34 @@ const { getDb } = require('../db/database');
 const upload = require('../middleware/upload');
 const { autoLogDiary, logStatusChange } = require('../lib/diary');
 
+// Convert a multer error message into something a human can act on. Multer's
+// own "File too large" doesn't tell the user the limit, which is the actual
+// useful information.
+function multerErrorMessage(err) {
+  if (!err) return null;
+  if (err.code === 'LIMIT_FILE_SIZE') return 'File is too large. Maximum upload size is 25 MB.';
+  if (err.code === 'LIMIT_UNEXPECTED_FILE') return 'Unexpected file field. Please use the upload form.';
+  return err.message || 'Upload failed.';
+}
+
+// Wrap upload.single so a multer error becomes a JSON response (for the
+// quick-upload XHR) or a flash + redirect (for the regular form). Without this
+// the multer error bubbles up to Express, which returns an HTML 500 page —
+// and the XHR client fails to parse it as JSON.
+function uploadPlanFile(jsonResponse) {
+  return (req, res, next) => {
+    upload.single('plan_file')(req, res, (err) => {
+      if (err) {
+        const msg = multerErrorMessage(err);
+        if (jsonResponse) return res.status(400).json({ error: msg });
+        req.flash('error', msg);
+        return res.redirect(req.get('referer') || '/plans/new');
+      }
+      next();
+    });
+  };
+}
+
 // List all traffic plans
 router.get('/', (req, res) => {
   const db = getDb();
@@ -38,7 +66,7 @@ router.get('/new', (req, res) => {
 });
 
 // Create plan
-router.post('/', upload.single('plan_file'), (req, res) => {
+router.post('/', uploadPlanFile(false), (req, res) => {
   const db = getDb();
   const b = req.body;
 
@@ -139,7 +167,7 @@ router.post('/', upload.single('plan_file'), (req, res) => {
 });
 
 // ─── QUICK UPLOAD (drag-drop from job page) ─────
-router.post('/quick-upload', upload.single('plan_file'), (req, res) => {
+router.post('/quick-upload', uploadPlanFile(true), (req, res) => {
   const db = getDb();
   const b = req.body;
   const jobId = b.job_id;
