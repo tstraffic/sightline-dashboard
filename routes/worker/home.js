@@ -175,10 +175,11 @@ router.get('/home', async (req, res) => {
   const compliance = member ? getComplianceStatus(member, today) : null;
 
   // Safety counts: unread Safety Updates + SWMS that need acknowledgement
-  // against their current version. The widget on the home screen renders
-  // silent when both are zero. Wrapped so a missing migration on an old
-  // DB doesn't 500 the home screen.
-  let safetyCounts = { unread: 0, swmsNeedsAck: 0 };
+  // against their current version + outstanding quizzes (published, deadline
+  // not passed, worker hasn't passed). The widget on the home screen renders
+  // silent when all are zero. Wrapped so a missing migration on an old DB
+  // doesn't 500 the home screen.
+  let safetyCounts = { unread: 0, swmsNeedsAck: 0, quizzesOutstanding: 0 };
   try {
     safetyCounts = db.prepare(`
       SELECT
@@ -191,8 +192,14 @@ router.get('/home', async (req, res) => {
           WHERE s.status='active'
             AND NOT EXISTS (SELECT 1 FROM swms_acknowledgements a
                             WHERE a.swms_id=s.id AND a.crew_member_id=?
-                              AND a.version_token=s.version_token)) AS swmsNeedsAck
-    `).get(worker.id, worker.id) || safetyCounts;
+                              AND a.version_token=s.version_token)) AS swmsNeedsAck,
+        (SELECT COUNT(*) FROM safety_quizzes q
+          WHERE q.status='published'
+            AND (q.deadline_at IS NULL OR q.deadline_at > datetime('now'))
+            AND NOT EXISTS (SELECT 1 FROM safety_quiz_attempts a
+                            WHERE a.quiz_id=q.id AND a.crew_member_id=?
+                              AND a.status='submitted' AND a.passed=1)) AS quizzesOutstanding
+    `).get(worker.id, worker.id, worker.id) || safetyCounts;
   } catch (e) { /* tables may not exist on stale databases */ }
 
   // Greeting + subtext

@@ -79,6 +79,9 @@ const PERMISSIONS = {
   // ── Safety Comments / Flags (worker submissions inbox; office moderates + responds) ──
   safety_comments: ['admin', 'safety', 'operations'],
 
+  // ── Safety Quizzes (knowledge-check builder; office authors, workers take) ──
+  safety_quizzes: ['admin', 'safety', 'operations', 'planning'],
+
   // ── Risk Assessment register (same access pattern as SWMS) ──
   risk_assessments: ['admin', 'safety', 'operations', 'planning'],
 
