@@ -1,0 +1,113 @@
+<% locals.currentPage = 'sop-register' %>
+<%
+  function fmtDate(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  const STATUS_BADGE = {
+    draft:    'bg-amber-50 text-amber-700 ring-amber-200',
+    active:   'bg-emerald-50 text-emerald-700 ring-emerald-200',
+    archived: 'bg-gray-50 text-gray-600 ring-gray-200',
+  };
+  const KIND_BADGE = {
+    template: 'bg-blue-50 text-blue-700 ring-blue-200',
+    job:      'bg-purple-50 text-purple-700 ring-purple-200',
+  };
+%>
+
+<div class="max-w-4xl mx-auto space-y-5">
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <a href="/sop-register" class="text-sm text-brand-600 hover:underline">← SOP Register</a>
+      <h1 class="text-2xl font-bold text-gray-900 mt-1 flex items-center gap-2 flex-wrap">
+        <%= sop.title %>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset <%= KIND_BADGE[sop.kind] %>"><%= kindLabels[sop.kind] %></span>
+        <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset <%= STATUS_BADGE[sop.status] %>"><%= statusLabels[sop.status] %></span>
+      </h1>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/sop-register/<%= sop.id %>/edit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Edit</a>
+      <form method="POST" action="/sop-register/<%= sop.id %>/delete" onsubmit="return confirm('Delete this SOP? This cannot be undone.')">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-300 hover:text-red-600 text-gray-700 text-sm font-semibold rounded-lg">Delete</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Sub-tabs: Details vs Acknowledgements (per-version) -->
+  <div class="border-b border-gray-200 flex items-center gap-1">
+    <span class="px-4 py-2 -mb-px border-b-2 border-brand-600 text-brand-700 text-sm font-semibold">Details</span>
+    <a href="/sop-register/<%= sop.id %>/acknowledgements" class="px-4 py-2 -mb-px border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-semibold">
+      Acknowledgements
+      <% if (typeof ackSummary !== 'undefined') { %>
+        <span class="ml-1 px-1.5 py-0.5 text-[10px] rounded-full bg-gray-100 text-gray-600"><%= ackSummary.acked_current || 0 %>/<%= ackSummary.total_crew || 0 %></span>
+      <% } %>
+    </a>
+  </div>
+
+  <% if (sop.status === 'active') { %>
+    <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+      Replacing the file or re-publishing this SOP will mint a new version and require every worker to re-acknowledge.
+    </div>
+  <% } %>
+
+  <%
+    // Expiry styling — same logic as the register so colours match.
+    let expiryCls = 'text-gray-700';
+    let expiryNote = '';
+    if (sop.expiry_date) {
+      const days = Math.floor((new Date(sop.expiry_date) - new Date(new Date().toISOString().slice(0,10))) / 86400000);
+      if (days < 0)        { expiryCls = 'text-red-700 font-semibold';   expiryNote = Math.abs(days) + ' days overdue'; }
+      else if (days <= 30) { expiryCls = 'text-amber-700 font-semibold'; expiryNote = 'in ' + days + ' days'; }
+    }
+  %>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 space-y-4">
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div>
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Job</p>
+        <p class="text-sm font-semibold text-gray-900 mt-0.5">
+          <% if (sop.job_number) { %><a href="/jobs/<%= sop.job_id %>" class="text-brand-600 hover:underline"><%= sop.job_number %></a><% } else { %>—<% } %>
+        </p>
+      </div>
+      <div>
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Owner</p>
+        <p class="text-sm font-semibold text-gray-900 mt-0.5"><%= sop.owner_name || 'Unassigned' %></p>
+      </div>
+      <div>
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Expiry / next review</p>
+        <p class="text-sm <%= expiryCls %> mt-0.5 tabular-nums"><%= fmtDate(sop.expiry_date) %><% if (expiryNote) { %> · <%= expiryNote %><% } %></p>
+      </div>
+      <div>
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Created</p>
+        <p class="text-sm text-gray-700 mt-0.5 tabular-nums"><%= fmtDate(sop.created_at) %><% if (sop.created_by_name) { %> · <%= sop.created_by_name %><% } %></p>
+      </div>
+    </div>
+
+    <% if (sop.description) { %>
+      <div class="pt-3 border-t border-gray-100">
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Description</p>
+        <p class="text-sm text-gray-700 whitespace-pre-line"><%= sop.description %></p>
+      </div>
+    <% } %>
+
+    <div class="pt-3 border-t border-gray-100">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">SOP file</p>
+      <% if (sop.file_path) { %>
+        <a href="/sop-register/<%= sop.id %>/file" class="inline-flex items-center gap-2 px-3 py-2 bg-brand-50 hover:bg-brand-100 text-brand-700 text-sm font-semibold rounded-lg ring-1 ring-brand-200">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m-7 7h8a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v13a2 2 0 002 2z"/></svg>
+          <%= sop.file_original_name || 'Download' %>
+        </a>
+      <% } else { %>
+        <p class="text-sm text-gray-500 italic">No file uploaded yet — this SOP is a placeholder waiting for the assignee to attach the document.</p>
+      <% } %>
+    </div>
+
+    <% if (sop.notes) { %>
+      <div class="pt-3 border-t border-gray-100">
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Internal notes</p>
+        <p class="text-sm text-gray-700 whitespace-pre-line"><%= sop.notes %></p>
+      </div>
+    <% } %>
+  </div>
+</div>

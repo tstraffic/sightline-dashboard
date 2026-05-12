@@ -230,6 +230,7 @@ app.use('/equipment/hire-dockets', requireLogin, requirePermission('equipment'),
 app.use('/equipment', requireLogin, requirePermission('equipment'), require('./routes/equipment'));
 app.use('/checklists', requireLogin, requirePermission('checklists'), require('./routes/checklists'));
 app.use('/swms', requireLogin, requirePermission('swms'), require('./routes/swms'));
+app.use('/sop-register', requireLogin, requirePermission('sop_register'), require('./routes/sop-register'));
 app.use('/safety-updates', requireLogin, requirePermission('safety_updates'), require('./routes/safety-updates'));
 app.use('/risk-assessments', requireLogin, requirePermission('risk_assessments'), require('./routes/risk-assessments'));
 app.use('/exports', requireLogin, requirePermission('exports'), require('./routes/exports'));

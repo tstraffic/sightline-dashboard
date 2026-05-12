@@ -8610,6 +8610,80 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 188: sop_register (Standard Operating Procedures register)
+  // Mirrors the swms table 1:1 — templates vs job-linked, draft/active/
+  // archived, expiry tracking, version_token. Lives alongside SWMS in the
+  // Safety section. Separate from sop_documents (induction sign-off).
+  // =============================================
+  if (!isMigrationApplied.get(188)) {
+    console.log('Running migration 188: sop_register');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sop_register (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'job' CHECK(kind IN ('template','job')),
+          status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','active','archived')),
+          job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          owner_id INTEGER REFERENCES users(id),
+          file_path TEXT DEFAULT '',
+          file_original_name TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          expiry_date DATE,
+          last_reminded_at DATETIME,
+          version_token TEXT DEFAULT '',
+          version_published_at DATETIME,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_kind    ON sop_register(kind)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_job     ON sop_register(job_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_status  ON sop_register(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_expiry  ON sop_register(expiry_date)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_version ON sop_register(version_token)');
+      recordMigration.run(188, 'sop_register');
+      console.log('Migration 188 applied');
+    } catch (e) {
+      console.error('Migration 188 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 189: sop_register_acknowledgements
+  // Mirrors swms_acknowledgements. Separate from sop_acknowledgements
+  // (induction sessions) by design — different lifecycle.
+  // =============================================
+  if (!isMigrationApplied.get(189)) {
+    console.log('Running migration 189: sop_register_acknowledgements');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sop_register_acknowledgements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sop_id INTEGER NOT NULL REFERENCES sop_register(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          version_token TEXT NOT NULL,
+          full_name TEXT NOT NULL,
+          signature_url TEXT DEFAULT '',
+          signed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          signed_via TEXT DEFAULT 'tap',
+          signed_ip TEXT DEFAULT '',
+          user_agent TEXT DEFAULT '',
+          UNIQUE(sop_id, crew_member_id, version_token)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_ack_crew    ON sop_register_acknowledgements(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sop_register_ack_sop_ver ON sop_register_acknowledgements(sop_id, version_token)');
+      recordMigration.run(189, 'sop_register_acknowledgements');
+      console.log('Migration 189 applied');
+    } catch (e) {
+      console.error('Migration 189 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
