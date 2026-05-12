@@ -1,0 +1,79 @@
+<style>
+  .cn-wrap { color: #fff; padding: 0 0 24px; }
+  .cn-back { display: inline-flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.55); font-size: 0.8rem; text-decoration: none; margin: 4px 0 8px; }
+  .cn-h1 { font-size: 1.4rem; font-weight: 800; margin: 4px 0 8px; }
+  .cn-sub { font-size: 0.8rem; color: rgba(255,255,255,0.55); margin-bottom: 14px; line-height: 1.45; }
+  .cn-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    padding: 14px; margin-bottom: 12px;
+  }
+  .cn-label { display:block; font-size: 0.65rem; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+  .cn-input, .cn-textarea, .cn-select {
+    width: 100%; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12);
+    color: #fff; border-radius: 10px; padding: 10px 12px; font-size: 0.9rem;
+  }
+  .cn-textarea { min-height: 120px; resize: vertical; }
+  .cn-select option { background: #0F1F3A; color: #fff; }
+  .cn-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
+  @media (min-width: 480px) { .cn-grid { grid-template-columns: 1fr 1fr; } }
+  .cn-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+  .cn-row input[type=checkbox] { width: 18px; height: 18px; accent-color: #00D2BE; }
+  .cn-anon-note { font-size: 0.7rem; color: rgba(255,255,255,0.5); padding-left: 28px; margin-top: -4px; line-height: 1.45; }
+  .cn-submit {
+    width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0;
+    background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
+    box-shadow: 0 6px 20px rgba(29,106,229,0.35);
+  }
+  .cn-submit:active { transform: translateY(1px); }
+</style>
+
+<div class="cn-wrap">
+  <a href="/w/safety/comments" class="cn-back">← Safety / Flag &amp; comment</a>
+  <h1 class="cn-h1">Flag or share feedback</h1>
+  <p class="cn-sub">Hazards, SWMS confusion, kit problems, ideas for improvement — anything safety-related. The office team gets a notification and responds back in this app.</p>
+
+  <form method="POST" action="/w/safety/comments" enctype="multipart/form-data">
+    <%- include('../../partials/csrf') %>
+
+    <div class="cn-card">
+      <label class="cn-label" for="category">Category</label>
+      <select name="category" id="category" class="cn-select">
+        <% categoryValues.forEach(c => { %>
+          <option value="<%= c %>"><%= categoryLabels[c] %></option>
+        <% }) %>
+      </select>
+    </div>
+
+    <div class="cn-card">
+      <label class="cn-label" for="body">What's going on?</label>
+      <textarea name="body" id="body" class="cn-textarea" required placeholder="Describe it. Include location, time, equipment, anything else useful."></textarea>
+    </div>
+
+    <% if (jobs && jobs.length) { %>
+      <div class="cn-card">
+        <label class="cn-label" for="job_id">Job reference (optional)</label>
+        <select name="job_id" id="job_id" class="cn-select">
+          <option value="">— None / not job-specific —</option>
+          <% jobs.forEach(j => { %>
+            <option value="<%= j.id %>"><%= j.job_number %> · <%= j.client %></option>
+          <% }) %>
+        </select>
+      </div>
+    <% } %>
+
+    <div class="cn-card">
+      <label class="cn-label" for="photos">Photos (optional, up to 5)</label>
+      <input type="file" name="photos" id="photos" multiple accept="image/*,.heic" class="cn-input" style="background: transparent; border-style: dashed; padding: 8px;">
+    </div>
+
+    <div class="cn-card">
+      <div class="cn-row">
+        <input type="checkbox" name="anonymous" id="anonymous" value="1">
+        <label for="anonymous" style="font-size: 0.88rem; font-weight: 600; color: #fff;">Submit anonymously</label>
+      </div>
+      <p class="cn-anon-note">The safety team won't see your name. You'll still get a response back here.</p>
+    </div>
+
+    <button type="submit" class="cn-submit">Submit</button>
+  </form>
+</div>

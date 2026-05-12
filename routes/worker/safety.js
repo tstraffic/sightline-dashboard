@@ -1,19 +1,24 @@
-// /w/safety — worker-side Safety module (Phase 1).
+// /w/safety — worker-side Safety module.
 //
-// Two sub-tabs in this phase:
-//   - /w/safety/swms     SWMS library (view + tap-to-acknowledge per version)
-//   - /w/safety/updates  Safety updates feed (view + auto mark-read)
+// Sub-tabs:
+//   - /w/safety/swms       SWMS library (view + tap-to-acknowledge per version)
+//   - /w/safety/updates    Safety updates feed (view + auto mark-read)
+//   - /w/safety/toolboxes  Toolbox talks archive (view + mark caught up)
+//   - /w/safety/comments   Submit hazard flags / suggestions / etc. + view own
 //
-// All file downloads (SWMS PDFs, update attachments) go through the
-// worker-side routes here rather than re-using the admin auth-gated routes
-// — never expose admin downloads to crew sessions.
+// All file downloads (SWMS PDFs, update attachments, toolbox slides, comment
+// photos) go through worker-side routes here rather than re-using the admin
+// auth-gated routes — never expose admin downloads to crew sessions.
 'use strict';
 
 const express = require('express');
 const router = express.Router();
+const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { getDb } = require('../../db/database');
+const { sendPushToUser } = require('../../services/pushNotification');
+const { submitterToken } = require('../../lib/anonymousToken');
 
 const CATEGORY_LABELS = {
   general: 'General',
@@ -22,6 +27,42 @@ const CATEGORY_LABELS = {
   toolbox: 'Toolbox',
   policy_change: 'Policy',
 };
+
+const COMMENT_CATEGORY_VALUES = ['hazard', 'swms_issue', 'suggestion', 'equipment', 'general'];
+const COMMENT_CATEGORY_LABELS = {
+  hazard: 'Hazard',
+  swms_issue: 'SWMS issue',
+  suggestion: 'Suggestion',
+  equipment: 'Equipment',
+  general: 'General',
+};
+const COMMENT_STATUS_LABELS = {
+  submitted: 'Submitted',
+  acknowledged: 'Acknowledged',
+  under_review: 'Under review',
+  closed: 'Closed',
+};
+
+// Comment photo uploads — stored alongside other safety attachments,
+// outside /public so the worker auth check controls access.
+const COMMENT_UPLOAD_DIR = path.join(__dirname, '..', '..', 'data', 'uploads', 'safety-comments');
+if (!fs.existsSync(COMMENT_UPLOAD_DIR)) fs.mkdirSync(COMMENT_UPLOAD_DIR, { recursive: true });
+const commentStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, COMMENT_UPLOAD_DIR),
+  filename: (req, file, cb) => {
+    const stamp = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, stamp + path.extname(file.originalname));
+  }
+});
+const commentUpload = multer({
+  storage: commentStorage,
+  // 10MB per file × max 5 photos per the spec.
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = /\.(jpg|jpeg|png|webp|heic)$/i.test(file.originalname);
+    cb(null, ok);
+  }
+}).array('photos', 5);
 
 // GET /w/safety — land on SWMS first (the compliance-critical half).
 router.get('/safety', (req, res) => res.redirect('/w/safety/swms'));
@@ -296,6 +337,181 @@ router.get('/safety/toolboxes/:id/photos/:photoId', (req, res) => {
   `).get(req.params.photoId, req.params.id);
   if (!ph || !ph.file_path) return res.status(404).send('not found');
   const abs = path.join(__dirname, '..', '..', ph.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('missing');
+  return res.sendFile(abs);
+});
+
+// =============================================
+// Comments / Flags (worker -> office)
+// =============================================
+
+// GET /w/safety/comments — list this worker's own submissions, queried by
+// submitter_token so anonymous rows still show up (crew_member_id is NULL
+// for those).
+router.get('/safety/comments', (req, res) => {
+  const db = getDb();
+  const token = submitterToken(req.session.worker.id);
+  const rows = db.prepare(`
+    SELECT c.id, c.category, c.body, c.status, c.is_anonymous,
+           c.office_response, c.response_at, c.created_at,
+           j.job_number
+    FROM safety_comments c
+    LEFT JOIN jobs j ON j.id = c.job_id
+    WHERE c.submitter_token = ?
+    ORDER BY c.created_at DESC
+    LIMIT 100
+  `).all(token);
+  res.render('worker/safety/comments-list', {
+    title: 'My safety comments', currentPage: 'safety',
+    subtab: 'comments', rows,
+    categoryLabels: COMMENT_CATEGORY_LABELS, statusLabels: COMMENT_STATUS_LABELS,
+  });
+});
+
+// GET /w/safety/comments/new — submit form
+router.get('/safety/comments/new', (req, res) => {
+  const db = getDb();
+  // Worker can optionally tie a comment to one of their current jobs.
+  let jobs = [];
+  try {
+    jobs = db.prepare(`
+      SELECT DISTINCT j.id, j.job_number, j.client
+      FROM crew_allocations ca
+      JOIN jobs j ON j.id = ca.job_id
+      WHERE ca.crew_member_id = ?
+        AND ca.allocation_date >= date('now', '-14 days')
+        AND ca.allocation_date <= date('now', '+14 days')
+        AND ca.status != 'cancelled'
+      ORDER BY j.job_number DESC
+    `).all(req.session.worker.id);
+  } catch (e) {}
+  res.render('worker/safety/comment-new', {
+    title: 'New safety comment', currentPage: 'safety',
+    subtab: 'comments', jobs,
+    categoryValues: COMMENT_CATEGORY_VALUES,
+    categoryLabels: COMMENT_CATEGORY_LABELS,
+  });
+});
+
+// POST /w/safety/comments — submit. Anonymous toggle is off by default;
+// when ticked we drop crew_member_id and rely on the deterministic token
+// for the worker's own list + push routing.
+router.post('/safety/comments', (req, res) => {
+  commentUpload(req, res, (multerErr) => {
+    if (multerErr) {
+      req.flash('error', multerErr.message || 'Upload failed.');
+      return res.redirect('/w/safety/comments/new');
+    }
+    const db = getDb();
+    const worker = req.session.worker;
+    const b = req.body;
+    const body = String(b.body || '').trim();
+    if (!body) {
+      req.flash('error', 'Please write something before submitting.');
+      return res.redirect('/w/safety/comments/new');
+    }
+    const category = COMMENT_CATEGORY_VALUES.includes(b.category) ? b.category : 'general';
+    const jobId = b.job_id ? (parseInt(b.job_id, 10) || null) : null;
+    const isAnonymous = (b.anonymous === '1' || b.anonymous === 'on') ? 1 : 0;
+    const token = submitterToken(worker.id);
+
+    try {
+      const r = db.prepare(`
+        INSERT INTO safety_comments
+          (crew_member_id, submitter_token, is_anonymous, category, body, job_id,
+           submitted_ip, user_agent)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        isAnonymous ? null : worker.id,
+        token,
+        isAnonymous,
+        category,
+        body,
+        jobId,
+        String(req.ip || ''),
+        String((req.get('user-agent') || '')).slice(0, 250)
+      );
+      const newId = r.lastInsertRowid;
+
+      const files = req.files || [];
+      if (files.length) {
+        const ins = db.prepare(`
+          INSERT INTO safety_comment_attachments (comment_id, file_path, file_original_name)
+          VALUES (?, ?, ?)
+        `);
+        for (const f of files) {
+          const rel = path.relative(path.join(__dirname, '..', '..'), f.path).replace(/\\/g, '/');
+          ins.run(newId, rel, f.originalname);
+        }
+      }
+
+      // Notify the safety team. Fire-and-forget per user. Office UI never
+      // gets to see crew_member_id for anonymous rows; the push title is
+      // identical for both cases for the same reason.
+      try {
+        const adminUsers = db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) IN ('admin','safety')").all();
+        const pushPayload = {
+          title: 'New safety comment',
+          body: COMMENT_CATEGORY_LABELS[category] + (isAnonymous ? ' (anonymous)' : '') + ' — tap to review.',
+          url: '/safety-comments/' + newId,
+          type: 'safety_comment_submitted',
+        };
+        for (const u of adminUsers) {
+          sendPushToUser(u.id, pushPayload).catch(e => console.error('[w/safety] notify admin push error:', e.message));
+        }
+      } catch (e) { console.error('[w/safety] notify admins error:', e.message); }
+
+      req.flash('success', 'Submitted. The safety team will review and respond.');
+      return res.redirect('/w/safety/comments/' + newId);
+    } catch (err) {
+      console.error('[w/safety] comment submit error:', err.message);
+      req.flash('error', 'Could not submit comment.');
+      return res.redirect('/w/safety/comments/new');
+    }
+  });
+});
+
+// GET /w/safety/comments/:id — own comment detail. Looked up by id AND
+// submitter_token so workers can only see their own (incl. their anon ones).
+router.get('/safety/comments/:id', (req, res) => {
+  const db = getDb();
+  const token = submitterToken(req.session.worker.id);
+  const comment = db.prepare(`
+    SELECT c.*, j.job_number, ru.full_name AS response_by_name
+    FROM safety_comments c
+    LEFT JOIN jobs j ON j.id = c.job_id
+    LEFT JOIN users ru ON ru.id = c.response_by_id
+    WHERE c.id = ? AND c.submitter_token = ?
+  `).get(req.params.id, token);
+  if (!comment) {
+    req.flash('error', 'Comment not found.');
+    return res.redirect('/w/safety/comments');
+  }
+  // internal_notes is office-only — strip it before render so a stray template
+  // expression can't leak it. The view doesn't reference it either, but
+  // defense-in-depth.
+  delete comment.internal_notes;
+  const photos = db.prepare('SELECT id FROM safety_comment_attachments WHERE comment_id = ? ORDER BY id ASC').all(comment.id);
+  res.render('worker/safety/comment-detail', {
+    title: 'Comment #' + comment.id, currentPage: 'safety',
+    subtab: 'comments', comment, photos,
+    categoryLabels: COMMENT_CATEGORY_LABELS, statusLabels: COMMENT_STATUS_LABELS,
+  });
+});
+
+// GET /w/safety/comments/:id/photos/:photoId — worker-auth photo serve.
+// Restricted by submitter_token so workers can't enumerate other people's
+// photos by guessing IDs.
+router.get('/safety/comments/:id/photos/:photoId', (req, res) => {
+  const db = getDb();
+  const token = submitterToken(req.session.worker.id);
+  const row = db.prepare(`
+    SELECT a.file_path FROM safety_comment_attachments a
+    JOIN safety_comments c ON c.id = a.comment_id
+    WHERE a.id = ? AND a.comment_id = ? AND c.submitter_token = ?
+  `).get(req.params.photoId, req.params.id, token);
+  if (!row || !row.file_path) return res.status(404).send('not found');
+  const abs = path.join(__dirname, '..', '..', row.file_path);
   if (!fs.existsSync(abs)) return res.status(404).send('missing');
   return res.sendFile(abs);
 });

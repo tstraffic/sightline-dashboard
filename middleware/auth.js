@@ -76,6 +76,9 @@ const PERMISSIONS = {
   // ── Toolbox Talks (archive + attendance tracking; office records, workers view) ──
   toolbox_talks: ['admin', 'safety', 'operations', 'planning'],
 
+  // ── Safety Comments / Flags (worker submissions inbox; office moderates + responds) ──
+  safety_comments: ['admin', 'safety', 'operations'],
+
   // ── Risk Assessment register (same access pattern as SWMS) ──
   risk_assessments: ['admin', 'safety', 'operations', 'planning'],
 

@@ -8674,6 +8674,82 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 189: safety_comments + attachments + anonymous salt
+  // Phase 2b — worker -> office channel for hazard flags, SWMS issues,
+  // suggestions, equipment concerns, general comments. When the worker
+  // submits anonymously, crew_member_id is NULL on the row and only the
+  // deterministic submitter_token is stored. The salt for the token lives
+  // in system_config under 'anonymous_comment_salt'; helpers in
+  // lib/anonymousToken.js read it.
+  // =============================================
+  if (!isMigrationApplied.get(189)) {
+    console.log('Running migration 189: safety_comments + anonymous salt');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS safety_comments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          -- NULL on anonymous rows. Joining to crew_members must never
+          -- happen on a row where is_anonymous=1.
+          crew_member_id INTEGER REFERENCES crew_members(id) ON DELETE SET NULL,
+          -- Deterministic hash of (crew_member_id + salt). Set on every row
+          -- (anon or not) so the worker portal can list its own submissions
+          -- without re-using crew_member_id on anon rows.
+          submitter_token TEXT NOT NULL,
+          is_anonymous INTEGER NOT NULL DEFAULT 0,
+          category TEXT NOT NULL DEFAULT 'general'
+            CHECK(category IN ('hazard','swms_issue','suggestion','equipment','general')),
+          body TEXT NOT NULL,
+          job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          status TEXT NOT NULL DEFAULT 'submitted'
+            CHECK(status IN ('submitted','acknowledged','under_review','closed')),
+          assigned_to_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          internal_notes TEXT DEFAULT '',                -- office-only, never returned to worker
+          office_response TEXT DEFAULT '',               -- visible to worker
+          response_at DATETIME,
+          response_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          submitted_ip TEXT DEFAULT '',
+          user_agent TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS safety_comment_attachments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          comment_id INTEGER NOT NULL REFERENCES safety_comments(id) ON DELETE CASCADE,
+          file_path TEXT NOT NULL,
+          file_original_name TEXT DEFAULT '',
+          uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comments_status ON safety_comments(status)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comments_token ON safety_comments(submitter_token)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comments_crew ON safety_comments(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comments_created ON safety_comments(created_at)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_safety_comment_attach ON safety_comment_attachments(comment_id)');
+
+      // Generate and store the anonymous-token salt if not present. system_config
+      // is already used for VAPID + push subscriptions; reuse it here.
+      try {
+        const existing = db.prepare("SELECT config_value FROM system_config WHERE config_key = 'anonymous_comment_salt'").get();
+        if (!existing || !existing.config_value) {
+          const salt = require('crypto').randomBytes(32).toString('hex');
+          db.prepare(`
+            INSERT OR IGNORE INTO system_config (config_key, config_value, config_type, description)
+            VALUES ('anonymous_comment_salt', ?, 'secret', 'Salt used to derive worker submitter_token on safety_comments rows. Never log or expose.')
+          `).run(salt);
+        }
+      } catch (e) {
+        console.error('Migration 189 salt seed error:', e.message);
+      }
+
+      recordMigration.run(189, 'safety_comments + anonymous salt');
+      console.log('Migration 189 applied');
+    } catch (e) {
+      console.error('Migration 189 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
