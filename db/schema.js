@@ -9087,6 +9087,88 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 196: Drop the `-1` suffix on sub-plans that are the only
+  // one of their type within a parent. Convention now: 1 of a type = bare
+  // ref (TSTGS3100); 2+ of a type = bare + -2, -3, … (TSTGS3100, TSTGS3100-2).
+  // Titles default to the ref string, so when title == old ref we update
+  // it too. The "Other" case stores titles like "<label> (<ref>)", so we
+  // patch the parenthesised ref there as well.
+  // =============================================
+  if (!isMigrationApplied.get(196)) {
+    try {
+      const rows = db.prepare(`
+        SELECT c1.id, c1.reference_number, c1.title
+        FROM compliance c1
+        WHERE c1.parent_id IS NOT NULL
+          AND c1.reference_number LIKE '%-1'
+          AND (SELECT COUNT(*) FROM compliance c2 WHERE c2.parent_id = c1.parent_id AND c2.item_type = c1.item_type) = 1
+      `).all();
+      const upd = db.prepare("UPDATE compliance SET reference_number = ?, title = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+      let renamed = 0;
+      rows.forEach(r => {
+        const oldRef = r.reference_number;
+        const newRef = oldRef.replace(/-1$/, '');
+        let newTitle = r.title;
+        if (r.title === oldRef) newTitle = newRef;
+        else if (r.title && r.title.includes(`(${oldRef})`)) newTitle = r.title.replace(`(${oldRef})`, `(${newRef})`);
+        upd.run(newRef, newTitle, r.id);
+        renamed += 1;
+      });
+      recordMigration.run(196, 'compliance refs: drop -1 suffix for single-of-a-type sub-plans');
+      console.log(`Migration 196 applied: dropped -1 suffix from ${renamed} single-of-a-type sub-plan ref(s)`);
+    } catch (e) {
+      console.error('Migration 196 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 197: Normalise traffic_plans.file_path + plan_revisions.file_path
+  // to the public URL form `uploads/<filename>`. Older rows stored multer's
+  // absolute disk path (e.g. /app/public/uploads/foo.pdf on Railway); the
+  // EJS template prepended a '/' to that, producing //app/... which
+  // browsers parse as protocol-relative (host = "app") and DNS-fail.
+  // After this migration every row holds just `uploads/<filename>` so the
+  // template renders /uploads/<filename> — a valid static URL.
+  // =============================================
+  if (!isMigrationApplied.get(197)) {
+    try {
+      const stripToUploads = (raw) => {
+        if (!raw) return raw;
+        const norm = String(raw).replace(/\\/g, '/');
+        const idx = norm.lastIndexOf('uploads/');
+        if (idx >= 0) return norm.slice(idx);
+        const base = norm.split('/').pop();
+        return base ? 'uploads/' + base : norm;
+      };
+
+      let fixedTp = 0;
+      try {
+        const tpRows = db.prepare("SELECT id, file_path FROM traffic_plans WHERE file_path IS NOT NULL AND file_path != ''").all();
+        const updTp = db.prepare("UPDATE traffic_plans SET file_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+        tpRows.forEach(r => {
+          const fixed = stripToUploads(r.file_path);
+          if (fixed !== r.file_path) { updTp.run(fixed, r.id); fixedTp += 1; }
+        });
+      } catch (e) { console.log('Migration 197: traffic_plans skipped:', e.message); }
+
+      let fixedRev = 0;
+      try {
+        const revRows = db.prepare("SELECT id, file_path FROM plan_revisions WHERE file_path IS NOT NULL AND file_path != ''").all();
+        const updRev = db.prepare("UPDATE plan_revisions SET file_path = ? WHERE id = ?");
+        revRows.forEach(r => {
+          const fixed = stripToUploads(r.file_path);
+          if (fixed !== r.file_path) { updRev.run(fixed, r.id); fixedRev += 1; }
+        });
+      } catch (e) { console.log('Migration 197: plan_revisions skipped:', e.message); }
+
+      recordMigration.run(197, 'normalise traffic_plans / plan_revisions file_path to uploads/<filename>');
+      console.log(`Migration 197 applied: normalised ${fixedTp} traffic_plans + ${fixedRev} plan_revisions file_path(s)`);
+    } catch (e) {
+      console.error('Migration 197 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
