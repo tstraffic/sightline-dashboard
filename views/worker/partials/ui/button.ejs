@@ -1,0 +1,35 @@
+<%# Worker UI primitive: button.
+    Locals:
+      label    required, the button text
+      kind     'primary' | 'secondary' | 'ghost' | 'danger' | 'accent' (default 'primary')
+      size     'sm' | 'md' | 'lg' (default 'md')
+      as       'button' | 'a' (default 'button')
+      href     when as='a', the destination
+      type     when as='button', defaults to 'submit'
+      block    boolean — full-width
+      icon     optional inline SVG markup placed before the label
+      attrs    optional raw HTML attributes string (onclick=..., aria-label=..., etc.)
+    Usage:
+      <%- include('partials/ui/button', { label: 'Submit', kind: 'primary', size: 'lg', block: true }) %>
+      <%- include('partials/ui/button', { label: 'Open shift', as: 'a', href: '/w/jobs/123', kind: 'secondary' }) %>
+%>
+<%
+  var _kind = typeof kind !== 'undefined' && kind ? kind : 'primary';
+  var _size = typeof size !== 'undefined' && size ? size : 'md';
+  var _as = typeof as !== 'undefined' && as === 'a' ? 'a' : 'button';
+  var _block = typeof block !== 'undefined' && block;
+  var _icon = typeof icon !== 'undefined' && icon ? icon : '';
+  var _attrs = typeof attrs !== 'undefined' && attrs ? attrs : '';
+  var _href = typeof href !== 'undefined' && href ? href : '#';
+  var _type = typeof type !== 'undefined' && type ? type : 'submit';
+  var classes = 'wd-btn' + (_block ? ' wd-btn-block' : '');
+%>
+<% if (_as === 'a') { %>
+  <a class="<%= classes %>" data-kind="<%= _kind %>" data-size="<%= _size %>" href="<%= _href %>" <%- _attrs %>>
+    <%- _icon %><span><%= label %></span>
+  </a>
+<% } else { %>
+  <button type="<%= _type %>" class="<%= classes %>" data-kind="<%= _kind %>" data-size="<%= _size %>" <%- _attrs %>>
+    <%- _icon %><span><%= label %></span>
+  </button>
+<% } %>

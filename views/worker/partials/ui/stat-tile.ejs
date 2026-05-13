@@ -1,0 +1,21 @@
+<%# Worker UI primitive: stat tile.
+    Locals:
+      label   small caps caption (required)
+      value   the big number (required, can be string or number)
+      unit    optional suffix shown small after the value (e.g. 'h', 'days')
+      sub     optional muted line below the value
+      kind    optional 'teal'|'blue'|'amber'|'rose'|'emerald'|'violet'|'indigo' (default: 'blue')
+      icon    optional inline SVG markup for the corner icon
+      countup boolean — when true, the value animates from 0 (PR 2 handler reads data-countup)
+    Usage:
+      <%- include('partials/ui/stat-tile', { label: 'Hours this week', value: 38, unit: 'h', kind: 'blue', icon: '<svg ...>' }) %>
+%>
+<% var _kind = typeof kind !== 'undefined' && kind ? kind : 'blue'; %>
+<% var _value = (value == null) ? '' : value; %>
+<% var _countup = typeof countup !== 'undefined' && countup; %>
+<div class="wd-stat-tile" data-kind="<%= _kind %>">
+  <p class="wd-stat-tile-label"><%= label %></p>
+  <p class="wd-stat-tile-value"><span<%- _countup ? ' data-countup="' + String(_value).replace(/[^0-9.\-]/g, '') + '"' : '' %>><%= _value %></span><% if (typeof unit !== 'undefined' && unit) { %><span class="wd-stat-tile-unit"><%= unit %></span><% } %></p>
+  <% if (typeof sub !== 'undefined' && sub) { %><p class="wd-stat-tile-sub"><%= sub %></p><% } %>
+  <% if (typeof icon !== 'undefined' && icon) { %><span class="wd-stat-tile-icon"><%- icon %></span><% } %>
+</div>

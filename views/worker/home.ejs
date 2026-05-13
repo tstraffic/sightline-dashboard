@@ -334,15 +334,23 @@
       <p class="wh-hero-ctx <%= subtext.kind %>"><span class="dot"></span><%= subtext.text %></p>
     <% } %>
 
-    <div class="wh-stats">
-      <div class="wh-stat hrs"><p class="wh-stat-label">Hours this week</p><p class="wh-stat-value" data-count="<%= stats.hoursThisWeek %>"><%= stats.hoursThisWeek %><span class="wh-stat-unit">hrs</span></p><p class="wh-stat-sub">Mon–Sun</p>
-        <div class="wh-stat-ico"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div></div>
-      <div class="wh-stat days"><p class="wh-stat-label">Days worked</p><p class="wh-stat-value" data-count="<%= stats.daysWorked %>"><%= stats.daysWorked %><span class="wh-stat-unit">/7</span></p><p class="wh-stat-sub">Last 7 days</p>
-        <div class="wh-stat-ico"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg></div></div>
-      <div class="wh-stat up"><p class="wh-stat-label">Upcoming</p><p class="wh-stat-value" data-count="<%= stats.upcomingShifts %>"><%= stats.upcomingShifts %></p><p class="wh-stat-sub">Next 14 days</p>
-        <div class="wh-stat-ico"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div></div>
-      <div class="wh-stat leave"><p class="wh-stat-label">Pending leave</p><p class="wh-stat-value" data-count="<%= stats.pendingLeave %>"><%= stats.pendingLeave %></p><p class="wh-stat-sub">Awaiting approval</p>
-        <div class="wh-stat-ico"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><path d="M2.5 19l19-7.5L2.5 4v7l13 .5-13 .5z"/></svg></div></div>
+    <div class="wh-stats" data-stagger>
+      <%- include('partials/ui/stat-tile', {
+        label: 'Hours this week', value: stats.hoursThisWeek, unit: 'hrs', sub: 'Mon–Sun', kind: 'blue', countup: true,
+        icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>'
+      }) %>
+      <%- include('partials/ui/stat-tile', {
+        label: 'Days worked', value: stats.daysWorked, unit: '/7', sub: 'Last 7 days', kind: 'emerald', countup: true,
+        icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>'
+      }) %>
+      <%- include('partials/ui/stat-tile', {
+        label: 'Upcoming', value: stats.upcomingShifts, sub: 'Next 14 days', kind: 'amber', countup: true,
+        icon: '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>'
+      }) %>
+      <%- include('partials/ui/stat-tile', {
+        label: 'Pending leave', value: stats.pendingLeave, sub: 'Awaiting approval', kind: 'violet', countup: true,
+        icon: '<svg fill="currentColor" viewBox="0 0 24 24"><path d="M2.5 19l19-7.5L2.5 4v7l13 .5-13 .5z"/></svg>'
+      }) %>
     </div>
   </div>
 <% } %>
@@ -666,7 +674,7 @@
 <% } %>
 
 <% if (section === 'actions' && !hidden.includes('actions')) { %>
-  <div class="wh-section-head"><span class="wh-section-title">Quick actions</span></div>
+  <%- include('partials/ui/section-header', { title: 'Quick actions' }) %>
   <div class="wh-qa">
     <a href="/w/forms/prestart" class="wh-qa-btn"><div class="wh-qa-ic g"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div><span class="wh-qa-lbl">Pre-Start</span></a>
     <a href="/w/forms/incident" class="wh-qa-btn"><div class="wh-qa-ic r"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg></div><span class="wh-qa-lbl">Incident</span></a>
