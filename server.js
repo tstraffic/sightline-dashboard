@@ -75,6 +75,19 @@ app.use('/vendor/pdfjs', express.static(path.join(__dirname, 'node_modules', 'pd
   maxAge: '30d',
   immutable: true,
 }));
+// docx-preview + jszip are the client-side Word renderer (mirrors the pdfjs
+// setup). Workers' iOS Safari can't render docx natively, and the server-
+// side LibreOffice approach was unreliable on Railway — so we render the
+// docx in the browser using docx-preview, served same-origin so the worker
+// session cookie covers it.
+app.use('/vendor/docx-preview', express.static(path.join(__dirname, 'node_modules', 'docx-preview', 'dist'), {
+  maxAge: '30d',
+  immutable: true,
+}));
+app.use('/vendor/jszip', express.static(path.join(__dirname, 'node_modules', 'jszip', 'dist'), {
+  maxAge: '30d',
+  immutable: true,
+}));
 
 // Prevent caching of HTML pages so service worker always gets fresh content
 app.use((req, res, next) => {

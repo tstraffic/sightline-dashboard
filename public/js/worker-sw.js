@@ -1,13 +1,14 @@
 // Worker Portal — Service Worker (PWA + push)
-// v5: pdfjs path layout changed (now mounts the full pdfjs-dist tree, not
-// just legacy/build) so the prebuilt viewer + cmaps + standard_fonts are
-// reachable. Old v4 cache entries point at the wrong paths; v2 of the
-// dedicated pdfjs cache forces a fresh fetch.
-const CACHE_NAME = 'ts-worker-v5';
-const PDFJS_CACHE = 'ts-worker-pdfjs-v2';
+// v6: adds client-side docx renderer assets (docx-preview + jszip), served
+// from /vendor/docx-preview/ and /vendor/jszip/. They share the dedicated
+// vendor cache with pdfjs so the worker can render Word docs offline once
+// they've been loaded once.
+const CACHE_NAME = 'ts-worker-v6';
+const VENDOR_CACHE = 'ts-worker-vendor-v1';
 
-// All pdfjs assets — bundle, worker, prebuilt viewer, cmaps, fonts.
-const PDFJS_RE = /^\/vendor\/pdfjs\//;
+// All client-side renderer assets (pdfjs, docx-preview, jszip). All are
+// immutable once shipped, so cache-first is safe.
+const VENDOR_RE = /^\/vendor\/(pdfjs|docx-preview|jszip)\//;
 
 // Install — cache core assets
 self.addEventListener('install', function(event) {
@@ -31,7 +32,7 @@ self.addEventListener('activate', function(event) {
     caches.keys().then(function(names) {
       return Promise.all(
         names
-          .filter(function(name) { return name !== CACHE_NAME && name !== PDFJS_CACHE; })
+          .filter(function(name) { return name !== CACHE_NAME && name !== VENDOR_CACHE; })
           .map(function(name) { return caches.delete(name); })
       );
     })
@@ -40,7 +41,7 @@ self.addEventListener('activate', function(event) {
 });
 
 // Fetch — split strategies:
-//   - /vendor/pdfjs/* : cache-first (immutable bundle from node_modules)
+//   - /vendor/{pdfjs,docx-preview,jszip}/* : cache-first (immutable bundles)
 //   - everything else : network-first (fallback to cache when offline)
 self.addEventListener('fetch', function(event) {
   if (event.request.method !== 'GET') return;
@@ -48,9 +49,9 @@ self.addEventListener('fetch', function(event) {
 
   const url = new URL(event.request.url);
 
-  if (PDFJS_RE.test(url.pathname)) {
+  if (VENDOR_RE.test(url.pathname)) {
     event.respondWith(
-      caches.open(PDFJS_CACHE).then(function (cache) {
+      caches.open(VENDOR_CACHE).then(function (cache) {
         return cache.match(event.request).then(function (hit) {
           if (hit) return hit;
           return fetch(event.request).then(function (response) {
