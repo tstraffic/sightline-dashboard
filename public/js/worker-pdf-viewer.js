@@ -179,9 +179,13 @@
     });
   }
 
-  // Dispatch entry — picks the renderer based on the original filename
-  // extension. Word docs use docx-preview (client-side); everything else
-  // (PDFs, plus whatever the server falls back to) uses pdfjs.
+  // Dispatch entry — fetches the document once, sniffs the first 4 bytes,
+  // then picks the renderer based on the magic header. This works regardless
+  // of what the filename extension says — the server-side docx→PDF conversion
+  // means a /file URL named "*.docx" can actually return a PDF body, and
+  // earlier-extension-based dispatch routed those into the wrong renderer.
+  //   %PDF       -> pdfjs
+  //   PK\x03\x04 -> docx-preview (ZIP / Office Open XML container)
   function initOne(el) {
     if (el._pdfvInitialised) return;
     el._pdfvInitialised = true;
@@ -189,31 +193,36 @@
     if (!src) return;
     var maxWidth = parseInt(el.getAttribute('data-pdf-max-width') || '0', 10) || 0;
     var name = safeName(el, src);
-    var ext = (name.match(/\.([^.]+)$/) || ['', ''])[1].toLowerCase();
 
     injectCss();
     el.innerHTML = loadingHtml();
 
-    if (ext === 'docx' || ext === 'doc') {
-      return renderDocx(el, src, name);
-    }
-    return renderPdf(el, src, name, maxWidth);
-  }
-
-  // Render a Word document client-side using docx-preview. The library
-  // outputs HTML into the container; we wrap it in a white card so the
-  // dark page background doesn't clash with the doc layout.
-  function renderDocx(el, src, name) {
-    return Promise.all([
-      loadDocxLib(),
-      fetch(src, { credentials: 'same-origin' }).then(function (r) {
+    fetch(src, { credentials: 'same-origin' })
+      .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching document');
         return r.blob();
-      }),
-    ])
-      .then(function (parts) {
-        var docxLib = parts[0];
-        var blob = parts[1];
+      })
+      .then(function (blob) {
+        return blob.slice(0, 4).arrayBuffer().then(function (buf) {
+          var b = new Uint8Array(buf);
+          var sig = ((b[0] << 24) | (b[1] << 16) | (b[2] << 8) | b[3]) >>> 0;
+          if (sig === 0x25504446) return renderPdfFromBlob(el, blob, name, maxWidth, src);
+          if (sig === 0x504B0304) return renderDocxFromBlob(el, blob, name, src);
+          var hex = '0x' + ('00000000' + sig.toString(16)).slice(-8);
+          throw new Error('Unknown document type (magic ' + hex + ')');
+        });
+      })
+      .catch(function (err) {
+        console.error('[pdf-viewer] dispatch failed:', err && (err.name + ': ' + err.message) || err);
+        el.innerHTML = errorHtml(src, name, err);
+      });
+  }
+
+  // Render a Word document client-side using docx-preview. Wrapped in a
+  // white card so the dark page background doesn't fight the doc layout.
+  function renderDocxFromBlob(el, blob, name, src) {
+    return loadDocxLib()
+      .then(function (docxLib) {
         el.innerHTML = '';
         var wrap = document.createElement('div');
         wrap.className = 'pdfv-docx-wrap';
@@ -233,23 +242,22 @@
       })
       .catch(function (err) {
         console.error('[pdf-viewer] docx render failed:', err && (err.name + ': ' + err.message) || err);
-        el.innerHTML = errorHtml(src, name, err);
+        el.innerHTML = errorHtml(src || '', name, err);
       });
   }
 
-  function renderPdf(el, src, name, maxWidth) {
-    return loadPdfjs()
-      .then(function (lib) {
+  function renderPdfFromBlob(el, blob, name, maxWidth, src) {
+    return Promise.all([loadPdfjs(), blob.arrayBuffer()])
+      .then(function (parts) {
+        var lib = parts[0];
+        var data = parts[1];
         return lib.getDocument({
-          url: src,
-          withCredentials: true,
+          data: data,
           cMapUrl: PDFJS_CMAP_URL,
           cMapPacked: true,
           standardFontDataUrl: PDFJS_FONTS_URL,
-          disableRange: false,
           // XFA forms (used by some Word/Acrobat exports) need explicit opt-in
-          // in pdfjs 3.x, otherwise getDocument fails. Worth trying for SWMS
-          // PDFs since many traffic-control docs come out of Word.
+          // in pdfjs 3.x, otherwise getDocument fails.
           enableXfa: true,
         }).promise;
       })
@@ -259,9 +267,6 @@
         stack.className = 'pdfv-stack';
         el.appendChild(stack);
 
-        // Container width is fixed once at render time; if the viewport
-        // changes orientation we'd need to re-render. For now a simple
-        // resize listener triggers a re-render of all visible pages.
         var containerWidth = pageWidthPx(el, maxWidth);
 
         // Pre-build per-page wrappers with a placeholder so the scroll
@@ -292,8 +297,6 @@
             });
         }
 
-        // Render the first 2 pages immediately so the viewer feels instant.
-        // The rest render as the worker scrolls them into view.
         if (wraps[0]) ensureRendered(wraps[0]);
         if (wraps[1]) ensureRendered(wraps[1]);
 
@@ -305,14 +308,13 @@
           }, { rootMargin: '300px 0px' });
           wraps.forEach(function (w) { io.observe(w); });
         } else {
-          // No IO support — render everything upfront (rare on modern mobile).
           wraps.forEach(ensureRendered);
         }
       })
       .catch(function (err) {
-        console.error('[pdf-viewer] in-page load failed:', err && (err.name + ': ' + err.message) || err);
+        console.error('[pdf-viewer] pdf render failed:', err && (err.name + ': ' + err.message) || err);
         injectCss();
-        el.innerHTML = errorHtml(src, name, err);
+        el.innerHTML = errorHtml(src || '', name, err);
       });
   }
 
