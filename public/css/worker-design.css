@@ -71,6 +71,16 @@
      a "tech product" feel without making body text feel like a terminal. */
   --wd-font-sans:    'Inter', system-ui, -apple-system, sans-serif;
   --wd-font-display: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Status tone gradients: top-bright, bottom-dim wash so warning /
+     danger / success cards feel "lit from above" the same way iOS
+     notifications do. Layered over --wd-elev-1-grad on .wd-card. */
+  --wd-tone-amber-grad:   linear-gradient(180deg, rgba(245, 158, 11, 0.14) 0%, rgba(245, 158, 11, 0.04) 100%);
+  --wd-tone-rose-grad:    linear-gradient(180deg, rgba(244, 63, 94, 0.14)  0%, rgba(244, 63, 94, 0.04)  100%);
+  --wd-tone-emerald-grad: linear-gradient(180deg, rgba(16, 185, 129, 0.14) 0%, rgba(16, 185, 129, 0.04) 100%);
+  --wd-tone-violet-grad:  linear-gradient(180deg, rgba(139, 92, 246, 0.14) 0%, rgba(139, 92, 246, 0.04) 100%);
+  --wd-tone-blue-grad:    linear-gradient(180deg, rgba(43, 127, 255, 0.14) 0%, rgba(43, 127, 255, 0.04) 100%);
+  --wd-tone-teal-grad:    linear-gradient(180deg, rgba(0, 210, 190, 0.14)  0%, rgba(0, 210, 190, 0.04)  100%);
 }
 
 /* Display-number utility. Tabular numerals stop count-up animations
@@ -101,21 +111,37 @@
   color: var(--wd-text-base);
 }
 
+/* Status-toned cards: top-bright wash layered over the base elev gradient
+   so warnings / errors / successes read as "lit from above", not flat tints. */
 .wd-card[data-tone="accent"] {
   border-color: rgba(0, 210, 190, 0.30);
-  background-color: var(--wd-teal-bg);
+  background-color: transparent;
+  background-image: var(--wd-tone-teal-grad), var(--wd-elev-1-grad);
 }
 .wd-card[data-tone="warning"] {
   border-color: rgba(245, 158, 11, 0.30);
-  background-color: var(--wd-amber-bg);
+  background-color: transparent;
+  background-image: var(--wd-tone-amber-grad), var(--wd-elev-1-grad);
 }
 .wd-card[data-tone="success"] {
   border-color: rgba(16, 185, 129, 0.30);
-  background-color: var(--wd-emerald-bg);
+  background-color: transparent;
+  background-image: var(--wd-tone-emerald-grad), var(--wd-elev-1-grad);
 }
 .wd-card[data-tone="danger"] {
   border-color: rgba(244, 63, 94, 0.30);
-  background-color: var(--wd-rose-bg);
+  background-color: transparent;
+  background-image: var(--wd-tone-rose-grad), var(--wd-elev-1-grad);
+}
+.wd-card[data-tone="info"] {
+  border-color: rgba(139, 92, 246, 0.30);
+  background-color: transparent;
+  background-image: var(--wd-tone-violet-grad), var(--wd-elev-1-grad);
+}
+.wd-card[data-tone="neutral"] {
+  border-color: rgba(43, 127, 255, 0.30);
+  background-color: transparent;
+  background-image: var(--wd-tone-blue-grad), var(--wd-elev-1-grad);
 }
 
 .wd-card-title { font-size: 0.95rem; font-weight: 700; color: var(--wd-text-strong); line-height: 1.25; }
