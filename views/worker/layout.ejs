@@ -77,12 +77,14 @@
       z-index: 0; pointer-events: none;
       background-image: radial-gradient(70% 50% at 50% 25%, rgba(43,127,255,0.07), transparent 70%);
     }
-    /* Keep the rest of the page above the ambient layer. */
+    /* Keep header + main above the ambient layer's stacking context.
+       Do NOT touch nav or .wh-ptr — they already carry their own
+       position: fixed (Tailwind .fixed on nav, inline on .wh-ptr) and
+       forcing position: relative here broke the bottom nav's anchoring
+       on real phones, causing main's reserved padding-bottom to double
+       up with the now-in-flow nav. */
     body.worker-portal > header,
-    body.worker-portal > main,
-    body.worker-portal > nav,
-    body.worker-portal > .wh-ptr { position: relative; z-index: 1; }
-    body.worker-portal > nav { z-index: 50; }
+    body.worker-portal > main { position: relative; z-index: 1; }
     /* Custom pull-to-refresh indicator. Driven by /js/worker-pull-refresh.js
        which sets transform + opacity directly during the drag. The three
        state classes layer on top: default, .wh-ptr-armed (worker pulled
