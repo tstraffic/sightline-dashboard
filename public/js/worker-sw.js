@@ -1,12 +1,12 @@
 // Worker Portal — Service Worker (PWA + push)
-// v4: dropped the server-rendered PDF page cache (it didn't work on Railway).
-// Workers now render PDFs in-browser via /js/worker-pdf-viewer.js loading
-// the pdfjs-dist bundle from /vendor/pdfjs/. Those assets get their own
-// cache so they're available offline once seen.
-const CACHE_NAME = 'ts-worker-v4';
-const PDFJS_CACHE = 'ts-worker-pdfjs-v1';
+// v5: pdfjs path layout changed (now mounts the full pdfjs-dist tree, not
+// just legacy/build) so the prebuilt viewer + cmaps + standard_fonts are
+// reachable. Old v4 cache entries point at the wrong paths; v2 of the
+// dedicated pdfjs cache forces a fresh fetch.
+const CACHE_NAME = 'ts-worker-v5';
+const PDFJS_CACHE = 'ts-worker-pdfjs-v2';
 
-// /vendor/pdfjs/pdf.min.js and /pdf.worker.min.js
+// All pdfjs assets — bundle, worker, prebuilt viewer, cmaps, fonts.
 const PDFJS_RE = /^\/vendor\/pdfjs\//;
 
 // Install — cache core assets
@@ -24,8 +24,8 @@ self.addEventListener('install', function(event) {
   self.skipWaiting();
 });
 
-// Activate — clean up old caches but keep the dedicated pdfjs cache so the
-// viewer assets remain instant on next visit.
+// Activate — clean up old caches (including the prior pdfjs cache version
+// since the path layout shifted).
 self.addEventListener('activate', function(event) {
   event.waitUntil(
     caches.keys().then(function(names) {
