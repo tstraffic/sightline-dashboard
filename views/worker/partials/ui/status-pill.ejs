@@ -1,12 +1,7 @@
-<%# Worker UI primitive: status pill / chip.
-    Locals:
-      label    required, the text on the pill
-      kind     'teal'|'blue'|'amber'|'rose'|'emerald'|'violet'|'indigo'|'neutral'
-      dot      boolean — when true, render a small dot before the label
-    Usage:
-      <%- include('partials/ui/status-pill', { kind: 'amber', label: 'Expiring' }) %>
-      <%- include('partials/ui/status-pill', { kind: 'emerald', label: 'Confirmed', dot: true }) %>
+<%
+  // Worker UI primitive: status pill / chip.
+  // Locals: label (required), kind (8 colours, default 'neutral'), dot (boolean).
+  var _kind = typeof kind !== 'undefined' && kind ? kind : 'neutral';
+  var _dot = typeof dot !== 'undefined' && dot;
 %>
-<% var _kind = typeof kind !== 'undefined' && kind ? kind : 'neutral'; %>
-<% var _dot = typeof dot !== 'undefined' && dot; %>
 <span class="wd-status-pill" data-kind="<%= _kind %>"><% if (_dot) { %><span class="wd-status-dot"></span><% } %><%= label %></span>
