@@ -65,6 +65,26 @@
   --wd-spring: cubic-bezier(0.22, 1, 0.36, 1);
   --wd-tap-scale: 0.96;
   --wd-tap-duration: 140ms;
+
+  /* Typography. Inter for headings + body, JetBrains Mono for the big
+     numbers (stat counts, temperature, streak counters) — gives the UI
+     a "tech product" feel without making body text feel like a terminal. */
+  --wd-font-sans:    'Inter', system-ui, -apple-system, sans-serif;
+  --wd-font-display: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+/* Display-number utility. Tabular numerals stop count-up animations
+   from "wobbling" as digit widths change frame to frame. */
+.wd-num {
+  font-family: var(--wd-font-display);
+  font-feature-settings: "tnum" 1, "ss01" 1;
+  letter-spacing: -0.02em;
+}
+
+/* Emphasis weight inside paragraphs — sits between body 400 and bold 700. */
+.wd-emph {
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.95);
 }
 
 /* =========================================================================
@@ -131,13 +151,15 @@
   letter-spacing: 0.07em;
 }
 .wd-stat-tile-value {
+  font-family: var(--wd-font-display);
   font-size: 1.5rem;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--wd-text-strong);
   margin-top: 2px;
   letter-spacing: -0.02em;
   line-height: 1;
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "ss01" 1;
 }
 .wd-stat-tile-unit {
   font-size: 0.8rem;
