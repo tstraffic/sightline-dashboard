@@ -1,0 +1,235 @@
+<%
+  // Premium weather card for /w/home (PR 3 of the polish sprint).
+  // Locals: weather (the object from services/homeContext.js getWeather()).
+  //
+  // Each weather.kind maps to:
+  //   - a mesh-gradient palette (three overlapping radial gradients animated
+  //     via background-position) painted behind the content
+  //   - an animated inline SVG icon that loops independently — sun rotation,
+  //     drifting clouds, falling rain/snow/lightning
+  //
+  // Lottie-equivalent feel at <2KB total for the icons + ~1KB of CSS, no
+  // external bundle. The class .wc-card scopes everything so existing
+  // worker.css styles aren't disturbed.
+
+  var _kind = (weather && weather.kind) ? weather.kind : 'cloudy';
+%>
+<style>
+  .wc-card {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    border-radius: 16px;
+    padding: 16px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 24px rgba(0,0,0,0.30);
+  }
+  /* Mesh background — three overlapping radial gradients drifting against
+     each other for a soft animated wash. Each kind overrides the colours. */
+  .wc-card::before {
+    content: '';
+    position: absolute; inset: 0;
+    z-index: -2;
+    background:
+      radial-gradient(120% 80% at 0% 0%, var(--wc-a, rgba(43,127,255,0.45)), transparent 60%),
+      radial-gradient(120% 90% at 100% 100%, var(--wc-b, rgba(0,210,190,0.30)), transparent 55%),
+      radial-gradient(140% 100% at 50% 50%, var(--wc-c, rgba(10,22,40,0.30)), transparent 70%),
+      var(--wc-base, #0a1628);
+    background-size: 200% 200%, 200% 200%, 200% 200%, 100% 100%;
+    background-position: 0% 0%, 100% 100%, 50% 50%, 0 0;
+    animation: wc-mesh 18s ease-in-out infinite alternate;
+  }
+  @keyframes wc-mesh {
+    0%   { background-position: 0% 0%, 100% 100%, 50% 50%, 0 0; }
+    100% { background-position: 30% 20%, 70% 60%, 60% 40%, 0 0; }
+  }
+  /* Soft inner overlay to keep text legible on bright meshes. */
+  .wc-card::after {
+    content: '';
+    position: absolute; inset: 0;
+    z-index: -1;
+    background: linear-gradient(180deg, rgba(10,22,40,0) 30%, rgba(10,22,40,0.30) 100%);
+    pointer-events: none;
+  }
+
+  .wc-icon { width: 64px; height: 64px; flex-shrink: 0; }
+
+  .wc-temp-row { display: flex; align-items: baseline; gap: 6px; }
+  .wc-temp { font-size: 2.4rem; font-weight: 800; line-height: 1; letter-spacing: -0.02em; }
+  .wc-feels { font-size: 0.72rem; color: rgba(255,255,255,0.65); }
+
+  .wc-desc { font-size: 0.9rem; font-weight: 600; margin-top: 2px; text-transform: capitalize; }
+  .wc-sub { font-size: 0.7rem; color: rgba(255,255,255,0.65); margin-top: 4px; }
+  .wc-meta { flex: 1; min-width: 0; }
+
+  .wc-warn {
+    margin-top: 10px;
+    padding: 8px 10px;
+    background: rgba(245, 158, 11, 0.18);
+    border: 1px solid rgba(245, 158, 11, 0.40);
+    border-radius: 10px;
+    color: #fde68a;
+    font-size: 0.72rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Per-kind palettes. */
+  .wc-card[data-kind="sunny"]         { --wc-base: #0e3066; --wc-a: rgba(255,200,80,0.40); --wc-b: rgba(43,127,255,0.40); --wc-c: rgba(255,140,40,0.20); }
+  .wc-card[data-kind="partly-cloudy"] { --wc-base: #102b50; --wc-a: rgba(96,165,250,0.45); --wc-b: rgba(180,200,220,0.25); --wc-c: rgba(255,180,90,0.18); }
+  .wc-card[data-kind="cloudy"]        { --wc-base: #1f2b3d; --wc-a: rgba(148,163,184,0.45); --wc-b: rgba(100,116,139,0.40); --wc-c: rgba(71,85,105,0.30); }
+  .wc-card[data-kind="rainy"]         { --wc-base: #0c1c3a; --wc-a: rgba(43,127,255,0.50); --wc-b: rgba(99,102,241,0.35); --wc-c: rgba(20,30,55,0.50); }
+  .wc-card[data-kind="stormy"]        { --wc-base: #0a0f1f; --wc-a: rgba(99,102,241,0.55); --wc-b: rgba(167,139,250,0.30); --wc-c: rgba(245,158,11,0.20); }
+  .wc-card[data-kind="snow"]          { --wc-base: #1b2640; --wc-a: rgba(186,230,253,0.50); --wc-b: rgba(255,255,255,0.25); --wc-c: rgba(125,211,252,0.30); }
+  .wc-card[data-kind="fog"]           { --wc-base: #2c3142; --wc-a: rgba(203,213,225,0.40); --wc-b: rgba(148,163,184,0.30); --wc-c: rgba(100,116,139,0.25); }
+
+  /* Sun: rotating rays + steady core. */
+  .wc-sun-rays { transform-origin: 32px 32px; animation: wc-rotate 28s linear infinite; }
+  @keyframes wc-rotate { to { transform: rotate(360deg); } }
+
+  /* Drifting clouds: left-to-right slow loop. */
+  .wc-cloud { animation: wc-drift 9s ease-in-out infinite alternate; }
+  .wc-cloud-2 { animation-delay: -3s; animation-duration: 11s; }
+  @keyframes wc-drift {
+    0%   { transform: translateX(-3px) translateY(0); }
+    100% { transform: translateX(3px) translateY(-1px); }
+  }
+
+  /* Rain drops: falling at staggered times. */
+  .wc-drop { animation: wc-fall 1.4s linear infinite; opacity: 0; }
+  .wc-drop-2 { animation-delay: 0.35s; }
+  .wc-drop-3 { animation-delay: 0.7s; }
+  .wc-drop-4 { animation-delay: 1.05s; }
+  @keyframes wc-fall {
+    0%   { transform: translateY(-2px); opacity: 0; }
+    20%  { opacity: 1; }
+    100% { transform: translateY(20px); opacity: 0; }
+  }
+
+  /* Storm: lightning flash. */
+  .wc-bolt { animation: wc-flash 2.4s ease-in-out infinite; transform-origin: 32px 36px; }
+  @keyframes wc-flash {
+    0%, 60%, 100% { opacity: 0.95; filter: drop-shadow(0 0 0 transparent); }
+    65% { opacity: 1; filter: drop-shadow(0 0 6px #fde68a); }
+    70% { opacity: 0.4; }
+    75% { opacity: 1; filter: drop-shadow(0 0 6px #fde68a); }
+    80% { opacity: 0.7; }
+  }
+
+  /* Snowflakes: falling + gentle sway. */
+  .wc-flake { animation: wc-snow 3s linear infinite; opacity: 0; }
+  .wc-flake-2 { animation-delay: 0.8s; animation-duration: 3.6s; }
+  .wc-flake-3 { animation-delay: 1.6s; animation-duration: 2.6s; }
+  @keyframes wc-snow {
+    0%   { transform: translate(0,-2px) rotate(0deg); opacity: 0; }
+    15%  { opacity: 1; }
+    100% { transform: translate(4px, 22px) rotate(120deg); opacity: 0; }
+  }
+
+  /* Fog: drifting horizontal bands. */
+  .wc-band { animation: wc-band 8s ease-in-out infinite alternate; }
+  .wc-band-2 { animation-delay: -2s; animation-duration: 10s; }
+  @keyframes wc-band {
+    0%   { transform: translateX(-4px); }
+    100% { transform: translateX(4px); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wc-card::before { animation: none; }
+    .wc-sun-rays, .wc-cloud, .wc-drop, .wc-bolt, .wc-flake, .wc-band { animation: none; }
+  }
+</style>
+
+<div class="wc-card" data-kind="<%= _kind %>">
+  <%# Icon — distinct SVG per kind. All paint white-ish so they read on any palette. %>
+  <% if (_kind === 'sunny') { %>
+    <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <g class="wc-sun-rays" stroke="#fde68a" stroke-width="2.4" stroke-linecap="round">
+        <line x1="32" y1="6"  x2="32" y2="14"/>
+        <line x1="32" y1="50" x2="32" y2="58"/>
+        <line x1="6"  y1="32" x2="14" y2="32"/>
+        <line x1="50" y1="32" x2="58" y2="32"/>
+        <line x1="13" y1="13" x2="19" y2="19"/>
+        <line x1="45" y1="45" x2="51" y2="51"/>
+        <line x1="51" y1="13" x2="45" y2="19"/>
+        <line x1="19" y1="45" x2="13" y2="51"/>
+      </g>
+      <circle cx="32" cy="32" r="11" fill="#fbbf24" stroke="#fde68a" stroke-width="1.4"/>
+    </svg>
+  <% } else if (_kind === 'partly-cloudy') { %>
+    <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <circle cx="22" cy="22" r="9" fill="#fbbf24" stroke="#fde68a" stroke-width="1.4"/>
+      <g class="wc-cloud">
+        <path d="M22 42c-4 0-7-3-7-7 0-3 2-6 5-6 1-4 5-7 9-7 5 0 9 4 9 9h2c4 0 7 3 7 7s-3 7-7 7H22z" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="1.4"/>
+      </g>
+    </svg>
+  <% } else if (_kind === 'cloudy') { %>
+    <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <g class="wc-cloud-2">
+        <path d="M15 26c1-3 4-5 7-5 1-4 5-7 9-7 5 0 9 4 9 9h2c4 0 7 3 7 7s-3 7-7 7H15c-4 0-7-3-7-7s3-7 7-4z" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.4"/>
+      </g>
+      <g class="wc-cloud" style="transform: translate(8px, 6px) scale(0.7); transform-origin: 0 0;">
+        <path d="M15 26c1-3 4-5 7-5 1-4 5-7 9-7 5 0 9 4 9 9h2c4 0 7 3 7 7s-3 7-7 7H15c-4 0-7-3-7-7s3-7 7-4z" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="1.4" opacity="0.85"/>
+      </g>
+    </svg>
+  <% } else if (_kind === 'rainy') { %>
+    <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <path d="M15 26c1-3 4-5 7-5 1-4 5-7 9-7 5 0 9 4 9 9h2c4 0 7 3 7 7s-3 7-7 7H15c-4 0-7-3-7-7s3-7 7-4z" fill="#cbd5e1" stroke="#94a3b8" stroke-width="1.4"/>
+      <g stroke="#60a5fa" stroke-width="2.4" stroke-linecap="round">
+        <line class="wc-drop"   x1="20" y1="42" x2="20" y2="50"/>
+        <line class="wc-drop wc-drop-2" x1="28" y1="42" x2="28" y2="50"/>
+        <line class="wc-drop wc-drop-3" x1="36" y1="42" x2="36" y2="50"/>
+        <line class="wc-drop wc-drop-4" x1="44" y1="42" x2="44" y2="50"/>
+      </g>
+    </svg>
+  <% } else if (_kind === 'stormy') { %>
+    <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <path d="M15 24c1-3 4-5 7-5 1-4 5-7 9-7 5 0 9 4 9 9h2c4 0 7 3 7 7s-3 7-7 7H15c-4 0-7-3-7-7s3-7 7-4z" fill="#475569" stroke="#334155" stroke-width="1.4"/>
+      <g class="wc-bolt">
+        <path d="M34 32 L24 46 L31 46 L28 56 L40 40 L33 40 L36 32 Z" fill="#facc15" stroke="#fde68a" stroke-width="1.4"/>
+      </g>
+    </svg>
+  <% } else if (_kind === 'snow') { %>
+    <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <path d="M15 26c1-3 4-5 7-5 1-4 5-7 9-7 5 0 9 4 9 9h2c4 0 7 3 7 7s-3 7-7 7H15c-4 0-7-3-7-7s3-7 7-4z" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="1.4"/>
+      <g fill="#bae6fd">
+        <circle class="wc-flake"   cx="22" cy="46" r="2.2"/>
+        <circle class="wc-flake wc-flake-2" cx="32" cy="46" r="2.2"/>
+        <circle class="wc-flake wc-flake-3" cx="42" cy="46" r="2.2"/>
+      </g>
+    </svg>
+  <% } else { /* fog */ %>
+    <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <g stroke="#cbd5e1" stroke-width="3" stroke-linecap="round">
+        <line class="wc-band"   x1="14" y1="24" x2="50" y2="24"/>
+        <line class="wc-band-2" x1="10" y1="34" x2="54" y2="34"/>
+        <line class="wc-band"   x1="14" y1="44" x2="50" y2="44"/>
+      </g>
+    </svg>
+  <% } %>
+
+  <div class="wc-meta">
+    <div class="wc-temp-row">
+      <span class="wc-temp"><%= weather.temp %>°</span>
+      <span class="wc-feels">feels <%= weather.feels_like %>°</span>
+    </div>
+    <p class="wc-desc"><%= weather.description %></p>
+    <p class="wc-sub">
+      <% if (weather.hi != null && weather.lo != null) { %>H <%= weather.hi %>° · L <%= weather.lo %>° · <% } %>
+      Wind <%= weather.wind_kmh %> km/h<% if (weather.rain_chance) { %> · <%= weather.rain_chance %>% rain<% } %><% if (weather.uv != null) { %> · UV <%= weather.uv %><% } %>
+    </p>
+  </div>
+</div>
+
+<% if (weather.rain_chance && weather.rain_chance >= 40) { %>
+  <div class="wc-warn">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999A5.002 5.002 0 006.1 8H6a4 4 0 00-3 7zm8 2v-4m0 0v-2"/></svg>
+    Wet weather PPE recommended — chance of rain above 40%
+  </div>
+<% } %>
