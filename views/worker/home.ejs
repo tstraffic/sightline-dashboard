@@ -84,7 +84,7 @@
     border-radius: 12px; padding: 10px 12px; position: relative;
   }
   .wh-stat-label { font-size: 0.625rem; font-weight: 700; color: rgba(255,255,255,0.45); text-transform: uppercase; letter-spacing: 0.07em; }
-  .wh-stat-value { font-size: 1.5rem; font-weight: 800; color: #fff; margin-top: 2px; letter-spacing: -0.02em; line-height: 1; }
+  .wh-stat-value { font-family: var(--wd-font-display, 'JetBrains Mono', ui-monospace, monospace); font-size: 1.5rem; font-weight: 700; color: #fff; margin-top: 2px; letter-spacing: -0.02em; line-height: 1; font-feature-settings: "tnum" 1, "ss01" 1; }
   .wh-stat-unit { font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.45); margin-left: 3px; }
   .wh-stat-sub { font-size: 0.65rem; color: rgba(255,255,255,0.4); margin-top: 4px; }
   .wh-stat-ico { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
@@ -141,7 +141,7 @@
   .wh-streak-ic.blue { background: rgba(43,127,255,0.18); color: #60A5FA; }
   .wh-streak-ic.purple { background: rgba(167,139,250,0.18); color: #A78BFA; }
   .wh-streak-ic.amber { background: rgba(245,158,11,0.18); color: #F59E0B; }
-  .wh-streak-value { font-size: 1.35rem; font-weight: 800; color: #fff; margin-top: 4px; letter-spacing: -0.02em; }
+  .wh-streak-value { font-family: var(--wd-font-display, 'JetBrains Mono', ui-monospace, monospace); font-size: 1.35rem; font-weight: 700; color: #fff; margin-top: 4px; letter-spacing: -0.02em; font-feature-settings: "tnum" 1, "ss01" 1; }
   .wh-streak-unit { font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,0.4); margin-left: 2px; }
   .wh-streak-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(255,255,255,0.08); overflow: hidden; }
   .wh-streak-bar-fill { height: 100%; background: currentColor; transition: width 0.8s ease-out; }
@@ -151,7 +151,7 @@
   .wh-wday { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 10px; padding: 8px 2px 6px; text-align: center; color: rgba(255,255,255,0.6); }
   .wh-wday.today { box-shadow: 0 0 0 1.5px #F59E0B; color: #F59E0B; background: rgba(245,158,11,0.08); }
   .wh-wday-letter { font-size: 0.625rem; font-weight: 700; letter-spacing: 0.04em; opacity: 0.65; }
-  .wh-wday-num { font-size: 0.95rem; font-weight: 700; margin-top: 1px; line-height: 1.1; color: #fff; }
+  .wh-wday-num { font-family: var(--wd-font-display, 'JetBrains Mono', ui-monospace, monospace); font-size: 0.9rem; font-weight: 700; margin-top: 1px; line-height: 1.1; color: #fff; font-feature-settings: "tnum" 1; }
   .wh-wday.past .wh-wday-num { opacity: 0.45; }
   .wh-wday-pill { display: inline-block; height: 4px; width: 20px; border-radius: 2px; margin-top: 4px; background: rgba(255,255,255,0.08); }
   .wh-wday.has-shift .wh-wday-pill { background: #00D2BE; }
@@ -533,7 +533,7 @@
 <% if (section === 'compliance' && !hidden.includes('compliance') && compliance && (!compliance.canAllocate || compliance.fatigueBlocked || (compliance.expiringItems && compliance.expiringItems.length > 0) || (compliance.expiredItems && compliance.expiredItems.length > 0))) { %>
   <div class="wh-section-head"><span class="wh-section-title">Heads up</span></div>
   <div class="wh-alert" data-attention="rose">
-    <h4>Compliance needs attention</h4>
+    <h4 class="wd-emph">Compliance needs attention</h4>
     <ul class="list-disc pl-5">
       <% if (compliance.fatigueBlocked) { %><li>Fatigue limit reached (<%= compliance.daysWorked %>/7 days worked)</li><% } %>
       <% if (compliance.expiredItems && compliance.expiredItems.length > 0) { %><li>Expired: <%= compliance.expiredItems.join(', ') %></li><% } %>
