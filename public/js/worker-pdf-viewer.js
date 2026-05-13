@@ -35,6 +35,10 @@
   // glyph mapping.
   var PDFJS_CMAP_URL = '/vendor/pdfjs/cmaps/';
   var PDFJS_FONTS_URL = '/vendor/pdfjs/standard_fonts/';
+  // docx-preview (UMD) and its jszip dependency. Used when the file
+  // extension is .doc/.docx — iOS Safari and pdfjs can't render Word docs.
+  var DOCX_LIB_URL = '/vendor/docx-preview/docx-preview.min.js';
+  var JSZIP_LIB_URL = '/vendor/jszip/jszip.min.js';
 
   var cssInjected = false;
   function injectCss() {
@@ -54,28 +58,58 @@
       '.pdfv-error { padding: 20px 16px; border-radius: 12px; background: rgba(244,63,94,0.10); border: 1px solid rgba(244,63,94,0.25); color: #fda4af; font-size: 0.85rem; text-align: center; }',
       '.pdfv-error a { color: #93C5FD; font-weight: 600; text-decoration: underline; display: inline-block; margin-top: 8px; }',
       '.pdfv-error .pdfv-err-detail { display: block; margin-top: 6px; color: rgba(253,164,175,0.7); font-size: 0.72rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; }',
+      /* docx-preview renders Word documents into a white card so the dark
+         page background doesnt fight the doc layout. Override the librarys
+         default styles to keep things consistent on mobile. */
+      '.pdfv-docx-wrap { background: #fff; color: #111; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); padding: 4px; overflow: hidden; }',
+      '.pdfv-docx-wrap .docx-wrapper { background: transparent !important; padding: 0 !important; margin: 0 !important; }',
+      '.pdfv-docx-wrap .docx-wrapper > section.docx { box-shadow: none !important; margin: 0 0 8px !important; max-width: 100% !important; width: auto !important; }',
+      '.pdfv-docx-wrap .docx { width: 100% !important; min-height: auto !important; }',
+      '.pdfv-docx-wrap img { max-width: 100% !important; height: auto !important; }',
     ].join('\n');
     document.head.appendChild(style);
   }
 
-  // Cache the script load promise so we don't re-inject on subsequent viewers.
-  var libPromise = null;
-  function loadLib() {
-    if (window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
-    if (libPromise) return libPromise;
-    libPromise = new Promise(function (resolve, reject) {
+  // Generic UMD script loader — promise-cached so multiple viewers don't
+  // reinject the same <script>.
+  var scriptPromises = {};
+  function loadScript(url) {
+    if (scriptPromises[url]) return scriptPromises[url];
+    scriptPromises[url] = new Promise(function (resolve, reject) {
       var s = document.createElement('script');
-      s.src = PDFJS_LIB_URL;
-      s.onload = function () {
-        var lib = window.pdfjsLib;
-        if (!lib) { reject(new Error('pdfjsLib not defined after load')); return; }
-        try { lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL; } catch (e) { /* non-fatal */ }
-        resolve(lib);
-      };
-      s.onerror = function () { libPromise = null; reject(new Error('Failed to load ' + PDFJS_LIB_URL)); };
+      s.src = url;
+      s.onload = function () { resolve(); };
+      s.onerror = function () { delete scriptPromises[url]; reject(new Error('Failed to load ' + url)); };
       document.head.appendChild(s);
     });
-    return libPromise;
+    return scriptPromises[url];
+  }
+
+  function loadPdfjs() {
+    if (window.pdfjsLib) {
+      try { window.pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL; } catch (e) {}
+      return Promise.resolve(window.pdfjsLib);
+    }
+    return loadScript(PDFJS_LIB_URL).then(function () {
+      var lib = window.pdfjsLib;
+      if (!lib) throw new Error('pdfjsLib not defined after load');
+      try { lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_URL; } catch (e) {}
+      return lib;
+    });
+  }
+
+  function loadDocxLib() {
+    // docx-preview needs JSZip available globally first.
+    return loadScript(JSZIP_LIB_URL)
+      .then(function () { return loadScript(DOCX_LIB_URL); })
+      .then(function () {
+        // docx-preview UMD exports onto window.docx in v0.3.x.
+        var d = window.docx || window['docx-preview'] || null;
+        if (!d || typeof d.renderAsync !== 'function') {
+          throw new Error('docx-preview not available on window after load');
+        }
+        return d;
+      });
   }
 
   function loadingHtml() {
@@ -145,6 +179,9 @@
     });
   }
 
+  // Dispatch entry — picks the renderer based on the original filename
+  // extension. Word docs use docx-preview (client-side); everything else
+  // (PDFs, plus whatever the server falls back to) uses pdfjs.
   function initOne(el) {
     if (el._pdfvInitialised) return;
     el._pdfvInitialised = true;
@@ -152,11 +189,56 @@
     if (!src) return;
     var maxWidth = parseInt(el.getAttribute('data-pdf-max-width') || '0', 10) || 0;
     var name = safeName(el, src);
+    var ext = (name.match(/\.([^.]+)$/) || ['', ''])[1].toLowerCase();
 
     injectCss();
     el.innerHTML = loadingHtml();
 
-    loadLib()
+    if (ext === 'docx' || ext === 'doc') {
+      return renderDocx(el, src, name);
+    }
+    return renderPdf(el, src, name, maxWidth);
+  }
+
+  // Render a Word document client-side using docx-preview. The library
+  // outputs HTML into the container; we wrap it in a white card so the
+  // dark page background doesn't clash with the doc layout.
+  function renderDocx(el, src, name) {
+    return Promise.all([
+      loadDocxLib(),
+      fetch(src, { credentials: 'same-origin' }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status + ' fetching document');
+        return r.blob();
+      }),
+    ])
+      .then(function (parts) {
+        var docxLib = parts[0];
+        var blob = parts[1];
+        el.innerHTML = '';
+        var wrap = document.createElement('div');
+        wrap.className = 'pdfv-docx-wrap';
+        var content = document.createElement('div');
+        var styles = document.createElement('div');
+        styles.style.display = 'none';
+        wrap.appendChild(content);
+        el.appendChild(wrap);
+        el.appendChild(styles);
+        return docxLib.renderAsync(blob, content, styles, {
+          className: 'docx',
+          inWrapper: true,
+          ignoreLastRenderedPageBreak: false,
+          experimental: false,
+          breakPages: true,
+        });
+      })
+      .catch(function (err) {
+        console.error('[pdf-viewer] docx render failed:', err && (err.name + ': ' + err.message) || err);
+        el.innerHTML = errorHtml(src, name, err);
+      });
+  }
+
+  function renderPdf(el, src, name, maxWidth) {
+    return loadPdfjs()
       .then(function (lib) {
         return lib.getDocument({
           url: src,
