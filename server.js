@@ -50,6 +50,15 @@ app.use(express.urlencoded({ extended: true, limit: '10mb', parameterLimit: 1000
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/data/uploads', express.static(path.join(__dirname, 'data', 'uploads')));
+// Serve PDF.js client bundle from node_modules so the worker portal can
+// render PDFs inline without a CDN dependency. Node-canvas (the server-side
+// renderer) doesn't build on Railway's default Nixpacks; rendering in the
+// browser sidesteps that entirely. Public — no auth on the static assets;
+// the PDFs themselves are still served via auth-gated routes.
+app.use('/vendor/pdfjs', express.static(path.join(__dirname, 'node_modules', 'pdfjs-dist', 'legacy', 'build'), {
+  maxAge: '30d',
+  immutable: true,
+}));
 
 // Prevent caching of HTML pages so service worker always gets fresh content
 app.use((req, res, next) => {

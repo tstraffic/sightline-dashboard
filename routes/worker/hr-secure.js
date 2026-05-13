@@ -13,7 +13,6 @@ const { logActivity } = require('../../middleware/audit');
 const { requirePinConfirm } = require('../../middleware/pinRateLimit');
 const { generateTfnPdf } = require('../../services/tfnPdf');
 const { notifyUsers } = (() => { try { return require('../../middleware/notifications'); } catch (e) { return { notifyUsers: () => {} }; } })();
-const pdfCache = require('../../lib/safety-pdf-cache');
 
 const UPLOAD_BASE = path.join(__dirname, '..', '..', 'data', 'uploads', 'hr');
 
@@ -250,36 +249,11 @@ function validateTfnChecksum(tfn) {
   return sum % 11 === 0;
 }
 
-// Resolve a stored pdf_url (e.g. "/data/uploads/hr/emp_3/tfn/x.pdf") to an
-// absolute path on disk. Returns null if the file doesn't exist.
-function resolveTfnPdfAbs(pdfUrl) {
-  if (!pdfUrl) return null;
-  const clean = String(pdfUrl).replace(/^\/+/, '');
-  const abs = path.join(__dirname, '..', '..', clean);
-  return fs.existsSync(abs) ? abs : null;
-}
-
 router.get('/hr/tfn', (req, res) => {
   const employee = loadEmployee(req.session.worker);
   if (!employee) return res.redirect('/w/hr');
   const db = getDb();
   const current = db.prepare('SELECT id, tfn_last3, residency_status, claim_threshold, has_help_debt, has_stsl_debt, medicare_variation, status, submitted_at, pdf_url FROM tfn_declarations WHERE employee_id = ? ORDER BY id DESC LIMIT 1').get(employee.id);
-
-  // Render the TFN PDF to PNG pages for inline display (mobile Safari /
-  // PWAs can't scroll inside an <iframe src=".pdf">).
-  let pageCount = 0;
-  let cacheKey = '';
-  let renderablePdf = false;
-  if (current && current.pdf_url) {
-    const abs = resolveTfnPdfAbs(current.pdf_url);
-    if (abs) {
-      renderablePdf = true;
-      cacheKey = pdfCache.fileStatHash(abs);
-      pdfCache.ensureRendered({ scope: 'hr_tfn', id: current.id, cacheKey, absPdfPath: abs })
-        .catch(e => console.error('[w/hr] tfn render error:', e.message));
-      pageCount = pdfCache.snapshot({ scope: 'hr_tfn', id: current.id, cacheKey }).count;
-    }
-  }
 
   logActivity({
     user: workerForAudit(req.session.worker),
@@ -294,48 +268,9 @@ router.get('/hr/tfn', (req, res) => {
     currentPage: 'more',
     employee,
     current,
-    pageCount, cacheKey, renderablePdf,
     flash_success: req.flash('success'),
     flash_error: req.flash('error'),
   });
-});
-
-// GET /w/hr/tfn/:declarationId/pages — JSON status for the inline viewer poll.
-router.get('/hr/tfn/:declarationId/pages', (req, res) => {
-  const employee = loadEmployee(req.session.worker);
-  if (!employee) return res.status(403).json({ error: 'no employee' });
-  const db = getDb();
-  const decl = db.prepare('SELECT id, pdf_url FROM tfn_declarations WHERE id = ? AND employee_id = ?').get(req.params.declarationId, employee.id);
-  if (!decl) return res.status(404).json({ error: 'not found' });
-  if (!decl.pdf_url) return res.json({ renderable: false, ready: false, count: 0 });
-  const abs = resolveTfnPdfAbs(decl.pdf_url);
-  if (!abs) return res.json({ renderable: true, ready: false, count: 0, error: 'file missing' });
-  const cacheKey = pdfCache.fileStatHash(abs);
-  const snap = pdfCache.snapshot({ scope: 'hr_tfn', id: decl.id, cacheKey });
-  if (snap.ready) return res.json({ renderable: true, ready: true, count: snap.count, version: cacheKey });
-  pdfCache.ensureRendered({ scope: 'hr_tfn', id: decl.id, cacheKey, absPdfPath: abs })
-    .catch(e => console.error('[w/hr] tfn pages render error:', e.message));
-  return res.json({ renderable: true, ready: false, count: 0, version: cacheKey });
-});
-
-// GET /w/hr/tfn/:declarationId/pages/:n.png — single PNG page (worker owns it).
-router.get('/hr/tfn/:declarationId/pages/:n.png', (req, res) => {
-  const employee = loadEmployee(req.session.worker);
-  if (!employee) return res.status(403).send('no employee');
-  const db = getDb();
-  const decl = db.prepare('SELECT id, pdf_url FROM tfn_declarations WHERE id = ? AND employee_id = ?').get(req.params.declarationId, employee.id);
-  if (!decl || !decl.pdf_url) return res.status(404).send('not found');
-  const abs = resolveTfnPdfAbs(decl.pdf_url);
-  if (!abs) return res.status(404).send('file missing');
-  const n = parseInt(req.params.n, 10);
-  if (!n || n < 1 || n > 1000) return res.status(400).send('bad page');
-  const cacheKey = pdfCache.fileStatHash(abs);
-  const pngPath = pdfCache.getPagePath('hr_tfn', decl.id, cacheKey, n);
-  if (!fs.existsSync(pngPath)) return res.status(404).send('page not ready');
-  res.setHeader('Content-Type', 'image/png');
-  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
-  res.setHeader('ETag', '"' + String(cacheKey || '0').slice(0, 32) + '-' + n + '"');
-  return res.sendFile(pngPath);
 });
 
 router.post('/hr/tfn', requirePinConfirm('tfn'), async (req, res) => {
