@@ -101,9 +101,16 @@
         redirect: 'follow',
       }), TIMEOUT_MS).then(function (res) {
         if (res.ok || res.redirected || res.status === 302 || res.status === 303) {
-          if (window.WorkerHaptics) window.WorkerHaptics.success();
           var dest = res.redirected ? res.url : successUrl;
-          window.location.assign(dest);
+          // Full-screen success overlay (haptic fires inside show()),
+          // then navigate. Falls back to plain redirect if the overlay
+          // controller isn't loaded yet (e.g. layout-bare views).
+          if (window.WorkerSubmitSuccess) {
+            window.WorkerSubmitSuccess.show({ redirect: dest });
+          } else {
+            if (window.WorkerHaptics) window.WorkerHaptics.success();
+            window.location.assign(dest);
+          }
           return;
         }
         // Server-side rejection — surface the response normally so the
@@ -125,6 +132,8 @@
           .then(function () {
             if (window.WorkerHaptics) window.WorkerHaptics.warning();
             toast("Saved offline — we'll submit it when you're back online.", 'success');
+            // Don't show the success overlay for the queued path —
+            // the worker hasn't actually submitted yet. Toast + redirect.
             setTimeout(function () { window.location.assign(successUrl); }, 800);
           })
           .catch(function (e) {

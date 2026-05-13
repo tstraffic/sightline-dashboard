@@ -1,0 +1,100 @@
+<%
+  // Full-screen submit-success overlay. Hidden by default; un-hidden by
+  // WorkerSubmitSuccess.show() (worker-submit-success.js) which also
+  // strokes the checkmark and fires the success haptic.
+%>
+<style>
+  .wss-overlay {
+    position: fixed; inset: 0;
+    z-index: 200;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10, 22, 40, 0.92);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    opacity: 0;
+    transition: opacity 200ms ease;
+  }
+  .wss-overlay.is-visible { display: flex; opacity: 1; }
+  .wss-overlay.is-leaving { opacity: 0; }
+
+  .wss-card {
+    display: flex; flex-direction: column; align-items: center; gap: 18px;
+    padding: 36px 32px;
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+    transform: scale(0.92);
+    transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .wss-overlay.is-visible .wss-card { transform: scale(1); }
+
+  .wss-circle {
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    background: rgba(16, 185, 129, 0.12);
+    border: 2px solid rgba(16, 185, 129, 0.4);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4);
+    animation: wss-pulse 1.2s ease-out forwards;
+  }
+  @keyframes wss-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+    70%  { box-shadow: 0 0 0 24px rgba(16, 185, 129, 0); }
+    100% { box-shadow: 0 0 0 24px rgba(16, 185, 129, 0); }
+  }
+
+  .wss-check {
+    width: 56px; height: 56px;
+    stroke: #10b981;
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+    fill: none;
+  }
+  .wss-check path {
+    stroke-dasharray: 60;
+    stroke-dashoffset: 60;
+  }
+  .wss-overlay.is-visible .wss-check path {
+    animation: wss-draw 420ms cubic-bezier(0.65, 0, 0.45, 1) 120ms forwards;
+  }
+  @keyframes wss-draw { to { stroke-dashoffset: 0; } }
+
+  .wss-msg {
+    color: #fff;
+    font-size: 1rem;
+    font-weight: 700;
+    text-align: center;
+  }
+  .wss-sub {
+    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.8rem;
+    font-weight: 500;
+    text-align: center;
+    margin-top: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .wss-overlay { transition: opacity 100ms linear; }
+    .wss-card { transition: none; transform: none; }
+    .wss-circle { animation: none; }
+    .wss-overlay.is-visible .wss-check path { animation: none; stroke-dashoffset: 0; }
+  }
+</style>
+
+<div id="wss-overlay" class="wss-overlay" aria-hidden="true" role="status">
+  <div class="wss-card">
+    <div class="wss-circle">
+      <svg class="wss-check" viewBox="0 0 60 60" aria-hidden="true">
+        <path d="M14 31 L26 43 L46 19"/>
+      </svg>
+    </div>
+    <div>
+      <p class="wss-msg" id="wss-msg">Submitted</p>
+      <p class="wss-sub" id="wss-sub">Thanks — that's on file.</p>
+    </div>
+  </div>
+</div>
