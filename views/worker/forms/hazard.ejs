@@ -5,7 +5,7 @@
   </a>
   <h1 class="text-xl font-bold text-gray-900">Report Hazard</h1>
 
-  <form method="POST" action="/w/forms/hazard" class="space-y-4">
+  <form method="POST" action="/w/forms/hazard" data-offline-form data-offline-scope="hazard" data-success-url="/w/forms" class="space-y-4">
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
     <input type="hidden" name="latitude" id="lat">
     <input type="hidden" name="longitude" id="lng">

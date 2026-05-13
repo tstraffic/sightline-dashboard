@@ -5,7 +5,7 @@
   </a>
   <h1 class="text-xl font-bold text-gray-900">Pre-Start Checklist</h1>
 
-  <form method="POST" action="/w/forms/prestart" class="space-y-4">
+  <form method="POST" action="/w/forms/prestart" data-offline-form data-offline-scope="prestart" data-success-url="/w/forms" class="space-y-4">
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
     <input type="hidden" name="latitude" id="lat">
     <input type="hidden" name="longitude" id="lng">

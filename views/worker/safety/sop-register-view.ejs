@@ -47,7 +47,7 @@
 
   <% if (showAckBar) { %>
     <div class="pv-actionbar">
-      <form method="POST" action="/w/safety/sop-register/<%= sop.id %>/acknowledge">
+      <form method="POST" action="/w/safety/sop-register/<%= sop.id %>/acknowledge" data-offline-form data-offline-scope="SOP acknowledgement" data-success-url="/w/safety/sop-register/<%= sop.id %>">
         <%- include('../../partials/csrf') %>
         <button type="submit" class="pv-ack-btn">I have read and understood this SOP</button>
       </form>
