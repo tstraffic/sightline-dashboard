@@ -5,7 +5,7 @@
   </a>
   <h1 class="text-xl font-bold text-gray-900">Take 5 Safety Check</h1>
 
-  <form method="POST" action="/w/forms/take5" class="space-y-4">
+  <form method="POST" action="/w/forms/take5" data-offline-form data-offline-scope="take5" data-success-url="/w/forms" class="space-y-4">
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
 
     <% if (todaysShifts.length > 0) { %>

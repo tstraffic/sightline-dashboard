@@ -58,7 +58,7 @@
 
   <% if (showAckBar) { %>
     <div class="pv-actionbar">
-      <form method="POST" action="/w/safety/swms/<%= swms.id %>/acknowledge">
+      <form method="POST" action="/w/safety/swms/<%= swms.id %>/acknowledge" data-offline-form data-offline-scope="SWMS acknowledgement" data-success-url="/w/safety/swms/<%= swms.id %>">
         <%- include('../../partials/csrf') %>
         <button type="submit" class="pv-ack-btn">I have read and understood this SWMS</button>
       </form>

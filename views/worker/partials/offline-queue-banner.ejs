@@ -1,0 +1,110 @@
+<%# Offline-queue banner: shows when worker-offline-queue.js has pending
+    submissions that haven't been sent yet. Mounted once on every worker
+    page via worker/layout.ejs. The script renders nothing until the
+    queue is non-empty, so this is invisible by default. %>
+<div id="wq-banner" class="wq-banner" hidden>
+  <button type="button" class="wq-banner-chip" id="wq-banner-chip">
+    <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1015.59-6.36L17 7m4-4v6h-6m1 12a9 9 0 01-15.59-6.36L7 17m-4 4v-6h6"/></svg>
+    <span id="wq-banner-count">0</span> pending
+  </button>
+  <div class="wq-banner-drawer" id="wq-banner-drawer" hidden>
+    <div class="wq-banner-title">Waiting to submit</div>
+    <ul class="wq-banner-list" id="wq-banner-list"></ul>
+    <button type="button" class="wq-banner-retry" id="wq-banner-retry">Retry now</button>
+  </div>
+</div>
+
+<style>
+  .wq-banner {
+    position: fixed; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px));
+    z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+  }
+  .wq-banner-chip {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(245,158,11,0.35);
+    background: rgba(10,22,40,0.96); color: #FCD34D;
+    font-size: 0.75rem; font-weight: 700; cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.4);
+  }
+  .wq-banner-chip:active { background: rgba(245,158,11,0.12); }
+  .wq-banner-drawer {
+    width: min(86vw, 320px);
+    padding: 12px; border-radius: 12px;
+    background: rgba(10,22,40,0.98); border: 1px solid rgba(255,255,255,0.1);
+    color: #fff; font-size: 0.8rem;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  }
+  .wq-banner-title { font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+  .wq-banner-list { margin: 0 0 8px; padding: 0; list-style: none; max-height: 220px; overflow-y: auto; }
+  .wq-banner-list li { padding: 6px 0; border-top: 1px solid rgba(255,255,255,0.06); display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+  .wq-banner-list li:first-child { border-top: 0; }
+  .wq-banner-list .scope { font-weight: 600; color: #fff; text-transform: capitalize; }
+  .wq-banner-list .err { color: #FCA5A5; font-size: 0.7rem; }
+  .wq-banner-list .age { color: rgba(255,255,255,0.45); font-size: 0.7rem; font-variant-numeric: tabular-nums; }
+  .wq-banner-retry {
+    width: 100%; padding: 8px; border-radius: 8px; border: 0;
+    background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
+    font-size: 0.78rem; font-weight: 700; cursor: pointer;
+  }
+  .wq-banner-retry:active { transform: translateY(1px); }
+</style>
+
+<script>
+(function () {
+  var banner = document.getElementById('wq-banner');
+  var chip = document.getElementById('wq-banner-chip');
+  var countEl = document.getElementById('wq-banner-count');
+  var drawer = document.getElementById('wq-banner-drawer');
+  var list = document.getElementById('wq-banner-list');
+  var retry = document.getElementById('wq-banner-retry');
+
+  function fmtAge(ms) {
+    var s = Math.round((Date.now() - ms) / 1000);
+    if (s < 60) return s + 's';
+    var m = Math.round(s / 60);
+    if (m < 60) return m + 'm';
+    var h = Math.round(m / 60);
+    return h + 'h';
+  }
+
+  function refresh() {
+    if (!window.WorkerOfflineQueue) { banner.hidden = true; return; }
+    window.WorkerOfflineQueue.listPending().then(function (rows) {
+      if (!rows.length) { banner.hidden = true; drawer.hidden = true; return; }
+      banner.hidden = false;
+      countEl.textContent = String(rows.length);
+      while (list.firstChild) list.removeChild(list.firstChild);
+      rows.forEach(function (r) {
+        var li = document.createElement('li');
+        var lbl = document.createElement('span');
+        lbl.className = 'scope';
+        lbl.textContent = (r.scope || 'form').replace(/[-_]/g, ' ');
+        var age = document.createElement('span');
+        age.className = 'age';
+        age.textContent = fmtAge(r.enqueuedAt);
+        li.appendChild(lbl);
+        if (r.status === 'failed' && r.lastError) {
+          var err = document.createElement('span');
+          err.className = 'err';
+          err.textContent = r.lastError;
+          li.appendChild(err);
+        }
+        li.appendChild(age);
+        list.appendChild(li);
+      });
+    });
+  }
+
+  chip.addEventListener('click', function () {
+    drawer.hidden = !drawer.hidden;
+    if (!drawer.hidden) refresh();
+  });
+  retry.addEventListener('click', function () {
+    if (window.WorkerOfflineQueue) window.WorkerOfflineQueue.flush().then(refresh);
+  });
+  window.addEventListener('wq:change', refresh);
+
+  // Initial paint after the queue lib registers itself.
+  setTimeout(refresh, 300);
+})();
+</script>

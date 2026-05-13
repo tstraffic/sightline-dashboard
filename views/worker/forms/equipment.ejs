@@ -5,7 +5,7 @@
   </a>
   <h1 class="text-xl font-bold text-gray-900">Equipment Check</h1>
 
-  <form method="POST" action="/w/forms/equipment" class="space-y-4">
+  <form method="POST" action="/w/forms/equipment" data-offline-form data-offline-scope="equipment" data-success-url="/w/forms" class="space-y-4">
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
     <% if (typeof allocation_id !== 'undefined' && allocation_id) { %>
       <input type="hidden" name="allocation_id" value="<%= allocation_id %>">

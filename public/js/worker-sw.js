@@ -82,6 +82,20 @@ self.addEventListener('fetch', function(event) {
   );
 });
 
+// BackgroundSync — Chrome/Edge call this when the device goes back online
+// while the page is closed. We can't reach IndexedDB-via-FormData from
+// inside the worker context easily, so we just notify any open clients
+// to retry their queue (and the page's `online` event handler picks up
+// the same job if no client is open).
+self.addEventListener('sync', function(event) {
+  if (event.tag !== 'wq-flush') return;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(list) {
+      list.forEach(function (c) { try { c.postMessage({ kind: 'wq-flush' }); } catch (e) {} });
+    })
+  );
+});
+
 // Push — show shift reminder / generic notifications
 self.addEventListener('push', function(event) {
   let data = {};

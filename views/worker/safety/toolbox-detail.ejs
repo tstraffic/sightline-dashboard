@@ -90,7 +90,7 @@
 
 <% if (isMissed) { %>
   <div class="tbd-actionbar">
-    <form method="POST" action="/w/safety/toolboxes/<%= toolbox.id %>/caught-up">
+    <form method="POST" action="/w/safety/toolboxes/<%= toolbox.id %>/caught-up" data-offline-form data-offline-scope="Toolbox caught up" data-success-url="/w/safety/toolboxes/<%= toolbox.id %>">
       <%- include('../../partials/csrf') %>
       <button type="submit" class="tbd-caught-btn">I've read this — mark caught up</button>
     </form>
