@@ -31,10 +31,12 @@
   --wd-radius-lg: 16px;
   --wd-radius-xl: 24px;
 
-  /* Elevation: inner 1px border + subtle inner gradient + drop shadow.
-     Combine via box-shadow + a background-image gradient on the element. */
+  /* Elevation: 1px hairline border + inner "lit-from-above" gradient + drop
+     shadow. Deepened in round 2 of premium polish (3.5% -> 0.5%) so the
+     light source above the screen reads on real phones, not just mocks. */
   --wd-elev-1-border: rgba(255, 255, 255, 0.04);
-  --wd-elev-1-grad: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0));
+  --wd-elev-1-grad: linear-gradient(180deg, rgba(255, 255, 255, 0.035) 0%, rgba(255, 255, 255, 0.005) 100%);
+  --wd-elev-2-grad: linear-gradient(180deg, rgba(255, 255, 255, 0.05)  0%, rgba(255, 255, 255, 0.008) 100%);
   --wd-elev-1-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.04),
     0 6px 14px rgba(0, 0, 0, 0.25);
@@ -99,6 +101,14 @@
 .wd-card-title { font-size: 0.95rem; font-weight: 700; color: var(--wd-text-strong); line-height: 1.25; }
 .wd-card-sub { font-size: 0.78rem; color: var(--wd-text-muted); margin-top: var(--wd-space-1); }
 .wd-card-body { font-size: 0.88rem; color: var(--wd-text-base); margin-top: var(--wd-space-3); line-height: 1.45; }
+
+/* Opt-in elevation helper: lets bespoke `.wh-*` cards in home.ejs adopt the
+   design-system surface treatment without renaming. */
+.wd-elevated {
+  border: 1px solid var(--wd-elev-1-border);
+  background-image: var(--wd-elev-1-grad);
+  box-shadow: var(--wd-elev-1-shadow);
+}
 
 /* =========================================================================
    Stat tile
