@@ -371,7 +371,7 @@
 
 <% if (section === 'cards' && !hidden.includes('cards') && cards && cards.length > 0) { %>
   <div class="wh-section-head"><span class="wh-section-title">For you</span></div>
-  <div class="wh-cards">
+  <div class="wh-cards" data-stagger>
     <% cards.forEach(function(c) { %>
       <div class="wh-card" data-card-id="<%= c.id %>">
         <button type="button" class="wh-card-dismiss" aria-label="Dismiss" onclick="whDismissCard(<%= c.id %>)">
@@ -433,7 +433,7 @@
 
 <% if (section === 'streaks' && !hidden.includes('streaks') && streaks) { %>
   <div class="wh-section-head"><span class="wh-section-title">Streaks &amp; milestones</span></div>
-  <div class="wh-streaks">
+  <div class="wh-streaks" data-stagger>
     <% const streakEntries = [
       ['shift_streak', streaks.shift_streak],
       ['incident_free', streaks.incident_free],
@@ -738,7 +738,7 @@
 
   <!-- Compact list of the rest -->
   <% if (restShifts.length > 0) { %>
-    <div style="margin-top:8px;">
+    <div style="margin-top:8px;" data-stagger>
       <% restShifts.forEach(s => {
         const d = new Date(s.allocation_date + 'T00:00:00');
         const dNum = d.getDate(); const dMon = d.toLocaleDateString('en-AU', { month: 'short' });
@@ -763,17 +763,19 @@
 
 <% if (section === 'activity' && !hidden.includes('activity') && recentClocks && recentClocks.length > 0) { %>
   <div class="wh-section-head"><span class="wh-section-title">Recent activity</span></div>
-  <% recentClocks.forEach(a => { %>
-    <div class="wh-act-item">
-      <div class="wh-act-ic <%= a.subtype === 'clock_in' ? 'in' : 'out' %>">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <% if (a.subtype === 'clock_in') { %><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/><% } else { %><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/><% } %>
-        </svg>
+  <div data-stagger>
+    <% recentClocks.forEach(a => { %>
+      <div class="wh-act-item">
+        <div class="wh-act-ic <%= a.subtype === 'clock_in' ? 'in' : 'out' %>">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <% if (a.subtype === 'clock_in') { %><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/><% } else { %><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/><% } %>
+          </svg>
+        </div>
+        <span class="wh-act-txt"><%= a.subtype === 'clock_in' ? 'Clocked in' : 'Clocked out' %></span>
+        <span class="wh-act-when"><%= fmtClockTime(a.at) %></span>
       </div>
-      <span class="wh-act-txt"><%= a.subtype === 'clock_in' ? 'Clocked in' : 'Clocked out' %></span>
-      <span class="wh-act-when"><%= fmtClockTime(a.at) %></span>
-    </div>
-  <% }) %>
+    <% }) %>
+  </div>
 <% } %>
 
 <% }); %>
