@@ -24,10 +24,10 @@ input[type="tel"], input[type="number"], select, textarea {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
 
-/* ── PWA Standalone ── */
-@media all and (display-mode: standalone) {
-  body { padding-top: env(safe-area-inset-top, 0px); }
-}
+/* ── PWA Standalone ──
+   Top safe-area is handled by the `.safe-area-top` class on <header>
+   in views/worker/layout.ejs; don't reserve it again on <body> or the
+   inset is doubled. */
 
 /* ── Card Effects ── */
 .shift-card { transition: transform 0.15s ease, box-shadow 0.15s ease; }
