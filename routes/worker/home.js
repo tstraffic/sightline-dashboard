@@ -6,6 +6,7 @@ const {
   buildGreetingSubtext, buildSmartCards, buildStreaks, buildTodayTimeline,
   loadPreferences, getWeather, geocodeAddress, localIso,
 } = require('../../services/homeContext');
+const { enrichTodaysShifts } = require('../../services/todayBriefing');
 
 // GET /w/home — Worker home screen (dynamic, contextual)
 router.get('/home', async (req, res) => {
@@ -330,6 +331,14 @@ router.get('/home', async (req, res) => {
       };
     }
   } catch (e) { console.error('[home] jobpack nudge failed:', e.message); }
+
+  // Annotate today's shifts with the briefing-card extras: Google Maps
+  // deeplink, countdown label, crew count, supervisor user id (for the
+  // one-tap "Message" link). Mutates each row; safe — todaysShifts is
+  // only used by the home view from here on.
+  try {
+    enrichTodaysShifts(db, todaysShifts, { workerId: worker.id, today, now: new Date() });
+  } catch (e) { console.error('[home] briefing enrich failed:', e.message); }
 
   res.render('worker/home', {
     title: 'Home', currentPage: 'home',
