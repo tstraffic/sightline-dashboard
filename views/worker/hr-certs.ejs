@@ -15,7 +15,7 @@
         <span class="text-sm font-medium text-gray-900"><%= member.licence_type %></span>
         <% if (member.licence_expiry) { %>
           <% const exp = new Date(member.licence_expiry); const now = new Date(); const isExpired = exp < now; const isExpiring = !isExpired && exp < new Date(Date.now() + 30*24*60*60*1000); %>
-          <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold
+          <span <% if (isExpired) { %>data-attention="rose"<% } %> class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold
             <%= isExpired ? 'bg-red-50 text-red-700' : isExpiring ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700' %>">
             <%= isExpired ? 'Expired' : isExpiring ? 'Expiring Soon' : 'Valid' %> · <%= exp.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) %>
           </span>
@@ -38,7 +38,7 @@
             <p class="text-sm font-medium text-gray-900"><%= c.competency_name || c.comp_type %></p>
             <% if (c.expiry_date) { %>
               <% const exp = new Date(c.expiry_date); const now = new Date(); const isExpired = exp < now; const isExpiring = !isExpired && exp < new Date(Date.now() + 30*24*60*60*1000); %>
-              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold
+              <span <% if (isExpired) { %>data-attention="rose"<% } %> class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold
                 <%= isExpired ? 'bg-red-50 text-red-700' : isExpiring ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700' %>">
                 <%= isExpired ? 'Expired' : isExpiring ? 'Expiring' : 'Valid' %>
               </span>

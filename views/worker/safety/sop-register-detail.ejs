@@ -45,9 +45,9 @@
   <% if (isCurrent) { %>
     <div class="sd-banner green">Acknowledged on <%= fmt(currentAck.signed_at) %>.</div>
   <% } else if (priorOnly) { %>
-    <div class="sd-banner amber">⚠ This SOP has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-acknowledge.</div>
+    <div class="sd-banner amber" data-attention="amber">⚠ This SOP has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-acknowledge.</div>
   <% } else { %>
-    <div class="sd-banner rose">You have not acknowledged this SOP yet.</div>
+    <div class="sd-banner rose" data-attention="rose">You have not acknowledged this SOP yet.</div>
   <% } %>
 
   <% if (sop.description) { %>
