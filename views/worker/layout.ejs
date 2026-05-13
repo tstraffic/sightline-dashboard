@@ -120,14 +120,48 @@
     @media (max-width: 360px) {
       nav.fixed.bottom-0 span.wh-tab-label { display: none; }
     }
+    /* Tab bar polish: active-indicator pill that springs between tabs,
+       icon scales up on the active tab. */
+    .wh-tab-bar { position: relative; }
+    .wh-tab-indicator {
+      position: absolute;
+      bottom: 4px;
+      height: 3px;
+      width: 24px;
+      left: 0;
+      background: #00D2BE;
+      border-radius: 999px;
+      pointer-events: none;
+      transform: translateX(var(--wh-tab-x, 0)) translateX(-50%);
+      width: var(--wh-tab-w, 24px);
+      transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+                  width 320ms cubic-bezier(0.22, 1, 0.36, 1),
+                  opacity 200ms ease;
+      opacity: 0;
+      box-shadow: 0 0 12px rgba(0,210,190,0.45);
+    }
+    .wh-tab-bar[data-tab-ready] .wh-tab-indicator { opacity: 1; }
+    /* Active icon scale + idle micro-pulse on the active tab. Pure CSS. */
+    .wh-tab-bar a svg {
+      transition: transform 280ms cubic-bezier(0.22, 1, 0.36, 1),
+                  color 180ms ease;
+      transform-origin: 50% 60%;
+    }
+    .wh-tab-bar a.is-active svg { transform: scale(1.12); }
+    .wh-tab-bar a:active svg { transform: scale(0.92); }
+    @media (prefers-reduced-motion: reduce) {
+      .wh-tab-indicator { transition: none; }
+      .wh-tab-bar a svg { transition: none; }
+    }
   </style>
   <nav class="fixed bottom-0 left-0 right-0 safe-area-bottom z-50" style="background: rgba(10,22,40,0.96); border-top: 1px solid rgba(255,255,255,0.06);">
-    <div class="flex items-center justify-around h-16 px-0.5 max-w-[520px] mx-auto">
+    <div class="flex items-center justify-around h-16 px-0.5 max-w-[520px] mx-auto wh-tab-bar" id="wh-tab-bar">
+      <span class="wh-tab-indicator" aria-hidden="true"></span>
       <% const cp = typeof currentPage !== 'undefined' ? currentPage : ''; %>
       <% const moreActive = ['more','profile','hr','wallet','leave','timesheets','availability','dockets','customise','chat','clock'].includes(cp); %>
 
       <!-- Home -->
-      <a href="/w/home" data-haptic class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'home' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/home" data-haptic data-tab="home" class="<%= cp === 'home' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'home' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
         </svg>
@@ -135,7 +169,7 @@
       </a>
 
       <!-- Jobs -->
-      <a href="/w/jobs" data-haptic class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'jobs' || cp === 'shifts' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/jobs" data-haptic data-tab="jobs" class="<%= (cp === 'jobs' || cp === 'shifts') ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'jobs' || cp === 'shifts' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
         </svg>
@@ -143,7 +177,7 @@
       </a>
 
       <!-- Forms (centre, replaces Clock — see comment above the nav). -->
-      <a href="/w/forms" data-haptic class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'forms' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/forms" data-haptic data-tab="forms" class="<%= cp === 'forms' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'forms' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
         </svg>
@@ -151,7 +185,7 @@
       </a>
 
       <!-- Feed -->
-      <a href="/w/feed" data-haptic class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'feed' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/feed" data-haptic data-tab="feed" class="<%= cp === 'feed' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'feed' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
         </svg>
@@ -159,7 +193,7 @@
       </a>
 
       <!-- Safety -->
-      <a href="/w/safety" data-haptic class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'safety' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/safety" data-haptic data-tab="safety" class="<%= cp === 'safety' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'safety' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
@@ -167,7 +201,7 @@
       </a>
 
       <!-- More -->
-      <a href="/w/more" data-haptic class="flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= moreActive ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/more" data-haptic data-tab="more" class="<%= moreActive ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= moreActive ? 'text-[#00D2BE]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
         </svg>
@@ -183,6 +217,7 @@
   <script src="/js/chat.js?v=3"></script>
   <script src="/js/worker-haptics.js?v=1"></script>
   <script src="/js/worker-motion.js?v=1"></script>
+  <script src="/js/worker-tabbar.js?v=1"></script>
   <script src="/js/worker-offline-queue.js?v=1"></script>
   <script src="/js/worker-submit-success.js?v=1"></script>
   <script src="/js/worker-offline-form.js?v=3"></script>
