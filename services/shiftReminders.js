@@ -132,6 +132,7 @@ async function sendUpcomingShiftReminders() {
           body: body.trim() || 'Tap to view your shift details.',
           url: c.link,
           type: 'shift_reminder_24h',
+          category: 'shift_reminder',
         });
         recordSent.run(c.crew_member_id, c.shift_key);
         sentCount++;

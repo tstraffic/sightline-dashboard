@@ -1,0 +1,79 @@
+<style>
+  .nf-wrap { padding: 12px; padding-bottom: 6rem; color: #fff; }
+  .nf-back { display: inline-flex; align-items: center; gap: 4px; color: #00D2BE; font-size: 0.85rem; font-weight: 600; }
+  .nf-h1 { font-size: 1.4rem; font-weight: 800; margin-top: 0.25rem; letter-spacing: -0.01em; }
+  .nf-sub { font-size: 0.78rem; color: rgba(255,255,255,0.55); margin-top: 4px; }
+  .nf-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 4px 14px; margin-top: 14px; }
+  .nf-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 0; border-top: 1px solid rgba(255,255,255,0.06); }
+  .nf-row:first-child { border-top: 0; }
+  .nf-label { flex: 1; min-width: 0; }
+  .nf-label .name { font-size: 0.92rem; font-weight: 600; color: #fff; }
+  .nf-label .sub { font-size: 0.72rem; color: rgba(255,255,255,0.55); margin-top: 2px; }
+  .nf-switch { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+  .nf-switch input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .nf-slider {
+    position: absolute; inset: 0; cursor: pointer;
+    background: rgba(255,255,255,0.12); border-radius: 999px;
+    transition: background 0.15s;
+  }
+  .nf-slider::before {
+    content: ''; position: absolute; top: 3px; left: 3px;
+    width: 20px; height: 20px; background: #fff; border-radius: 50%;
+    transition: transform 0.15s;
+  }
+  .nf-switch input:checked + .nf-slider { background: #2B7FFF; }
+  .nf-switch input:checked + .nf-slider::before { transform: translateX(18px); }
+  .nf-submit-bar { position: sticky; bottom: 0; padding: 16px 0 calc(16px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(180deg, transparent, rgba(10,22,40,0.95) 35%); margin-top: 16px; }
+  .nf-submit { width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #2B7FFF, #1D6AE5); border: 0; box-shadow: 0 8px 22px rgba(29,106,229,0.45); }
+  .nf-master { font-size: 0.78rem; color: rgba(255,255,255,0.7); margin-top: 8px; display: flex; gap: 12px; }
+  .nf-master a { color: #93C5FD; font-weight: 600; }
+</style>
+
+<div class="nf-wrap">
+  <a href="/w/profile" class="nf-back">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    Profile
+  </a>
+  <h1 class="nf-h1">Notifications</h1>
+  <p class="nf-sub">Choose what pings your phone. Everything on by default — toggle off anything you don't need.</p>
+
+  <p class="nf-master">
+    <a href="#" id="nf-all-on">Turn all on</a>
+    <a href="#" id="nf-all-off">Turn all off</a>
+  </p>
+
+  <form method="POST" action="/w/profile/notifications" id="nf-form">
+    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+
+    <div class="nf-card">
+      <% categories.forEach(function (c) { %>
+        <label class="nf-row">
+          <span class="nf-label">
+            <span class="name"><%= c.label %></span>
+            <span class="sub"><%= c.sub %></span>
+          </span>
+          <span class="nf-switch">
+            <input type="checkbox" name="enabled" value="<%= c.key %>" <%= c.enabled ? 'checked' : '' %>>
+            <span class="nf-slider"></span>
+          </span>
+        </label>
+      <% }) %>
+    </div>
+
+    <div class="nf-submit-bar">
+      <button type="submit" class="nf-submit">Save settings</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  function setAll(state) {
+    document.querySelectorAll('#nf-form input[name="enabled"]').forEach(function (cb) {
+      cb.checked = state;
+    });
+  }
+  document.getElementById('nf-all-on').addEventListener('click', function (e) { e.preventDefault(); setAll(true); });
+  document.getElementById('nf-all-off').addEventListener('click', function (e) { e.preventDefault(); setAll(false); });
+})();
+</script>

@@ -56,6 +56,7 @@ function announcePublished(req, toolbox) {
     body: 'New toolbox talk posted — tap to review.',
     url: '/w/safety/toolboxes/' + toolbox.id,
     type: 'toolbox_talk',
+    category: 'toolbox',
   }).catch(e => console.error('[toolbox-talks] push error:', e.message));
   try {
     logActivity({

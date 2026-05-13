@@ -33,6 +33,7 @@ function announcePublished(req, quiz) {
     body: 'Tap to start the safety knowledge check.',
     url: '/w/safety/quizzes/' + quiz.id,
     type: 'safety_quiz',
+    category: 'quiz',
   }).catch(e => console.error('[safety-quizzes] push error:', e.message));
   try {
     logActivity({

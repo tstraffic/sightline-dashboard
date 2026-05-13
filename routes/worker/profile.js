@@ -6,6 +6,22 @@ const multer = require('multer');
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../../db/database');
 const { logActivity } = require('../../middleware/audit');
+const { getWorkerNotificationPrefs, setWorkerNotificationPref } = require('../../services/pushNotification');
+
+// Notification categories shown on /w/profile/notifications. Each one
+// corresponds to a `category` string the push senders pass. Default-on
+// when no row exists in worker_notification_prefs.
+const NOTIFICATION_CATEGORIES = [
+  { key: 'shift_reminder', label: 'Shift reminders', sub: 'Day before each shift starts' },
+  { key: 'swms_update', label: 'New SWMS', sub: 'SWMS that need your acknowledgement' },
+  { key: 'sop_update', label: 'New SOP', sub: 'SOPs that need your acknowledgement' },
+  { key: 'safety_update', label: 'Safety updates', sub: 'Bulletins, alerts, policy changes' },
+  { key: 'toolbox', label: 'Toolbox talks', sub: 'New toolbox sessions posted' },
+  { key: 'quiz', label: 'Safety quizzes', sub: 'When a new quiz is published' },
+  { key: 'kudos', label: 'Kudos', sub: 'When a workmate sends you kudos' },
+  { key: 'comment_response', label: 'Office responses', sub: 'Replies to your safety comments' },
+  { key: 'cert_expiry', label: 'Certificate expiry', sub: '30 / 14 / 7 days before tickets lapse' },
+];
 
 const PHOTO_BASE = path.join(__dirname, '..', '..', 'data', 'uploads', 'hr');
 
@@ -414,6 +430,36 @@ router.post('/profile/contacts/:id/delete', (req, res) => {
 
   req.flash('success', 'Emergency contact removed.');
   res.redirect('/w/profile');
+});
+
+// GET /w/profile/notifications — per-category opt-in/out for worker push.
+router.get('/profile/notifications', (req, res) => {
+  const workerId = req.session.worker.id;
+  const prefsMap = getWorkerNotificationPrefs(workerId);
+  // Build a categories[] with enabled (default-on if not set).
+  const categories = NOTIFICATION_CATEGORIES.map(c => ({
+    key: c.key, label: c.label, sub: c.sub,
+    enabled: prefsMap[c.key + ':push'] === undefined ? true : prefsMap[c.key + ':push'],
+  }));
+  res.render('worker/profile-notifications', {
+    title: 'Notification settings',
+    currentPage: 'more',
+    categories,
+  });
+});
+
+// POST /w/profile/notifications — save toggles. Form submits the list of
+// currently-enabled categories; anything not in the list is turned off.
+router.post('/profile/notifications', (req, res) => {
+  const workerId = req.session.worker.id;
+  const enabledSet = new Set(
+    [].concat(req.body.enabled || []).map(String)
+  );
+  for (const c of NOTIFICATION_CATEGORIES) {
+    setWorkerNotificationPref(workerId, c.key, 'push', enabledSet.has(c.key));
+  }
+  req.flash('success', 'Notification settings saved.');
+  res.redirect('/w/profile/notifications');
 });
 
 module.exports = router;
