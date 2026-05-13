@@ -88,6 +88,7 @@
   .wc-card[data-kind="stormy"]        { --wc-base: #0a0f1f; --wc-a: rgba(99,102,241,0.55); --wc-b: rgba(167,139,250,0.30); --wc-c: rgba(245,158,11,0.20); }
   .wc-card[data-kind="snow"]          { --wc-base: #1b2640; --wc-a: rgba(186,230,253,0.50); --wc-b: rgba(255,255,255,0.25); --wc-c: rgba(125,211,252,0.30); }
   .wc-card[data-kind="fog"]           { --wc-base: #2c3142; --wc-a: rgba(203,213,225,0.40); --wc-b: rgba(148,163,184,0.30); --wc-c: rgba(100,116,139,0.25); }
+  .wc-card[data-kind="night"]         { --wc-base: #0a0f24; --wc-a: rgba(99,102,241,0.45); --wc-b: rgba(139,92,246,0.30); --wc-c: rgba(15,23,42,0.55); }
 
   /* Sun: rotating rays + steady core. */
   .wc-sun-rays { transform-origin: 32px 32px; animation: wc-rotate 28s linear infinite; }
@@ -140,9 +141,18 @@
     100% { transform: translateX(4px); }
   }
 
+  /* Night: twinkling stars. */
+  .wc-star { animation: wc-twinkle 2.8s ease-in-out infinite; transform-origin: center; }
+  .wc-star-2 { animation-delay: 0.7s; animation-duration: 3.4s; }
+  .wc-star-3 { animation-delay: 1.4s; animation-duration: 2.4s; }
+  @keyframes wc-twinkle {
+    0%, 100% { opacity: 0.35; transform: scale(0.85); }
+    50%      { opacity: 1;    transform: scale(1.1); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
     .wc-card::before { animation: none; }
-    .wc-sun-rays, .wc-cloud, .wc-drop, .wc-bolt, .wc-flake, .wc-band { animation: none; }
+    .wc-sun-rays, .wc-cloud, .wc-drop, .wc-bolt, .wc-flake, .wc-band, .wc-star { animation: none; }
   }
 </style>
 
@@ -202,6 +212,18 @@
         <circle class="wc-flake"   cx="22" cy="46" r="2.2"/>
         <circle class="wc-flake wc-flake-2" cx="32" cy="46" r="2.2"/>
         <circle class="wc-flake wc-flake-3" cx="42" cy="46" r="2.2"/>
+      </g>
+    </svg>
+  <% } else if (_kind === 'night') { %>
+    <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
+      <%# Crescent moon — drawn by subtracting an offset circle so the
+          inner curve is genuine moon shape, not just a thin arc. %>
+      <path d="M44 36a16 16 0 1 1-16-22 13 13 0 0 0 16 22z" fill="#fde68a" stroke="#fcd34d" stroke-width="1.4"/>
+      <g fill="#fef3c7">
+        <circle class="wc-star"   cx="14" cy="16" r="1.6"/>
+        <circle class="wc-star wc-star-2" cx="50" cy="14" r="1.2"/>
+        <circle class="wc-star wc-star-3" cx="54" cy="40" r="1.4"/>
+        <circle class="wc-star wc-star-2" cx="10" cy="42" r="1.2"/>
       </g>
     </svg>
   <% } else { /* fog */ %>
