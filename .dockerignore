@@ -1,0 +1,23 @@
+# Keep the build context small — avoids copying GB of test data or local
+# node_modules into the image (the Dockerfile runs its own npm ci).
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.env.*
+data/uploads
+data/database.sqlite
+data/database.sqlite-*
+*.sqlite
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+.DS_Store
+*.log
+playwright-report
+test-results
+.vscode
+.idea
+README.md
+CLAUDE.md
