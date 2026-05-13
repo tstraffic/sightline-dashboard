@@ -9169,6 +9169,29 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 198: Resync every parent Plan's rolled-up status from its
+  // sub-plans. Prior versions of the bulk-status endpoint and the regular
+  // edit-save handler didn't call syncParentStatus, so parents drifted out
+  // of step with their children (sub-plan went to 'submitted' but the
+  // parent stayed on 'started'). The route fixes the going-forward bug;
+  // this migration repairs the data state once.
+  // =============================================
+  if (!isMigrationApplied.get(198)) {
+    try {
+      const planStatus = require('../lib/planStatus');
+      const parents = db.prepare("SELECT id FROM compliance WHERE parent_id IS NULL AND plan_number IS NOT NULL").all();
+      let resynced = 0;
+      parents.forEach(p => {
+        try { planStatus.syncParentStatus(db, p.id); resynced += 1; } catch (e) { /* skip individual failures */ }
+      });
+      recordMigration.run(198, 'resync parent Plan statuses from their sub-plans');
+      console.log(`Migration 198 applied: resynced ${resynced} parent Plan status(es) from sub-plans`);
+    } catch (e) {
+      console.error('Migration 198 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

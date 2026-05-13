@@ -735,8 +735,13 @@ router.post('/bulk-status', (req, res) => {
   if (!Array.isArray(ids) || ids.length === 0 || !validStatuses.includes(status)) return res.status(400).json({ error: 'Invalid request' });
   const placeholders = ids.map(() => '?').join(',');
   // Log to diary before updating
-  const items = db.prepare(`SELECT id, job_id, title, reference_number, item_type, item_types, status as old_status FROM compliance WHERE id IN (${placeholders})`).all(...ids);
+  const items = db.prepare(`SELECT id, parent_id, job_id, title, reference_number, item_type, item_types, status as old_status FROM compliance WHERE id IN (${placeholders})`).all(...ids);
   db.prepare(`UPDATE compliance SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(status, ...ids);
+  // Roll up to each affected parent so the badge on the register/job pages
+  // stays in step with the sub-plan it summarises.
+  const affectedParents = new Set();
+  items.forEach(it => { if (it.parent_id != null) affectedParents.add(it.parent_id); });
+  affectedParents.forEach(pid => planStatus.syncParentStatus(db, pid));
   // Sync linked tasks so approved/submitted plans close their assigned task
   // instead of building up. Same status map as the single-edit handler.
   try {
@@ -1092,6 +1097,13 @@ router.post('/:id', (req, res) => {
           });
         }
       }
+    }
+
+    // If this row is a sub-plan, roll its status change up to the parent so
+    // the badge on the register and the job's Plans tab matches what the
+    // user just set on the child.
+    if (oldItem && oldItem.parent_id != null) {
+      try { planStatus.syncParentStatus(db, oldItem.parent_id); } catch (e) { console.error('syncParentStatus after /:id update failed:', e.message); }
     }
 
     req.flash('success', 'Item updated.');
