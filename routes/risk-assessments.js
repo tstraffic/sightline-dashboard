@@ -10,6 +10,9 @@ const path = require('path');
 const fs = require('fs');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
+const { autoLogDiary } = require('../lib/diary');
+const tgsTemplate = require('../lib/raTemplates/tgsRiskOptions');
+const { mergePdfs } = require('../lib/pdfMerge');
 
 const RA_DIR = path.join(__dirname, '..', 'data', 'uploads', 'risk-assessments');
 if (!fs.existsSync(RA_DIR)) fs.mkdirSync(RA_DIR, { recursive: true });
@@ -255,6 +258,205 @@ router.post('/:id/delete', (req, res) => {
     console.error('[risk-assessments DELETE]', err);
     req.flash('error', 'Delete failed.');
     return res.redirect('/risk-assessments');
+  }
+});
+
+// ===== TGS Risk & Options Assessment — interactive form + combined PDF =====
+
+// Load an RA plus its linked compliance sub-plan, parent Plan, and job
+// in a single shot. Returns null if the RA isn't of template_type
+// 'tgs_risk_options'.
+function loadTgsContext(db, raId) {
+  const ra = db.prepare("SELECT * FROM risk_assessments WHERE id = ?").get(raId);
+  if (!ra) return null;
+  if (ra.template_type !== 'tgs_risk_options') return { ra, sub: null, parent: null, job: null, fallback: true };
+  let sub = null, parent = null, job = null;
+  if (ra.compliance_id) {
+    sub = db.prepare("SELECT * FROM compliance WHERE id = ?").get(ra.compliance_id);
+    if (sub && sub.parent_id) parent = db.prepare("SELECT * FROM compliance WHERE id = ?").get(sub.parent_id);
+  }
+  if (ra.job_id) job = db.prepare("SELECT * FROM jobs WHERE id = ?").get(ra.job_id);
+  return { ra, sub, parent, job };
+}
+
+// GET /risk-assessments/:id/fill — render the TGS RA form. Falls through
+// to the legacy edit page for any other template_type / NULL.
+router.get('/:id/fill', (req, res) => {
+  const db = getDb();
+  const ctx = loadTgsContext(db, req.params.id);
+  if (!ctx) { req.flash('error', 'Risk Assessment not found.'); return res.redirect('/risk-assessments'); }
+  if (ctx.fallback) return res.redirect('/risk-assessments/' + req.params.id + '/edit');
+
+  let responses = {};
+  if (ctx.ra.responses_json) {
+    try { responses = JSON.parse(ctx.ra.responses_json); } catch (e) { responses = {}; }
+  }
+  // First-time-open prefill: take what we can from the sub-plan + job so
+  // the user doesn't retype obvious context.
+  if (!ctx.ra.responses_json) {
+    responses.site = responses.site || {};
+    if (ctx.job) {
+      responses.site.suburb = responses.site.suburb || ctx.job.suburb || '';
+      responses.site.road = responses.site.road || ctx.job.site_address || '';
+      responses.site.client_principal = responses.site.client_principal || ctx.job.client || '';
+    }
+    if (ctx.sub) responses.site.tgs_design_no = responses.site.tgs_design_no || ctx.sub.reference_number || '';
+    responses.sign_off = responses.sign_off || {};
+    responses.sign_off.tgs_ref_no = responses.sign_off.tgs_ref_no || (ctx.sub && ctx.sub.reference_number) || '';
+  }
+
+  res.render('risk-assessments/fill-tgs', {
+    title: ctx.ra.title || 'Risk Assessment',
+    ra: ctx.ra, sub: ctx.sub, parent: ctx.parent, job: ctx.job, responses,
+    questions: tgsTemplate.QUESTIONS,
+    matrixHeaders: tgsTemplate.MATRIX_HEADERS,
+    matrixRows: tgsTemplate.MATRIX_ROWS,
+    actionLevels: tgsTemplate.ACTION_LEVELS,
+    ratingOptions: tgsTemplate.RATING_OPTIONS,
+    user: req.session.user,
+  });
+});
+
+// POST /risk-assessments/:id/fill — accept form payload, serialise into
+// responses_json, flip status draft → active.
+router.post('/:id/fill', (req, res) => {
+  const db = getDb();
+  const ra = db.prepare("SELECT * FROM risk_assessments WHERE id = ?").get(req.params.id);
+  if (!ra) { req.flash('error', 'Risk Assessment not found.'); return res.redirect('/risk-assessments'); }
+  if (ra.template_type !== 'tgs_risk_options') return res.redirect('/risk-assessments/' + req.params.id + '/edit');
+
+  const b = req.body || {};
+  // Build answers map for the canonical question list. Each row carries
+  // { yn, desc, rating } keyed by question number.
+  const answers = {};
+  tgsTemplate.QUESTIONS.forEach(q => {
+    answers[q.number] = {
+      yn: (b['yn_' + q.number] === 'yes' || b['yn_' + q.number] === 'no') ? b['yn_' + q.number] : '',
+      desc: String(b['desc_' + q.number] || '').trim(),
+      rating: String(b['rating_' + q.number] || '').trim(),
+    };
+  });
+  // Section 4 free rows + risk-management rows arrive as parallel arrays
+  // (HTML multi-row inputs). Filter blank rows so the JSON stays tight.
+  const section4 = [];
+  const s4Qs = [].concat(b.section4_question || []);
+  const s4Yn = [].concat(b.section4_yn || []);
+  const s4Desc = [].concat(b.section4_desc || []);
+  const s4Rate = [].concat(b.section4_rating || []);
+  for (let i = 0; i < s4Qs.length; i++) {
+    const row = { question: String(s4Qs[i] || '').trim(), yn: String(s4Yn[i] || ''), desc: String(s4Desc[i] || '').trim(), rating: String(s4Rate[i] || '') };
+    if (row.question || row.desc) section4.push(row);
+  }
+  const riskMgmt = [];
+  const rmH = [].concat(b.rm_hazard || []);
+  const rmC = [].concat(b.rm_controls || []);
+  const rmR = [].concat(b.rm_remaining || []);
+  for (let i = 0; i < rmH.length; i++) {
+    const row = { hazard: String(rmH[i] || '').trim(), controls: String(rmC[i] || '').trim(), remaining: String(rmR[i] || '').trim() };
+    if (row.hazard || row.controls) riskMgmt.push(row);
+  }
+
+  const responses = {
+    site: {
+      road: String(b.site_road || '').trim(),
+      from_side_st: String(b.site_from_side_st || '').trim(),
+      to_side_st: String(b.site_to_side_st || '').trim(),
+      suburb: String(b.site_suburb || '').trim(),
+      direction: String(b.site_direction || '').trim().toUpperCase(),
+      posted_speed: String(b.site_posted_speed || '').trim(),
+      client_principal: String(b.site_client_principal || '').trim(),
+      road_authority: String(b.site_road_authority || '').trim(),
+      scope_of_works: String(b.site_scope_of_works || '').trim(),
+      tgs_design_no: String(b.site_tgs_design_no || '').trim(),
+      design_date: String(b.site_design_date || '').trim(),
+      estimated_duration: String(b.site_estimated_duration || '').trim(),
+    },
+    options: {
+      method_selected: ['around', 'past', 'through'].includes(b.method_selected) ? b.method_selected : '',
+      method_reason: String(b.method_reason || '').trim(),
+    },
+    shuttle_applies: b.shuttle_applies === '1' || b.shuttle_applies === 'on',
+    detour_applies: b.detour_applies === '1' || b.detour_applies === 'on',
+    answers,
+    section4,
+    risk_management: riskMgmt,
+    additional_comments: String(b.additional_comments || '').trim(),
+    sign_off: {
+      author: { name: String(b.author_name || '').trim(), pwz: String(b.author_pwz || '').trim(), date: String(b.author_date || '').trim() },
+      approver: { name: String(b.approver_name || '').trim(), pwz: String(b.approver_pwz || '').trim(), date: String(b.approver_date || '').trim() },
+      one_up: { name: String(b.one_up_name || '').trim(), pwz: String(b.one_up_pwz || '').trim(), accreditation: String(b.one_up_accreditation || '').trim(), date: String(b.one_up_date || '').trim() },
+      tgs_ref_no: String(b.tgs_ref_no || '').trim(),
+    },
+  };
+
+  // Status flips draft → active on the first save with non-blank content.
+  const hasContent = responses.site.road || responses.site.tgs_design_no || Object.values(answers).some(a => a.yn) || riskMgmt.length > 0;
+  const newStatus = hasContent ? 'active' : ra.status;
+  db.prepare(`UPDATE risk_assessments SET responses_json = ?, status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .run(JSON.stringify(responses), newStatus, ra.id);
+
+  try { logActivity({ user: req.session.user, action: 'update', entityType: 'risk_assessment', entityId: ra.id, entityLabel: ra.title, details: 'Filled TGS RA form', ip: req.ip }); } catch (e) {}
+  if (ra.job_id) {
+    try { autoLogDiary(db, { jobId: ra.job_id, summary: `[${req.session.user.full_name}] Risk Assessment "${ra.title}" updated.`, userId: req.session.user.id }); } catch (e) {}
+  }
+  req.flash('success', 'Risk Assessment saved.');
+  res.redirect('/risk-assessments/' + ra.id + '/fill');
+});
+
+// POST /risk-assessments/:id/generate-combined — render the filled RA to
+// PDF, merge with the linked sub-plan's TGS file, store the merged file
+// as the canonical attachment on the sub-plan.
+router.post('/:id/generate-combined', async (req, res) => {
+  const db = getDb();
+  const ctx = loadTgsContext(db, req.params.id);
+  if (!ctx || ctx.fallback) { req.flash('error', 'Combined PDF only supported for TGS Risk Assessments.'); return res.redirect('/risk-assessments/' + req.params.id); }
+  if (!ctx.sub) { req.flash('error', 'This Risk Assessment is not linked to a sub-plan.'); return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'); }
+  if (ctx.ra.status !== 'active') { req.flash('error', 'Fill the Risk Assessment before generating the combined PDF.'); return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'); }
+
+  // Find the most recent TGS doc on the sub-plan.
+  const tgsDoc = db.prepare("SELECT * FROM compliance_documents WHERE compliance_id = ? ORDER BY id DESC LIMIT 1").get(ctx.sub.id);
+  if (!tgsDoc) { req.flash('error', 'Upload the TGS PDF on the sub-plan first.'); return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'); }
+
+  const tgsDiskPath = tgsDoc.file_path.startsWith('/') ? path.join(__dirname, '..', tgsDoc.file_path) : path.join(__dirname, '..', tgsDoc.file_path);
+  if (!fs.existsSync(tgsDiskPath)) { req.flash('error', 'TGS file missing on disk.'); return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'); }
+  if (!/\.pdf$/i.test(tgsDoc.original_name || tgsDoc.file_path)) {
+    req.flash('error', 'Combined generation requires the TGS to be a PDF.');
+    return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill');
+  }
+
+  try {
+    let responses = {};
+    try { responses = JSON.parse(ctx.ra.responses_json || '{}'); } catch (e) {}
+    const raBuf = await tgsTemplate.renderTgsRiskOptionsPdf({ ra: ctx.ra, sub: ctx.sub, parent: ctx.parent, job: ctx.job, responses });
+    const tgsBuf = fs.readFileSync(tgsDiskPath);
+    const combinedBuf = await mergePdfs([raBuf, tgsBuf]);
+
+    const outDir = path.join(__dirname, '..', 'data', 'uploads', 'compliance', String(ctx.sub.id));
+    fs.mkdirSync(outDir, { recursive: true });
+    const fname = Date.now() + '-' + Math.round(Math.random() * 1e9) + '-combined.pdf';
+    const absPath = path.join(outDir, fname);
+    fs.writeFileSync(absPath, combinedBuf);
+    const relPath = '/data/uploads/compliance/' + ctx.sub.id + '/' + fname;
+    const niceName = ((ctx.sub.reference_number || ctx.parent && ('plan-' + ctx.parent.plan_number) || 'plan') + ' — RA + TGS.pdf').replace(/\s+/g, ' ');
+
+    // Rewrite the existing TGS row so the sub-plan card downloads the
+    // combined file. Old bare TGS file stays on disk untouched (no GC) —
+    // we can clean it up later if storage gets tight.
+    db.prepare("UPDATE compliance_documents SET filename = ?, original_name = ?, file_path = ?, file_size = ?, mime_type = 'application/pdf' WHERE id = ?")
+      .run(fname, niceName, relPath, combinedBuf.length, tgsDoc.id);
+    db.prepare("UPDATE risk_assessments SET combined_pdf_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(relPath, ctx.ra.id);
+
+    try { logActivity({ user: req.session.user, action: 'upload', entityType: 'risk_assessment', entityId: ctx.ra.id, entityLabel: ctx.ra.title, details: 'Generated combined RA + TGS PDF', ip: req.ip }); } catch (e) {}
+    if (ctx.ra.job_id) {
+      try { autoLogDiary(db, { jobId: ctx.ra.job_id, complianceItemId: ctx.sub.parent_id, summary: `[${req.session.user.full_name}] Generated combined RA + TGS for ${ctx.sub.reference_number}.`, userId: req.session.user.id }); } catch (e) {}
+    }
+    req.flash('success', 'Combined RA + TGS PDF generated and attached.');
+    if (req.headers.accept && req.headers.accept.includes('json')) return res.json({ success: true, file_path: relPath });
+    return res.redirect('/compliance/' + ctx.sub.parent_id + '/edit');
+  } catch (err) {
+    console.error('[risk-assessments] generate-combined failed:', err);
+    req.flash('error', 'Combined PDF generation failed: ' + err.message);
+    return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill');
   }
 });
 
