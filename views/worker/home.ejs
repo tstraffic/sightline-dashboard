@@ -136,11 +136,52 @@
     border-radius: 12px; padding: 10px 12px; position: relative; overflow: hidden;
   }
   .wh-streak-label { font-size: 0.625rem; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.07em; display: flex; align-items: center; gap: 6px; }
-  .wh-streak-ic { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 6px; }
+  .wh-streak-ic { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 6px; position: relative; overflow: visible; transition: box-shadow 240ms ease; }
   .wh-streak-ic.emerald { background: rgba(16,185,129,0.18); color: #34D399; }
   .wh-streak-ic.blue { background: rgba(43,127,255,0.18); color: #60A5FA; }
   .wh-streak-ic.purple { background: rgba(167,139,250,0.18); color: #A78BFA; }
   .wh-streak-ic.amber { background: rgba(245,158,11,0.18); color: #F59E0B; }
+
+  /* Shift-streak flame tier ladder. Each tier ramps colour intensity,
+     animation speed, and box-shadow glow as the streak climbs. Legendary
+     gets three CSS particle-flames rising from the icon (.wh-flame-particle). */
+  .wh-streak-ic[data-tier="cold"]      { background: rgba(148,163,184,0.18); color: #94A3B8; }
+  .wh-streak-ic[data-tier="cold"]      svg { opacity: 0.55; }
+  .wh-streak-ic[data-tier="warm"]      { background: rgba(245,158,11,0.18); color: #FCD34D; }
+  .wh-streak-ic[data-tier="hot"]       { background: rgba(245,158,11,0.22); color: #F59E0B; box-shadow: 0 0 8px rgba(245,158,11,0.30); }
+  .wh-streak-ic[data-tier="hot"]       svg { animation: wh-flicker 1.5s ease-in-out infinite; transform-origin: center; }
+  .wh-streak-ic[data-tier="blazing"]   { background: rgba(249,115,22,0.25); color: #F97316; box-shadow: 0 0 12px rgba(249,115,22,0.50); }
+  .wh-streak-ic[data-tier="blazing"]   svg { animation: wh-flicker 1.0s ease-in-out infinite; transform-origin: center; }
+  .wh-streak-ic[data-tier="legendary"] { background: rgba(239,68,68,0.28); color: #EF4444; box-shadow: 0 0 16px rgba(239,68,68,0.60); }
+  .wh-streak-ic[data-tier="legendary"] svg { animation: wh-flicker 0.8s ease-in-out infinite; transform-origin: center; }
+
+  .wh-flame-particle {
+    position: absolute; top: -3px; left: 50%;
+    width: 5px; height: 7px; border-radius: 50% 50% 40% 40%;
+    background: radial-gradient(circle at 50% 70%, #FCA5A5, #EF4444 70%, transparent 100%);
+    filter: blur(0.8px);
+    transform: translate(-50%, 0) scale(0.6);
+    opacity: 0;
+    animation: wh-particle-rise 1.8s ease-out infinite;
+    pointer-events: none;
+  }
+  .wh-flame-particle-2 { animation-delay: 0.6s; left: 32%; }
+  .wh-flame-particle-3 { animation-delay: 1.2s; left: 68%; }
+
+  @keyframes wh-flicker {
+    0%, 100% { transform: scale(1.00) rotate(-1deg); }
+    50%      { transform: scale(1.06) rotate( 1deg); }
+  }
+  @keyframes wh-particle-rise {
+    0%   { transform: translate(-50%, 0)     scale(0.6); opacity: 0; }
+    25%  { opacity: 1; }
+    100% { transform: translate(-50%, -16px) scale(0.2); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wh-streak-ic[data-tier] svg,
+    .wh-flame-particle { animation: none !important; }
+    .wh-flame-particle { opacity: 0 !important; }
+  }
   .wh-streak-value { font-family: var(--wd-font-display, 'JetBrains Mono', ui-monospace, monospace); font-size: 1.35rem; font-weight: 700; color: #fff; margin-top: 4px; letter-spacing: -0.02em; font-feature-settings: "tnum" 1, "ss01" 1; }
   .wh-streak-unit { font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,0.4); margin-left: 2px; }
   .wh-streak-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(255,255,255,0.08); overflow: hidden; }
@@ -459,7 +500,19 @@
   </a>
 <% } %>
 
-<% if (section === 'streaks' && !hidden.includes('streaks') && streaks) { %>
+<% if (section === 'streaks' && !hidden.includes('streaks') && streaks) {
+  // Shift-streak flame tier ladder. The fire icon escalates with the
+  // worker's current streak — cold (no shifts), warm (1-2), hot (3-6,
+  // gentle flicker), blazing (7-13, faster flicker + glow), legendary
+  // (14+, three particle-flames rising). CSS keyframes do all the work.
+  function flameTier(n) {
+    if (!n || n < 1) return 'cold';
+    if (n < 3)  return 'warm';
+    if (n < 7)  return 'hot';
+    if (n < 14) return 'blazing';
+    return 'legendary';
+  }
+%>
   <div class="wh-section-head"><span class="wh-section-title">Streaks &amp; milestones</span></div>
   <div class="wh-streaks" data-stagger>
     <% const streakEntries = [
@@ -467,11 +520,18 @@
       ['incident_free', streaks.incident_free],
       ['forms_streak', streaks.forms_streak],
       ['hours_milestone', streaks.hours_milestone],
-    ]; streakEntries.forEach(function([k, s]) { if (!s) return; %>
+    ]; streakEntries.forEach(function([k, s]) { if (!s) return;
+       var _tier = s.iconKey === 'fire' ? flameTier(s.current) : null;
+    %>
       <div class="wh-streak" style="color: <%= s.tone === 'emerald' ? '#34D399' : s.tone === 'blue' ? '#60A5FA' : s.tone === 'purple' ? '#A78BFA' : '#F59E0B' %>;">
         <p class="wh-streak-label">
-          <span class="wh-streak-ic <%= s.tone %>">
+          <span class="wh-streak-ic <%= s.tone %>" <% if (_tier) { %>data-tier="<%= _tier %>"<% } %>>
             <% if (s.iconKey === 'fire') { %><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2c1.5 4 5 5 5 9a5 5 0 11-10 0c0-1.5.5-3 1.5-4.5C9 8 11 5 12 2z"/></svg>
+            <% if (_tier === 'legendary') { %>
+              <span class="wh-flame-particle"></span>
+              <span class="wh-flame-particle wh-flame-particle-2"></span>
+              <span class="wh-flame-particle wh-flame-particle-3"></span>
+            <% } %>
             <% } else if (s.iconKey === 'shield') { %><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
             <% } else if (s.iconKey === 'check') { %><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
             <% } else { %><svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M5 3h14l-1 11H6L5 3zm3 14h8v2H8v-2z"/></svg>
