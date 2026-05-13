@@ -48,6 +48,16 @@ app.use(helmet({
 // the route handler runs — Express then returns a generic 500.
 app.use(express.urlencoded({ extended: true, limit: '10mb', parameterLimit: 100000 }));
 app.use(express.json());
+// Service worker must never be cached by the browser HTTP cache — otherwise
+// updates can take 24+ hours to roll out on iOS PWAs. The SW itself uses
+// caches.match() to control resource caching internally; this header just
+// forces the browser to always re-fetch the SW script.
+app.get(['/js/worker-sw.js', '/js/admin-sw.js'], (req, res, next) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/data/uploads', express.static(path.join(__dirname, 'data', 'uploads')));
 // Serve the full pdfjs-dist asset tree from node_modules so the worker
