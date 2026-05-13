@@ -90,6 +90,39 @@
     @media (prefers-reduced-motion: reduce) {
       .wh-ambient { background-image: radial-gradient(60% 50% at 50% 30%, rgba(43,127,255,0.06), transparent 70%); }
     }
+
+    /* Custom pull-to-refresh indicator. Driven by /js/worker-pull-refresh.js
+       which sets transform + opacity directly during the drag. The three
+       state classes layer on top: default, .wh-ptr-armed (worker pulled
+       past the threshold), and .wh-ptr-refreshing (released armed → spin
+       + reload). */
+    .wh-ptr {
+      position: fixed; top: 0; left: 50%;
+      transform: translate(-50%, 0);
+      width: 36px; height: 36px;
+      border-radius: 50%;
+      background: rgba(10,22,40,0.92);
+      border: 1px solid rgba(0,210,190,0.25);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 80;
+      opacity: 0;
+      pointer-events: none;
+      box-shadow: 0 8px 18px rgba(0,0,0,0.4);
+    }
+    .wh-ptr-spinner {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      border: 2px solid rgba(0,210,190,0.25);
+      border-top-color: #00D2BE;
+      transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    .wh-ptr-armed { border-color: rgba(0,210,190,0.6); background: rgba(0,210,190,0.12); }
+    .wh-ptr-armed .wh-ptr-spinner { transform: scale(1.15); }
+    .wh-ptr-refreshing .wh-ptr-spinner { animation: wh-ptr-spin 0.8s linear infinite; }
+    @keyframes wh-ptr-spin { to { transform: rotate(360deg); } }
+    @media (prefers-reduced-motion: reduce) {
+      .wh-ptr-refreshing .wh-ptr-spinner { animation: none; }
+    }
   </style>
 
   <!-- Top Header (Traffio-style: initials + title + refresh) -->
@@ -246,6 +279,7 @@
   <script src="/js/worker-haptics.js?v=1"></script>
   <script src="/js/worker-motion.js?v=1"></script>
   <script src="/js/worker-tabbar.js?v=1"></script>
+  <script src="/js/worker-pull-refresh.js?v=1"></script>
   <script src="/js/worker-offline-queue.js?v=1"></script>
   <script src="/js/worker-submit-success.js?v=1"></script>
   <script src="/js/worker-offline-form.js?v=3"></script>
