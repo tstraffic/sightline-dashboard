@@ -110,8 +110,11 @@ router.post('/', uploadPlanFile(false), (req, res) => {
     planTypes = b.plan_type;
   }
 
-  // Handle file upload
-  const filePath = req.file ? req.file.path.replace(/\\/g, '/') : '';
+  // Handle file upload. Store the public URL path (uploads/<filename>),
+  // NOT the absolute filesystem path — multer's req.file.path resolves to
+  // /app/public/uploads/... on Railway, and rendering that with a leading
+  // slash produced //app/... which browsers parse as protocol-relative.
+  const filePath = req.file ? 'uploads/' + req.file.filename : '';
   const fileOriginalName = req.file ? req.file.originalname : '';
 
   // The "Push to Final Plans" + "Client Provided" toggles must work from
@@ -208,7 +211,7 @@ router.post('/quick-upload', uploadPlanFile(true), (req, res) => {
     }
     const planNumber = `${codePrefix}-${jobSeq}-${String(nextSuffix).padStart(2, '0')}`;
 
-    const filePath = req.file.path.replace(/\\/g, '/');
+    const filePath = 'uploads/' + req.file.filename;
     const fileOriginalName = req.file.originalname;
     // Use filename (without extension) as the plan title
     const fileTitle = req.file.originalname.replace(/\.[^.]+$/, '');
@@ -337,7 +340,7 @@ router.post('/:id/delete', (req, res) => {
 
     // Delete physical file if exists
     if (plan.file_path) {
-      const fullPath = require('path').join(__dirname, '..', plan.file_path);
+      const fullPath = require('path').join(__dirname, '..', 'public', plan.file_path);
       try { require('fs').unlinkSync(fullPath); } catch (e) { /* file may not exist */ }
     }
 
@@ -444,7 +447,7 @@ router.post('/:id/revisions', upload.single('revision_file'), (req, res) => {
   if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
 
   const b = req.body;
-  const filePath = req.file ? req.file.path.replace(/\\/g, '/') : '';
+  const filePath = req.file ? 'uploads/' + req.file.filename : '';
   const fileOriginalName = req.file ? req.file.originalname : '';
 
   // Auto-increment revision label (Rev A → Rev B → Rev C...)

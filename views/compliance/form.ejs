@@ -110,7 +110,7 @@
               <label class="text-sm font-medium text-blue-800 whitespace-nowrap">Number of TGS Plans</label>
               <input type="number" name="tgs_quantity" id="tgs_quantity" min="1" value="<%= isEdit && item.tgs_quantity ? item.tgs_quantity : 1 %>"
                 class="w-20 bg-white border border-blue-300 text-gray-900 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <span class="text-xs text-blue-600">Plans appear as TSTGS3001-1, TSTGS3001-2, etc.</span>
+              <span class="text-xs text-blue-600">Plans appear as TSTGS3001 (first), TSTGS3001-2, TSTGS3001-3, etc.</span>
             </div>
           </div>
         </div>
@@ -326,15 +326,10 @@
         <!-- Reference Number -->
         <div>
           <label for="reference_number" class="block text-sm font-medium text-gray-600 mb-1">Reference Number</label>
-          <div class="flex gap-2">
-            <input type="text" id="reference_number" name="reference_number"
-              value="<%= isEdit && item.reference_number ? item.reference_number : '' %>"
-              class="flex-1 bg-white border border-gray-300 text-gray-900 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
-              placeholder="Auto-generated or manual entry">
-            <button type="button" id="generateRefBtn" onclick="generateRefNumber()"
-              class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg transition-colors whitespace-nowrap"
-              title="Generate next reference number">Generate</button>
-          </div>
+          <input type="text" id="reference_number" name="reference_number"
+            value="<%= isEdit && item.reference_number ? item.reference_number : '' %>"
+            class="w-full bg-white border border-gray-300 text-gray-900 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-brand-500"
+            placeholder="Auto-generated or manual entry">
         </div>
 
         <!-- Client PM -->
@@ -869,34 +864,6 @@ document.querySelectorAll('input[name="item_types"]').forEach(function(cb) {
   cb.addEventListener('change', updateResponseFields);
 });
 updateResponseFields();
-
-// Auto-generate reference number
-function generateRefNumber() {
-  var checked = document.querySelectorAll('input[name="item_types"]:checked');
-  var type = checked.length > 0 ? checked[0].value : '';
-  var btn = document.getElementById('generateRefBtn');
-  if (btn) { btn.textContent = '...'; btn.disabled = true; }
-  fetch('/compliance/api/next-ref?item_type=' + encodeURIComponent(type))
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-      document.getElementById('reference_number').value = data.reference_number;
-      if (btn) { btn.textContent = 'Generate'; btn.disabled = false; }
-      clearRefWarning();
-    })
-    .catch(function() {
-      if (btn) { btn.textContent = 'Generate'; btn.disabled = false; }
-    });
-}
-
-// Auto-fill ref number on NEW items when type checkbox changes (if field is empty)
-<% if (!isEdit) { %>
-document.querySelectorAll('input[name="item_types"]').forEach(function(cb) {
-  cb.addEventListener('change', function() {
-    var refInput = document.getElementById('reference_number');
-    if (!refInput.value) generateRefNumber();
-  });
-});
-<% } %>
 
 // Duplicate reference number check
 var refInput = document.getElementById('reference_number');
