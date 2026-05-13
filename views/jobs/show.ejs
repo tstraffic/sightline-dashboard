@@ -1032,18 +1032,32 @@
     })();
     </script>
     <%
-      // Combine traffic_plans + compliance items with plan-related types for this tab
+      // Combine traffic_plans + compliance items with plan-related types for this tab.
+      // Top-level rows are parent Plans (parent_id IS NULL AND plan_number IS NOT NULL)
+      // + any legacy flat compliance rows. Sub-plans nest under their parent in an
+      // expandable row, mirroring the main Plans & Approvals register at /compliance.
       const planTypes = [
         'traffic_guidance','tmp_approval','spa','sza','rol',
         'council_permit','bus_approval','police_notification','letter_drop','other'
       ];
-      const compliancePlans = (typeof complianceItems !== 'undefined' ? complianceItems : []).filter(function(c) {
+      const allCompliance = (typeof complianceItems !== 'undefined' ? complianceItems : []);
+      const subsByParent = (typeof subPlansByParent !== 'undefined' && subPlansByParent) ? subPlansByParent : {};
+      // Sub-plan ids — used to filter them out of the top-level list (they show
+      // up nested under their parent instead).
+      const subPlanIds = new Set();
+      Object.keys(subsByParent).forEach(pid => (subsByParent[pid] || []).forEach(s => subPlanIds.add(s.id)));
+      const allPlans = allCompliance.filter(function(c) {
+        if (subPlanIds.has(c.id)) return false; // hide sub-plans at top level
+        if (c.parent_id != null) return false;  // safety: any other child rows
+        // Parent plans + legacy flat rows that have plan-type item_types
         const types = (c.item_types || c.item_type || '').split(',');
-        return types.some(function(t) { return planTypes.includes(t.trim()); });
+        const isParent = c.plan_number != null;
+        return isParent || types.some(function(t) { return planTypes.includes(t.trim()); });
       });
-      const allPlans = compliancePlans;
       // Also include traffic_plans entries
       const tpEntries = typeof trafficPlans !== 'undefined' ? trafficPlans : [];
+      const planTypeLabels = { traffic_guidance: 'TGS', tmp_approval: 'CTMP', spa: 'SPA', sza: 'SZA', rol: 'ROL', council_permit: 'Council', bus_approval: 'Bus', police_notification: 'Police', letter_drop: 'Letter', other: 'Other' };
+      const planStatusColors = { not_started: 'bg-gray-100 text-gray-600', started: 'bg-purple-50 text-purple-700', submitted: 'bg-blue-50 text-blue-700', approved: 'bg-emerald-50 text-emerald-700', rejected: 'bg-red-50 text-red-700', expired: 'bg-amber-50 text-amber-700' };
     %>
     <% if (allPlans.length === 0 && tpEntries.length === 0) { %>
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 text-center">
@@ -1066,25 +1080,43 @@
         </thead>
         <tbody class="divide-y divide-gray-200">
           <% allPlans.forEach(function(item) {
-            const types = (item.item_types || item.item_type || '').split(',').filter(Boolean);
-            const typeLabels = { traffic_guidance: 'TGS', tmp_approval: 'CTMP', spa: 'SPA', sza: 'SZA', rol: 'ROL', council_permit: 'Council', bus_approval: 'Bus', police_notification: 'Police', letter_drop: 'Letter', other: 'Other' };
-            const statusColors = { not_started: 'bg-gray-100 text-gray-600', started: 'bg-purple-50 text-purple-700', submitted: 'bg-blue-50 text-blue-700', approved: 'bg-emerald-50 text-emerald-700', rejected: 'bg-red-50 text-red-700', expired: 'bg-amber-50 text-amber-700' };
+            const isParentPlan = item.parent_id == null && item.plan_number != null;
+            const subList = isParentPlan ? (subsByParent[item.id] || []) : [];
+            // Parent's "Types" column derives from the actual sub-plan types,
+            // not the placeholder item_type ('other') that parents carry.
+            const subTypeCounts = {};
+            subList.forEach(s => { subTypeCounts[s.item_type] = (subTypeCounts[s.item_type] || 0) + 1; });
+            const parentTypes = Object.keys(subTypeCounts);
+            const flatTypes = (item.item_types || item.item_type || '').split(',').filter(Boolean);
+            const types = isParentPlan ? parentTypes : flatTypes;
           %>
           <tr class="hover:bg-gray-50">
             <td class="px-4 py-3">
               <a href="/compliance/<%= item.id %>/edit?return_to=/jobs/<%= job.id %>%23plans" class="text-brand-600 hover:text-brand-700 font-medium"><%= item.title %></a>
-              <% if (item.reference_number) { %><div class="text-xs text-gray-400"><%= item.reference_number %></div><% } %>
+              <% if (isParentPlan) { %>
+                <button type="button" class="job-plan-toggle inline-flex items-center gap-1 text-xs font-mono font-semibold text-brand-700 hover:text-brand-800 mt-0.5"
+                  data-target="job-plan-exp-<%= item.id %>" title="Click to see <%= subList.length %> sub-plan<%= subList.length === 1 ? '' : 's' %>">
+                  <svg class="w-3 h-3 chevron transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7"/></svg>
+                  #<%= item.plan_number %>
+                  <span class="text-[10px] font-sans font-normal text-gray-400">(<%= subList.length %>)</span>
+                </button>
+              <% } else if (item.reference_number) { %>
+                <div class="text-xs text-gray-400"><%= item.reference_number %></div>
+              <% } %>
             </td>
             <td class="px-4 py-3">
               <div class="flex flex-wrap gap-1">
                 <% types.forEach(function(t) { %>
-                  <span class="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 text-blue-700"><%= typeLabels[t] || t %></span>
+                  <span class="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 text-blue-700"><%= planTypeLabels[t] || t %><% if (isParentPlan && subTypeCounts[t] > 1) { %> ×<%= subTypeCounts[t] %><% } %></span>
                 <% }) %>
+                <% if (isParentPlan && types.length === 0) { %>
+                  <span class="text-[11px] text-gray-400 italic">empty plan</span>
+                <% } %>
               </div>
             </td>
             <td class="px-4 py-3 text-gray-600 text-xs"><%= item.designer || item.approver_name || '-' %></td>
             <td class="px-4 py-3">
-              <span class="inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full <%= statusColors[item.status] || 'bg-gray-100 text-gray-600' %>"><%= (item.status || 'not_started').replace(/_/g, ' ') %></span>
+              <span class="inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full <%= planStatusColors[item.status] || 'bg-gray-100 text-gray-600' %>"><%= (item.status || 'not_started').replace(/_/g, ' ') %></span>
             </td>
             <td class="px-4 py-3 text-gray-500 text-xs"><%= item.due_date ? formatDateShort(item.due_date) : '-' %></td>
             <td class="px-4 py-3 text-gray-500 text-xs"><%= item.expiry_date ? formatDateShort(item.expiry_date) : '-' %></td>
@@ -1098,6 +1130,41 @@
               </form>
             </td>
           </tr>
+          <% if (isParentPlan) { %>
+            <tr id="job-plan-exp-<%= item.id %>" class="hidden bg-gray-50/60">
+              <td colspan="7" class="px-6 py-3 border-l-2 border-l-brand-300">
+                <% if (subList.length === 0) { %>
+                  <div class="text-xs text-gray-500 italic">No sub-plans yet — open the Plan to add some.</div>
+                <% } else { %>
+                  <div class="text-[11px] uppercase tracking-wide text-gray-400 font-semibold mb-2">Sub-plans (#<%= item.plan_number %>)</div>
+                  <table class="w-full text-xs">
+                    <thead class="text-gray-500">
+                      <tr class="text-left">
+                        <th class="font-medium pb-1.5 pr-3">Reference</th>
+                        <th class="font-medium pb-1.5 pr-3">Type</th>
+                        <th class="font-medium pb-1.5 pr-3">Description</th>
+                        <th class="font-medium pb-1.5 pr-3">Owner</th>
+                        <th class="font-medium pb-1.5 pr-3">Status</th>
+                        <th class="font-medium pb-1.5 pr-3">Expires</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <% subList.forEach(function(s) { %>
+                        <tr class="border-t border-gray-200 hover:bg-white">
+                          <td class="py-1.5 pr-3 font-mono text-gray-700"><a href="/compliance/<%= s.id %>/edit?return_to=/jobs/<%= job.id %>%23plans" class="text-brand-600 hover:text-brand-700"><%= s.reference_number || '—' %></a></td>
+                          <td class="py-1.5 pr-3"><span class="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded-full bg-blue-50 text-blue-700"><%= planTypeLabels[s.item_type] || s.item_type %></span></td>
+                          <td class="py-1.5 pr-3 text-gray-700"><%= s.description || s.title || '—' %></td>
+                          <td class="py-1.5 pr-3 text-gray-600"><%= s.owner_name || '—' %></td>
+                          <td class="py-1.5 pr-3"><span class="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded-full <%= planStatusColors[s.status] || 'bg-gray-100 text-gray-600' %>"><%= (s.status || 'not_started').replace(/_/g, ' ') %></span></td>
+                          <td class="py-1.5 pr-3 text-gray-500"><%= s.expiry_date ? formatDateShort(s.expiry_date) : '—' %></td>
+                        </tr>
+                      <% }) %>
+                    </tbody>
+                  </table>
+                <% } %>
+              </td>
+            </tr>
+          <% } %>
           <% }) %>
           <% tpEntries.forEach(function(tp) { %>
           <tr class="hover:bg-gray-50">
@@ -1160,6 +1227,19 @@
       </table>
     </div>
     <% } %>
+    <script>
+      // Expand/collapse a parent Plan's sub-plan list. Mirrors the chevron
+      // toggle behaviour on the main /compliance register.
+      document.querySelectorAll('.job-plan-toggle').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+          var row = document.getElementById(btn.dataset.target);
+          if (!row) return;
+          row.classList.toggle('hidden');
+          var chev = btn.querySelector('.chevron');
+          if (chev) chev.classList.toggle('rotate-90');
+        });
+      });
+    </script>
   </div>
   <% } %>
 

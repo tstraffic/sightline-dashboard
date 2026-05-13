@@ -253,6 +253,28 @@ router.get('/:id', (req, res) => {
     WHERE c.job_id = ? ORDER BY c.due_date ASC
   `).all(job.id);
 
+  // Pre-bucket sub-plans by parent so the Plans tab can render parent rows
+  // with an expandable sub-plan list — same shape as the /compliance register.
+  // Children may live under a parent that isn't job-scoped (or vice versa),
+  // so pull sub-plans by parent_id IN (...) rather than relying on c.job_id.
+  const parentIdsForJob = complianceItems
+    .filter(c => c.parent_id == null && c.plan_number != null)
+    .map(c => c.id);
+  const subPlansByParent = {};
+  if (parentIdsForJob.length > 0) {
+    const ph = parentIdsForJob.map(() => '?').join(',');
+    const subs = db.prepare(`
+      SELECT c.id, c.parent_id, c.item_type, c.reference_number, c.title, c.description,
+             c.status, c.submitted_date, c.expiry_date, c.due_date, c.designer,
+             c.assigned_to_id, u.full_name AS owner_name
+      FROM compliance c LEFT JOIN users u ON c.assigned_to_id = u.id
+      WHERE c.parent_id IN (${ph}) ORDER BY c.item_type, c.reference_number
+    `).all(...parentIdsForJob);
+    subs.forEach(s => {
+      (subPlansByParent[s.parent_id] = subPlansByParent[s.parent_id] || []).push(s);
+    });
+  }
+
   const deliveryDocs = db.prepare("SELECT * FROM documents WHERE job_id = ? AND library = 'delivery' ORDER BY category, original_name").all(job.id);
   const complianceDocs = db.prepare("SELECT d.*, u.full_name as uploaded_by_name FROM documents d LEFT JOIN users u ON d.uploaded_by_id = u.id WHERE d.job_id = ? AND d.library = 'compliance' ORDER BY d.category, d.created_at DESC").all(job.id);
   const accountsDocs = canViewAccounts(req.session.user)
@@ -525,7 +547,7 @@ router.get('/:id', (req, res) => {
 
   res.render('jobs/show', {
     title: job.job_number,
-    job, tasks, complianceItems, complianceDocs, deliveryDocs, accountsDocs,
+    job, tasks, complianceItems, subPlansByParent, complianceDocs, deliveryDocs, accountsDocs,
     incidents, contacts, timesheets, budget, costEntries, totalSpend,
     complianceCosts, equipmentCosts,
     equipmentAssignments, hireDockets, trafficPlans, chatThreadId, diaryEntries, tgsPlans,
