@@ -35,10 +35,6 @@
   // glyph mapping.
   var PDFJS_CMAP_URL = '/vendor/pdfjs/cmaps/';
   var PDFJS_FONTS_URL = '/vendor/pdfjs/standard_fonts/';
-  // Prebuilt pdfjs viewer (UMD) shipped with the npm package. We fall back
-  // to it inside an <iframe> if the in-page render rejects — it handles a
-  // wider range of edge-case PDFs than our minimal canvas loop.
-  var PDFJS_VIEWER_URL = '/vendor/pdfjs/legacy/web/viewer.html';
 
   var cssInjected = false;
   function injectCss() {
@@ -58,7 +54,6 @@
       '.pdfv-error { padding: 20px 16px; border-radius: 12px; background: rgba(244,63,94,0.10); border: 1px solid rgba(244,63,94,0.25); color: #fda4af; font-size: 0.85rem; text-align: center; }',
       '.pdfv-error a { color: #93C5FD; font-weight: 600; text-decoration: underline; display: inline-block; margin-top: 8px; }',
       '.pdfv-error .pdfv-err-detail { display: block; margin-top: 6px; color: rgba(253,164,175,0.7); font-size: 0.72rem; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-word; }',
-      '.pdfv-iframe { width: 100%; height: 80vh; min-height: 520px; border: 0; border-radius: 8px; background: #fff; display: block; }',
     ].join('\n');
     document.head.appendChild(style);
   }
@@ -109,15 +104,6 @@
       errLabel,
       '</div>',
     ].join('');
-  }
-
-  // Last-ditch fallback: load the PDF inside an <iframe> pointed at
-  // pdfjs-dist's prebuilt viewer. iOS Safari renders the canvas inside the
-  // iframe just fine — the broken-iframe-PDF behaviour only triggers when
-  // the iframe src is itself a .pdf URL.
-  function viewerIframeHtml(src) {
-    var url = PDFJS_VIEWER_URL + '?file=' + encodeURIComponent(src);
-    return '<iframe class="pdfv-iframe" src="' + url + '" allowfullscreen></iframe>';
   }
 
   function safeName(el, src) {
@@ -179,6 +165,10 @@
           cMapPacked: true,
           standardFontDataUrl: PDFJS_FONTS_URL,
           disableRange: false,
+          // XFA forms (used by some Word/Acrobat exports) need explicit opt-in
+          // in pdfjs 3.x, otherwise getDocument fails. Worth trying for SWMS
+          // PDFs since many traffic-control docs come out of Word.
+          enableXfa: true,
         }).promise;
       })
       .then(function (pdf) {
@@ -239,32 +229,8 @@
       })
       .catch(function (err) {
         console.error('[pdf-viewer] in-page load failed:', err && (err.name + ': ' + err.message) || err);
-        // Try the prebuilt pdfjs viewer in an iframe. It handles more
-        // edge-case PDFs (linearized streams, XFA forms, unusual encryption)
-        // than our minimal canvas loop. If THAT iframe fails to load too
-        // — onerror after a short timeout — fall through to the save link.
         injectCss();
-        el.innerHTML = viewerIframeHtml(src);
-        var iframe = el.querySelector('iframe');
-        var settled = false;
-        var settle = function (ok, reason) {
-          if (settled) return;
-          settled = true;
-          if (!ok) {
-            console.error('[pdf-viewer] iframe viewer failed:', reason);
-            el.innerHTML = errorHtml(src, name, err);
-          }
-        };
-        if (iframe) {
-          iframe.addEventListener('load', function () { settle(true); });
-          iframe.addEventListener('error', function () { settle(false, 'iframe error event'); });
-          // Hard cap — if the iframe never fires load (e.g. blocked / network
-          // hung), give up after 15s and show the save link with the
-          // original error so the worker isn't stuck.
-          setTimeout(function () { settle(true); }, 15000);
-        } else {
-          settle(false, 'iframe not created');
-        }
+        el.innerHTML = errorHtml(src, name, err);
       });
   }
 
