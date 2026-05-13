@@ -27,45 +27,20 @@
       <div class="sf-readrow"><span class="sf-k">Tax-free threshold</span><span class="sf-v"><%= current.claim_threshold ? 'Claimed' : 'Not claimed' %></span></div>
       <div class="sf-readrow"><span class="sf-k">HELP / STSL</span><span class="sf-v"><%= current.has_help_debt ? 'HELP' : '' %><% if (current.has_help_debt && current.has_stsl_debt) { %> + <% } %><%= current.has_stsl_debt ? 'STSL' : '' %><% if (!current.has_help_debt && !current.has_stsl_debt) { %>None<% } %></span></div>
       <div class="sf-readrow"><span class="sf-k">Medicare</span><span class="sf-v capitalize"><%= current.medicare_variation %></span></div>
-      <% if (current.pdf_url && typeof renderablePdf !== 'undefined' && renderablePdf && pageCount > 0) { %>
+      <% if (current.pdf_url) { %>
         <div class="sf-readrow"><span class="sf-k">Signed copy</span><span class="sf-v">Below</span></div>
-        <div class="tfn-pdf-pages" style="margin-top: 10px;">
-          <% for (let n = 1; n <= pageCount; n++) { %>
-            <img src="/w/hr/tfn/<%= current.id %>/pages/<%= n %>.png?v=<%= encodeURIComponent(cacheKey) %>" loading="<%= n === 1 ? 'eager' : 'lazy' %>" decoding="async" alt="Page <%= n %>" style="display: block; width: 100%; height: auto; margin: 0 auto 8px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08); background: #fff;">
-          <% } %>
+        <div style="margin-top: 10px;">
+          <div class="pdf-viewer"
+               data-pdf-src="<%= current.pdf_url %>"
+               data-pdf-name="TFN_declaration.pdf"
+               data-pdf-max-width="900"></div>
         </div>
-      <% } else if (current.pdf_url && typeof renderablePdf !== 'undefined' && renderablePdf) { %>
-        <div class="sf-readrow"><span class="sf-k">Signed copy</span><span class="sf-v">Preparing&hellip;</span></div>
-        <div id="tfn-prep" data-poll-url="/w/hr/tfn/<%= current.id %>/pages" style="margin-top: 10px; padding: 18px; text-align: center; background: rgba(0,0,0,0.04); border: 1px dashed rgba(0,0,0,0.15); border-radius: 10px; color: #6b7280; font-size: 0.85rem;">
-          Rendering signed copy&hellip;
-        </div>
-      <% } else if (current.pdf_url) { %>
-        <div class="sf-readrow"><span class="sf-k">Signed copy</span><span class="sf-v"><a class="text-brand-400 underline" href="<%= current.pdf_url %>">Download PDF</a></span></div>
       <% } %>
       <p class="sf-meta">Submitted <%= new Date(current.submitted_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) %></p>
     </div>
 
-    <% if (current.pdf_url && typeof renderablePdf !== 'undefined' && renderablePdf && pageCount === 0) { %>
-    <script>
-    (function () {
-      var el = document.getElementById('tfn-prep');
-      if (!el) return;
-      var url = el.getAttribute('data-poll-url');
-      var tries = 0;
-      function tick() {
-        tries++;
-        fetch(url, { credentials: 'same-origin', cache: 'no-store' })
-          .then(function (r) { return r.json(); })
-          .then(function (d) {
-            if (d && d.ready && d.count > 0) { location.reload(); return; }
-            if (tries > 60) return;
-            setTimeout(tick, 1500);
-          })
-          .catch(function () { if (tries < 60) setTimeout(tick, 2500); });
-      }
-      setTimeout(tick, 1200);
-    })();
-    </script>
+    <% if (current.pdf_url) { %>
+    <script src="/js/worker-pdf-viewer.js?v=1"></script>
     <% } %>
   <% } %>
 

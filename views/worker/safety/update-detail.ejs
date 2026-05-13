@@ -28,13 +28,7 @@
     border-radius: 10px; color: #93C5FD; font-weight: 600; font-size: 0.85rem;
     text-decoration: none; margin-top: 12px;
   }
-  .ud-pdf-pages { margin-top: 14px; }
-  .ud-pdf-pages img { display: block; width: 100%; height: auto; margin: 0 auto 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.06); background: #fff; }
-  .ud-preparing { margin-top: 14px; color: rgba(255,255,255,0.7); text-align: center; padding: 28px 14px; background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.1); border-radius: 12px; font-size: 0.85rem; }
-  .ud-prep-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: #2B7FFF; margin: 0 2px; animation: ud-pulse 1.2s infinite ease-in-out; }
-  .ud-prep-dot:nth-child(2) { animation-delay: 0.15s; }
-  .ud-prep-dot:nth-child(3) { animation-delay: 0.3s; }
-  @keyframes ud-pulse { 0%,100% { opacity: 0.35; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
+  .ud-pdf-wrap { margin-top: 14px; }
 </style>
 
 <div class="ud-wrap">
@@ -48,45 +42,22 @@
 
   <div class="ud-body"><%= update.body %></div>
 
-  <% if (update.attachment_path && renderablePdf && pageCount > 0) { %>
-    <div class="ud-pdf-pages">
-      <% for (let n = 1; n <= pageCount; n++) { %>
-        <img src="/w/safety/updates/<%= update.id %>/pages/<%= n %>.png?v=<%= encodeURIComponent(cacheKey) %>" loading="<%= n === 1 ? 'eager' : 'lazy' %>" decoding="async" alt="Page <%= n %>">
-      <% } %>
-    </div>
-  <% } else if (update.attachment_path && renderablePdf) { %>
-    <div class="ud-preparing" id="ud-prep" data-poll-url="/w/safety/updates/<%= update.id %>/pages">
-      Preparing attachment<span class="ud-prep-dot"></span><span class="ud-prep-dot"></span><span class="ud-prep-dot"></span>
+  <% if (update.attachment_path && isPdfAttachment) { %>
+    <div class="ud-pdf-wrap">
+      <div class="pdf-viewer"
+           data-pdf-src="/w/safety/updates/<%= update.id %>/file"
+           data-pdf-name="<%= (update.attachment_original_name || 'attachment.pdf') %>"></div>
     </div>
   <% } else if (update.attachment_path) { %>
-    <a href="/w/safety/updates/<%= update.id %>/file" class="ud-attach">
+    <a href="/w/safety/updates/<%= update.id %>/file" download="<%= update.attachment_original_name %>" class="ud-attach">
       <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m-7 7h8a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v13a2 2 0 002 2z"/></svg>
       <%= update.attachment_original_name %>
     </a>
   <% } %>
 </div>
 
-<% if (renderablePdf && pageCount === 0) { %>
-<script>
-(function () {
-  var el = document.getElementById('ud-prep');
-  if (!el) return;
-  var url = el.getAttribute('data-poll-url');
-  var tries = 0;
-  function tick() {
-    tries++;
-    fetch(url, { credentials: 'same-origin', cache: 'no-store' })
-      .then(function (r) { return r.json(); })
-      .then(function (d) {
-        if (d && d.ready && d.count > 0) { location.reload(); return; }
-        if (tries > 60) return;
-        setTimeout(tick, 1500);
-      })
-      .catch(function () { if (tries < 60) setTimeout(tick, 2500); });
-  }
-  setTimeout(tick, 1200);
-})();
-</script>
+<% if (update.attachment_path && isPdfAttachment) { %>
+<script src="/js/worker-pdf-viewer.js?v=1"></script>
 <% } %>
 
 <script>

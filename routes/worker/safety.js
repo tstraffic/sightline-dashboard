@@ -21,27 +21,6 @@ const fs = require('fs');
 const { getDb } = require('../../db/database');
 const { sendPushToUser } = require('../../services/pushNotification');
 const { submitterToken } = require('../../lib/anonymousToken');
-const pdfCache = require('../../lib/safety-pdf-cache');
-
-// Resolve a relative file_path (as stored in DB, e.g. "data/uploads/swms/xyz.pdf")
-// to an absolute path. Returns null if missing on disk.
-function resolveUploadPath(relPath) {
-  if (!relPath) return null;
-  const clean = String(relPath).replace(/^\/+/, '');
-  const abs = path.join(__dirname, '..', '..', clean);
-  return fs.existsSync(abs) ? abs : null;
-}
-
-// Send a rendered PDF page PNG with long-lived immutable cache headers.
-// The URL is expected to include ?v=<cacheKey> so the response is safely
-// immutable from the browser's perspective.
-function sendCachedPage(res, absPngPath, cacheKey, n) {
-  if (!fs.existsSync(absPngPath)) return res.status(404).send('page not found');
-  res.setHeader('Content-Type', 'image/png');
-  res.setHeader('Cache-Control', 'private, max-age=31536000, immutable');
-  res.setHeader('ETag', '"' + String(cacheKey || '0').slice(0, 32) + '-' + n + '"');
-  return res.sendFile(absPngPath);
-}
 
 const CATEGORY_LABELS = {
   general: 'General',
@@ -177,25 +156,10 @@ router.get('/safety/swms/:id', (req, res) => {
     ORDER BY signed_at DESC LIMIT 1
   `).get(swms.id, workerId) : null;
 
-  // Kick off PNG rendering for inline display if we have access + the file
-  // is a PDF. The view branches on pageCount: > 0 → image stack, == 0 +
-  // renderablePdf → "preparing…" placeholder + poll, else → download fallback.
-  let pageCount = 0;
-  let cacheKey = swms.version_token || '';
-  const abs = hasAccess && swms.file_path ? resolveUploadPath(swms.file_path) : null;
-  const renderablePdf = hasAccess && pdfCache.isRenderable(swms.file_original_name) && !!abs;
-  if (renderablePdf) {
-    cacheKey = cacheKey || pdfCache.fileStatHash(abs);
-    pdfCache.ensureRendered({ scope: 'swms', id: swms.id, cacheKey, absPdfPath: abs })
-      .catch(e => console.error('[w/safety] swms detail render error:', e.message));
-    pageCount = pdfCache.snapshot({ scope: 'swms', id: swms.id, cacheKey }).count;
-  }
-
   res.render('worker/safety/swms-detail', {
     title: swms.title, currentPage: 'safety',
     subtab: 'swms', swms, currentAck, lastAnyAck,
     hasAccess, pendingRequest, lastDecidedRequest,
-    pageCount, cacheKey, renderablePdf,
   });
 });
 
@@ -323,45 +287,9 @@ router.get('/safety/swms/:id/file', (req, res) => {
   return sendSafetyFileInline(res, abs, swms.file_original_name);
 });
 
-// GET /w/safety/swms/:id/pages — JSON { renderable, ready, count, version }.
-// Triggers a background render on first call; subsequent calls report status.
-router.get('/safety/swms/:id/pages', (req, res) => {
-  const db = getDb();
-  const workerId = req.session.worker.id;
-  const swms = db.prepare("SELECT id, kind, file_path, file_original_name, version_token, status FROM swms WHERE id = ?").get(req.params.id);
-  if (!swms || swms.status !== 'active') return res.status(404).json({ error: 'not found' });
-  if (!hasSwmsAccess(db, swms, workerId)) return res.status(403).json({ error: 'no access' });
-  if (!swms.file_path) return res.json({ renderable: false, ready: false, count: 0 });
-  if (!pdfCache.isRenderable(swms.file_original_name)) return res.json({ renderable: false, ready: false, count: 0 });
-  const abs = resolveUploadPath(swms.file_path);
-  if (!abs) return res.json({ renderable: true, ready: false, count: 0, error: 'file missing' });
-  const cacheKey = swms.version_token || pdfCache.fileStatHash(abs);
-  const snap = pdfCache.snapshot({ scope: 'swms', id: swms.id, cacheKey });
-  if (snap.ready) return res.json({ renderable: true, ready: true, count: snap.count, version: cacheKey });
-  // Kick off the render in the background; client will poll.
-  pdfCache.ensureRendered({ scope: 'swms', id: swms.id, cacheKey, absPdfPath: abs })
-    .catch(e => console.error('[w/safety] swms render error:', e.message));
-  return res.json({ renderable: true, ready: false, count: 0, version: cacheKey });
-});
-
-// GET /w/safety/swms/:id/pages/:n.png — auth-gated, version-busted PNG.
-router.get('/safety/swms/:id/pages/:n.png', (req, res) => {
-  const db = getDb();
-  const workerId = req.session.worker.id;
-  const swms = db.prepare("SELECT id, kind, file_path, version_token, status FROM swms WHERE id = ?").get(req.params.id);
-  if (!swms || swms.status !== 'active') return res.status(404).send('not found');
-  if (!hasSwmsAccess(db, swms, workerId)) return res.status(403).send('no access');
-  const abs = resolveUploadPath(swms.file_path);
-  if (!abs) return res.status(404).send('file missing');
-  const n = parseInt(req.params.n, 10);
-  if (!n || n < 1 || n > 1000) return res.status(400).send('bad page');
-  const cacheKey = swms.version_token || pdfCache.fileStatHash(abs);
-  const pngPath = pdfCache.getPagePath('swms', swms.id, cacheKey, n);
-  return sendCachedPage(res, pngPath, cacheKey, n);
-});
-
-// GET /w/safety/swms/:id/view — fullscreen image-stack viewer (no header/nav).
-// Uses layout-bare so the worker can scroll the document without browser chrome.
+// GET /w/safety/swms/:id/view — fullscreen PDF viewer (no header/nav).
+// Uses layout-bare so the worker can scroll the document without browser
+// chrome. PDF rendering happens client-side via /js/worker-pdf-viewer.js.
 router.get('/safety/swms/:id/view', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
@@ -378,16 +306,6 @@ router.get('/safety/swms/:id/view', (req, res) => {
     req.flash('error', 'You do not have access to this SWMS yet.');
     return res.redirect('/w/safety/swms/' + swms.id);
   }
-  const abs = resolveUploadPath(swms.file_path);
-  const renderablePdf = pdfCache.isRenderable(swms.file_original_name) && !!abs;
-  let pageCount = 0;
-  let cacheKey = swms.version_token || '';
-  if (renderablePdf) {
-    cacheKey = cacheKey || pdfCache.fileStatHash(abs);
-    pdfCache.ensureRendered({ scope: 'swms', id: swms.id, cacheKey, absPdfPath: abs })
-      .catch(e => console.error('[w/safety] swms view render error:', e.message));
-    pageCount = pdfCache.snapshot({ scope: 'swms', id: swms.id, cacheKey }).count;
-  }
   const currentAck = db.prepare(`
     SELECT * FROM swms_acknowledgements
     WHERE swms_id = ? AND crew_member_id = ? AND version_token = ?
@@ -395,7 +313,7 @@ router.get('/safety/swms/:id/view', (req, res) => {
   res.render('worker/safety/swms-view', {
     layout: 'worker/layout-bare',
     title: swms.title, currentPage: 'safety',
-    swms, pageCount, cacheKey, renderablePdf, currentAck,
+    swms, currentAck,
   });
 });
 
@@ -448,21 +366,9 @@ router.get('/safety/sop-register/:id', (req, res) => {
     ORDER BY signed_at DESC LIMIT 1
   `).get(sop.id, workerId);
 
-  let pageCount = 0;
-  let cacheKey = sop.version_token || '';
-  const abs = sop.file_path ? resolveUploadPath(sop.file_path) : null;
-  const renderablePdf = pdfCache.isRenderable(sop.file_original_name) && !!abs;
-  if (renderablePdf) {
-    cacheKey = cacheKey || pdfCache.fileStatHash(abs);
-    pdfCache.ensureRendered({ scope: 'sop', id: sop.id, cacheKey, absPdfPath: abs })
-      .catch(e => console.error('[w/safety] sop detail render error:', e.message));
-    pageCount = pdfCache.snapshot({ scope: 'sop', id: sop.id, cacheKey }).count;
-  }
-
   res.render('worker/safety/sop-register-detail', {
     title: sop.title, currentPage: 'safety',
     subtab: 'sop-register', sop, currentAck, lastAnyAck,
-    pageCount, cacheKey, renderablePdf,
   });
 });
 
@@ -510,37 +416,7 @@ router.get('/safety/sop-register/:id/file', (req, res) => {
   return sendSafetyFileInline(res, abs, sop.file_original_name);
 });
 
-// GET /w/safety/sop-register/:id/pages — mirror of the SWMS pages endpoint.
-router.get('/safety/sop-register/:id/pages', (req, res) => {
-  const db = getDb();
-  const sop = db.prepare("SELECT id, file_path, file_original_name, version_token, status FROM sop_register WHERE id = ?").get(req.params.id);
-  if (!sop || sop.status !== 'active') return res.status(404).json({ error: 'not found' });
-  if (!sop.file_path) return res.json({ renderable: false, ready: false, count: 0 });
-  if (!pdfCache.isRenderable(sop.file_original_name)) return res.json({ renderable: false, ready: false, count: 0 });
-  const abs = resolveUploadPath(sop.file_path);
-  if (!abs) return res.json({ renderable: true, ready: false, count: 0, error: 'file missing' });
-  const cacheKey = sop.version_token || pdfCache.fileStatHash(abs);
-  const snap = pdfCache.snapshot({ scope: 'sop', id: sop.id, cacheKey });
-  if (snap.ready) return res.json({ renderable: true, ready: true, count: snap.count, version: cacheKey });
-  pdfCache.ensureRendered({ scope: 'sop', id: sop.id, cacheKey, absPdfPath: abs })
-    .catch(e => console.error('[w/safety] sop render error:', e.message));
-  return res.json({ renderable: true, ready: false, count: 0, version: cacheKey });
-});
-
-router.get('/safety/sop-register/:id/pages/:n.png', (req, res) => {
-  const db = getDb();
-  const sop = db.prepare("SELECT id, file_path, version_token, status FROM sop_register WHERE id = ?").get(req.params.id);
-  if (!sop || sop.status !== 'active') return res.status(404).send('not found');
-  const abs = resolveUploadPath(sop.file_path);
-  if (!abs) return res.status(404).send('file missing');
-  const n = parseInt(req.params.n, 10);
-  if (!n || n < 1 || n > 1000) return res.status(400).send('bad page');
-  const cacheKey = sop.version_token || pdfCache.fileStatHash(abs);
-  const pngPath = pdfCache.getPagePath('sop', sop.id, cacheKey, n);
-  return sendCachedPage(res, pngPath, cacheKey, n);
-});
-
-// GET /w/safety/sop-register/:id/view — fullscreen SOP viewer.
+// GET /w/safety/sop-register/:id/view — fullscreen SOP viewer (client-side render).
 router.get('/safety/sop-register/:id/view', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
@@ -553,16 +429,6 @@ router.get('/safety/sop-register/:id/view', (req, res) => {
     req.flash('error', 'SOP not found or not active.');
     return res.redirect('/w/safety/sop-register');
   }
-  const abs = resolveUploadPath(sop.file_path);
-  const renderablePdf = pdfCache.isRenderable(sop.file_original_name) && !!abs;
-  let pageCount = 0;
-  let cacheKey = sop.version_token || '';
-  if (renderablePdf) {
-    cacheKey = cacheKey || pdfCache.fileStatHash(abs);
-    pdfCache.ensureRendered({ scope: 'sop', id: sop.id, cacheKey, absPdfPath: abs })
-      .catch(e => console.error('[w/safety] sop view render error:', e.message));
-    pageCount = pdfCache.snapshot({ scope: 'sop', id: sop.id, cacheKey }).count;
-  }
   const currentAck = db.prepare(`
     SELECT * FROM sop_register_acknowledgements
     WHERE sop_id = ? AND crew_member_id = ? AND version_token = ?
@@ -570,7 +436,7 @@ router.get('/safety/sop-register/:id/view', (req, res) => {
   res.render('worker/safety/sop-register-view', {
     layout: 'worker/layout-bare',
     title: sop.title, currentPage: 'safety',
-    sop, pageCount, cacheKey, renderablePdf, currentAck,
+    sop, currentAck,
   });
 });
 
@@ -609,53 +475,12 @@ router.get('/safety/updates/:id', (req, res) => {
     req.flash('error', 'Safety update not found.');
     return res.redirect('/w/safety/updates');
   }
-
-  let pageCount = 0;
-  let cacheKey = '';
-  const abs = update.attachment_path ? resolveUploadPath(update.attachment_path) : null;
-  const renderablePdf = pdfCache.isRenderable(update.attachment_original_name) && !!abs;
-  if (renderablePdf) {
-    cacheKey = pdfCache.fileStatHash(abs);
-    pdfCache.ensureRendered({ scope: 'safety_update', id: update.id, cacheKey, absPdfPath: abs })
-      .catch(e => console.error('[w/safety] update detail render error:', e.message));
-    pageCount = pdfCache.snapshot({ scope: 'safety_update', id: update.id, cacheKey }).count;
-  }
-
+  const isPdfAttachment = !!(update.attachment_original_name && /\.pdf$/i.test(update.attachment_original_name));
   res.render('worker/safety/update-detail', {
     title: update.title, currentPage: 'safety',
     subtab: 'updates', update, categoryLabels: CATEGORY_LABELS,
-    pageCount, cacheKey, renderablePdf,
+    isPdfAttachment,
   });
-});
-
-// GET /w/safety/updates/:id/pages — safety-update attachment inline PNGs.
-router.get('/safety/updates/:id/pages', (req, res) => {
-  const db = getDb();
-  const row = db.prepare('SELECT id, attachment_path, attachment_original_name, status FROM safety_updates WHERE id = ?').get(req.params.id);
-  if (!row || row.status !== 'published') return res.status(404).json({ error: 'not found' });
-  if (!row.attachment_path) return res.json({ renderable: false, ready: false, count: 0 });
-  if (!pdfCache.isRenderable(row.attachment_original_name)) return res.json({ renderable: false, ready: false, count: 0 });
-  const abs = resolveUploadPath(row.attachment_path);
-  if (!abs) return res.json({ renderable: true, ready: false, count: 0, error: 'file missing' });
-  const cacheKey = pdfCache.fileStatHash(abs);
-  const snap = pdfCache.snapshot({ scope: 'safety_update', id: row.id, cacheKey });
-  if (snap.ready) return res.json({ renderable: true, ready: true, count: snap.count, version: cacheKey });
-  pdfCache.ensureRendered({ scope: 'safety_update', id: row.id, cacheKey, absPdfPath: abs })
-    .catch(e => console.error('[w/safety] update render error:', e.message));
-  return res.json({ renderable: true, ready: false, count: 0, version: cacheKey });
-});
-
-router.get('/safety/updates/:id/pages/:n.png', (req, res) => {
-  const db = getDb();
-  const row = db.prepare('SELECT id, attachment_path, status FROM safety_updates WHERE id = ?').get(req.params.id);
-  if (!row || row.status !== 'published') return res.status(404).send('not found');
-  const abs = resolveUploadPath(row.attachment_path);
-  if (!abs) return res.status(404).send('file missing');
-  const n = parseInt(req.params.n, 10);
-  if (!n || n < 1 || n > 1000) return res.status(400).send('bad page');
-  const cacheKey = pdfCache.fileStatHash(abs);
-  const pngPath = pdfCache.getPagePath('safety_update', row.id, cacheKey, n);
-  return sendCachedPage(res, pngPath, cacheKey, n);
 });
 
 // POST /w/safety/updates/:id/read — idempotent insert via UNIQUE constraint.
@@ -731,53 +556,12 @@ router.get('/safety/toolboxes/:id', (req, res) => {
     SELECT * FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?
   `).get(toolbox.id, workerId);
   const photos = db.prepare(`SELECT id FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
-
-  let pageCount = 0;
-  let cacheKey = '';
-  const abs = toolbox.slides_path ? resolveUploadPath(toolbox.slides_path) : null;
-  const renderablePdf = pdfCache.isRenderable(toolbox.slides_original_name) && !!abs;
-  if (renderablePdf) {
-    cacheKey = pdfCache.fileStatHash(abs);
-    pdfCache.ensureRendered({ scope: 'toolbox', id: toolbox.id, cacheKey, absPdfPath: abs })
-      .catch(e => console.error('[w/safety] toolbox detail render error:', e.message));
-    pageCount = pdfCache.snapshot({ scope: 'toolbox', id: toolbox.id, cacheKey }).count;
-  }
-
+  const isPdfSlides = !!(toolbox.slides_original_name && /\.pdf$/i.test(toolbox.slides_original_name));
   res.render('worker/safety/toolbox-detail', {
     title: toolbox.title, currentPage: 'safety',
     subtab: 'toolboxes', toolbox, myAttendance, photos,
-    pageCount, cacheKey, renderablePdf,
+    isPdfSlides,
   });
-});
-
-// GET /w/safety/toolboxes/:id/pages — toolbox slides inline PNGs.
-router.get('/safety/toolboxes/:id/pages', (req, res) => {
-  const db = getDb();
-  const row = db.prepare("SELECT id, slides_path, slides_original_name, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
-  if (!row || row.status !== 'published') return res.status(404).json({ error: 'not found' });
-  if (!row.slides_path) return res.json({ renderable: false, ready: false, count: 0 });
-  if (!pdfCache.isRenderable(row.slides_original_name)) return res.json({ renderable: false, ready: false, count: 0 });
-  const abs = resolveUploadPath(row.slides_path);
-  if (!abs) return res.json({ renderable: true, ready: false, count: 0, error: 'file missing' });
-  const cacheKey = pdfCache.fileStatHash(abs);
-  const snap = pdfCache.snapshot({ scope: 'toolbox', id: row.id, cacheKey });
-  if (snap.ready) return res.json({ renderable: true, ready: true, count: snap.count, version: cacheKey });
-  pdfCache.ensureRendered({ scope: 'toolbox', id: row.id, cacheKey, absPdfPath: abs })
-    .catch(e => console.error('[w/safety] toolbox render error:', e.message));
-  return res.json({ renderable: true, ready: false, count: 0, version: cacheKey });
-});
-
-router.get('/safety/toolboxes/:id/pages/:n.png', (req, res) => {
-  const db = getDb();
-  const row = db.prepare("SELECT id, slides_path, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
-  if (!row || row.status !== 'published') return res.status(404).send('not found');
-  const abs = resolveUploadPath(row.slides_path);
-  if (!abs) return res.status(404).send('file missing');
-  const n = parseInt(req.params.n, 10);
-  if (!n || n < 1 || n > 1000) return res.status(400).send('bad page');
-  const cacheKey = pdfCache.fileStatHash(abs);
-  const pngPath = pdfCache.getPagePath('toolbox', row.id, cacheKey, n);
-  return sendCachedPage(res, pngPath, cacheKey, n);
 });
 
 // POST /w/safety/toolboxes/:id/caught-up — worker self-claim. Idempotent via
