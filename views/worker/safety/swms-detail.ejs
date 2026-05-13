@@ -3,8 +3,13 @@
     if (!s) return '—';
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
+  function fmtDate(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
+  }
   const isCurrent = !!currentAck;
   const priorOnly = !currentAck && !!lastAnyAck;
+  const isLocked = !hasAccess;
 %>
 <style>
   .sd-wrap { color: #fff; padding: 0 0 110px; }
@@ -12,20 +17,25 @@
   .sd-title { font-size: 1.35rem; font-weight: 800; line-height: 1.2; margin-bottom: 8px; }
   .sd-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-bottom: 14px; }
   .sd-banner {
-    border-radius: 12px; padding: 12px 14px; font-size: 0.82rem; margin-bottom: 14px;
+    border-radius: 12px; padding: 12px 14px; font-size: 0.82rem; margin-bottom: 14px; line-height: 1.4;
   }
   .sd-banner.amber { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d; }
   .sd-banner.green { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
   .sd-banner.rose  { background: rgba(244,63,94,0.15); border: 1px solid rgba(244,63,94,0.3); color: #fda4af; }
+  .sd-banner.slate { background: rgba(148,163,184,0.12); border: 1px solid rgba(148,163,184,0.3); color: #e2e8f0; }
+  /* Use min-height instead of vh so the mobile PDF viewer gets enough room
+     without overflowing past the bottom tab nav. iframe is more compatible
+     than <embed> across mobile browsers. */
   .sd-pdf-frame {
-    width: 100%; height: 70vh; min-height: 420px; border-radius: 12px;
+    width: 100%; height: 78vh; min-height: 500px; border-radius: 12px;
     border: 1px solid rgba(255,255,255,0.08); background: rgba(255,255,255,0.03);
+    display: block;
   }
   .sd-download {
-    display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 14px;
     background: rgba(43,127,255,0.15); border: 1px solid rgba(43,127,255,0.3);
-    border-radius: 10px; color: #93C5FD; font-weight: 600; font-size: 0.85rem;
-    text-decoration: none; margin-top: 10px;
+    border-radius: 10px; color: #93C5FD; font-weight: 600; font-size: 0.9rem;
+    text-decoration: none; margin-top: 10px; width: 100%;
   }
   .sd-actionbar {
     position: fixed; left: 0; right: 0; bottom: 64px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
@@ -37,41 +47,121 @@
     box-shadow: 0 6px 20px rgba(29,106,229,0.35);
   }
   .sd-ack-btn:active { transform: translateY(1px); }
+  .sd-lock-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 16px; margin-bottom: 14px; text-align: center;
+  }
+  .sd-lock-icon-lg { width: 36px; height: 36px; opacity: 0.7; margin: 4px auto 8px; display: block; }
+  .sd-lock-card h3 { font-size: 1rem; font-weight: 700; margin-bottom: 6px; }
+  .sd-lock-card p { font-size: 0.82rem; color: rgba(255,255,255,0.65); line-height: 1.45; }
+  .sd-form-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 14px; margin-bottom: 14px;
+  }
+  .sd-form-card h3 { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+  .sd-form-card p.sd-form-sub { font-size: 0.78rem; color: rgba(255,255,255,0.6); margin-bottom: 12px; line-height: 1.4; }
+  .sd-field { margin-bottom: 10px; }
+  .sd-field label { display: block; font-size: 0.72rem; font-weight: 600; color: rgba(255,255,255,0.7); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px; }
+  .sd-field input, .sd-field textarea {
+    width: 100%; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 8px; padding: 10px 12px; color: #fff; font-size: 0.9rem;
+    font-family: inherit;
+  }
+  .sd-field input:focus, .sd-field textarea:focus {
+    outline: none; border-color: rgba(43,127,255,0.6);
+  }
+  .sd-field textarea { resize: vertical; min-height: 70px; }
+  .sd-req-btn {
+    width: 100%; padding: 12px; border-radius: 10px; font-size: 0.9rem; font-weight: 700; border: 0;
+    background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
+  }
 </style>
 
 <div class="sd-wrap">
   <a href="/w/safety/swms" class="sd-back">← Safety / SWMS</a>
   <div class="sd-title"><%= swms.title %></div>
   <div class="sd-meta">
-    <span><%= swms.kind === 'template' ? 'Template' : 'Job-linked' %></span>
+    <span><%= swms.kind === 'template' ? 'Generic' : 'Job-linked' %></span>
     <% if (swms.job_number) { %><span>· <%= swms.job_number %></span><% } %>
+    <% if (swms.client) { %><span>· <%= swms.client %></span><% } %>
     <% if (swms.version_published_at) { %><span>· Version published <%= fmt(swms.version_published_at) %></span><% } %>
   </div>
 
-  <% if (isCurrent) { %>
-    <div class="sd-banner green">Acknowledged on <%= fmt(currentAck.signed_at) %>.</div>
-  <% } else if (priorOnly) { %>
-    <div class="sd-banner amber">⚠ This SWMS has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-acknowledge.</div>
-  <% } else { %>
-    <div class="sd-banner rose">You have not acknowledged this SWMS yet.</div>
-  <% } %>
+  <% if (isLocked) { %>
+    <div class="sd-lock-card">
+      <svg class="sd-lock-icon-lg" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c-1.105 0-2 .895-2 2v3h4v-3c0-1.105-.895-2-2-2zm6 5V9a6 6 0 10-12 0v7a2 2 0 002 2h8a2 2 0 002-2z"/></svg>
+      <h3>This SWMS is locked</h3>
+      <p>Job-linked SWMS are only available to crew who have been inducted onto the job site. If you've completed the induction (with us or the client), request confirmation below.</p>
+    </div>
 
-  <% if (swms.description) { %>
-    <p style="font-size: 0.85rem; color: rgba(255,255,255,0.75); margin-bottom: 12px; white-space: pre-line;"><%= swms.description %></p>
-  <% } %>
+    <% if (swms.description) { %>
+      <p style="font-size: 0.85rem; color: rgba(255,255,255,0.65); margin-bottom: 14px; white-space: pre-line;"><%= swms.description %></p>
+    <% } %>
 
-  <% if (swms.file_path) { %>
-    <embed src="/w/safety/swms/<%= swms.id %>/file" type="application/pdf" class="sd-pdf-frame">
-    <a href="/w/safety/swms/<%= swms.id %>/file" target="_blank" class="sd-download">
-      <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9V5a2 2 0 012-2h7a2 2 0 012 2v14a2 2 0 01-2 2h-7a2 2 0 01-2-2v-4M3 12h12m0 0l-3-3m3 3l-3 3"/></svg>
-      Open in new tab
-    </a>
+    <% if (pendingRequest) { %>
+      <div class="sd-banner amber">
+        Your access request was submitted on <%= fmt(pendingRequest.created_at) %>. The office will confirm your induction and unlock this SWMS shortly.
+        <% if (pendingRequest.inducted_with) { %><br><span style="opacity:0.85;">Inducted with: <%= pendingRequest.inducted_with %></span><% } %>
+      </div>
+    <% } else if (lastDecidedRequest && lastDecidedRequest.status === 'rejected') { %>
+      <div class="sd-banner rose">
+        A previous request was declined on <%= fmt(lastDecidedRequest.decided_at) %>.
+        <% if (lastDecidedRequest.decision_note) { %><br><span style="opacity:0.9;">Note: <%= lastDecidedRequest.decision_note %></span><% } %>
+        <br>You can submit a new request if your situation has changed.
+      </div>
+    <% } %>
+
+    <% if (!pendingRequest) { %>
+      <div class="sd-form-card">
+        <h3>Request access</h3>
+        <p class="sd-form-sub">Tell us where you completed the site induction so we can confirm and unlock this SWMS.</p>
+        <form method="POST" action="/w/safety/swms/<%= swms.id %>/request-access">
+          <%- include('../../partials/csrf') %>
+          <div class="sd-field">
+            <label for="inducted_with">Inducted with</label>
+            <input type="text" id="inducted_with" name="inducted_with" placeholder="e.g. T&S, John Holland, Abergeldie" maxlength="120" required>
+          </div>
+          <div class="sd-field">
+            <label for="induction_date">Induction date (optional)</label>
+            <input type="date" id="induction_date" name="induction_date">
+          </div>
+          <div class="sd-field">
+            <label for="worker_note">Notes for the office (optional)</label>
+            <textarea id="worker_note" name="worker_note" placeholder="Anything that helps confirm your induction..." maxlength="1000"></textarea>
+          </div>
+          <button type="submit" class="sd-req-btn">Submit request</button>
+        </form>
+      </div>
+    <% } %>
+
   <% } else { %>
-    <p style="color: rgba(255,255,255,0.5); font-size: 0.85rem;">No document attached.</p>
+
+    <% if (isCurrent) { %>
+      <div class="sd-banner green">Acknowledged on <%= fmt(currentAck.signed_at) %>.</div>
+    <% } else if (priorOnly) { %>
+      <div class="sd-banner amber">⚠ This SWMS has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-acknowledge.</div>
+    <% } else { %>
+      <div class="sd-banner rose">You have not acknowledged this SWMS yet.</div>
+    <% } %>
+
+    <% if (swms.description) { %>
+      <p style="font-size: 0.85rem; color: rgba(255,255,255,0.75); margin-bottom: 12px; white-space: pre-line;"><%= swms.description %></p>
+    <% } %>
+
+    <% if (swms.file_path) { %>
+      <iframe src="/w/safety/swms/<%= swms.id %>/file#view=FitH" class="sd-pdf-frame" title="<%= swms.title %>" loading="lazy"></iframe>
+      <a href="/w/safety/swms/<%= swms.id %>/file" target="_blank" rel="noopener" class="sd-download">
+        <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 9V5a2 2 0 012-2h7a2 2 0 012 2v14a2 2 0 01-2 2h-7a2 2 0 01-2-2v-4M3 12h12m0 0l-3-3m3 3l-3 3"/></svg>
+        Open full screen
+      </a>
+    <% } else { %>
+      <p style="color: rgba(255,255,255,0.5); font-size: 0.85rem;">No document attached.</p>
+    <% } %>
+
   <% } %>
 </div>
 
-<% if (!isCurrent) { %>
+<% if (!isLocked && !isCurrent) { %>
   <div class="sd-actionbar">
     <form method="POST" action="/w/safety/swms/<%= swms.id %>/acknowledge">
       <%- include('../../partials/csrf') %>

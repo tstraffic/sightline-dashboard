@@ -9217,6 +9217,60 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 200: SWMS competency grants + access requests
+  // Job-linked SWMS are no longer visible to all workers by default.
+  // - crew_swms_grants: a crew member has been granted access to a
+  //   job-linked SWMS (either by admin approving a request, or by
+  //   admin manually attaching it as a competency).
+  // - crew_swms_access_requests: a worker has requested access to a
+  //   job-linked SWMS (claiming they completed the induction with us
+  //   or the client). Admin reviews from the License & Competencies
+  //   tab on the crew profile.
+  // =============================================
+  if (!isMigrationApplied.get(200)) {
+    console.log('Running migration 200: crew_swms_grants + crew_swms_access_requests');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS crew_swms_grants (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          swms_id INTEGER NOT NULL REFERENCES swms(id) ON DELETE CASCADE,
+          granted_by_id INTEGER REFERENCES users(id),
+          granted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','request_approved')),
+          notes TEXT DEFAULT '',
+          UNIQUE(crew_member_id, swms_id)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_crew_swms_grants_crew ON crew_swms_grants(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_crew_swms_grants_swms ON crew_swms_grants(swms_id)');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS crew_swms_access_requests (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          swms_id INTEGER NOT NULL REFERENCES swms(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+          worker_note TEXT DEFAULT '',
+          inducted_with TEXT DEFAULT '',
+          induction_date DATE,
+          decided_by_id INTEGER REFERENCES users(id),
+          decided_at DATETIME,
+          decision_note TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_swms_access_req_crew   ON crew_swms_access_requests(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_swms_access_req_swms   ON crew_swms_access_requests(swms_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_swms_access_req_status ON crew_swms_access_requests(status)');
+      recordMigration.run(200, 'crew_swms_grants + crew_swms_access_requests');
+      console.log('Migration 200 applied');
+    } catch (e) {
+      console.error('Migration 200 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

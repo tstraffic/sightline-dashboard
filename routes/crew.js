@@ -3,7 +3,7 @@ const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
-const { requireRole } = require('../middleware/auth');
+const { requireRole, requirePermission } = require('../middleware/auth');
 const { createInvitation, TOKEN_EXPIRY_HOURS } = require('../services/invitations');
 const { sendEmail } = require('../services/email');
 const { workerInviteEmail } = require('../services/emailTemplates');
@@ -287,6 +287,55 @@ router.get('/:id', (req, res) => {
     ORDER BY al.created_at DESC LIMIT 20
   `).all(req.params.id);
 
+  // Granted SWMS competencies (job-linked SWMS this crew member can access).
+  const swmsGrants = db.prepare(`
+    SELECT g.id, g.granted_at, g.source, g.notes,
+           s.id AS swms_id, s.title, s.status, s.expiry_date, s.kind,
+           j.job_number, j.client,
+           u.full_name AS granted_by_name
+    FROM crew_swms_grants g
+    JOIN swms s ON s.id = g.swms_id
+    LEFT JOIN jobs j ON j.id = s.job_id
+    LEFT JOIN users u ON u.id = g.granted_by_id
+    WHERE g.crew_member_id = ?
+    ORDER BY g.granted_at DESC
+  `).all(member.id);
+
+  // Pending access requests + recent history.
+  const pendingSwmsRequests = db.prepare(`
+    SELECT r.*, s.title, s.kind, j.job_number, j.client
+    FROM crew_swms_access_requests r
+    JOIN swms s ON s.id = r.swms_id
+    LEFT JOIN jobs j ON j.id = s.job_id
+    WHERE r.crew_member_id = ? AND r.status = 'pending'
+    ORDER BY r.created_at ASC
+  `).all(member.id);
+
+  const decidedSwmsRequests = db.prepare(`
+    SELECT r.*, s.title, s.kind, j.job_number, j.client,
+      u.full_name AS decided_by_name
+    FROM crew_swms_access_requests r
+    JOIN swms s ON s.id = r.swms_id
+    LEFT JOIN jobs j ON j.id = s.job_id
+    LEFT JOIN users u ON u.id = r.decided_by_id
+    WHERE r.crew_member_id = ? AND r.status <> 'pending'
+    ORDER BY r.decided_at DESC
+    LIMIT 10
+  `).all(member.id);
+
+  // Job-linked SWMS available to attach manually (excludes ones already granted).
+  const availableJobSwms = db.prepare(`
+    SELECT s.id, s.title, s.status, j.job_number, j.client
+    FROM swms s
+    LEFT JOIN jobs j ON j.id = s.job_id
+    WHERE s.kind = 'job' AND s.status = 'active'
+      AND NOT EXISTS (
+        SELECT 1 FROM crew_swms_grants g
+        WHERE g.swms_id = s.id AND g.crew_member_id = ?
+      )
+    ORDER BY j.job_number DESC, s.title
+  `).all(member.id);
+
   res.render('crew/show', {
     title: member.full_name + ' — Worker Profile',
     currentPage: 'crew',
@@ -298,7 +347,126 @@ router.get('/:id', (req, res) => {
     activities,
     approvedBy: approvedBy ? approvedBy.full_name : null,
     today,
+    swmsGrants,
+    pendingSwmsRequests,
+    decidedSwmsRequests,
+    availableJobSwms,
   });
+});
+
+// POST /:id/swms-requests/:requestId/approve — admin confirms the worker's
+// induction; creates a crew_swms_grants row (idempotent) + marks the request approved.
+router.post('/:id/swms-requests/:requestId/approve', requirePermission('swms'), (req, res) => {
+  const db = getDb();
+  const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
+  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  const request = db.prepare('SELECT * FROM crew_swms_access_requests WHERE id = ? AND crew_member_id = ?').get(req.params.requestId, member.id);
+  if (!request) { req.flash('error', 'Request not found.'); return res.redirect('/crew/' + member.id); }
+  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return res.redirect('/crew/' + member.id); }
+  const decisionNote = String(req.body.decision_note || '').trim().slice(0, 500);
+  try {
+    const tx = db.transaction(() => {
+      db.prepare(`
+        INSERT OR IGNORE INTO crew_swms_grants
+          (crew_member_id, swms_id, granted_by_id, source, notes)
+        VALUES (?, ?, ?, 'request_approved', ?)
+      `).run(member.id, request.swms_id, req.session.user.id, decisionNote);
+      db.prepare(`
+        UPDATE crew_swms_access_requests
+        SET status = 'approved', decided_by_id = ?, decided_at = CURRENT_TIMESTAMP, decision_note = ?
+        WHERE id = ?
+      `).run(req.session.user.id, decisionNote, request.id);
+    });
+    tx();
+    const swmsRow = db.prepare('SELECT title FROM swms WHERE id = ?').get(request.swms_id);
+    logActivity({ user: req.session.user, action: 'approve', entityType: 'crew_member', entityId: member.id, entityLabel: member.full_name, details: 'Approved SWMS access: ' + (swmsRow && swmsRow.title || '#' + request.swms_id), ip: req.ip });
+    req.flash('success', 'Access granted. ' + member.full_name + ' can now view this SWMS.');
+  } catch (e) {
+    console.error('[crew] swms request approve error:', e.message);
+    req.flash('error', 'Could not approve request.');
+  }
+  return res.redirect('/crew/' + member.id + '#swms-requests');
+});
+
+// POST /:id/swms-requests/:requestId/reject — decline with an optional note.
+router.post('/:id/swms-requests/:requestId/reject', requirePermission('swms'), (req, res) => {
+  const db = getDb();
+  const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
+  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  const request = db.prepare('SELECT * FROM crew_swms_access_requests WHERE id = ? AND crew_member_id = ?').get(req.params.requestId, member.id);
+  if (!request) { req.flash('error', 'Request not found.'); return res.redirect('/crew/' + member.id); }
+  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return res.redirect('/crew/' + member.id); }
+  const decisionNote = String(req.body.decision_note || '').trim().slice(0, 500);
+  try {
+    db.prepare(`
+      UPDATE crew_swms_access_requests
+      SET status = 'rejected', decided_by_id = ?, decided_at = CURRENT_TIMESTAMP, decision_note = ?
+      WHERE id = ?
+    `).run(req.session.user.id, decisionNote, request.id);
+    logActivity({ user: req.session.user, action: 'reject', entityType: 'crew_member', entityId: member.id, entityLabel: member.full_name, details: 'Rejected SWMS access request #' + request.id, ip: req.ip });
+    req.flash('success', 'Request rejected.');
+  } catch (e) {
+    console.error('[crew] swms request reject error:', e.message);
+    req.flash('error', 'Could not reject request.');
+  }
+  return res.redirect('/crew/' + member.id + '#swms-requests');
+});
+
+// POST /:id/swms-grants — admin manually attaches a job-linked SWMS to a
+// crew member's competencies (i.e. unlocks the worker portal view without
+// a self-service request).
+router.post('/:id/swms-grants', requirePermission('swms'), (req, res) => {
+  const db = getDb();
+  const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
+  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  const swmsId = parseInt(req.body.swms_id, 10) || 0;
+  if (!swmsId) { req.flash('error', 'Pick a SWMS to attach.'); return res.redirect('/crew/' + member.id); }
+  const swms = db.prepare("SELECT id, title, kind, status FROM swms WHERE id = ?").get(swmsId);
+  if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/crew/' + member.id); }
+  if (swms.kind !== 'job') { req.flash('error', 'Only job-linked SWMS are grantable as competencies.'); return res.redirect('/crew/' + member.id); }
+  const notes = String(req.body.notes || '').trim().slice(0, 500);
+  try {
+    db.prepare(`
+      INSERT OR IGNORE INTO crew_swms_grants
+        (crew_member_id, swms_id, granted_by_id, source, notes)
+      VALUES (?, ?, ?, 'manual', ?)
+    `).run(member.id, swmsId, req.session.user.id, notes);
+    // Also auto-close any pending request for the same SWMS, since access
+    // is now granted out-of-band.
+    db.prepare(`
+      UPDATE crew_swms_access_requests
+      SET status = 'approved', decided_by_id = ?, decided_at = CURRENT_TIMESTAMP, decision_note = COALESCE(NULLIF(decision_note,''), 'Granted manually')
+      WHERE crew_member_id = ? AND swms_id = ? AND status = 'pending'
+    `).run(req.session.user.id, member.id, swmsId);
+    logActivity({ user: req.session.user, action: 'create', entityType: 'crew_member', entityId: member.id, entityLabel: member.full_name, details: 'Granted SWMS competency: ' + swms.title, ip: req.ip });
+    req.flash('success', 'SWMS attached as a competency.');
+  } catch (e) {
+    console.error('[crew] swms grant error:', e.message);
+    req.flash('error', 'Could not attach SWMS.');
+  }
+  return res.redirect('/crew/' + member.id + '#swms-competencies');
+});
+
+// POST /:id/swms-grants/:grantId/delete — revoke a granted SWMS competency.
+router.post('/:id/swms-grants/:grantId/delete', requirePermission('swms'), (req, res) => {
+  const db = getDb();
+  const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
+  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  const grant = db.prepare(`
+    SELECT g.id, s.title FROM crew_swms_grants g
+    JOIN swms s ON s.id = g.swms_id
+    WHERE g.id = ? AND g.crew_member_id = ?
+  `).get(req.params.grantId, member.id);
+  if (!grant) { req.flash('error', 'Grant not found.'); return res.redirect('/crew/' + member.id); }
+  try {
+    db.prepare('DELETE FROM crew_swms_grants WHERE id = ?').run(grant.id);
+    logActivity({ user: req.session.user, action: 'delete', entityType: 'crew_member', entityId: member.id, entityLabel: member.full_name, details: 'Revoked SWMS competency: ' + grant.title, ip: req.ip });
+    req.flash('success', 'SWMS competency revoked.');
+  } catch (e) {
+    console.error('[crew] swms grant revoke error:', e.message);
+    req.flash('error', 'Could not revoke grant.');
+  }
+  return res.redirect('/crew/' + member.id + '#swms-competencies');
 });
 
 // POST /:id/delete — Delete Crew Member
