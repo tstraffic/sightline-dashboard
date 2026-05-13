@@ -69,7 +69,19 @@ const commentUpload = multer({
 // GET /w/safety — land on SWMS first (the compliance-critical half).
 router.get('/safety', (req, res) => res.redirect('/w/safety/swms'));
 
-// GET /w/safety/swms — list active SWMS with per-row needs-ack badge.
+// Job-linked SWMS are gated: a crew member only sees the file once an admin
+// has granted them access (manually, or by approving a request). Templates
+// (kind = 'template') are always visible to active crew.
+function hasSwmsAccess(db, swmsRow, crewId) {
+  if (!swmsRow) return false;
+  if (swmsRow.kind === 'template') return true;
+  const g = db.prepare("SELECT 1 FROM crew_swms_grants WHERE crew_member_id = ? AND swms_id = ?").get(crewId, swmsRow.id);
+  return !!g;
+}
+
+// GET /w/safety/swms — list active SWMS. Generic (template) shows fully;
+// job-linked shows as locked with a Request Access affordance unless the
+// crew member has been granted access.
 router.get('/safety/swms', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
@@ -77,30 +89,45 @@ router.get('/safety/swms', (req, res) => {
     SELECT s.id, s.title, s.description, s.kind, s.expiry_date,
            s.version_token, s.version_published_at, s.file_path,
            j.job_number, j.project_name,
-           a.id AS ack_id, a.signed_at, a.version_token AS acked_token
+           a.id AS ack_id, a.signed_at, a.version_token AS acked_token,
+           g.id AS grant_id,
+           pr.id AS pending_request_id, pr.created_at AS pending_request_at
     FROM swms s
     LEFT JOIN jobs j ON j.id = s.job_id
     LEFT JOIN swms_acknowledgements a
       ON a.swms_id = s.id AND a.crew_member_id = ? AND a.version_token = s.version_token
+    LEFT JOIN crew_swms_grants g
+      ON g.swms_id = s.id AND g.crew_member_id = ?
+    LEFT JOIN crew_swms_access_requests pr
+      ON pr.swms_id = s.id AND pr.crew_member_id = ? AND pr.status = 'pending'
     WHERE s.status = 'active'
-    ORDER BY (a.id IS NULL) DESC, s.kind, s.title
-  `).all(workerId);
-  const needsAck = rows.filter(r => !r.ack_id);
-  const upToDate = rows.filter(r => !!r.ack_id);
+    ORDER BY s.kind, (a.id IS NULL) DESC, s.title
+  `).all(workerId, workerId, workerId);
+
+  // Generic SWMS: always accessible. Sort needs-ack first.
+  const generic = rows
+    .filter(r => r.kind === 'template')
+    .sort((a, b) => (a.ack_id ? 1 : 0) - (b.ack_id ? 1 : 0));
+
+  // Job-linked: split into granted (accessible) vs locked.
+  const jobLinkedAll = rows.filter(r => r.kind === 'job');
+  const jobLinkedGranted = jobLinkedAll.filter(r => !!r.grant_id);
+  const jobLinkedLocked = jobLinkedAll.filter(r => !r.grant_id);
+
   res.render('worker/safety/swms-list', {
     title: 'SWMS — Safety', currentPage: 'safety',
-    subtab: 'swms', needsAck, upToDate,
+    subtab: 'swms',
+    generic, jobLinkedGranted, jobLinkedLocked,
   });
 });
 
-// GET /w/safety/swms/:id — single SWMS detail. Surfaces the worker's
-// most-recent ack (any version) so we can show an amber "updated since you
-// last acknowledged it" banner.
+// GET /w/safety/swms/:id — single SWMS detail. For job-linked SWMS without
+// a grant, the file is hidden and a Request Access form is shown instead.
 router.get('/safety/swms/:id', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
   const swms = db.prepare(`
-    SELECT s.*, j.job_number, j.client FROM swms s
+    SELECT s.*, j.job_number, j.client, j.project_name FROM swms s
     LEFT JOIN jobs j ON j.id = s.job_id
     WHERE s.id = ? AND s.status = 'active'
   `).get(req.params.id);
@@ -108,19 +135,89 @@ router.get('/safety/swms/:id', (req, res) => {
     req.flash('error', 'SWMS not found or not active.');
     return res.redirect('/w/safety/swms');
   }
-  const currentAck = db.prepare(`
+  const hasAccess = hasSwmsAccess(db, swms, workerId);
+  const pendingRequest = swms.kind === 'job' ? db.prepare(`
+    SELECT * FROM crew_swms_access_requests
+    WHERE swms_id = ? AND crew_member_id = ? AND status = 'pending'
+    ORDER BY created_at DESC LIMIT 1
+  `).get(swms.id, workerId) : null;
+  const lastDecidedRequest = swms.kind === 'job' ? db.prepare(`
+    SELECT * FROM crew_swms_access_requests
+    WHERE swms_id = ? AND crew_member_id = ? AND status <> 'pending'
+    ORDER BY decided_at DESC LIMIT 1
+  `).get(swms.id, workerId) : null;
+  const currentAck = hasAccess ? db.prepare(`
     SELECT * FROM swms_acknowledgements
     WHERE swms_id = ? AND crew_member_id = ? AND version_token = ?
-  `).get(swms.id, workerId, swms.version_token || '');
-  const lastAnyAck = db.prepare(`
+  `).get(swms.id, workerId, swms.version_token || '') : null;
+  const lastAnyAck = hasAccess ? db.prepare(`
     SELECT * FROM swms_acknowledgements
     WHERE swms_id = ? AND crew_member_id = ?
     ORDER BY signed_at DESC LIMIT 1
-  `).get(swms.id, workerId);
+  `).get(swms.id, workerId) : null;
   res.render('worker/safety/swms-detail', {
     title: swms.title, currentPage: 'safety',
     subtab: 'swms', swms, currentAck, lastAnyAck,
+    hasAccess, pendingRequest, lastDecidedRequest,
   });
+});
+
+// POST /w/safety/swms/:id/request-access — worker claims they've completed
+// the site induction (with us or the client) and asks the office to confirm
+// + unlock the job-linked SWMS for them.
+router.post('/safety/swms/:id/request-access', (req, res) => {
+  const db = getDb();
+  const workerId = req.session.worker.id;
+  const swms = db.prepare("SELECT id, kind, title, status FROM swms WHERE id = ?").get(req.params.id);
+  if (!swms || swms.status !== 'active') {
+    req.flash('error', 'SWMS not available.');
+    return res.redirect('/w/safety/swms');
+  }
+  if (swms.kind !== 'job') {
+    req.flash('error', 'This SWMS does not require an access request.');
+    return res.redirect('/w/safety/swms/' + swms.id);
+  }
+  // Already granted? Just bounce them back.
+  const grant = db.prepare("SELECT id FROM crew_swms_grants WHERE swms_id = ? AND crew_member_id = ?").get(swms.id, workerId);
+  if (grant) {
+    req.flash('success', 'You already have access to this SWMS.');
+    return res.redirect('/w/safety/swms/' + swms.id);
+  }
+  // Block duplicate pending requests.
+  const existing = db.prepare("SELECT id FROM crew_swms_access_requests WHERE swms_id = ? AND crew_member_id = ? AND status = 'pending'").get(swms.id, workerId);
+  if (existing) {
+    req.flash('success', 'Your request is already pending. The office will review it shortly.');
+    return res.redirect('/w/safety/swms/' + swms.id);
+  }
+  const inductedWith = String(req.body.inducted_with || '').trim().slice(0, 120);
+  const inductionDate = (req.body.induction_date && /^\d{4}-\d{2}-\d{2}$/.test(req.body.induction_date)) ? req.body.induction_date : null;
+  const workerNote = String(req.body.worker_note || '').trim().slice(0, 1000);
+  try {
+    db.prepare(`
+      INSERT INTO crew_swms_access_requests
+        (crew_member_id, swms_id, worker_note, inducted_with, induction_date)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(workerId, swms.id, workerNote, inductedWith, inductionDate);
+    // Fire a push to ops/admin so they can action it.
+    try {
+      const adminUsers = db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) IN ('admin','operations','safety')").all();
+      const worker = req.session.worker;
+      const payload = {
+        title: 'SWMS access request',
+        body: (worker.full_name || 'A worker') + ' requested access to ' + swms.title + '.',
+        url: '/crew/' + workerId + '#swms-requests',
+        type: 'swms_access_request',
+      };
+      for (const u of adminUsers) {
+        sendPushToUser(u.id, payload).catch(e => console.error('[w/safety] swms request push error:', e.message));
+      }
+    } catch (e) { console.error('[w/safety] swms request notify error:', e.message); }
+    req.flash('success', 'Request submitted. The office will confirm your induction and unlock the SWMS.');
+  } catch (e) {
+    console.error('[w/safety] swms access request error:', e.message);
+    req.flash('error', 'Could not submit request.');
+  }
+  return res.redirect('/w/safety/swms/' + swms.id);
 });
 
 // POST /w/safety/swms/:id/acknowledge — idempotent ack with version snapshot.
@@ -151,20 +248,42 @@ router.post('/safety/swms/:id/acknowledge', (req, res) => {
   return res.redirect('/w/safety/swms/' + swms.id);
 });
 
-// GET /w/safety/swms/:id/file — auth-gated download (worker session).
+// Stream a file inline so the browser PDF viewer (incl. mobile Safari/Chrome)
+// can render it inside an iframe instead of triggering a download. Falls back
+// to attachment disposition for non-PDFs since they wouldn't render anyway.
+function sendSafetyFileInline(res, abs, originalName) {
+  const ext = path.extname(originalName || abs).toLowerCase();
+  const isPdf = ext === '.pdf';
+  const cleanName = (originalName || path.basename(abs)).replace(/[\r\n"]/g, '');
+  if (isPdf) {
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', 'inline; filename="' + cleanName + '"');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    return res.sendFile(abs);
+  }
+  return res.download(abs, cleanName);
+}
+
+// GET /w/safety/swms/:id/file — auth-gated PDF serve (worker session).
+// Job-linked SWMS additionally require an access grant.
 router.get('/safety/swms/:id/file', (req, res) => {
   const db = getDb();
-  const swms = db.prepare("SELECT file_path, file_original_name, status FROM swms WHERE id = ?").get(req.params.id);
+  const workerId = req.session.worker.id;
+  const swms = db.prepare("SELECT id, kind, file_path, file_original_name, status FROM swms WHERE id = ?").get(req.params.id);
   if (!swms || swms.status !== 'active' || !swms.file_path) {
     req.flash('error', 'File unavailable.');
     return res.redirect('/w/safety/swms/' + req.params.id);
+  }
+  if (!hasSwmsAccess(db, swms, workerId)) {
+    req.flash('error', 'You do not have access to this SWMS yet. Request access from the SWMS page.');
+    return res.redirect('/w/safety/swms/' + swms.id);
   }
   const abs = path.join(__dirname, '..', '..', swms.file_path);
   if (!fs.existsSync(abs)) {
     req.flash('error', 'File missing on disk.');
     return res.redirect('/w/safety/swms/' + req.params.id);
   }
-  return res.download(abs, swms.file_original_name || path.basename(abs));
+  return sendSafetyFileInline(res, abs, swms.file_original_name);
 });
 
 // GET /w/safety/sop-register — list active SOPs with per-row needs-ack badge.
@@ -249,7 +368,7 @@ router.post('/safety/sop-register/:id/acknowledge', (req, res) => {
   return res.redirect('/w/safety/sop-register/' + sop.id);
 });
 
-// GET /w/safety/sop-register/:id/file — auth-gated download (worker session).
+// GET /w/safety/sop-register/:id/file — auth-gated inline serve (worker session).
 router.get('/safety/sop-register/:id/file', (req, res) => {
   const db = getDb();
   const sop = db.prepare("SELECT file_path, file_original_name, status FROM sop_register WHERE id = ?").get(req.params.id);
@@ -262,7 +381,7 @@ router.get('/safety/sop-register/:id/file', (req, res) => {
     req.flash('error', 'File missing on disk.');
     return res.redirect('/w/safety/sop-register/' + req.params.id);
   }
-  return res.download(abs, sop.file_original_name || path.basename(abs));
+  return sendSafetyFileInline(res, abs, sop.file_original_name);
 });
 
 // GET /w/safety/updates — feed of published bulletins with unread flag.

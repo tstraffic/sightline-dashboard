@@ -8,48 +8,85 @@
     transition: background 0.15s;
   }
   .saf-card:active { background: rgba(255,255,255,0.07); }
-  .saf-card-title { font-size: 0.95rem; font-weight: 700; color: #fff; }
-  .saf-card-meta { font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .saf-card.locked { background: rgba(255,255,255,0.02); border-style: dashed; }
+  .saf-card-title { font-size: 0.95rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px; }
+  .saf-card-title.dim { color: rgba(255,255,255,0.7); }
+  .saf-card-meta { font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   .saf-chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 0.65rem; font-weight: 700; }
   .saf-chip-needs { background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3); }
   .saf-chip-done { background: rgba(16,185,129,0.15); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.28); }
   .saf-chip-kind { background: rgba(99,102,241,0.15); color: #c7d2fe; border: 1px solid rgba(99,102,241,0.25); }
+  .saf-chip-locked { background: rgba(148,163,184,0.18); color: #cbd5e1; border: 1px solid rgba(148,163,184,0.3); }
+  .saf-chip-pending { background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
   .saf-empty { text-align: center; padding: 32px 16px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
+  .saf-helptext { font-size: 0.72rem; color: rgba(255,255,255,0.55); padding: 0 4px 6px; line-height: 1.4; }
+  .saf-lock-icon { width: 14px; height: 14px; opacity: 0.7; }
 </style>
 
 <div class="saf-wrap">
   <h1 class="saf-h1">Safety</h1>
   <%- include('./_tabs') %>
 
-  <% if (needsAck.length === 0 && upToDate.length === 0) { %>
+  <% if (generic.length === 0 && jobLinkedGranted.length === 0 && jobLinkedLocked.length === 0) { %>
     <div class="saf-empty">No active SWMS in the register yet.</div>
   <% } else { %>
-    <% if (needsAck.length > 0) { %>
-      <div class="saf-section-h" style="color: #fda4af;">Needs acknowledgement (<%= needsAck.length %>)</div>
-      <% needsAck.forEach(r => { %>
+
+    <% if (generic.length > 0) { %>
+      <div class="saf-section-h">Generic SWMS (<%= generic.length %>)</div>
+      <% generic.forEach(r => { %>
         <a href="/w/safety/swms/<%= r.id %>" class="saf-card">
           <div class="saf-card-title"><%= r.title %></div>
           <div class="saf-card-meta">
-            <span class="saf-chip saf-chip-needs">Needs ack</span>
-            <span class="saf-chip saf-chip-kind"><%= r.kind === 'template' ? 'Template' : 'Job-linked' %></span>
+            <% if (r.ack_id) { %>
+              <span class="saf-chip saf-chip-done">Acknowledged</span>
+            <% } else { %>
+              <span class="saf-chip saf-chip-needs">Needs ack</span>
+            <% } %>
+            <span class="saf-chip saf-chip-kind">Generic</span>
+          </div>
+        </a>
+      <% }) %>
+    <% } %>
+
+    <% if (jobLinkedGranted.length > 0) { %>
+      <div class="saf-section-h">Job-linked SWMS — Granted (<%= jobLinkedGranted.length %>)</div>
+      <% jobLinkedGranted.forEach(r => { %>
+        <a href="/w/safety/swms/<%= r.id %>" class="saf-card">
+          <div class="saf-card-title"><%= r.title %></div>
+          <div class="saf-card-meta">
+            <% if (r.ack_id) { %>
+              <span class="saf-chip saf-chip-done">Acknowledged</span>
+            <% } else { %>
+              <span class="saf-chip saf-chip-needs">Needs ack</span>
+            <% } %>
+            <span class="saf-chip saf-chip-kind">Job-linked</span>
             <% if (r.job_number) { %><span>· <%= r.job_number %></span><% } %>
           </div>
         </a>
       <% }) %>
     <% } %>
 
-    <% if (upToDate.length > 0) { %>
-      <div class="saf-section-h">Up to date (<%= upToDate.length %>)</div>
-      <% upToDate.forEach(r => { %>
-        <a href="/w/safety/swms/<%= r.id %>" class="saf-card">
-          <div class="saf-card-title"><%= r.title %></div>
+    <% if (jobLinkedLocked.length > 0) { %>
+      <div class="saf-section-h">Job-linked SWMS — Locked (<%= jobLinkedLocked.length %>)</div>
+      <div class="saf-helptext">These SWMS are tied to a specific job site. If you've completed the induction (with us or the client), tap one to request access.</div>
+      <% jobLinkedLocked.forEach(r => { %>
+        <a href="/w/safety/swms/<%= r.id %>" class="saf-card locked">
+          <div class="saf-card-title dim">
+            <svg class="saf-lock-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c-1.105 0-2 .895-2 2v3h4v-3c0-1.105-.895-2-2-2zm6 5V9a6 6 0 10-12 0v7"/></svg>
+            <%= r.title %>
+          </div>
           <div class="saf-card-meta">
-            <span class="saf-chip saf-chip-done">Acknowledged</span>
-            <span class="saf-chip saf-chip-kind"><%= r.kind === 'template' ? 'Template' : 'Job-linked' %></span>
+            <% if (r.pending_request_id) { %>
+              <span class="saf-chip saf-chip-pending">Request pending</span>
+            <% } else { %>
+              <span class="saf-chip saf-chip-locked">Locked</span>
+            <% } %>
+            <span class="saf-chip saf-chip-kind">Job-linked</span>
             <% if (r.job_number) { %><span>· <%= r.job_number %></span><% } %>
           </div>
         </a>
       <% }) %>
     <% } %>
+
   <% } %>
 </div>
