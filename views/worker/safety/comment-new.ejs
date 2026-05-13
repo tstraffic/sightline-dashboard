@@ -63,7 +63,7 @@
 
     <div class="cn-card">
       <label class="cn-label" for="photos">Photos (optional, up to 5)</label>
-      <input type="file" name="photos" id="photos" multiple accept="image/*,.heic" class="cn-input" style="background: transparent; border-style: dashed; padding: 8px;">
+      <input type="file" name="photos" id="photos" multiple accept="image/*,.heic" capture="environment" data-wpi data-wpi-max="5" data-wpi-label="Add photo" class="cn-input">
     </div>
 
     <div class="cn-card">
@@ -77,3 +77,4 @@
     <button type="submit" class="cn-submit">Submit</button>
   </form>
 </div>
+<script src="/js/worker-photo-input.js?v=1"></script>

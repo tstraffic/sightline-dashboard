@@ -40,25 +40,25 @@
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-2">
         <label class="block text-xs font-semibold text-gray-500 uppercase">Fuel gauge photo</label>
         <p class="text-[11px] text-gray-500">One photo of the fuel gauge at the end of the shift.</p>
-        <input type="file" name="fuel_gauge_photos" accept="image/*" class="block w-full text-xs text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-brand-50 file:text-brand-700 file:text-xs file:font-semibold">
+        <input type="file" name="fuel_gauge_photos" accept="image/*" capture="environment" data-wpi data-wpi-max="2" data-wpi-label="Fuel gauge photo">
       </div>
 
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-2">
         <label class="block text-xs font-semibold text-gray-500 uppercase">Vehicle interior photos</label>
         <p class="text-[11px] text-gray-500">Minimum 3 photos.</p>
-        <input type="file" name="interior_photos" accept="image/*" multiple class="block w-full text-xs text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-brand-50 file:text-brand-700 file:text-xs file:font-semibold">
+        <input type="file" name="interior_photos" accept="image/*" capture="environment" multiple data-wpi data-wpi-max="6" data-wpi-label="Add interior photo">
       </div>
 
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-2">
         <label class="block text-xs font-semibold text-gray-500 uppercase">Equipment cage photos</label>
         <p class="text-[11px] text-gray-500">Minimum 3 photos showing the cage from all 3 angles.</p>
-        <input type="file" name="equipment_photos" accept="image/*" multiple class="block w-full text-xs text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-brand-50 file:text-brand-700 file:text-xs file:font-semibold">
+        <input type="file" name="equipment_photos" accept="image/*" capture="environment" multiple data-wpi data-wpi-max="6" data-wpi-label="Add equipment photo">
       </div>
 
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-2">
         <label class="block text-xs font-semibold text-gray-500 uppercase">Arrow board photos (3 angles)</label>
         <p class="text-[11px] text-gray-500">Actuator (driver side), front-on, passenger side.</p>
-        <input type="file" name="arrow_board_photos" accept="image/*" multiple class="block w-full text-xs text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:bg-brand-50 file:text-brand-700 file:text-xs file:font-semibold">
+        <input type="file" name="arrow_board_photos" accept="image/*" capture="environment" multiple data-wpi data-wpi-max="6" data-wpi-label="Add arrow board photo">
       </div>
 
       <!-- Free-text follow-ups -->
@@ -80,3 +80,4 @@
     </div>
   </form>
 </div>
+<script src="/js/worker-photo-input.js?v=1"></script>

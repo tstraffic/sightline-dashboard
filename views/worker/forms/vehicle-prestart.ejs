@@ -190,7 +190,7 @@
                     <% }) %>
                   </div>
                 <% } else if (rt === 'media_upload') { %>
-                  <input type="file" name="answer_<%= it.item_key %>" accept="image/*" multiple class="vps-input">
+                  <input type="file" name="answer_<%= it.item_key %>" accept="image/*" capture="environment" multiple data-wpi data-wpi-max="6" data-wpi-label="Add photo">
                 <% } else if (rt === 'signature') { %>
                   <div class="vps-sig-pad" id="sig-<%= it.item_key %>"><canvas data-sigkey="<%= it.item_key %>"></canvas></div>
                   <input type="hidden" name="answer_<%= it.item_key %>" id="sigval-<%= it.item_key %>">
@@ -255,3 +255,4 @@
   window.vpsClearSig = function (key) { if (pads[key]) pads[key].clear(); };
 })();
 </script>
+<script src="/js/worker-photo-input.js?v=1"></script>
