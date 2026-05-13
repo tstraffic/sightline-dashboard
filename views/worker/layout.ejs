@@ -6,12 +6,12 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="T&S Employee">
-  <meta name="theme-color" content="#020817">
+  <meta name="theme-color" content="#0A1628">
   <!-- The worker portal mixes a dark page background with intentionally
        white form cards. Tell the browser we're rendering "light" form
        controls so iOS Safari / Chrome dark mode doesn't auto-invert input
        backgrounds (which made text fields look like blank white blocks). -->
-  <meta name="color-scheme" content="light only">
+  <meta name="color-scheme" content="dark">
   <style>
     /* Backstop: any input/select/textarea inside a worker form must use a
        white bg + dark text regardless of OS dark-mode. The Tailwind classes
@@ -49,7 +49,7 @@
     }
   </script>
   <link rel="stylesheet" href="/css/custom.css?v=2">
-  <link rel="stylesheet" href="/css/worker.css?v=5">
+  <link rel="stylesheet" href="/css/worker.css?v=6">
   <link rel="stylesheet" href="/css/worker-theme.css?v=1">
   <link rel="stylesheet" href="/css/worker-design.css?v=4">
   <link rel="stylesheet" href="/css/chat.css?v=3">
@@ -119,9 +119,12 @@
     }
   </style>
 
-  <!-- Top Header (Traffio-style: initials + title + refresh) -->
-  <header class="shrink-0 safe-area-top" style="background: rgba(10,22,40,0.95); border-bottom: 1px solid rgba(255,255,255,0.06);">
-    <div class="flex items-center justify-between px-4 h-12">
+  <!-- Top Header (Traffio-style: initials + title + refresh).
+       Solid #0A1628 background that fully covers the iOS safe-area-top
+       zone so the notch area reads as "the header", not as empty body
+       space above the header. -->
+  <header class="shrink-0 safe-area-top" style="background: #0A1628; border-bottom: 1px solid rgba(255,255,255,0.06);">
+    <div class="flex items-center justify-between px-4 h-11">
       <% if (typeof worker !== 'undefined' && worker) { %>
         <a href="/w/profile" aria-label="Profile" class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 active:scale-95 transition" style="background: rgba(0,210,190,0.15); color: #00D2BE; border: 1px solid rgba(0,210,190,0.3);">
           <%= worker.full_name.split(' ').map(n => n[0]).join('').slice(0,2) %>

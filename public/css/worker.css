@@ -11,7 +11,14 @@ a, button { min-height: 44px; }
 nav a { -webkit-tap-highlight-color: transparent; user-select: none; min-height: auto; }
 
 /* ── Scrolling ── */
-html { scroll-behavior: smooth; -webkit-overflow-scrolling: touch; }
+html {
+  /* Set explicit dark background so iOS PWA standalone mode doesn't show
+     UA-default white in the safe-area-bottom zone under the home
+     indicator. Matches the body's bottom gradient stop. */
+  background: #0A1628;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
 
 /* ── Input Zoom Prevention (iOS) ── */
 input[type="text"], input[type="password"], input[type="email"],
