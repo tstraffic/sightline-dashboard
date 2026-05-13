@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="T&S Employee">
+  <meta name="theme-color" content="#020817">
+  <meta name="color-scheme" content="light only">
+  <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+  <link rel="manifest" href="/manifest.json">
+  <title><%= typeof title !== 'undefined' ? title + ' | ' : '' %>T&S Employee Portal</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'] }, colors: { brand: { 500: '#2B7FFF', 600: '#1D6AE5' }, ts: { cyan: '#00D2BE', navy: '#0A1628' } } } }
+    }
+  </script>
+  <link rel="stylesheet" href="/css/worker.css?v=4">
+  <link rel="stylesheet" href="/css/worker-theme.css?v=1">
+</head>
+<body class="worker-portal h-full font-sans antialiased" style="background: #020817; color: rgba(255,255,255,0.92); margin: 0;">
+<script>(function(){try{
+  var grad = localStorage.getItem('w-theme-gradient') || 'classic';
+  document.body.classList.add('gradient-' + grad);
+}catch(e){}})();</script>
+
+  <%- body %>
+
+  <script src="/js/worker.js"></script>
+  <%- typeof script !== 'undefined' ? script : '' %>
+</body>
+</html>
