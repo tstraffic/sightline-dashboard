@@ -21,6 +21,7 @@ const fs = require('fs');
 const { getDb } = require('../../db/database');
 const { sendPushToUser } = require('../../services/pushNotification');
 const { submitterToken } = require('../../lib/anonymousToken');
+const docxToPdf = require('../../lib/docx-to-pdf');
 
 const CATEGORY_LABELS = {
   general: 'General',
@@ -249,28 +250,52 @@ router.post('/safety/swms/:id/acknowledge', (req, res) => {
   return res.redirect('/w/safety/swms/' + swms.id);
 });
 
-// Stream a file inline so the browser PDF viewer (incl. mobile Safari/Chrome)
-// can render it inside an iframe instead of triggering a download. Falls back
-// to attachment disposition for non-PDFs since they wouldn't render anyway.
-function sendSafetyFileInline(res, abs, originalName) {
+// Stream a file inline for the client-side pdfjs viewer. If the source is a
+// Word doc / PowerPoint / spreadsheet, server-side converts to PDF via
+// LibreOffice (cached per scope+id+cacheKey) and streams the PDF instead.
+// The worker-side viewer doesn't know the difference — it always sees a PDF.
+//
+// `ctx` is { scope, id, cacheKey } — required when the original may be a
+// docx; cacheKey is normally the row's version_token so the cached PDF
+// busts when admin uploads a new version.
+async function sendSafetyFileInline(res, abs, originalName, ctx) {
   const ext = path.extname(originalName || abs).toLowerCase();
   const isPdf = ext === '.pdf';
   const cleanName = (originalName || path.basename(abs)).replace(/[\r\n"]/g, '');
-  if (isPdf) {
+
+  let pdfPath = isPdf ? abs : null;
+  let displayName = cleanName;
+
+  if (!isPdf && ctx && ctx.scope && ctx.id && docxToPdf.isConvertible(originalName || abs)) {
+    try {
+      const cacheKey = ctx.cacheKey || docxToPdf.fileStatHash(abs);
+      pdfPath = await docxToPdf.ensureConverted({
+        scope: ctx.scope, id: ctx.id, cacheKey,
+        absSourcePath: abs,
+      });
+      displayName = ((originalName || 'document').replace(/\.[^.]+$/, '') + '.pdf').replace(/[\r\n"]/g, '');
+    } catch (e) {
+      console.error('[w/safety] docx->pdf conversion failed for', originalName, '-', e.message);
+      // Fall through to attachment download of the original.
+    }
+  }
+
+  if (pdfPath) {
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', 'inline; filename="' + cleanName + '"');
+    res.setHeader('Content-Disposition', 'inline; filename="' + (displayName || 'document.pdf') + '"');
     res.setHeader('X-Content-Type-Options', 'nosniff');
-    return res.sendFile(abs);
+    return res.sendFile(pdfPath);
   }
   return res.download(abs, cleanName);
 }
 
 // GET /w/safety/swms/:id/file — auth-gated PDF serve (worker session).
-// Job-linked SWMS additionally require an access grant.
-router.get('/safety/swms/:id/file', (req, res) => {
+// Job-linked SWMS additionally require an access grant. Word docs are
+// transparently converted to PDF server-side (see sendSafetyFileInline).
+router.get('/safety/swms/:id/file', async (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
-  const swms = db.prepare("SELECT id, kind, file_path, file_original_name, status FROM swms WHERE id = ?").get(req.params.id);
+  const swms = db.prepare("SELECT id, kind, file_path, file_original_name, version_token, status FROM swms WHERE id = ?").get(req.params.id);
   if (!swms || swms.status !== 'active' || !swms.file_path) {
     req.flash('error', 'File unavailable.');
     return res.redirect('/w/safety/swms/' + req.params.id);
@@ -284,7 +309,9 @@ router.get('/safety/swms/:id/file', (req, res) => {
     req.flash('error', 'File missing on disk.');
     return res.redirect('/w/safety/swms/' + req.params.id);
   }
-  return sendSafetyFileInline(res, abs, swms.file_original_name);
+  return sendSafetyFileInline(res, abs, swms.file_original_name, {
+    scope: 'swms', id: swms.id, cacheKey: swms.version_token || docxToPdf.fileStatHash(abs),
+  });
 });
 
 // GET /w/safety/swms/:id/view — fullscreen PDF viewer (no header/nav).
@@ -400,10 +427,11 @@ router.post('/safety/sop-register/:id/acknowledge', (req, res) => {
   return res.redirect('/w/safety/sop-register/' + sop.id);
 });
 
-// GET /w/safety/sop-register/:id/file — auth-gated inline serve (worker session).
-router.get('/safety/sop-register/:id/file', (req, res) => {
+// GET /w/safety/sop-register/:id/file — auth-gated inline serve. Word docs
+// are transparently converted to PDF server-side.
+router.get('/safety/sop-register/:id/file', async (req, res) => {
   const db = getDb();
-  const sop = db.prepare("SELECT file_path, file_original_name, status FROM sop_register WHERE id = ?").get(req.params.id);
+  const sop = db.prepare("SELECT id, file_path, file_original_name, version_token, status FROM sop_register WHERE id = ?").get(req.params.id);
   if (!sop || sop.status !== 'active' || !sop.file_path) {
     req.flash('error', 'File unavailable.');
     return res.redirect('/w/safety/sop-register/' + req.params.id);
@@ -413,7 +441,9 @@ router.get('/safety/sop-register/:id/file', (req, res) => {
     req.flash('error', 'File missing on disk.');
     return res.redirect('/w/safety/sop-register/' + req.params.id);
   }
-  return sendSafetyFileInline(res, abs, sop.file_original_name);
+  return sendSafetyFileInline(res, abs, sop.file_original_name, {
+    scope: 'sop', id: sop.id, cacheKey: sop.version_token || docxToPdf.fileStatHash(abs),
+  });
 });
 
 // GET /w/safety/sop-register/:id/view — fullscreen SOP viewer (client-side render).
@@ -501,10 +531,12 @@ router.post('/safety/updates/:id/read', (req, res) => {
   }
 });
 
-// GET /w/safety/updates/:id/file — auth-gated attachment download.
-router.get('/safety/updates/:id/file', (req, res) => {
+// GET /w/safety/updates/:id/file — auth-gated attachment serve. Word docs
+// are transparently converted to PDF server-side so the inline viewer
+// renders them; everything else falls through to download.
+router.get('/safety/updates/:id/file', async (req, res) => {
   const db = getDb();
-  const row = db.prepare('SELECT attachment_path, attachment_original_name, status FROM safety_updates WHERE id = ?').get(req.params.id);
+  const row = db.prepare('SELECT id, attachment_path, attachment_original_name, status FROM safety_updates WHERE id = ?').get(req.params.id);
   if (!row || row.status !== 'published' || !row.attachment_path) {
     req.flash('error', 'Attachment unavailable.');
     return res.redirect('/w/safety/updates/' + req.params.id);
@@ -514,7 +546,9 @@ router.get('/safety/updates/:id/file', (req, res) => {
     req.flash('error', 'File missing on disk.');
     return res.redirect('/w/safety/updates/' + req.params.id);
   }
-  return res.download(abs, row.attachment_original_name || path.basename(abs));
+  return sendSafetyFileInline(res, abs, row.attachment_original_name, {
+    scope: 'safety_update', id: row.id, cacheKey: docxToPdf.fileStatHash(abs),
+  });
 });
 
 // =============================================
@@ -589,10 +623,11 @@ router.post('/safety/toolboxes/:id/caught-up', (req, res) => {
   return res.redirect('/w/safety/toolboxes/' + toolbox.id);
 });
 
-// GET /w/safety/toolboxes/:id/slides — worker-auth slides download.
-router.get('/safety/toolboxes/:id/slides', (req, res) => {
+// GET /w/safety/toolboxes/:id/slides — worker-auth slides serve. Word /
+// PowerPoint slides are transparently converted to PDF server-side.
+router.get('/safety/toolboxes/:id/slides', async (req, res) => {
   const db = getDb();
-  const row = db.prepare("SELECT slides_path, slides_original_name, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
+  const row = db.prepare("SELECT id, slides_path, slides_original_name, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
   if (!row || row.status !== 'published' || !row.slides_path) {
     req.flash('error', 'Slides unavailable.');
     return res.redirect('/w/safety/toolboxes/' + req.params.id);
@@ -602,7 +637,9 @@ router.get('/safety/toolboxes/:id/slides', (req, res) => {
     req.flash('error', 'File missing on disk.');
     return res.redirect('/w/safety/toolboxes/' + req.params.id);
   }
-  return res.download(abs, row.slides_original_name || path.basename(abs));
+  return sendSafetyFileInline(res, abs, row.slides_original_name, {
+    scope: 'toolbox', id: row.id, cacheKey: docxToPdf.fileStatHash(abs),
+  });
 });
 
 // GET /w/safety/toolboxes/:id/photos/:photoId — inline serve for the gallery.

@@ -17,6 +17,18 @@ const fs = require('fs');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { sendPushToAllActiveCrew } = require('../services/pushNotification');
+const docxToPdf = require('../lib/docx-to-pdf');
+
+// Fire-and-forget docx → PDF conversion so the first worker view doesn't
+// pay the LibreOffice cold-start latency. Safe to call with non-docx files —
+// it short-circuits internally.
+function prewarmConversion(swmsId, fileName, filePath, versionToken) {
+  if (!filePath || !fileName || !docxToPdf.isConvertible(fileName)) return;
+  const abs = path.join(__dirname, '..', filePath);
+  docxToPdf.ensureConverted({
+    scope: 'swms', id: swmsId, cacheKey: versionToken, absSourcePath: abs,
+  }).catch(e => console.error('[swms] prewarm convert failed:', e.message));
+}
 
 // Opaque version token. Rotates whenever a SWMS file is replaced or the row
 // transitions draft -> active. Workers store this token on their ack rows;
@@ -195,6 +207,9 @@ router.post('/', swmsUpload.single('swms_file'), (req, res) => {
     if (status === 'active') {
       notifyCrewSwmsUpdate({ id: r.lastInsertRowid, title });
     }
+    // Pre-warm the docx→PDF conversion so the first worker who opens the
+    // SWMS gets an instant render instead of waiting on LibreOffice cold start.
+    prewarmConversion(r.lastInsertRowid, fileName, filePath, versionToken);
     req.flash('success', kind === 'template' ? 'SWMS template imported.' : 'SWMS created.');
     return res.redirect('/swms/' + r.lastInsertRowid);
   } catch (err) {
@@ -331,6 +346,9 @@ router.post('/:id', swmsUpload.single('swms_file'), (req, res) => {
     try { logActivity({ user: req.session.user, action: 'update', entityType: 'swms', entityId: swms.id, entityLabel: title, details: '', ip: req.ip }); } catch (e) {}
     if (versionToken !== swms.version_token) {
       notifyCrewSwmsUpdate({ id: swms.id, title });
+      // New version → pre-warm the docx→PDF cache so workers don't wait
+      // on the first view. Skipped automatically for PDF uploads.
+      prewarmConversion(swms.id, fileName, filePath, versionToken);
     }
     req.flash('success', 'SWMS updated.');
     return res.redirect('/swms/' + swms.id);
