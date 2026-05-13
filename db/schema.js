@@ -9271,6 +9271,67 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 201: worker_notification_prefs
+  // Per-category opt-in/out for worker push notifications. Defaults are
+  // "enabled" — a missing row means the worker hasn't customised that
+  // category yet, so the push sender treats it as on.
+  //
+  // Categories (initial set, extensible):
+  //   swms_update, sop_update, safety_update, toolbox, quiz,
+  //   shift_reminder, shift_change, kudos, dm, comment_response,
+  //   cert_expiry, payday
+  // =============================================
+  if (!isMigrationApplied.get(201)) {
+    console.log('Running migration 201: worker_notification_prefs');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS worker_notification_prefs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          category TEXT NOT NULL,
+          channel TEXT NOT NULL DEFAULT 'push' CHECK(channel IN ('push','email')),
+          enabled INTEGER NOT NULL DEFAULT 1,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(crew_member_id, category, channel)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_worker_notif_prefs_crew ON worker_notification_prefs(crew_member_id)');
+      recordMigration.run(201, 'worker_notification_prefs');
+      console.log('Migration 201 applied');
+    } catch (e) {
+      console.error('Migration 201 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 202: cert_expiry_reminder_log
+  // Dedup table for the daily cert-expiry push: a row gets inserted per
+  // (crew_member_id, item_key, days_out) so we don't fire the same 14-day
+  // warning twice. crew_members.licence_expiry → item_key 'licence', etc.
+  // =============================================
+  if (!isMigrationApplied.get(202)) {
+    console.log('Running migration 202: cert_expiry_reminder_log');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS cert_expiry_reminder_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          item_key TEXT NOT NULL,
+          days_out INTEGER NOT NULL,
+          expiry_date DATE,
+          sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(crew_member_id, item_key, days_out, expiry_date)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_cert_expiry_log_crew ON cert_expiry_reminder_log(crew_member_id)');
+      recordMigration.run(202, 'cert_expiry_reminder_log');
+      console.log('Migration 202 applied');
+    } catch (e) {
+      console.error('Migration 202 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

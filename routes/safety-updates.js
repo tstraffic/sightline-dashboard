@@ -57,6 +57,7 @@ function announcePublished(req, update) {
     body: CATEGORY_LABELS[update.category] + ' — tap to read.',
     url: '/w/safety/updates/' + update.id,
     type: 'safety_update',
+    category: 'safety_update',
   }).catch(e => console.error('[safety-updates] push error:', e.message));
   try {
     logActivity({

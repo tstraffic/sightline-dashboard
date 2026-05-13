@@ -172,6 +172,7 @@ router.post('/:id/respond', (req, res) => {
         body: 'The office has responded to your submission.',
         url: '/w/safety/comments/' + comment.id,
         type: 'safety_comment_response',
+        category: 'comment_response',
       }).catch(e => console.error('[safety-comments] push response error:', e.message));
     }
   } catch (e) { console.error('[safety-comments] respond push error:', e.message); }

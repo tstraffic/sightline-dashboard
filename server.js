@@ -16,6 +16,7 @@ const { sidebarBadges } = require('./middleware/sidebarBadges');
 const { chatUnreadCountMiddleware } = require('./middleware/chat');
 const { initVapid } = require('./services/pushNotification');
 const { sendUpcomingShiftReminders } = require('./services/shiftReminders');
+const { sendCertExpiryReminders } = require('./services/certExpiryReminders');
 const { csrfProtection } = require('./middleware/csrf');
 
 // Initialize database and seed data
@@ -389,6 +390,17 @@ app.listen(PORT, () => {
     if (now.getDay() === 1 && now.getHours() === 7 && now.getMinutes() >= 15 && now.getMinutes() < 30) {
       console.log('Generating weekly job summaries...');
       generateWeeklySummaries();
+    }
+  }, 15 * 60 * 1000);
+
+  // Cert expiry reminders — daily at 7:30 AM. Fires for licence / white
+  // card / medical / TC / TI / first-aid items expiring in 30 / 14 / 7
+  // days, deduped via cert_expiry_reminder_log. Each worker can mute
+  // the 'cert_expiry' category in /w/profile/notifications.
+  setInterval(() => {
+    const now = new Date();
+    if (now.getHours() === 7 && now.getMinutes() >= 30 && now.getMinutes() < 45) {
+      sendCertExpiryReminders().catch(e => console.error('[cron] cert-expiry error:', e.message));
     }
   }, 15 * 60 * 1000);
 });

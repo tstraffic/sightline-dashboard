@@ -33,6 +33,7 @@ function notifyCrewSopUpdate(sopRow) {
     body: 'A new version requires your acknowledgement.',
     url: '/w/safety/sop-register/' + sopRow.id,
     type: 'sop_update',
+    category: 'sop_update',
   }).catch(e => console.error('[sop-register] push fan-out error:', e.message));
 }
 

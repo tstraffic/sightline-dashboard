@@ -183,11 +183,33 @@ function removeWorkerSubscription(endpoint) {
 }
 
 /**
+ * Worker-side per-category opt-in/out. Returns true unless the worker has
+ * explicitly disabled this category in worker_notification_prefs. A category
+ * of null/undefined is always allowed (back-compat with old call sites that
+ * haven't been migrated yet).
+ */
+function isWorkerCategoryEnabled(db, crewMemberId, category) {
+  if (!category) return true;
+  try {
+    const row = db.prepare(
+      "SELECT enabled FROM worker_notification_prefs WHERE crew_member_id = ? AND category = ? AND channel = 'push'"
+    ).get(crewMemberId, category);
+    if (!row) return true; // default-on
+    return row.enabled === 1;
+  } catch (e) { return true; }
+}
+
+/**
  * Send a push notification to a crew member (all their subscribed devices).
+ * Pass `payload.category` to honour worker_notification_prefs (per-category
+ * mute toggles). If not set, the push always fires (back-compat).
  */
 async function sendPushToCrew(crewMemberId, payload) {
   if (!vapidConfigured) return;
   const db = getDb();
+  if (!isWorkerCategoryEnabled(db, crewMemberId, payload && payload.category)) {
+    return; // worker muted this category
+  }
   const subs = db.prepare('SELECT * FROM worker_push_subscriptions WHERE crew_member_id = ?').all(crewMemberId);
   if (subs.length === 0) return;
   const payloadStr = JSON.stringify(payload);
@@ -220,9 +242,30 @@ async function sendPushToAllActiveCrew(payload) {
   const db = getDb();
   const rows = db.prepare('SELECT DISTINCT crew_member_id FROM worker_push_subscriptions').all();
   for (const r of rows) {
-    try { await sendPushToCrew(r.crew_member_id, payload); }
+    try { await sendPushToCrew(r.crew_member_id, payload); /* category honoured inside */ }
     catch (e) { console.error('[Push] fan-out crew', r.crew_member_id, e.message); }
   }
+}
+
+/**
+ * Read + write worker notification prefs (used by /w/profile/notifications).
+ */
+function getWorkerNotificationPrefs(crewMemberId) {
+  const db = getDb();
+  const rows = db.prepare("SELECT category, channel, enabled FROM worker_notification_prefs WHERE crew_member_id = ?").all(crewMemberId);
+  const map = {};
+  for (const r of rows) map[r.category + ':' + r.channel] = r.enabled === 1;
+  return map;
+}
+
+function setWorkerNotificationPref(crewMemberId, category, channel, enabled) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO worker_notification_prefs (crew_member_id, category, channel, enabled, updated_at)
+    VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+    ON CONFLICT(crew_member_id, category, channel) DO UPDATE SET
+      enabled = excluded.enabled, updated_at = excluded.updated_at
+  `).run(crewMemberId, category, channel || 'push', enabled ? 1 : 0);
 }
 
 module.exports = {
@@ -236,4 +279,7 @@ module.exports = {
   removeWorkerSubscription,
   sendPushToCrew,
   sendPushToAllActiveCrew,
+  isWorkerCategoryEnabled,
+  getWorkerNotificationPrefs,
+  setWorkerNotificationPref,
 };

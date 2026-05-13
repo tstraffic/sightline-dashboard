@@ -44,6 +44,7 @@ function notifyCrewSwmsUpdate(swmsRow) {
     body: 'A new version requires your acknowledgement.',
     url: '/w/safety/swms/' + swmsRow.id,
     type: 'swms_update',
+    category: 'swms_update',
   }).catch(e => console.error('[swms] push fan-out error:', e.message));
 }
 
