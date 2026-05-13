@@ -64,22 +64,18 @@
   document.body.classList.add('gradient-' + grad);
 }catch(e){}})();</script>
 
-  <!-- Ambient wash + noise behind everything. Fixed positioning so it does
-       not repaint on scroll. Two stacked layers: a barely-visible cool
-       radial wash so the top of the screen feels "lit", and a 256x256
-       feTurbulence SVG tiled at very low opacity so the pure-black areas
-       aren't dead flat. Inlined as a data-URI so no extra HTTP. -->
+  <!-- Ambient wash behind everything. Fixed positioning so it does not
+       repaint on scroll. Just a soft cool radial glow at the top — the
+       SVG noise tile that originally lived here was reading as concrete
+       wall on real phones, so we dropped it. The deepened card gradient
+       from PR 1 + the page background gradient already give plenty of
+       depth on their own. -->
   <div class="wh-ambient" aria-hidden="true"></div>
   <style>
     .wh-ambient {
       position: fixed; inset: 0;
       z-index: 0; pointer-events: none;
-      opacity: 0.55;
-      background-image:
-        radial-gradient(60% 50% at 50% 30%, rgba(43,127,255,0.06), transparent 70%),
-        url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='256' height='256'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 0.5 0'/></filter><rect width='256' height='256' filter='url(%23n)' opacity='0.7'/></svg>");
-      background-repeat: no-repeat, repeat;
-      background-size: 100% 100%, 256px 256px;
+      background-image: radial-gradient(70% 50% at 50% 25%, rgba(43,127,255,0.07), transparent 70%);
     }
     /* Keep the rest of the page above the ambient layer. */
     body.worker-portal > header,
@@ -87,10 +83,6 @@
     body.worker-portal > nav,
     body.worker-portal > .wh-ptr { position: relative; z-index: 1; }
     body.worker-portal > nav { z-index: 50; }
-    @media (prefers-reduced-motion: reduce) {
-      .wh-ambient { background-image: radial-gradient(60% 50% at 50% 30%, rgba(43,127,255,0.06), transparent 70%); }
-    }
-
     /* Custom pull-to-refresh indicator. Driven by /js/worker-pull-refresh.js
        which sets transform + opacity directly during the drag. The three
        state classes layer on top: default, .wh-ptr-armed (worker pulled
