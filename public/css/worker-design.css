@@ -297,6 +297,31 @@
 .wd-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
 
 /* =========================================================================
+   Breathing pulse for attention-worthy cards (PR 7).
+
+   Opt-in via [data-attention] (optionally [data-attention="amber|rose|
+   emerald|teal|blue"] for a tinted glow). The animation is deliberately
+   gentle — 2.6s cycle, 1.0 -> 0.92 -> 1.0 opacity, with a glow ring that
+   breathes in sync — so it reads as "alive" not "loading spinner".
+   Anything already pulsing on its own (wh-hero-ctx dots, wh-slide-in
+   cards, sd-pulse) keeps its existing animation; this is for whole-card
+   ambient breath only.
+   ========================================================================= */
+@keyframes wd-breathing {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 var(--wd-attn-glow, rgba(255,255,255,0.18)); }
+  50%      { opacity: 0.92; box-shadow: 0 0 0 6px transparent; }
+}
+[data-attention] {
+  animation: wd-breathing 2.6s ease-in-out infinite;
+  will-change: opacity, box-shadow;
+}
+[data-attention="amber"]   { --wd-attn-glow: rgba(245, 158, 11, 0.35); }
+[data-attention="rose"]    { --wd-attn-glow: rgba(244, 63, 94, 0.35); }
+[data-attention="emerald"] { --wd-attn-glow: rgba(16, 185, 129, 0.30); }
+[data-attention="teal"]    { --wd-attn-glow: rgba(0, 210, 190, 0.30); }
+[data-attention="blue"]    { --wd-attn-glow: rgba(43, 127, 255, 0.30); }
+
+/* =========================================================================
    Reduced motion: respect OS preference.
    ========================================================================= */
 @media (prefers-reduced-motion: reduce) {
@@ -306,5 +331,9 @@
   .wd-stat-tile {
     transition: none !important;
     transform: none !important;
+  }
+  [data-attention] {
+    animation: none !important;
+    box-shadow: none !important;
   }
 }

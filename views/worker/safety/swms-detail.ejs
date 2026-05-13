@@ -95,12 +95,12 @@
     <% } %>
 
     <% if (pendingRequest) { %>
-      <div class="sd-banner amber">
+      <div class="sd-banner amber" data-attention="amber">
         Your access request was submitted on <%= fmt(pendingRequest.created_at) %>. The office will confirm your induction and unlock this SWMS shortly.
         <% if (pendingRequest.inducted_with) { %><br><span style="opacity:0.85;">Inducted with: <%= pendingRequest.inducted_with %></span><% } %>
       </div>
     <% } else if (lastDecidedRequest && lastDecidedRequest.status === 'rejected') { %>
-      <div class="sd-banner rose">
+      <div class="sd-banner rose" data-attention="rose">
         A previous request was declined on <%= fmt(lastDecidedRequest.decided_at) %>.
         <% if (lastDecidedRequest.decision_note) { %><br><span style="opacity:0.9;">Note: <%= lastDecidedRequest.decision_note %></span><% } %>
         <br>You can submit a new request if your situation has changed.
@@ -135,9 +135,9 @@
     <% if (isCurrent) { %>
       <div class="sd-banner green">Acknowledged on <%= fmt(currentAck.signed_at) %>.</div>
     <% } else if (priorOnly) { %>
-      <div class="sd-banner amber">⚠ This SWMS has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-acknowledge.</div>
+      <div class="sd-banner amber" data-attention="amber">⚠ This SWMS has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-acknowledge.</div>
     <% } else { %>
-      <div class="sd-banner rose">You have not acknowledged this SWMS yet.</div>
+      <div class="sd-banner rose" data-attention="rose">You have not acknowledged this SWMS yet.</div>
     <% } %>
 
     <% if (swms.description) { %>

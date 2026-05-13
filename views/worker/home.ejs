@@ -409,7 +409,7 @@
   var headline = pct >= 90 ? 'On top of your checklists' : pct >= 60 ? 'Catch up on your checklists' : 'Several checklists outstanding';
 %>
   <div class="wh-section-head"><span class="wh-section-title">Your checklist completion · last 7 days</span></div>
-  <a href="/w/forms" style="display:block;text-decoration:none;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-left:3px solid <%= toneFg %>;border-radius:14px;padding:14px 16px;">
+  <a href="/w/forms" <% if (tone === 'red') { %>data-attention="rose"<% } else if (tone === 'amber') { %>data-attention="amber"<% } %> style="display:block;text-decoration:none;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-left:3px solid <%= toneFg %>;border-radius:14px;padding:14px 16px;">
     <div style="display:flex;align-items:center;gap:14px;">
       <div style="width:54px;height:54px;border-radius:50%;background:<%= toneBg %>;color:<%= toneFg %>;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:0.95rem;flex-shrink:0;">
         <%= pct %>%
@@ -512,7 +512,7 @@
 
 <% if (section === 'compliance' && !hidden.includes('compliance') && compliance && (!compliance.canAllocate || compliance.fatigueBlocked || (compliance.expiringItems && compliance.expiringItems.length > 0) || (compliance.expiredItems && compliance.expiredItems.length > 0))) { %>
   <div class="wh-section-head"><span class="wh-section-title">Heads up</span></div>
-  <div class="wh-alert">
+  <div class="wh-alert" data-attention="rose">
     <h4>Compliance needs attention</h4>
     <ul class="list-disc pl-5">
       <% if (compliance.fatigueBlocked) { %><li>Fatigue limit reached (<%= compliance.daysWorked %>/7 days worked)</li><% } %>
