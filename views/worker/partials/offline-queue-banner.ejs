@@ -2,12 +2,12 @@
     submissions that haven't been sent yet. Mounted once on every worker
     page via worker/layout.ejs. The script renders nothing until the
     queue is non-empty, so this is invisible by default. %>
-<div id="wq-banner" class="wq-banner" hidden>
-  <button type="button" class="wq-banner-chip" id="wq-banner-chip">
+<div id="wq-banner" class="wq-banner" aria-live="polite">
+  <button type="button" class="wq-banner-chip" id="wq-banner-chip" aria-label="Pending offline submissions">
     <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12a9 9 0 1015.59-6.36L17 7m4-4v6h-6m1 12a9 9 0 01-15.59-6.36L7 17m-4 4v-6h6"/></svg>
     <span id="wq-banner-count">0</span> pending
   </button>
-  <div class="wq-banner-drawer" id="wq-banner-drawer" hidden>
+  <div class="wq-banner-drawer" id="wq-banner-drawer">
     <div class="wq-banner-title">Waiting to submit</div>
     <ul class="wq-banner-list" id="wq-banner-list"></ul>
     <button type="button" class="wq-banner-retry" id="wq-banner-retry">Retry now</button>
@@ -15,10 +15,19 @@
 </div>
 
 <style>
+  /* The banner is fixed-positioned above the bottom tab nav. Hidden by
+     default; the script un-hides it only when the queue is non-empty.
+     `display: none` baseline + `.is-visible` toggle, because the
+     [hidden] HTML attribute alone was being overridden by the previous
+     `display: flex` rule (giving us a stuck "0 pending" chip floating
+     over the home screen). */
   .wq-banner {
     position: fixed; right: 12px; bottom: calc(76px + env(safe-area-inset-bottom, 0px));
-    z-index: 60; display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+    z-index: 60; display: none; flex-direction: column; align-items: flex-end; gap: 8px;
   }
+  .wq-banner.is-visible { display: flex; }
+  .wq-banner-drawer { display: none; }
+  .wq-banner-drawer.is-open { display: block; }
   .wq-banner-chip {
     display: inline-flex; align-items: center; gap: 6px;
     padding: 8px 12px; border-radius: 999px; border: 1px solid rgba(245,158,11,0.35);
@@ -68,10 +77,18 @@
   }
 
   function refresh() {
-    if (!window.WorkerOfflineQueue) { banner.hidden = true; return; }
+    if (!window.WorkerOfflineQueue) {
+      banner.classList.remove('is-visible');
+      drawer.classList.remove('is-open');
+      return;
+    }
     window.WorkerOfflineQueue.listPending().then(function (rows) {
-      if (!rows.length) { banner.hidden = true; drawer.hidden = true; return; }
-      banner.hidden = false;
+      if (!rows.length) {
+        banner.classList.remove('is-visible');
+        drawer.classList.remove('is-open');
+        return;
+      }
+      banner.classList.add('is-visible');
       countEl.textContent = String(rows.length);
       while (list.firstChild) list.removeChild(list.firstChild);
       rows.forEach(function (r) {
@@ -96,8 +113,8 @@
   }
 
   chip.addEventListener('click', function () {
-    drawer.hidden = !drawer.hidden;
-    if (!drawer.hidden) refresh();
+    drawer.classList.toggle('is-open');
+    if (drawer.classList.contains('is-open')) refresh();
   });
   retry.addEventListener('click', function () {
     if (window.WorkerOfflineQueue) window.WorkerOfflineQueue.flush().then(refresh);

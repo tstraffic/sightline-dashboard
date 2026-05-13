@@ -101,6 +101,7 @@
         redirect: 'follow',
       }), TIMEOUT_MS).then(function (res) {
         if (res.ok || res.redirected || res.status === 302 || res.status === 303) {
+          if (window.WorkerHaptics) window.WorkerHaptics.success();
           var dest = res.redirected ? res.url : successUrl;
           window.location.assign(dest);
           return;
@@ -108,6 +109,7 @@
         // Server-side rejection — surface the response normally so the
         // worker sees the validation error. Replace the page body with
         // the response (HTML).
+        if (window.WorkerHaptics) window.WorkerHaptics.error();
         return res.text().then(function (html) {
           document.open(); document.write(html); document.close();
         });
@@ -121,11 +123,13 @@
         }
         window.WorkerOfflineQueue.enqueue({ url: url, method: method, formData: fd, scope: scope })
           .then(function () {
+            if (window.WorkerHaptics) window.WorkerHaptics.warning();
             toast("Saved offline — we'll submit it when you're back online.", 'success');
             setTimeout(function () { window.location.assign(successUrl); }, 800);
           })
           .catch(function (e) {
             console.error('[wq] enqueue failed:', e);
+            if (window.WorkerHaptics) window.WorkerHaptics.error();
             toast("Couldn't save offline. Check your signal and try again.", 'warn');
             if (submitter) submitter.disabled = prevDisabled;
           });

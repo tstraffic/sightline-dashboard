@@ -137,6 +137,7 @@
         rm.setAttribute('aria-label', 'Remove photo');
         rm.textContent = '×';
         rm.addEventListener('click', function () {
+          if (window.WorkerHaptics) window.WorkerHaptics.medium();
           try { URL.revokeObjectURL(img.src); } catch (e) {}
           files.splice(idx, 1);
           sync();
@@ -156,7 +157,10 @@
           '</svg>',
           '<span>' + label + '</span>',
         ].join('');
-        addBtn.addEventListener('click', function () { input.click(); });
+        addBtn.addEventListener('click', function () {
+          if (window.WorkerHaptics) window.WorkerHaptics.light();
+          input.click();
+        });
         grid.appendChild(addBtn);
       }
 
