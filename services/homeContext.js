@@ -420,9 +420,11 @@ function fetchJson(url, timeoutMs = 3500) {
 }
 
 // WMO weather codes → friendly label + emoji + kind. `kind` is one of
-// sunny / partly-cloudy / cloudy / rainy / stormy / snow / fog. The
-// premium weather card (views/worker/partials/weather-card.ejs) maps
-// kind → mesh-gradient palette + animated SVG icon.
+// sunny / partly-cloudy / cloudy / rainy / stormy / snow / fog / night.
+// The caller folds is_day into the result: clear / partly-cloudy /
+// cloudy at night collapse to `night`, but rainy/stormy/snow/fog keep
+// their precipitation kind so the worker still sees the conditions
+// that matter on shift.
 // Full table: https://open-meteo.com/en/docs#weathervariables
 function describeWmo(code) {
   const map = {
@@ -465,12 +467,27 @@ async function getWeather(lat, lng) {
   if (cached && cached.expires > Date.now()) return cached.data;
 
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
-    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation,relative_humidity_2m` +
+    `&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,precipitation,relative_humidity_2m,is_day` +
     `&daily=precipitation_probability_max,uv_index_max,temperature_2m_max,temperature_2m_min` +
     `&timezone=Australia%2FSydney`;
   const j = await fetchJson(url);
   if (!j || !j.current) return null;
-  const [desc, emoji, kind] = describeWmo(j.current.weather_code);
+  let [desc, emoji, kind] = describeWmo(j.current.weather_code);
+  // Open-Meteo returns is_day=1 for day, 0 for night (based on lat/lng +
+  // local time). At night, "clear sky" should read as moonlit, not sunny —
+  // but precipitation kinds (rainy/stormy/snow/fog) keep their kind so the
+  // worker still sees the conditions on shift.
+  const isDay = j.current.is_day;
+  if (isDay === 0 && (kind === 'sunny' || kind === 'partly-cloudy' || kind === 'cloudy')) {
+    kind = 'night';
+    if (j.current.weather_code === 0 || j.current.weather_code === 1) {
+      desc = 'Clear night';
+      emoji = '🌙';
+    } else if (j.current.weather_code === 2) {
+      desc = 'Partly cloudy night';
+      emoji = '☁️';
+    }
+  }
   const out = {
     temp: Math.round(j.current.temperature_2m),
     feels_like: Math.round(j.current.apparent_temperature),
@@ -478,6 +495,7 @@ async function getWeather(lat, lng) {
     condition: desc,
     emoji,
     kind,
+    is_day: isDay === undefined ? 1 : isDay,
     wind_kmh: Math.round(j.current.wind_speed_10m || 0),
     rain_chance: (j.daily && j.daily.precipitation_probability_max) ? (j.daily.precipitation_probability_max[0] || 0) : 0,
     uv: (j.daily && j.daily.uv_index_max) ? Math.round((j.daily.uv_index_max[0] || 0) * 10) / 10 : null,
@@ -486,7 +504,10 @@ async function getWeather(lat, lng) {
     humidity: j.current.relative_humidity_2m != null ? Math.round(j.current.relative_humidity_2m) : null,
     icon: '', // kept for back-compat with any view that used OpenWeatherMap icon URL
   };
-  weatherCache.set(cacheKey, { expires: Date.now() + 3600 * 1000, data: out });
+  // 15-minute cache: 1h was too coarse — a sunny midday reading was
+  // still showing at 9pm in rain. 15min keeps API load low while still
+  // catching condition changes within a typical shift gap.
+  weatherCache.set(cacheKey, { expires: Date.now() + 15 * 60 * 1000, data: out });
   return out;
 }
 
