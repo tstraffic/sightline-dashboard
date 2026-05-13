@@ -78,11 +78,18 @@
     var max = parseInt(input.getAttribute('data-wpi-max') || (multiple ? '6' : '1'), 10);
     var label = input.getAttribute('data-wpi-label') || (multiple ? 'Add photo' : 'Take photo');
 
-    // Force capture + accept to image. If callers want pickable images too,
-    // they can override data-wpi-pick="1" to allow Photos.app as a fallback.
+    // No `capture` by default — workers asked to keep the choice between
+    // camera and gallery. iOS Safari then shows its native action sheet
+    // (Take Photo / Photo Library / Choose Files) and Android Chrome
+    // shows a similar picker. Callers can opt into camera-only by
+    // setting data-wpi-camera="1".
     if (!input.hasAttribute('accept')) input.setAttribute('accept', 'image/*');
-    if (input.getAttribute('data-wpi-pick') !== '1') {
+    if (input.getAttribute('data-wpi-camera') === '1' && !input.hasAttribute('capture')) {
       input.setAttribute('capture', 'environment');
+    } else if (input.getAttribute('data-wpi-camera') !== '1') {
+      // Strip a hardcoded `capture` from earlier markup so the action
+      // sheet is restored without having to touch every view.
+      input.removeAttribute('capture');
     }
 
     injectCss();
