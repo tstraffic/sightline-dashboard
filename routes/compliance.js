@@ -80,6 +80,7 @@ function createParentPlan(req, res, db, b) {
 
   let parentId = null;
   let subPlanCount = 0;
+  let raCreatedCount = 0;
   try {
     // Detect tender_id column once; legacy DBs without migration 158 fall back gracefully.
     let hasTenderCol = false;
@@ -113,11 +114,26 @@ function createParentPlan(req, res, db, b) {
       // `other_description` field if the per-row inputs aren't present.
       const legacyOtherDesc = String(b.other_description || '').trim().slice(0, 120);
 
+      // Optional: also create a Risk Assessment record per TGS sub-plan
+      // when the parent form's "RA needed" toggle was ticked for TGS.
+      // Detect the risk_assessments shape once — schema v199 adds the
+      // compliance_id + template_type columns; older DBs fall through.
+      let raReady = false;
+      try {
+        const raCols = db.prepare("PRAGMA table_info(risk_assessments)").all().map(c => c.name);
+        raReady = raCols.includes('compliance_id') && raCols.includes('template_type') && raCols.includes('responses_json');
+      } catch (e) {}
+      const insertRa = raReady ? db.prepare(`
+        INSERT INTO risk_assessments (title, description, kind, status, job_id, owner_id, expiry_date,
+          compliance_id, template_type, created_by_id, created_at, updated_at)
+        VALUES (?, '', 'job', 'draft', ?, ?, date('now', '+6 months'), ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `) : null;
       SUB_PLAN_TYPES.forEach(type => {
         const raw = b['count_' + type];
         const count = parseInt(raw, 10);
         if (!Number.isFinite(count) || count <= 0) return;
         const typeOwnerId = b['owner_' + type] || null;
+        const raNeeded = type === 'traffic_guidance' && (b['ra_needed_' + type] === '1' || b['ra_needed_' + type] === 1 || b['ra_needed_' + type] === 'on' || b['ra_needed_' + type] === true);
         for (let seq = 1; seq <= count; seq++) {
           const ref = planStatus.buildSubPlanRef(planNumber, type, seq);
           let subTitle = ref;
@@ -127,12 +143,19 @@ function createParentPlan(req, res, db, b) {
             subOtherDesc = perRow || legacyOtherDesc;
             if (subOtherDesc) subTitle = `${subOtherDesc} (${ref})`;
           }
+          let subRes;
           if (hasTenderCol) {
-            insertSub.run(parentId, jobId, clientId, tenderId, type, type, subTitle, ref, typeOwnerId, subOtherDesc);
+            subRes = insertSub.run(parentId, jobId, clientId, tenderId, type, type, subTitle, ref, typeOwnerId, subOtherDesc);
           } else {
-            insertSub.run(parentId, jobId, clientId, type, type, subTitle, ref, typeOwnerId, subOtherDesc);
+            subRes = insertSub.run(parentId, jobId, clientId, type, type, subTitle, ref, typeOwnerId, subOtherDesc);
           }
           subPlanCount += 1;
+          if (raNeeded && insertRa) {
+            try {
+              insertRa.run('RA — ' + ref, jobId, typeOwnerId, subRes.lastInsertRowid, 'tgs_risk_options', req.session.user.id);
+              raCreatedCount += 1;
+            } catch (raErr) { console.error('[Compliance] auto-create RA failed for ' + ref + ':', raErr.message); }
+          }
         }
       });
     });
@@ -145,7 +168,8 @@ function createParentPlan(req, res, db, b) {
       userId: req.session.user.id
     });
 
-    req.flash('success', `Plan #${planNumber} created with ${subPlanCount} sub-plan slot(s).`);
+    const raSuffix = raCreatedCount > 0 ? ` + ${raCreatedCount} Risk Assessment${raCreatedCount === 1 ? '' : 's'} drafted` : '';
+    req.flash('success', `Plan #${planNumber} created with ${subPlanCount} sub-plan slot(s)${raSuffix}.`);
     return res.redirect('/compliance/' + parentId + '/edit');
   } catch (err) {
     console.error('[Compliance] createParentPlan error:', err.message);
@@ -913,6 +937,20 @@ router.get('/:id/edit', (req, res) => {
     }
   }
 
+  // Risk Assessments keyed by sub-plan id (the sub-plan card surfaces a
+  // "Risk Assessment: …" badge with a link to the fill form + a
+  // Generate Combined PDF button when RA is active + TGS uploaded).
+  // Guarded with try/catch — pre-mig-199 DBs won't have compliance_id.
+  let raBySubPlan = {};
+  if (isParent && subPlans.length > 0) {
+    try {
+      const subIds = subPlans.map(s => s.id);
+      const subPh = subIds.map(() => '?').join(',');
+      const raRows = db.prepare(`SELECT id, compliance_id, title, status, template_type, combined_pdf_path FROM risk_assessments WHERE compliance_id IN (${subPh})`).all(...subIds);
+      raRows.forEach(r => { raBySubPlan[r.compliance_id] = r; });
+    } catch (e) { /* schema not migrated yet */ }
+  }
+
   // Tender link (if this plan is rolled up under a tender)
   let tender = null;
   if (item.tender_id) {
@@ -928,6 +966,7 @@ router.get('/:id/edit', (req, res) => {
     prefillJobId: '', prefillClientId: '', prefillTenderId: '', returnTo,
     documents, linkedTask, revisions, tender,
     isParent, subPlans, subPlanDocs, subPlanTypes: SUB_PLAN_TYPES,
+    raBySubPlan,
   });
 });
 

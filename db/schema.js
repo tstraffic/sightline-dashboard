@@ -9192,6 +9192,31 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 199: Risk Assessments — link to compliance sub-plan +
+  // form-template support. Adds `compliance_id` so an RA can be tied to
+  // the TGS sub-plan it covers (NULL = legacy uploaded-file RAs).
+  // `template_type` distinguishes 'tgs_risk_options' (the new
+  // dashboard-fillable form) from legacy NULL rows. `responses_json` is
+  // the form payload; `combined_pdf_path` is the merged RA+TGS file that
+  // becomes the sub-plan's attachment after Generate Combined PDF.
+  // =============================================
+  if (!isMigrationApplied.get(199)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(risk_assessments)").all().map(c => c.name);
+      const addCol = (name, def) => { if (!cols.includes(name)) db.exec(`ALTER TABLE risk_assessments ADD COLUMN ${name} ${def}`); };
+      addCol('compliance_id', 'INTEGER REFERENCES compliance(id) ON DELETE CASCADE');
+      addCol('template_type', 'TEXT DEFAULT NULL');
+      addCol('responses_json', 'TEXT DEFAULT NULL');
+      addCol('combined_pdf_path', 'TEXT DEFAULT NULL');
+      try { db.exec('CREATE INDEX IF NOT EXISTS idx_risk_assessments_compliance ON risk_assessments(compliance_id)'); } catch (e) {}
+      recordMigration.run(199, 'risk_assessments: add compliance_id, template_type, responses_json, combined_pdf_path');
+      console.log('Migration 199 applied: risk_assessments columns added for TGS RA form');
+    } catch (e) {
+      console.error('Migration 199 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -150,11 +150,19 @@
         <div class="space-y-2.5">
           <% subPlanTypes.forEach(t => { %>
             <div class="border border-gray-200 rounded-lg hover:border-brand-300 hover:bg-brand-50/40 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50">
-              <label class="grid grid-cols-[1fr_auto_minmax(0,200px)] items-center gap-3 px-4 py-3 cursor-pointer">
+              <label class="grid grid-cols-[1fr_auto_auto_minmax(0,200px)] items-center gap-3 px-4 py-3 cursor-pointer">
                 <span class="flex items-center gap-2.5 text-sm text-gray-800">
                   <input type="checkbox" class="type-toggle w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500" data-type="<%= t %>">
                   <%= TYPE_LABELS[t] || t %>
                 </span>
+                <% if (t === 'traffic_guidance') { %>
+                  <label class="ra-toggle flex items-center gap-1.5 text-[11px] font-medium text-gray-600 whitespace-nowrap opacity-60 cursor-pointer" title="Auto-create a TGS Risk & Options Assessment for each sub-plan">
+                    <input type="checkbox" name="ra_needed_<%= t %>" value="1" disabled class="ra-checkbox w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 disabled:cursor-not-allowed">
+                    RA needed
+                  </label>
+                <% } else { %>
+                  <span class="text-[11px] text-gray-300 whitespace-nowrap" title="Risk assessments for this type are coming soon">RA n/a</span>
+                <% } %>
                 <input type="number" name="count_<%= t %>" min="1" max="20" value="1" disabled
                   class="count-input w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400">
                 <select name="owner_<%= t %>" disabled
@@ -182,6 +190,14 @@
             const countInput = card.querySelector('.count-input');
             countInput.disabled = !cb.checked;
             card.querySelector('.owner-input').disabled = !cb.checked;
+            // RA-needed checkbox (only present on TGS row) follows the same gate as count + owner.
+            const raLabel = card.querySelector('.ra-toggle');
+            const raCheckbox = card.querySelector('.ra-checkbox');
+            if (raCheckbox) {
+              raCheckbox.disabled = !cb.checked;
+              if (raLabel) raLabel.classList.toggle('opacity-60', !cb.checked);
+              if (!cb.checked) raCheckbox.checked = false;
+            }
             if (cb.dataset.type === 'other') {
               renderOtherDescriptions(card, cb.checked);
               if (cb.checked) {
@@ -334,7 +350,7 @@
             </div>
             <div class="space-y-3">
               <% list.forEach(sub => { %>
-                <%- include('./_sub_plan_card', { sub, docs: (subPlanDocs && subPlanDocs[sub.id]) || [], parentId: item.id, statusBadge: STATUS_BADGE }) %>
+                <%- include('./_sub_plan_card', { sub, docs: (subPlanDocs && subPlanDocs[sub.id]) || [], parentId: item.id, statusBadge: STATUS_BADGE, ra: (typeof raBySubPlan !== 'undefined' && raBySubPlan) ? raBySubPlan[sub.id] : null }) %>
               <% }) %>
             </div>
           </div>

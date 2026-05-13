@@ -1,0 +1,421 @@
+<%
+  const r = responses || {};
+  const site = r.site || {};
+  const opts = r.options || {};
+  const ans = r.answers || {};
+  const s4 = Array.isArray(r.section4) ? r.section4 : [];
+  const rm = Array.isArray(r.risk_management) ? r.risk_management : [];
+  const so = r.sign_off || {};
+  const author = so.author || {};
+  const approver = so.approver || {};
+  const oneUp = so.one_up || {};
+  const direction = (site.direction || '').toUpperCase();
+  function ynVal(num, val) { return ans[num] && ans[num].yn === val ? 'checked' : ''; }
+  function descVal(num) { return ans[num] ? (ans[num].desc || '') : ''; }
+  function rateVal(num) { return ans[num] ? (ans[num].rating || '') : ''; }
+  const planNumber = parent && parent.plan_number ? '#' + parent.plan_number : '';
+  const subRef = sub && sub.reference_number ? sub.reference_number : '';
+  const hasTgsDoc = sub && sub.id; // sub-plan exists; doc check is server-side
+%>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="mb-4">
+    <a href="/risk-assessments" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700">
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      Back to Risk Assessments
+    </a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
+    <div class="bg-brand-600 text-white px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <div class="text-xs uppercase tracking-widest opacity-80">T&S Traffic Control · ABN 58 655 958 320</div>
+        <h1 class="text-xl font-bold leading-tight">Traffic Guidance Scheme — Risk &amp; Options Assessment</h1>
+        <div class="text-xs opacity-80 mt-0.5">Doc No: TSROA-001 · Rev: A</div>
+      </div>
+      <div class="text-right text-xs">
+        <% if (parent) { %><div>Plan <span class="font-mono"><%= planNumber %></span></div><% } %>
+        <% if (sub) { %><div>Sub-plan <span class="font-mono"><%= subRef %></span></div><% } %>
+        <div>Status: <%= (ra.status || 'draft').toUpperCase() %></div>
+      </div>
+    </div>
+  </div>
+
+  <form method="POST" action="/risk-assessments/<%= ra.id %>/fill" id="raForm">
+    <%- include('../partials/csrf') %>
+
+    <!-- Site Location Details -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Site Location Details</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Road</label><input type="text" name="site_road" value="<%= site.road || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">From Side St</label><input type="text" name="site_from_side_st" value="<%= site.from_side_st || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">To Side St</label><input type="text" name="site_to_side_st" value="<%= site.to_side_st || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Suburb</label><input type="text" name="site_suburb" value="<%= site.suburb || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Direction</label>
+          <div class="mt-1 flex gap-2">
+            <% ['N','S','E','W'].forEach(function(d){ %>
+              <label class="flex items-center gap-1 px-2 py-1.5 border border-gray-300 rounded-md cursor-pointer text-sm <%= direction === d ? 'bg-brand-50 border-brand-400' : 'bg-white' %>">
+                <input type="radio" name="site_direction" value="<%= d %>" <%= direction === d ? 'checked' : '' %> class="w-3.5 h-3.5"><%= d %>
+              </label>
+            <% }) %>
+          </div>
+        </div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Posted Speed (km/h)</label><input type="text" name="site_posted_speed" value="<%= site.posted_speed || '' %>" placeholder="60" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Client / Principal</label><input type="text" name="site_client_principal" value="<%= site.client_principal || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Road Authority</label><input type="text" name="site_road_authority" value="<%= site.road_authority || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">TGS Design No</label><input type="text" name="site_tgs_design_no" value="<%= site.tgs_design_no || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Design Date</label><input type="date" name="site_design_date" value="<%= site.design_date || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Estimated Duration</label><input type="text" name="site_estimated_duration" value="<%= site.estimated_duration || '' %>" placeholder="e.g. 1 night, 3 weeks" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div class="sm:col-span-2 lg:col-span-3"><label class="text-xs font-semibold text-gray-500 uppercase">Scope of Works</label><textarea name="site_scope_of_works" rows="2" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= site.scope_of_works || '' %></textarea></div>
+      </div>
+    </section>
+
+    <!-- Options Assessment -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Options Assessment</h2>
+      <div class="mb-3">
+        <span class="text-xs font-semibold text-gray-500 uppercase mr-3">Method Selected</span>
+        <% ['around','past','through'].forEach(function(m){ %>
+          <label class="inline-flex items-center gap-1.5 mr-4 cursor-pointer">
+            <input type="radio" name="method_selected" value="<%= m %>" <%= opts.method_selected === m ? 'checked' : '' %> class="w-4 h-4">
+            <span class="text-sm capitalize"><%= m %></span>
+          </label>
+        <% }) %>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase">Reason for Method Selected</label>
+        <textarea name="method_reason" rows="2" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= opts.method_reason || '' %></textarea>
+      </div>
+    </section>
+
+    <%
+      function renderSection(sectionNum, sectionTitle, sectionNote) {
+        const rows = questions.filter(q => q.section === sectionNum);
+    %>
+      <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+        <div class="flex items-start justify-between mb-3 gap-4">
+          <div>
+            <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700">Section <%= sectionNum %> — <%= sectionTitle %></h2>
+            <% if (sectionNote) { %><p class="text-xs text-gray-500 mt-0.5"><%= sectionNote %></p><% } %>
+          </div>
+          <% if (sectionNum === 2 || sectionNum === 3) { %>
+            <label class="inline-flex items-center gap-2 text-xs text-gray-600 whitespace-nowrap">
+              <input type="checkbox" name="<%= sectionNum === 2 ? 'shuttle_applies' : 'detour_applies' %>" value="1" <%= (sectionNum === 2 ? r.shuttle_applies : r.detour_applies) ? 'checked' : '' %> class="w-4 h-4">
+              <%= sectionNum === 2 ? 'Shuttle flow involved' : 'Detours involved' %>
+            </label>
+          <% } %>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-xs border border-gray-200">
+            <thead class="bg-gray-50">
+              <tr class="text-left text-gray-500 uppercase">
+                <th class="px-2 py-2 w-12">#</th>
+                <th class="px-2 py-2">Question</th>
+                <th class="px-2 py-2 w-14 text-center">Yes</th>
+                <th class="px-2 py-2 w-14 text-center">No</th>
+                <th class="px-2 py-2">Description of Risks (if No)</th>
+                <th class="px-2 py-2 w-32">Risk Rating</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+              <% rows.forEach(function(q) { %>
+                <tr>
+                  <td class="px-2 py-2 align-top font-mono text-gray-500"><%= q.number %></td>
+                  <td class="px-2 py-2 align-top text-gray-700"><%= q.text %></td>
+                  <td class="px-2 py-2 text-center align-top"><input type="radio" name="yn_<%= q.number %>" value="yes" <%- ynVal(q.number, 'yes') %> class="w-4 h-4"></td>
+                  <td class="px-2 py-2 text-center align-top"><input type="radio" name="yn_<%= q.number %>" value="no" <%- ynVal(q.number, 'no') %> class="w-4 h-4"></td>
+                  <td class="px-2 py-2"><input type="text" name="desc_<%= q.number %>" value="<%= descVal(q.number) %>" class="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"></td>
+                  <td class="px-2 py-2">
+                    <select name="rating_<%= q.number %>" class="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                      <option value="">—</option>
+                      <% ratingOptions.forEach(function(opt){ %><option value="<%= opt %>" <%= rateVal(q.number) === opt ? 'selected' : '' %>><%= opt %></option><% }) %>
+                    </select>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    <% } %>
+
+    <%- renderSection(1, 'General', null) %>
+    <%- renderSection(2, 'Shuttle Flow', 'Only required when Scope of Works involves shuttle flow arrangements.') %>
+    <%- renderSection(3, 'Detours', 'Only required when the TGS involves detours to traffic.') %>
+
+    <!-- Section 4 — Other Hazards & Risks (free rows) -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Section 4 — Other Hazards &amp; Risks</h2>
+      <p class="text-xs text-gray-500 mb-3">Add any site-specific risks not covered above.</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-gray-200" id="section4Table">
+          <thead class="bg-gray-50">
+            <tr class="text-left text-gray-500 uppercase">
+              <th class="px-2 py-2 w-12">#</th>
+              <th class="px-2 py-2">Hazard / Question</th>
+              <th class="px-2 py-2 w-14 text-center">Yes</th>
+              <th class="px-2 py-2 w-14 text-center">No</th>
+              <th class="px-2 py-2">Description of Risks</th>
+              <th class="px-2 py-2 w-32">Risk Rating</th>
+              <th class="px-2 py-2 w-8"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200" id="section4Body">
+            <% const initialS4 = s4.length > 0 ? s4 : [{question:'',yn:'',desc:'',rating:''}]; initialS4.forEach(function(row, i){ %>
+              <tr class="s4-row">
+                <td class="px-2 py-2 align-top font-mono text-gray-500">4.<span class="s4-idx"><%= i + 1 %></span></td>
+                <td class="px-2 py-2"><input type="text" name="section4_question" value="<%= row.question || '' %>" class="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"></td>
+                <td class="px-2 py-2 text-center"><input type="radio" name="s4yn_<%= i %>" value="yes" <%= row.yn === 'yes' ? 'checked' : '' %> data-real-name="section4_yn" class="w-4 h-4"></td>
+                <td class="px-2 py-2 text-center"><input type="radio" name="s4yn_<%= i %>" value="no" <%= row.yn === 'no' ? 'checked' : '' %> data-real-name="section4_yn" class="w-4 h-4"></td>
+                <td class="px-2 py-2"><input type="text" name="section4_desc" value="<%= row.desc || '' %>" class="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"></td>
+                <td class="px-2 py-2">
+                  <select name="section4_rating" class="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                    <option value="">—</option>
+                    <% ratingOptions.forEach(function(opt){ %><option value="<%= opt %>" <%= row.rating === opt ? 'selected' : '' %>><%= opt %></option><% }) %>
+                  </select>
+                </td>
+                <td class="px-2 py-2 text-center"><button type="button" class="s4-remove text-gray-400 hover:text-rose-600">✕</button></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <button type="button" id="s4Add" class="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Add another row
+      </button>
+    </section>
+
+    <!-- Risk Management -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Risk Management</h2>
+      <p class="text-xs text-gray-500 mb-3">Any risks identified above must be controlled here. Control measures must meet the WHS Risk Management Hierarchy of Controls (Eliminate → Substitute → Engineering → Administrative → PPE).</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-gray-200" id="rmTable">
+          <thead class="bg-gray-50">
+            <tr class="text-left text-gray-500 uppercase">
+              <th class="px-2 py-2 w-12">Item</th>
+              <th class="px-2 py-2">Hazard / Risk</th>
+              <th class="px-2 py-2">Control Measures</th>
+              <th class="px-2 py-2 w-40">Remaining Risk Rating</th>
+              <th class="px-2 py-2 w-8"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-200" id="rmBody">
+            <% const initialRm = rm.length > 0 ? rm : [{hazard:'',controls:'',remaining:''}]; initialRm.forEach(function(row, i){ %>
+              <tr class="rm-row">
+                <td class="px-2 py-2 align-top font-mono text-gray-500"><span class="rm-idx"><%= i + 1 %></span></td>
+                <td class="px-2 py-2"><textarea name="rm_hazard" rows="2" class="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"><%= row.hazard || '' %></textarea></td>
+                <td class="px-2 py-2"><textarea name="rm_controls" rows="2" class="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-500"><%= row.controls || '' %></textarea></td>
+                <td class="px-2 py-2">
+                  <select name="rm_remaining" class="w-full px-2 py-1 bg-white border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                    <option value="">—</option>
+                    <% ratingOptions.forEach(function(opt){ %><option value="<%= opt %>" <%= row.remaining === opt ? 'selected' : '' %>><%= opt %></option><% }) %>
+                  </select>
+                </td>
+                <td class="px-2 py-2 text-center"><button type="button" class="rm-remove text-gray-400 hover:text-rose-600">✕</button></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <button type="button" id="rmAdd" class="mt-3 inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-700">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Add row
+      </button>
+    </section>
+
+    <!-- Risk Rating Matrix (read-only reference) -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Risk Rating Matrix</h2>
+      <p class="text-xs text-gray-500 mb-3">Likelihood ↓ / Consequence →</p>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-gray-200 text-center">
+          <thead class="bg-gray-50"><tr>
+            <% matrixHeaders.forEach(function(h){ %><th class="px-2 py-2 text-xs font-semibold text-gray-600"><%= h %></th><% }) %>
+          </tr></thead>
+          <tbody>
+            <% matrixRows.forEach(function(row){ %>
+              <tr>
+                <% row.forEach(function(cell, j){ %>
+                  <% const cellLower = cell.toLowerCase(); %>
+                  <td class="px-2 py-2 border-t border-gray-200 <%= j === 0 ? 'font-semibold text-gray-700 text-left' : (cellLower.startsWith('low') ? 'bg-green-50 text-green-700' : cellLower.startsWith('medium') ? 'bg-yellow-50 text-yellow-700' : cellLower.startsWith('high') ? 'bg-orange-50 text-orange-700' : cellLower.startsWith('extreme') ? 'bg-rose-50 text-rose-700' : '') %>"><%= cell %></td>
+                <% }) %>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Action Levels -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Residual Risk Action Levels</h2>
+      <div class="space-y-2 text-xs">
+        <% actionLevels.forEach(function(lvl){ %>
+          <div class="flex items-start gap-3">
+            <span class="font-bold w-32 shrink-0"><%= lvl.rating %> — <%= lvl.label %></span>
+            <span class="text-gray-700"><%= lvl.text %></span>
+          </div>
+        <% }) %>
+      </div>
+    </section>
+
+    <!-- Additional Comments -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Additional Comments</h2>
+      <textarea name="additional_comments" rows="3" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= r.additional_comments || '' %></textarea>
+    </section>
+
+    <!-- Sign-Off -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Sign-Off</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div>
+          <h3 class="text-xs font-semibold text-gray-700 uppercase mb-2">Author (Designer)</h3>
+          <input type="text" name="author_name" value="<%= author.name || '' %>" placeholder="Name" class="w-full mb-2 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <input type="text" name="author_pwz" value="<%= author.pwz || '' %>" placeholder="PWZ Lic No" class="w-full mb-2 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <input type="date" name="author_date" value="<%= author.date || '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <h3 class="text-xs font-semibold text-gray-700 uppercase mb-2">Approver</h3>
+          <input type="text" name="approver_name" value="<%= approver.name || '' %>" placeholder="Name" class="w-full mb-2 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <input type="text" name="approver_pwz" value="<%= approver.pwz || '' %>" placeholder="PWZ Lic No" class="w-full mb-2 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <input type="date" name="approver_date" value="<%= approver.date || '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <h3 class="text-xs font-semibold text-gray-700 uppercase mb-2">One-Up Manager</h3>
+          <input type="text" name="one_up_name" value="<%= oneUp.name || '' %>" placeholder="Name" class="w-full mb-2 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <input type="text" name="one_up_accreditation" value="<%= oneUp.accreditation || '' %>" placeholder="Accreditation" class="w-full mb-2 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <input type="date" name="one_up_date" value="<%= oneUp.date || '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
+      <div class="mt-4">
+        <label class="text-xs font-semibold text-gray-500 uppercase">TGS Ref No</label>
+        <input type="text" name="tgs_ref_no" value="<%= so.tgs_ref_no || subRef %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 max-w-xs">
+      </div>
+      <p class="mt-4 text-[11px] text-gray-500 italic">One-Up Manager approval required where any residual risk is rated High (3) or Extreme (4). Signatures are wet-signed after print.</p>
+    </section>
+
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <a href="/risk-assessments" class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-50">Cancel</a>
+      <div class="flex items-center gap-2">
+        <% if (ra.status === 'active' && sub) { %>
+          <button type="button" id="generateCombinedBtn" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium rounded-lg">Generate Combined PDF</button>
+        <% } %>
+        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg">Save Risk Assessment</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+  // Section 4 dynamic rows. Radio group names need to be unique per row
+  // so the browser scopes Yes/No selection inside that row only — we
+  // rewrite them on submit to the parallel-array name `section4_yn`.
+  (function() {
+    const body = document.getElementById('section4Body');
+    const add = document.getElementById('s4Add');
+    function reindex() {
+      const rows = body.querySelectorAll('.s4-row');
+      rows.forEach((row, i) => {
+        const idx = row.querySelector('.s4-idx');
+        if (idx) idx.textContent = i + 1;
+        row.querySelectorAll('input[type=radio]').forEach(r => { r.name = 's4yn_' + i; });
+      });
+    }
+    add.addEventListener('click', () => {
+      const template = body.querySelector('.s4-row');
+      const clone = template.cloneNode(true);
+      clone.querySelectorAll('input[type=text], textarea').forEach(el => el.value = '');
+      clone.querySelectorAll('input[type=radio]').forEach(el => el.checked = false);
+      clone.querySelectorAll('select').forEach(el => el.selectedIndex = 0);
+      body.appendChild(clone);
+      reindex();
+    });
+    body.addEventListener('click', e => {
+      if (e.target.classList.contains('s4-remove')) {
+        if (body.querySelectorAll('.s4-row').length === 1) return;
+        e.target.closest('.s4-row').remove();
+        reindex();
+      }
+    });
+  })();
+
+  // Risk Management dynamic rows.
+  (function() {
+    const body = document.getElementById('rmBody');
+    const add = document.getElementById('rmAdd');
+    function reindex() {
+      body.querySelectorAll('.rm-row').forEach((row, i) => {
+        const idx = row.querySelector('.rm-idx');
+        if (idx) idx.textContent = i + 1;
+      });
+    }
+    add.addEventListener('click', () => {
+      const template = body.querySelector('.rm-row');
+      const clone = template.cloneNode(true);
+      clone.querySelectorAll('input, textarea').forEach(el => el.value = '');
+      clone.querySelectorAll('select').forEach(el => el.selectedIndex = 0);
+      body.appendChild(clone);
+      reindex();
+    });
+    body.addEventListener('click', e => {
+      if (e.target.classList.contains('rm-remove')) {
+        if (body.querySelectorAll('.rm-row').length === 1) return;
+        e.target.closest('.rm-row').remove();
+        reindex();
+      }
+    });
+  })();
+
+  // Rewrite per-row radio group names to the parallel-array name so the
+  // server sees `section4_yn[]` instead of scoped `s4yn_<i>`.
+  document.getElementById('raForm').addEventListener('submit', () => {
+    document.querySelectorAll('#section4Body .s4-row').forEach((row) => {
+      row.querySelectorAll('input[type=radio][data-real-name]').forEach(r => {
+        if (r.checked) r.name = r.dataset.realName;
+        else r.disabled = true; // unchecked + group-renamed would clobber; drop them
+      });
+      // Ensure every row contributes a section4_yn slot — emit a blank if neither was picked
+      const checked = row.querySelector('input[type=radio][name="section4_yn"]');
+      if (!checked) {
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'section4_yn';
+        hidden.value = '';
+        row.appendChild(hidden);
+      }
+    });
+  });
+
+  // Generate Combined PDF — POST to the dedicated route; server replaces
+  // the sub-plan's TGS doc with the merged PDF then redirects back.
+  const gcb = document.getElementById('generateCombinedBtn');
+  if (gcb) {
+    gcb.addEventListener('click', async () => {
+      if (!confirm('Generate the combined PDF? This will replace the bare TGS attachment on the sub-plan with the merged RA + TGS document.')) return;
+      gcb.disabled = true; gcb.textContent = 'Generating...';
+      const csrf = document.querySelector('input[name="_csrf"]').value;
+      try {
+        const r = await fetch('/risk-assessments/<%= ra.id %>/generate-combined', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json' },
+          body: '_csrf=' + encodeURIComponent(csrf),
+        });
+        if (!r.ok) {
+          const text = await r.text();
+          alert('Combined PDF failed: ' + text.slice(0, 200));
+          gcb.disabled = false; gcb.textContent = 'Generate Combined PDF';
+          return;
+        }
+        window.location.href = '<%= sub ? "/compliance/" + sub.parent_id + "/edit" : "/risk-assessments/" + ra.id + "/fill" %>';
+      } catch (e) {
+        alert('Combined PDF failed: ' + e.message);
+        gcb.disabled = false; gcb.textContent = 'Generate Combined PDF';
+      }
+    });
+  }
+</script>

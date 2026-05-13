@@ -4,6 +4,15 @@
   const isApproved = sub.status === 'approved';
   const isRejected = sub.status === 'rejected';
   const docCount = (docs || []).length;
+  // Risk Assessment context (passed in from _parent_form.ejs when migration 199 has run).
+  const linkedRa = (typeof ra !== 'undefined' && ra) ? ra : null;
+  const isTgs = sub.item_type === 'traffic_guidance';
+  const raActive = linkedRa && linkedRa.status === 'active';
+  const raStatusColor = linkedRa
+    ? (linkedRa.status === 'active' ? 'bg-emerald-50 text-emerald-700 ring-emerald-200'
+       : linkedRa.status === 'archived' ? 'bg-gray-100 text-gray-600 ring-gray-200'
+       : 'bg-amber-50 text-amber-700 ring-amber-200')
+    : '';
 
   // Per-sub-plan cost/profit (admin + finance only). Only show the chip
   // line if there's some money or hours data — otherwise it'd just say $0
@@ -108,6 +117,25 @@
       <span class="ml-auto font-semibold <%= subProfit >= 0 ? 'text-emerald-700' : 'text-rose-700' %>">
         <%= subProfit >= 0 ? 'Profit ' : 'Loss ' %><%= fmtMoneySub(Math.abs(subProfit)) %>
       </span>
+    </div>
+  <% } %>
+
+  <!-- Risk Assessment link (TGS only, shown when an RA was auto-created on parent plan creation) -->
+  <% if (isTgs && linkedRa) { %>
+    <div class="mb-3 flex flex-wrap items-center gap-2 px-3 py-2 bg-blue-50/60 ring-1 ring-blue-100 rounded text-xs">
+      <span class="text-[10px] font-bold uppercase tracking-wide text-blue-700">Risk Assessment</span>
+      <a href="/risk-assessments/<%= linkedRa.id %>/fill" class="text-brand-600 hover:text-brand-700 font-medium truncate"><%= linkedRa.title %></a>
+      <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ring-1 ring-inset <%= raStatusColor %>"><%= (linkedRa.status || 'draft').toUpperCase() %></span>
+      <% if (raActive && docCount > 0) { %>
+        <form method="POST" action="/risk-assessments/<%= linkedRa.id %>/generate-combined" class="ml-auto" onsubmit="return confirm('Generate the combined PDF? This replaces the bare TGS attachment with the merged RA + TGS document.')">
+          <%- include('../partials/csrf') %>
+          <button type="submit" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded">Generate Combined PDF</button>
+        </form>
+      <% } else if (raActive && docCount === 0) { %>
+        <span class="ml-auto text-[11px] text-gray-500 italic">Upload TGS PDF below to enable combined export</span>
+      <% } else { %>
+        <a href="/risk-assessments/<%= linkedRa.id %>/fill" class="ml-auto text-[11px] text-amber-700 hover:text-amber-800 font-medium">Fill out →</a>
+      <% } %>
     </div>
   <% } %>
 
