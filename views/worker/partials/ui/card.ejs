@@ -1,0 +1,16 @@
+<%# Worker UI primitive: card.
+    Locals:
+      tone  optional 'default' | 'accent' | 'warning' | 'success' | 'danger'
+      class extra class names to append
+      body  raw HTML to render inside (the include caller passes the inner markup)
+    Usage:
+      <%- include('partials/ui/card', { tone: 'accent', body: `<p>...</p>` }) %>
+    Or wrap inline:
+      <% var card = include('partials/ui/card', { tone: 'warning', body: `<p>Heads up</p>` }) %>
+      <%- card %>
+%>
+<% var _tone = typeof tone !== 'undefined' && tone ? tone : 'default'; %>
+<% var _class = typeof className !== 'undefined' && className ? ' ' + className : ''; %>
+<div class="wd-card<%= _class %>" data-tone="<%= _tone %>">
+  <%- typeof body !== 'undefined' && body ? body : '' %>
+</div>

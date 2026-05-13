@@ -1,0 +1,310 @@
+/* Worker portal design system tokens + UI primitives.
+ *
+ * Single source of truth for spacing / radius / elevation / brand + status
+ * colours. Loaded by views/worker/layout.ejs after worker.css and
+ * worker-theme.css so it wins specificity ties without !important.
+ *
+ * Primitives:
+ *   .wd-card                  — generic surface
+ *   .wd-stat-tile             — hero stat block (label + value + icon)
+ *   .wd-section-header        — small caps title + optional right slot
+ *   .wd-status-pill           — colour-coded pill / chip
+ *   .wd-btn                   — primary / secondary / ghost / danger
+ *
+ * Variant attributes use data-* so the partials can render kebab-case
+ * locals without class-name string concat: data-kind="amber",
+ * data-tone="success", data-size="lg".
+ */
+
+:root {
+  /* Spacing scale matching the brief: 4/8/12/16/24/32. */
+  --wd-space-1: 4px;
+  --wd-space-2: 8px;
+  --wd-space-3: 12px;
+  --wd-space-4: 16px;
+  --wd-space-6: 24px;
+  --wd-space-8: 32px;
+
+  /* Radius scale: 8/12/16/24. */
+  --wd-radius-sm: 8px;
+  --wd-radius-md: 12px;
+  --wd-radius-lg: 16px;
+  --wd-radius-xl: 24px;
+
+  /* Elevation: inner 1px border + subtle inner gradient + drop shadow.
+     Combine via box-shadow + a background-image gradient on the element. */
+  --wd-elev-1-border: rgba(255, 255, 255, 0.04);
+  --wd-elev-1-grad: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0));
+  --wd-elev-1-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 6px 14px rgba(0, 0, 0, 0.25);
+  --wd-elev-2-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.05),
+    0 10px 24px rgba(0, 0, 0, 0.35);
+
+  /* Brand + status. Each colour pairs with a 10%-opacity tint. */
+  --wd-teal: #00d2be;        --wd-teal-bg:    rgba(0, 210, 190, 0.10);
+  --wd-blue: #2b7fff;        --wd-blue-bg:    rgba(43, 127, 255, 0.10);
+  --wd-amber: #f59e0b;       --wd-amber-bg:   rgba(245, 158, 11, 0.10);
+  --wd-rose: #f43f5e;        --wd-rose-bg:    rgba(244, 63, 94, 0.10);
+  --wd-emerald: #10b981;     --wd-emerald-bg: rgba(16, 185, 129, 0.10);
+  --wd-violet: #8b5cf6;      --wd-violet-bg:  rgba(139, 92, 246, 0.10);
+  --wd-indigo: #6366f1;      --wd-indigo-bg:  rgba(99, 102, 241, 0.10);
+  --wd-neutral: rgba(255, 255, 255, 0.75);
+  --wd-neutral-bg: rgba(255, 255, 255, 0.06);
+
+  /* Text colours on the dark worker theme. */
+  --wd-text-strong: #ffffff;
+  --wd-text-base: rgba(255, 255, 255, 0.86);
+  --wd-text-muted: rgba(255, 255, 255, 0.55);
+  --wd-text-dim: rgba(255, 255, 255, 0.40);
+
+  /* Motion. */
+  --wd-spring: cubic-bezier(0.22, 1, 0.36, 1);
+  --wd-tap-scale: 0.96;
+  --wd-tap-duration: 140ms;
+}
+
+/* =========================================================================
+   Card
+   ========================================================================= */
+.wd-card {
+  position: relative;
+  border-radius: var(--wd-radius-lg);
+  border: 1px solid var(--wd-elev-1-border);
+  background-image: var(--wd-elev-1-grad);
+  background-color: rgba(255, 255, 255, 0.025);
+  box-shadow: var(--wd-elev-1-shadow);
+  padding: var(--wd-space-4);
+  color: var(--wd-text-base);
+}
+
+.wd-card[data-tone="accent"] {
+  border-color: rgba(0, 210, 190, 0.30);
+  background-color: var(--wd-teal-bg);
+}
+.wd-card[data-tone="warning"] {
+  border-color: rgba(245, 158, 11, 0.30);
+  background-color: var(--wd-amber-bg);
+}
+.wd-card[data-tone="success"] {
+  border-color: rgba(16, 185, 129, 0.30);
+  background-color: var(--wd-emerald-bg);
+}
+.wd-card[data-tone="danger"] {
+  border-color: rgba(244, 63, 94, 0.30);
+  background-color: var(--wd-rose-bg);
+}
+
+.wd-card-title { font-size: 0.95rem; font-weight: 700; color: var(--wd-text-strong); line-height: 1.25; }
+.wd-card-sub { font-size: 0.78rem; color: var(--wd-text-muted); margin-top: var(--wd-space-1); }
+.wd-card-body { font-size: 0.88rem; color: var(--wd-text-base); margin-top: var(--wd-space-3); line-height: 1.45; }
+
+/* =========================================================================
+   Stat tile
+   ========================================================================= */
+.wd-stat-tile {
+  position: relative;
+  border-radius: var(--wd-radius-md);
+  border: 1px solid var(--wd-elev-1-border);
+  background-image: var(--wd-elev-1-grad);
+  background-color: rgba(255, 255, 255, 0.025);
+  box-shadow: var(--wd-elev-1-shadow);
+  padding: var(--wd-space-3) var(--wd-space-3);
+  overflow: hidden;
+}
+.wd-stat-tile-label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  color: var(--wd-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+.wd-stat-tile-value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--wd-text-strong);
+  margin-top: 2px;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.wd-stat-tile-unit {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--wd-text-dim);
+  margin-left: 3px;
+}
+.wd-stat-tile-sub {
+  font-size: 0.65rem;
+  color: var(--wd-text-dim);
+  margin-top: var(--wd-space-1);
+}
+.wd-stat-tile-icon {
+  position: absolute;
+  top: var(--wd-space-2);
+  right: var(--wd-space-2);
+  width: 26px;
+  height: 26px;
+  border-radius: var(--wd-radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.wd-stat-tile-icon svg { width: 14px; height: 14px; }
+/* Per-tile accent: paint the icon background + value tint via data-kind. */
+.wd-stat-tile[data-kind="teal"]    .wd-stat-tile-icon { background: var(--wd-teal-bg);    color: var(--wd-teal); }
+.wd-stat-tile[data-kind="blue"]    .wd-stat-tile-icon { background: var(--wd-blue-bg);    color: #60a5fa; }
+.wd-stat-tile[data-kind="amber"]   .wd-stat-tile-icon { background: var(--wd-amber-bg);   color: var(--wd-amber); }
+.wd-stat-tile[data-kind="rose"]    .wd-stat-tile-icon { background: var(--wd-rose-bg);    color: #fda4af; }
+.wd-stat-tile[data-kind="emerald"] .wd-stat-tile-icon { background: var(--wd-emerald-bg); color: #34d399; }
+.wd-stat-tile[data-kind="violet"]  .wd-stat-tile-icon { background: var(--wd-violet-bg);  color: #a78bfa; }
+.wd-stat-tile[data-kind="indigo"]  .wd-stat-tile-icon { background: var(--wd-indigo-bg);  color: #818cf8; }
+
+/* =========================================================================
+   Section header
+   ========================================================================= */
+.wd-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: var(--wd-space-6) var(--wd-space-1) var(--wd-space-2);
+  padding: 0;
+}
+.wd-section-header-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--wd-text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.wd-section-header-right {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wd-space-2);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #60a5fa;
+}
+
+/* =========================================================================
+   Status pill
+   ========================================================================= */
+.wd-status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--wd-space-1);
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  border: 1px solid transparent;
+  line-height: 1.2;
+}
+.wd-status-pill[data-kind="teal"]    { background: var(--wd-teal-bg);    color: var(--wd-teal);    border-color: rgba(0,210,190,0.25); }
+.wd-status-pill[data-kind="blue"]    { background: var(--wd-blue-bg);    color: #93c5fd;           border-color: rgba(43,127,255,0.25); }
+.wd-status-pill[data-kind="amber"]   { background: var(--wd-amber-bg);   color: #fcd34d;           border-color: rgba(245,158,11,0.25); }
+.wd-status-pill[data-kind="rose"]    { background: var(--wd-rose-bg);    color: #fda4af;           border-color: rgba(244,63,94,0.25); }
+.wd-status-pill[data-kind="emerald"] { background: var(--wd-emerald-bg); color: #6ee7b7;           border-color: rgba(16,185,129,0.25); }
+.wd-status-pill[data-kind="violet"]  { background: var(--wd-violet-bg);  color: #c4b5fd;           border-color: rgba(139,92,246,0.25); }
+.wd-status-pill[data-kind="indigo"]  { background: var(--wd-indigo-bg);  color: #c7d2fe;           border-color: rgba(99,102,241,0.25); }
+.wd-status-pill[data-kind="neutral"],
+.wd-status-pill:not([data-kind])      { background: var(--wd-neutral-bg); color: var(--wd-text-base); border-color: rgba(255,255,255,0.08); }
+
+.wd-status-pill .wd-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+/* =========================================================================
+   Button
+   ========================================================================= */
+.wd-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--wd-space-2);
+  font-family: inherit;
+  font-weight: 700;
+  border-radius: var(--wd-radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  text-decoration: none;
+  transition:
+    transform var(--wd-tap-duration) var(--wd-spring),
+    background 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    opacity 120ms ease;
+  /* Comfortable touch targets on mobile per the brief. */
+  min-height: 44px;
+  padding: 0 var(--wd-space-4);
+  font-size: 0.875rem;
+  color: var(--wd-text-strong);
+}
+.wd-btn:active:not(:disabled) { transform: scale(var(--wd-tap-scale)); }
+.wd-btn:disabled,
+.wd-btn[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
+
+/* Sizes. */
+.wd-btn[data-size="sm"] { min-height: 36px; padding: 0 var(--wd-space-3); font-size: 0.8rem; }
+.wd-btn[data-size="lg"] { min-height: 52px; padding: 0 var(--wd-space-6); font-size: 0.95rem; border-radius: var(--wd-radius-lg); }
+
+/* Kinds. Primary uses the existing brand-blue gradient that already
+   anchors the worker portal's CTAs; ghost is borderless for inline
+   secondary actions; danger uses rose. */
+.wd-btn[data-kind="primary"] {
+  background: linear-gradient(135deg, #1d6ae5, #2b7fff);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(29, 106, 229, 0.32);
+}
+.wd-btn[data-kind="primary"]:hover { background: linear-gradient(135deg, #1a5cc8, #2479f0); }
+
+.wd-btn[data-kind="accent"] {
+  background: linear-gradient(135deg, #00b3a0, #00d2be);
+  color: #0a1628;
+  box-shadow: 0 6px 16px rgba(0, 210, 190, 0.32);
+}
+
+.wd-btn[data-kind="secondary"] {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--wd-text-strong);
+}
+.wd-btn[data-kind="secondary"]:hover { background: rgba(255, 255, 255, 0.10); }
+
+.wd-btn[data-kind="ghost"] {
+  background: transparent;
+  color: #93c5fd;
+  border-color: transparent;
+  font-weight: 600;
+}
+.wd-btn[data-kind="ghost"]:hover { background: rgba(43, 127, 255, 0.08); }
+
+.wd-btn[data-kind="danger"] {
+  background: linear-gradient(135deg, #be123c, #f43f5e);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(244, 63, 94, 0.28);
+}
+
+.wd-btn-block { width: 100%; }
+
+/* Icon slot inside the button. */
+.wd-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+
+/* =========================================================================
+   Reduced motion: respect OS preference.
+   ========================================================================= */
+@media (prefers-reduced-motion: reduce) {
+  .wd-btn,
+  .wd-btn:active,
+  .wd-card,
+  .wd-stat-tile {
+    transition: none !important;
+    transform: none !important;
+  }
+}

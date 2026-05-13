@@ -1,0 +1,12 @@
+<%# Worker UI primitive: section header.
+    Locals:
+      title  required, the small caps label
+      right  optional raw HTML rendered on the right side (link, count badge…)
+    Usage:
+      <%- include('partials/ui/section-header', { title: "Today's shift" }) %>
+      <%- include('partials/ui/section-header', { title: 'Coming up', right: '<a href="/w/shifts">See all</a>' }) %>
+%>
+<div class="wd-section-header">
+  <span class="wd-section-header-title"><%= title %></span>
+  <% if (typeof right !== 'undefined' && right) { %><span class="wd-section-header-right"><%- right %></span><% } %>
+</div>
