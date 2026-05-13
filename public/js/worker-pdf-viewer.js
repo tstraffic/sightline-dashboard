@@ -203,7 +203,30 @@
 
   function initAll() {
     var els = document.querySelectorAll('.pdf-viewer[data-pdf-src]');
-    for (var i = 0; i < els.length; i++) initOne(els[i]);
+    // Lazy-init when the viewer scrolls near the viewport. Wallet pages can
+    // have several PDF viewers on the same scroll; we don't want to fetch
+    // all of them on page load.
+    if ('IntersectionObserver' in window) {
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            io.unobserve(entry.target);
+            initOne(entry.target);
+          }
+        });
+      }, { rootMargin: '600px 0px' });
+      for (var i = 0; i < els.length; i++) {
+        // Pre-paint a "Loading…" stub so the page height is stable.
+        if (!els[i].innerHTML.trim()) {
+          injectCss();
+          els[i].innerHTML = loadingHtml();
+        }
+        io.observe(els[i]);
+      }
+    } else {
+      // No IO support — init everything synchronously (rare on modern mobile).
+      for (var j = 0; j < els.length; j++) initOne(els[j]);
+    }
   }
 
   if (document.readyState === 'loading') {
