@@ -96,14 +96,29 @@
     }
 
     function explode(c) {
-      if (reduced || !WP() || !WP().celebrate) return;
-      // Convert orbit particles -> outward ballistic, then layer a
-      // celebration burst on top for emphasis.
+      if (reduced || !WP()) return;
+      // Minimalist release: clear the orbit, then spawn a tiny ring of
+      // 6 soft teal particles drifting outward + fading. Used to be a
+      // 40-particle confetti burst which the user said felt like "too
+      // much stuff flying out".
       WP().removeTagged && WP().removeTagged('ptr');
-      WP().celebrate({
-        type: 'info', origin: c, intensity: 1.0,
-        functional: true,
-      });
+      if (!WP().spawn) return;
+      var N = 6;
+      for (var i = 0; i < N; i++) {
+        var ang = (i / N) * Math.PI * 2;
+        var speed = 90;
+        WP().spawn({
+          x: c.x, y: c.y,
+          vx: Math.cos(ang) * speed,
+          vy: Math.sin(ang) * speed,
+          drag: 0.94,
+          color: 'rgba(0,210,190,0.85)',
+          size: 1.8,
+          maxLife: 0.55,
+          shape: 'circle',
+          alpha: 0.9,
+        });
+      }
     }
 
     main.addEventListener('touchstart', function (e) {
