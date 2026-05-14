@@ -24,6 +24,16 @@
   </style>
   <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
   <link rel="manifest" href="/manifest.json">
+  <!-- iOS uses apple-touch-icon for Add-to-Home-Screen — without these it
+       falls back to a screenshot or stretches the manifest icon. -->
+  <link rel="apple-touch-icon" href="/images/apple-touch-icon.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="/images/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/images/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/images/icon-512.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="T&S Employee">
+  <meta name="theme-color" content="#1D6AE5">
   <title><%= typeof title !== 'undefined' ? title + ' | ' : '' %>T&S Employee Portal</title>
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
