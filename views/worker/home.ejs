@@ -582,7 +582,7 @@
           </span>
           <%= s.label %>
         </p>
-        <p class="wh-streak-value" data-count="<%= s.current %>"><%= s.current %><span class="wh-streak-unit"><%= s.unit %></span></p>
+        <p class="wh-streak-value" data-motion="count" data-count-to="<%= s.current %>"><%= s.current %><span class="wh-streak-unit"><%= s.unit %></span></p>
         <% if (s.progress != null) { %>
           <div class="wh-streak-bar"><div class="wh-streak-bar-fill" style="width: 0%;" data-target="<%= s.progress %>"></div></div>
         <% } %>
@@ -917,31 +917,10 @@
 
 <script>
 (function () {
-  // ===== Animated counters =====
-  function animateCount(el, target) {
-    var start = 0, dur = 700, t0 = null;
-    var isFloat = String(target).indexOf('.') !== -1;
-    target = parseFloat(target) || 0;
-    function step(ts) {
-      if (!t0) t0 = ts;
-      var p = Math.min(1, (ts - t0) / dur);
-      var v = start + (target - start) * (1 - Math.pow(1 - p, 3));
-      // Keep unit span intact
-      var unit = el.querySelector('.wh-stat-unit, .wh-streak-unit');
-      var display = isFloat ? v.toFixed(1) : Math.round(v);
-      if (unit) {
-        el.firstChild.nodeValue = display;
-      } else {
-        el.textContent = display;
-      }
-      if (p < 1) requestAnimationFrame(step);
-    }
-    requestAnimationFrame(step);
-  }
-  document.querySelectorAll('[data-count]').forEach(function (el) {
-    var t = el.getAttribute('data-count');
-    animateCount(el, t);
-  });
+  // Animated counters are now driven by data-motion="count" in
+  // public/js/worker-motion.js — see particle PR 7 audit. The local
+  // animateCount() helper that used to live here has been removed in
+  // favour of the unified Motion One implementation.
 
   // ===== Streak milestone celebration =====
   // Fire a one-off confetti burst the first time the worker crosses
@@ -949,9 +928,10 @@
   // so re-loading the home page doesn't re-fire.
   (function () {
     try {
-      var streakValEl = document.querySelector('.wh-streak-ic[data-tier] + .wh-streak-value, .wh-streak-ic[data-tier]');
+      var streakValEl = document.querySelector('.wh-streak-ic[data-tier]');
       if (!streakValEl || !window.WorkerParticles) return;
-      var n = parseInt(streakValEl.closest('.wh-streak').querySelector('.wh-streak-value').getAttribute('data-count') || '0', 10);
+      var valEl = streakValEl.closest('.wh-streak').querySelector('.wh-streak-value');
+      var n = parseInt(valEl && (valEl.getAttribute('data-count-to') || valEl.getAttribute('data-count')) || '0', 10);
       if (!isFinite(n) || n < 3) return;
       var last = parseInt(localStorage.getItem('wh:streak:lastCelebrated') || '0', 10);
       var crossed = (n >= 14 && last < 14) || (n >= 7 && last < 7) || (n >= 3 && last < 3);

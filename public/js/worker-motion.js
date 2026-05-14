@@ -137,20 +137,43 @@
   // Uses requestAnimationFrame directly (Web Animations API isn't ideal
   // for text-content interpolation). Motion One's inView is reused for
   // viewport gating.
+  //
+  // Two markup shapes supported:
+  //   <span data-motion="count" data-count-to="12">12hrs</span>
+  //     -> reads suffix "hrs" from the trailing text, writes textContent
+  //   <p data-motion="count" data-count-to="6">6<span class="unit">/7</span></p>
+  //     -> writes only the first text node, leaves child <span> alone
   function bindCount(el) {
     var to = parseFloat(el.getAttribute('data-count-to') || el.textContent || '0');
     if (!isFinite(to)) return;
-    var raw = el.textContent || '';
-    var match = raw.match(/^[\s-]*([0-9]+(?:\.[0-9]+)?)(.*)$/);
-    var suffix = match ? match[2] : '';
     var decimals = to % 1 === 0 ? 0 : 1;
 
-    if (reducedMotion || !hasMotion) {
-      el.textContent = (decimals ? to.toFixed(decimals) : Math.round(to)) + suffix;
-      return;
+    // Find the first child text node; if present we'll write only into
+    // it so adjacent child elements (unit spans, etc.) stay intact.
+    var firstText = null;
+    for (var i = 0; i < el.childNodes.length; i++) {
+      var n = el.childNodes[i];
+      if (n.nodeType === 3 /* Node.TEXT_NODE */) { firstText = n; break; }
     }
 
-    el.textContent = '0' + suffix;
+    var suffix = '';
+    if (!firstText) {
+      // Element is text-only; parse a trailing unit out of the existing
+      // text content (e.g. "12hrs" -> suffix "hrs").
+      var raw = el.textContent || '';
+      var match = raw.match(/^[\s-]*([0-9]+(?:\.[0-9]+)?)(.*)$/);
+      suffix = match ? match[2] : '';
+    }
+
+    function write(v) {
+      var s = (decimals ? v.toFixed(decimals) : Math.round(v)) + suffix;
+      if (firstText) firstText.nodeValue = s;
+      else el.textContent = s;
+    }
+
+    if (reducedMotion || !hasMotion) { write(to); return; }
+
+    write(0);
     var fired = false;
     function play() {
       if (fired) return;
@@ -159,8 +182,7 @@
       function tick(now) {
         var t = Math.min(1, (now - start) / COUNT_MS);
         var eased = 1 - Math.pow(1 - t, 3);
-        var v = to * eased;
-        el.textContent = (decimals ? v.toFixed(decimals) : Math.round(v)) + suffix;
+        write(to * eased);
         if (t < 1) requestAnimationFrame(tick);
       }
       requestAnimationFrame(tick);
