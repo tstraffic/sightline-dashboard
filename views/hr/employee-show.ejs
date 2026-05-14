@@ -201,6 +201,11 @@
       <button onclick="switchEmpTab('competencies')" data-tab="competencies" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Competencies <span class="ml-1 bg-gray-100 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= competencies.length %></span></button>
       <button onclick="switchEmpTab('workforce')" data-tab="workforce" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Linked Workforce <% if (crewMember) { %><span class="ml-1 w-2 h-2 bg-emerald-500 rounded-full inline-block"></span><% } %></button>
       <button onclick="switchEmpTab('training')" data-tab="training" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Training <% if (locals.training && training.length > 0) { %><span class="ml-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= training.length %></span><% } %></button>
+      <%# Toolbox Meetings — every published toolbox + this worker's
+          attendance status, scoped to their linked crew_member. %>
+      <% var tbCount = (typeof toolboxMeetings !== 'undefined' && toolboxMeetings) ? toolboxMeetings.length : 0; %>
+      <% var tbAttendedCount = (typeof toolboxMeetings !== 'undefined' && toolboxMeetings) ? toolboxMeetings.filter(function (m) { return m.my_status === 'attended' || m.my_status === 'caught_up'; }).length : 0; %>
+      <button onclick="switchEmpTab('toolbox-meetings')" data-tab="toolbox-meetings" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Toolbox Meetings <% if (tbCount > 0) { %><span class="ml-1 bg-gray-100 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= tbAttendedCount %>/<%= tbCount %></span><% } %></button>
     </nav>
   </div>
 
@@ -1356,6 +1361,63 @@
         </div>
         <h3 class="text-gray-900 font-semibold text-base mb-1">No training records</h3>
         <p class="text-gray-500 text-sm">This employee hasn't completed any training modules yet.</p>
+      </div>
+    <% } %>
+  </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TAB: Toolbox Meetings                        -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div id="tab-toolbox-meetings" class="emp-tab-content" style="display:none;">
+    <% if (!employee.linked_crew_member_id) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-8 text-center">
+        <p class="text-sm text-gray-600">This employee isn't linked to a crew member yet, so toolbox meeting attendance can't be tracked. Link a crew member from the <b>Linked Workforce</b> tab to start logging meeting attendance.</p>
+      </div>
+    <% } else if (!toolboxMeetings || toolboxMeetings.length === 0) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-8 text-center">
+        <svg class="w-10 h-10 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <h3 class="text-gray-900 font-semibold text-base mb-1">No toolbox meetings yet</h3>
+        <p class="text-gray-500 text-sm">Once the office publishes a toolbox talk, every active worker's attendance will appear here.</p>
+      </div>
+    <% } else { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <ul class="divide-y divide-gray-100">
+          <% toolboxMeetings.forEach(function (m) { %>
+            <li class="p-4 hover:bg-gray-50 transition-colors">
+              <div class="flex items-start gap-3">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <a href="/toolbox-talks/<%= m.id %>" class="text-sm font-semibold text-gray-900 hover:text-brand-700"><%= m.title %></a>
+                    <% if (m.my_status === 'attended') { %>
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-emerald-100 text-emerald-700">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        Attended
+                      </span>
+                    <% } else if (m.my_status === 'caught_up') { %>
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-amber-100 text-amber-700">Caught up</span>
+                    <% } else if (m.my_status === 'absent') { %>
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-rose-100 text-rose-700">Couldn't attend</span>
+                    <% } else { %>
+                      <span class="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold rounded-full bg-gray-100 text-gray-500">No response</span>
+                    <% } %>
+                  </div>
+                  <p class="text-xs text-gray-500 mt-1">
+                    <% if (m.held_at) { %><%= new Date(m.held_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) %> · <% } %>
+                    <% if (m.presenter) { %>Presenter: <span class="text-gray-700 font-medium"><%= m.presenter %></span><% } %>
+                  </p>
+                  <% if (m.key_points) { %>
+                    <p class="text-xs text-gray-600 mt-2 line-clamp-3 whitespace-pre-line"><%= m.key_points %></p>
+                  <% } %>
+                  <% if (m.my_status === 'absent' && m.absence_reason) { %>
+                    <div class="mt-2 px-3 py-2 bg-rose-50 border border-rose-100 rounded-md text-xs text-rose-800">
+                      <span class="font-semibold">Reason given:</span> <%= m.absence_reason %>
+                    </div>
+                  <% } %>
+                </div>
+              </div>
+            </li>
+          <% }); %>
+        </ul>
       </div>
     <% } %>
   </div>

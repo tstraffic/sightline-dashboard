@@ -9355,6 +9355,41 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 204: Toolbox attendance — sessions + absence reason
+  // - new table toolbox_attendance_sessions: one token per toolbox so we
+  //   can share a public attendance link with workers (precedent:
+  //   sop_signing_sessions).
+  // - new column toolbox_attendance.absence_reason: nullable; set when
+  //   a worker confirms they can't attend.
+  // The existing status enum had 'attended' | 'caught_up'; we now also
+  // allow 'absent' to represent "marked themselves as not attending".
+  // =============================================
+  if (!isMigrationApplied.get(204)) {
+    console.log('Running migration 204: toolbox attendance sessions + absence_reason');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS toolbox_attendance_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          token TEXT NOT NULL UNIQUE,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          closed_at DATETIME
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_session_toolbox ON toolbox_attendance_sessions(toolbox_id)');
+      const cols = db.prepare("PRAGMA table_info(toolbox_attendance)").all().map(c => c.name);
+      if (!cols.includes('absence_reason')) {
+        db.exec("ALTER TABLE toolbox_attendance ADD COLUMN absence_reason TEXT");
+      }
+      recordMigration.run(204, 'toolbox_attendance_sessions + absence_reason');
+      console.log('Migration 204 applied');
+    } catch (e) {
+      console.error('Migration 204 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

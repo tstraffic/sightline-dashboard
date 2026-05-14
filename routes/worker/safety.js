@@ -562,7 +562,8 @@ router.get('/safety/toolboxes', (req, res) => {
   const workerId = req.session.worker.id;
   const rows = db.prepare(`
     SELECT t.id, t.title, t.held_at, t.presenter, t.key_points,
-           a.status AS my_status, a.recorded_at AS my_recorded_at
+           a.status AS my_status, a.absence_reason AS my_absence_reason,
+           a.recorded_at AS my_recorded_at
     FROM toolbox_talks t
     LEFT JOIN toolbox_attendance a ON a.toolbox_id = t.id AND a.crew_member_id = ?
     WHERE t.status = 'published'
@@ -570,7 +571,7 @@ router.get('/safety/toolboxes', (req, res) => {
     LIMIT 200
   `).all(workerId);
   res.render('worker/safety/toolboxes-list', {
-    title: 'Toolbox Talks', currentPage: 'safety',
+    title: 'Toolbox Meetings', currentPage: 'safety',
     subtab: 'toolboxes', rows,
   });
 });

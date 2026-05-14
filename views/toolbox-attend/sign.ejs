@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#0A1628">
+  <title>Toolbox Meeting attendance — <%= session.title %></title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      min-height: 100dvh;
+      font-family: 'Inter', system-ui, sans-serif;
+      background:
+        radial-gradient(120% 80% at 0% 0%, rgba(43,127,255,0.18), transparent 60%),
+        radial-gradient(120% 80% at 100% 100%, rgba(0,210,190,0.12), transparent 55%),
+        linear-gradient(160deg, #0F1F3A, #0A1628);
+      color: #fff;
+      padding: env(safe-area-inset-top) 16px env(safe-area-inset-bottom);
+    }
+    .wrap { max-width: 540px; margin: 0 auto; padding: 24px 0 40px; }
+    .card {
+      background-color: rgba(255,255,255,0.025);
+      background-image: linear-gradient(180deg, rgba(255,255,255,0.035) 0%, rgba(255,255,255,0.005) 100%);
+      border: 1px solid rgba(255,255,255,0.06);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 8px 22px rgba(0,0,0,0.32);
+      border-radius: 16px;
+      padding: 18px 18px 16px;
+      margin-bottom: 14px;
+    }
+    .eyebrow { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.55); font-weight: 700; }
+    h1 { font-size: 22px; font-weight: 800; margin-top: 4px; letter-spacing: -0.01em; line-height: 1.2; }
+    .meta { font-size: 13px; color: rgba(255,255,255,0.65); margin-top: 6px; }
+    .meta b { color: #fff; font-weight: 600; }
+    .notes { font-size: 14px; color: rgba(255,255,255,0.80); margin-top: 10px; line-height: 1.5; white-space: pre-line; }
+    label.row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px; cursor: pointer;
+      border-top: 1px solid rgba(255,255,255,0.06);
+      transition: background 120ms ease;
+    }
+    label.row:first-child { border-top: 0; }
+    label.row:active, label.row.is-selected { background: rgba(0,210,190,0.10); }
+    label.row input[type="radio"] { accent-color: #00D2BE; width: 18px; height: 18px; }
+    .name { flex: 1; font-weight: 600; font-size: 15px; }
+    .emp { font-size: 12px; color: rgba(255,255,255,0.45); font-variant-numeric: tabular-nums; }
+    .status-tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+    .status-attended { background: rgba(16,185,129,0.20); color: #34D399; }
+    .status-absent { background: rgba(244,63,94,0.20); color: #FCA5A5; }
+    .status-caught { background: rgba(245,158,11,0.20); color: #FCD34D; }
+    input[type="text"], textarea {
+      width: 100%; padding: 11px 13px; background: rgba(255,255,255,0.05);
+      border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;
+      color: #fff; font-family: inherit; font-size: 15px; outline: none;
+    }
+    input[type="text"]:focus, textarea:focus { border-color: rgba(0,210,190,0.5); }
+    .seg {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;
+    }
+    .seg label {
+      padding: 12px; border-radius: 12px; text-align: center; cursor: pointer; font-weight: 700;
+      border: 1px solid rgba(255,255,255,0.10);
+      background: rgba(255,255,255,0.03);
+      transition: border-color 140ms, background 140ms;
+      font-size: 14px;
+    }
+    .seg label.attended.is-checked { background: rgba(16,185,129,0.14); border-color: rgba(16,185,129,0.55); color: #6EE7B7; }
+    .seg label.absent.is-checked   { background: rgba(244,63,94,0.14); border-color: rgba(244,63,94,0.55); color: #FDA4AF; }
+    .seg input { display: none; }
+    .filter { width: 100%; margin-bottom: 8px; }
+    .submit {
+      width: 100%; padding: 14px; border: 0; border-radius: 12px;
+      background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
+      font-weight: 800; font-size: 15px; cursor: pointer; margin-top: 14px;
+      box-shadow: 0 8px 20px rgba(43,127,255,0.35);
+    }
+    .submit:disabled { opacity: 0.5; cursor: not-allowed; box-shadow: none; }
+    .ok-card {
+      background: rgba(16,185,129,0.10);
+      border: 1px solid rgba(16,185,129,0.35);
+      color: #6EE7B7;
+      padding: 16px; border-radius: 14px; text-align: center; margin-bottom: 14px;
+    }
+    .ok-card h2 { font-size: 18px; font-weight: 800; margin-bottom: 4px; color: #fff; }
+    .reason-block { display: none; margin-top: 10px; }
+    .reason-block.is-visible { display: block; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <% if (submitted) { %>
+      <div class="ok-card">
+        <h2>Thanks, <%= submittedAs %>!</h2>
+        <% if (submittedStatus === 'attended') { %>
+          <p>Your attendance is confirmed.</p>
+        <% } else if (submittedStatus === 'absent') { %>
+          <p>Noted — your reason has been sent to the office.</p>
+        <% } %>
+        <p style="margin-top:8px;font-size:12px;color:rgba(255,255,255,0.65);">You can close this page.</p>
+      </div>
+    <% } %>
+
+    <div class="card">
+      <p class="eyebrow">Toolbox meeting</p>
+      <h1><%= session.title %></h1>
+      <p class="meta">
+        <% if (session.held_at) { %><b><%= new Date(session.held_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) %></b> · <% } %>
+        Presenter: <b><%= session.presenter || '—' %></b>
+      </p>
+      <% if (session.key_points) { %>
+        <p class="notes"><%= session.key_points %></p>
+      <% } %>
+    </div>
+
+    <% if (!submitted) { %>
+      <form method="POST" action="/toolbox-attend/<%= session.token %>/submit" id="att-form">
+        <div class="card">
+          <p class="eyebrow" style="margin-bottom:8px;">Who are you?</p>
+          <input class="filter" type="text" id="filter" placeholder="Filter by name..." oninput="filterRows(this.value)">
+          <div id="people" style="max-height:42vh;overflow-y:auto;border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);">
+            <% attendees.forEach(function (a) { %>
+              <label class="row" data-name="<%= (a.full_name || '').toLowerCase() %>">
+                <input type="radio" name="crew_member_id" value="<%= a.id %>" onchange="onPick(this)">
+                <span class="name"><%= a.full_name %></span>
+                <% if (a.employee_id) { %><span class="emp"><%= a.employee_id %></span><% } %>
+                <% if (a.currentStatus === 'attended') { %>
+                  <span class="status-tag status-attended">Attended</span>
+                <% } else if (a.currentStatus === 'absent') { %>
+                  <span class="status-tag status-absent">Absent</span>
+                <% } else if (a.currentStatus === 'caught_up') { %>
+                  <span class="status-tag status-caught">Caught up</span>
+                <% } %>
+              </label>
+            <% }); %>
+          </div>
+        </div>
+
+        <div class="card">
+          <p class="eyebrow" style="margin-bottom:6px;">Your status</p>
+          <div class="seg" id="status-seg">
+            <label class="attended">
+              <input type="radio" name="status" value="attended" onchange="onStatus(this)">
+              <span>I attended</span>
+            </label>
+            <label class="absent">
+              <input type="radio" name="status" value="absent" onchange="onStatus(this)">
+              <span>I can't attend</span>
+            </label>
+          </div>
+          <div class="reason-block" id="reason-block">
+            <p class="eyebrow" style="margin-top:14px;margin-bottom:6px;">Why?</p>
+            <textarea name="absence_reason" id="absence-reason" rows="3" placeholder="A short reason..." maxlength="1000"></textarea>
+          </div>
+        </div>
+
+        <button type="submit" class="submit" id="submit-btn" disabled>Submit</button>
+      </form>
+    <% } %>
+  </div>
+
+  <script>
+    var pickedCrew = null;
+    var pickedStatus = null;
+    function onPick(input) {
+      pickedCrew = input.value;
+      document.querySelectorAll('label.row').forEach(function (l) { l.classList.remove('is-selected'); });
+      var lbl = input.closest('label.row');
+      if (lbl) lbl.classList.add('is-selected');
+      updateSubmit();
+    }
+    function onStatus(input) {
+      pickedStatus = input.value;
+      document.querySelectorAll('#status-seg label').forEach(function (l) { l.classList.remove('is-checked'); });
+      var lbl = input.closest('label');
+      if (lbl) lbl.classList.add('is-checked');
+      var rb = document.getElementById('reason-block');
+      if (pickedStatus === 'absent') rb.classList.add('is-visible'); else rb.classList.remove('is-visible');
+      updateSubmit();
+    }
+    function updateSubmit() {
+      var btn = document.getElementById('submit-btn');
+      var reason = (document.getElementById('absence-reason') || {}).value || '';
+      var ok = !!pickedCrew && !!pickedStatus && (pickedStatus === 'attended' || reason.trim().length > 0);
+      btn.disabled = !ok;
+    }
+    function filterRows(q) {
+      q = (q || '').toLowerCase().trim();
+      document.querySelectorAll('label.row').forEach(function (r) {
+        var name = r.getAttribute('data-name') || '';
+        r.style.display = (!q || name.indexOf(q) !== -1) ? '' : 'none';
+      });
+    }
+    var ar = document.getElementById('absence-reason');
+    if (ar) ar.addEventListener('input', updateSubmit);
+  </script>
+</body>
+</html>

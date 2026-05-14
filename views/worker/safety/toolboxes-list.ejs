@@ -23,7 +23,14 @@
   }
   .tb-chip.att   { background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); }
   .tb-chip.caught{ background: rgba(139,92,246,0.18); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3); }
-  .tb-chip.miss  { background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
+  .tb-chip.absent{ background: rgba(244,63,94,0.18);  color: #fca5a5; border: 1px solid rgba(244,63,94,0.3); }
+  .tb-chip.miss  { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.10); }
+  .tb-reason {
+    margin-top: 8px; padding: 8px 10px; border-radius: 8px;
+    background: rgba(244,63,94,0.10); border: 1px solid rgba(244,63,94,0.22);
+    color: #fda4af; font-size: 0.72rem; line-height: 1.4;
+  }
+  .tb-reason b { color: #fff; font-weight: 600; }
   .saf-empty { text-align: center; padding: 32px 16px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
 </style>
 
@@ -32,18 +39,24 @@
   <%- include('./_tabs') %>
 
   <% if (!rows.length) { %>
-    <div class="saf-empty">No toolbox talks posted yet.</div>
+    <div class="saf-empty">No toolbox meetings posted yet.</div>
   <% } else { %>
     <% rows.forEach(r => {
       const status = r.my_status;
-      const chipClass = status === 'attended' ? 'att' : status === 'caught_up' ? 'caught' : 'miss';
-      const chipLabel = status === 'attended' ? 'Attended' : status === 'caught_up' ? 'Caught up' : 'Not attended';
+      let chipClass = 'miss';
+      let chipLabel = 'No response';
+      if (status === 'attended')  { chipClass = 'att';    chipLabel = 'Attended'; }
+      else if (status === 'caught_up') { chipClass = 'caught'; chipLabel = 'Caught up'; }
+      else if (status === 'absent')    { chipClass = 'absent'; chipLabel = 'Couldn\'t attend'; }
     %>
       <a href="/w/safety/toolboxes/<%= r.id %>" class="tb-card">
         <div class="tb-card-title"><%= r.title %></div>
         <div class="tb-card-meta"><%= fmt(r.held_at) %><% if (r.presenter) { %> · <%= r.presenter %><% } %></div>
         <% if (r.key_points) { %><div class="tb-snip"><%= r.key_points %></div><% } %>
         <span class="tb-chip <%= chipClass %>"><%= chipLabel %></span>
+        <% if (status === 'absent' && r.my_absence_reason) { %>
+          <div class="tb-reason"><b>Your reason:</b> <%= r.my_absence_reason %></div>
+        <% } %>
       </a>
     <% }) %>
   <% } %>
