@@ -236,6 +236,61 @@
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fill();
+      } else if (p.shape === 'rect') {
+        // confetti strip: thin rotated rectangle. End-of-life fade.
+        var fr = p.life / p.maxLife;
+        ctx.globalAlpha = p.alpha * (1 - Math.max(0, fr - 0.7) / 0.3);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.fillRect(-p.size, -p.size * 0.35, p.size * 2, p.size * 0.7);
+        ctx.restore();
+        // advance spin (re-uses vAngle as rad/s)
+        p.angle += p.vAngle * dt;
+      } else if (p.shape === 'triangle') {
+        var ft = p.life / p.maxLife;
+        ctx.globalAlpha = p.alpha * (1 - Math.max(0, ft - 0.7) / 0.3);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.beginPath();
+        ctx.moveTo(0, -p.size);
+        ctx.lineTo(p.size * 0.9, p.size * 0.8);
+        ctx.lineTo(-p.size * 0.9, p.size * 0.8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        p.angle += p.vAngle * dt;
+      } else if (p.shape === 'hardhat') {
+        // Tiny stylised hard-hat: rounded top + brim rectangle.
+        var fh = p.life / p.maxLife;
+        ctx.globalAlpha = p.alpha * (1 - Math.max(0, fh - 0.7) / 0.3);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.beginPath();
+        // dome
+        ctx.arc(0, 0, p.size, Math.PI, 0);
+        // brim
+        ctx.lineTo(p.size * 1.25, p.size * 0.18);
+        ctx.lineTo(-p.size * 1.25, p.size * 0.18);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+        p.angle += p.vAngle * dt;
+      } else if (p.shape === 'vest') {
+        // High-vis vest silhouette: rounded rect with reflective stripe.
+        var fv = p.life / p.maxLife;
+        ctx.globalAlpha = p.alpha * (1 - Math.max(0, fv - 0.7) / 0.3);
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.angle);
+        ctx.fillRect(-p.size, -p.size * 1.1, p.size * 2, p.size * 2.2);
+        // stripe across the middle in a contrasting tone
+        ctx.fillStyle = 'rgba(255,255,255,0.85)';
+        ctx.fillRect(-p.size, -p.size * 0.15, p.size * 2, p.size * 0.30);
+        ctx.restore();
+        p.angle += p.vAngle * dt;
       } else {
         // circle
         ctx.beginPath();
@@ -278,11 +333,61 @@
     if (weatherKind && !running) start();
   }
   function count() { return particles.length; }
-  function burst(opts) {
-    // Placeholder — PRs 3/4 will extend.
-    if (reduced && !(opts && opts.functional)) return;
-    // (no-op for now)
+
+  // ----- Celebration burst -------------------------------------------
+  // Imperative confetti API: WorkerParticles.celebrate({type, origin,
+  // intensity, functional}). Used on form-submit success and streak
+  // milestones. functional=true keeps the burst alive under
+  // prefers-reduced-motion (form-submit feedback is functional, not
+  // decorative).
+  var PALETTES = {
+    success:   ['#10B981', '#34D399', '#00D2BE', '#FCD34D', '#FFFFFF'],
+    streak:    ['#EF4444', '#F97316', '#F59E0B', '#FCD34D', '#FFFFFF'],
+    milestone: ['#FACC15', '#8B5CF6', '#2B7FFF', '#00D2BE', '#FFFFFF'],
+    info:      ['#2B7FFF', '#60A5FA', '#8B5CF6', '#FFFFFF'],
+  };
+  var SHAPES = ['rect', 'circle', 'triangle', 'hardhat', 'vest'];
+
+  function spawnConfetti(p, origin, palette) {
+    var angle = (-Math.PI / 2) + (Math.random() - 0.5) * (Math.PI * 0.95);
+    var speed = 280 + Math.random() * 260;
+    p.x = origin.x;
+    p.y = origin.y;
+    p.vx = Math.cos(angle) * speed;
+    p.vy = Math.sin(angle) * speed;
+    p.gravity = 720;             // px/s^2 — confetti falls reasonably fast
+    p.drag = 0.985;              // mild air resistance per frame
+    p.life = 0;
+    p.maxLife = 1.6 + Math.random() * 1.4;
+    p.size = 6 + Math.random() * 5;
+    p.color = palette[(Math.random() * palette.length) | 0];
+    p.alpha = 1;
+    p.shape = SHAPES[(Math.random() * SHAPES.length) | 0];
+    p.angle = Math.random() * Math.PI * 2;
+    p.vAngle = (Math.random() - 0.5) * 9; // rad/s spin
   }
+
+  function celebrate(opts) {
+    opts = opts || {};
+    if (reduced && !opts.functional) return;
+    init();
+    var type = opts.type || 'success';
+    var palette = PALETTES[type] || PALETTES.success;
+    var intensity = Math.max(0.25, Math.min(2, opts.intensity || 1));
+    var origin = opts.origin || { x: W / 2, y: H * 0.35 };
+    // Budget-aware: leave headroom for weather + tap particles.
+    var available = MAX - particles.length;
+    var wanted = Math.round(40 * intensity);
+    var n = Math.max(0, Math.min(available, wanted));
+    for (var i = 0; i < n; i++) {
+      var p = alloc();
+      spawnConfetti(p, origin, palette);
+      particles.push(p);
+    }
+    if (!running) start();
+  }
+
+  function burst(opts) { return celebrate(opts); }
 
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', autoInit);
@@ -301,7 +406,8 @@
   window.WorkerParticles = {
     init: init,
     setWeather: setWeather,
-    burst: burst,
+    celebrate: celebrate,
+    burst: burst, // alias of celebrate, kept for parity with the brief
     count: count,
   };
 })();

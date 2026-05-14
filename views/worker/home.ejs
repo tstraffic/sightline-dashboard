@@ -942,6 +942,31 @@
     var t = el.getAttribute('data-count');
     animateCount(el, t);
   });
+
+  // ===== Streak milestone celebration =====
+  // Fire a one-off confetti burst the first time the worker crosses
+  // a streak tier (3, 7, 14). Last-seen value persisted in localStorage
+  // so re-loading the home page doesn't re-fire.
+  (function () {
+    try {
+      var streakValEl = document.querySelector('.wh-streak-ic[data-tier] + .wh-streak-value, .wh-streak-ic[data-tier]');
+      if (!streakValEl || !window.WorkerParticles) return;
+      var n = parseInt(streakValEl.closest('.wh-streak').querySelector('.wh-streak-value').getAttribute('data-count') || '0', 10);
+      if (!isFinite(n) || n < 3) return;
+      var last = parseInt(localStorage.getItem('wh:streak:lastCelebrated') || '0', 10);
+      var crossed = (n >= 14 && last < 14) || (n >= 7 && last < 7) || (n >= 3 && last < 3);
+      if (!crossed) return;
+      localStorage.setItem('wh:streak:lastCelebrated', String(n));
+      var rect = streakValEl.getBoundingClientRect();
+      setTimeout(function () {
+        window.WorkerParticles.celebrate({
+          type: 'streak',
+          origin: { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 },
+          intensity: n >= 14 ? 1.6 : (n >= 7 ? 1.2 : 0.8),
+        });
+      }, 600);
+    } catch (e) { /* noop */ }
+  })();
   // Progress bars
   document.querySelectorAll('.wh-streak-bar-fill[data-target]').forEach(function (el) {
     setTimeout(function () { el.style.width = el.getAttribute('data-target') + '%'; }, 40);
