@@ -20,10 +20,14 @@ function loadSession(token) {
 function loadAttendeeList(sessionId) {
   const db = getDb();
   const crew = db.prepare(`
-    SELECT id, full_name, employee_id, email
-    FROM crew_members
-    WHERE active = 1
-    ORDER BY full_name
+    SELECT cm.id, cm.full_name, cm.employee_id, cm.email
+    FROM crew_members cm
+    WHERE cm.active = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM employees e
+        WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+      )
+    ORDER BY cm.full_name
   `).all();
   const signedIds = new Set(
     db.prepare('SELECT crew_member_id FROM sop_acknowledgements WHERE session_id = ? AND crew_member_id IS NOT NULL')

@@ -567,9 +567,13 @@ router.get('/safety/toolboxes', (req, res) => {
     FROM toolbox_talks t
     LEFT JOIN toolbox_attendance a ON a.toolbox_id = t.id AND a.crew_member_id = ?
     WHERE t.status = 'published'
+      AND (
+        NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = t.id)
+        OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = t.id AND i.crew_member_id = ?)
+      )
     ORDER BY t.held_at DESC, t.created_at DESC
     LIMIT 200
-  `).all(workerId);
+  `).all(workerId, workerId);
   res.render('worker/safety/toolboxes-list', {
     title: 'Toolbox Meetings', currentPage: 'safety',
     subtab: 'toolboxes', rows,
