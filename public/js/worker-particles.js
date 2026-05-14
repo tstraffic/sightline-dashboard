@@ -93,7 +93,7 @@
     stormy:   { rate: 40, init: initRain,    cap: 90, gust: true },
     snow:     { rate: 14, init: initSnow,    cap: 60 },
     fog:      { rate: 1.5, init: initFog,    cap: 14 },
-    sunny:    { rate: 4,  init: initSunMote, cap: 30 },
+    sunny:    { rate: 2.2, init: initSunMote, cap: 18 },
     night:    { rate: 0.8, init: initStar,   cap: 22, twinkle: true },
     // partly-cloudy / cloudy intentionally idle for now — the orbs and
     // the weather card SVG already carry the cloudiness signal. Pure
@@ -135,14 +135,17 @@
     p.alpha = 0.6;
     p.shape = 'fog';
   }
+  // Sun motes — toned down per user feedback. Still warm + visible but
+  // no longer reads as "orange snow". Rate, cap, size, and colour
+  // alpha all softened.
   function initSunMote(p) {
     p.x = Math.random() * W;
     p.y = H + 10;
-    p.vx = (Math.random() - 0.5) * 8;
-    p.vy = -10 - Math.random() * 18;
+    p.vx = (Math.random() - 0.5) * 6;
+    p.vy = -8 - Math.random() * 14;
     p.life = 0; p.maxLife = 6 + Math.random() * 5;
-    p.size = 1.4 + Math.random() * 1.8;
-    p.color = 'rgba(253,224,71,0.65)';
+    p.size = 0.9 + Math.random() * 1.2;
+    p.color = 'rgba(253,224,71,0.42)';
     p.alpha = 0.0;
     p.shape = 'circle';
   }
