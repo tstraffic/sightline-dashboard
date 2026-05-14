@@ -9390,6 +9390,35 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 205: toolbox_invitees
+  // Scopes a toolbox talk to a specific list of crew members. When rows
+  // exist for a toolbox_id, ONLY those workers appear on the public
+  // attendance picker, the admin's worker-profile Toolbox Meetings tab,
+  // and the worker-portal list. Empty (no rows) means "open to everyone"
+  // — preserves prior behaviour for existing toolboxes.
+  // =============================================
+  if (!isMigrationApplied.get(205)) {
+    console.log('Running migration 205: toolbox_invitees');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS toolbox_invitees (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(toolbox_id, crew_member_id)
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_invitees_toolbox ON toolbox_invitees(toolbox_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_invitees_crew ON toolbox_invitees(crew_member_id)');
+      recordMigration.run(205, 'toolbox_invitees');
+      console.log('Migration 205 applied');
+    } catch (e) {
+      console.error('Migration 205 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -62,6 +62,71 @@
       </div>
     </div>
 
+    <%
+      var _selectableCrew = (typeof selectableCrew !== 'undefined' && selectableCrew) || [];
+      var _inviteeSet = {};
+      (typeof inviteeIds !== 'undefined' && inviteeIds ? inviteeIds : []).forEach(function (id) { _inviteeSet[id] = true; });
+      var _hasInvitees = Object.keys(_inviteeSet).length > 0;
+    %>
+    <div>
+      <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Invite which workers? <span class="text-gray-300 normal-case font-medium tracking-normal">(leave empty to invite everyone)</span></label>
+        <div class="flex items-center gap-2 text-xs">
+          <input type="text" id="inv-filter" placeholder="Filter by name..." oninput="invFilter(this.value)"
+                 class="px-2 py-1 border border-gray-300 rounded-md text-xs">
+          <button type="button" onclick="invToggleAll(true)" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-xs font-semibold">Select all</button>
+          <button type="button" onclick="invToggleAll(false)" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-xs font-semibold">Clear</button>
+        </div>
+      </div>
+      <%# Hidden marker tells the update handler the picker was on this
+          submission (vs. being absent from a non-form-supporting client),
+          so an empty invitee_ids list correctly clears the list. %>
+      <input type="hidden" name="invitees_submitted" value="1">
+      <div id="inv-list" class="max-h-64 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50 divide-y divide-gray-100">
+        <% if (_selectableCrew.length === 0) { %>
+          <p class="p-4 text-sm text-gray-500 text-center">No active workers found.</p>
+        <% } %>
+        <% _selectableCrew.forEach(function (c) { %>
+          <label class="inv-row flex items-center gap-3 px-3 py-2 hover:bg-white cursor-pointer" data-name="<%= (c.full_name || '').toLowerCase() %>">
+            <input type="checkbox" name="invitee_ids" value="<%= c.id %>" <%= _inviteeSet[c.id] ? 'checked' : '' %>
+                   class="w-4 h-4 text-brand-600 rounded">
+            <span class="text-sm font-medium text-gray-800 flex-1"><%= c.full_name %></span>
+            <% if (c.employee_id) { %><span class="text-xs text-gray-400 font-mono"><%= c.employee_id %></span><% } %>
+          </label>
+        <% }); %>
+      </div>
+      <p class="text-xs text-gray-400 mt-1">
+        <span id="inv-count"><%= Object.keys(_inviteeSet).length %></span> invited.
+        <%= _hasInvitees ? 'Only ticked workers see this meeting on their profile / portal and on the public attendance link.' : 'Empty list = open to every active worker.' %>
+      </p>
+    </div>
+
+    <script>
+      function invToggleAll(checked) {
+        document.querySelectorAll('#inv-list .inv-row').forEach(function (row) {
+          if (row.style.display === 'none') return;
+          var cb = row.querySelector('input[type="checkbox"]');
+          if (cb) cb.checked = !!checked;
+        });
+        invUpdateCount();
+      }
+      function invFilter(q) {
+        q = (q || '').toLowerCase().trim();
+        document.querySelectorAll('#inv-list .inv-row').forEach(function (row) {
+          var n = row.getAttribute('data-name') || '';
+          row.style.display = (!q || n.indexOf(q) !== -1) ? '' : 'none';
+        });
+      }
+      function invUpdateCount() {
+        var n = document.querySelectorAll('#inv-list input[type="checkbox"]:checked').length;
+        var el = document.getElementById('inv-count');
+        if (el) el.textContent = n;
+      }
+      document.querySelectorAll('#inv-list input[type="checkbox"]').forEach(function (cb) {
+        cb.addEventListener('change', invUpdateCount);
+      });
+    </script>
+
     <div>
       <label for="photos" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Photos (gallery)</label>
       <input type="file" id="photos" name="photos" accept="image/*" multiple

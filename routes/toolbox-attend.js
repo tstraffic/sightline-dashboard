@@ -22,12 +22,43 @@ function loadSession(token) {
 
 function attendeeList(toolboxId) {
   const db = getDb();
-  const crew = db.prepare(`
-    SELECT id, full_name, employee_id
-    FROM crew_members
-    WHERE active = 1
-    ORDER BY full_name
-  `).all();
+
+  // If this toolbox was scoped to specific invitees, restrict the picker
+  // to that list. Empty invitees -> open to every active crew member.
+  const inviteeRows = db.prepare(
+    'SELECT crew_member_id FROM toolbox_invitees WHERE toolbox_id = ?'
+  ).all(toolboxId);
+  const inviteeIds = inviteeRows.map(r => r.crew_member_id);
+
+  // Active crew, EXCLUDING any whose linked employees row was soft-
+  // deleted. We don't want the dropdown re-surfacing deleted profiles.
+  let crew;
+  if (inviteeIds.length) {
+    const placeholders = inviteeIds.map(() => '?').join(',');
+    crew = db.prepare(`
+      SELECT cm.id, cm.full_name, cm.employee_id
+      FROM crew_members cm
+      WHERE cm.active = 1
+        AND cm.id IN (${placeholders})
+        AND NOT EXISTS (
+          SELECT 1 FROM employees e
+          WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+        )
+      ORDER BY cm.full_name
+    `).all(...inviteeIds);
+  } else {
+    crew = db.prepare(`
+      SELECT cm.id, cm.full_name, cm.employee_id
+      FROM crew_members cm
+      WHERE cm.active = 1
+        AND NOT EXISTS (
+          SELECT 1 FROM employees e
+          WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+        )
+      ORDER BY cm.full_name
+    `).all();
+  }
+
   const recorded = db.prepare(`
     SELECT crew_member_id, status, absence_reason
     FROM toolbox_attendance
@@ -100,11 +131,33 @@ router.post('/:token/submit', (req, res) => {
   }
 
   const db = getDb();
-  const crew = db.prepare('SELECT id, full_name FROM crew_members WHERE id = ? AND active = 1').get(crewId);
+  const crew = db.prepare(`
+    SELECT cm.id, cm.full_name
+    FROM crew_members cm
+    WHERE cm.id = ? AND cm.active = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM employees e
+        WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+      )
+  `).get(crewId);
   if (!crew) {
     return res.status(400).render('toolbox-attend/error', {
       layout: false, message: 'Worker not found. Please refresh and try again.',
     });
+  }
+  // If the toolbox has an explicit invitee list, the worker must be on it.
+  const inviteeRows = db.prepare(
+    'SELECT 1 FROM toolbox_invitees WHERE toolbox_id = ?'
+  ).all(session.toolbox_id);
+  if (inviteeRows.length > 0) {
+    const isInvited = db.prepare(
+      'SELECT 1 FROM toolbox_invitees WHERE toolbox_id = ? AND crew_member_id = ?'
+    ).get(session.toolbox_id, crew.id);
+    if (!isInvited) {
+      return res.status(403).render('toolbox-attend/error', {
+        layout: false, message: 'You were not invited to this toolbox meeting. Please check with your supervisor.',
+      });
+    }
   }
 
   // Upsert. The UNIQUE(toolbox_id, crew_member_id) constraint means one

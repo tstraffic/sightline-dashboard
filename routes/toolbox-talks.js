@@ -30,6 +30,41 @@ function getOrCreateAttendanceSession(toolboxId, userId) {
   return db.prepare('SELECT * FROM toolbox_attendance_sessions WHERE id = ?').get(r.lastInsertRowid);
 }
 
+// Active crew_members EXCLUDING any whose linked employees row has
+// been soft-deleted. Used wherever we render a worker picker so
+// deleted profiles don't leak back in.
+function selectableCrewMembers() {
+  return getDb().prepare(`
+    SELECT cm.id, cm.full_name, cm.employee_id
+    FROM crew_members cm
+    WHERE cm.active = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM employees e
+        WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+      )
+    ORDER BY cm.full_name
+  `).all();
+}
+
+// Replace the invitee list for a toolbox. crewIds is an array of
+// numeric crew_member.id; pass an empty array to clear (= open to
+// everyone again).
+function setToolboxInvitees(toolboxId, crewIds) {
+  const db = getDb();
+  const ids = (Array.isArray(crewIds) ? crewIds : []).map(n => parseInt(n, 10)).filter(n => n > 0);
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM toolbox_invitees WHERE toolbox_id = ?').run(toolboxId);
+    if (!ids.length) return;
+    const ins = db.prepare('INSERT OR IGNORE INTO toolbox_invitees (toolbox_id, crew_member_id) VALUES (?, ?)');
+    for (const id of ids) ins.run(toolboxId, id);
+  });
+  tx();
+}
+function getToolboxInviteeIds(toolboxId) {
+  return getDb().prepare('SELECT crew_member_id FROM toolbox_invitees WHERE toolbox_id = ?')
+    .all(toolboxId).map(r => r.crew_member_id);
+}
+
 const UPLOAD_DIR = path.join(__dirname, '..', 'data', 'uploads', 'toolbox');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 
@@ -117,6 +152,8 @@ router.get('/new', (req, res) => {
   res.render('toolbox-talks/form', {
     title: 'New Toolbox Talk', currentPage: 'toolbox-talks',
     toolbox: null, photos: [], isEdit: false,
+    selectableCrew: selectableCrewMembers(),
+    inviteeIds: [],
   });
 });
 
@@ -159,6 +196,10 @@ router.post('/', formUploads, (req, res) => {
       wantsPublish ? userId : null,
       userId
     );
+
+    // Invitees — empty array means "open to everyone".
+    const inviteeIds = Array.isArray(b.invitee_ids) ? b.invitee_ids : (b.invitee_ids ? [b.invitee_ids] : []);
+    setToolboxInvitees(r.lastInsertRowid, inviteeIds);
 
     // Persist photo attachments separately so each one is downloadable.
     const photoFiles = (req.files && req.files.photos) || [];
@@ -232,9 +273,20 @@ router.get('/:id', (req, res) => {
     } catch (e) { console.error('[toolbox session load]', e.message); }
   }
 
+  // Invitees — list (with names) so the detail page can show who was
+  // scoped. Empty array means open to everyone.
+  const invitees = db.prepare(`
+    SELECT cm.id, cm.full_name, cm.employee_id
+    FROM toolbox_invitees i
+    JOIN crew_members cm ON cm.id = i.crew_member_id
+    WHERE i.toolbox_id = ?
+    ORDER BY cm.full_name
+  `).all(toolbox.id);
+
   res.render('toolbox-talks/show', {
     title: toolbox.title, currentPage: 'toolbox-talks',
     toolbox, photos, summary, absences, attendanceSession, attendanceUrl,
+    invitees,
     statusLabels: STATUS_LABELS,
   });
 });
@@ -248,6 +300,8 @@ router.get('/:id/edit', (req, res) => {
   res.render('toolbox-talks/form', {
     title: 'Edit Toolbox Talk', currentPage: 'toolbox-talks',
     toolbox, photos, isEdit: true,
+    selectableCrew: selectableCrewMembers(),
+    inviteeIds: getToolboxInviteeIds(toolbox.id),
   });
 });
 
@@ -285,6 +339,13 @@ router.post('/:id', formUploads, (req, res) => {
       slidesPath, slidesName, signonPath, signonName,
       toolbox.id
     );
+
+    // Invitees — admin can re-scope an existing toolbox at any time.
+    // Empty means "open to everyone" again.
+    if (Object.prototype.hasOwnProperty.call(b, 'invitee_ids') || b.invitees_submitted === '1') {
+      const inviteeIds = Array.isArray(b.invitee_ids) ? b.invitee_ids : (b.invitee_ids ? [b.invitee_ids] : []);
+      setToolboxInvitees(toolbox.id, inviteeIds);
+    }
 
     const photoFiles = (req.files && req.files.photos) || [];
     if (photoFiles.length) {
@@ -380,6 +441,10 @@ router.get('/:id/attendance', (req, res) => {
     FROM crew_members cm
     LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
     WHERE cm.active = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM employees e
+        WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+      )
     ORDER BY cm.full_name
   `).all(toolbox.id);
   // Workers allocated on the toolbox's held_at date — "select all from this

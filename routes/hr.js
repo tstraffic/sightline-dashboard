@@ -639,6 +639,8 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
   // the worker didn't respond — the user wants the full list visible.
   let toolboxMeetings = [];
   try {
+    // Show a toolbox in the worker profile only if it's open to everyone
+    // (no invitees set) OR this worker is on the explicit invitee list.
     toolboxMeetings = db.prepare(`
       SELECT
         t.id, t.title, t.held_at, t.presenter, t.key_points, t.published_at,
@@ -647,8 +649,12 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
       LEFT JOIN toolbox_attendance a
         ON a.toolbox_id = t.id AND a.crew_member_id = ?
       WHERE t.status = 'published'
+        AND (
+          NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = t.id)
+          OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = t.id AND i.crew_member_id = ?)
+        )
       ORDER BY COALESCE(t.held_at, t.published_at) DESC, t.id DESC
-    `).all(employee.linked_crew_member_id || -1);
+    `).all(employee.linked_crew_member_id || -1, employee.linked_crew_member_id || -1);
   } catch (e) { /* table may not exist on stale DB */ }
 
   res.render('hr/employee-show', {

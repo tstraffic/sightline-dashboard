@@ -634,11 +634,16 @@ router.get('/present/:module', (req, res) => {
       ]
     : slides;
 
-  // Active crew for the picker
+  // Active crew for the picker — excludes any crew_member whose linked
+  // employees row has been soft-deleted so deleted profiles don't show.
   const attendees = getDb().prepare(`
     SELECT cm.id, cm.full_name, cm.employee_id
     FROM crew_members cm
     WHERE cm.active = 1
+      AND NOT EXISTS (
+        SELECT 1 FROM employees e
+        WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+      )
     ORDER BY cm.full_name
   `).all();
 

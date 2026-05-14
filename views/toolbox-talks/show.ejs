@@ -101,6 +101,26 @@
       </div>
     <% } %>
 
+    <%# Invitees — surface the scope so the admin can see at a glance
+        who's expected. Empty list = open to all active workers. %>
+    <% if (typeof invitees !== 'undefined' && invitees.length > 0) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
+          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Invited (<%= invitees.length %>)</p>
+          <a href="/toolbox-talks/<%= toolbox.id %>/edit" class="text-xs font-semibold text-brand-700 hover:text-brand-900">Change list</a>
+        </div>
+        <div class="flex flex-wrap gap-1.5">
+          <% invitees.forEach(function (i) { %>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-[11px] font-medium border border-brand-100"><%= i.full_name %></span>
+          <% }); %>
+        </div>
+      </div>
+    <% } else if (toolbox.status === 'published') { %>
+      <div class="bg-white border border-dashed border-gray-200 rounded-xl shadow-sm p-4 text-center">
+        <p class="text-xs text-gray-500">Open to every active worker. <a href="/toolbox-talks/<%= toolbox.id %>/edit" class="text-brand-700 hover:text-brand-900 font-semibold">Limit to specific people</a></p>
+      </div>
+    <% } %>
+
     <%# Absences with reasons — surfaces who said they can't attend so
         the office can follow up before scheduling the catch-up session. %>
     <% if (typeof absences !== 'undefined' && absences.length > 0) { %>
