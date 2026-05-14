@@ -1,174 +1,204 @@
-// Worker portal motion layer.
+// Unified motion bootstrap for the worker portal. Powered by Motion One
+// (window.Motion, loaded from /vendor/motion/motion.js).
 //
-// Three behaviours, all CSS-driven + a tiny JS shim:
+// Reads a single `data-motion` attribute on opted-in elements and
+// applies the corresponding animation. All behaviours are no-ops under
+// `prefers-reduced-motion: reduce`.
 //
-//   1. Tap feedback — spring-back scale on every tappable. Pure CSS,
-//      no script needed beyond the styles this file injects.
-//   2. Stagger fade-in for opted-in lists — any element with
-//      `data-stagger` reveals its direct children with a 40ms
-//      cascade. IntersectionObserver gates lists below the fold so
-//      they don't burn frames before they're visible.
-//   3. Count-up for numeric stats — every `[data-countup]` element
-//      animates from 0 to its final value over 600ms using easeOutCubic
-//      when it enters the viewport. Falls back to the static value
-//      under prefers-reduced-motion.
+// Supported intents (space-separated, so an element can opt into more
+// than one — e.g. data-motion="fade-up press"):
 //
-// Self-contained: injects its own CSS, no design-system dependency
-// other than the spring curve token (read via a CSS var, falls back
-// to a hardcoded curve if worker-design.css hasn't loaded).
+//   data-motion~="fade-up"     Element fades in + slides up 8px when it
+//                              first enters the viewport.
+//
+//   data-motion~="stagger"     CONTAINER. Direct children animate in
+//                              with a 50ms cascade (fade + 8px slide)
+//                              once the container enters the viewport.
+//
+//   data-motion~="press"       Element springs to scale(0.96) on
+//                              pointerdown and bounces back on
+//                              pointerup / cancel via Motion One spring.
+//
+//   data-motion~="count"       Numeric stat. Reads `data-count-to="N"`
+//                              (or falls back to the element's
+//                              textContent), animates 0 -> N over
+//                              ~700ms with an easeOutCubic when the
+//                              element first enters the viewport.
+//                              Trailing unit text (e.g. "12hrs") is
+//                              preserved.
+//
+// Legacy attributes from v1 PR 2 are auto-upgraded so we don't have to
+// touch every view:
+//   data-stagger          -> data-motion="stagger"
+//   data-countup="N"      -> data-motion="count" data-count-to="N"
 
 (function () {
   'use strict';
 
-  // Honour the OS-level reduced-motion preference. We still bind the
-  // tap-feedback styles (the tap-scale is so small it isn't bothersome)
-  // but skip the entrance animation + count-up so the page paints
-  // instantly.
-  var reduced = false;
+  var M = window.Motion;
+  var hasMotion = !!(M && M.animate && M.inView);
+
+  var reducedMotion = false;
   try {
-    reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    reducedMotion = window.matchMedia &&
+                    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch (e) { /* old browsers */ }
 
-  // ----- CSS injection -----------------------------------------------------
-  if (!document.getElementById('wd-motion-css')) {
-    var style = document.createElement('style');
-    style.id = 'wd-motion-css';
-    style.textContent = [
-      // Tap feedback: any element opting in with .wd-tap, or any native
-      // <button> / <a role="button">, springs back on press. Existing
-      // worker-portal buttons get this for free.
-      '.wd-tap, .wd-btn, button:not([disabled]):not([aria-disabled="true"]), a[role="button"], .wh-act-btn, .wh-qa-btn, .saf-card, .nf-row, .wd-stat-tile {',
-      '  transition: transform 140ms cubic-bezier(0.22, 1, 0.36, 1), opacity 120ms ease;',
-      '}',
-      '.wd-tap:active, .wd-btn:active:not([disabled]):not([aria-disabled="true"]), button:active:not([disabled]):not([aria-disabled="true"]), a[role="button"]:active, .wh-act-btn:active, .wh-qa-btn:active {',
-      '  transform: scale(var(--wd-tap-scale, 0.96));',
-      '}',
+  // --- Tokens -----------------------------------------------------------
+  var SPRING       = { type: 'spring', stiffness: 220, damping: 22, mass: 1 };
+  var EASE_OUT     = [0.22, 1, 0.36, 1];
+  var FADE_UP_TO   = { opacity: 1, transform: 'translateY(0px)' };
+  var STAGGER_MS   = 50;
+  var COUNT_MS     = 700;
 
-      // Stagger entrance: only applies once the parent has the
-      // data-stagger-ready attribute, which the JS adds either on
-      // DOMContentLoaded (above the fold) or via IntersectionObserver
-      // (below the fold). That avoids ugly invisible content for
-      // workers on slow devices.
-      '[data-stagger][data-stagger-ready] > * {',
-      '  animation: wd-stagger-in 360ms cubic-bezier(0.22, 1, 0.36, 1) both;',
-      '}',
-      // 12 cascading steps; lists longer than that just settle quickly.
-      '[data-stagger][data-stagger-ready] > *:nth-child(1) { animation-delay: 20ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(2) { animation-delay: 60ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(3) { animation-delay: 100ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(4) { animation-delay: 140ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(5) { animation-delay: 180ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(6) { animation-delay: 220ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(7) { animation-delay: 260ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(8) { animation-delay: 300ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(9) { animation-delay: 320ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(10) { animation-delay: 340ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(11) { animation-delay: 360ms; }',
-      '[data-stagger][data-stagger-ready] > *:nth-child(n+12) { animation-delay: 380ms; }',
-      '@keyframes wd-stagger-in {',
-      '  from { opacity: 0; transform: translateY(8px); }',
-      '  to   { opacity: 1; transform: translateY(0); }',
-      '}',
-
-      // Reduced-motion: kill the entrance animation entirely. We still
-      // keep the tap-scale because it's information, not decoration.
-      '@media (prefers-reduced-motion: reduce) {',
-      '  [data-stagger][data-stagger-ready] > * { animation: none; }',
-      '}',
-    ].join('\n');
-    document.head.appendChild(style);
+  function setInitial(el) {
+    el.style.opacity = '0';
+    el.style.transform = 'translateY(8px)';
+    el.style.willChange = 'opacity, transform';
+  }
+  function clearInitial(el) {
+    el.style.willChange = '';
   }
 
-  // ----- Stagger --------------------------------------------------------
-  function armStagger(el) {
-    if (el.hasAttribute('data-stagger-ready')) return;
-    el.setAttribute('data-stagger-ready', '');
+  function tokens(el) {
+    var raw = el.getAttribute('data-motion') || '';
+    return raw.trim().split(/\s+/).filter(Boolean);
   }
 
-  function bindStagger() {
-    var lists = document.querySelectorAll('[data-stagger]:not([data-stagger-ready])');
-    if (!lists.length) return;
-    if (reduced || !('IntersectionObserver' in window)) {
-      // Skip observation entirely — just paint immediately.
-      lists.forEach(armStagger);
-      return;
-    }
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          io.unobserve(entry.target);
-          armStagger(entry.target);
-        }
-      });
-    }, { rootMargin: '0px 0px -10% 0px' });
-    lists.forEach(function (el) {
-      // Above-the-fold lists trigger immediately; IO confirms anything
-      // off-screen on first paint.
-      var r = el.getBoundingClientRect();
-      if (r.top < window.innerHeight) armStagger(el);
-      else io.observe(el);
+  // --- Legacy attribute migration --------------------------------------
+  function upgradeLegacyAttrs(root) {
+    root.querySelectorAll('[data-stagger]:not([data-motion])').forEach(function (el) {
+      el.setAttribute('data-motion', 'stagger');
+    });
+    root.querySelectorAll('[data-countup]:not([data-motion])').forEach(function (el) {
+      el.setAttribute('data-motion', 'count');
+      var n = el.getAttribute('data-countup');
+      if (n != null && !el.hasAttribute('data-count-to')) el.setAttribute('data-count-to', n);
     });
   }
 
-  // ----- Count-up -------------------------------------------------------
-  function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
-
-  function runCountUp(el, target) {
-    var t = parseFloat(target);
-    if (!isFinite(t)) { el.textContent = target; return; }
-    var isInt = String(target).indexOf('.') === -1;
-    var start = performance.now();
-    var dur = 600;
-    function tick(now) {
-      var p = Math.min(1, (now - start) / dur);
-      var v = t * easeOutCubic(p);
-      el.textContent = isInt ? Math.round(v).toString() : v.toFixed(1);
-      if (p < 1) requestAnimationFrame(tick);
-      else el.textContent = isInt ? String(Math.round(t)) : String(t);
-    }
-    requestAnimationFrame(tick);
-  }
-
-  function bindCountUp() {
-    var els = document.querySelectorAll('[data-countup]');
-    if (!els.length) return;
-    if (reduced || !('IntersectionObserver' in window)) {
-      els.forEach(function (el) {
-        var t = el.getAttribute('data-countup');
-        // Keep the rendered text as-is when reduced or no IO; just clear the
-        // attribute so we don't re-run after a future bindCountUp().
-        el.removeAttribute('data-countup');
-        if (t != null && t !== '') el.textContent = t;
-      });
+  // --- fade-up ----------------------------------------------------------
+  function bindFadeUp(el) {
+    if (reducedMotion || !hasMotion) {
+      el.style.opacity = '';
+      el.style.transform = '';
       return;
     }
-    var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (entry) {
-        if (entry.isIntersecting) {
-          var el = entry.target;
-          io.unobserve(el);
-          var t = el.getAttribute('data-countup');
-          el.removeAttribute('data-countup');
-          // Reset to 0 before animating so the eye catches the rise.
-          el.textContent = '0';
-          requestAnimationFrame(function () { runCountUp(el, t); });
-        }
+    setInitial(el);
+    M.inView(el, function () {
+      M.animate(el, FADE_UP_TO, { duration: 0.5, easing: EASE_OUT });
+      setTimeout(function () { clearInitial(el); }, 600);
+    }, { amount: 0.15, margin: '0px 0px -10% 0px' });
+  }
+
+  // --- stagger ---------------------------------------------------------
+  function bindStagger(container) {
+    var kids = Array.prototype.slice.call(container.children);
+    if (!kids.length) return;
+    if (reducedMotion || !hasMotion) return;
+    kids.forEach(function (k) {
+      setInitial(k);
+      k.setAttribute('data-motion-child', '');
+    });
+    M.inView(container, function () {
+      var delayFn = (M.stagger
+        ? M.stagger(STAGGER_MS / 1000)
+        : function (_el, i) { return (i * STAGGER_MS) / 1000; });
+      M.animate(kids, FADE_UP_TO, {
+        duration: 0.45,
+        easing: EASE_OUT,
+        delay: delayFn,
       });
-    }, { threshold: 0.15 });
-    els.forEach(function (el) { io.observe(el); });
+      setTimeout(function () { kids.forEach(clearInitial); }, 600 + STAGGER_MS * kids.length);
+    }, { amount: 0.05, margin: '0px 0px -5% 0px' });
   }
 
-  // ----- Boot -----------------------------------------------------------
-  function init() {
-    bindStagger();
-    bindCountUp();
+  // --- press -----------------------------------------------------------
+  function bindPress(el) {
+    if (reducedMotion || !hasMotion) return;
+    if (el._motionPress) return;
+    el._motionPress = true;
+    el.style.transformOrigin = '50% 50%';
+
+    function down() {
+      if (el.disabled || el.getAttribute('aria-disabled') === 'true') return;
+      M.animate(el, { transform: 'scale(0.96)' }, { duration: 0.12, easing: EASE_OUT });
+    }
+    function up() {
+      M.animate(el, { transform: 'scale(1)' }, SPRING);
+    }
+    el.addEventListener('pointerdown', down, { passive: true });
+    el.addEventListener('pointerup',     up, { passive: true });
+    el.addEventListener('pointerleave',  up, { passive: true });
+    el.addEventListener('pointercancel', up, { passive: true });
   }
+
+  // --- count-up --------------------------------------------------------
+  // Uses requestAnimationFrame directly (Web Animations API isn't ideal
+  // for text-content interpolation). Motion One's inView is reused for
+  // viewport gating.
+  function bindCount(el) {
+    var to = parseFloat(el.getAttribute('data-count-to') || el.textContent || '0');
+    if (!isFinite(to)) return;
+    var raw = el.textContent || '';
+    var match = raw.match(/^[\s-]*([0-9]+(?:\.[0-9]+)?)(.*)$/);
+    var suffix = match ? match[2] : '';
+    var decimals = to % 1 === 0 ? 0 : 1;
+
+    if (reducedMotion || !hasMotion) {
+      el.textContent = (decimals ? to.toFixed(decimals) : Math.round(to)) + suffix;
+      return;
+    }
+
+    el.textContent = '0' + suffix;
+    var fired = false;
+    function play() {
+      if (fired) return;
+      fired = true;
+      var start = performance.now();
+      function tick(now) {
+        var t = Math.min(1, (now - start) / COUNT_MS);
+        var eased = 1 - Math.pow(1 - t, 3);
+        var v = to * eased;
+        el.textContent = (decimals ? v.toFixed(decimals) : Math.round(v)) + suffix;
+        if (t < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+    M.inView(el, play, { amount: 0.4 });
+  }
+
+  // --- Bootstrap -------------------------------------------------------
+  function init(root) {
+    root = root || document;
+    upgradeLegacyAttrs(root);
+
+    root.querySelectorAll('[data-motion]').forEach(function (el) {
+      var ts = tokens(el);
+      if (ts.indexOf('stagger') !== -1) bindStagger(el);
+      if (ts.indexOf('fade-up') !== -1) bindFadeUp(el);
+      if (ts.indexOf('press')   !== -1) bindPress(el);
+      if (ts.indexOf('count')   !== -1) bindCount(el);
+    });
+
+    // Auto-bind press to obvious tappables that don't opt in explicitly
+    // so we don't have to touch every button across the worker views.
+    var auto = root.querySelectorAll(
+      '.wd-btn, .wh-act-btn, .wh-qa-btn, .wd-stat-tile, button.wh-fab-main'
+    );
+    auto.forEach(bindPress);
+  }
+
   if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
+    document.addEventListener('DOMContentLoaded', function () { init(document); });
   } else {
-    init();
+    init(document);
   }
 
-  // Re-arm after dynamic content insertions (e.g. SPA-style nav swaps).
-  window.WorkerMotion = { init: init, armStagger: armStagger };
+  window.WorkerMotion = {
+    init: init,
+    bindPress: bindPress,
+    bindFadeUp: bindFadeUp,
+    bindCount: bindCount,
+  };
 })();
