@@ -64,19 +64,10 @@
   document.body.classList.add('gradient-' + grad);
 }catch(e){}})();</script>
 
-  <!-- Ambient wash behind everything. Fixed positioning so it does not
-       repaint on scroll. Just a soft cool radial glow at the top — the
-       SVG noise tile that originally lived here was reading as concrete
-       wall on real phones, so we dropped it. The deepened card gradient
-       from PR 1 + the page background gradient already give plenty of
-       depth on their own. -->
-  <div class="wh-ambient" aria-hidden="true"></div>
+  <!-- Ambient background — drifting blurred orbs in the brand palette.
+       Replaces the prior static radial wash. See partial for details. -->
+  <%- include('./partials/ambient-background') %>
   <style>
-    .wh-ambient {
-      position: fixed; inset: 0;
-      z-index: 0; pointer-events: none;
-      background-image: radial-gradient(70% 50% at 50% 25%, rgba(43,127,255,0.07), transparent 70%);
-    }
     /* Keep header + main above the ambient layer's stacking context.
        Do NOT touch nav or .wh-ptr — they already carry their own
        position: fixed (Tailwind .fixed on nav, inline on .wh-ptr) and

@@ -1,0 +1,94 @@
+<%
+  // <AmbientBackground /> — round-3 particle PR 1.
+  // Six large blurred orbs in the brand palette, drifting slowly behind
+  // every worker page. Pure CSS for the motion (each orb owns its own
+  // keyframe + duration); a tiny JS shim pauses all animations when
+  // the tab is backgrounded so the orbs don't burn battery.
+  //
+  // Replaces the prior single-radial .wh-ambient layer.
+%>
+<div class="wh-orbs" aria-hidden="true">
+  <span class="wh-orb wh-orb-1"></span>
+  <span class="wh-orb wh-orb-2"></span>
+  <span class="wh-orb wh-orb-3"></span>
+  <span class="wh-orb wh-orb-4"></span>
+  <span class="wh-orb wh-orb-5"></span>
+  <span class="wh-orb wh-orb-6"></span>
+</div>
+<style>
+  .wh-orbs {
+    position: fixed; inset: 0;
+    z-index: 0; pointer-events: none;
+    overflow: hidden;
+  }
+  .wh-orb {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(80px);
+    will-change: transform;
+    /* Default low opacity so the orbs read as ambient atmosphere, not
+       coloured blobs. Per-orb overrides below bump teal slightly higher
+       since it's the brand accent. */
+    opacity: 0.05;
+  }
+
+  /* Drift keyframes — each orb uses its own keyframe so the timings
+     are visibly different and the field never lines up to a beat. */
+  @keyframes wh-orb-drift-1 {
+    0%, 100% { transform: translate3d(-20vw, -10vh, 0) scale(1.00); }
+    50%      { transform: translate3d( 10vw, 15vh, 0) scale(1.10); }
+  }
+  @keyframes wh-orb-drift-2 {
+    0%, 100% { transform: translate3d( 60vw,  5vh, 0) scale(1.05); }
+    50%      { transform: translate3d( 35vw, 30vh, 0) scale(0.95); }
+  }
+  @keyframes wh-orb-drift-3 {
+    0%, 100% { transform: translate3d(-10vw, 60vh, 0) scale(1.00); }
+    50%      { transform: translate3d( 20vw, 80vh, 0) scale(1.08); }
+  }
+  @keyframes wh-orb-drift-4 {
+    0%, 100% { transform: translate3d( 70vw, 50vh, 0) scale(0.95); }
+    50%      { transform: translate3d( 45vw, 75vh, 0) scale(1.05); }
+  }
+  @keyframes wh-orb-drift-5 {
+    0%, 100% { transform: translate3d( 25vw, 35vh, 0) scale(1.00); }
+    50%      { transform: translate3d( 50vw, 10vh, 0) scale(1.06); }
+  }
+  @keyframes wh-orb-drift-6 {
+    0%, 100% { transform: translate3d( 5vw,  90vh, 0) scale(0.92); }
+    50%      { transform: translate3d( 60vw, 65vh, 0) scale(1.04); }
+  }
+
+  /* Per-orb colour + size + animation pairing. Colours pulled from the
+     design-system palette (worker-design.css). */
+  .wh-orb-1 { width: 520px; height: 520px; background: radial-gradient(circle, var(--wd-teal,    #00D2BE), transparent 65%); opacity: 0.07; animation: wh-orb-drift-1 38s ease-in-out infinite; }
+  .wh-orb-2 { width: 440px; height: 440px; background: radial-gradient(circle, var(--wd-blue,    #2B7FFF), transparent 65%); animation: wh-orb-drift-2 44s ease-in-out infinite; }
+  .wh-orb-3 { width: 480px; height: 480px; background: radial-gradient(circle, var(--wd-violet,  #8B5CF6), transparent 65%); animation: wh-orb-drift-3 52s ease-in-out infinite; }
+  .wh-orb-4 { width: 380px; height: 380px; background: radial-gradient(circle, var(--wd-emerald, #10B981), transparent 65%); animation: wh-orb-drift-4 46s ease-in-out infinite; }
+  .wh-orb-5 { width: 360px; height: 360px; background: radial-gradient(circle, var(--wd-indigo,  #6366F1), transparent 65%); animation: wh-orb-drift-5 50s ease-in-out infinite; }
+  .wh-orb-6 { width: 420px; height: 420px; background: radial-gradient(circle, var(--wd-teal,    #00D2BE), transparent 65%); opacity: 0.04; animation: wh-orb-drift-6 58s ease-in-out infinite; }
+
+  /* Pause when the document is hidden (tab backgrounded, screen locked,
+     or app sent to iOS app switcher). The JS below toggles the class. */
+  .wh-orbs.is-paused .wh-orb { animation-play-state: paused; }
+
+  /* Reduced motion: stop all drift, lower opacity further so the orbs
+     don't become big distracting circles when frozen. */
+  @media (prefers-reduced-motion: reduce) {
+    .wh-orb { animation: none !important; opacity: 0.025 !important; }
+  }
+</style>
+<script>
+(function () {
+  // Pause-when-hidden so the orbs don't keep rasterizing in the
+  // background. visibilitychange handles iOS PWA backgrounding too.
+  var orbs = document.querySelector('.wh-orbs');
+  if (!orbs) return;
+  function sync() {
+    if (document.visibilityState === 'hidden') orbs.classList.add('is-paused');
+    else orbs.classList.remove('is-paused');
+  }
+  document.addEventListener('visibilitychange', sync);
+  sync();
+})();
+</script>
