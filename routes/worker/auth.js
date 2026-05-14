@@ -77,7 +77,21 @@ router.post('/login', (req, res) => {
 
   const returnTo = req.session.workerReturnTo || '/w/home';
   delete req.session.workerReturnTo;
-  res.redirect(returnTo);
+  // Wait for the SQLite session store to persist req.session.worker
+  // before redirecting. Without this the 302 races the async store
+  // write — the browser hits /w/home, requireWorker doesn't see the
+  // worker session yet, bounces to /w/login, and the user sees the
+  // login form "just refresh". The race is non-deterministic, hence
+  // some workers (admin's pre-seeded test account on a fast laptop)
+  // happened to win it while phone testers consistently lost.
+  req.session.save((err) => {
+    if (err) {
+      console.error('[worker login] session save failed:', err.message);
+      req.flash('error', 'Login succeeded but the session could not be saved. Please try again.');
+      return res.redirect('/w/login');
+    }
+    res.redirect(returnTo);
+  });
 });
 
 // GET /w/logout — Sign out worker
@@ -85,7 +99,9 @@ router.get('/logout', (req, res) => {
   delete req.session.worker;
   delete req.session.workerReturnTo;
   req.flash('success', 'You have been signed out.');
-  res.redirect('/w/login');
+  // Same redirect-before-save race as POST /w/login — flash + cleared
+  // session must persist before the browser navigates.
+  req.session.save(() => res.redirect('/w/login'));
 });
 
 // Forgot PIN
@@ -157,7 +173,7 @@ router.post('/reset-pin/:token', (req, res) => {
   markTokenUsed(req.params.token);
 
   req.flash('success', 'Your PIN has been reset. You can now sign in.');
-  res.redirect('/w/login');
+  req.session.save(() => res.redirect('/w/login'));
 });
 
 module.exports = router;
