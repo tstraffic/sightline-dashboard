@@ -1,0 +1,115 @@
+<div id="shareModal" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+  <form method="POST" id="shareForm" class="bg-white rounded-xl shadow-xl w-full max-w-lg">
+    <%- include('../partials/csrf') %>
+    <div class="p-5 border-b border-gray-200">
+      <h2 class="text-lg font-semibold text-gray-900">Share this note</h2>
+      <p class="text-sm text-gray-500 mt-1">Pick who should see this note. They'll be able to read it (but not edit) until you remove them.</p>
+    </div>
+    <div class="p-5 space-y-3">
+      <input type="text" id="shareSearch" placeholder="Search people..." class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <div id="shareUserList" class="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+        <% (availableUsers || []).forEach(function(u) { %>
+          <label class="share-user-row flex items-center justify-between gap-3 px-3 py-2 cursor-pointer hover:bg-gray-50" data-name="<%= (u.full_name || '').toLowerCase() %>">
+            <span class="text-sm text-gray-700"><%= u.full_name %></span>
+            <input type="checkbox" class="share-user-cb w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500" value="<%= u.id %>" data-name="<%= u.full_name %>">
+          </label>
+        <% }) %>
+        <% if (!availableUsers || availableUsers.length === 0) { %>
+          <div class="px-3 py-4 text-sm text-gray-400 text-center">No other active users yet.</div>
+        <% } %>
+      </div>
+      <div id="shareChips" class="flex flex-wrap gap-1.5 min-h-[24px]"></div>
+      <div class="p-3 bg-amber-50 border border-amber-200 rounded-lg flex items-start gap-2 text-xs text-amber-800">
+        <svg class="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <span>Going public to the people above. They'll be able to see this note until you remove them from the share list. Continue?</span>
+      </div>
+      <input type="hidden" name="share_user_ids" id="shareIdsField" value="">
+    </div>
+    <div class="px-5 py-4 bg-gray-50 rounded-b-xl flex items-center justify-end gap-2">
+      <button type="button" id="shareCancel" class="px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
+      <button type="submit" id="shareConfirm" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg">Confirm share</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function() {
+  // Mini share-picker. Same DOM serves the composer (noteId null) and the
+  // per-note "Share…" action (noteId = '123'). The composer route receives
+  // the selection via a hidden field on its own form; for existing notes
+  // we POST to /notes/<id>/share directly.
+  const modal = document.getElementById('shareModal');
+  const form = document.getElementById('shareForm');
+  const idsField = document.getElementById('shareIdsField');
+  const chipsBox = document.getElementById('shareChips');
+  const search = document.getElementById('shareSearch');
+  const cancelBtn = document.getElementById('shareCancel');
+  const confirmBtn = document.getElementById('shareConfirm');
+  let mode = 'note'; // 'note' or 'composer'
+  let currentNoteId = null;
+  const cbs = () => Array.from(document.querySelectorAll('.share-user-cb'));
+
+  function syncChips() {
+    chipsBox.innerHTML = '';
+    cbs().filter(c => c.checked).forEach(c => {
+      const chip = document.createElement('span');
+      chip.className = 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-xs ring-1 ring-brand-200';
+      chip.innerHTML = c.dataset.name + ' <button type="button" data-uncheck="' + c.value + '" class="text-brand-500 hover:text-brand-700">&times;</button>';
+      chipsBox.appendChild(chip);
+    });
+    chipsBox.querySelectorAll('[data-uncheck]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const v = btn.getAttribute('data-uncheck');
+        const cb = document.querySelector('.share-user-cb[value="' + v + '"]');
+        if (cb) { cb.checked = false; syncChips(); }
+      });
+    });
+  }
+
+  cbs().forEach(cb => cb.addEventListener('change', syncChips));
+  search.addEventListener('input', () => {
+    const q = search.value.trim().toLowerCase();
+    document.querySelectorAll('.share-user-row').forEach(row => {
+      row.classList.toggle('hidden', q && !row.dataset.name.includes(q));
+    });
+  });
+
+  function close() { modal.classList.add('hidden'); }
+  cancelBtn.addEventListener('click', close);
+  modal.addEventListener('click', e => { if (e.target === modal) close(); });
+
+  form.addEventListener('submit', (e) => {
+    const ids = cbs().filter(c => c.checked).map(c => c.value);
+    idsField.value = ids.join(',');
+    if (mode === 'composer') {
+      // Don't POST the modal form; write the picked ids back into the
+      // composer's hidden field, then let the composer's own Save button
+      // submit the create.
+      e.preventDefault();
+      const composerField = document.getElementById('composerShareIds');
+      const composerCount = document.getElementById('composerShareCount');
+      const composerSummary = document.getElementById('composerShareSummary');
+      composerField.value = ids.join(',');
+      composerCount.textContent = ids.length;
+      composerSummary.classList.toggle('hidden', ids.length === 0);
+      close();
+      return;
+    }
+    // For existing-note share: action set when opening; let the form POST.
+  });
+
+  window.__openShareModal = function({ noteId, initialShares }) {
+    mode = noteId ? 'note' : 'composer';
+    currentNoteId = noteId;
+    form.action = noteId ? ('/notes/' + noteId + '/share') : '#';
+    confirmBtn.textContent = noteId ? 'Confirm share' : 'Use these people';
+    const initIds = new Set((initialShares || []).map(String));
+    cbs().forEach(cb => { cb.checked = initIds.has(cb.value); });
+    search.value = '';
+    document.querySelectorAll('.share-user-row').forEach(row => row.classList.remove('hidden'));
+    syncChips();
+    modal.classList.remove('hidden');
+    setTimeout(() => search.focus(), 30);
+  };
+})();
+</script>
