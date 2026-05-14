@@ -120,55 +120,142 @@
     </div>
   </div>
 
-  <!-- Presentation History -->
+  <!-- Presentation History — tabbed by module so the table doesn't blow
+       out as we run more inductions. Collapsed by default after 8 rows
+       per module with a "Show all" toggle. Each row has a delete button. -->
+  <%
+    var byMod = (typeof presentationsByModule !== 'undefined' && presentationsByModule)
+      ? presentationsByModule
+      : { employee_guide: presentations.filter(function(p){return p.module==='employee_guide';}),
+          tc_training_1:  presentations.filter(function(p){return p.module==='tc_training_1';}) };
+    var modules = [
+      { key: 'employee_guide', label: 'Employee Guide',   accent: 'brand', rows: byMod.employee_guide || [] },
+      { key: 'tc_training_1',  label: 'TC Training 1',    accent: 'amber', rows: byMod.tc_training_1  || [] },
+    ];
+    function fmtDate(d) { try { return new Date(d).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }); } catch (e) { return d || '—'; } }
+  %>
   <div class="bg-white rounded-xl border border-gray-200 shadow-sm">
-    <div class="px-6 py-4 border-b border-gray-200">
-      <h2 class="font-semibold text-gray-900">Presentation History</h2>
+    <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <h2 class="font-semibold text-gray-900">Presentation History</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Every group induction run is logged here.</p>
+      </div>
+      <div class="ph-tabs flex bg-gray-100 rounded-lg p-1 text-sm">
+        <% modules.forEach(function(m, i) { %>
+          <button type="button" class="ph-tab px-3 py-1.5 rounded-md font-medium transition-colors <%= i === 0 ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-600 hover:text-gray-900' %>" data-tab="<%= m.key %>">
+            <%= m.label %> <span class="text-gray-400 ml-1">(<%= m.rows.length %>)</span>
+          </button>
+        <% }) %>
+      </div>
     </div>
-    <% if (presentations.length === 0) { %>
-    <div class="p-6 text-center text-gray-400">
-      <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z"/></svg>
-      <p class="font-medium">No presentations yet</p>
-      <p class="text-sm mt-1">Launch a presentation above to get started</p>
-    </div>
-    <% } else { %>
-    <div class="overflow-x-auto">
-      <table class="w-full text-sm">
-        <thead class="bg-gray-50">
-          <tr>
-            <th class="px-6 py-3 text-left font-medium text-gray-500">Module</th>
-            <th class="px-6 py-3 text-left font-medium text-gray-500">Presenter</th>
-            <th class="px-6 py-3 text-left font-medium text-gray-500">Attendees</th>
-            <th class="px-6 py-3 text-left font-medium text-gray-500">Date</th>
-            <th class="px-6 py-3 text-left font-medium text-gray-500">Status</th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-gray-100">
-          <% presentations.forEach(p => { %>
-          <tr class="hover:bg-gray-50">
-            <td class="px-6 py-3">
-              <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium <%= p.module === 'employee_guide' ? 'bg-brand-100 text-brand-700' : 'bg-amber-100 text-amber-700' %>">
-                <%= p.module === 'employee_guide' ? 'Employee Guide' : 'TC Training 1' %>
-              </span>
-            </td>
-            <td class="px-6 py-3 text-gray-900"><%= p.presenter_name %></td>
-            <td class="px-6 py-3 text-gray-600"><%= p.attendee_names || '—' %></td>
-            <td class="px-6 py-3 text-gray-600"><%= new Date(p.started_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) %></td>
-            <td class="px-6 py-3">
-              <% if (p.completed_at) { %>
-              <span class="inline-flex items-center gap-1 text-green-700 text-xs font-medium">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-                Completed
-              </span>
-              <% } else { %>
-              <span class="text-amber-600 text-xs font-medium">In Progress</span>
-              <% } %>
-            </td>
-          </tr>
-          <% }) %>
-        </tbody>
-      </table>
-    </div>
-    <% } %>
+
+    <% modules.forEach(function(m, i) { %>
+      <div class="ph-pane <%= i === 0 ? '' : 'hidden' %>" data-pane="<%= m.key %>">
+        <% if (m.rows.length === 0) { %>
+          <div class="p-6 text-center text-gray-400">
+            <p class="font-medium">No <%= m.label %> sessions yet</p>
+            <p class="text-sm mt-1">Launch a Group Induction above to get started.</p>
+          </div>
+        <% } else { %>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="px-6 py-3 text-left font-medium text-gray-500">When</th>
+                  <th class="px-6 py-3 text-left font-medium text-gray-500">Presenter</th>
+                  <th class="px-6 py-3 text-left font-medium text-gray-500">Attendees</th>
+                  <th class="px-6 py-3 text-left font-medium text-gray-500">Quiz</th>
+                  <th class="px-6 py-3 text-left font-medium text-gray-500">Status</th>
+                  <th class="px-6 py-3 text-right font-medium text-gray-500">Actions</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <% m.rows.forEach(function(p, idx) { %>
+                  <tr class="hover:bg-gray-50 ph-row" data-extra="<%= idx >= 8 ? 'true' : 'false' %>" <%= idx >= 8 ? 'style="display:none;"' : '' %>>
+                    <td class="px-6 py-3 text-gray-700 whitespace-nowrap"><%= fmtDate(p.started_at) %></td>
+                    <td class="px-6 py-3 text-gray-900"><%= p.presenter_name || '—' %></td>
+                    <td class="px-6 py-3 text-gray-700 max-w-md">
+                      <% if (p.attendee_names) { %>
+                        <% var names = String(p.attendee_names).split(',').map(function(s){return s.trim();}).filter(Boolean); %>
+                        <div class="flex flex-wrap gap-1.5">
+                          <% names.forEach(function(n) { %>
+                            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-<%= m.accent %>-50 text-<%= m.accent %>-700 text-[11px] font-medium border border-<%= m.accent %>-100"><%= n %></span>
+                          <% }) %>
+                        </div>
+                      <% } else { %>
+                        <span class="text-gray-400 text-xs">—</span>
+                      <% } %>
+                    </td>
+                    <td class="px-6 py-3 text-gray-700 whitespace-nowrap">
+                      <% if (p.quiz_score != null) { %>
+                        <span class="font-semibold <%= p.quiz_passed ? 'text-emerald-700' : 'text-rose-700' %>"><%= p.quiz_score %></span><span class="text-gray-400">/12</span>
+                      <% } else { %>
+                        <span class="text-gray-400">—</span>
+                      <% } %>
+                    </td>
+                    <td class="px-6 py-3">
+                      <% if (p.completed_at) { %>
+                        <span class="inline-flex items-center gap-1 text-emerald-700 text-xs font-medium">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                          Completed
+                        </span>
+                      <% } else { %>
+                        <span class="text-amber-600 text-xs font-medium">In progress</span>
+                      <% } %>
+                    </td>
+                    <td class="px-6 py-3 text-right whitespace-nowrap">
+                      <form method="POST" action="/induction/admin/presentations/<%= p.id %>/delete" onsubmit="return confirm('Delete this presentation from history? Per-attendee training completions stay on file.');" class="inline">
+                        <%- include('../../partials/csrf') %>
+                        <button type="submit" class="inline-flex items-center gap-1 px-2.5 py-1.5 text-xs font-medium text-rose-700 hover:text-rose-900 hover:bg-rose-50 rounded-md transition-colors" aria-label="Delete">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
+                          Delete
+                        </button>
+                      </form>
+                    </td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+            <% if (m.rows.length > 8) { %>
+              <div class="px-6 py-3 border-t border-gray-100 text-center">
+                <button type="button" class="ph-showall text-sm font-medium text-brand-700 hover:text-brand-900" data-pane="<%= m.key %>">
+                  Show all <%= m.rows.length %> sessions
+                </button>
+              </div>
+            <% } %>
+          </div>
+        <% } %>
+      </div>
+    <% }) %>
   </div>
+
+  <script>
+  (function () {
+    var tabs = document.querySelectorAll('.ph-tab');
+    var panes = document.querySelectorAll('.ph-pane');
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () {
+        var key = t.getAttribute('data-tab');
+        tabs.forEach(function (x) {
+          x.classList.toggle('bg-white', x === t);
+          x.classList.toggle('text-gray-900', x === t);
+          x.classList.toggle('shadow-sm', x === t);
+          x.classList.toggle('text-gray-600', x !== t);
+        });
+        panes.forEach(function (p) {
+          p.classList.toggle('hidden', p.getAttribute('data-pane') !== key);
+        });
+      });
+    });
+    document.querySelectorAll('.ph-showall').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var key = b.getAttribute('data-pane');
+        var pane = document.querySelector('[data-pane="' + key + '"]');
+        if (!pane) return;
+        pane.querySelectorAll('.ph-row[data-extra="true"]').forEach(function (r) { r.style.display = ''; });
+        b.parentElement.style.display = 'none';
+      });
+    });
+  })();
+  </script>
 </div>

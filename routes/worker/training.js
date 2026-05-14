@@ -36,9 +36,19 @@ router.get('/training', (req, res) => {
   const modules = Object.entries(MODULES).map(([slug, cfg]) => {
     let status = null;
     if (employee) {
-      const pass = db.prepare(
-        "SELECT id, completed_at, score, total FROM training_completions WHERE employee_id = ? AND module = ? AND passed = 1 ORDER BY completed_at DESC LIMIT 1"
-      ).get(employee.id, cfg.key);
+      // Match any of (employee_id, crew_member_id, legacy-orphan email)
+      // so group-induction completions surface for workers whose
+      // employees.linked_crew_member_id wasn't set at the time.
+      const pass = db.prepare(`
+        SELECT id, completed_at, score, total FROM training_completions
+        WHERE module = ? AND passed = 1
+          AND (
+            employee_id = ?
+            OR (crew_member_id IS NOT NULL AND crew_member_id = ?)
+            OR (employee_id IS NULL AND email IS NOT NULL AND LOWER(email) = LOWER(?))
+          )
+        ORDER BY completed_at DESC LIMIT 1
+      `).get(cfg.key, employee.id, employee.linked_crew_member_id || -1, employee.email || '');
       status = pass || null;
     }
     return { slug, title: cfg.title, key: cfg.key, totalQuestions: quizFromSlides(cfg.slides).length, passed: !!status, lastPass: status };

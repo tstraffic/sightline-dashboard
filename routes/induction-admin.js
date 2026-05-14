@@ -649,25 +649,55 @@ router.get('/present/:module', (req, res) => {
     moduleTitle,
     modulePath,
     completionUrl: modulePath + '/quiz-result',
+    startUrl: modulePath + '/start',
     groupMode: true,
     attendees,
+    csrfToken: req.session && req.session._csrf,
   });
 });
 
-// GET /induction/admin/presentations — history of presentations
+// GET /induction/admin/presentations — history of presentations.
+// Returns the rows split by module so the template can tab them; each
+// module is sorted newest-first.
 router.get('/presentations', (req, res) => {
-  const presentations = getDb().prepare(`
+  const rows = getDb().prepare(`
     SELECT p.*, u.full_name as presenter_name
     FROM induction_presentations p
     LEFT JOIN users u ON p.presented_by_id = u.id
     ORDER BY p.started_at DESC
   `).all();
 
+  const byModule = {
+    employee_guide: rows.filter(r => r.module === 'employee_guide'),
+    tc_training_1: rows.filter(r => r.module === 'tc_training_1'),
+  };
+
   res.render('induction/admin/presentations', {
     title: 'Training Presentations',
     currentPage: 'induction-presentations',
-    presentations,
+    presentations: rows,           // kept for back-compat in case other views call this template
+    presentationsByModule: byModule,
   });
+});
+
+// POST /induction/admin/presentations/:id/delete — remove a history row.
+// We deliberately do NOT cascade-delete the per-attendee
+// training_completions rows; those are the worker's audit record and
+// should outlive the presentation entry. Only the history-table row is
+// removed.
+router.post('/presentations/:id/delete', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) {
+    req.flash('error', 'Invalid presentation id.');
+    return res.redirect('/induction/admin/presentations');
+  }
+  try {
+    getDb().prepare('DELETE FROM induction_presentations WHERE id = ?').run(id);
+    req.flash('success', 'Presentation removed from history.');
+  } catch (e) {
+    req.flash('error', 'Could not delete presentation: ' + e.message);
+  }
+  res.redirect('/induction/admin/presentations');
 });
 
 // POST /induction/admin/present/:module/start — start a presentation session
@@ -709,7 +739,7 @@ router.post('/present/:module/quiz-result', (req, res) => {
   if (!moduleKey) return res.status(400).json({ success: false, error: 'Unknown module' });
 
   const db = getDb();
-  const { presentation_id, score, total, passed, answers, attendee_ids } = req.body;
+  const { presentation_id, score, total, passed, answers, attendee_ids, attendee_names } = req.body;
   const passedFlag = passed ? 1 : 0;
   const ids = Array.isArray(attendee_ids) ? attendee_ids.map(n => parseInt(n, 10)).filter(n => n > 0) : [];
 
@@ -717,9 +747,11 @@ router.post('/present/:module/quiz-result', (req, res) => {
     try {
       db.prepare(`
         UPDATE induction_presentations
-        SET quiz_score = ?, quiz_passed = ?, quiz_answers = ?
+        SET quiz_score = ?, quiz_passed = ?, quiz_answers = ?,
+            attendee_names = ?,
+            completed_at = datetime('now')
         WHERE id = ?
-      `).run(score, passedFlag, JSON.stringify(answers || {}), presentation_id);
+      `).run(score, passedFlag, JSON.stringify(answers || {}), attendee_names || '', presentation_id);
     } catch (e) { console.error('Update presentation failed:', e.message); }
   }
 
@@ -750,6 +782,25 @@ router.post('/present/:module/quiz-result', (req, res) => {
             "SELECT id FROM employees WHERE LOWER(email) = LOWER(?) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1"
           ).get(crew.email);
           if (byEmail) employeeId = byEmail.id;
+        }
+        // Last-resort name match — handles workers whose crew_member email
+        // is blank but their employees record has them by full_name.
+        if (!employeeId && crew.full_name) {
+          const byName = db.prepare(
+            "SELECT id FROM employees WHERE LOWER(full_name) = LOWER(?) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1"
+          ).get(crew.full_name);
+          if (byName) employeeId = byName.id;
+        }
+        // Backfill the canonical link both directions if we resolved the
+        // employees row via fallback. Future training reads then hit the
+        // fast crew_member_id path and the admin profile knows about the
+        // link.
+        if (employeeId && !crew.linked_employee_id) {
+          try {
+            db.prepare(
+              "UPDATE employees SET linked_crew_member_id = ? WHERE id = ? AND linked_crew_member_id IS NULL"
+            ).run(crew.id, employeeId);
+          } catch (e) { /* column may be missing on legacy DB; ignore */ }
         }
         insertCompletion.run(
           employeeId || null,

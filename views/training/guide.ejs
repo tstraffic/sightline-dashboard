@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <% if (typeof csrfToken !== 'undefined' && csrfToken) { %><meta name="csrf-token" content="<%= csrfToken %>"><% } %>
   <title><%= moduleTitle %> — T&S Traffic Control</title>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -896,16 +897,31 @@
     // attendee-picker slide and the quiz-result POST sends attendee_ids
     // instead of full_name/email.
     var GROUP_MODE = <%- (typeof groupMode !== 'undefined' && groupMode) ? 'true' : 'false' %>;
+    var START_URL  = <%- JSON.stringify(typeof startUrl !== 'undefined' ? startUrl : '') %>;
+    var PRESENTATION_ID = null;
 
-    // In group mode the trainee-info card (the "Enter your details to
-    // record your completion" block injected into the Quiz Introduction
-    // slide) is irrelevant — completions are recorded per ticked attendee
-    // instead. Hide the card on init so the presenter doesn't see empty
-    // input fields they're tempted to fill in.
+    function getCsrfToken() {
+      var m = document.querySelector('meta[name="csrf-token"]');
+      return m ? m.content : '';
+    }
+
+    // In group mode: (1) hide the trainee-info card on the quiz-intro slide
+    // (presenter has no single trainee to enter), (2) create an
+    // induction_presentations row so this session shows up in the History
+    // table on /induction/admin/presentations.
     if (GROUP_MODE) {
       var tnInit = document.getElementById('trainee-name');
       if (tnInit && tnInit.parentElement && tnInit.parentElement.parentElement) {
         tnInit.parentElement.parentElement.style.display = 'none';
+      }
+      if (START_URL) {
+        fetch(START_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
+          body: '{}',
+        }).then(function (r) { return r.json(); })
+          .then(function (j) { if (j && j.id) PRESENTATION_ID = j.id; })
+          .catch(function () { /* non-fatal; quiz-result can still write completions */ });
       }
     }
 
@@ -1021,12 +1037,27 @@
         // - Group mode: { attendee_ids, score, total, passed, answers } -> /induction/admin/present/:module/quiz-result
         var completionUrl = '<%= completionUrl %>';
         var modulePath = '<%= modulePath %>';
+        var selectedNames = [];
+        if (GROUP_MODE) {
+          document.querySelectorAll('.attendee-cb:checked').forEach(function (cb) {
+            var row = cb.closest('.attendee-row');
+            if (row) {
+              var nameEl = row.querySelector('span');
+              if (nameEl) selectedNames.push(nameEl.textContent.trim());
+            }
+          });
+        }
         var body = GROUP_MODE
-          ? { attendee_ids: getSelectedAttendeeIds(), score: correct, total: quizData.length, passed: true, answers: answers }
+          ? {
+              presentation_id: PRESENTATION_ID,
+              attendee_ids: getSelectedAttendeeIds(),
+              attendee_names: selectedNames.join(', '),
+              score: correct, total: quizData.length, passed: true, answers: answers,
+            }
           : { full_name: traineeName, email: traineeEmail, score: correct, total: quizData.length };
         fetch(completionUrl, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
           body: JSON.stringify(body)
         }).then(function(r) { return r.json(); }).then(function(data) {
           var msg = document.getElementById('resultMsg');
