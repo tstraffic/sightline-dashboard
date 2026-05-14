@@ -224,7 +224,7 @@
         <button type="button" onclick="clearSig('worker')" class="ds-sig-clear">Clear</button>
       </div>
       <div class="ds-sig-pad" id="worker-sig-pad">
-        <canvas id="worker-sig-canvas"></canvas>
+        <canvas id="worker-sig-canvas" data-particle-trail></canvas>
       </div>
       <input type="hidden" name="signature_data" id="worker-sig-data">
       <p class="ds-sig-hint" id="worker-sig-hint">Sign above with your finger</p>
@@ -241,7 +241,7 @@
         placeholder="Client printed name"
         class="ds-input" style="margin-bottom:10px;">
       <div class="ds-sig-pad" id="client-sig-pad">
-        <canvas id="client-sig-canvas"></canvas>
+        <canvas id="client-sig-canvas" data-particle-trail></canvas>
       </div>
       <input type="hidden" name="client_signature" id="client-sig-data">
       <p class="ds-sig-hint" id="client-sig-hint">Client signs above</p>

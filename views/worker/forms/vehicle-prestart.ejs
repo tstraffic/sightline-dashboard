@@ -192,7 +192,7 @@
                 <% } else if (rt === 'media_upload') { %>
                   <input type="file" name="answer_<%= it.item_key %>" accept="image/*" capture="environment" multiple data-wpi data-wpi-max="6" data-wpi-label="Add photo">
                 <% } else if (rt === 'signature') { %>
-                  <div class="vps-sig-pad" id="sig-<%= it.item_key %>"><canvas data-sigkey="<%= it.item_key %>"></canvas></div>
+                  <div class="vps-sig-pad" id="sig-<%= it.item_key %>"><canvas data-sigkey="<%= it.item_key %>" data-particle-trail></canvas></div>
                   <input type="hidden" name="answer_<%= it.item_key %>" id="sigval-<%= it.item_key %>">
                   <div style="margin-top:6px;display:flex;justify-content:flex-end;width:100%;">
                     <button type="button" class="vps-sig-clear" onclick="vpsClearSig('<%= it.item_key %>')">Clear</button>

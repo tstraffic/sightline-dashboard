@@ -166,7 +166,7 @@
     <% if (template.require_signature) { %>
       <div class="cf-card">
         <p class="cf-section-title">Worker signature *</p>
-        <div class="cf-sig-pad" id="cf-main-sig"><canvas data-mainsig="1"></canvas></div>
+        <div class="cf-sig-pad" id="cf-main-sig"><canvas data-mainsig="1" data-particle-trail></canvas></div>
         <input type="hidden" name="signature_data" id="cf-main-sig-val">
         <div style="margin-top:6px;display:flex;justify-content:flex-end;">
           <button type="button" class="cf-sig-clear" onclick="cfClearMain()">Clear</button>
