@@ -88,13 +88,15 @@
   // Per-condition recipes. Each emit() call may add 0-N particles
   // depending on emit rate + dt. Recipes return an "emit rate" in
   // particles per second; the engine caps total at MAX.
+  // Densities pulled back per user feedback — was previously feeling
+  // busy on small phone screens. Halved rates + caps across the board.
   var WEATHER = {
-    rainy:    { rate: 24, init: initRain,    cap: 70 },
-    stormy:   { rate: 40, init: initRain,    cap: 90, gust: true },
-    snow:     { rate: 14, init: initSnow,    cap: 60 },
-    fog:      { rate: 1.5, init: initFog,    cap: 14 },
-    sunny:    { rate: 2.2, init: initSunMote, cap: 18 },
-    night:    { rate: 0.8, init: initStar,   cap: 22, twinkle: true },
+    rainy:    { rate: 12, init: initRain,    cap: 32 },
+    stormy:   { rate: 20, init: initRain,    cap: 44, gust: true },
+    snow:     { rate: 7,  init: initSnow,    cap: 28 },
+    fog:      { rate: 1.0, init: initFog,    cap: 8 },
+    sunny:    { rate: 1.4, init: initSunMote, cap: 10 },
+    night:    { rate: 0.5, init: initStar,   cap: 12, twinkle: true },
     // partly-cloudy / cloudy intentionally idle for now — the orbs and
     // the weather card SVG already carry the cloudiness signal. Pure
     // cloud wisps were hard to read at the brief's 3-8% opacity budget.
