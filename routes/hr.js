@@ -9,7 +9,7 @@ const { requirePermission, canViewSensitiveHR } = require('../middleware/auth');
 const { logActivity } = require('../middleware/audit');
 const { createInvitation, TOKEN_EXPIRY_HOURS } = require('../services/invitations');
 const { sendEmail } = require('../services/email');
-const { workerInviteEmail, sopSignLinkEmail } = require('../services/emailTemplates');
+const { workerInviteEmail, sopSignLinkEmail, pinResetEmail } = require('../services/emailTemplates');
 const crypto = require('crypto');
 const { currentVersion: currentSopVersion } = require('../lib/sop');
 const { REQUIRED_MODULES } = require('../lib/induction');
@@ -1131,12 +1131,50 @@ router.post('/employees/:id/send-invite', requirePermission('hr_employees'), asy
   }
 
   try {
-    const { token } = createInvitation({ type: 'crew_member', targetId: crewMember.id, email: crewMember.email, createdById: req.session.user.id });
-    const setupUrl = (process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`) + '/w/setup/' + token;
-    await sendEmail(crewMember.email, 'Set up your T&S Worker Portal PIN', workerInviteEmail(crewMember.full_name, setupUrl, TOKEN_EXPIRY_HOURS));
+    const db = getDb();
+    // If the worker already set their PIN, "Email Invite" can't send them
+    // to /w/setup any more (that token only works once). Send a Reset PIN
+    // link instead — same email button, smart payload.
+    const hasPin = !!crewMember.pin_hash;
+    const tokenType = hasPin ? 'pin_reset' : 'crew_member';
 
-    logActivity({ user: req.session.user, action: 'update', entityType: 'crew_member', entityId: crewMember.id, entityLabel: crewMember.full_name, details: 'Sent worker portal email invitation (from HR)', ip: req.ip });
-    req.flash('success', `Invitation email sent to ${crewMember.email}`);
+    // Invalidate any earlier unused tokens of this type for this worker
+    // so the previous email they have sitting in Gmail can't be clicked
+    // (the user reported clicking an older email landed on
+    // "link is invalid or expired"). The freshest email is now the only
+    // valid one.
+    db.prepare(
+      "UPDATE invitations SET used_at = CURRENT_TIMESTAMP WHERE type = ? AND target_id = ? AND used_at IS NULL"
+    ).run(tokenType, crewMember.id);
+
+    const { token } = createInvitation({
+      type: tokenType,
+      targetId: crewMember.id,
+      email: crewMember.email,
+      createdById: req.session.user.id,
+    });
+    const baseUrl = process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`;
+    const linkUrl = hasPin
+      ? `${baseUrl}/w/reset-pin/${token}`
+      : `${baseUrl}/w/setup/${token}`;
+    const subject = hasPin
+      ? 'Reset your T&S Worker Portal PIN'
+      : 'Set up your T&S Worker Portal PIN';
+    const html = hasPin
+      ? pinResetEmail(crewMember.full_name, linkUrl, TOKEN_EXPIRY_HOURS)
+      : workerInviteEmail(crewMember.full_name, linkUrl, TOKEN_EXPIRY_HOURS);
+    await sendEmail(crewMember.email, subject, html);
+
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'crew_member',
+      entityId: crewMember.id, entityLabel: crewMember.full_name,
+      details: hasPin ? 'Sent worker portal PIN reset link (from HR)' : 'Sent worker portal email invitation (from HR)',
+      ip: req.ip,
+    });
+    req.flash('success', hasPin
+      ? `Sent a Reset PIN link to ${crewMember.email}.`
+      : `Invitation email sent to ${crewMember.email}.`
+    );
   } catch (err) {
     console.error('Send invite error:', err);
     req.flash('error', 'Failed to send invitation email.');
