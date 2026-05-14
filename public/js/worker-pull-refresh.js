@@ -54,9 +54,9 @@
       // Throttle emission to ~12 particles/sec while pulling, with a
       // cap of ~14 active 'ptr' particles at any time.
       var now = performance.now();
-      if (now - lastEmit < 80) return;
+      if (now - lastEmit < 160) return;
       lastEmit = now;
-      if (WP().tagCount && WP().tagCount('ptr') >= 14) return;
+      if (WP().tagCount && WP().tagCount('ptr') >= 7) return;
       // Spawn from a ring around the viewport edges.
       var edge = Math.random();
       var x, y;
@@ -103,7 +103,7 @@
       // much stuff flying out".
       WP().removeTagged && WP().removeTagged('ptr');
       if (!WP().spawn) return;
-      var N = 6;
+      var N = 4;
       for (var i = 0; i < N; i++) {
         var ang = (i / N) * Math.PI * 2;
         var speed = 90;
