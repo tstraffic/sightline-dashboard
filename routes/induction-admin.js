@@ -727,19 +727,40 @@ router.post('/present/:module/quiz-result', (req, res) => {
   let recorded = [];
   if (passedFlag && ids.length > 0) {
     const insertCompletion = db.prepare(`
-      INSERT INTO training_completions (employee_id, module, full_name, email, score, total, passed)
-      VALUES (?, ?, ?, ?, ?, ?, 1)
+      INSERT INTO training_completions
+        (employee_id, crew_member_id, module, full_name, email, score, total, passed)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 1)
     `);
     for (const crewId of ids) {
       try {
         const crew = db.prepare(`
           SELECT cm.id, cm.full_name, cm.email,
-            (SELECT id FROM employees WHERE linked_crew_member_id = cm.id AND deleted_at IS NULL ORDER BY id DESC LIMIT 1) as employee_id
+            (SELECT id FROM employees WHERE linked_crew_member_id = cm.id AND deleted_at IS NULL ORDER BY id DESC LIMIT 1) as linked_employee_id
           FROM crew_members cm WHERE cm.id = ?
         `).get(crewId);
         if (!crew) continue;
-        insertCompletion.run(crew.employee_id || null, moduleKey, crew.full_name, crew.email || '', score || 0, total || 0);
-        if (crew.employee_id) maybeMarkInducted(db, crew.employee_id, 'in_person');
+        // Resolve the employees row for this attendee. Prefer the explicit
+        // linked_crew_member_id; fall back to an email match so workers
+        // who were added before the linking columns existed still get
+        // their profile credited. The crew_member_id column on the row
+        // is the source of truth — it's always written.
+        let employeeId = crew.linked_employee_id || null;
+        if (!employeeId && crew.email) {
+          const byEmail = db.prepare(
+            "SELECT id FROM employees WHERE LOWER(email) = LOWER(?) AND deleted_at IS NULL ORDER BY id DESC LIMIT 1"
+          ).get(crew.email);
+          if (byEmail) employeeId = byEmail.id;
+        }
+        insertCompletion.run(
+          employeeId || null,
+          crew.id,
+          moduleKey,
+          crew.full_name,
+          crew.email || '',
+          score || 0,
+          total || 0
+        );
+        if (employeeId) maybeMarkInducted(db, employeeId, 'in_person');
         recorded.push(crew.full_name);
       } catch (e) { console.error('Completion insert failed for crew', crewId, e.message); }
     }

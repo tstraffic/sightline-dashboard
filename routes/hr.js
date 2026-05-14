@@ -596,10 +596,25 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     try { induction = db.prepare("SELECT * FROM induction_submissions WHERE email = ? AND status IN ('submitted','approved') ORDER BY submitted_at DESC LIMIT 1").get(employee.email); } catch (e) {}
   }
 
-  // Induction status: aggregate of training_completions + SOP ack + manual flag
+  // Induction status: aggregate of training_completions + SOP ack + manual flag.
+  // Group-induction (per-attendee multi-write) stores crew_member_id directly,
+  // so a row counts if EITHER (a) employee_id matches this profile, OR
+  // (b) crew_member_id matches this employee's linked_crew_member_id.
+  // Falls back to a case-insensitive email match for legacy completions
+  // recorded before migration 203 added crew_member_id.
   const trainingPasses = {};
   REQUIRED_MODULES.forEach(m => {
-    const row = db.prepare("SELECT id, completed_at, score, total FROM training_completions WHERE employee_id = ? AND module = ? AND passed = 1 ORDER BY completed_at DESC LIMIT 1").get(employee.id, m);
+    const row = db.prepare(`
+      SELECT id, completed_at, score, total
+      FROM training_completions
+      WHERE module = ? AND passed = 1
+        AND (
+          employee_id = ?
+          OR (crew_member_id IS NOT NULL AND crew_member_id = ?)
+          OR (employee_id IS NULL AND email IS NOT NULL AND LOWER(email) = LOWER(?))
+        )
+      ORDER BY completed_at DESC LIMIT 1
+    `).get(m, employee.id, employee.linked_crew_member_id || -1, employee.email || '');
     trainingPasses[m] = row || null;
   });
   let inductionMarkedBy = null;

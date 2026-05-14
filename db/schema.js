@@ -9332,6 +9332,29 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 203: training_completions.crew_member_id
+  // Group-induction quiz writes a row per ticked attendee. The original
+  // table only had employee_id, but not every crew_member has a linked
+  // employees row, so attendees without that link were getting orphan
+  // rows (employee_id=null) that didn't surface on their profile.
+  // Add crew_member_id so completions are always retrievable.
+  // =============================================
+  if (!isMigrationApplied.get(203)) {
+    console.log('Running migration 203: training_completions.crew_member_id');
+    try {
+      const cols = db.prepare("PRAGMA table_info(training_completions)").all().map(c => c.name);
+      if (!cols.includes('crew_member_id')) {
+        db.exec("ALTER TABLE training_completions ADD COLUMN crew_member_id INTEGER REFERENCES crew_members(id)");
+      }
+      db.exec('CREATE INDEX IF NOT EXISTS idx_tc_crew ON training_completions(crew_member_id)');
+      recordMigration.run(203, 'training_completions.crew_member_id');
+      console.log('Migration 203 applied');
+    } catch (e) {
+      console.error('Migration 203 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
