@@ -2,9 +2,9 @@
 <%
   function money(n) {
     if (n == null) return '$0.00';
-    return '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return '$' + Number(n).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
-  function fmtDate(s) { if (!s) return ''; return new Date(s + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  function fmtDate(s) { if (!s) return ''; return new Date(s + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }); }
   function shortRange(a, b) {
     const d1 = new Date(a + 'T00:00:00'); const d2 = new Date(b + 'T00:00:00');
     const sameMonth = d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
@@ -57,7 +57,7 @@
       %>
         <a href="/w/hr/payslips/<%= p.id %>" target="_blank" style="display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; text-decoration: none; background: <%= isNew ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.02)' %>; border: 1px solid <%= isNew ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.04)' %>;">
           <div style="width: 44px; height: 44px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: <%= isNew ? 'rgba(16,185,129,0.18)' : 'rgba(43,127,255,0.15)' %>; color: <%= isNew ? '#34D399' : '#60A5FA' %>; flex-shrink: 0;">
-            <span style="font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1;"><%= new Date(p.pay_date + 'T00:00:00').toLocaleDateString('en-AU', { month: 'short' }).toUpperCase() %></span>
+            <span style="font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1;"><%= new Date(p.pay_date + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' }).toUpperCase() %></span>
             <span style="font-size: 1.1rem; font-weight: 800; line-height: 1.1;"><%= new Date(p.pay_date + 'T00:00:00').getDate() %></span>
           </div>
           <div style="flex: 1; min-width: 0;">

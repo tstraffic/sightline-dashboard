@@ -106,7 +106,7 @@
       <p class="eyebrow">Toolbox meeting</p>
       <h1><%= session.title %></h1>
       <p class="meta">
-        <% if (session.held_at) { %><b><%= new Date(session.held_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) %></b> · <% } %>
+        <% if (session.held_at) { %><b><%= new Date(session.held_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) %></b> · <% } %>
         Presenter: <b><%= session.presenter || '—' %></b>
       </p>
       <% if (session.key_points) { %>

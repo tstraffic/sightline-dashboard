@@ -4,8 +4,8 @@
     const d = new Date(s);
     const today = new Date();
     const isToday = d.toDateString() === today.toDateString();
-    if (isToday) return d.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' });
-    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+    if (isToday) return d.toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit' });
+    return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' });
   }
   const CHIP_STYLE = {
     general:       'background: rgba(43,127,255,0.18); color: #93C5FD; border: 1px solid rgba(43,127,255,0.3);',

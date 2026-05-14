@@ -10,7 +10,7 @@
   }
   function dayHeading(iso) {
     const d = new Date(iso + 'T00:00:00');
-    return d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
+    return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long', day: 'numeric', month: 'short' });
   }
 %>
 
@@ -206,7 +206,7 @@
           <div class="ws-shift-body">
             <div class="ws-shift-top">
               <span class="ws-shift-time">
-                <%= new Date(s.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { weekday:'short', day:'numeric', month:'short' }) %>
+                <%= new Date(s.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday:'short', day:'numeric', month:'short' }) %>
                 · <%= fmtTime(s.start_time) %>–<%= fmtTime(s.end_time) %>
               </span>
               <span class="ws-shift-pill allocated">Confirm</span>
@@ -239,7 +239,7 @@
     %>
       <div class="ws-day-head" id="date-<%= date %>">
         <span class="ws-day-title <%= isToday ? 'today' : '' %>">
-          <%= isToday ? 'Today · ' + d.toLocaleDateString('en-AU', { day:'numeric', month:'short' }) : heading %>
+          <%= isToday ? 'Today · ' + d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short' }) : heading %>
         </span>
         <span class="ws-day-meta"><%= groupedByDate[date].length %> shift<%= groupedByDate[date].length === 1 ? '' : 's' %></span>
       </div>

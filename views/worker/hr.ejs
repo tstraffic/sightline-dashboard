@@ -122,7 +122,7 @@
           <div class="flex justify-between"><span class="text-gray-500">Type</span><span class="font-medium text-gray-900"><%= employee.employment_type.replace(/_/g, ' ') %></span></div>
         <% } %>
         <% if (employee.employment_start_date) { %>
-          <div class="flex justify-between"><span class="text-gray-500">Start Date</span><span class="font-medium text-gray-900"><%= new Date(employee.employment_start_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) %></span></div>
+          <div class="flex justify-between"><span class="text-gray-500">Start Date</span><span class="font-medium text-gray-900"><%= new Date(employee.employment_start_date).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) %></span></div>
         <% } %>
       </div>
     </div>

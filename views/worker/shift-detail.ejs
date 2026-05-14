@@ -30,7 +30,7 @@
       </div>
       <div>
         <p class="text-xs text-gray-500">Date</p>
-        <p class="text-sm font-medium text-gray-900"><%= new Date(allocation.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) %></p>
+        <p class="text-sm font-medium text-gray-900"><%= new Date(allocation.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) %></p>
       </div>
     </div>
     <div class="p-4 flex items-center gap-3">

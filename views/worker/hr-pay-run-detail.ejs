@@ -1,6 +1,6 @@
 <%- include('partials/secure-form-style') %>
 <%
-  function money(n) { if (n == null) return '$0.00'; return '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function money(n) { if (n == null) return '$0.00'; return '$' + Number(n).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function shortRange(a, b) {
     if (!a || !b) return '';
     const d1 = new Date(a + 'T00:00:00'); const d2 = new Date(b + 'T00:00:00');

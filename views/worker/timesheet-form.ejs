@@ -15,7 +15,7 @@
       <select name="job_id" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         <option value="">Select a job...</option>
         <% recentAllocations.forEach(a => { %>
-          <option value="<%= a.job_id %>"><%= a.job_number %> — <%= a.client %> (<%= new Date(a.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) %>)</option>
+          <option value="<%= a.job_id %>"><%= a.job_number %> — <%= a.client %> (<%= new Date(a.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' }) %>)</option>
         <% }) %>
       </select>
     </div>
