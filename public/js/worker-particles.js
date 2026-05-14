@@ -180,6 +180,7 @@
     lastTick = now;
 
     emitWeather(dt);
+    if (loaders.length) tickLoaders();
 
     ctx.clearRect(0, 0, W, H);
     for (var i = particles.length - 1; i >= 0; i--) {
@@ -456,6 +457,117 @@
     var n = 0; for (var i = 0; i < particles.length; i++) if (particles[i].tag === tag) n++; return n;
   }
 
+  // ----- Loader ring -------------------------------------------------
+  // Replaces classic CSS spinners with a small ring of orbit particles.
+  // Auto-attaches to any [data-loader] element on the page, updates the
+  // orbit centre once per frame to track the element's viewport rect,
+  // and removes the particles on detach (element removed from DOM).
+  var nextLoaderId = 1;
+  var loaders = []; // { el, tag, radius, color, size }
+
+  function attachLoader(el, opts) {
+    if (!el || el._wpLoader) return;
+    if (reduced) {
+      // Render a static dot ring via DOM as the reduced-motion fallback.
+      el.classList.add('wp-loader-static');
+      el._wpLoader = { static: true };
+      return;
+    }
+    opts = opts || {};
+    var id = 'loader-' + (nextLoaderId++);
+    el._wpLoader = { tag: id };
+    var n = opts.count || 6;
+    var radius = opts.radius || 12;
+    var color = opts.color || '#00D2BE';
+    var size = opts.size || 2.0;
+    var rect = el.getBoundingClientRect();
+    var cx = rect.left + rect.width / 2;
+    var cy = rect.top  + rect.height / 2;
+    var omega = opts.omega || 4.5;
+    for (var i = 0; i < n; i++) {
+      spawn({
+        tag: id,
+        behavior: 'orbit',
+        cx: cx, cy: cy,
+        radius: radius,
+        omega: omega,
+        angle: (i / n) * Math.PI * 2,
+        color: color,
+        size: size,
+        maxLife: 999,
+        alpha: 0.9,
+        shape: 'circle',
+      });
+    }
+    loaders.push({ el: el, tag: id, radius: radius, color: color, size: size });
+  }
+
+  function detachLoader(el) {
+    if (!el || !el._wpLoader) return;
+    if (el._wpLoader.static) {
+      el.classList.remove('wp-loader-static');
+    } else {
+      removeTagged(el._wpLoader.tag);
+      for (var i = loaders.length - 1; i >= 0; i--) {
+        if (loaders[i].el === el) loaders.splice(i, 1);
+      }
+    }
+    el._wpLoader = null;
+  }
+
+  // Per-frame loader-rect tracking. Cheap (getBoundingClientRect is fast
+  // and the loader count is tiny in practice). Skipped when no loaders.
+  function tickLoaders() {
+    for (var i = 0; i < loaders.length; i++) {
+      var L = loaders[i];
+      if (!L.el.isConnected) {
+        detachLoader(L.el);
+        i--; continue;
+      }
+      var r = L.el.getBoundingClientRect();
+      var cx = r.left + r.width / 2;
+      var cy = r.top + r.height / 2;
+      modifyTagged(L.tag, { cx: cx, cy: cy });
+    }
+  }
+
+  // Auto-attach via MutationObserver — any element appearing with the
+  // [data-loader] attribute kicks off a ring; element removal cleans up.
+  function autoScanLoaders() {
+    document.querySelectorAll('[data-loader]:not([data-loader-bound])').forEach(function (el) {
+      el.setAttribute('data-loader-bound', '');
+      var opts = {};
+      var r = el.getAttribute('data-loader-radius'); if (r) opts.radius = parseFloat(r);
+      var c = el.getAttribute('data-loader-color');  if (c) opts.color = c;
+      attachLoader(el, opts);
+    });
+  }
+  if (window.MutationObserver) {
+    var lmo = new MutationObserver(autoScanLoaders);
+    lmo.observe(document.documentElement, { childList: true, subtree: true });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', autoScanLoaders);
+  } else {
+    autoScanLoaders();
+  }
+
+  // Inject the reduced-motion fallback CSS once.
+  (function injectLoaderCss() {
+    if (document.getElementById('wp-loader-css')) return;
+    var s = document.createElement('style');
+    s.id = 'wp-loader-css';
+    s.textContent = [
+      '.wp-loader-static { display: inline-block; width: 24px; height: 24px; position: relative; }',
+      '.wp-loader-static::before, .wp-loader-static::after {',
+      '  content: ""; position: absolute; top: 50%; left: 50%; width: 8px; height: 8px;',
+      '  border-radius: 50%; background: #00D2BE; transform: translate(-50%, -50%); opacity: 0.6;',
+      '}',
+      '.wp-loader-static::after { width: 18px; height: 18px; background: transparent; border: 1.5px solid #00D2BE; opacity: 0.4; }',
+    ].join('\n');
+    document.head.appendChild(s);
+  })();
+
   // ----- Tap particles -----------------------------------------------
   // Tiny 3-5 particle burst at the tap point. Decorative — skipped
   // under prefers-reduced-motion. Default colour is brand teal; the
@@ -539,6 +651,8 @@
     modifyTagged: modifyTagged,
     removeTagged: removeTagged,
     tagCount: tagCount,
+    attachLoader: attachLoader,
+    detachLoader: detachLoader,
     count: count,
   };
 })();
