@@ -3,7 +3,9 @@
 /* ── Safe Area ── */
 .safe-area-top { padding-top: env(safe-area-inset-top, 0px); }
 .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
-nav.fixed { padding-bottom: env(safe-area-inset-bottom, 0px); }
+/* Bottom tab nav anchors directly to the screen edge — no safe-area
+   reservation. The icons sit at the very bottom; the iOS home indicator
+   overlays the bottom edge by ~5px. Worker explicitly requested this. */
 main { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem); }
 
 /* ── Touch Targets ── */
