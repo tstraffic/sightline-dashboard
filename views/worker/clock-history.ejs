@@ -25,7 +25,7 @@
     <% dates.forEach(function(date) { %>
       <%
         const d = new Date(date + 'T00:00:00');
-        const dateLabel = d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+        const dateLabel = d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short', day: 'numeric', month: 'short' });
         const total = dailyTotals[date] || { hours: 0, mins: 0 };
         const events = groupedByDate[date].sort((a, b) => a.event_time.localeCompare(b.event_time));
       %>

@@ -1,6 +1,6 @@
 <%
   // Helpers
-  function fmtDate(d) { if (!d) return ''; return new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  function fmtDate(d) { if (!d) return ''; return new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }); }
   function dayNum(iso) { return parseInt(iso.split('-')[2], 10); }
   // Build rows of 7 cells
   const rows = [];
@@ -592,7 +592,7 @@
       }
       var arr = Array.from(selectedDates).sort();
       wrap.innerHTML = arr.map(function (d) {
-        var short = new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+        var short = new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' });
         return '<span class="lv-chip">' + short + '<button type="button" onclick="lvRemoveDate(\'' + d + '\')">×</button></span>';
       }).join('');
     }

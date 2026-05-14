@@ -1,7 +1,7 @@
 <%
   function fmtDate(s) {
     if (!s) return '—';
-    return new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+    return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
   const isResume = latest && latest.status === 'in_progress';
   const hasPassed = latest && latest.passed;

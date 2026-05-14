@@ -1,6 +1,6 @@
 <%- include('partials/secure-form-style') %>
 <%
-  function money(n) { if (n == null) return '$0.00'; return '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function money(n) { if (n == null) return '$0.00'; return '$' + Number(n).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function shortRange(a, b) {
     if (!a || !b) return '';
     const d1 = new Date(a + 'T00:00:00'); const d2 = new Date(b + 'T00:00:00');
@@ -40,7 +40,7 @@
       <% lines.forEach(function (l) { %>
         <a href="/w/hr/pay-runs/<%= l.id %>" style="display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; text-decoration: none; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.04); margin-bottom: 6px;">
           <div style="width: 44px; height: 44px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: rgba(96,165,250,0.15); color: #60A5FA; flex-shrink: 0;">
-            <span style="font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1;"><%= l.period_end ? new Date(l.period_end + 'T00:00:00').toLocaleDateString('en-AU', { month: 'short' }).toUpperCase() : '—' %></span>
+            <span style="font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1;"><%= l.period_end ? new Date(l.period_end + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' }).toUpperCase() : '—' %></span>
             <span style="font-size: 1.1rem; font-weight: 800; line-height: 1.1;"><%= l.period_end ? new Date(l.period_end + 'T00:00:00').getDate() : '?' %></span>
           </div>
           <div style="flex: 1; min-width: 0;">

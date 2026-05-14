@@ -2,7 +2,7 @@
   function fmt(s) {
     if (!s) return '';
     const d = new Date(s);
-    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+    return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
 %>
 <style>

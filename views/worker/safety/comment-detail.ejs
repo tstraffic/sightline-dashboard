@@ -1,7 +1,7 @@
 <%
   function fmt(s) {
     if (!s) return '—';
-    return new Date(s).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   const CHIP_STATUS = {
     submitted:    'background: rgba(43,127,255,0.18); color: #93C5FD; border: 1px solid rgba(43,127,255,0.3);',

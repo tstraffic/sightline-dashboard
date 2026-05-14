@@ -1,7 +1,7 @@
 <%
   function fmtDate(s) {
     if (!s) return '';
-    return new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+    return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
   function statusMeta(row) {
     if (!row.latest_status) return { label: 'Not started', style: 'background: rgba(43,127,255,0.18); color: #93C5FD; border: 1px solid rgba(43,127,255,0.3);' };

@@ -14,8 +14,8 @@
     const diff = Math.round((d - today) / 86400000);
     if (diff === 0) return 'Today';
     if (diff === 1) return 'Tomorrow';
-    if (diff < 7) return d.toLocaleDateString('en-AU', { weekday: 'long' });
-    return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+    if (diff < 7) return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long' });
+    return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short', day: 'numeric', month: 'short' });
   }
   function fmtClockTime(ts) {
     const d = new Date(ts);
@@ -810,8 +810,8 @@
   const restShifts = upcomingShifts.slice(1);
   const nd = new Date(nextShift.allocation_date + 'T00:00:00');
   const ndNum = nd.getDate();
-  const ndMon = nd.toLocaleDateString('en-AU', { month: 'short' });
-  const ndDow = nd.toLocaleDateString('en-AU', { weekday: 'short' });
+  const ndMon = nd.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' });
+  const ndDow = nd.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short' });
   const nextLink = nextShift.job_id ? ('/w/jobs/' + nextShift.job_id) : '/w/shifts';
   const isAllocated = (nextShift.status === 'allocated' || nextShift.status === 'assigned');
 %>
@@ -860,7 +860,7 @@
     <div style="margin-top:8px;" data-stagger>
       <% restShifts.forEach(s => {
         const d = new Date(s.allocation_date + 'T00:00:00');
-        const dNum = d.getDate(); const dMon = d.toLocaleDateString('en-AU', { month: 'short' });
+        const dNum = d.getDate(); const dMon = d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' });
         const link = s.job_id ? ('/w/jobs/' + s.job_id) : '/w/shifts';
       %>
         <a href="<%= link %>" class="wh-up-item" style="text-decoration: none;">

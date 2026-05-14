@@ -209,7 +209,7 @@
     const el = document.getElementById('currentTime');
     if (!el) return;
     const now = new Date();
-    el.textContent = now.toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+    el.textContent = now.toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
   }
   updateClock();
   setInterval(updateClock, 1000);

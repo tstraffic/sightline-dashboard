@@ -145,7 +145,7 @@
         </p>
       </div>
       <span class="ds-summary-date">
-        <%= new Date(allocation.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) %>
+        <%= new Date(allocation.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short', day: 'numeric', month: 'short' }) %>
       </span>
     </div>
   </div>

@@ -1,15 +1,16 @@
 <%
   function fmtDate(s) {
     if (!s) return '—';
-    return new Date(s).toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+    return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
   function fmt(s) {
     if (!s) return '—';
-    return new Date(s).toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   const status = myAttendance && myAttendance.status;
   const isAttended = status === 'attended';
   const isCaughtUp = status === 'caught_up';
+  const isAbsent   = status === 'absent';
   const isMissed   = !status;
 %>
 <style>
@@ -53,11 +54,16 @@
   <div class="tbd-meta"><%= fmtDate(toolbox.held_at) %><% if (toolbox.presenter) { %> · Presented by <%= toolbox.presenter %><% } %></div>
 
   <% if (isAttended) { %>
-    <div class="tbd-banner green">✓ You attended this toolbox<% if (myAttendance.recorded_at) { %> (recorded <%= fmt(myAttendance.recorded_at) %>)<% } %>.</div>
+    <div class="tbd-banner green">✓ You confirmed attendance<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
   <% } else if (isCaughtUp) { %>
     <div class="tbd-banner violet">↻ You marked this as caught up<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
+  <% } else if (isAbsent) { %>
+    <div class="tbd-banner amber">
+      ✗ You said you can't attend<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.
+      <% if (myAttendance.absence_reason) { %><br><span style="opacity:0.85;">Your reason: <%= myAttendance.absence_reason %></span><% } %>
+    </div>
   <% } else { %>
-    <div class="tbd-banner amber">You weren't recorded as attending this toolbox. Read it over and mark yourself caught up at the bottom.</div>
+    <div class="tbd-banner amber">You haven't confirmed your attendance for this toolbox. Read it over and mark yourself caught up at the bottom.</div>
   <% } %>
 
   <% if (toolbox.key_points) { %>

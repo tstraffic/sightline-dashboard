@@ -236,9 +236,9 @@
       <% Object.keys(requestsByDate).sort().forEach(function (date) {
         var d = new Date(date + 'T00:00:00');
         var isToday = date === today;
-        var dayLabel = isToday ? 'Today' : d.toLocaleDateString('en-AU', { weekday: 'short' });
+        var dayLabel = isToday ? 'Today' : d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short' });
         var dayNum = d.getDate();
-        var monthName = d.toLocaleDateString('en-AU', { month: 'short' });
+        var monthName = d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' });
       %>
         <div class="ws-day-head">
           <span class="ws-day-title <%= isToday ? 'today' : '' %>"><%= dayLabel %> <%= dayNum %> <%= monthName.toUpperCase() %></span>
@@ -295,9 +295,9 @@
       <% Object.keys(confirmedByDate).sort().forEach(function (date) {
         var d = new Date(date + 'T00:00:00');
         var isToday = date === today;
-        var dayLabel = isToday ? 'Today' : d.toLocaleDateString('en-AU', { weekday: 'short' });
+        var dayLabel = isToday ? 'Today' : d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short' });
         var dayNum = d.getDate();
-        var monthName = d.toLocaleDateString('en-AU', { month: 'short' });
+        var monthName = d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' });
       %>
         <div class="ws-day-head" id="date-<%= date %>">
           <span class="ws-day-title <%= isToday ? 'today' : '' %>"><%= dayLabel %> <%= dayNum %> <%= monthName.toUpperCase() %></span>
@@ -373,9 +373,9 @@
     <% } else { %>
       <% Object.keys(finishedByDate).sort().reverse().forEach(function (date) {
         var d = new Date(date + 'T00:00:00');
-        var dayLabel = d.toLocaleDateString('en-AU', { weekday: 'short' });
+        var dayLabel = d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short' });
         var dayNum = d.getDate();
-        var monthName = d.toLocaleDateString('en-AU', { month: 'short' });
+        var monthName = d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' });
       %>
         <div class="ws-day-head">
           <span class="ws-day-title"><%= dayLabel %> <%= dayNum %> <%= monthName.toUpperCase() %></span>

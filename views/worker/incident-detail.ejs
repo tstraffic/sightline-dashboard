@@ -13,7 +13,7 @@
   };
   function formatDate(d) {
     if (!d) return '-';
-    return new Date(d).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+    return new Date(d).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: 'short', year: 'numeric' });
   }
 %>
 

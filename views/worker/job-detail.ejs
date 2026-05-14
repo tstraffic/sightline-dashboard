@@ -1,7 +1,7 @@
 <%
   const dateObj = new Date(allocation.allocation_date + 'T00:00:00');
-  const dayName = dateObj.toLocaleDateString('en-AU', { weekday: 'long' });
-  const dateFormatted = dateObj.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit' });
+  const dayName = dateObj.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long' });
+  const dateFormatted = dateObj.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: '2-digit' });
   const isPending = allocation.status === 'allocated';
   const isFinished = allocation.status === 'completed' || allocation.status === 'declined';
   const today = new Date().toISOString().split('T')[0];
