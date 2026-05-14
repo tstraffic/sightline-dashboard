@@ -191,6 +191,9 @@ router.get('/home', async (req, res) => {
                             WHERE r.safety_update_id=u.id AND r.crew_member_id=?)) AS unread,
         (SELECT COUNT(*) FROM swms s
           WHERE s.status='active'
+            AND s.kind='template'   /* only generic SWMS — job-linked SWMS
+                                       require an access grant and aren't a
+                                       universal acknowledgement obligation. */
             AND NOT EXISTS (SELECT 1 FROM swms_acknowledgements a
                             WHERE a.swms_id=s.id AND a.crew_member_id=?
                               AND a.version_token=s.version_token)) AS swmsNeedsAck,
