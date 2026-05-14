@@ -89,6 +89,14 @@ app.use('/vendor/jszip', express.static(path.join(__dirname, 'node_modules', 'js
   maxAge: '30d',
   immutable: true,
 }));
+// Motion One — the worker-motion bootstrap (public/js/worker-motion.js)
+// reads window.Motion to spring-animate UI behaviours via the Web
+// Animations API. Same self-host pattern as pdfjs / docx-preview so the
+// service worker can cache it.
+app.use('/vendor/motion', express.static(path.join(__dirname, 'node_modules', 'motion', 'dist'), {
+  maxAge: '30d',
+  immutable: true,
+}));
 
 // Prevent caching of HTML pages so service worker always gets fresh content
 app.use((req, res, next) => {
