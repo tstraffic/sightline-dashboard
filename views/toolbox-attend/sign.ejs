@@ -94,7 +94,7 @@
       <div class="ok-card">
         <h2>Thanks, <%= submittedAs %>!</h2>
         <% if (submittedStatus === 'attended') { %>
-          <p>Your attendance is confirmed.</p>
+          <p>You're confirmed to attend. See you there.</p>
         <% } else if (submittedStatus === 'absent') { %>
           <p>Noted — your reason has been sent to the office.</p>
         <% } %>
@@ -126,7 +126,7 @@
                 <span class="name"><%= a.full_name %></span>
                 <% if (a.employee_id) { %><span class="emp"><%= a.employee_id %></span><% } %>
                 <% if (a.currentStatus === 'attended') { %>
-                  <span class="status-tag status-attended">Attended</span>
+                  <span class="status-tag status-attended">Will attend</span>
                 <% } else if (a.currentStatus === 'absent') { %>
                   <span class="status-tag status-absent">Absent</span>
                 <% } else if (a.currentStatus === 'caught_up') { %>
@@ -142,7 +142,7 @@
           <div class="seg" id="status-seg">
             <label class="attended">
               <input type="radio" name="status" value="attended" onchange="onStatus(this)">
-              <span>I attended</span>
+              <span>I will attend</span>
             </label>
             <label class="absent">
               <input type="radio" name="status" value="absent" onchange="onStatus(this)">

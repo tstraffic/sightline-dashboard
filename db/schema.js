@@ -9419,6 +9419,55 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 206: dedupe crew_members by email
+  // The HR Linked Workforce flow auto-creates a crew_members row when
+  // the admin enables portal access. If a seeded crew_members row
+  // already existed for that worker (demo data) AND the email didn't
+  // match exactly (whitespace, case, or a typo), the linker created a
+  // SECOND row. Result: two "Salif Hoque" entries in pickers, login
+  // sometimes hits the row WITHOUT the PIN.
+  // For each group of crew_members sharing the same LOWER(email), pick
+  // the canonical row (has pin_hash > active > recent login > newest)
+  // and mark the rest as active=0 + clear their email so they don't
+  // appear in picker queries or match login lookups. Non-destructive.
+  // =============================================
+  if (!isMigrationApplied.get(206)) {
+    console.log('Running migration 206: dedupe crew_members by email');
+    try {
+      const groups = db.prepare(`
+        SELECT LOWER(email) AS lemail, COUNT(*) AS n
+        FROM crew_members
+        WHERE email IS NOT NULL AND TRIM(email) <> ''
+        GROUP BY LOWER(email)
+        HAVING n > 1
+      `).all();
+      let deactivated = 0;
+      for (const g of groups) {
+        const rows = db.prepare(`
+          SELECT id, pin_hash, active, last_worker_login
+          FROM crew_members
+          WHERE LOWER(email) = ?
+          ORDER BY (pin_hash IS NOT NULL AND pin_hash != '') DESC,
+                   (active = 1) DESC,
+                   (last_worker_login IS NOT NULL) DESC,
+                   last_worker_login DESC,
+                   id DESC
+        `).all(g.lemail);
+        // First row is the winner; deactivate the rest and blank their
+        // email so they stop matching login + picker queries.
+        for (let i = 1; i < rows.length; i++) {
+          db.prepare("UPDATE crew_members SET active = 0, email = '' WHERE id = ?").run(rows[i].id);
+          deactivated++;
+        }
+      }
+      recordMigration.run(206, 'dedupe crew_members by email');
+      console.log(`Migration 206 applied: deactivated ${deactivated} duplicate crew_members row(s)`);
+    } catch (e) {
+      console.error('Migration 206 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

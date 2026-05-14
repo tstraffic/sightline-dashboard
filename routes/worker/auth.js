@@ -35,13 +35,32 @@ router.post('/login', (req, res) => {
   }
 
   const db = getDb();
-  // Try email first, then employee_id
+  // Try email first, then employee_id. If the database ever ended up
+  // with two crew_members rows for the same person (e.g. a seeded demo
+  // row + a row auto-created by the HR linker), prefer the one that's
+  // actually usable: has a PIN set, is active, has the most recent
+  // login, then the most-recent row id.
+  const orderBy = `
+    ORDER BY (pin_hash IS NOT NULL AND pin_hash != '') DESC,
+             (active = 1) DESC,
+             (last_worker_login IS NOT NULL) DESC,
+             last_worker_login DESC,
+             id DESC
+  `;
   let member = db.prepare(
-    'SELECT id, full_name, employee_id, role, phone, email, pin_hash, active FROM crew_members WHERE LOWER(email) = LOWER(?)'
+    `SELECT id, full_name, employee_id, role, phone, email, pin_hash, active
+       FROM crew_members
+      WHERE LOWER(email) = LOWER(?)
+      ${orderBy}
+      LIMIT 1`
   ).get(loginId);
   if (!member) {
     member = db.prepare(
-      'SELECT id, full_name, employee_id, role, phone, email, pin_hash, active FROM crew_members WHERE employee_id = ?'
+      `SELECT id, full_name, employee_id, role, phone, email, pin_hash, active
+         FROM crew_members
+        WHERE employee_id = ?
+        ${orderBy}
+        LIMIT 1`
     ).get(loginId);
   }
 
