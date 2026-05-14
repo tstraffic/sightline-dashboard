@@ -52,7 +52,11 @@
               </td>
               <td class="px-2 py-2 text-xs text-gray-600 tabular-nums"><%= fmtDate(r.held_at) %></td>
               <td class="px-2 py-2 text-xs text-gray-600"><%= r.presenter || '—' %></td>
-              <td class="px-2 py-2 text-xs text-gray-600"><%= r.attended_count || 0 %></td>
+              <td class="px-2 py-2 text-xs text-gray-600 tabular-nums">
+                <%= (r.attended_count || 0) + (r.caught_count || 0) %><%
+                  if (r.invitee_count > 0) { %><span class="text-gray-400">/<%= r.invitee_count %></span><% }
+                %>
+              </td>
               <td class="px-2 py-2 text-xs text-gray-600"><%= r.caught_count || 0 %></td>
             </tr>
           <% }) %>
