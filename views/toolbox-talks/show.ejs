@@ -65,11 +65,64 @@
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
       <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Coverage</p>
       <p class="text-2xl font-bold text-gray-900"><%= covered %> <span class="text-gray-400 font-normal text-base">of <%= total %> · <%= pct %>%</span></p>
-      <p class="text-xs text-gray-500 mt-1"><%= attended %> attended · <%= caughtUp %> caught up</p>
+      <p class="text-xs text-gray-500 mt-1">
+        <%= attended %> attended · <%= caughtUp %> caught up
+        <% if (summary.absent) { %> · <span class="text-rose-600 font-semibold"><%= summary.absent %> can't attend</span><% } %>
+      </p>
       <div class="w-full h-2 bg-gray-100 rounded-full mt-2">
         <div class="h-2 bg-emerald-500 rounded-full" style="width: <%= pct %>%"></div>
       </div>
     </div>
+
+    <%# Public attendance link — workers visit, pick name, mark
+        attended/absent. Copy button + regenerate option. %>
+    <% if (typeof attendanceUrl !== 'undefined' && attendanceUrl) { %>
+      <div class="bg-gradient-to-br from-brand-50 to-emerald-50 border border-brand-200 rounded-xl shadow-sm p-5">
+        <div class="flex items-start justify-between gap-3 flex-wrap">
+          <div>
+            <p class="text-[10px] font-bold text-brand-700 uppercase tracking-widest mb-1">Attendance link · share with the crew</p>
+            <p class="text-sm text-gray-700">Workers click, pick their name, and confirm attendance (or say why they can't). No login required.</p>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <a href="<%= attendanceUrl %>" target="_blank" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-brand-700 bg-white border border-brand-200 hover:bg-brand-50 rounded-md">Preview</a>
+            <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/attendance-session/regenerate" class="inline" onsubmit="return confirm('Generate a new link? The old one will stop working.');">
+              <%- include('../partials/csrf') %>
+              <button type="submit" class="inline-flex items-center gap-1 px-3 py-2 text-xs font-semibold text-amber-700 bg-white border border-amber-200 hover:bg-amber-50 rounded-md">Regenerate</button>
+            </form>
+          </div>
+        </div>
+        <div class="mt-3 flex items-center gap-2">
+          <input id="att-link" type="text" value="<%= attendanceUrl %>" readonly onclick="this.select()" class="flex-1 px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg text-gray-800 font-mono">
+          <button type="button" onclick="(function(){var i=document.getElementById('att-link');navigator.clipboard.writeText(i.value).then(function(){var b=event.target;var t=b.textContent;b.textContent='Copied!';setTimeout(function(){b.textContent=t;},1500);});})()" class="inline-flex items-center gap-1 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+            Copy
+          </button>
+        </div>
+      </div>
+    <% } %>
+
+    <%# Absences with reasons — surfaces who said they can't attend so
+        the office can follow up before scheduling the catch-up session. %>
+    <% if (typeof absences !== 'undefined' && absences.length > 0) { %>
+      <div class="bg-white border border-rose-200 rounded-xl shadow-sm p-5">
+        <p class="text-[10px] font-bold text-rose-700 uppercase tracking-widest mb-2">Couldn't attend (<%= absences.length %>)</p>
+        <ul class="divide-y divide-gray-100">
+          <% absences.forEach(function (a) { %>
+            <li class="py-2.5 flex items-start gap-3">
+              <div class="flex-1">
+                <p class="text-sm font-semibold text-gray-900"><%= a.full_name %><% if (a.employee_id) { %><span class="text-gray-400 text-xs font-normal ml-1.5"><%= a.employee_id %></span><% } %></p>
+                <% if (a.absence_reason) { %>
+                  <p class="text-xs text-gray-600 mt-0.5"><%= a.absence_reason %></p>
+                <% } %>
+              </div>
+              <span class="text-[11px] text-gray-400 whitespace-nowrap">
+                <%= a.recorded_at ? new Date(a.recorded_at).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) : '' %>
+              </span>
+            </li>
+          <% }); %>
+        </ul>
+      </div>
+    <% } %>
   <% } %>
 
   <% if (toolbox.key_points) { %>

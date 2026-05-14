@@ -633,6 +633,24 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     inductionMarkedBy = db.prepare('SELECT full_name FROM users WHERE id = ?').get(employee.inducted_marked_by_id);
   }
 
+  // Toolbox meetings: every published toolbox + this worker's attendance
+  // status (attended / caught_up / absent + reason / not recorded).
+  // Joined by linked_crew_member_id so we get a row per meeting even if
+  // the worker didn't respond — the user wants the full list visible.
+  let toolboxMeetings = [];
+  try {
+    toolboxMeetings = db.prepare(`
+      SELECT
+        t.id, t.title, t.held_at, t.presenter, t.key_points, t.published_at,
+        a.status AS my_status, a.absence_reason, a.recorded_at AS my_recorded_at
+      FROM toolbox_talks t
+      LEFT JOIN toolbox_attendance a
+        ON a.toolbox_id = t.id AND a.crew_member_id = ?
+      WHERE t.status = 'published'
+      ORDER BY COALESCE(t.held_at, t.published_at) DESC, t.id DESC
+    `).all(employee.linked_crew_member_id || -1);
+  } catch (e) { /* table may not exist on stale DB */ }
+
   res.render('hr/employee-show', {
     title: employee.full_name,
     currentPage: 'hr-employees',
@@ -649,6 +667,7 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     sopStatus,
     sopHistory,
     trainingPasses,
+    toolboxMeetings,
     inductionMarkedBy: inductionMarkedBy ? inductionMarkedBy.full_name : null,
     settingsOptions,
     canViewSensitive: canViewSensitiveHR(req.session.user),

@@ -6,6 +6,7 @@
 'use strict';
 
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
@@ -13,6 +14,21 @@ const fs = require('fs');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { sendPushToAllActiveCrew } = require('../services/pushNotification');
+
+// Lazy-creates the public attendance session for a toolbox. Idempotent
+// for repeat publishes / detail-page renders. Returns the row.
+function getOrCreateAttendanceSession(toolboxId, userId) {
+  const db = getDb();
+  let row = db.prepare('SELECT * FROM toolbox_attendance_sessions WHERE toolbox_id = ? ORDER BY id DESC LIMIT 1')
+    .get(toolboxId);
+  if (row && !row.closed_at) return row;
+  const token = crypto.randomBytes(18).toString('base64url');
+  const r = db.prepare(`
+    INSERT INTO toolbox_attendance_sessions (token, toolbox_id, created_by_id)
+    VALUES (?, ?, ?)
+  `).run(token, toolboxId, userId || null);
+  return db.prepare('SELECT * FROM toolbox_attendance_sessions WHERE id = ?').get(r.lastInsertRowid);
+}
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'data', 'uploads', 'toolbox');
 if (!fs.existsSync(UPLOAD_DIR)) fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -162,8 +178,11 @@ router.post('/', formUploads, (req, res) => {
         entityId: r.lastInsertRowid, entityLabel: title, details: status, ip: req.ip,
       });
     } catch (e) {}
-    if (wantsPublish) announcePublished(req, { id: r.lastInsertRowid, title });
-    req.flash('success', wantsPublish ? 'Toolbox talk published.' : 'Draft saved.');
+    if (wantsPublish) {
+      announcePublished(req, { id: r.lastInsertRowid, title });
+      try { getOrCreateAttendanceSession(r.lastInsertRowid, userId); } catch (e) { console.error('[toolbox session]', e.message); }
+    }
+    req.flash('success', wantsPublish ? 'Toolbox talk published — share the attendance link with the crew.' : 'Draft saved.');
     return res.redirect('/toolbox-talks/' + r.lastInsertRowid);
   } catch (err) {
     console.error('[toolbox-talks POST]', err);
@@ -188,11 +207,35 @@ router.get('/:id', (req, res) => {
     SELECT
       (SELECT COUNT(*) FROM crew_members WHERE active = 1) AS total_crew,
       (SELECT COUNT(*) FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'attended') AS attended,
-      (SELECT COUNT(*) FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'caught_up') AS caught_up
-  `).get(toolbox.id, toolbox.id);
+      (SELECT COUNT(*) FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'caught_up') AS caught_up,
+      (SELECT COUNT(*) FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'absent') AS absent
+  `).get(toolbox.id, toolbox.id, toolbox.id);
+  // List of workers who marked themselves absent + their reason, so the
+  // office can see at a glance who's missing and why.
+  const absences = db.prepare(`
+    SELECT a.absence_reason, a.recorded_at, cm.full_name, cm.employee_id
+    FROM toolbox_attendance a
+    JOIN crew_members cm ON cm.id = a.crew_member_id
+    WHERE a.toolbox_id = ? AND a.status = 'absent'
+    ORDER BY a.recorded_at DESC
+  `).all(toolbox.id);
+
+  // Generate / fetch the public attendance link only once the toolbox
+  // is published (drafts shouldn't be sharable yet).
+  let attendanceSession = null;
+  let attendanceUrl = null;
+  if (toolbox.status === 'published') {
+    try {
+      attendanceSession = getOrCreateAttendanceSession(toolbox.id, req.session.user && req.session.user.id);
+      const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+      attendanceUrl = base + '/toolbox-attend/' + attendanceSession.token;
+    } catch (e) { console.error('[toolbox session load]', e.message); }
+  }
+
   res.render('toolbox-talks/show', {
     title: toolbox.title, currentPage: 'toolbox-talks',
-    toolbox, photos, summary, statusLabels: STATUS_LABELS,
+    toolbox, photos, summary, absences, attendanceSession, attendanceUrl,
+    statusLabels: STATUS_LABELS,
   });
 });
 
@@ -286,8 +329,22 @@ router.post('/:id/publish', (req, res) => {
     WHERE id = ?
   `).run(userId, toolbox.id);
   announcePublished(req, toolbox);
-  req.flash('success', 'Toolbox talk published.');
+  try { getOrCreateAttendanceSession(toolbox.id, userId); } catch (e) { console.error('[toolbox session]', e.message); }
+  req.flash('success', 'Toolbox talk published — share the attendance link with the crew.');
   return res.redirect('/toolbox-talks/' + toolbox.id);
+});
+
+// POST /toolbox-talks/:id/attendance-session/regenerate — invalidate
+// previous link, mint a new one. Used if the office sent the wrong
+// link or someone shared it externally.
+router.post('/:id/attendance-session/regenerate', (req, res) => {
+  const db = getDb();
+  const tb = db.prepare('SELECT id FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  db.prepare("UPDATE toolbox_attendance_sessions SET closed_at = datetime('now') WHERE toolbox_id = ? AND closed_at IS NULL").run(tb.id);
+  getOrCreateAttendanceSession(tb.id, req.session.user && req.session.user.id);
+  req.flash('success', 'Generated a fresh attendance link.');
+  return res.redirect('/toolbox-talks/' + tb.id);
 });
 
 // POST /toolbox-talks/:id/archive

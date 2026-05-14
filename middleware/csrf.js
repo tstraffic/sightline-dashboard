@@ -14,6 +14,7 @@ const SKIP_PATHS = [
 // (e.g. /sop-sign/:token/submit hit by external phones with no session).
 const SKIP_PREFIXES = [
   '/sop-sign/',
+  '/toolbox-attend/',
 ];
 
 function csrfProtection(req, res, next) {
