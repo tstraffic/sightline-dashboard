@@ -217,6 +217,18 @@ router.post('/:id', (req, res) => {
       b.licence_type || '', b.licence_expiry || null, b.white_card || '', b.white_card_expiry || null,
       b.induction_date || null, b.medical_expiry || null, b.active ? 1 : 0, req.params.id
     );
+
+    // Mirror name + contact onto the linked employees row so the HR
+    // profile + payroll stay in sync. Both tables hold full_name and
+    // both feed different views; divergence shows up as "I changed
+    // it but it didn't propagate".
+    try {
+      db.prepare(`
+        UPDATE employees
+        SET full_name = ?, email = ?, phone = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE linked_crew_member_id = ? AND deleted_at IS NULL
+      `).run(b.full_name, b.email || '', b.phone || '', req.params.id);
+    } catch (e) { /* column drift ok */ }
     logActivity({ user: req.session.user, action: 'update', entityType: 'crew_member', entityId: member.id, entityLabel: b.full_name, details: 'Updated crew member details', ip: req.ip });
     req.flash('success', b.full_name + ' updated.');
     res.redirect('/crew/' + member.id);

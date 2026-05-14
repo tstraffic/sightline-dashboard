@@ -811,6 +811,23 @@ router.post('/employees/:id', requirePermission('hr_employees'), (req, res) => {
   try {
     db.prepare('UPDATE employees SET ' + sets.join(', ') + ' WHERE id = ?').run(...params);
 
+    // Keep the linked crew_members row in sync — its full_name / email /
+    // phone feed every public picker (toolbox attendance, group induction,
+    // SOP sign-off) and the worker portal. Without this, capitalising
+    // someone's name in the HR roster left old-case "salif hoque" sitting
+    // in the public attendance link.
+    try {
+      const linkedRow = db.prepare('SELECT linked_crew_member_id FROM employees WHERE id = ?').get(req.params.id);
+      const linkedId = linkedRow && linkedRow.linked_crew_member_id;
+      if (linkedId) {
+        db.prepare(`
+          UPDATE crew_members
+          SET full_name = ?, email = ?, phone = ?
+          WHERE id = ?
+        `).run(fullName, b.email || '', b.phone || '', linkedId);
+      }
+    } catch (e) { /* column drift ok, don't block the HR save */ }
+
     // --- Payroll details (bank, super, TFN) ---
     // Admin can edit these inline. We write into the encrypted payroll tables
     // (not employees.internal_notes). Each change creates a new row tagged
