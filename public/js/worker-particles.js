@@ -389,6 +389,65 @@
 
   function burst(opts) { return celebrate(opts); }
 
+  // ----- Tap particles -----------------------------------------------
+  // Tiny 3-5 particle burst at the tap point. Decorative — skipped
+  // under prefers-reduced-motion. Default colour is brand teal; the
+  // delegated listener below derives a tone from a data-particle-color
+  // attribute on the target or its closest ancestor.
+  function tapBurst(x, y, color) {
+    if (reduced) return;
+    init();
+    var available = MAX - particles.length;
+    if (available <= 0) return;
+    var n = Math.min(available, 3 + ((Math.random() * 3) | 0));
+    var c = color || '#00D2BE';
+    for (var i = 0; i < n; i++) {
+      var p = alloc();
+      var angle = Math.random() * Math.PI * 2;
+      var speed = 80 + Math.random() * 120;
+      p.x = x;
+      p.y = y;
+      p.vx = Math.cos(angle) * speed;
+      p.vy = Math.sin(angle) * speed - 30; // slight upward bias
+      p.gravity = 280;
+      p.drag = 0.94;
+      p.life = 0;
+      p.maxLife = 0.55 + Math.random() * 0.35;
+      p.size = 2 + Math.random() * 2;
+      p.color = c;
+      p.alpha = 1;
+      p.shape = 'circle';
+      p.angle = 0; p.vAngle = 0;
+      particles.push(p);
+    }
+    if (!running) start();
+  }
+
+  // Delegated pointerdown — fires for any element opting in via
+  // data-particle="tap" or any primary CTA (.wd-btn[data-kind="primary"],
+  // .wh-act-btn.primary, .wh-fab-main). Skipped if the tap originated
+  // inside a disabled element.
+  function bindTapDelegation() {
+    if (window._wpTapBound) return;
+    window._wpTapBound = true;
+    document.addEventListener('pointerdown', function (e) {
+      var t = e.target.closest && e.target.closest(
+        '[data-particle="tap"], .wd-btn[data-kind="primary"], .wh-act-btn.primary, .wh-fab-main'
+      );
+      if (!t) return;
+      if (t.disabled || t.getAttribute('aria-disabled') === 'true') return;
+      var color = t.getAttribute('data-particle-color') ||
+                  (window.getComputedStyle(t).color) ||
+                  '#00D2BE';
+      tapBurst(e.clientX, e.clientY, color);
+    }, { passive: true });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', bindTapDelegation);
+  } else {
+    bindTapDelegation();
+  }
+
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', autoInit);
   } else {
@@ -408,6 +467,7 @@
     setWeather: setWeather,
     celebrate: celebrate,
     burst: burst, // alias of celebrate, kept for parity with the brief
+    tapBurst: tapBurst,
     count: count,
   };
 })();
