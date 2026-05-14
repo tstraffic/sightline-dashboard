@@ -186,11 +186,31 @@
       var p = particles[i];
       p.life += dt;
 
-      // motion
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-      if (p.gravity) p.vy += p.gravity * dt;
-      if (p.drag !== 1) { p.vx *= Math.pow(p.drag, dt * 60); p.vy *= Math.pow(p.drag, dt * 60); }
+      // behavior switch — most particles are 'ballistic' (default).
+      // 'converge' steers toward p.targetX/Y with acceleration.
+      // 'orbit' rotates around (cx, cy) at fixed radius.
+      if (p.behavior === 'converge') {
+        var ddx = (p.targetX - p.x);
+        var ddy = (p.targetY - p.y);
+        var ddist = Math.sqrt(ddx * ddx + ddy * ddy) || 1;
+        var acc = 1400 / Math.max(80, ddist); // stronger when close
+        p.vx += (ddx / ddist) * acc * dt * 60;
+        p.vy += (ddy / ddist) * acc * dt * 60;
+        p.vx *= 0.92; p.vy *= 0.92;          // damp so it doesn't overshoot wildly
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (ddist < 12) { p.alpha *= 0.85; if (p.alpha < 0.05) p.life = p.maxLife; }
+      } else if (p.behavior === 'orbit') {
+        p.angle += (p.omega || 6) * dt;
+        p.x = p.cx + Math.cos(p.angle) * p.radius;
+        p.y = p.cy + Math.sin(p.angle) * p.radius;
+      } else {
+        // ballistic (default) — original motion
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        if (p.gravity) p.vy += p.gravity * dt;
+        if (p.drag !== 1) { p.vx *= Math.pow(p.drag, dt * 60); p.vy *= Math.pow(p.drag, dt * 60); }
+      }
 
       // shape-specific tweaks
       if (p.shape === 'circle' && p.vAngle) {
@@ -389,6 +409,53 @@
 
   function burst(opts) { return celebrate(opts); }
 
+  // ----- Generic spawn + tag operations ------------------------------
+  // Used by the pull-to-refresh controller in PR 6 to drive converge ->
+  // orbit -> explode without coupling each phase into the engine. Any
+  // future imperative emitter can use these directly too.
+  function spawn(spec) {
+    if (particles.length >= MAX) return null;
+    init();
+    var p = alloc();
+    p.x = spec.x || 0; p.y = spec.y || 0;
+    p.vx = spec.vx || 0; p.vy = spec.vy || 0;
+    p.gravity = spec.gravity || 0;
+    p.drag = spec.drag != null ? spec.drag : 1;
+    p.life = 0;
+    p.maxLife = spec.maxLife || 1;
+    p.size = spec.size || 2;
+    p.color = spec.color || '#FFFFFF';
+    p.alpha = spec.alpha != null ? spec.alpha : 1;
+    p.shape = spec.shape || 'circle';
+    p.angle = spec.angle || 0;
+    p.vAngle = spec.vAngle || 0;
+    p.behavior = spec.behavior || 'ballistic';
+    p.targetX = spec.targetX || 0;
+    p.targetY = spec.targetY || 0;
+    p.cx = spec.cx || 0; p.cy = spec.cy || 0;
+    p.radius = spec.radius || 0;
+    p.omega = spec.omega || 0;
+    p.tag = spec.tag || '';
+    particles.push(p);
+    if (!running) start();
+    return p;
+  }
+  function modifyTagged(tag, patch) {
+    for (var i = 0; i < particles.length; i++) {
+      var p = particles[i];
+      if (p.tag !== tag) continue;
+      for (var k in patch) if (Object.prototype.hasOwnProperty.call(patch, k)) p[k] = patch[k];
+    }
+  }
+  function removeTagged(tag) {
+    for (var i = particles.length - 1; i >= 0; i--) {
+      if (particles[i].tag === tag) recycle(particles.splice(i, 1)[0]);
+    }
+  }
+  function tagCount(tag) {
+    var n = 0; for (var i = 0; i < particles.length; i++) if (particles[i].tag === tag) n++; return n;
+  }
+
   // ----- Tap particles -----------------------------------------------
   // Tiny 3-5 particle burst at the tap point. Decorative — skipped
   // under prefers-reduced-motion. Default colour is brand teal; the
@@ -468,6 +535,10 @@
     celebrate: celebrate,
     burst: burst, // alias of celebrate, kept for parity with the brief
     tapBurst: tapBurst,
+    spawn: spawn,
+    modifyTagged: modifyTagged,
+    removeTagged: removeTagged,
+    tagCount: tagCount,
     count: count,
   };
 })();
