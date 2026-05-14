@@ -9505,6 +9505,48 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 208: re-link employees to surviving crew_members
+  // Migration 206 deactivated duplicate crew_members rows. If the
+  // employees.linked_crew_member_id was pointing at the loser, the HR
+  // profile is now wired to a deactivated row with cleared email — and
+  // the "Email Invite" button fails with "Crew member needs an email
+  // address". Re-link each affected employees row to the surviving
+  // crew_members row matched by email.
+  // =============================================
+  if (!isMigrationApplied.get(208)) {
+    console.log('Running migration 208: re-link employees to surviving crew_members');
+    try {
+      const broken = db.prepare(`
+        SELECT e.id AS emp_id, e.email AS emp_email
+        FROM employees e
+        JOIN crew_members cm ON cm.id = e.linked_crew_member_id
+        WHERE e.linked_crew_member_id IS NOT NULL
+          AND e.deleted_at IS NULL
+          AND e.email IS NOT NULL AND TRIM(e.email) <> ''
+          AND (cm.active = 0 OR cm.email IS NULL OR TRIM(cm.email) = '')
+      `).all();
+      let relinked = 0;
+      const findCanonical = db.prepare(`
+        SELECT id FROM crew_members
+        WHERE active = 1 AND LOWER(email) = LOWER(?)
+        ORDER BY (pin_hash IS NOT NULL AND pin_hash != '') DESC, id DESC
+        LIMIT 1
+      `);
+      const updateLink = db.prepare(
+        'UPDATE employees SET linked_crew_member_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+      );
+      for (const row of broken) {
+        const canonical = findCanonical.get(row.emp_email);
+        if (canonical) { updateLink.run(canonical.id, row.emp_id); relinked++; }
+      }
+      recordMigration.run(208, 're-link employees to surviving crew_members');
+      console.log(`Migration 208 applied: re-linked ${relinked} employees to surviving crew_members`);
+    } catch (e) {
+      console.error('Migration 208 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
