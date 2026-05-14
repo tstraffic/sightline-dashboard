@@ -113,7 +113,11 @@
   }
 
   function loadingHtml() {
-    return '<div class="pdfv-loading">Loading document<span class="pdfv-dot"></span><span class="pdfv-dot"></span><span class="pdfv-dot"></span></div>';
+    // Loader is a particle-ring driven by /js/worker-particles.js'
+    // [data-loader] auto-attach. Inline width/height ensures the
+    // canvas-side particle ring has a centre to track even before
+    // text content fills the row.
+    return '<div class="pdfv-loading"><span data-loader data-loader-radius="14" data-loader-color="#60A5FA" style="display:inline-block;width:36px;height:36px;vertical-align:middle;margin-right:8px;"></span>Loading document</div>';
   }
 
   function escapeHtml(s) {
