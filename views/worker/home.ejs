@@ -592,6 +592,10 @@
 <% } %>
 
 <% if (section === 'weather' && !hidden.includes('weather') && weather) { %>
+  <%# Invisible marker — worker-particles.js reads data-weather-kind on
+      DOMContentLoaded and starts emitting per-condition particles
+      (rain streaks, sun motes, snow, fog, stars). %>
+  <div data-weather-kind="<%= weather.kind || 'cloudy' %>" style="display:none;" aria-hidden="true"></div>
   <%- include('partials/ui/section-header', { title: (weather.source === 'depot' ? 'Weather at the depot' : 'Weather at next site') + (weather.city ? ' · ' + weather.city : '') }) %>
   <%- include('partials/weather-card', { weather: weather }) %>
 <% } %>
