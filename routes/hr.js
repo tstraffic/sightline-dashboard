@@ -560,9 +560,20 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
 
   const settingsOptions = res.locals.settingsOptions || {};
 
-  // Training completions
+  // Training completions — match by any of (employee_id, crew_member_id,
+  // legacy-orphan email) so group-induction completions surface even when
+  // the historical employees.linked_crew_member_id wasn't set.
   let training = [];
-  try { training = db.prepare('SELECT * FROM training_completions WHERE employee_id = ? ORDER BY completed_at DESC').all(employee.id); } catch (e) {}
+  try {
+    training = db.prepare(`
+      SELECT * FROM training_completions
+      WHERE
+        employee_id = ?
+        OR (crew_member_id IS NOT NULL AND crew_member_id = ?)
+        OR (employee_id IS NULL AND email IS NOT NULL AND LOWER(email) = LOWER(?))
+      ORDER BY completed_at DESC
+    `).all(employee.id, employee.linked_crew_member_id || -1, employee.email || '');
+  } catch (e) {}
 
   // SOP acknowledgement status — current version + history
   const sopVersion = currentSopVersion();
