@@ -598,57 +598,59 @@ router.get('/uploads/:id/:filename', (req, res) => {
   res.sendFile(filePath);
 });
 
-// GET /induction/admin/present/:module — slide presenter
+// GET /induction/admin/present/:module — group-induction presenter.
+// Renders the SAME polished deck used at /training/:slug (the standalone
+// trainee flow), with one extra slide injected right before the first
+// interactive-quiz: an attendee picker so the presenter can mark off who
+// is in the room. On quiz pass, one training_completions row is written
+// per ticked attendee (see /quiz-result handler below).
 router.get('/present/:module', (req, res) => {
   const { module } = req.params;
-  let slides, moduleTitle, moduleKey;
+  let slides, moduleTitle, moduleKey, modulePath;
 
   if (module === 'employee-guide') {
     slides = employeeGuideSlides;
     moduleTitle = 'T&S Employee Guide';
     moduleKey = 'employee_guide';
+    modulePath = '/induction/admin/present/employee-guide';
   } else if (module === 'tc-training-1') {
     slides = tcTrainingSlides;
     moduleTitle = 'Traffic Control Training — Module 1';
     moduleKey = 'tc_training_1';
+    modulePath = '/induction/admin/present/tc-training-1';
   } else {
     return res.status(404).send('Unknown module');
   }
 
-  // Inject an attendee-picker slide right before the first interactive-quiz
-  // slide so the presenter can mark off who's in the room before they
-  // actually take the quiz. Attendees are written to training_completions
-  // when the quiz is passed.
+  // Inject the attendee-picker slide right before the first interactive
+  // quiz slide so it's the last thing the presenter sees before the room
+  // starts answering questions.
   const firstQuizIdx = slides.findIndex(s => s.layout === 'interactive-quiz');
-  let mergedSlides;
-  if (firstQuizIdx >= 0) {
-    mergedSlides = [
-      ...slides.slice(0, firstQuizIdx),
-      { layout: 'attendee-picker', title: 'Who is here today?' },
-      ...slides.slice(firstQuizIdx),
-    ];
-  } else {
-    mergedSlides = slides;
-  }
+  const mergedSlides = firstQuizIdx >= 0
+    ? [
+        ...slides.slice(0, firstQuizIdx),
+        { layout: 'attendee-picker', title: 'Who is here today?' },
+        ...slides.slice(firstQuizIdx),
+      ]
+    : slides;
 
   // Active crew for the picker
   const attendees = getDb().prepare(`
-    SELECT cm.id, cm.full_name, cm.employee_id, e.id as employee_table_id
+    SELECT cm.id, cm.full_name, cm.employee_id
     FROM crew_members cm
-    LEFT JOIN employees e ON e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL
     WHERE cm.active = 1
     ORDER BY cm.full_name
   `).all();
 
-  res.render('induction/admin/presenter', {
+  res.render('training/guide', {
     layout: false,
-    module,
-    moduleKey,
-    moduleTitle,
     slides: mergedSlides,
     totalSlides: mergedSlides.length,
+    moduleTitle,
+    modulePath,
+    completionUrl: modulePath + '/quiz-result',
+    groupMode: true,
     attendees,
-    title: moduleTitle,
   });
 });
 
