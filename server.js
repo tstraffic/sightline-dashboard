@@ -110,6 +110,10 @@ app.use((req, res, next) => {
 
 // Sessions (secure cookies in production)
 const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT === 'production';
+// Trust the Railway TLS-terminating proxy so req.secure / X-Forwarded-Proto
+// work correctly. MUST be set before session() so cookie.secure can be
+// honoured for proxied HTTPS requests.
+if (isProduction) app.set('trust proxy', 1);
 app.use(session({
   store: new SQLiteStore({ db: 'sessions.db', dir: path.join(__dirname, 'data') }),
   secret: process.env.SESSION_SECRET || (isProduction ? (() => { console.warn('WARNING: SESSION_SECRET not set in production!'); return require('crypto').randomBytes(32).toString('hex'); })() : 'dev-session-secret'),
@@ -122,9 +126,6 @@ app.use(session({
     sameSite: 'lax',
   }
 }));
-
-// Trust proxy for Railway (needed for secure cookies behind load balancer)
-if (isProduction) app.set('trust proxy', 1);
 
 app.use(flash());
 
