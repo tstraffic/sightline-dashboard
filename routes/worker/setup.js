@@ -74,7 +74,10 @@ router.post('/:token', (req, res) => {
   });
 
   req.flash('success', 'Your PIN has been set! You can now sign in.');
-  res.redirect('/w/login');
+  // Wait for the flash to persist into the session store before the
+  // 302 — without this the worker hits /w/login before the success
+  // message has been written and the page renders blank.
+  req.session.save(() => res.redirect('/w/login'));
 });
 
 module.exports = router;
