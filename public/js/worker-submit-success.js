@@ -52,6 +52,17 @@
     ov.classList.add('is-visible');
     ov.setAttribute('aria-hidden', 'false');
     try { if (window.WorkerHaptics) window.WorkerHaptics.success(); } catch (e) {}
+    // Confetti burst behind the overlay. functional=true so it still
+    // fires under prefers-reduced-motion — submit feedback is not a
+    // decorative effect.
+    try {
+      if (window.WorkerParticles) {
+        var origin = { x: window.innerWidth / 2, y: window.innerHeight * 0.40 };
+        window.WorkerParticles.celebrate({
+          type: 'success', origin: origin, intensity: 1.0, functional: true,
+        });
+      }
+    } catch (e) {}
 
     var ms = opts.dismissMs == null ? DEFAULT_MS : opts.dismissMs;
     if (ms > 0) {
