@@ -37,7 +37,25 @@
   <h1 class="nf-h1">Notifications</h1>
   <p class="nf-sub">Choose what pings your phone. Everything on by default — toggle off anything you don't need.</p>
 
-  <p class="nf-master">
+  <!-- Push status panel — none of the toggles below matter if push isn't
+       actually set up on this device. This panel shows the live state and
+       offers Enable / Send-test so the worker can verify the pipeline. -->
+  <div id="push-status-card" class="nf-card" style="padding: 14px; margin-top: 14px;">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <span id="push-dot" style="display: inline-block; width: 10px; height: 10px; border-radius: 999px; background: rgba(255,255,255,0.3); flex-shrink: 0;"></span>
+      <div style="flex: 1; min-width: 0;">
+        <p id="push-status-title" style="font-size: 0.95rem; font-weight: 700; color: #fff; margin: 0;">Checking…</p>
+        <p id="push-status-sub" style="font-size: 0.78rem; color: rgba(255,255,255,0.6); margin-top: 2px;">Working out whether push is set up on this device.</p>
+      </div>
+    </div>
+    <div id="push-actions" style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
+      <button type="button" id="push-enable-btn" style="display: none; padding: 9px 14px; border-radius: 10px; font-size: 0.82rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #2B7FFF, #1D6AE5); border: 0;">Enable push</button>
+      <button type="button" id="push-test-btn" style="display: none; padding: 9px 14px; border-radius: 10px; font-size: 0.82rem; font-weight: 700; color: #fff; background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.15);">Send test</button>
+    </div>
+    <p id="push-server-info" style="font-size: 0.72rem; color: rgba(255,255,255,0.45); margin-top: 10px;">Server has <strong><%= subscribedDevices %></strong> device<%= subscribedDevices === 1 ? '' : 's' %> subscribed for your account.</p>
+  </div>
+
+  <p class="nf-master" style="margin-top: 16px;">
     <a href="#" id="nf-all-on">Turn all on</a>
     <a href="#" id="nf-all-off">Turn all off</a>
   </p>
@@ -75,5 +93,135 @@
   }
   document.getElementById('nf-all-on').addEventListener('click', function (e) { e.preventDefault(); setAll(true); });
   document.getElementById('nf-all-off').addEventListener('click', function (e) { e.preventDefault(); setAll(false); });
+})();
+
+// ── Push status panel ──
+// Detects browser support + permission + active subscription. If any link in
+// the chain is broken the worker sees exactly what's missing, and gets a one-
+// tap button to fix it.
+(function () {
+  var dot       = document.getElementById('push-dot');
+  var title     = document.getElementById('push-status-title');
+  var sub       = document.getElementById('push-status-sub');
+  var enableBtn = document.getElementById('push-enable-btn');
+  var testBtn   = document.getElementById('push-test-btn');
+
+  function setDot(c) { dot.style.background = c; }
+
+  function urlBase64ToUint8Array(s) {
+    var pad = '='.repeat((4 - s.length % 4) % 4);
+    var b64 = (s + pad).replace(/-/g, '+').replace(/_/g, '/');
+    var raw = atob(b64);
+    var out = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+    return out;
+  }
+
+  function render(state, message, detail, options) {
+    options = options || {};
+    title.textContent = message;
+    sub.textContent = detail || '';
+    if (state === 'ok')      setDot('#10B981');
+    else if (state === 'warn') setDot('#F59E0B');
+    else if (state === 'bad')  setDot('#EF4444');
+    else setDot('rgba(255,255,255,0.3)');
+    enableBtn.style.display = options.showEnable ? 'inline-flex' : 'none';
+    testBtn.style.display   = options.showTest   ? 'inline-flex' : 'none';
+  }
+
+  async function check() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
+      render('bad', 'Push not supported on this browser',
+             'Open the worker portal in Chrome, Edge, Firefox, or Safari (iOS 16.4+ added to Home Screen).');
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      render('bad', 'Notifications blocked',
+             'Open your browser/site settings, allow notifications for this site, then come back and tap "Enable push".',
+             { showEnable: true });
+      return;
+    }
+    try {
+      var reg = await navigator.serviceWorker.ready;
+      var existing = await reg.pushManager.getSubscription();
+      if (existing) {
+        // Re-send to server in case the row was lost (idempotent upsert).
+        fetch('/w/notifications/push/subscribe', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(existing),
+        }).catch(function(){});
+        render('ok', 'Push notifications enabled on this device',
+               'You should receive safety updates, announcements, and shift reminders.',
+               { showTest: true });
+        return;
+      }
+      render('warn', 'Push not turned on yet for this device',
+             'Tap "Enable push" — you\'ll get a one-time browser prompt.',
+             { showEnable: true });
+    } catch (e) {
+      render('bad', 'Could not check push status', (e && e.message) || 'Unknown error', { showEnable: true });
+    }
+  }
+
+  async function enable() {
+    enableBtn.disabled = true;
+    enableBtn.textContent = 'Working…';
+    try {
+      var perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+      if (perm !== 'granted') {
+        render('bad', 'Permission was not granted',
+               'You need to allow notifications for this site in your browser settings.',
+               { showEnable: true });
+        return;
+      }
+      var keyRes = await fetch('/w/notifications/push/vapid-key');
+      if (!keyRes.ok) throw new Error('VAPID key not available');
+      var keyData = await keyRes.json();
+      if (!keyData.publicKey) throw new Error('Server has no push key configured');
+      var reg = await navigator.serviceWorker.ready;
+      var sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
+      });
+      var save = await fetch('/w/notifications/push/subscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(sub),
+      });
+      if (!save.ok) throw new Error('Server rejected the subscription');
+      render('ok', 'Push notifications enabled on this device',
+             'You should receive safety updates, announcements, and shift reminders.',
+             { showTest: true });
+    } catch (e) {
+      render('bad', 'Could not enable push', (e && e.message) || 'Unknown error', { showEnable: true });
+    } finally {
+      enableBtn.disabled = false;
+      enableBtn.textContent = 'Enable push';
+    }
+  }
+
+  async function test() {
+    testBtn.disabled = true;
+    var orig = testBtn.textContent;
+    testBtn.textContent = 'Sending…';
+    try {
+      var r = await fetch('/w/notifications/push/test', { method: 'POST' });
+      var data = await r.json().catch(function(){ return {}; });
+      if (data && data.success) {
+        testBtn.textContent = 'Sent — check your phone';
+      } else {
+        testBtn.textContent = data && data.error ? data.error : 'Test failed';
+      }
+    } catch (e) {
+      testBtn.textContent = 'Test failed';
+    } finally {
+      setTimeout(function () { testBtn.disabled = false; testBtn.textContent = orig; }, 3000);
+    }
+  }
+
+  enableBtn.addEventListener('click', enable);
+  testBtn.addEventListener('click', test);
+  check();
 })();
 </script>

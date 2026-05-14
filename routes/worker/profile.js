@@ -442,10 +442,21 @@ router.get('/profile/notifications', (req, res) => {
     key: c.key, label: c.label, sub: c.sub,
     enabled: prefsMap[c.key + ':push'] === undefined ? true : prefsMap[c.key + ':push'],
   }));
+  // How many devices this worker has subscribed — drives the status panel at
+  // the top of the page so they know whether the push pipeline is actually
+  // alive end-to-end before the per-category toggles matter.
+  let subscribedDevices = 0;
+  try {
+    const r = require('../../db/database').getDb()
+      .prepare('SELECT COUNT(*) AS c FROM worker_push_subscriptions WHERE crew_member_id = ?')
+      .get(workerId);
+    subscribedDevices = (r && r.c) || 0;
+  } catch (e) { /* table may not exist on a fresh install */ }
   res.render('worker/profile-notifications', {
     title: 'Notification settings',
     currentPage: 'more',
     categories,
+    subscribedDevices,
   });
 });
 
