@@ -9468,6 +9468,43 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 207: backfill crew_members.full_name from employees
+  // HR profile edits employees.full_name; crew_members.full_name was
+  // not synced. Pickers + the public attendance link read off
+  // crew_members.full_name, so capitalising someone's HR name didn't
+  // propagate. Going forward both edit handlers mirror; this one-shot
+  // brings legacy rows into sync.
+  // =============================================
+  if (!isMigrationApplied.get(207)) {
+    console.log('Running migration 207: backfill crew_members.full_name from employees');
+    try {
+      const result = db.prepare(`
+        UPDATE crew_members
+        SET full_name = (
+          SELECT e.full_name FROM employees e
+          WHERE e.linked_crew_member_id = crew_members.id
+            AND e.deleted_at IS NULL
+            AND e.full_name IS NOT NULL
+            AND TRIM(e.full_name) <> ''
+          ORDER BY e.id DESC LIMIT 1
+        )
+        WHERE EXISTS (
+          SELECT 1 FROM employees e
+          WHERE e.linked_crew_member_id = crew_members.id
+            AND e.deleted_at IS NULL
+            AND e.full_name IS NOT NULL
+            AND TRIM(e.full_name) <> ''
+            AND e.full_name != crew_members.full_name
+        )
+      `).run();
+      recordMigration.run(207, 'backfill crew_members.full_name from employees');
+      console.log(`Migration 207 applied: synced ${result.changes} crew_members name(s) from linked employees`);
+    } catch (e) {
+      console.error('Migration 207 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
