@@ -3,7 +3,7 @@
 // from /vendor/docx-preview/ and /vendor/jszip/. They share the dedicated
 // vendor cache with pdfjs so the worker can render Word docs offline once
 // they've been loaded once.
-const CACHE_NAME = 'ts-worker-v18';
+const CACHE_NAME = 'ts-worker-v19';
 const VENDOR_CACHE = 'ts-worker-vendor-v1';
 
 // All client-side renderer assets (pdfjs, docx-preview, jszip). All are
