@@ -128,7 +128,10 @@ router.get('/', (req, res) => {
   const rows = db.prepare(`
     SELECT t.*, u.full_name AS created_by_name,
       (SELECT COUNT(*) FROM toolbox_attendance a WHERE a.toolbox_id = t.id AND a.status = 'attended') AS attended_count,
-      (SELECT COUNT(*) FROM toolbox_attendance a WHERE a.toolbox_id = t.id AND a.status = 'caught_up') AS caught_count
+      (SELECT COUNT(*) FROM toolbox_attendance a WHERE a.toolbox_id = t.id AND a.status = 'caught_up') AS caught_count,
+      /* Invited count: when the toolbox is scoped, this is the size of
+         the invitee list. Falls back to all active workers when open. */
+      (SELECT COUNT(*) FROM toolbox_invitees i WHERE i.toolbox_id = t.id) AS invitee_count
     FROM toolbox_talks t
     LEFT JOIN users u ON u.id = t.created_by_id
     WHERE t.status = ?
@@ -246,11 +249,25 @@ router.get('/:id', (req, res) => {
   const photos = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
   const summary = db.prepare(`
     SELECT
-      (SELECT COUNT(*) FROM crew_members WHERE active = 1) AS total_crew,
+      /* Total = invitee count when scoped, otherwise active crew (excluding
+         soft-deleted employees). Means the coverage % is meaningful even
+         when a toolbox is open to just a few people. */
+      CASE
+        WHEN (SELECT COUNT(*) FROM toolbox_invitees WHERE toolbox_id = ?) > 0
+          THEN (SELECT COUNT(*) FROM toolbox_invitees WHERE toolbox_id = ?)
+        ELSE (
+          SELECT COUNT(*) FROM crew_members cm
+          WHERE cm.active = 1
+            AND NOT EXISTS (
+              SELECT 1 FROM employees e
+              WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+            )
+        )
+      END AS total_crew,
       (SELECT COUNT(*) FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'attended') AS attended,
       (SELECT COUNT(*) FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'caught_up') AS caught_up,
       (SELECT COUNT(*) FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'absent') AS absent
-  `).get(toolbox.id, toolbox.id, toolbox.id);
+  `).get(toolbox.id, toolbox.id, toolbox.id, toolbox.id, toolbox.id);
   // List of workers who marked themselves absent + their reason, so the
   // office can see at a glance who's missing and why.
   const absences = db.prepare(`
