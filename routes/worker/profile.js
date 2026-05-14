@@ -13,6 +13,7 @@ const { getWorkerNotificationPrefs, setWorkerNotificationPref } = require('../..
 // when no row exists in worker_notification_prefs.
 const NOTIFICATION_CATEGORIES = [
   { key: 'shift_reminder', label: 'Shift reminders', sub: 'Day before each shift starts' },
+  { key: 'announcement', label: 'Announcements', sub: 'Company-wide messages from the office' },
   { key: 'swms_update', label: 'New SWMS', sub: 'SWMS that need your acknowledgement' },
   { key: 'sop_update', label: 'New SOP', sub: 'SOPs that need your acknowledgement' },
   { key: 'safety_update', label: 'Safety updates', sub: 'Bulletins, alerts, policy changes' },

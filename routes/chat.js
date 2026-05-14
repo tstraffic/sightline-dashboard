@@ -383,6 +383,23 @@ router.post('/api/threads/:threadId/messages', requireThreadMember, (req, res) =
         console.error('[Chat Push] Error sending to user', member.user_id, ':', err.message || err);
       });
     }
+
+    // Announcement channels fan out to the WORKER push subscriptions too —
+    // chat_thread_members only stores admin user_ids, so workers never appear
+    // in the loop above. Deep-link to the worker-side channel view so the
+    // push opens inside the worker portal (admin shell would 403 them).
+    if (thread.thread_type === 'announcement') {
+      const { sendPushToAllActiveCrew } = require('../services/pushNotification');
+      sendPushToAllActiveCrew({
+        title: thread.title || 'Announcement',
+        body: `${senderName}: ${preview}`,
+        url: `/w/chat/channel/${threadId}`,
+        type: 'announcement',
+        category: 'announcement',
+      }).catch(err => {
+        console.error('[Chat Push] Announcement fan-out failed:', err.message || err);
+      });
+    }
   } catch (e) {
     console.error('[Chat Push] Error in push notification block:', e.message || e);
   }
