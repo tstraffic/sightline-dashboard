@@ -23,9 +23,9 @@ function loadAttendeeList(sessionId) {
     SELECT cm.id, cm.full_name, cm.employee_id, cm.email
     FROM crew_members cm
     WHERE cm.active = 1
-      AND NOT EXISTS (
-        SELECT 1 FROM employees e
-        WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+      AND (
+        NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+        OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL)
       )
     ORDER BY cm.full_name
   `).all();

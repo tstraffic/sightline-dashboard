@@ -30,17 +30,19 @@ function getOrCreateAttendanceSession(toolboxId, userId) {
   return db.prepare('SELECT * FROM toolbox_attendance_sessions WHERE id = ?').get(r.lastInsertRowid);
 }
 
-// Active crew_members EXCLUDING any whose linked employees row has
-// been soft-deleted. Used wherever we render a worker picker so
-// deleted profiles don't leak back in.
+// Active crew_members for worker pickers, excluding only those whose
+// ONLY HR profiles are soft-deleted. A worker with a deleted HR row +
+// a current active HR row stays in the list (some workers got deleted
+// and re-added — Suhail Ahmed is one of them — and the picker was
+// hiding them by mistake).
 function selectableCrewMembers() {
   return getDb().prepare(`
     SELECT cm.id, cm.full_name, cm.employee_id
     FROM crew_members cm
     WHERE cm.active = 1
-      AND NOT EXISTS (
-        SELECT 1 FROM employees e
-        WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+      AND (
+        NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+        OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL)
       )
     ORDER BY cm.full_name
   `).all();
@@ -258,9 +260,9 @@ router.get('/:id', (req, res) => {
         ELSE (
           SELECT COUNT(*) FROM crew_members cm
           WHERE cm.active = 1
-            AND NOT EXISTS (
-              SELECT 1 FROM employees e
-              WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+            AND (
+              NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+              OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL)
             )
         )
       END AS total_crew,
@@ -452,18 +454,26 @@ router.get('/:id/attendance', (req, res) => {
   const db = getDb();
   const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
   if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
+  // If the toolbox has an invitee list, only show those workers — same
+  // scope as the public attendance picker so the admin tab matches what
+  // the worker sees. Otherwise (open-to-all toolbox) show every active
+  // crew, excluding only workers whose ONLY HR profile is soft-deleted.
   const rows = db.prepare(`
     SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
            a.status AS attendance_status, a.recorded_at, a.recorded_by_id
     FROM crew_members cm
     LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
     WHERE cm.active = 1
-      AND NOT EXISTS (
-        SELECT 1 FROM employees e
-        WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NOT NULL
+      AND (
+        NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+        OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL)
+      )
+      AND (
+        NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ?)
+        OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ? AND i.crew_member_id = cm.id)
       )
     ORDER BY cm.full_name
-  `).all(toolbox.id);
+  `).all(toolbox.id, toolbox.id, toolbox.id);
   // Workers allocated on the toolbox's held_at date — "select all from this
   // day" shortcut on the form. Sourced from crew_allocations OR booking_crew.
   let allocatedIds = [];
