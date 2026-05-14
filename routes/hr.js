@@ -929,6 +929,28 @@ function loadEmployeeWithCrew(req, res, opts = {}) {
     crewMember = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(employee.linked_crew_member_id);
   }
 
+  // Self-heal: if the linked crew_member row is unusable (deactivated
+  // dupe with cleared email — the migration-206 fingerprint), re-resolve
+  // to the surviving canonical row by matching employee.email. Updates
+  // the link so subsequent edits / invites land on the right row.
+  if (crewMember && employee.email &&
+      (!crewMember.active || !crewMember.email || crewMember.email.trim() === '')) {
+    try {
+      const canonical = db.prepare(`
+        SELECT id FROM crew_members
+        WHERE active = 1 AND LOWER(email) = LOWER(?)
+        ORDER BY (pin_hash IS NOT NULL AND pin_hash != '') DESC, id DESC
+        LIMIT 1
+      `).get(employee.email);
+      if (canonical && canonical.id !== crewMember.id) {
+        db.prepare('UPDATE employees SET linked_crew_member_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+          .run(canonical.id, employee.id);
+        employee.linked_crew_member_id = canonical.id;
+        crewMember = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(canonical.id);
+      }
+    } catch (e) { /* fall through to standard auto-create below */ }
+  }
+
   // Auto-create crew member if not linked and auto-create is requested
   if (!crewMember && opts.autoCreate) {
     if (!employee.email) { req.flash('error', 'Employee needs an email address before enabling portal access.'); return null; }
@@ -1148,9 +1170,24 @@ router.post('/employees/:id/send-invite', requirePermission('hr_employees'), asy
     return res.redirect(`/hr/employees/${employee.id}#workforce`);
   }
 
+  // Backfill the crew_member's email from the employees record if it's
+  // missing (e.g. cleared by the dedupe migration). Lets the invite
+  // succeed even if the data is mid-migration.
+  if (!crewMember.email && employee.email) {
+    try {
+      getDb().prepare('UPDATE crew_members SET email = ? WHERE id = ?').run(employee.email, crewMember.id);
+      crewMember.email = employee.email;
+    } catch (e) { /* fall through */ }
+  }
   if (!crewMember.email) {
-    req.flash('error', 'Crew member needs an email address to receive an invite.');
+    req.flash('error', 'Crew member needs an email address to receive an invite. Please set the worker\'s email on the HR profile first.');
     return res.redirect(`/hr/employees/${employee.id}#workforce`);
+  }
+  if (!crewMember.active) {
+    try {
+      getDb().prepare('UPDATE crew_members SET active = 1 WHERE id = ?').run(crewMember.id);
+      crewMember.active = 1;
+    } catch (e) { /* fall through */ }
   }
 
   try {
