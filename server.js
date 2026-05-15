@@ -196,7 +196,10 @@ app.use('/w', requireWorker, workerLocals, require('./routes/worker/jobs'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/clock'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/shifts'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/chat'));
-app.use('/w', requireWorker, workerLocals, require('./routes/worker/timesheets'));
+// Worker timesheets removed — traffic control workflow uses end-of-shift
+// docket signing, not self-submitted hours. Old deep links redirect to
+// dockets. The admin-side timesheets module still exists for office use.
+app.use('/w/timesheets', requireWorker, (req, res) => res.redirect('/w/dockets'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/availability'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/incidents'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/training'));
