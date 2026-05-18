@@ -11,16 +11,23 @@
   .sd-back { display: inline-flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.55); font-size: 0.8rem; text-decoration: none; margin: 4px 0 8px; }
   .sd-title { font-size: 1.35rem; font-weight: 800; line-height: 1.2; margin-bottom: 8px; }
   .sd-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-bottom: 14px; }
-  .sd-banner { border-radius: 12px; padding: 12px 14px; font-size: 0.82rem; margin-bottom: 14px; }
+  .sd-banner { border-radius: 12px; padding: 12px 14px; font-size: 0.82rem; margin-bottom: 14px; line-height: 1.4; }
   .sd-banner.amber { background-image: linear-gradient(180deg, rgba(245,158,11,0.16) 0%, rgba(245,158,11,0.04) 100%); border: 1px solid rgba(245,158,11,0.30); color: #fcd34d; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
   .sd-banner.green { background-image: linear-gradient(180deg, rgba(16,185,129,0.16) 0%, rgba(16,185,129,0.04) 100%); border: 1px solid rgba(16,185,129,0.30); color: #6ee7b7; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
   .sd-banner.rose  { background-image: linear-gradient(180deg, rgba(244,63,94,0.16)  0%, rgba(244,63,94,0.04)  100%); border: 1px solid rgba(244,63,94,0.30);  color: #fda4af; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
+
+  /* Open-fullscreen sits ABOVE the inline viewer so workers can jump
+     straight to the chrome-free reader without scrolling past pages of
+     inline PDF first — mirrors the SWMS detail page. */
   .sd-fullscreen {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 14px;
     background: rgba(43,127,255,0.15); border: 1px solid rgba(43,127,255,0.3);
     border-radius: 10px; color: #93C5FD; font-weight: 600; font-size: 0.9rem;
-    text-decoration: none; margin-top: 10px; width: 100%;
+    text-decoration: none; margin: 0 0 12px; width: 100%;
   }
+  .sd-fullscreen:active { background: rgba(43,127,255,0.25); }
+
+  /* Sticky bottom action bar — single tap to acknowledge */
   .sd-actionbar {
     position: fixed; left: 0; right: 0; bottom: 64px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
     background: rgba(10,22,40,0.96); border-top: 1px solid rgba(255,255,255,0.08); z-index: 40;
@@ -29,8 +36,42 @@
     width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0;
     background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
     box-shadow: 0 6px 20px rgba(29,106,229,0.35);
+    transition: opacity 0.15s;
   }
   .sd-ack-btn:active { transform: translateY(1px); }
+  .sd-ack-btn:disabled { opacity: 0.45; box-shadow: none; }
+
+  /* Signature pad — sits in the normal flow above the action bar so the
+     keyboard / signing hand doesn't overlap the canvas. */
+  .sd-sign-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px; padding: 14px; margin: 14px 0 80px;
+  }
+  .sd-sign-card h3 { font-size: 0.95rem; font-weight: 700; margin: 0; color: #fff; }
+  .sd-sign-card p.hint { font-size: 0.78rem; color: rgba(255,255,255,0.6); margin: 4px 0 12px; line-height: 1.4; }
+  .sd-sign-pad-wrap {
+    position: relative; border-radius: 10px;
+    background-image: repeating-linear-gradient(to bottom, rgba(255,255,255,0.03) 0, rgba(255,255,255,0.03) 23px, rgba(255,255,255,0.06) 23px, rgba(255,255,255,0.06) 24px);
+    background-color: rgba(255,255,255,0.92);
+    border: 1px solid rgba(255,255,255,0.12); overflow: hidden;
+  }
+  .sd-sign-pad { display: block; width: 100%; height: 180px; touch-action: none; cursor: crosshair; }
+  .sd-sign-placeholder {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    font-size: 0.78rem; color: rgba(15,23,42,0.45); pointer-events: none; font-weight: 500;
+  }
+  .sd-sign-footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 6px 10px; background: rgba(0,0,0,0.25); border-top: 1px solid rgba(255,255,255,0.08);
+  }
+  .sd-sign-footer span { font-size: 0.65rem; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+  .sd-sign-clear { background: none; border: 0; color: rgba(255,255,255,0.6); font-size: 0.75rem; font-weight: 600; cursor: pointer; padding: 4px 8px; }
+  .sd-sign-clear:active { color: #fff; }
+  .sd-prev-sig {
+    background: rgba(255,255,255,0.95); border-radius: 8px; padding: 8px;
+    border: 1px solid rgba(255,255,255,0.15); margin-top: 6px;
+  }
+  .sd-prev-sig img { display: block; max-height: 80px; max-width: 100%; margin: 0 auto; }
 </style>
 
 <div class="sd-wrap">
@@ -43,11 +84,16 @@
   </div>
 
   <% if (isCurrent) { %>
-    <div class="sd-banner green">Acknowledged on <%= fmt(currentAck.signed_at) %>.</div>
+    <div class="sd-banner green">
+      Acknowledged on <%= fmt(currentAck.signed_at) %>.
+      <% if (currentAck.signature_url) { %>
+        <div class="sd-prev-sig"><img src="<%= currentAck.signature_url %>" alt="Your signature"></div>
+      <% } %>
+    </div>
   <% } else if (priorOnly) { %>
-    <div class="sd-banner amber" data-attention="amber">⚠ This SOP has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-acknowledge.</div>
+    <div class="sd-banner amber" data-attention="amber">⚠ This SOP has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-sign below.</div>
   <% } else { %>
-    <div class="sd-banner rose" data-attention="rose">You have not acknowledged this SOP yet.</div>
+    <div class="sd-banner rose" data-attention="rose">You have not acknowledged this SOP yet. Read it through, sign at the bottom, then tap acknowledge.</div>
   <% } %>
 
   <% if (sop.description) { %>
@@ -55,25 +101,136 @@
   <% } %>
 
   <% if (sop.file_path) { %>
-    <div class="pdf-viewer"
-         data-pdf-src="/w/safety/sop-register/<%= sop.id %>/file"
-         data-pdf-name="<%= (sop.file_original_name || sop.title || 'SOP') %>"></div>
+    <!-- Open-fullscreen above the inline viewer (matches SWMS layout) -->
     <a href="/w/safety/sop-register/<%= sop.id %>/view" class="sd-fullscreen">
       <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5v4m0-4h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg>
       Open full screen
     </a>
+    <div class="pdf-viewer"
+         data-pdf-src="/w/safety/sop-register/<%= sop.id %>/file"
+         data-pdf-name="<%= (sop.file_original_name || sop.title || 'SOP') %>"></div>
   <% } else { %>
     <p style="color: rgba(255,255,255,0.5); font-size: 0.85rem;">No document attached.</p>
+  <% } %>
+
+  <% if (!isCurrent) { %>
+    <!-- Signature pad — required before the action bar's Acknowledge
+         button enables. Stays in the normal flow so the user can see
+         the canvas while signing (no overlap with the fixed bottom). -->
+    <div class="sd-sign-card">
+      <h3>Sign to acknowledge</h3>
+      <p class="hint">By signing you confirm that you've read and understood this SOP and will follow it on site.</p>
+      <div class="sd-sign-pad-wrap">
+        <canvas id="sd-sign-pad" class="sd-sign-pad"></canvas>
+        <span id="sd-sign-placeholder" class="sd-sign-placeholder">Sign with your finger</span>
+        <div class="sd-sign-footer">
+          <span>Signature</span>
+          <button type="button" id="sd-sign-clear" class="sd-sign-clear">Clear</button>
+        </div>
+      </div>
+    </div>
   <% } %>
 </div>
 
 <% if (!isCurrent) { %>
   <div class="sd-actionbar">
-    <form method="POST" action="/w/safety/sop-register/<%= sop.id %>/acknowledge" data-offline-form data-offline-scope="SOP acknowledgement" data-success-url="/w/safety/sop-register/<%= sop.id %>">
+    <form method="POST" action="/w/safety/sop-register/<%= sop.id %>/acknowledge" id="sd-ack-form"
+          data-offline-form data-offline-scope="SOP acknowledgement"
+          data-success-url="/w/safety/sop-register/<%= sop.id %>">
       <%- include('../../partials/csrf') %>
-      <button type="submit" class="sd-ack-btn">I have read and understood this SOP</button>
+      <input type="hidden" name="signature_data" id="sd-sign-data">
+      <button type="submit" id="sd-ack-btn" class="sd-ack-btn" disabled>Sign &amp; acknowledge</button>
     </form>
   </div>
+
+  <script>
+    // Signature pad — minimal, works with touch + mouse. Enables the
+    // Acknowledge button as soon as the worker draws something so empty
+    // submissions can't go through.
+    (function () {
+      var canvas = document.getElementById('sd-sign-pad');
+      if (!canvas) return;
+      var placeholder = document.getElementById('sd-sign-placeholder');
+      var clearBtn    = document.getElementById('sd-sign-clear');
+      var submitBtn   = document.getElementById('sd-ack-btn');
+      var dataInput   = document.getElementById('sd-sign-data');
+      var form        = document.getElementById('sd-ack-form');
+
+      var ctx = canvas.getContext('2d');
+      var drawing = false;
+      var last = null;
+      var hasInk = false;
+
+      function size() {
+        var dpr = window.devicePixelRatio || 1;
+        var rect = canvas.getBoundingClientRect();
+        if (rect.width === 0) return;
+        canvas.width  = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+        ctx.lineWidth = 2.4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#0f172a';
+      }
+      size();
+      window.addEventListener('resize', size);
+
+      function xy(e) {
+        var r = canvas.getBoundingClientRect();
+        var t = e.touches ? e.touches[0] : e;
+        return { x: t.clientX - r.left, y: t.clientY - r.top };
+      }
+      function start(e) {
+        e.preventDefault();
+        drawing = true;
+        last = xy(e);
+        placeholder.style.display = 'none';
+      }
+      function move(e) {
+        if (!drawing) return;
+        e.preventDefault();
+        var p = xy(e);
+        ctx.beginPath();
+        ctx.moveTo(last.x, last.y);
+        ctx.lineTo(p.x, p.y);
+        ctx.stroke();
+        last = p;
+        if (!hasInk) {
+          hasInk = true;
+          submitBtn.disabled = false;
+        }
+      }
+      function end() { drawing = false; }
+
+      canvas.addEventListener('mousedown', start);
+      canvas.addEventListener('mousemove', move);
+      canvas.addEventListener('mouseup', end);
+      canvas.addEventListener('mouseleave', end);
+      canvas.addEventListener('touchstart', start, { passive: false });
+      canvas.addEventListener('touchmove', move, { passive: false });
+      canvas.addEventListener('touchend', end);
+
+      clearBtn.addEventListener('click', function () {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        hasInk = false;
+        placeholder.style.display = '';
+        submitBtn.disabled = true;
+      });
+
+      form.addEventListener('submit', function (e) {
+        if (!hasInk) {
+          e.preventDefault();
+          alert('Please draw your signature before acknowledging.');
+          return;
+        }
+        dataInput.value = canvas.toDataURL('image/png');
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Submitting…';
+      });
+    })();
+  </script>
 <% } %>
 
 <% if (sop.file_path) { %>

@@ -1,221 +1,203 @@
 <%
-  function fmtDate(s) {
-    if (!s) return '';
-    try {
-      return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
-    } catch (e) { return ''; }
-  }
+  // Worker SOP list. Two buckets — what still needs your signature, and
+  // what's already up to date with the current published version. Mirrors
+  // the SWMS list so workers move between the two tabs without re-learning
+  // the UI.
+  const needs = needsAck || [];
+  const done  = upToDate || [];
 
-  var totalCount    = (generic ? generic.length : 0) + (jobLinked ? jobLinked.length : 0);
-  var needsCount    = ((generic || []).filter(function(r){return !r.ack_id;}).length) +
-                      ((jobLinked || []).filter(function(r){return !r.ack_id;}).length);
-  var doneCount     = totalCount - needsCount;
-  var pct           = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+  function chipKind(r) {
+    return r.kind === 'template' ? 'Template' : 'Job-linked';
+  }
 %>
 <style>
-  /* Mirrors swms-list.ejs at the foundation; adds a summary header and
-     per-section empty states so the page reads as a real register
-     even when one bucket is empty. */
   .saf-wrap { padding: 0; color: #fff; }
-  .saf-h1 { font-size: 1.5rem; font-weight: 800; padding: 6px 4px 8px; letter-spacing: -0.01em; }
+  .saf-h1 { font-size: 1.5rem; font-weight: 800; padding: 6px 4px 4px; letter-spacing: -0.01em; }
+  .saf-sub { font-size: 0.78rem; color: rgba(255,255,255,0.55); padding: 0 4px 8px; }
 
-  /* Top summary card */
-  .sop-summary {
-    background-color: rgba(255,255,255,0.025);
-    background-image: linear-gradient(180deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.005) 100%);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 14px;
-    padding: 14px 16px;
-    margin: 4px 4px 14px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.18);
+  /* Summary strip — at-a-glance state */
+  .saf-summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 14px; }
+  .saf-stat {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 10px 12px; text-align: left;
   }
-  .sop-sum-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-  .sop-sum-label { font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.08em; }
-  .sop-sum-num { font-family: var(--wd-font-display, 'JetBrains Mono', ui-monospace, monospace); font-size: 1.4rem; font-weight: 700; color: #fff; letter-spacing: -0.02em; font-feature-settings: "tnum" 1, "ss01" 1; }
-  .sop-sum-pct { font-size: 0.78rem; font-weight: 600; color: rgba(255,255,255,0.7); }
-  .sop-bar { margin-top: 10px; height: 6px; border-radius: 3px; background: rgba(255,255,255,0.06); overflow: hidden; }
-  .sop-bar-fill { height: 100%; background: linear-gradient(90deg, #34D399, #00D2BE); transition: width 0.6s cubic-bezier(0.22, 1, 0.36, 1); }
-  .sop-pills { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
-  .sop-pill {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 4px 10px; border-radius: 999px;
-    font-size: 0.72rem; font-weight: 600;
-  }
-  .sop-pill .dot { width: 6px; height: 6px; border-radius: 50%; }
-  .sop-pill.needs { background: rgba(244,63,94,0.14); color: #fda4af; border: 1px solid rgba(244,63,94,0.25); }
-  .sop-pill.needs .dot { background: #F43F5E; }
-  .sop-pill.done { background: rgba(16,185,129,0.12); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.25); }
-  .sop-pill.done .dot { background: #10B981; }
+  .saf-stat .n  { font-size: 1.4rem; font-weight: 800; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
+  .saf-stat .l  { font-size: 0.65rem; font-weight: 700; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4px; }
+  .saf-stat.attention { background: rgba(244,63,94,0.10); border-color: rgba(244,63,94,0.30); }
+  .saf-stat.attention .n { color: #fda4af; }
+  .saf-stat.done { background: rgba(16,185,129,0.10); border-color: rgba(16,185,129,0.30); }
+  .saf-stat.done .n { color: #6ee7b7; }
 
-  /* Section headers + cards (shared grammar with SWMS) */
-  .saf-section-h { font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.08em; margin: 16px 4px 8px; display: flex; align-items: center; justify-content: space-between; }
-  .saf-section-h .count {
-    font-size: 0.65rem; font-weight: 700; color: rgba(255,255,255,0.5);
-    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
-    padding: 2px 8px; border-radius: 999px; letter-spacing: 0.02em; text-transform: none;
+  /* Section group — tap to collapse, then the cards */
+  .saf-group { margin-bottom: 12px; }
+  .saf-group-h {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 12px; background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
+    color: #fff; cursor: pointer; user-select: none;
+    -webkit-tap-highlight-color: transparent;
   }
+  .saf-group-h .left { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .saf-group-h .title { font-size: 0.78rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+  .saf-group-h .count {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 22px;
+    padding: 0 6px; height: 22px; border-radius: 999px; font-size: 0.7rem; font-weight: 700;
+    background: rgba(255,255,255,0.10); color: rgba(255,255,255,0.85);
+  }
+  .saf-group-h .count.attention { background: rgba(244,63,94,0.18); color: #fda4af; }
+  .saf-group-h .count.done      { background: rgba(16,185,129,0.18); color: #6ee7b7; }
+  .saf-group-h .chev {
+    width: 16px; height: 16px; transition: transform 0.18s; flex-shrink: 0; opacity: 0.7;
+  }
+  .saf-group[data-open="false"] .chev { transform: rotate(-90deg); }
+  .saf-group[data-open="false"] .saf-group-body { display: none; }
+  .saf-group-body { padding-top: 8px; }
+
+  /* SOP card */
   .saf-card {
     background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
     padding: 12px 14px; margin-bottom: 8px; display: block; color: inherit; text-decoration: none;
     transition: background 0.15s;
   }
   .saf-card:active { background: rgba(255,255,255,0.07); }
-  .saf-card-title { font-size: 0.95rem; font-weight: 700; color: #fff; }
-  .saf-card-meta { font-size: 0.7rem; color: rgba(255,255,255,0.5); margin-top: 4px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .saf-card-sub { font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-top: 6px; line-height: 1.4;
-    display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-  .saf-card-foot { font-size: 0.65rem; color: rgba(255,255,255,0.40); margin-top: 6px; }
+  .saf-card.attention { border-color: rgba(244,63,94,0.35); background: rgba(244,63,94,0.08); }
+
+  .saf-card-row { display: flex; align-items: center; gap: 10px; }
+  .saf-card-icon {
+    width: 28px; height: 28px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.7);
+  }
+  .saf-card-icon.attention { background: rgba(244,63,94,0.18); color: #fda4af; }
+  .saf-card-icon.done      { background: rgba(16,185,129,0.18); color: #6ee7b7; }
+  .saf-card-icon svg { width: 16px; height: 16px; }
+  .saf-card-title { flex: 1; min-width: 0; }
+  .saf-card-title .name { font-size: 0.95rem; font-weight: 700; color: #fff; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .saf-card-meta { font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .saf-chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 0.65rem; font-weight: 700; }
-  .saf-chip-needs { background: rgba(244,63,94,0.18);  color: #fda4af; border: 1px solid rgba(244,63,94,0.3); }
+  .saf-chip-needs { background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3); }
   .saf-chip-done  { background: rgba(16,185,129,0.15); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.28); }
   .saf-chip-kind  { background: rgba(99,102,241,0.15); color: #c7d2fe; border: 1px solid rgba(99,102,241,0.25); }
-  .saf-chip-job   { background: rgba(43,127,255,0.15); color: #93c5fd; border: 1px solid rgba(43,127,255,0.30); }
 
-  /* Empty-state per section — sits where cards would, so the layout
-     never collapses to a single section. */
-  .saf-empty-section {
-    background: rgba(255,255,255,0.02);
-    border: 1px dashed rgba(255,255,255,0.10);
-    border-radius: 12px;
-    padding: 18px 16px;
-    text-align: center;
-    color: rgba(255,255,255,0.5);
-    font-size: 0.78rem;
-    line-height: 1.4;
+  .saf-empty {
+    text-align: center; padding: 22px 16px; color: rgba(255,255,255,0.45);
+    font-size: 0.85rem; background: rgba(255,255,255,0.02);
+    border: 1px dashed rgba(255,255,255,0.10); border-radius: 12px;
   }
-  .saf-empty-section svg { width: 28px; height: 28px; margin: 0 auto 8px; opacity: 0.45; display: block; }
-  .saf-empty-section b { color: rgba(255,255,255,0.75); font-weight: 600; }
-
-  /* All-clear celebration when there's nothing left to ack at all */
-  .saf-all-clear {
-    background: linear-gradient(180deg, rgba(16,185,129,0.14) 0%, rgba(16,185,129,0.04) 100%);
-    border: 1px solid rgba(16,185,129,0.30);
-    border-radius: 14px;
-    padding: 18px;
-    text-align: center;
-    margin: 6px 4px 14px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
-  }
-  .saf-all-clear h3 { font-size: 1rem; font-weight: 800; color: #6ee7b7; margin-bottom: 4px; }
-  .saf-all-clear p { font-size: 0.78rem; color: rgba(255,255,255,0.65); }
+  .saf-empty strong { color: rgba(255,255,255,0.75); display: block; margin-bottom: 2px; }
 </style>
 
 <div class="saf-wrap">
   <h1 class="saf-h1">Safety</h1>
+  <p class="saf-sub">Read each SOP, sign at the bottom, then tap acknowledge.</p>
   <%- include('./_tabs') %>
 
-  <% if (totalCount === 0) { %>
-    <%# Truly empty register — admin hasn't published any SOPs yet. %>
-    <div class="saf-empty-section">
-      <svg fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-      <b>No SOPs published yet.</b><br>
-      The office will let you know when any are ready to review.
+  <!-- Summary strip -->
+  <div class="saf-summary">
+    <div class="saf-stat <%= needs.length > 0 ? 'attention' : '' %>">
+      <p class="n"><%= needs.length %></p>
+      <p class="l">Needs sign</p>
+    </div>
+    <div class="saf-stat <%= done.length > 0 ? 'done' : '' %>">
+      <p class="n"><%= done.length %></p>
+      <p class="l">Signed</p>
+    </div>
+    <div class="saf-stat">
+      <p class="n"><%= needs.length + done.length %></p>
+      <p class="l">Total</p>
+    </div>
+  </div>
+
+  <% if (needs.length === 0 && done.length === 0) { %>
+    <div class="saf-empty">
+      <strong>All clear</strong>
+      No active SOPs in the register yet.
     </div>
   <% } else { %>
 
-    <%# At-a-glance summary — total, needs-ack, up-to-date, progress bar. %>
-    <div class="sop-summary">
-      <div class="sop-sum-top">
-        <div>
-          <div class="sop-sum-label">Your SOP register</div>
-          <div style="display:flex;align-items:baseline;gap:6px;margin-top:2px;">
-            <span class="sop-sum-num"><%= doneCount %></span>
-            <span class="sop-sum-pct">of <%= totalCount %> acknowledged</span>
+    <!-- NEEDS SIGN — always expanded so the action item is one tap away -->
+    <% if (needs.length > 0) { %>
+      <div class="saf-group" data-open="true">
+        <div class="saf-group-h" data-toggle>
+          <div class="left">
+            <svg class="chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            <span class="title">Needs your sign</span>
           </div>
+          <span class="count attention"><%= needs.length %></span>
         </div>
-        <div style="text-align:right;">
-          <div class="sop-sum-label">Progress</div>
-          <div class="sop-sum-num"><%= pct %><span style="font-size:0.85rem;color:rgba(255,255,255,0.45);font-weight:600;">%</span></div>
+        <div class="saf-group-body">
+          <% needs.forEach(r => { %>
+            <a href="/w/safety/sop-register/<%= r.id %>" class="saf-card attention">
+              <div class="saf-card-row">
+                <div class="saf-card-icon attention">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/></svg>
+                </div>
+                <div class="saf-card-title">
+                  <div class="name"><%= r.title %></div>
+                  <div class="saf-card-meta">
+                    <span class="saf-chip saf-chip-needs">Needs sign</span>
+                    <span class="saf-chip saf-chip-kind"><%= chipKind(r) %></span>
+                    <% if (r.job_number) { %><span>· <%= r.job_number %></span><% } %>
+                  </div>
+                </div>
+              </div>
+            </a>
+          <% }) %>
         </div>
-      </div>
-      <div class="sop-bar"><div class="sop-bar-fill" style="width: <%= pct %>%;"></div></div>
-      <div class="sop-pills">
-        <% if (needsCount > 0) { %>
-          <span class="sop-pill needs"><span class="dot"></span><%= needsCount %> needs ack</span>
-        <% } %>
-        <% if (doneCount > 0) { %>
-          <span class="sop-pill done"><span class="dot"></span><%= doneCount %> up to date</span>
-        <% } %>
-      </div>
-    </div>
-
-    <% if (needsCount === 0) { %>
-      <div class="saf-all-clear">
-        <h3>✓ All caught up</h3>
-        <p>You've acknowledged every current SOP version. Nothing to do.</p>
       </div>
     <% } %>
 
-    <%# Section 1 — Generic SOPs. Always shown. %>
-    <div class="saf-section-h">
-      <span>Generic SOPs</span>
-      <% if (generic && generic.length > 0) { %><span class="count"><%= generic.length %></span><% } %>
-    </div>
-    <% if (generic && generic.length > 0) { %>
-      <% generic.forEach(r => { %>
-        <a href="/w/safety/sop-register/<%= r.id %>" class="saf-card">
-          <div class="saf-card-title"><%= r.title %></div>
-          <div class="saf-card-meta">
-            <% if (r.ack_id) { %>
-              <span class="saf-chip saf-chip-done">Acknowledged</span>
-            <% } else { %>
-              <span class="saf-chip saf-chip-needs">Needs ack</span>
-            <% } %>
-            <span class="saf-chip saf-chip-kind">Generic</span>
+    <!-- SIGNED — collapsed by default -->
+    <% if (done.length > 0) { %>
+      <div class="saf-group" data-open="false">
+        <div class="saf-group-h" data-toggle>
+          <div class="left">
+            <svg class="chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            <span class="title">Signed &amp; up to date</span>
           </div>
-          <% if (r.description) { %><div class="saf-card-sub"><%= r.description %></div><% } %>
-          <div class="saf-card-foot">
-            <% if (r.ack_id && r.signed_at) { %>
-              Acknowledged <%= fmtDate(r.signed_at) %>
-            <% } else if (r.version_published_at) { %>
-              Updated <%= fmtDate(r.version_published_at) %>
-            <% } %>
-          </div>
-        </a>
-      <% }) %>
-    <% } else { %>
-      <div class="saf-empty-section">
-        <svg fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        <b>No generic SOPs.</b><br>
-        Workplace-wide procedures will appear here.
-      </div>
-    <% } %>
-
-    <%# Section 2 — Job-linked SOPs. Always shown. %>
-    <div class="saf-section-h">
-      <span>Job-linked SOPs</span>
-      <% if (jobLinked && jobLinked.length > 0) { %><span class="count"><%= jobLinked.length %></span><% } %>
-    </div>
-    <% if (jobLinked && jobLinked.length > 0) { %>
-      <% jobLinked.forEach(r => { %>
-        <a href="/w/safety/sop-register/<%= r.id %>" class="saf-card">
-          <div class="saf-card-title"><%= r.title %></div>
-          <div class="saf-card-meta">
-            <% if (r.ack_id) { %>
-              <span class="saf-chip saf-chip-done">Acknowledged</span>
-            <% } else { %>
-              <span class="saf-chip saf-chip-needs">Needs ack</span>
-            <% } %>
-            <span class="saf-chip saf-chip-job">Job-linked</span>
-            <% if (r.job_number) { %><span>· <%= r.job_number %></span><% } %>
-          </div>
-          <% if (r.description) { %><div class="saf-card-sub"><%= r.description %></div><% } %>
-          <div class="saf-card-foot">
-            <% if (r.ack_id && r.signed_at) { %>
-              Acknowledged <%= fmtDate(r.signed_at) %>
-            <% } else if (r.version_published_at) { %>
-              Updated <%= fmtDate(r.version_published_at) %>
-            <% } %>
-          </div>
-        </a>
-      <% }) %>
-    <% } else { %>
-      <div class="saf-empty-section">
-        <svg fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"/></svg>
-        <b>No job-linked SOPs right now.</b><br>
-        When you're rostered to a job that has site-specific procedures, they'll show here.
+          <span class="count done"><%= done.length %></span>
+        </div>
+        <div class="saf-group-body">
+          <% done.forEach(r => { %>
+            <a href="/w/safety/sop-register/<%= r.id %>" class="saf-card">
+              <div class="saf-card-row">
+                <div class="saf-card-icon done">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                </div>
+                <div class="saf-card-title">
+                  <div class="name"><%= r.title %></div>
+                  <div class="saf-card-meta">
+                    <span class="saf-chip saf-chip-done">Signed</span>
+                    <span class="saf-chip saf-chip-kind"><%= chipKind(r) %></span>
+                    <% if (r.job_number) { %><span>· <%= r.job_number %></span><% } %>
+                  </div>
+                </div>
+              </div>
+            </a>
+          <% }) %>
+        </div>
       </div>
     <% } %>
 
   <% } %>
 </div>
+
+<script>
+  // Tap-to-collapse for the section headers. State is sessionStorage-scoped
+  // so Needs-sign re-opens on a fresh login regardless of last visit.
+  (function () {
+    document.querySelectorAll('.saf-group [data-toggle]').forEach(function (h) {
+      var group = h.closest('.saf-group');
+      var key = 'sop-grp-' + (group.querySelector('.title')?.textContent || '').trim();
+      try {
+        var saved = sessionStorage.getItem(key);
+        if (saved === 'true' || saved === 'false') group.setAttribute('data-open', saved);
+      } catch (e) {}
+      h.addEventListener('click', function () {
+        var open = group.getAttribute('data-open') === 'true';
+        group.setAttribute('data-open', open ? 'false' : 'true');
+        try { sessionStorage.setItem(key, open ? 'false' : 'true'); } catch (e) {}
+      });
+    });
+  })();
+</script>
