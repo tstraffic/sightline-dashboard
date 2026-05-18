@@ -9680,6 +9680,46 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 212: User Notes — personal notes / reminders / meeting
+  // discussion items with selective sharing. user_notes is the row, with a
+  // freeform `content`, a `note_date` (day-journal grouping defaults to
+  // today), and a `tag` (note / reminder / meeting). Default visibility is
+  // private to the author. user_note_shares is the per-user share list —
+  // a note is visible to user U iff created_by_id = U OR a share row
+  // exists for U. is_shared mirrors share-list non-emptiness for fast
+  // filtering without a join.
+  // =============================================
+  if (!isMigrationApplied.get(212)) {
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS user_notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        created_by_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        note_date DATE NOT NULL,
+        tag TEXT NOT NULL DEFAULT 'note' CHECK(tag IN ('note','reminder','meeting')),
+        is_shared INTEGER NOT NULL DEFAULT 0,
+        pinned INTEGER NOT NULL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_user_notes_creator_date ON user_notes(created_by_id, note_date)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_user_notes_date ON user_notes(note_date)');
+      db.exec(`CREATE TABLE IF NOT EXISTS user_note_shares (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        note_id INTEGER NOT NULL REFERENCES user_notes(id) ON DELETE CASCADE,
+        shared_with_user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(note_id, shared_with_user_id)
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_user_note_shares_user ON user_note_shares(shared_with_user_id)');
+      recordMigration.run(212, 'user_notes + user_note_shares (personal notes with selective sharing)');
+      console.log('Migration 212 applied: user_notes + user_note_shares created');
+    } catch (e) {
+      console.error('Migration 212 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -1,0 +1,196 @@
+<%
+  const TAG_LABELS = { note: 'Note', reminder: 'Reminder', meeting: 'Meeting' };
+  const TAG_PILL = {
+    note:     'bg-gray-100 text-gray-700 ring-gray-200',
+    reminder: 'bg-amber-50 text-amber-700 ring-amber-200',
+    meeting:  'bg-blue-50 text-blue-700 ring-blue-200',
+  };
+  function buildQs(over) {
+    const f = Object.assign({}, filters, over);
+    const parts = [];
+    if (f.view && f.view !== 'all')   parts.push('view=' + f.view);
+    if (f.tag)                         parts.push('tag=' + f.tag);
+    if (f.range && f.range !== 'week') parts.push('range=' + f.range);
+    return parts.length ? '?' + parts.join('&') : '';
+  }
+  const tabClass = active => 'px-3 py-1.5 rounded-lg text-sm font-medium transition ' + (active ? 'bg-brand-600 text-white shadow-sm' : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200');
+%>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+  <div class="flex items-start justify-between gap-4 flex-wrap mb-6">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Notes</h1>
+      <p class="text-sm text-gray-500 mt-0.5">Personal notes, reminders and meeting discussion points. Private by default — share with specific people when you need to.</p>
+    </div>
+  </div>
+
+  <!-- Filter row -->
+  <div class="flex flex-wrap gap-2 mb-4">
+    <div class="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg">
+      <a href="/notes<%= buildQs({ view: 'all' }) %>" class="<%= tabClass(filters.view === 'all') %>">All visible</a>
+      <a href="/notes<%= buildQs({ view: 'mine' }) %>" class="<%= tabClass(filters.view === 'mine') %>">My notes</a>
+      <a href="/notes<%= buildQs({ view: 'shared' }) %>" class="<%= tabClass(filters.view === 'shared') %>">Shared with me</a>
+    </div>
+    <div class="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg">
+      <a href="/notes<%= buildQs({ tag: '' }) %>" class="<%= tabClass(!filters.tag) %>">All tags</a>
+      <a href="/notes<%= buildQs({ tag: 'note' }) %>" class="<%= tabClass(filters.tag === 'note') %>">Notes</a>
+      <a href="/notes<%= buildQs({ tag: 'reminder' }) %>" class="<%= tabClass(filters.tag === 'reminder') %>">Reminders</a>
+      <a href="/notes<%= buildQs({ tag: 'meeting' }) %>" class="<%= tabClass(filters.tag === 'meeting') %>">Meeting discussion</a>
+    </div>
+    <div class="flex items-center gap-1.5 bg-gray-50 p-1 rounded-lg">
+      <a href="/notes<%= buildQs({ range: 'today' }) %>" class="<%= tabClass(filters.range === 'today') %>">Today</a>
+      <a href="/notes<%= buildQs({ range: 'week' }) %>" class="<%= tabClass(filters.range === 'week') %>">This week</a>
+      <a href="/notes<%= buildQs({ range: 'all' }) %>" class="<%= tabClass(filters.range === 'all') %>">All time</a>
+    </div>
+  </div>
+
+  <!-- Composer -->
+  <form method="POST" action="/notes" id="composerForm" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-6">
+    <%- include('../partials/csrf') %>
+    <input type="hidden" name="share_user_ids" id="composerShareIds" value="">
+    <textarea name="content" id="composerContent" rows="3" required placeholder="Drop a note, a reminder, or something to bring up in your next meeting..." class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"></textarea>
+    <div class="mt-3 flex flex-wrap items-center gap-3">
+      <select name="tag" id="composerTag" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="note">Note</option>
+        <option value="reminder">Reminder</option>
+        <option value="meeting">Meeting discussion</option>
+      </select>
+      <input type="date" name="note_date" id="composerDate" value="<%= today %>" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <div id="composerShareSummary" class="text-xs text-gray-500 hidden">
+        <span class="inline-flex items-center gap-1"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-3.13a4 4 0 11-8 0 4 4 0 018 0zm6 0a4 4 0 11-8 0 4 4 0 018 0z"/></svg> Sharing with <span id="composerShareCount">0</span></span>
+      </div>
+      <div class="flex-1"></div>
+      <button type="button" id="composerShareBtn" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg">Share with…</button>
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg">Save note</button>
+    </div>
+  </form>
+
+  <!-- Feed -->
+  <% if (groups.length === 0) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center">
+      <svg class="w-10 h-10 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      <p class="text-sm text-gray-500">No notes here yet. Drop one in above.</p>
+    </div>
+  <% } %>
+
+  <% groups.forEach(function(group){ %>
+    <div class="mb-6">
+      <div class="flex items-baseline gap-2 mb-2 sticky top-0 bg-gray-50/90 backdrop-blur py-1 z-[1]">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700"><%= group.label %></h2>
+        <span class="text-xs text-gray-400 font-mono"><%= group.date %></span>
+        <span class="text-xs text-gray-400">· <%= group.notes.length %> note<%= group.notes.length === 1 ? '' : 's' %></span>
+      </div>
+      <div class="space-y-2">
+        <% group.notes.forEach(function(n){
+          const mine = n.created_by_id === user.id;
+          const shareList = (sharesByNote && sharesByNote[n.id]) || [];
+        %>
+          <article id="note-<%= n.id %>" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 hover:shadow-md transition <%= n.pinned ? 'ring-1 ring-amber-200 bg-amber-50/30' : '' %>">
+            <div class="flex items-start justify-between gap-3 mb-2 flex-wrap">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="inline-flex items-center px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-full ring-1 ring-inset <%= TAG_PILL[n.tag] %>"><%= TAG_LABELS[n.tag] %></span>
+                <% if (n.pinned) { %><span class="text-xs text-amber-600">📌 Pinned</span><% } %>
+                <% if (n.is_shared) { %>
+                  <span class="inline-flex items-center gap-1 text-xs text-blue-700"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a4 4 0 00-3-3.87M9 20H4v-2a4 4 0 013-3.87m6-3.13a4 4 0 11-8 0 4 4 0 018 0zm6 0a4 4 0 11-8 0 4 4 0 018 0z"/></svg> Shared<% if (mine && shareList.length > 0) { %> with <%= shareList.length %><% } %></span>
+                <% } else if (mine) { %>
+                  <span class="inline-flex items-center gap-1 text-xs text-gray-400" title="Only you can see this"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11c0-1.657 1.343-3 3-3s3 1.343 3 3v4M5 21h14a2 2 0 002-2v-7a2 2 0 00-2-2H5a2 2 0 00-2 2v7a2 2 0 002 2z"/></svg> Private</span>
+                <% } %>
+                <% if (!mine) { %>
+                  <span class="text-xs text-gray-500">from <span class="font-medium text-gray-700"><%= n.author_name %></span></span>
+                <% } %>
+              </div>
+              <% if (mine) { %>
+                <div class="flex items-center gap-1 text-xs">
+                  <button type="button" class="note-edit-btn px-2 py-1 text-gray-500 hover:text-brand-600" data-id="<%= n.id %>" data-content="<%= encodeURIComponent(n.content) %>" data-tag="<%= n.tag %>" data-date="<%= n.note_date %>">Edit</button>
+                  <button type="button" class="note-share-btn px-2 py-1 text-gray-500 hover:text-brand-600" data-id="<%= n.id %>" data-shares='<%- JSON.stringify(shareList) %>'>Share…</button>
+                  <form method="POST" action="/notes/<%= n.id %>/pin" class="inline">
+                    <%- include('../partials/csrf') %>
+                    <button type="submit" class="px-2 py-1 text-gray-500 hover:text-amber-600" title="<%= n.pinned ? 'Unpin' : 'Pin' %>"><%= n.pinned ? 'Unpin' : 'Pin' %></button>
+                  </form>
+                  <% if (n.is_shared) { %>
+                    <form method="POST" action="/notes/<%= n.id %>/unshare" class="inline" onsubmit="return confirm('Make this note private again? The people you shared with will lose access.')">
+                      <%- include('../partials/csrf') %>
+                      <button type="submit" class="px-2 py-1 text-gray-500 hover:text-amber-600">Make private</button>
+                    </form>
+                  <% } %>
+                  <form method="POST" action="/notes/<%= n.id %>/delete" class="inline" onsubmit="return confirm('Delete this note?')">
+                    <%- include('../partials/csrf') %>
+                    <button type="submit" class="px-2 py-1 text-gray-500 hover:text-rose-600">Delete</button>
+                  </form>
+                </div>
+              <% } %>
+            </div>
+            <div class="text-sm text-gray-800 whitespace-pre-wrap"><%= n.content %></div>
+          </article>
+        <% }) %>
+      </div>
+    </div>
+  <% }) %>
+</div>
+
+<!-- Edit modal -->
+<div id="editModal" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+  <form method="POST" id="editForm" class="bg-white rounded-xl shadow-xl w-full max-w-lg">
+    <%- include('../partials/csrf') %>
+    <div class="p-5 border-b border-gray-200">
+      <h2 class="text-lg font-semibold text-gray-900">Edit note</h2>
+    </div>
+    <div class="p-5 space-y-3">
+      <textarea name="content" id="editContent" rows="4" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+      <div class="flex items-center gap-3">
+        <select name="tag" id="editTag" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="note">Note</option>
+          <option value="reminder">Reminder</option>
+          <option value="meeting">Meeting discussion</option>
+        </select>
+        <input type="date" name="note_date" id="editDate" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+    <div class="px-5 py-4 bg-gray-50 rounded-b-xl flex items-center justify-end gap-2">
+      <button type="button" id="editCancel" class="px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg">Save changes</button>
+    </div>
+  </form>
+</div>
+
+<!-- Share modal -->
+<%- include('./_share_modal', { availableUsers: users }) %>
+
+<script>
+(function() {
+  // ===== Edit modal =====
+  const editModal = document.getElementById('editModal');
+  const editForm = document.getElementById('editForm');
+  const editContent = document.getElementById('editContent');
+  const editTag = document.getElementById('editTag');
+  const editDate = document.getElementById('editDate');
+  document.querySelectorAll('.note-edit-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      editForm.action = '/notes/' + btn.dataset.id;
+      editContent.value = decodeURIComponent(btn.dataset.content || '');
+      editTag.value = btn.dataset.tag;
+      editDate.value = btn.dataset.date;
+      editModal.classList.remove('hidden');
+    });
+  });
+  document.getElementById('editCancel').addEventListener('click', () => editModal.classList.add('hidden'));
+  editModal.addEventListener('click', e => { if (e.target === editModal) editModal.classList.add('hidden'); });
+
+  // ===== Share modal (wired by _share_modal.ejs's own script — we just expose openers) =====
+  const composerShareBtn = document.getElementById('composerShareBtn');
+  composerShareBtn.addEventListener('click', () => {
+    // null id means "for the composer" — modal writes selection into composerShareIds
+    window.__openShareModal && window.__openShareModal({ noteId: null, initialShares: getComposerSelectedIds() });
+  });
+  function getComposerSelectedIds() {
+    const raw = document.getElementById('composerShareIds').value;
+    return raw ? raw.split(',').map(s => parseInt(s, 10)).filter(Boolean) : [];
+  }
+  document.querySelectorAll('.note-share-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const initial = JSON.parse(btn.dataset.shares || '[]').map(s => s.id);
+      window.__openShareModal && window.__openShareModal({ noteId: btn.dataset.id, initialShares: initial });
+    });
+  });
+})();
+</script>

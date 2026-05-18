@@ -30,6 +30,7 @@ const PERMISSIONS = {
   // (no migration), so existing rows aren't destroyed; they just can't
   // reach any module via the sidebar gates.
   dashboard:     ['admin', 'operations', 'planning', 'finance', 'hr', 'management', 'accounts', 'safety'],
+  notes:         ['admin', 'operations', 'planning', 'finance', 'hr', 'management', 'accounts', 'safety'],
   jobs:          ['admin', 'operations', 'planning', 'finance', 'management'],
   projects:      ['admin', 'operations', 'planning', 'finance', 'management'],
   tenders:       ['admin', 'planning', 'management'],
