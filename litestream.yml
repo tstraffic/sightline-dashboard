@@ -1,0 +1,40 @@
+# Litestream replication config.
+#
+# Streams the live SQLite database to S3-compatible object storage as the
+# app writes to it, so a disk loss / corrupt-WAL event doesn't take the
+# business down. Point-in-time restore is possible to any second within
+# the retention window.
+#
+# IMPORTANT: only tstraffic.db is replicated. sessions.db is intentionally
+# left out — restoring it brings back stale session rows, leading to ghost
+# logins from before the disaster.
+#
+# Required env vars (set in Railway):
+#   LITESTREAM_BUCKET             — bucket name (e.g. ts-dashboard-backup)
+#   LITESTREAM_ENDPOINT           — S3 endpoint URL
+#                                     R2: https://<account_id>.r2.cloudflarestorage.com
+#                                     S3: leave blank or https://s3.<region>.amazonaws.com
+#   LITESTREAM_REGION             — bucket region ('auto' works for R2)
+#   LITESTREAM_ACCESS_KEY_ID      — bucket key id
+#   LITESTREAM_SECRET_ACCESS_KEY  — bucket secret
+#
+# When LITESTREAM_BUCKET is unset, start.sh skips Litestream entirely and
+# runs node directly — useful for local dev without a bucket.
+#
+# Tweak the retention/snapshot window in the replica block below as your
+# RPO/cost tradeoff changes. Defaults: 30-day retention, 24-hour snapshots.
+
+dbs:
+  - path: /app/data/tstraffic.db
+    replicas:
+      - type: s3
+        bucket: ${LITESTREAM_BUCKET}
+        path: tstraffic
+        endpoint: ${LITESTREAM_ENDPOINT}
+        region: ${LITESTREAM_REGION}
+        access-key-id: ${LITESTREAM_ACCESS_KEY_ID}
+        secret-access-key: ${LITESTREAM_SECRET_ACCESS_KEY}
+        retention: 720h          # 30 days
+        retention-check-interval: 1h
+        snapshot-interval: 24h
+        sync-interval: 1s        # flush WAL frames every second
