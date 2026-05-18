@@ -389,7 +389,9 @@ router.get('/safety/swms/:id/view', (req, res) => {
   });
 });
 
-// GET /w/safety/sop-register — list active SOPs with per-row needs-ack badge.
+// GET /w/safety/sop-register — list active SOPs grouped like the SWMS
+// register: Generic (kind='template') and Job-linked, needs-ack rows
+// sorted to the top of each section.
 router.get('/safety/sop-register', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
@@ -403,13 +405,20 @@ router.get('/safety/sop-register', (req, res) => {
     LEFT JOIN sop_register_acknowledgements a
       ON a.sop_id = s.id AND a.crew_member_id = ? AND a.version_token = s.version_token
     WHERE s.status = 'active'
-    ORDER BY (a.id IS NULL) DESC, s.kind, s.title
+    ORDER BY s.kind, (a.id IS NULL) DESC, s.title
   `).all(workerId);
-  const needsAck = rows.filter(r => !r.ack_id);
-  const upToDate = rows.filter(r => !!r.ack_id);
+
+  const sortNeedsFirst = (a, b) => (a.ack_id ? 1 : 0) - (b.ack_id ? 1 : 0);
+  const generic   = rows.filter(r => r.kind === 'template').sort(sortNeedsFirst);
+  const jobLinked = rows.filter(r => r.kind === 'job').sort(sortNeedsFirst);
+
   res.render('worker/safety/sop-register-list', {
     title: 'SOP — Safety', currentPage: 'safety',
-    subtab: 'sop-register', needsAck, upToDate,
+    subtab: 'sop-register',
+    generic, jobLinked,
+    // Back-compat for any older template still referencing these.
+    needsAck: rows.filter(r => !r.ack_id),
+    upToDate: rows.filter(r => !!r.ack_id),
   });
 });
 
