@@ -199,6 +199,24 @@ function handleSubmission(req, res) {
         return res.status(400).send('Please sign the induction agreement, type your full name and tick the acknowledgement.');
       }
 
+      // DOB is compulsory — payroll, super, certain tickets and the worker
+      // birthday flow all key off it. Validate format and a sane age range so
+      // typos like "0202-05-18" or "2030-05-18" don't get through.
+      const dobRaw = (b.date_of_birth || '').trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(dobRaw)) {
+        const msg = 'Please enter your date of birth.';
+        if (wantsJSON) return res.status(400).json({ ok: false, error: msg });
+        return res.status(400).send(msg);
+      }
+      const dobDate = new Date(dobRaw + 'T00:00:00');
+      const dobYear = dobDate.getFullYear();
+      const nowYear = new Date().getFullYear();
+      if (isNaN(dobDate.getTime()) || dobDate > new Date() || dobYear < 1900 || (nowYear - dobYear) < 14) {
+        const msg = 'Date of birth looks wrong — please check and try again.';
+        if (wantsJSON) return res.status(400).json({ ok: false, error: msg });
+        return res.status(400).send(msg);
+      }
+
       // All possible column→value mappings
       const allFields = {
         access_token: accessToken,
