@@ -9547,6 +9547,73 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 209: sop_document_files — multiple PDFs per section.
+  // Adds a child table so each SOP/SWMS section can hold N files instead of
+  // one. Backfilled from the parent row's existing file_path. The parent
+  // columns (filename, file_path, page_renders, ...) are kept populated so
+  // older code paths that still read them keep working until they're
+  // migrated to the new shape.
+  //
+  // page_renders_dir: directory key under data/uploads/sop-documents/page-renders/
+  //   - Legacy/backfilled rows reuse the parent doc id (so the existing
+  //     PNGs at page-renders/<doc_id>/ remain reachable without copying).
+  //   - New rows use 'file-<file_id>'.
+  // =============================================
+  if (!isMigrationApplied.get(209)) {
+    console.log('Running migration 209: sop_document_files (multi-PDF sections)');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sop_document_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sop_document_id INTEGER NOT NULL REFERENCES sop_documents(id) ON DELETE CASCADE,
+          filename TEXT NOT NULL,
+          original_name TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          file_size INTEGER DEFAULT 0,
+          mime_type TEXT DEFAULT '',
+          page_renders TEXT DEFAULT NULL,
+          page_renders_dir TEXT NOT NULL DEFAULT '',
+          display_order INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_sop_document_files_doc ON sop_document_files(sop_document_id, display_order);
+      `);
+      // Backfill: one child file per existing section, copying the parent's
+      // file metadata. page_renders_dir is set to the parent's id (string)
+      // so the existing on-disk PNGs at .../page-renders/<doc_id>/ are
+      // located correctly by the file-level routes below.
+      const parents = db.prepare(`
+        SELECT id, filename, original_name, file_path, file_size, mime_type, page_renders
+        FROM sop_documents
+      `).all();
+      const insertChild = db.prepare(`
+        INSERT INTO sop_document_files
+          (sop_document_id, filename, original_name, file_path, file_size, mime_type,
+           page_renders, page_renders_dir, display_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+      `);
+      const existsChild = db.prepare(
+        'SELECT 1 FROM sop_document_files WHERE sop_document_id = ? LIMIT 1'
+      );
+      let backfilled = 0;
+      for (const p of parents) {
+        if (existsChild.get(p.id)) continue;
+        if (!p.filename || !p.file_path) continue;
+        insertChild.run(
+          p.id, p.filename, p.original_name || p.filename, p.file_path,
+          p.file_size || 0, p.mime_type || '',
+          p.page_renders || null, String(p.id)
+        );
+        backfilled++;
+      }
+      recordMigration.run(209, 'sop_document_files (multi-PDF sections)');
+      console.log(`Migration 209 applied: sop_document_files created, ${backfilled} sections backfilled`);
+    } catch (e) {
+      console.error('Migration 209 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
