@@ -41,7 +41,24 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     ca-certificates \
+    curl \
     && rm -rf /var/lib/apt/lists/*
+
+# Litestream — streams the SQLite WAL to S3/R2 so a disk loss doesn't
+# take the business down. See litestream.yml + start.sh for wiring. The
+# binary is a single static Go executable, no runtime deps.
+ARG LITESTREAM_VERSION=0.3.13
+RUN ARCH=$(dpkg --print-architecture) \
+ && case "$ARCH" in \
+      amd64) LS_ARCH=amd64 ;; \
+      arm64) LS_ARCH=arm64 ;; \
+      *)     echo "Unsupported arch: $ARCH" && exit 1 ;; \
+    esac \
+ && curl -fsSL -o /tmp/litestream.tar.gz \
+      "https://github.com/benbjohnson/litestream/releases/download/v${LITESTREAM_VERSION}/litestream-v${LITESTREAM_VERSION}-linux-${LS_ARCH}.tar.gz" \
+ && tar -xzf /tmp/litestream.tar.gz -C /usr/local/bin litestream \
+ && rm /tmp/litestream.tar.gz \
+ && litestream version
 
 WORKDIR /app
 
@@ -53,7 +70,15 @@ RUN npm ci --omit=dev
 # Application source
 COPY . .
 
+# Litestream config lives at /etc/litestream.yml so the binary picks it
+# up by default. Kept in the repo (no secrets — only env-var references)
+# so the config is version-controlled alongside the migrations it backs up.
+RUN cp /app/litestream.yml /etc/litestream.yml \
+ && chmod +x /app/start.sh
+
 ENV NODE_ENV=production
 
 # Railway provides PORT — server.js reads it via process.env.PORT.
-CMD ["npm", "start"]
+# start.sh decides whether to launch under Litestream based on
+# LITESTREAM_BUCKET being set.
+CMD ["/app/start.sh"]

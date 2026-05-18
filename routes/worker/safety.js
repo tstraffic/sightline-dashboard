@@ -389,7 +389,9 @@ router.get('/safety/swms/:id/view', (req, res) => {
   });
 });
 
-// GET /w/safety/sop-register — list active SOPs with per-row needs-ack badge.
+// GET /w/safety/sop-register — list active SOPs grouped like the SWMS
+// register: Generic (kind='template') and Job-linked, needs-ack rows
+// sorted to the top of each section.
 router.get('/safety/sop-register', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
@@ -403,13 +405,20 @@ router.get('/safety/sop-register', (req, res) => {
     LEFT JOIN sop_register_acknowledgements a
       ON a.sop_id = s.id AND a.crew_member_id = ? AND a.version_token = s.version_token
     WHERE s.status = 'active'
-    ORDER BY (a.id IS NULL) DESC, s.kind, s.title
+    ORDER BY s.kind, (a.id IS NULL) DESC, s.title
   `).all(workerId);
-  const needsAck = rows.filter(r => !r.ack_id);
-  const upToDate = rows.filter(r => !!r.ack_id);
+
+  const sortNeedsFirst = (a, b) => (a.ack_id ? 1 : 0) - (b.ack_id ? 1 : 0);
+  const generic   = rows.filter(r => r.kind === 'template').sort(sortNeedsFirst);
+  const jobLinked = rows.filter(r => r.kind === 'job').sort(sortNeedsFirst);
+
   res.render('worker/safety/sop-register-list', {
     title: 'SOP — Safety', currentPage: 'safety',
-    subtab: 'sop-register', needsAck, upToDate,
+    subtab: 'sop-register',
+    generic, jobLinked,
+    // Back-compat for any older template still referencing these.
+    needsAck: rows.filter(r => !r.ack_id),
+    upToDate: rows.filter(r => !!r.ack_id),
   });
 });
 
@@ -444,7 +453,12 @@ router.get('/safety/sop-register/:id', (req, res) => {
   });
 });
 
-// POST /w/safety/sop-register/:id/acknowledge — idempotent ack with version snapshot.
+// POST /w/safety/sop-register/:id/acknowledge — idempotent ack with version
+// snapshot. Requires a drawn signature (data URL from the worker portal
+// sign pad). The PNG is written to data/uploads/sop-signatures and the
+// relative URL is stored in sop_register_acknowledgements.signature_url
+// so admins can audit who actually signed (not just tapped a button).
+// Mirrors the SWMS ack handler.
 router.post('/safety/sop-register/:id/acknowledge', (req, res) => {
   const db = getDb();
   const worker = req.session.worker;
@@ -453,17 +467,58 @@ router.post('/safety/sop-register/:id/acknowledge', (req, res) => {
     req.flash('error', 'SOP not available.');
     return res.redirect('/w/safety/sop-register');
   }
+
+  const sigDataUrl = (req.body.signature_data || '').toString();
+  if (!/^data:image\/(png|jpeg);base64,/.test(sigDataUrl)) {
+    req.flash('error', 'Please draw your signature before acknowledging.');
+    return res.redirect('/w/safety/sop-register/' + sop.id);
+  }
+
+  // Persist signature PNG. Tolerate write failures (fall through to saving
+  // the ack with an empty signature_url) rather than blocking the ack —
+  // but log so we can chase it up.
+  let signatureUrl = '';
+  try {
+    const sigDir = path.join(__dirname, '..', '..', 'data', 'uploads', 'sop-signatures');
+    fs.mkdirSync(sigDir, { recursive: true });
+    const fname = `sop_${sop.id}_crew_${worker.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.png`;
+    const base64 = sigDataUrl.split(',')[1];
+    fs.writeFileSync(path.join(sigDir, fname), Buffer.from(base64, 'base64'));
+    signatureUrl = `/data/uploads/sop-signatures/${fname}`;
+  } catch (e) {
+    console.error('[w/safety] sop signature save failed:', e.message);
+  }
+
   const fullName = worker.full_name || ('Employee #' + worker.id);
   try {
-    db.prepare(`
-      INSERT OR IGNORE INTO sop_register_acknowledgements
-        (sop_id, crew_member_id, version_token, full_name, signed_via, signed_ip, user_agent)
-      VALUES (?, ?, ?, ?, 'tap', ?, ?)
-    `).run(
-      sop.id, worker.id, sop.version_token || '', fullName,
-      String(req.ip || ''),
-      String((req.get('user-agent') || '')).slice(0, 250)
-    );
+    // Insert; if a row already exists for (sop, crew, version) update the
+    // signature so a re-sign overwrites cleanly.
+    const existing = db.prepare(
+      'SELECT id FROM sop_register_acknowledgements WHERE sop_id = ? AND crew_member_id = ? AND version_token = ?'
+    ).get(sop.id, worker.id, sop.version_token || '');
+    if (existing) {
+      db.prepare(`
+        UPDATE sop_register_acknowledgements
+        SET full_name = ?, signature_url = ?, signed_via = 'sign', signed_at = CURRENT_TIMESTAMP,
+            signed_ip = ?, user_agent = ?
+        WHERE id = ?
+      `).run(
+        fullName, signatureUrl,
+        String(req.ip || ''),
+        String((req.get('user-agent') || '')).slice(0, 250),
+        existing.id
+      );
+    } else {
+      db.prepare(`
+        INSERT INTO sop_register_acknowledgements
+          (sop_id, crew_member_id, version_token, full_name, signature_url, signed_via, signed_ip, user_agent)
+        VALUES (?, ?, ?, ?, ?, 'sign', ?, ?)
+      `).run(
+        sop.id, worker.id, sop.version_token || '', fullName, signatureUrl,
+        String(req.ip || ''),
+        String((req.get('user-agent') || '')).slice(0, 250)
+      );
+    }
     req.flash('success', 'Acknowledged. Thanks ' + (worker.full_name || '').split(' ')[0] + '.');
   } catch (e) {
     console.error('[w/safety] sop ack error', e.message);
@@ -1143,6 +1198,26 @@ router.get('/safety/quizzes/:id/results', (req, res) => {
     title: quiz.title + ' — Results', currentPage: 'safety',
     subtab: 'quizzes', quiz, attempt, questions, answers,
     canRetake: !blocked,
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────
+// /w/safety/training — read-only view of the worker's in-house training
+// records (Portaboom, Trailer, etc.). HR enters these from the employee
+// profile; workers only consume them here.
+// ─────────────────────────────────────────────────────────────────────
+const { forCrewMember: trainingRecordsForCrew } = require('../../lib/trainingRecords');
+router.get('/safety/training', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  let records = [];
+  try { records = trainingRecordsForCrew(db, worker.id); }
+  catch (e) { console.error('[w/safety/training] load failed:', e.message); }
+  res.render('worker/safety/training-list', {
+    title: 'Safety — Training',
+    currentPage: 'safety',
+    subtab: 'training',
+    records,
   });
 });
 

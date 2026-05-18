@@ -19,6 +19,17 @@ router.get('/login', (req, res) => {
   });
 });
 
+// Per-account PIN lockout.
+//
+// PINs are 4 digits = 10,000 combinations. The global 10/15-min rate
+// limit in server.js is per-IP — useless against a distributed attack
+// targeting one Employee ID. After PIN_MAX_ATTEMPTS wrong PINs we lock
+// the crew_members row for PIN_LOCK_MINUTES. Counters live on the row
+// (pin_failed_attempts, pin_locked_until) so the lock survives restarts
+// and is account-scoped rather than IP-scoped.
+const PIN_MAX_ATTEMPTS = 5;
+const PIN_LOCK_MINUTES = 15;
+
 // POST /w/login — Authenticate worker (accepts email OR employee_id)
 router.post('/login', (req, res) => {
   const { employee_id, pin } = req.body;
@@ -47,8 +58,12 @@ router.post('/login', (req, res) => {
              last_worker_login DESC,
              id DESC
   `;
+  const selectCols = `
+    id, full_name, employee_id, role, phone, email, pin_hash, active,
+    pin_failed_attempts, pin_locked_until
+  `;
   let member = db.prepare(
-    `SELECT id, full_name, employee_id, role, phone, email, pin_hash, active
+    `SELECT ${selectCols}
        FROM crew_members
       WHERE LOWER(email) = LOWER(?)
       ${orderBy}
@@ -56,7 +71,7 @@ router.post('/login', (req, res) => {
   ).get(loginId);
   if (!member) {
     member = db.prepare(
-      `SELECT id, full_name, employee_id, role, phone, email, pin_hash, active
+      `SELECT ${selectCols}
          FROM crew_members
         WHERE employee_id = ?
         ${orderBy}
@@ -76,10 +91,37 @@ router.post('/login', (req, res) => {
     return loginError('No PIN has been set for your account. Please contact your supervisor to set one.');
   }
 
+  // Locked? Refuse before doing the bcrypt compare so attackers can't
+  // even measure timing differences while waiting out the lock.
+  if (member.pin_locked_until) {
+    const lockedUntil = new Date(member.pin_locked_until + (member.pin_locked_until.includes('Z') ? '' : 'Z'));
+    if (!isNaN(lockedUntil.getTime()) && lockedUntil.getTime() > Date.now()) {
+      const minsLeft = Math.max(1, Math.ceil((lockedUntil.getTime() - Date.now()) / 60000));
+      return loginError(`Too many wrong PINs. Try again in ${minsLeft} min, or use Forgot PIN.`);
+    }
+    // Lock has expired — clear it so this attempt counts fresh.
+    db.prepare('UPDATE crew_members SET pin_locked_until = NULL, pin_failed_attempts = 0 WHERE id = ?').run(member.id);
+    member.pin_failed_attempts = 0;
+    member.pin_locked_until = null;
+  }
+
   const pinMatch = bcrypt.compareSync(pin, member.pin_hash);
   if (!pinMatch) {
-    return loginError('Incorrect PIN. Please try again.');
+    const newAttempts = (member.pin_failed_attempts || 0) + 1;
+    if (newAttempts >= PIN_MAX_ATTEMPTS) {
+      const lockUntilSql = `datetime('now', '+${PIN_LOCK_MINUTES} minutes')`;
+      db.prepare(`UPDATE crew_members SET pin_failed_attempts = ?, pin_locked_until = ${lockUntilSql} WHERE id = ?`)
+        .run(newAttempts, member.id);
+      console.warn('[worker login] account locked after repeated wrong PINs', { loginId, crew_member_id: member.id });
+      return loginError(`Too many wrong PINs. Account locked for ${PIN_LOCK_MINUTES} min — use Forgot PIN to unlock immediately.`);
+    }
+    db.prepare('UPDATE crew_members SET pin_failed_attempts = ? WHERE id = ?').run(newAttempts, member.id);
+    const remaining = PIN_MAX_ATTEMPTS - newAttempts;
+    return loginError(`Incorrect PIN. ${remaining} attempt${remaining === 1 ? '' : 's'} left before lockout.`);
   }
+
+  // Successful PIN — clear any failed-attempt state on the row.
+  db.prepare('UPDATE crew_members SET pin_failed_attempts = 0, pin_locked_until = NULL WHERE id = ?').run(member.id);
 
   req.session.worker = {
     id: member.id,
@@ -188,7 +230,16 @@ router.post('/reset-pin/:token', (req, res) => {
 
   const db = getDb();
   const pinHash = bcrypt.hashSync(pin, 12);
-  db.prepare('UPDATE crew_members SET pin_hash = ?, pin_plain = ?, pin_set_at = CURRENT_TIMESTAMP WHERE id = ?').run(pinHash, pin, invitation.target_id);
+  // Resetting the PIN also clears any active lockout — the user's whole
+  // point in coming through this flow is "I'm locked out". If we left the
+  // lock in place they'd reset their PIN then still get bounced for 15
+  // minutes from /w/login, which makes the email link feel broken.
+  db.prepare(`
+    UPDATE crew_members
+       SET pin_hash = ?, pin_plain = ?, pin_set_at = CURRENT_TIMESTAMP,
+           pin_failed_attempts = 0, pin_locked_until = NULL
+     WHERE id = ?
+  `).run(pinHash, pin, invitation.target_id);
   markTokenUsed(req.params.token);
 
   req.flash('success', 'Your PIN has been reset. You can now sign in.');

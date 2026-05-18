@@ -777,9 +777,17 @@
         </section>
 
       <% } else if (slide.layout === 'interactive-quiz' && slide.quizData) { %>
+        <%
+          // Total questions for the active module — counted once per render
+          // so the badge reads "Question 3 of 10" for TC training and
+          // "Question 3 of 12" for the Employee Guide without hard-coding.
+          if (typeof quizTotal === 'undefined') {
+            var quizTotal = slides.filter(function (s) { return s.layout === 'interactive-quiz'; }).length;
+          }
+        %>
         <section class="slide-panel" data-idx="<%= idx %>" data-quiz="<%= slide.quizData.questionNumber %>">
           <div style="text-align:center;flex:1;display:flex;flex-direction:column;justify-content:center;">
-            <div class="badge badge-blue">Question <%= slide.quizData.questionNumber %> of 12</div>
+            <div class="badge badge-blue">Question <%= slide.quizData.questionNumber %> of <%= quizTotal %></div>
             <h2 style="max-width:600px;margin:0 auto;"><%= slide.quizData.question %></h2>
             <div class="quiz-options" id="qopts-<%= slide.quizData.questionNumber %>">
               <% slide.quizData.options.forEach(function(opt) { %>
