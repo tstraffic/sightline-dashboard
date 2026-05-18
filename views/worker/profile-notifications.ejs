@@ -95,6 +95,13 @@
   document.getElementById('nf-all-off').addEventListener('click', function (e) { e.preventDefault(); setAll(false); });
 })();
 
+// CSRF helper — every state-changing POST below has to include this
+// header or the global CSRF middleware silently 403s it.
+function csrfToken() {
+  var m = document.querySelector('meta[name="csrf-token"]');
+  return m ? m.content : '';
+}
+
 // ── Push status panel ──
 // Detects browser support + permission + active subscription. If any link in
 // the chain is broken the worker sees exactly what's missing, and gets a one-
@@ -129,7 +136,22 @@
     testBtn.style.display   = options.showTest   ? 'inline-flex' : 'none';
   }
 
+  // iOS only supports Web Push from an installed (standalone) PWA.
+  // Mobile Safari direct returns Notification.permission='denied' forever.
+  function iosNeedsInstall() {
+    var ua = navigator.userAgent || '';
+    var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    var standalone = window.navigator.standalone === true ||
+                     (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+    return isIOS && !standalone;
+  }
+
   async function check() {
+    if (iosNeedsInstall()) {
+      render('warn', 'Add to Home Screen to enable push',
+             'On iPhone you have to install the portal as an app before push notifications work. Tap the Share icon → Add to Home Screen, then open the app and come back here.');
+      return;
+    }
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
       render('bad', 'Push not supported on this browser',
              'Open the worker portal in Chrome, Edge, Firefox, or Safari (iOS 16.4+ added to Home Screen).');
@@ -148,7 +170,8 @@
         // Re-send to server in case the row was lost (idempotent upsert).
         fetch('/w/notifications/push/subscribe', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() },
+          credentials: 'same-origin',
           body: JSON.stringify(existing),
         }).catch(function(){});
         render('ok', 'Push notifications enabled on this device',
@@ -186,10 +209,15 @@
       });
       var save = await fetch('/w/notifications/push/subscribe', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() },
+        credentials: 'same-origin',
         body: JSON.stringify(sub),
       });
-      if (!save.ok) throw new Error('Server rejected the subscription');
+      if (!save.ok) {
+        var errMsg = 'Server rejected the subscription';
+        try { var j = await save.json(); if (j && j.error) errMsg = j.error; } catch (e) {}
+        throw new Error(errMsg);
+      }
       render('ok', 'Push notifications enabled on this device',
              'You should receive safety updates, announcements, and shift reminders.',
              { showTest: true });
@@ -206,7 +234,11 @@
     var orig = testBtn.textContent;
     testBtn.textContent = 'Sending…';
     try {
-      var r = await fetch('/w/notifications/push/test', { method: 'POST' });
+      var r = await fetch('/w/notifications/push/test', {
+        method: 'POST',
+        headers: { 'x-csrf-token': csrfToken() },
+        credentials: 'same-origin',
+      });
       var data = await r.json().catch(function(){ return {}; });
       if (data && data.success) {
         testBtn.textContent = 'Sent — check your phone';

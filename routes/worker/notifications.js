@@ -53,15 +53,29 @@ router.post('/notifications/push/test', async (req, res) => {
     if (!subCount || subCount.c === 0) {
       return res.json({ success: false, error: 'No push subscriptions found. Enable notifications first.' });
     }
-    await sendPushToCrew(crewId, {
-      title: 'T&S Test Notification',
-      body: 'Push notifications are working. You will be notified 24 hours before each shift.',
-      url: '/w/home',
-      type: 'test',
-    });
-    res.json({ success: true, devices: subCount.c });
+    if (!getVapidPublicKey()) {
+      return res.json({ success: false, error: 'Server is missing VAPID keys. Contact the office.' });
+    }
+    let result;
+    try {
+      result = await sendPushToCrew(crewId, {
+        title: 'T&S Test Notification',
+        body: 'Push notifications are working. You will be notified 24 hours before each shift.',
+        url: '/w/home',
+        type: 'test',
+      });
+    } catch (sendErr) {
+      console.error('[WorkerPush test] sendPushToCrew threw:', sendErr.message, sendErr.stack);
+      return res.status(500).json({ success: false, error: 'Push send failed: ' + (sendErr.message || 'unknown') });
+    }
+    if (!result || result.sent === 0) {
+      const reason = (result && (result.lastError || result.reason)) || 'no devices reached';
+      return res.json({ success: false, error: 'Push not delivered: ' + reason });
+    }
+    res.json({ success: true, devices: subCount.c, delivered: result.sent, failed: result.failed });
   } catch (err) {
-    res.status(500).json({ error: 'Failed to send test' });
+    console.error('[WorkerPush test] handler error:', err.message, err.stack);
+    res.status(500).json({ success: false, error: 'Failed to send test: ' + (err.message || 'unknown') });
   }
 });
 

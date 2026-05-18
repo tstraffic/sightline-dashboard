@@ -47,26 +47,31 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 async function setupWorkerPush(registration) {
+  // CSRF token from the layout's <meta name="csrf-token"> — every
+  // state-changing POST to /w/notifications/push/* must include it or
+  // the global CSRF middleware silently 403s the request.
+  function csrfToken() {
+    var m = document.querySelector('meta[name="csrf-token"]');
+    return m ? m.content : '';
+  }
   try {
     var existing = await registration.pushManager.getSubscription();
     if (existing) {
-      // Re-send to server in case the row was lost (idempotent upsert).
       await fetch('/w/notifications/push/subscribe', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() },
+        credentials: 'same-origin',
         body: JSON.stringify(existing),
       });
       return;
     }
     if (Notification.permission === 'denied') return;
     if (Notification.permission === 'default') {
-      // Don't auto-prompt on every load — only when on /w/home
-      // and the user has been there a moment (avoids fatigue).
       if (location.pathname !== '/w/home') return;
       var perm = await Notification.requestPermission();
       if (perm !== 'granted') return;
     }
-    var keyRes = await fetch('/w/notifications/push/vapid-key');
+    var keyRes = await fetch('/w/notifications/push/vapid-key', { credentials: 'same-origin' });
     if (!keyRes.ok) return;
     var keyData = await keyRes.json();
     if (!keyData.publicKey) return;
@@ -76,7 +81,8 @@ async function setupWorkerPush(registration) {
     });
     await fetch('/w/notifications/push/subscribe', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() },
+      credentials: 'same-origin',
       body: JSON.stringify(sub),
     });
     console.log('[WorkerPush] subscribed for shift reminders');
