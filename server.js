@@ -175,6 +175,9 @@ app.use('/training', require('./routes/training'));
 // Public token-protected SOP sign-off (no auth required, scoped by URL token)
 app.use('/sop-sign', require('./routes/sop-sign'));
 app.use('/toolbox-attend', require('./routes/toolbox-attend'));
+// Public VOC cert verification (auditors scan a QR on a printed cert).
+// Mounted before blockWorkerFromAdmin so it works in any session state.
+app.use('/voc', require('./routes/voc-public'));
 
 // Rate limiting on login endpoints (prevent brute force)
 const loginLimiter = rateLimit({

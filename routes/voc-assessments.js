@@ -10,8 +10,35 @@
 
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
+const QRCode = require('qrcode');
 const { getDb } = require('../db/database');
 const { normaliseRole } = require('../middleware/auth');
+const { renderVocCertificatePdf } = require('../lib/pdf/vocCertificatePdf');
+
+const CERT_DIR = path.join(__dirname, '..', 'data', 'uploads', 'voc-certificates');
+function ensureCertDir() {
+  try { fs.mkdirSync(CERT_DIR, { recursive: true }); } catch (e) { /* ignore */ }
+}
+
+// Certificate ID: TSC-{year}-{6-char hex}-{voc_seq}, deterministic per voc.id.
+// Once persisted on voc_assessments.certificate_id, never recomputed.
+function deriveCertId(assessment) {
+  const seedDate = assessment.valid_from || assessment.assessment_date || new Date().toISOString();
+  const year = String(seedDate).slice(0, 4);
+  const hex = crypto.createHash('sha256').update('voc:' + assessment.id).digest('hex').slice(0, 6).toUpperCase();
+  const seq = String(assessment.id).padStart(4, '0');
+  return `TSC-${year}-${hex}-${seq}`;
+}
+
+// Where the QR code points. APP_BASE_URL is set on Railway; falls back to
+// the production URL per CLAUDE.md, then to localhost for dev.
+function verifyUrlFor(certId) {
+  const base = process.env.APP_BASE_URL || 'https://tstc.up.railway.app';
+  return base.replace(/\/$/, '') + '/voc/verify/' + encodeURIComponent(certId);
+}
 
 // ────────────────────────────────────────────────
 // Helpers
@@ -345,7 +372,7 @@ router.post('/:id', (req, res) => {
 // ────────────────────────────────────────────────
 // SUBMIT (finalize, set outcome + expiry)
 // ────────────────────────────────────────────────
-router.post('/:id/submit', (req, res) => {
+router.post('/:id/submit', async (req, res) => {
   const db = getDb();
   const existing = getAssessmentWithTemplate(db, req.params.id);
   if (!existing) { req.flash('error', 'VOC not found.'); return res.redirect('/voc-assessments'); }
@@ -413,14 +440,175 @@ router.post('/:id/submit', (req, res) => {
       b.copy_to_worker_yes === 'on' ? 1 : 0, b.matrix_entered_by || '',
       existing.id
     );
+
+    // On Competent: assign a certificate id (idempotent — only if missing)
+    // and regenerate the PDF. A revoked cert that's re-submitted as
+    // competent flips back to 'active'.
+    if (outcome === 'competent') {
+      const fresh = getAssessmentWithTemplate(db, existing.id);
+      const certId = fresh.certificate_id || deriveCertId(fresh);
+      try {
+        ensureCertDir();
+        const pdfBuf = await renderVocCertificatePdf(fresh, certId, verifyUrlFor(certId));
+        const filename = `voc-${fresh.id}-${Date.now()}.pdf`;
+        fs.writeFileSync(path.join(CERT_DIR, filename), pdfBuf);
+        const relPath = 'voc-certificates/' + filename;
+        db.prepare(`
+          UPDATE voc_assessments
+          SET certificate_id = ?, certificate_status = 'active',
+              certificate_revoked_at = NULL, certificate_revoked_by = NULL,
+              certificate_revoked_reason = '',
+              pdf_path = ?, pdf_generated_at = CURRENT_TIMESTAMP,
+              updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?
+        `).run(certId, relPath, fresh.id);
+      } catch (e) {
+        console.error('[voc-assessments] cert PDF generation failed:', e);
+        // Persist cert_id even if PDF render fails so the verify URL stays
+        // stable; the next download attempt can regenerate the PDF.
+        db.prepare(`
+          UPDATE voc_assessments SET certificate_id = ?, certificate_status = 'active'
+          WHERE id = ? AND certificate_id IS NULL
+        `).run(certId, fresh.id);
+      }
+    }
+
     req.flash('success', outcome === 'competent'
-      ? `Submitted as Competent. Valid until ${validUntil}.`
+      ? `Submitted as Competent. Certificate issued — valid until ${validUntil}.`
       : 'Submitted as Not Yet Competent. Schedule re-assessment.');
   } catch (err) {
     console.error('[voc-assessments] submit error:', err);
     req.flash('error', 'Failed to submit: ' + err.message);
   }
   res.redirect(`/voc-assessments/${existing.id}/edit`);
+});
+
+// ────────────────────────────────────────────────
+// CERTIFICATE PREVIEW
+// Screen-only render of what the Phase 2 cert will look like. Renders
+// the certificate.ejs view with the existing voc_assessments record.
+// Phase 2 will: persist a real certificate_id at submit time, embed a
+// real QR via the qrcode npm dep, and pipe this through PDFKit for
+// download. Right now it's a preview — useful for getting the layout +
+// branding signed off before wiring up the full Phase 2 flow.
+// ────────────────────────────────────────────────
+router.get('/:id/certificate', async (req, res) => {
+  const db = getDb();
+  const a = getAssessmentWithTemplate(db, req.params.id);
+  if (!a) { req.flash('error', 'VOC not found.'); return res.redirect('/voc-assessments'); }
+  if (a.outcome !== 'competent') {
+    req.flash('error', 'Only Competent assessments have a certificate.');
+    return res.redirect(`/voc-assessments/${a.id}/edit`);
+  }
+  const certId = a.certificate_id || deriveCertId(a);
+  const verifyUrl = verifyUrlFor(certId);
+  let qrDataUrl = '';
+  try {
+    qrDataUrl = await QRCode.toDataURL(verifyUrl, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 320,
+      color: { dark: '#1f3864', light: '#FFFFFF' },
+    });
+  } catch (e) {
+    console.error('[voc-assessments] QR generation failed:', e);
+  }
+  res.render('voc-assessments/certificate', {
+    a, certId, qrDataUrl, verifyUrl,
+    isRevoked: a.certificate_status === 'revoked',
+    // Use a bare layout (no admin chrome) since the cert is its own page.
+    layout: false,
+  });
+});
+
+// ────────────────────────────────────────────────
+// CERTIFICATE PDF DOWNLOAD
+// Streams the persisted PDF; regenerates on the fly if missing (e.g. first
+// download after a Railway redeploy that lost the uploads volume contents).
+// ────────────────────────────────────────────────
+router.get('/:id/pdf', async (req, res) => {
+  const db = getDb();
+  const a = getAssessmentWithTemplate(db, req.params.id);
+  if (!a || a.outcome !== 'competent') return res.status(404).send('Certificate not available.');
+  const certId = a.certificate_id || deriveCertId(a);
+  let pdfBuffer = null;
+  if (a.pdf_path) {
+    const full = path.join(__dirname, '..', 'data', 'uploads', path.basename(path.dirname(a.pdf_path)), path.basename(a.pdf_path));
+    // Fallback resolution — the pdf_path is stored as 'voc-certificates/<file>'.
+    const altFull = path.join(CERT_DIR, path.basename(a.pdf_path));
+    const which = fs.existsSync(altFull) ? altFull : (fs.existsSync(full) ? full : null);
+    if (which) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${certId}.pdf"`);
+      return fs.createReadStream(which).pipe(res);
+    }
+  }
+  try {
+    pdfBuffer = await renderVocCertificatePdf(a, certId, verifyUrlFor(certId));
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${certId}.pdf"`);
+    return res.end(pdfBuffer);
+  } catch (e) {
+    console.error('[voc-assessments] PDF render failed:', e);
+    return res.status(500).send('Failed to render certificate.');
+  }
+});
+
+// ────────────────────────────────────────────────
+// REVOKE CERTIFICATE (admin only)
+// Worker portal + public verify page reflect immediately.
+// ────────────────────────────────────────────────
+router.post('/:id/revoke', (req, res) => {
+  if (normaliseRole(req.session.user.role) !== 'admin') {
+    req.flash('error', 'Only admins can revoke certificates.');
+    return res.redirect(`/voc-assessments/${req.params.id}/edit`);
+  }
+  const db = getDb();
+  const a = db.prepare('SELECT id, certificate_id, certificate_status FROM voc_assessments WHERE id = ?').get(req.params.id);
+  if (!a || !a.certificate_id) {
+    req.flash('error', 'No certificate to revoke.');
+    return res.redirect(`/voc-assessments/${req.params.id}/edit`);
+  }
+  const reason = (req.body.reason || '').trim();
+  if (!reason) {
+    req.flash('error', 'Provide a revocation reason.');
+    return res.redirect(`/voc-assessments/${req.params.id}/edit`);
+  }
+  db.prepare(`
+    UPDATE voc_assessments
+    SET certificate_status = 'revoked',
+        certificate_revoked_at = CURRENT_TIMESTAMP,
+        certificate_revoked_by = ?,
+        certificate_revoked_reason = ?,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(req.session.user.id, reason, a.id);
+  req.flash('success', `Certificate ${a.certificate_id} revoked.`);
+  res.redirect(`/voc-assessments/${a.id}/edit`);
+});
+
+// ────────────────────────────────────────────────
+// UNREVOKE — restore an active cert (admin only).
+// Useful when a revoke was made in error; doesn't reset
+// the worker's underlying competency record.
+// ────────────────────────────────────────────────
+router.post('/:id/unrevoke', (req, res) => {
+  if (normaliseRole(req.session.user.role) !== 'admin') {
+    req.flash('error', 'Only admins can change certificate status.');
+    return res.redirect(`/voc-assessments/${req.params.id}/edit`);
+  }
+  const db = getDb();
+  db.prepare(`
+    UPDATE voc_assessments
+    SET certificate_status = 'active',
+        certificate_revoked_at = NULL,
+        certificate_revoked_by = NULL,
+        certificate_revoked_reason = '',
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(req.params.id);
+  req.flash('success', 'Certificate restored to active.');
+  res.redirect(`/voc-assessments/${req.params.id}/edit`);
 });
 
 // ────────────────────────────────────────────────
