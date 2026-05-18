@@ -9547,6 +9547,42 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 209: standalone TGS Risk & Options Assessments under Plans.
+  // Separate from risk_assessments — these are filled in the Planning area,
+  // exported as PDF, and optionally attached to a traffic_plans row later
+  // via plan_revisions. plan_id is nullable so the form can be drafted
+  // before any plan exists.
+  if (!isMigrationApplied.get(209)) {
+    console.log('Running migration 209: tgs_risk_assessments table');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tgs_risk_assessments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_id INTEGER REFERENCES traffic_plans(id) ON DELETE SET NULL,
+          job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          title TEXT DEFAULT '',
+          tgs_ref_no TEXT DEFAULT '',
+          status TEXT DEFAULT 'draft',
+          responses_json TEXT DEFAULT '{}',
+          residual_risk TEXT DEFAULT NULL,
+          requires_one_up INTEGER DEFAULT 0,
+          pdf_path TEXT DEFAULT '',
+          pdf_generated_at DATETIME DEFAULT NULL,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_tgs_ra_plan_id ON tgs_risk_assessments(plan_id);
+        CREATE INDEX IF NOT EXISTS idx_tgs_ra_job_id ON tgs_risk_assessments(job_id);
+        CREATE INDEX IF NOT EXISTS idx_tgs_ra_status ON tgs_risk_assessments(status);
+      `);
+      recordMigration.run(209, 'tgs_risk_assessments standalone table');
+      console.log('Migration 209 applied: tgs_risk_assessments table created');
+    } catch (e) {
+      console.error('Migration 209 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
