@@ -1,0 +1,121 @@
+<% locals.currentPage = 'tgs-risk-assessments' %>
+
+<%
+  const statusColors = {
+    draft: 'bg-gray-100 text-gray-700',
+    finalized: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
+  };
+  const riskColors = {
+    Low:     'bg-green-100 text-green-800 ring-1 ring-green-600/20',
+    Medium:  'bg-yellow-100 text-yellow-800 ring-1 ring-yellow-600/20',
+    High:    'bg-orange-100 text-orange-800 ring-1 ring-orange-600/20',
+    Extreme: 'bg-red-100 text-red-800 ring-1 ring-red-600/20',
+  };
+  function fmtDate(d) {
+    if (!d) return '-';
+    return new Date(d).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+%>
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">TGS Risk Assessments</h1>
+    <p class="text-gray-500 text-sm mt-0.5">Traffic Guidance Scheme Risk &amp; Options Assessments (TSROA-001 Rev A) &middot; export PDF &middot; attach to plans</p>
+  </div>
+  <a href="/tgs-risk-assessments/new" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">
+    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+    New TGS Risk Assessment
+  </a>
+</div>
+
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 mb-5">
+  <form method="GET" action="/tgs-risk-assessments" class="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2 sm:gap-3">
+    <%- include('../partials/csrf') %>
+    <div class="flex-1 sm:flex-none sm:min-w-[120px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
+      <select name="status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <option value="draft"     <%= filters.status === 'draft' ? 'selected' : '' %>>Draft</option>
+        <option value="finalized" <%= filters.status === 'finalized' ? 'selected' : '' %>>Finalized</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">Apply</button>
+      <a href="/tgs-risk-assessments" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition">Clear</a>
+    </div>
+  </form>
+</div>
+
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <% if (assessments.length === 0) { %>
+    <div class="p-6 text-center">
+      <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      <p class="text-gray-500 text-sm font-medium">No TGS Risk Assessments yet</p>
+      <p class="text-gray-400 text-xs mt-1">Fill the TSROA-001 template, export it as PDF, and attach it to a plan when ready.</p>
+      <a href="/tgs-risk-assessments/new" class="inline-flex items-center mt-3 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
+        <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        Create First Assessment
+      </a>
+    </div>
+  <% } else { %>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-200">
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Title</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">TGS Ref</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Linked Plan</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Residual Risk</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Created</th>
+            <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <% assessments.forEach(function(a) { %>
+            <tr class="hover:bg-gray-50 <%= a.requires_one_up ? 'border-l-4 border-l-red-400' : '' %>">
+              <td class="px-3 py-2.5">
+                <a href="/tgs-risk-assessments/<%= a.id %>/edit" class="text-brand-600 font-semibold hover:text-brand-700"><%= a.title || ('Assessment #' + a.id) %></a>
+                <% if (a.requires_one_up) { %>
+                  <span class="block text-[10px] text-red-600 font-semibold">One-Up Manager required</span>
+                <% } %>
+              </td>
+              <td class="px-3 py-2.5 text-gray-700 text-xs"><%= a.tgs_ref_no || '-' %></td>
+              <td class="px-3 py-2.5 text-xs hidden md:table-cell">
+                <% if (a.plan_number) { %>
+                  <a href="/plans/<%= a.plan_id %>/edit" class="text-brand-600 hover:text-brand-700"><%= a.plan_number %></a>
+                <% } else { %>
+                  <span class="text-gray-300">unlinked</span>
+                <% } %>
+              </td>
+              <td class="px-3 py-2.5">
+                <% if (a.residual_risk) { %>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= riskColors[a.residual_risk] || 'bg-gray-100 text-gray-700' %>"><%= a.residual_risk.toUpperCase() %></span>
+                <% } else { %>
+                  <span class="text-gray-300 text-xs">-</span>
+                <% } %>
+              </td>
+              <td class="px-3 py-2.5">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= statusColors[a.status] || 'bg-gray-100 text-gray-700' %>"><%= (a.status || 'draft').toUpperCase() %></span>
+              </td>
+              <td class="px-3 py-2.5 text-gray-500 text-xs hidden lg:table-cell"><%= fmtDate(a.created_at) %></td>
+              <td class="px-3 py-2.5 text-right">
+                <div class="flex items-center justify-end gap-1">
+                  <a href="/tgs-risk-assessments/<%= a.id %>/edit" class="px-2.5 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg">Edit</a>
+                  <a href="/tgs-risk-assessments/<%= a.id %>/pdf" target="_blank" class="px-2.5 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 rounded-lg">PDF</a>
+                  <form method="POST" action="/tgs-risk-assessments/<%= a.id %>/delete" class="inline" onsubmit="return confirm('Delete this assessment?')">
+                    <%- include('../partials/csrf') %>
+                    <button type="submit" class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition" title="Delete">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <div class="px-3 py-2.5 border-t border-gray-200 text-xs text-gray-400"><%= assessments.length %> assessment<%= assessments.length !== 1 ? 's' : '' %></div>
+  <% } %>
+</div>

@@ -267,6 +267,7 @@ app.use('/dockets', requireLogin, requirePermission('audits'), require('./routes
 app.use('/shift-tasks', requireLogin, requirePermission('tasks'), require('./routes/shift-tasks-admin'));
 app.use('/leave-approvals', requireLogin, requirePermission('leave_approvals'), require('./routes/leave-approvals'));
 app.use('/plans', requireLogin, requirePermission('compliance'), require('./routes/plans'));
+app.use('/tgs-risk-assessments', requireLogin, requirePermission('compliance'), require('./routes/tgs-risk-assessments'));
 app.use('/incidents', requireLogin, requirePermission('incidents'), require('./routes/incidents'));
 app.use('/contacts', requireLogin, requirePermission('contacts'), require('./routes/contacts'));
 app.use('/documents', requireLogin, requirePermission('documents'), require('./routes/documents'));

@@ -1,0 +1,509 @@
+<% locals.currentPage = 'tgs-risk-assessments' %>
+
+<%
+  const a = assessment || {};
+  const r = responses || {};
+  const site = r.site || {};
+  const opts = r.options || {};
+  const answers = r.answers || {};
+  const s4 = Array.isArray(r.section4) ? r.section4 : [];
+  const rm = Array.isArray(r.risk_management) ? r.risk_management : [];
+  const so = r.sign_off || {};
+  const author = so.author || {};
+  const approver = so.approver || {};
+  const oneUp = so.one_up || {};
+  const direction = (site.direction || '').toUpperCase();
+
+  // Group questions by section for the loops below.
+  const section1 = questions.filter(function(q){ return q.section === 1; });
+  const section2 = questions.filter(function(q){ return q.section === 2; });
+  const section3 = questions.filter(function(q){ return q.section === 3; });
+  const sectionMap = { 1: section1, 2: section2, 3: section3 };
+
+  const action = a.id ? ('/tgs-risk-assessments/' + a.id) : '/tgs-risk-assessments';
+
+  // Risk-band Tailwind classes used by both server-rendered initial state
+  // and the client-side JS (kept in sync via data-band attributes).
+  const riskClass = {
+    Low:     'bg-green-500 text-white',
+    Medium:  'bg-yellow-400 text-black',
+    High:    'bg-orange-500 text-white',
+    Extreme: 'bg-red-600 text-white',
+  };
+%>
+
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="mb-4">
+    <a href="/tgs-risk-assessments" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700">
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      Back to TGS Risk Assessments
+    </a>
+  </div>
+
+  <!-- Header card -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
+    <div class="bg-brand-600 text-white px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
+      <div>
+        <div class="text-xs uppercase tracking-widest opacity-80">T&amp;S Traffic Control · ABN 58 655 958 320</div>
+        <h1 class="text-xl font-bold leading-tight">Traffic Guidance Scheme — Risk &amp; Options Assessment</h1>
+        <div class="text-xs opacity-80 mt-0.5">Doc No: TSROA-001 · Rev: A</div>
+      </div>
+      <div class="text-right text-xs">
+        <% if (a.id) { %><div>Assessment <span class="font-mono">#<%= a.id %></span></div><% } %>
+        <div>Status: <%= (a.status || 'draft').toUpperCase() %></div>
+      </div>
+    </div>
+  </div>
+
+  <form method="POST" action="<%= action %>" id="tgsRaForm">
+    <%- include('../partials/csrf') %>
+
+    <!-- Meta — title / ref / link to plan or job -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Assessment Details</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="sm:col-span-2">
+          <label class="text-xs font-semibold text-gray-500 uppercase">Title</label>
+          <input type="text" name="title" value="<%= a.title || '' %>" placeholder="e.g. Pacific Hwy Night Shutdown — Risk Options" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">TGS Ref No</label>
+          <input type="text" name="tgs_ref_no" value="<%= a.tgs_ref_no || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Link to Plan (optional)</label>
+          <select name="plan_id" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">— not linked yet —</option>
+            <% plans.forEach(function(p){ %>
+              <option value="<%= p.id %>" <%= a.plan_id == p.id ? 'selected' : '' %>><%= p.plan_number %><%= p.plan_types ? ' (' + p.plan_types + ')' : '' %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Link to Job (optional)</label>
+          <select name="job_id" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">— none —</option>
+            <% jobs.forEach(function(j){ %>
+              <option value="<%= j.id %>" <%= a.job_id == j.id ? 'selected' : '' %>><%= j.job_number %> · <%= j.project_name || j.client %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Site Location Details -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Site Location Details</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Road</label><input type="text" name="site_road" value="<%= site.road || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">From Side St</label><input type="text" name="site_from_side_st" value="<%= site.from_side_st || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">To Side St</label><input type="text" name="site_to_side_st" value="<%= site.to_side_st || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Suburb</label><input type="text" name="site_suburb" value="<%= site.suburb || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Direction</label>
+          <div class="mt-1 flex gap-2">
+            <% ['N','S','E','W'].forEach(function(d){ %>
+              <label class="flex items-center gap-1 px-2 py-1.5 border border-gray-300 rounded-md cursor-pointer text-sm <%= direction === d ? 'bg-brand-50 border-brand-400' : 'bg-white' %>">
+                <input type="radio" name="site_direction" value="<%= d %>" <%= direction === d ? 'checked' : '' %> class="w-3.5 h-3.5"><%= d %>
+              </label>
+            <% }) %>
+          </div>
+        </div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Posted Speed (km/h)</label><input type="text" name="site_posted_speed" value="<%= site.posted_speed || '' %>" placeholder="60" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Client / Principal</label><input type="text" name="site_client_principal" value="<%= site.client_principal || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Road Authority</label><input type="text" name="site_road_authority" value="<%= site.road_authority || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">TGS Design No</label><input type="text" name="site_tgs_design_no" value="<%= site.tgs_design_no || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Design Date</label><input type="date" name="site_design_date" value="<%= site.design_date || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Estimated Duration</label><input type="text" name="site_estimated_duration" value="<%= site.estimated_duration || '' %>" placeholder="e.g. 1 night, 3 weeks" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div class="sm:col-span-2 lg:col-span-3"><label class="text-xs font-semibold text-gray-500 uppercase">Scope of Works</label><textarea name="site_scope_of_works" rows="2" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= site.scope_of_works || '' %></textarea></div>
+      </div>
+    </section>
+
+    <!-- Options Assessment -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Options Assessment</h2>
+      <div class="mb-3">
+        <span class="text-xs font-semibold text-gray-500 uppercase mr-3">Method Selected</span>
+        <% ['around','past','through'].forEach(function(m){ %>
+          <label class="inline-flex items-center gap-2 mr-4 text-sm">
+            <input type="radio" name="method_selected" value="<%= m %>" <%= opts.method_selected === m ? 'checked' : '' %> class="w-3.5 h-3.5">
+            <%= m.charAt(0).toUpperCase() + m.slice(1) %>
+          </label>
+        <% }) %>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase">Reason for method selected</label>
+        <textarea name="method_reason" rows="2" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= opts.method_reason || '' %></textarea>
+      </div>
+    </section>
+
+    <!-- Risk Assessment — Sections 1, 2, 3 -->
+    <% [
+      { num: 1, label: 'Section 1 — General', note: null },
+      { num: 2, label: 'Section 2 — Shuttle Flow', note: 'If your SOW does not involve shuttle flow, leave Section 2 blank.' },
+      { num: 3, label: 'Section 3 — Detours', note: 'If your TGS does not involve detours, leave Section 3 blank.' },
+    ].forEach(function(sec){ %>
+      <section class="bg-white border border-gray-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+        <div class="bg-brand-50 px-6 py-3 border-b border-gray-200 flex items-center justify-between gap-2 flex-wrap">
+          <div>
+            <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700"><%= sec.label %></h2>
+            <% if (sec.note) { %><p class="text-xs text-gray-500 italic mt-0.5"><%= sec.note %></p><% } %>
+          </div>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50">
+              <tr class="text-left">
+                <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-12">#</th>
+                <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Question</th>
+                <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-14 text-center">Yes</th>
+                <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-14 text-center">No</th>
+                <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-64">Description of Risks (if No)</th>
+                <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-56">Risk Rating</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <% sectionMap[sec.num].forEach(function(q){
+                const ans = answers[q.number] || {};
+                const yn = ans.yn || '';
+                const desc = ans.desc || '';
+                const ql = ans.likelihood || '';
+                const qc = ans.consequence || '';
+                const qRating = ans.rating || '';
+              %>
+                <tr data-q-row data-q-num="<%= q.number %>" data-q-text="<%= q.text.replace(/"/g, '&quot;') %>">
+                  <td class="px-3 py-2 align-top text-xs font-semibold text-gray-700"><%= q.number %></td>
+                  <td class="px-3 py-2 align-top text-sm text-gray-700"><%= q.text %></td>
+                  <td class="px-3 py-2 align-top text-center">
+                    <input type="radio" name="yn_<%= q.number %>" value="yes" <%= yn === 'yes' ? 'checked' : '' %> data-q-yn class="w-4 h-4">
+                  </td>
+                  <td class="px-3 py-2 align-top text-center">
+                    <input type="radio" name="yn_<%= q.number %>" value="no" <%= yn === 'no' ? 'checked' : '' %> data-q-yn class="w-4 h-4">
+                  </td>
+                  <td class="px-3 py-2 align-top">
+                    <textarea name="desc_<%= q.number %>" rows="2" data-q-desc placeholder="Describe the risk…" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400" <%= yn === 'no' ? '' : 'disabled' %>><%= desc %></textarea>
+                  </td>
+                  <td class="px-3 py-2 align-top">
+                    <div class="flex flex-col gap-1">
+                      <select name="likelihood_<%= q.number %>" data-q-l class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400" <%= yn === 'no' ? '' : 'disabled' %>>
+                        <option value="">Likelihood…</option>
+                        <% likelihood.forEach(function(l){ %>
+                          <option value="<%= l.code %>" <%= ql === l.code ? 'selected' : '' %>><%= l.code %>. <%= l.label %></option>
+                        <% }) %>
+                      </select>
+                      <select name="consequence_<%= q.number %>" data-q-c class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400" <%= yn === 'no' ? '' : 'disabled' %>>
+                        <option value="">Consequence…</option>
+                        <% consequence.forEach(function(c){ %>
+                          <option value="<%= c.code %>" <%= String(qc) === String(c.code) ? 'selected' : '' %>><%= c.code %>. <%= c.label %></option>
+                        <% }) %>
+                      </select>
+                      <div data-q-badge class="text-center font-bold text-xs py-1 rounded <%= qRating && riskClass[qRating] ? riskClass[qRating] : 'hidden' %>">
+                        <%= qRating ? (qRating + ' (' + qc + ql + ')') : '' %>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    <% }) %>
+
+    <!-- Section 4 — free-entry hazards -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+      <div class="bg-brand-50 px-6 py-3 border-b border-gray-200 flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700">Section 4 — Other Hazards &amp; Risks</h2>
+          <p class="text-xs text-gray-500 italic mt-0.5">Describe additional hazards not covered above.</p>
+        </div>
+        <button type="button" id="s4AddRow" class="text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-3 py-1.5 rounded-lg">+ Add Hazard</button>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50">
+            <tr class="text-left">
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-12">#</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Hazard Description</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-14 text-center">Yes</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-14 text-center">No</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-64">Description of Risks (if No)</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-56">Risk Rating</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-12 text-right"></th>
+            </tr>
+          </thead>
+          <tbody id="s4Tbody" class="divide-y divide-gray-100">
+            <%
+              const s4Rows = s4.length > 0 ? s4 : [{}, {}, {}, {}];
+              s4Rows.forEach(function(row, i){
+                const yn = row.yn || '';
+                const r4 = row.rating || '';
+            %>
+              <tr data-s4-row>
+                <td class="px-3 py-2 align-top text-xs font-semibold text-gray-700 s4-index">4.<%= i + 1 %></td>
+                <td class="px-3 py-2 align-top">
+                  <textarea name="s4_question" rows="2" placeholder="Describe hazard…" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"><%= row.question || '' %></textarea>
+                </td>
+                <td class="px-3 py-2 align-top text-center">
+                  <input type="radio" data-s4-yn value="yes" <%= yn === 'yes' ? 'checked' : '' %> class="w-4 h-4">
+                  <input type="hidden" name="s4_yn" value="<%= yn %>" data-s4-yn-hidden>
+                </td>
+                <td class="px-3 py-2 align-top text-center">
+                  <input type="radio" data-s4-yn value="no" <%= yn === 'no' ? 'checked' : '' %> class="w-4 h-4">
+                </td>
+                <td class="px-3 py-2 align-top">
+                  <textarea name="s4_desc" rows="2" data-s4-desc placeholder="Describe the risk…" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400" <%= yn === 'no' ? '' : 'disabled' %>><%= row.desc || '' %></textarea>
+                </td>
+                <td class="px-3 py-2 align-top">
+                  <div class="flex flex-col gap-1">
+                    <select name="s4_likelihood" data-s4-l class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400" <%= yn === 'no' ? '' : 'disabled' %>>
+                      <option value="">Likelihood…</option>
+                      <% likelihood.forEach(function(l){ %>
+                        <option value="<%= l.code %>" <%= row.likelihood === l.code ? 'selected' : '' %>><%= l.code %>. <%= l.label %></option>
+                      <% }) %>
+                    </select>
+                    <select name="s4_consequence" data-s4-c class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-50 disabled:text-gray-400" <%= yn === 'no' ? '' : 'disabled' %>>
+                      <option value="">Consequence…</option>
+                      <% consequence.forEach(function(c){ %>
+                        <option value="<%= c.code %>" <%= String(row.consequence) === String(c.code) ? 'selected' : '' %>><%= c.code %>. <%= c.label %></option>
+                      <% }) %>
+                    </select>
+                    <div data-s4-badge class="text-center font-bold text-xs py-1 rounded <%= r4 && riskClass[r4] ? riskClass[r4] : 'hidden' %>">
+                      <%= r4 ? (r4 + ' (' + (row.consequence || '') + (row.likelihood || '') + ')') : '' %>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-3 py-2 align-top text-right">
+                  <button type="button" data-s4-remove class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md" title="Remove row">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Risk Management -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+      <div class="bg-brand-50 px-6 py-3 border-b border-gray-200 flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700">Risk Management</h2>
+          <p class="text-xs text-gray-500 italic mt-0.5">Any risks identified above must be controlled below. Hierarchy of Controls: Eliminate → Substitute → Engineering → Administrative → PPE.</p>
+        </div>
+        <div class="flex gap-2">
+          <button type="button" id="rmPullNo" class="text-xs font-medium text-white bg-brand-600 hover:bg-brand-500 px-3 py-1.5 rounded-lg">Pull &quot;No&quot; items into table</button>
+          <button type="button" id="rmAddRow" class="text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-3 py-1.5 rounded-lg">+ Add Row</button>
+        </div>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50">
+            <tr class="text-left">
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-16">Item</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Hazard / Risk</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Control Measures</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-56">Remaining Risk Rating</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-12 text-right"></th>
+            </tr>
+          </thead>
+          <tbody id="rmTbody" class="divide-y divide-gray-100">
+            <%
+              const rmRows = rm.length > 0 ? rm : [{}];
+              rmRows.forEach(function(row, i){
+                const rrate = row.rating || '';
+            %>
+              <tr data-rm-row>
+                <td class="px-3 py-2 align-top">
+                  <input type="text" name="rm_ref" value="<%= row.ref || (i + 1) %>" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs font-semibold text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                </td>
+                <td class="px-3 py-2 align-top">
+                  <textarea name="rm_hazard" rows="2" placeholder="Hazard…" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"><%= row.hazard || '' %></textarea>
+                </td>
+                <td class="px-3 py-2 align-top">
+                  <textarea name="rm_controls" rows="2" placeholder="e.g. Reduce speed limit to 40km/h, additional advance warning signs, spotter on site…" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"><%= row.controls || '' %></textarea>
+                </td>
+                <td class="px-3 py-2 align-top">
+                  <div class="flex flex-col gap-1">
+                    <select name="rm_likelihood" data-rm-l class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                      <option value="">Likelihood…</option>
+                      <% likelihood.forEach(function(l){ %>
+                        <option value="<%= l.code %>" <%= row.likelihood === l.code ? 'selected' : '' %>><%= l.code %>. <%= l.label %></option>
+                      <% }) %>
+                    </select>
+                    <select name="rm_consequence" data-rm-c class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                      <option value="">Consequence…</option>
+                      <% consequence.forEach(function(c){ %>
+                        <option value="<%= c.code %>" <%= String(row.consequence) === String(c.code) ? 'selected' : '' %>><%= c.code %>. <%= c.label %></option>
+                      <% }) %>
+                    </select>
+                    <div data-rm-badge class="text-center font-bold text-xs py-1 rounded <%= rrate && riskClass[rrate] ? riskClass[rrate] : 'hidden' %>">
+                      <%= rrate ? (rrate + ' (' + (row.consequence || '') + (row.likelihood || '') + ')') : '' %>
+                    </div>
+                  </div>
+                </td>
+                <td class="px-3 py-2 align-top text-right">
+                  <button type="button" data-rm-remove class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md" title="Remove row">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- Matrix + Action Levels reference -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+      <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Risk Rating Matrix</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full text-[10px] text-center border-collapse">
+            <thead>
+              <tr>
+                <% matrixHeaders.forEach(function(h){ %>
+                  <th class="border border-gray-200 bg-gray-50 px-1.5 py-1 font-semibold text-gray-600"><%= h %></th>
+                <% }) %>
+              </tr>
+            </thead>
+            <tbody>
+              <% matrixRows.forEach(function(row){ %>
+                <tr>
+                  <% row.forEach(function(cell, j){
+                    let band = '';
+                    if (j > 0) {
+                      const m = cell.match(/^(Low|Medium|High|Extreme)/);
+                      if (m) band = m[1];
+                    }
+                  %>
+                    <% if (j === 0) { %>
+                      <td class="border border-gray-200 bg-gray-50 font-semibold p-1 text-gray-700"><%= cell %></td>
+                    <% } else { %>
+                      <td class="border border-gray-200 p-1 font-semibold <%= riskClass[band] || '' %>"><%= cell %></td>
+                    <% } %>
+                  <% }) %>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </section>
+      <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Residual Risk Action Levels</h2>
+        <table class="w-full text-xs">
+          <tbody class="divide-y divide-gray-100">
+            <% actionLevels.forEach(function(lvl){ %>
+              <tr>
+                <td class="py-2 pr-3 w-24">
+                  <span class="inline-flex items-center justify-center w-full px-2 py-1 rounded font-bold <%= riskClass[lvl.label] || '' %>"><%= lvl.rating %> <%= lvl.label %></span>
+                </td>
+                <td class="py-2 text-gray-600"><%= lvl.text %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </section>
+    </div>
+
+    <!-- Additional Comments -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Additional Comments</h2>
+      <textarea name="additional_comments" rows="3" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= r.additional_comments || '' %></textarea>
+    </section>
+
+    <!-- Sign-Off -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Sign-Off</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Author (Designer)</label><input type="text" name="author_name" value="<%= author.name || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">PWZ Lic No</label><input type="text" name="author_pwz" value="<%= author.pwz || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Date</label><input type="date" name="author_date" value="<%= author.date || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Approver</label><input type="text" name="approver_name" value="<%= approver.name || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">PWZ Lic No</label><input type="text" name="approver_pwz" value="<%= approver.pwz || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Date</label><input type="date" name="approver_date" value="<%= approver.date || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">One-Up Manager <span id="oneUpRequiredHint" class="text-red-600 hidden">(required)</span></label>
+          <input type="text" name="one_up_name" id="oneUpName" value="<%= oneUp.name || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Accreditation</label><input type="text" name="one_up_accreditation" value="<%= oneUp.accreditation || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Date</label><input type="date" name="one_up_date" value="<%= oneUp.date || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+      </div>
+      <p class="mt-3 text-xs text-gray-500 italic">One-Up Manager approval required where any residual risk is rated High (3) or Extreme (4).</p>
+    </section>
+
+    <!-- Action bar -->
+    <div class="sticky bottom-0 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-white border-t border-gray-200 shadow-sm flex items-center justify-between flex-wrap gap-3">
+      <div class="text-sm" id="residualBanner">
+        <% if (a.residual_risk) { %>
+          Highest residual risk:
+          <span class="inline-flex items-center px-2 py-0.5 rounded font-bold <%= riskClass[a.residual_risk] || '' %>"><%= a.residual_risk %></span>
+          <% if (a.requires_one_up) { %>
+            <span class="ml-3 text-red-600 font-semibold">One-Up Manager sign-off required</span>
+          <% } %>
+        <% } %>
+      </div>
+      <div class="flex gap-2">
+        <% if (a.id) { %>
+          <a href="/tgs-risk-assessments/<%= a.id %>/pdf" target="_blank" class="px-4 py-2 border border-brand-600 text-brand-700 hover:bg-brand-50 rounded-lg text-sm font-medium">Export PDF</a>
+        <% } %>
+        <button type="submit" id="saveBtn" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg">
+          <%= a.id ? 'Save Changes' : 'Create Assessment' %>
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <% if (a.id) { %>
+    <!-- Finalize + Attach actions (separate forms, must live outside #tgsRaForm) -->
+    <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <form method="POST" action="/tgs-risk-assessments/<%= a.id %>/finalize" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+        <%- include('../partials/csrf') %>
+        <h3 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Finalize &amp; Generate PDF</h3>
+        <p class="text-xs text-gray-500 mb-3">Save your latest changes first, then click below to lock the assessment and generate the PDF.</p>
+        <button type="submit" class="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium rounded-lg" <%= a.requires_one_up && (!oneUp.name) ? 'disabled' : '' %>>
+          <%= a.status === 'finalized' ? 'Re-generate PDF' : 'Finalize &amp; Generate PDF' %>
+        </button>
+        <% if (a.requires_one_up && !oneUp.name) { %>
+          <p class="mt-2 text-xs text-red-600">Fill One-Up Manager name and save before finalizing.</p>
+        <% } %>
+      </form>
+
+      <form method="POST" action="" id="attachForm" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+        <%- include('../partials/csrf') %>
+        <h3 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Attach to Plan</h3>
+        <p class="text-xs text-gray-500 mb-3">Pick a traffic plan to attach this assessment's PDF to. Adds a new revision on the plan.</p>
+        <div class="flex gap-2">
+          <select id="attachPlanSelect" class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">— pick a plan —</option>
+            <% plans.forEach(function(p){ %>
+              <option value="<%= p.id %>"><%= p.plan_number %><%= p.plan_types ? ' (' + p.plan_types + ')' : '' %></option>
+            <% }) %>
+          </select>
+          <button type="submit" id="attachBtn" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg" <%= !a.pdf_path ? 'disabled' : '' %>>Attach</button>
+        </div>
+        <% if (!a.pdf_path) { %>
+          <p class="mt-2 text-xs text-gray-500 italic">Finalize first to generate the PDF, then attach.</p>
+        <% } %>
+        <script>
+          (function () {
+            var form = document.getElementById('attachForm');
+            var sel  = document.getElementById('attachPlanSelect');
+            if (!form || !sel) return;
+            form.addEventListener('submit', function (e) {
+              if (!sel.value) { e.preventDefault(); alert('Pick a plan to attach to.'); return; }
+              form.action = '/tgs-risk-assessments/<%= a.id %>/attach/' + sel.value;
+            });
+          })();
+        </script>
+      </form>
+    </div>
+  <% } %>
+</div>
+
+<script src="/js/tgs-risk-assessment.js"></script>
