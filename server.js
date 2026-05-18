@@ -196,7 +196,10 @@ app.use('/w', requireWorker, workerLocals, require('./routes/worker/jobs'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/clock'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/shifts'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/chat'));
-app.use('/w', requireWorker, workerLocals, require('./routes/worker/timesheets'));
+// Worker timesheets removed — traffic control workflow uses end-of-shift
+// docket signing, not self-submitted hours. Old deep links redirect to
+// dockets. The admin-side timesheets module still exists for office use.
+app.use('/w/timesheets', requireWorker, (req, res) => res.redirect('/w/dockets'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/availability'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/incidents'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/training'));
@@ -210,6 +213,7 @@ app.use('/w', requireWorker, workerLocals, require('./routes/worker/forms'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/custom-checklists'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/notifications'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/safety'));
+app.use('/w', requireWorker, workerLocals, require('./routes/worker/birthday'));
 app.get('/w/more', requireWorker, workerLocals, (req, res) => {
   res.locals.isManager = require('./middleware/managerAuth').isManager(req.session.worker);
   res.render('worker/more', { title: 'More', currentPage: 'more' });
@@ -265,6 +269,7 @@ app.use('/dockets', requireLogin, requirePermission('audits'), require('./routes
 app.use('/shift-tasks', requireLogin, requirePermission('tasks'), require('./routes/shift-tasks-admin'));
 app.use('/leave-approvals', requireLogin, requirePermission('leave_approvals'), require('./routes/leave-approvals'));
 app.use('/plans', requireLogin, requirePermission('compliance'), require('./routes/plans'));
+app.use('/tgs-risk-assessments', requireLogin, requirePermission('compliance'), require('./routes/tgs-risk-assessments'));
 app.use('/incidents', requireLogin, requirePermission('incidents'), require('./routes/incidents'));
 app.use('/contacts', requireLogin, requirePermission('contacts'), require('./routes/contacts'));
 app.use('/documents', requireLogin, requirePermission('documents'), require('./routes/documents'));

@@ -34,6 +34,76 @@ async function renderAndPersistPages(db, docRow) {
   }
 }
 
+// Same idea, but for a single child file row in sop_document_files.
+// Renders into page-renders/<page_renders_dir>/ — each file gets its own
+// directory so the legacy parent-keyed renders don't collide with new ones.
+async function renderAndPersistPagesForFile(db, fileRow) {
+  if (!/pdf/i.test(fileRow.mime_type || '') && !/\.pdf$/i.test(fileRow.original_name || '')) {
+    return { pages: [], error: null };
+  }
+  try {
+    const dirKey = fileRow.page_renders_dir || `file-${fileRow.id}`;
+    const out = path.join(SOP_PAGE_DIR, dirKey);
+    fs.mkdirSync(out, { recursive: true });
+    const pages = await renderPdfToPngs(fileRow.file_path, out);
+    db.prepare('UPDATE sop_document_files SET page_renders = ?, page_renders_dir = ? WHERE id = ?')
+      .run(JSON.stringify(pages), dirKey, fileRow.id);
+    return { pages, error: null };
+  } catch (e) {
+    console.error(`[sop-render] file ${fileRow.id} failed:`, e.message);
+    return { pages: [], error: e.message };
+  }
+}
+
+// Keep the parent sop_documents row in sync with the first child file so
+// older code paths that still read parent columns (e.g. /sop-documents/:id/file,
+// /sop-sign/:token/document/:id) keep working. Called whenever a section's
+// file list changes — upload of first file, deletion, reordering, etc.
+function syncParentToFirstFile(db, sopDocumentId) {
+  const first = db.prepare(`
+    SELECT id, filename, original_name, file_path, file_size, mime_type, page_renders
+    FROM sop_document_files
+    WHERE sop_document_id = ?
+    ORDER BY display_order ASC, id ASC
+    LIMIT 1
+  `).get(sopDocumentId);
+  if (first) {
+    db.prepare(`
+      UPDATE sop_documents
+      SET filename = ?, original_name = ?, file_path = ?, file_size = ?, mime_type = ?, page_renders = ?
+      WHERE id = ?
+    `).run(
+      first.filename, first.original_name, first.file_path,
+      first.file_size || 0, first.mime_type || '', first.page_renders || null,
+      sopDocumentId
+    );
+  } else {
+    // No files left on the section — null out the parent file columns so the
+    // section is visibly empty in the UI.
+    db.prepare(`
+      UPDATE sop_documents
+      SET filename = '', original_name = '', file_path = '', file_size = 0, mime_type = '', page_renders = NULL
+      WHERE id = ?
+    `).run(sopDocumentId);
+  }
+}
+
+// Load all files for a section in display order. Used by the admin view to
+// list files under each section.
+function loadFilesForSection(db, sopDocumentId) {
+  return db.prepare(`
+    SELECT id, sop_document_id, filename, original_name, file_path, file_size, mime_type,
+           page_renders, page_renders_dir, display_order, created_at
+    FROM sop_document_files
+    WHERE sop_document_id = ?
+    ORDER BY display_order ASC, id ASC
+  `).all(sopDocumentId).map(r => {
+    let pageCount = 0;
+    if (r.page_renders) { try { pageCount = (JSON.parse(r.page_renders) || []).length; } catch (e) {} }
+    return { ...r, pageCount };
+  });
+}
+
 const sopDocStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     fs.mkdirSync(SOP_DOC_DIR, { recursive: true });
@@ -965,6 +1035,12 @@ router.get('/sop-documents', (req, res) => {
     ORDER BY d.active DESC, d.display_order ASC, d.id ASC
   `).all();
 
+  // Attach the file list to each section so the view can render multi-file
+  // editing controls. Falls back to an empty list — the view handles "no files".
+  for (const d of docs) {
+    d.files = loadFilesForSection(db, d.id);
+  }
+
   res.render('induction/admin/sop-documents', {
     title: 'SOP / SWMS Sections',
     currentPage: 'induction-presentations',
@@ -973,7 +1049,10 @@ router.get('/sop-documents', (req, res) => {
   });
 });
 
-// POST /induction/admin/sop-documents — upload a new doc
+// POST /induction/admin/sop-documents — upload a new section + first file.
+// The file goes into sop_document_files; the parent sop_documents row holds
+// only metadata (title, description, sop_slug) plus a mirror of the first
+// file's columns for back-compat with legacy readers.
 router.post('/sop-documents', sopDocUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
@@ -999,12 +1078,31 @@ router.post('/sop-documents', sopDocUpload.single('file'), async (req, res) => {
 
     const placeholders = fields.map(() => '?').join(', ');
     const result = db.prepare(`INSERT INTO sop_documents (${fields.join(', ')}) VALUES (${placeholders})`).run(...values);
+    const sopDocumentId = result.lastInsertRowid;
+
+    // Insert the first child file row. page_renders_dir uses 'file-<id>' so
+    // its rendered PNGs land in their own folder, separate from the legacy
+    // parent-keyed renders.
+    const fileInsert = db.prepare(`
+      INSERT INTO sop_document_files
+        (sop_document_id, filename, original_name, file_path, file_size, mime_type, display_order, page_renders_dir)
+      VALUES (?, ?, ?, ?, ?, ?, 0, '')
+    `).run(
+      sopDocumentId, req.file.filename, req.file.originalname,
+      req.file.path, req.file.size, req.file.mimetype || ''
+    );
+    const fileId = fileInsert.lastInsertRowid;
+    db.prepare("UPDATE sop_document_files SET page_renders_dir = ? WHERE id = ?")
+      .run(`file-${fileId}`, fileId);
 
     // Render PDF pages to PNGs so the mobile sign page can display them inline.
     // Best-effort — done synchronously here so the admin sees the result on
     // redirect, but failures are non-fatal and caught inside the helper.
-    const docRow = db.prepare('SELECT * FROM sop_documents WHERE id = ?').get(result.lastInsertRowid);
-    const { pages, error } = await renderAndPersistPages(db, docRow);
+    const fileRow = db.prepare('SELECT * FROM sop_document_files WHERE id = ?').get(fileId);
+    const { pages, error } = await renderAndPersistPagesForFile(db, fileRow);
+    // Mirror the (now-rendered) first file back onto the parent row.
+    syncParentToFirstFile(db, sopDocumentId);
+
     let suffix = '';
     if (pages.length > 0) suffix = ` — rendered ${pages.length} page${pages.length === 1 ? '' : 's'} for inline display.`;
     else if (error) suffix = ` (Inline render failed: ${error}. The PDF will still display via the browser's PDF viewer.)`;
@@ -1017,16 +1115,166 @@ router.post('/sop-documents', sopDocUpload.single('file'), async (req, res) => {
   }
 });
 
-// POST /induction/admin/sop-documents/:id/render — re-render pages (backfill or refresh)
+// POST /induction/admin/sop-documents/:id/files — add another file to a section
+router.post('/sop-documents/:id/files', sopDocUpload.single('file'), async (req, res) => {
+  try {
+    const db = getDb();
+    const section = db.prepare('SELECT id, title FROM sop_documents WHERE id = ?').get(req.params.id);
+    if (!section) {
+      req.flash('error', 'Section not found.');
+      return res.redirect('/induction/admin/sop-documents');
+    }
+    if (!req.file) {
+      req.flash('error', 'No file uploaded.');
+      return res.redirect('/induction/admin/sop-documents');
+    }
+    const next = db.prepare(
+      'SELECT COALESCE(MAX(display_order), -1) + 1 AS n FROM sop_document_files WHERE sop_document_id = ?'
+    ).get(section.id);
+    const ins = db.prepare(`
+      INSERT INTO sop_document_files
+        (sop_document_id, filename, original_name, file_path, file_size, mime_type, display_order, page_renders_dir)
+      VALUES (?, ?, ?, ?, ?, ?, ?, '')
+    `).run(
+      section.id, req.file.filename, req.file.originalname,
+      req.file.path, req.file.size, req.file.mimetype || '', next.n
+    );
+    const fileId = ins.lastInsertRowid;
+    db.prepare('UPDATE sop_document_files SET page_renders_dir = ? WHERE id = ?')
+      .run(`file-${fileId}`, fileId);
+
+    const fileRow = db.prepare('SELECT * FROM sop_document_files WHERE id = ?').get(fileId);
+    const { pages, error } = await renderAndPersistPagesForFile(db, fileRow);
+    // Only resync the parent if this was added at position 0 (i.e. the
+    // section had no files until now). The mirror tracks the FIRST file.
+    if (next.n === 0) syncParentToFirstFile(db, section.id);
+
+    let suffix = '';
+    if (pages.length > 0) suffix = ` — rendered ${pages.length} page${pages.length === 1 ? '' : 's'}.`;
+    else if (error) suffix = ` (Inline render failed: ${error}.)`;
+    req.flash(pages.length > 0 || !error ? 'success' : 'error', `Added file to "${section.title}".${suffix}`);
+    res.redirect('/induction/admin/sop-documents');
+  } catch (err) {
+    console.error('[sop-documents file add] failed:', err);
+    req.flash('error', `Could not add file: ${err.message}`);
+    res.redirect('/induction/admin/sop-documents');
+  }
+});
+
+// POST /induction/admin/sop-documents/:id/files/:fileId/delete
+router.post('/sop-documents/:id/files/:fileId/delete', (req, res) => {
+  try {
+    const db = getDb();
+    const file = db.prepare(
+      'SELECT * FROM sop_document_files WHERE id = ? AND sop_document_id = ?'
+    ).get(req.params.fileId, req.params.id);
+    if (!file) { req.flash('error', 'File not found.'); return res.redirect('/induction/admin/sop-documents'); }
+    // Clean up the actual file + its rendered pages directory.
+    try { if (file.file_path) fs.unlinkSync(file.file_path); } catch (e) { /* may already be gone */ }
+    if (file.page_renders_dir) {
+      try { fs.rmSync(path.join(SOP_PAGE_DIR, file.page_renders_dir), { recursive: true, force: true }); } catch (e) { /* ok */ }
+    }
+    db.prepare('DELETE FROM sop_document_files WHERE id = ?').run(file.id);
+    // Re-pack display_order so the next "up/down" move doesn't bump into gaps.
+    const remaining = db.prepare(
+      'SELECT id FROM sop_document_files WHERE sop_document_id = ? ORDER BY display_order ASC, id ASC'
+    ).all(req.params.id);
+    const reorder = db.prepare('UPDATE sop_document_files SET display_order = ? WHERE id = ?');
+    remaining.forEach((r, i) => reorder.run(i, r.id));
+    syncParentToFirstFile(db, parseInt(req.params.id, 10));
+    req.flash('success', `Removed "${file.original_name || file.filename}".`);
+  } catch (err) {
+    console.error('[sop-documents file delete] failed:', err);
+    req.flash('error', `Delete failed: ${err.message}`);
+  }
+  res.redirect('/induction/admin/sop-documents');
+});
+
+// POST /induction/admin/sop-documents/:id/files/:fileId/move — up/down within a section
+router.post('/sop-documents/:id/files/:fileId/move', (req, res) => {
+  const db = getDb();
+  const file = db.prepare(
+    'SELECT id, sop_document_id, display_order FROM sop_document_files WHERE id = ? AND sop_document_id = ?'
+  ).get(req.params.fileId, req.params.id);
+  if (!file) return res.redirect('/induction/admin/sop-documents');
+  const dir = req.body.dir === 'up' ? 'up' : 'down';
+  const op = dir === 'up' ? '<' : '>';
+  const ord = dir === 'up' ? 'DESC' : 'ASC';
+  const neighbour = db.prepare(`
+    SELECT id, display_order FROM sop_document_files
+    WHERE sop_document_id = ? AND display_order ${op} ?
+    ORDER BY display_order ${ord} LIMIT 1
+  `).get(file.sop_document_id, file.display_order);
+  if (neighbour) {
+    db.prepare('UPDATE sop_document_files SET display_order = ? WHERE id = ?').run(neighbour.display_order, file.id);
+    db.prepare('UPDATE sop_document_files SET display_order = ? WHERE id = ?').run(file.display_order, neighbour.id);
+    syncParentToFirstFile(db, file.sop_document_id);
+  }
+  res.redirect('/induction/admin/sop-documents');
+});
+
+// POST /induction/admin/sop-documents/:id/files/:fileId/render — re-render
+router.post('/sop-documents/:id/files/:fileId/render', async (req, res) => {
+  const db = getDb();
+  const file = db.prepare(
+    'SELECT * FROM sop_document_files WHERE id = ? AND sop_document_id = ?'
+  ).get(req.params.fileId, req.params.id);
+  if (!file) { req.flash('error', 'File not found.'); return res.redirect('/induction/admin/sop-documents'); }
+  const { pages, error } = await renderAndPersistPagesForFile(db, file);
+  if (pages.length > 0) {
+    req.flash('success', `Rendered ${pages.length} page${pages.length === 1 ? '' : 's'} for "${file.original_name}".`);
+  } else {
+    req.flash('error', `Couldn't render "${file.original_name}": ${error || 'unknown reason'}.`);
+  }
+  // If this was the primary file, sync the page_renders mirror onto the parent.
+  if (file.display_order === 0) syncParentToFirstFile(db, file.sop_document_id);
+  res.redirect('/induction/admin/sop-documents');
+});
+
+// GET /induction/admin/sop-documents/:id/files/:fileId/file — admin file serving
+router.get('/sop-documents/:id/files/:fileId/file', (req, res) => {
+  const db = getDb();
+  const file = db.prepare(
+    'SELECT * FROM sop_document_files WHERE id = ? AND sop_document_id = ?'
+  ).get(req.params.fileId, req.params.id);
+  if (!file) return res.status(404).send('Not found');
+  const safe = path.resolve(SOP_DOC_DIR, path.basename(file.filename));
+  if (!fs.existsSync(safe)) return res.status(404).send('File missing');
+  if (file.mime_type) res.setHeader('Content-Type', file.mime_type);
+  res.setHeader('Content-Disposition', 'inline; filename="' + (file.original_name || file.filename) + '"');
+  res.sendFile(safe);
+});
+
+// POST /induction/admin/sop-documents/:id/render — re-render pages for every
+// file in the section (backfill or refresh after a doc was replaced).
 router.post('/sop-documents/:id/render', async (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT * FROM sop_documents WHERE id = ?').get(req.params.id);
   if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
-  const { pages, error } = await renderAndPersistPages(db, doc);
-  if (pages.length > 0) {
-    req.flash('success', `Rendered ${pages.length} page${pages.length === 1 ? '' : 's'} for "${doc.title}".`);
+
+  const files = loadFilesForSection(db, doc.id);
+  if (files.length === 0) {
+    // No child files yet — fall back to the legacy parent-row render so older
+    // sections (pre-209 migration) still have a way to render.
+    const { pages, error } = await renderAndPersistPages(db, doc);
+    if (pages.length > 0) req.flash('success', `Rendered ${pages.length} page${pages.length === 1 ? '' : 's'} for "${doc.title}".`);
+    else req.flash('error', `Couldn't render "${doc.title}": ${error || 'unknown reason'}.`);
+    return res.redirect('/induction/admin/sop-documents');
+  }
+
+  let totalPages = 0;
+  const errors = [];
+  for (const f of files) {
+    const { pages, error } = await renderAndPersistPagesForFile(db, f);
+    totalPages += pages.length;
+    if (error) errors.push(`${f.original_name}: ${error}`);
+  }
+  syncParentToFirstFile(db, doc.id);
+
+  if (errors.length === 0) {
+    req.flash('success', `Rendered ${totalPages} page${totalPages === 1 ? '' : 's'} across ${files.length} file${files.length === 1 ? '' : 's'} for "${doc.title}".`);
   } else {
-    req.flash('error', `Couldn't render "${doc.title}": ${error || 'unknown reason'}. The PDF will still display via the browser's PDF viewer on the sign page.`);
+    req.flash('error', `Rendered ${totalPages} page${totalPages === 1 ? '' : 's'}, with ${errors.length} error${errors.length === 1 ? '' : 's'}: ${errors.join('; ')}`);
   }
   res.redirect('/induction/admin/sop-documents');
 });
@@ -1080,14 +1328,30 @@ router.post('/sop-documents/:id/toggle', (req, res) => {
   res.redirect('/induction/admin/sop-documents');
 });
 
-// POST /induction/admin/sop-documents/:id/delete — permanently remove
+// POST /induction/admin/sop-documents/:id/delete — permanently remove section
+// + every file inside it, plus their rendered-page directories on disk.
 router.post('/sop-documents/:id/delete', (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT id, title, file_path FROM sop_documents WHERE id = ?').get(req.params.id);
   if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
-  try { fs.unlinkSync(doc.file_path); } catch (e) { /* file may already be gone */ }
-  // Remove rendered pages too
+
+  // Tear down every child file's bytes + page-render directory first.
+  const files = db.prepare(
+    'SELECT file_path, page_renders_dir FROM sop_document_files WHERE sop_document_id = ?'
+  ).all(doc.id);
+  for (const f of files) {
+    try { if (f.file_path) fs.unlinkSync(f.file_path); } catch (e) { /* ok */ }
+    if (f.page_renders_dir) {
+      try { fs.rmSync(path.join(SOP_PAGE_DIR, f.page_renders_dir), { recursive: true, force: true }); } catch (e) { /* ok */ }
+    }
+  }
+
+  // Legacy: the parent row itself used to own a file + page-renders dir
+  // keyed by sop_documents.id. Clean those up too in case anything's left.
+  try { if (doc.file_path) fs.unlinkSync(doc.file_path); } catch (e) { /* ok */ }
   try { fs.rmSync(path.join(SOP_PAGE_DIR, String(doc.id)), { recursive: true, force: true }); } catch (e) { /* ok */ }
+
+  // ON DELETE CASCADE on the FK takes care of the child rows in the DB.
   db.prepare('DELETE FROM sop_documents WHERE id = ?').run(doc.id);
   req.flash('success', `Deleted "${doc.title}".`);
   res.redirect('/induction/admin/sop-documents');

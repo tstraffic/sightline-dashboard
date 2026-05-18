@@ -72,6 +72,60 @@
   })();
 </script>
 
+<% if (typeof birthdaysToday !== 'undefined' && birthdaysToday && birthdaysToday.length > 0) { %>
+<!-- Birthday banner — pops when at least one active crew member's DOB is today -->
+<style>
+  .bday-banner { position: relative; overflow: hidden; }
+  .bday-banner::before, .bday-banner::after {
+    content: ''; position: absolute; pointer-events: none; border-radius: 9999px; filter: blur(28px);
+  }
+  .bday-banner::before { top: -40px; left: -30px; width: 180px; height: 180px; background: radial-gradient(closest-side, rgba(244,114,182,0.45), transparent 70%); }
+  .bday-banner::after  { bottom: -50px; right: -20px; width: 220px; height: 220px; background: radial-gradient(closest-side, rgba(250,204,21,0.35), transparent 70%); }
+  .bday-confetti { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
+  .bday-confetti span {
+    position: absolute; top: -10px; width: 8px; height: 12px; opacity: 0.85;
+    animation: bday-fall linear infinite;
+  }
+  .bday-confetti span:nth-child(1)  { left:  6%; background: #F472B6; animation-duration: 6.2s; animation-delay: -0.3s; transform: rotate(15deg); }
+  .bday-confetti span:nth-child(2)  { left: 18%; background: #FBBF24; animation-duration: 5.5s; animation-delay: -1.7s; transform: rotate(-22deg); }
+  .bday-confetti span:nth-child(3)  { left: 31%; background: #60A5FA; animation-duration: 7.1s; animation-delay: -2.4s; transform: rotate(35deg); }
+  .bday-confetti span:nth-child(4)  { left: 44%; background: #34D399; animation-duration: 4.8s; animation-delay: -0.9s; transform: rotate(-12deg); }
+  .bday-confetti span:nth-child(5)  { left: 56%; background: #F472B6; animation-duration: 6.6s; animation-delay: -3.1s; transform: rotate(28deg); }
+  .bday-confetti span:nth-child(6)  { left: 68%; background: #A78BFA; animation-duration: 5.2s; animation-delay: -1.4s; transform: rotate(-30deg); }
+  .bday-confetti span:nth-child(7)  { left: 81%; background: #FBBF24; animation-duration: 7.3s; animation-delay: -0.7s; transform: rotate(18deg); }
+  .bday-confetti span:nth-child(8)  { left: 93%; background: #34D399; animation-duration: 6.0s; animation-delay: -2.0s; transform: rotate(-25deg); }
+  @keyframes bday-fall {
+    0%   { transform: translateY(0) rotate(0deg);     opacity: 0; }
+    10%  { opacity: 0.9; }
+    100% { transform: translateY(160px) rotate(360deg); opacity: 0; }
+  }
+  @media (prefers-reduced-motion: reduce) { .bday-confetti { display: none; } }
+</style>
+<div class="bday-banner bg-gradient-to-br from-pink-50 via-amber-50 to-rose-50 border border-pink-200 rounded-2xl p-4 sm:p-5 mb-5 shadow-sm">
+  <div class="bday-confetti" aria-hidden="true">
+    <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+  </div>
+  <div class="relative z-10 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+    <div class="flex-shrink-0 w-14 h-14 rounded-2xl bg-gradient-to-br from-pink-400 to-rose-500 text-white flex items-center justify-center text-3xl shadow-md">
+      🎂
+    </div>
+    <div class="flex-1 min-w-0">
+      <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-pink-600 mb-0.5">Birthday today</p>
+      <% birthdaysToday.forEach((b, i) => { %>
+        <% if (i > 0) { %><span class="text-gray-400 mx-1">·</span><% } %>
+        <a href="/crew/<%= b.crew_member_id %>" class="text-lg font-extrabold text-gray-900 hover:text-pink-600 transition-colors">
+          <%= b.full_name %>
+        </a>
+        <% if (b.turning && b.turning > 0 && b.turning < 110) { %>
+          <span class="text-sm font-medium text-gray-500 ml-1">turns <%= b.turning %></span>
+        <% } %>
+      <% }) %>
+      <p class="text-sm text-gray-600 mt-1">Drop them a message today — the team is wishing them on the worker portal.</p>
+    </div>
+  </div>
+</div>
+<% } %>
+
 <% if (typeof onboarding !== 'undefined' && onboarding) { %>
 <!-- Onboarding Checklist -->
 <div class="bg-white border border-brand-200 rounded-2xl shadow-sm p-3 sm:p-4 mb-5 relative" id="onboarding-banner">

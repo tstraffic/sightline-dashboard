@@ -28,7 +28,7 @@
   // Upcoming shifts are the single most important thing on this page —
   // lift them to right after Today's shift so workers see what's next
   // without scrolling. Compliance + actions slot in below.
-  const defaultOrder = ['hero','manager','today','upcoming','weather','compliance','safety','actions','week','jobpack','timeline','cards','streaks','activity'];
+  const defaultOrder = ['hero','birthdays','manager','today','upcoming','weather','compliance','safety','actions','week','jobpack','timeline','cards','streaks','activity'];
   // Weather was previously buried near the bottom and a few users hid it
   // via Customise Home before realising it covered their next site.
   // Force it back into view: lift in the default order AND scrub it out
@@ -467,6 +467,136 @@
   </div>
 <% } %>
 
+<% if (section === 'birthdays' && !hidden.includes('birthdays') && ((typeof myBirthdayRow !== 'undefined' && myBirthdayRow) || (typeof otherBirthdays !== 'undefined' && otherBirthdays && otherBirthdays.length > 0))) { %>
+  <%
+    const _myBday = (typeof myBirthdayRow !== 'undefined') ? myBirthdayRow : null;
+    const _others = (typeof otherBirthdays !== 'undefined') ? (otherBirthdays || []) : [];
+    const _myMsgs = (typeof myBirthdayMessages !== 'undefined') ? (myBirthdayMessages || []) : [];
+  %>
+  <% if (_myBday) { %>
+    <!-- Birthday person's own banner — only renders when DOB matches today.
+         The full-screen modal that follows is hidden by default and shown
+         once per day via the small inline script. -->
+    <div id="my-bday-banner" style="margin-top: 12px; padding: 16px 18px; border-radius: 16px; position: relative; overflow: hidden;
+         background: linear-gradient(135deg, rgba(244,114,182,0.18), rgba(251,191,36,0.12));
+         border: 1px solid rgba(244,114,182,0.35);
+         box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 24px rgba(244,114,182,0.18);">
+      <div style="display: flex; align-items: center; gap: 14px; position: relative; z-index: 1;">
+        <div style="width: 48px; height: 48px; border-radius: 14px; background: linear-gradient(135deg, #F472B6, #F59E0B); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; flex-shrink: 0; box-shadow: 0 8px 20px rgba(244,114,182,0.45);">🎂</div>
+        <div style="flex: 1; min-width: 0;">
+          <p style="font-size: 0.65rem; font-weight: 700; color: #FBCFE8; text-transform: uppercase; letter-spacing: 0.08em;">Happy birthday!</p>
+          <p style="font-size: 1rem; font-weight: 800; color: #fff; margin-top: 1px;">From the T&amp;S team 🎉</p>
+          <p style="font-size: 0.72rem; color: rgba(255,255,255,0.7); margin-top: 1px;">
+            <% if (_myMsgs.length === 0) { %>No wishes yet — the day is young.<% } else { %><%= _myMsgs.length %> wish<%= _myMsgs.length === 1 ? '' : 'es' %> from the crew so far — read them below.<% } %>
+          </p>
+        </div>
+        <button type="button" onclick="document.getElementById('my-bday-modal').classList.remove('hidden')"
+          style="flex-shrink: 0; padding: 8px 12px; border-radius: 999px; background: rgba(255,255,255,0.16); color: #fff; font-size: 0.72rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.22);">
+          Open
+        </button>
+      </div>
+    </div>
+
+    <% if (_myMsgs.length > 0) { %>
+      <!-- Message wall (right on home so the worker doesn't have to navigate) -->
+      <div style="margin-top: 12px; padding: 12px 14px; border-radius: 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06);">
+        <p style="font-size: 0.62rem; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 8px;">Wishes from the crew</p>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <% _myMsgs.forEach(m => { %>
+            <div style="padding: 8px 10px; border-radius: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.05);">
+              <p style="font-size: 0.7rem; font-weight: 700; color: #fff;"><%= m.from_name %></p>
+              <p style="font-size: 0.8rem; color: rgba(255,255,255,0.85); margin-top: 2px; white-space: pre-wrap;"><%= m.message %></p>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
+
+    <!-- Full-screen pop-up: once per day, dismissable. localStorage key
+         encodes the worker id + Sydney date so it re-fires next year. -->
+    <div id="my-bday-modal" class="hidden" style="position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(6px);">
+      <div style="position: relative; max-width: 360px; width: 100%; padding: 24px 22px 22px; border-radius: 22px; text-align: center; overflow: hidden;
+           background: linear-gradient(160deg, #1F1233, #2D0B36 60%, #1A0E2A);
+           border: 1px solid rgba(244,114,182,0.4);
+           box-shadow: 0 20px 60px rgba(244,114,182,0.35), 0 8px 24px rgba(0,0,0,0.5);">
+        <div class="bday-modal-confetti" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <div style="position: relative; z-index: 1;">
+          <p style="font-size: 4rem; line-height: 1; margin-bottom: 6px;">🎂</p>
+          <h2 style="font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: -0.01em;">Happy Birthday,<br><span style="background: linear-gradient(90deg, #F472B6, #F59E0B); -webkit-background-clip: text; background-clip: text; color: transparent;"><%= firstName %></span>!</h2>
+          <p style="font-size: 0.85rem; color: rgba(255,255,255,0.75); margin-top: 10px; line-height: 1.5;">
+            From everyone at T&amp;S Traffic Control — have an awesome day. Look out for messages from the crew below. 🎉
+          </p>
+          <button type="button"
+            onclick="(function(){document.getElementById('my-bday-modal').classList.add('hidden'); try{localStorage.setItem('tsBdayModalSeen_<%= myBirthdayRow.crew_member_id %>_<%= today %>','1');}catch(e){}})()"
+            style="margin-top: 18px; padding: 10px 22px; border-radius: 999px; background: linear-gradient(135deg, #F472B6, #F59E0B); color: white; font-size: 0.85rem; font-weight: 800; border: 0; box-shadow: 0 8px 20px rgba(244,114,182,0.4);">
+            Thanks!
+          </button>
+        </div>
+      </div>
+    </div>
+    <style>
+      .bday-modal-confetti { position: absolute; inset: 0; pointer-events: none; }
+      .bday-modal-confetti span {
+        position: absolute; top: -10px; width: 9px; height: 14px; opacity: 0.85;
+        animation: bday-modal-fall linear infinite;
+      }
+      .bday-modal-confetti span:nth-child(1)  { left:  5%; background: #F472B6; animation-duration: 5.5s; animation-delay: -0.4s; transform: rotate(12deg); }
+      .bday-modal-confetti span:nth-child(2)  { left: 14%; background: #FBBF24; animation-duration: 6.4s; animation-delay: -2.0s; transform: rotate(-18deg); }
+      .bday-modal-confetti span:nth-child(3)  { left: 24%; background: #60A5FA; animation-duration: 5.0s; animation-delay: -3.1s; transform: rotate(28deg); }
+      .bday-modal-confetti span:nth-child(4)  { left: 35%; background: #34D399; animation-duration: 7.2s; animation-delay: -1.2s; transform: rotate(-10deg); }
+      .bday-modal-confetti span:nth-child(5)  { left: 47%; background: #F472B6; animation-duration: 5.8s; animation-delay: -0.6s; transform: rotate(22deg); }
+      .bday-modal-confetti span:nth-child(6)  { left: 58%; background: #A78BFA; animation-duration: 6.0s; animation-delay: -2.7s; transform: rotate(-30deg); }
+      .bday-modal-confetti span:nth-child(7)  { left: 70%; background: #FBBF24; animation-duration: 5.3s; animation-delay: -1.5s; transform: rotate(15deg); }
+      .bday-modal-confetti span:nth-child(8)  { left: 80%; background: #34D399; animation-duration: 6.8s; animation-delay: -3.4s; transform: rotate(-22deg); }
+      .bday-modal-confetti span:nth-child(9)  { left: 89%; background: #F472B6; animation-duration: 5.6s; animation-delay: -0.9s; transform: rotate(8deg); }
+      .bday-modal-confetti span:nth-child(10) { left: 96%; background: #60A5FA; animation-duration: 7.5s; animation-delay: -2.3s; transform: rotate(-14deg); }
+      @keyframes bday-modal-fall {
+        0%   { transform: translateY(0) rotate(0deg);     opacity: 0; }
+        12%  { opacity: 0.9; }
+        100% { transform: translateY(420px) rotate(360deg); opacity: 0; }
+      }
+      @media (prefers-reduced-motion: reduce) { .bday-modal-confetti { display: none; } }
+    </style>
+    <script>
+      (function () {
+        try {
+          var key = 'tsBdayModalSeen_<%= myBirthdayRow.crew_member_id %>_<%= today %>';
+          if (!localStorage.getItem(key)) {
+            var m = document.getElementById('my-bday-modal');
+            if (m) m.classList.remove('hidden');
+          }
+        } catch (e) { /* SSR-only fallback: modal stays hidden, banner has Open button */ }
+      })();
+    </script>
+  <% } %>
+
+  <% if (_others.length > 0) { %>
+    <!-- Coworker birthday cards — one row per other birthday person.
+         Tapping the card jumps to the wish page where the worker can leave
+         their (one and only) message. -->
+    <div style="margin-top: 12px;">
+      <% _others.forEach(b => { %>
+        <a href="/w/birthday/<%= b.crew_member_id %>"
+           style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-top: 6px; border-radius: 14px; text-decoration: none;
+                  background: linear-gradient(135deg, rgba(244,114,182,0.12), rgba(251,191,36,0.08));
+                  border: 1px solid rgba(244,114,182,0.25);">
+          <div style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #F472B6, #F59E0B); display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; box-shadow: 0 6px 14px rgba(244,114,182,0.4);">🎂</div>
+          <div style="flex: 1; min-width: 0;">
+            <p style="font-size: 0.62rem; font-weight: 700; color: #FBCFE8; text-transform: uppercase; letter-spacing: 0.08em;">Birthday today</p>
+            <p style="font-size: 0.95rem; font-weight: 800; color: #fff; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"><%= b.full_name %></p>
+            <p style="font-size: 0.7rem; color: rgba(255,255,255,0.65); margin-top: 1px;">
+              <% if (b.alreadyWished) { %>✓ You've already wished them — tap to read the wall<% } else { %>Tap to leave one wish<% } %>
+            </p>
+          </div>
+          <svg style="width: 16px; height: 16px; color: rgba(255,255,255,0.5); flex-shrink: 0;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </a>
+      <% }) %>
+    </div>
+  <% } %>
+<% } %>
+
 <% if (section === 'manager' && typeof isManager !== 'undefined' && isManager) { %>
   <a href="/w/manage" style="display: block; margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(236,72,153,0.14)); border: 1px solid rgba(245,158,11,0.3); text-decoration: none; display: flex; align-items: center; gap: 12px;">
     <div style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #F59E0B, #EC4899); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
@@ -799,7 +929,6 @@
     <a href="/w/forms/incident" class="wh-qa-btn"><div class="wh-qa-ic r"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg></div><span class="wh-qa-lbl">Incident</span></a>
     <a href="/w/dockets" class="wh-qa-btn"><div class="wh-qa-ic b"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div><span class="wh-qa-lbl">Dockets</span></a>
     <a href="/w/forms" class="wh-qa-btn"><div class="wh-qa-ic p"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div><span class="wh-qa-lbl">Forms</span></a>
-    <a href="/w/timesheets" class="wh-qa-btn"><div class="wh-qa-ic t"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div><span class="wh-qa-lbl">Timesheet</span></a>
   </div>
 <% } %>
 

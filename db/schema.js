@@ -9548,7 +9548,140 @@ function runMigrations(db) {
   }
 
   // =============================================
-  // Migration 209: User Notes — personal notes / reminders / meeting
+  // Migration 209: sop_document_files — multiple PDFs per section.
+  // Adds a child table so each SOP/SWMS section can hold N files instead of
+  // one. Backfilled from the parent row's existing file_path. The parent
+  // columns (filename, file_path, page_renders, ...) are kept populated so
+  // older code paths that still read them keep working until they're
+  // migrated to the new shape.
+  //
+  // page_renders_dir: directory key under data/uploads/sop-documents/page-renders/
+  //   - Legacy/backfilled rows reuse the parent doc id (so the existing
+  //     PNGs at page-renders/<doc_id>/ remain reachable without copying).
+  //   - New rows use 'file-<file_id>'.
+  // =============================================
+  if (!isMigrationApplied.get(209)) {
+    console.log('Running migration 209: sop_document_files (multi-PDF sections)');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS sop_document_files (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          sop_document_id INTEGER NOT NULL REFERENCES sop_documents(id) ON DELETE CASCADE,
+          filename TEXT NOT NULL,
+          original_name TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          file_size INTEGER DEFAULT 0,
+          mime_type TEXT DEFAULT '',
+          page_renders TEXT DEFAULT NULL,
+          page_renders_dir TEXT NOT NULL DEFAULT '',
+          display_order INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_sop_document_files_doc ON sop_document_files(sop_document_id, display_order);
+      `);
+      // Backfill: one child file per existing section, copying the parent's
+      // file metadata. page_renders_dir is set to the parent's id (string)
+      // so the existing on-disk PNGs at .../page-renders/<doc_id>/ are
+      // located correctly by the file-level routes below.
+      const parents = db.prepare(`
+        SELECT id, filename, original_name, file_path, file_size, mime_type, page_renders
+        FROM sop_documents
+      `).all();
+      const insertChild = db.prepare(`
+        INSERT INTO sop_document_files
+          (sop_document_id, filename, original_name, file_path, file_size, mime_type,
+           page_renders, page_renders_dir, display_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+      `);
+      const existsChild = db.prepare(
+        'SELECT 1 FROM sop_document_files WHERE sop_document_id = ? LIMIT 1'
+      );
+      let backfilled = 0;
+      for (const p of parents) {
+        if (existsChild.get(p.id)) continue;
+        if (!p.filename || !p.file_path) continue;
+        insertChild.run(
+          p.id, p.filename, p.original_name || p.filename, p.file_path,
+          p.file_size || 0, p.mime_type || '',
+          p.page_renders || null, String(p.id)
+        );
+        backfilled++;
+      }
+      recordMigration.run(209, 'sop_document_files (multi-PDF sections)');
+      console.log(`Migration 209 applied: sop_document_files created, ${backfilled} sections backfilled`);
+    } catch (e) {
+      console.error('Migration 209 error:', e.message);
+    }
+  }
+
+  // Migration 210: standalone TGS Risk & Options Assessments under Plans.
+  // Separate from risk_assessments — these are filled in the Planning area,
+  // exported as PDF, and optionally attached to a traffic_plans row later
+  // via plan_revisions. plan_id is nullable so the form can be drafted
+  // before any plan exists.
+  if (!isMigrationApplied.get(210)) {
+    console.log('Running migration 210: tgs_risk_assessments table');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tgs_risk_assessments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_id INTEGER REFERENCES traffic_plans(id) ON DELETE SET NULL,
+          job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          title TEXT DEFAULT '',
+          tgs_ref_no TEXT DEFAULT '',
+          status TEXT DEFAULT 'draft',
+          responses_json TEXT DEFAULT '{}',
+          residual_risk TEXT DEFAULT NULL,
+          requires_one_up INTEGER DEFAULT 0,
+          pdf_path TEXT DEFAULT '',
+          pdf_generated_at DATETIME DEFAULT NULL,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_tgs_ra_plan_id ON tgs_risk_assessments(plan_id);
+        CREATE INDEX IF NOT EXISTS idx_tgs_ra_job_id ON tgs_risk_assessments(job_id);
+        CREATE INDEX IF NOT EXISTS idx_tgs_ra_status ON tgs_risk_assessments(status);
+      `);
+      recordMigration.run(210, 'tgs_risk_assessments standalone table');
+      console.log('Migration 210 applied: tgs_risk_assessments table created');
+    } catch (e) {
+      console.error('Migration 210 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 211: birthday_messages — coworker birthday wishes.
+  // Each worker can leave AT MOST ONE message per coworker per birthday,
+  // enforced by the UNIQUE constraint below. The birthday_date column
+  // is the Sydney-local YYYY-MM-DD of the birthday, so the same worker
+  // can wish the same person every subsequent year without colliding.
+  // =============================================
+  if (!isMigrationApplied.get(211)) {
+    console.log('Running migration 211: birthday_messages');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS birthday_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          target_crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          from_crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          birthday_date TEXT NOT NULL,
+          message TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(from_crew_member_id, target_crew_member_id, birthday_date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_birthday_messages_target
+          ON birthday_messages(target_crew_member_id, birthday_date);
+      `);
+      recordMigration.run(211, 'birthday_messages');
+      console.log('Migration 211 applied: birthday_messages table created');
+    } catch (e) {
+      console.error('Migration 211 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 212: User Notes — personal notes / reminders / meeting
   // discussion items with selective sharing. user_notes is the row, with a
   // freeform `content`, a `note_date` (day-journal grouping defaults to
   // today), and a `tag` (note / reminder / meeting). Default visibility is
@@ -9557,7 +9690,7 @@ function runMigrations(db) {
   // exists for U. is_shared mirrors share-list non-emptiness for fast
   // filtering without a join.
   // =============================================
-  if (!isMigrationApplied.get(209)) {
+  if (!isMigrationApplied.get(212)) {
     try {
       db.exec(`CREATE TABLE IF NOT EXISTS user_notes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -9580,10 +9713,10 @@ function runMigrations(db) {
         UNIQUE(note_id, shared_with_user_id)
       )`);
       db.exec('CREATE INDEX IF NOT EXISTS idx_user_note_shares_user ON user_note_shares(shared_with_user_id)');
-      recordMigration.run(209, 'user_notes + user_note_shares (personal notes with selective sharing)');
-      console.log('Migration 209 applied: user_notes + user_note_shares created');
+      recordMigration.run(212, 'user_notes + user_note_shares (personal notes with selective sharing)');
+      console.log('Migration 212 applied: user_notes + user_note_shares created');
     } catch (e) {
-      console.error('Migration 209 error:', e.message);
+      console.error('Migration 212 error:', e.message);
     }
   }
 

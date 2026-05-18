@@ -3,6 +3,7 @@ const { sendTeamsNotification } = require('./integrations');
 const { sendEmail } = require('../services/email');
 const { notificationEmail, dailyDigestEmail } = require('../services/emailTemplates');
 const { sendPushForNotifications } = require('../services/pushNotification');
+const { todaysBirthdays, localIso: bdayLocalIso } = require('../lib/birthdays');
 
 /**
  * Middleware that attaches unread notification count to res.locals for the header bell icon.
@@ -441,6 +442,29 @@ function generateNotifications() {
         }
       }
     }
+
+    // 13. Birthdays today — notify admin/management/ops/HR users once per
+    // birthday person per day. insertIfNew's 24h dedupe means re-running
+    // the engine every 15 min won't spam; the title+type combo keys the
+    // dedupe per birthday person.
+    try {
+      const bdays = todaysBirthdays(db);
+      if (bdays.length > 0) {
+        const bdayRecipients = db.prepare(`
+          SELECT id FROM users
+          WHERE active = 1 AND LOWER(role) IN ('admin','management','operations','hr')
+        `).all();
+        for (const b of bdays) {
+          const turning = (b.turning && b.turning > 0 && b.turning < 110) ? ` turns ${b.turning} today.` : ' has a birthday today.';
+          const title = `🎂 Birthday today: ${b.full_name}`;
+          const msg = `${b.full_name}${turning} Drop them a wish — the crew is also wishing them on the worker portal.`;
+          const link = `/crew/${b.crew_member_id}`;
+          for (const u of bdayRecipients) {
+            insertAndTrack(u.id, 'birthday_today', title, msg, link, null);
+          }
+        }
+      }
+    } catch (e) { console.error('[notifications] birthday step failed:', e.message); }
 
     // Send immediate email notifications for newly created notifications
     sendImmediateEmails(db, newNotificationIds);

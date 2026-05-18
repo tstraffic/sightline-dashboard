@@ -223,6 +223,10 @@ router.post('/safety/swms/:id/request-access', (req, res) => {
 });
 
 // POST /w/safety/swms/:id/acknowledge — idempotent ack with version snapshot.
+// Requires a drawn signature (data URL from the worker portal sign pad). The
+// PNG is written to data/uploads/swms-signatures and the relative URL is
+// stored in swms_acknowledgements.signature_url so admins can audit who
+// actually signed (not just tapped a button).
 router.post('/safety/swms/:id/acknowledge', (req, res) => {
   const db = getDb();
   const worker = req.session.worker;
@@ -231,17 +235,58 @@ router.post('/safety/swms/:id/acknowledge', (req, res) => {
     req.flash('error', 'SWMS not available.');
     return res.redirect('/w/safety/swms');
   }
+
+  const sigDataUrl = (req.body.signature_data || '').toString();
+  if (!/^data:image\/(png|jpeg);base64,/.test(sigDataUrl)) {
+    req.flash('error', 'Please draw your signature before acknowledging.');
+    return res.redirect('/w/safety/swms/' + swms.id);
+  }
+
+  // Persist the signature PNG. We tolerate write failures (fall through to
+  // saving the ack row with an empty signature_url) rather than blocking the
+  // ack — but log so we can chase it up.
+  let signatureUrl = '';
+  try {
+    const sigDir = path.join(__dirname, '..', '..', 'data', 'uploads', 'swms-signatures');
+    fs.mkdirSync(sigDir, { recursive: true });
+    const fname = `swms_${swms.id}_crew_${worker.id}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.png`;
+    const base64 = sigDataUrl.split(',')[1];
+    fs.writeFileSync(path.join(sigDir, fname), Buffer.from(base64, 'base64'));
+    signatureUrl = `/data/uploads/swms-signatures/${fname}`;
+  } catch (e) {
+    console.error('[w/safety] swms signature save failed:', e.message);
+  }
+
   const fullName = worker.full_name || ('Employee #' + worker.id);
   try {
-    db.prepare(`
-      INSERT OR IGNORE INTO swms_acknowledgements
-        (swms_id, crew_member_id, version_token, full_name, signed_via, signed_ip, user_agent)
-      VALUES (?, ?, ?, ?, 'tap', ?, ?)
-    `).run(
-      swms.id, worker.id, swms.version_token || '', fullName,
-      String(req.ip || ''),
-      String((req.get('user-agent') || '')).slice(0, 250)
-    );
+    // Insert; if a row already exists for (swms, crew, version) update the
+    // signature so a re-sign overwrites cleanly.
+    const existing = db.prepare(
+      'SELECT id FROM swms_acknowledgements WHERE swms_id = ? AND crew_member_id = ? AND version_token = ?'
+    ).get(swms.id, worker.id, swms.version_token || '');
+    if (existing) {
+      db.prepare(`
+        UPDATE swms_acknowledgements
+        SET full_name = ?, signature_url = ?, signed_via = 'sign', signed_at = CURRENT_TIMESTAMP,
+            signed_ip = ?, user_agent = ?
+        WHERE id = ?
+      `).run(
+        fullName, signatureUrl,
+        String(req.ip || ''),
+        String((req.get('user-agent') || '')).slice(0, 250),
+        existing.id
+      );
+    } else {
+      db.prepare(`
+        INSERT INTO swms_acknowledgements
+          (swms_id, crew_member_id, version_token, full_name, signature_url, signed_via, signed_ip, user_agent)
+        VALUES (?, ?, ?, ?, ?, 'sign', ?, ?)
+      `).run(
+        swms.id, worker.id, swms.version_token || '', fullName, signatureUrl,
+        String(req.ip || ''),
+        String((req.get('user-agent') || '')).slice(0, 250)
+      );
+    }
     req.flash('success', 'Acknowledged. Thanks ' + (worker.full_name || '').split(' ')[0] + '.');
   } catch (e) {
     console.error('[w/safety] ack error', e.message);
