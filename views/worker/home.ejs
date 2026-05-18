@@ -490,7 +490,7 @@
             <% if (_myMsgs.length === 0) { %>No wishes yet — the day is young.<% } else { %><%= _myMsgs.length %> wish<%= _myMsgs.length === 1 ? '' : 'es' %> from the crew so far — read them below.<% } %>
           </p>
         </div>
-        <button type="button" onclick="document.getElementById('my-bday-modal').classList.remove('hidden')"
+        <button type="button" onclick="document.getElementById('my-bday-modal').style.display='flex'"
           style="flex-shrink: 0; padding: 8px 12px; border-radius: 999px; background: rgba(255,255,255,0.16); color: #fff; font-size: 0.72rem; font-weight: 700; border: 1px solid rgba(255,255,255,0.22);">
           Open
         </button>
@@ -513,8 +513,11 @@
     <% } %>
 
     <!-- Full-screen pop-up: once per day, dismissable. localStorage key
-         encodes the worker id + Sydney date so it re-fires next year. -->
-    <div id="my-bday-modal" class="hidden" style="position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.72); display: flex; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(6px);">
+         encodes the worker id + Sydney date so it re-fires next year.
+         display:none on the element (not the `hidden` class) because inline
+         `display:flex` would otherwise outrank Tailwind's .hidden when the
+         click handler tries to dismiss it. -->
+    <div id="my-bday-modal" style="display: none; position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,0.72); align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(6px);">
       <div style="position: relative; max-width: 360px; width: 100%; padding: 24px 22px 22px; border-radius: 22px; text-align: center; overflow: hidden;
            background: linear-gradient(160deg, #1F1233, #2D0B36 60%, #1A0E2A);
            border: 1px solid rgba(244,114,182,0.4);
@@ -529,8 +532,8 @@
             From everyone at T&amp;S Traffic Control — have an awesome day. Look out for messages from the crew below. 🎉
           </p>
           <button type="button"
-            onclick="(function(){document.getElementById('my-bday-modal').classList.add('hidden'); try{localStorage.setItem('tsBdayModalSeen_<%= myBirthdayRow.crew_member_id %>_<%= today %>','1');}catch(e){}})()"
-            style="margin-top: 18px; padding: 10px 22px; border-radius: 999px; background: linear-gradient(135deg, #F472B6, #F59E0B); color: white; font-size: 0.85rem; font-weight: 800; border: 0; box-shadow: 0 8px 20px rgba(244,114,182,0.4);">
+            onclick="(function(){document.getElementById('my-bday-modal').style.display='none'; try{localStorage.setItem('tsBdayModalSeen_<%= myBirthdayRow.crew_member_id %>_<%= today %>','1');}catch(e){}})()"
+            style="margin-top: 18px; padding: 10px 22px; border-radius: 999px; background: linear-gradient(135deg, #F472B6, #F59E0B); color: white; font-size: 0.85rem; font-weight: 800; border: 0; box-shadow: 0 8px 20px rgba(244,114,182,0.4); cursor: pointer;">
             Thanks!
           </button>
         </div>
@@ -561,13 +564,19 @@
     </style>
     <script>
       (function () {
+        var m = document.getElementById('my-bday-modal');
+        if (!m) return;
+        // Tap the dim backdrop (anywhere outside the inner card) to dismiss.
+        m.addEventListener('click', function (e) {
+          if (e.target === m) {
+            m.style.display = 'none';
+            try { localStorage.setItem('tsBdayModalSeen_<%= myBirthdayRow.crew_member_id %>_<%= today %>', '1'); } catch (err) {}
+          }
+        });
         try {
           var key = 'tsBdayModalSeen_<%= myBirthdayRow.crew_member_id %>_<%= today %>';
-          if (!localStorage.getItem(key)) {
-            var m = document.getElementById('my-bday-modal');
-            if (m) m.classList.remove('hidden');
-          }
-        } catch (e) { /* SSR-only fallback: modal stays hidden, banner has Open button */ }
+          if (!localStorage.getItem(key)) m.style.display = 'flex';
+        } catch (e) { /* localStorage blocked — modal stays closed, banner Open button still works */ }
       })();
     </script>
   <% } %>
