@@ -1,0 +1,211 @@
+<%
+  // Cert preview render — faithful to docs/templates/TS_VOC_Certificate.html.
+  // Phase 2 will swap the QR placeholder for a real QR (qrcode npm),
+  // persist certificateId on submit, and pipe this through PDFKit for
+  // download. For now this is a screen-only preview powered by the
+  // submitted VOC record.
+  function fmtDateAU(d) {
+    if (!d) return '—';
+    return new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
+  }
+%>
+<!DOCTYPE html>
+<html lang="en-AU">
+<head>
+<meta charset="UTF-8">
+<title>Certificate — <%= a.voc_number %></title>
+<style>
+  @page { size: A4 landscape; margin: 0; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #e5e7eb; font-family: 'Georgia', 'Times New Roman', serif; padding: 20px; min-height: 100vh; }
+
+  .toolbar {
+    position: fixed; top: 12px; right: 12px;
+    background: white; padding: 8px 12px; border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15); display: flex; gap: 6px;
+    z-index: 100; font-family: Arial, sans-serif; font-size: 10pt;
+  }
+  .toolbar button {
+    background: #1f3864; color: white; border: none;
+    padding: 6px 14px; border-radius: 4px; cursor: pointer;
+  }
+  .toolbar button.secondary { background: white; color: #1f3864; border: 1px solid #1f3864; }
+
+  .cert {
+    width: 297mm; height: 210mm; margin: 0 auto;
+    background: #fff; position: relative;
+    padding: 14mm 16mm; box-shadow: 0 4px 20px rgba(0,0,0,0.18);
+    background-image:
+      radial-gradient(circle at 10% 0%, rgba(31,56,100,0.04), transparent 40%),
+      radial-gradient(circle at 90% 100%, rgba(212,175,55,0.05), transparent 40%);
+  }
+  .cert::before { content: ""; position: absolute; inset: 8mm; border: 2px solid #1f3864; pointer-events: none; }
+  .cert::after  { content: ""; position: absolute; inset: 10mm; border: 1px solid #d4af37; pointer-events: none; }
+  .corner { position: absolute; width: 18mm; height: 18mm; border: 2px solid #d4af37; pointer-events: none; }
+  .corner.tl { top: 8mm; left: 8mm; border-right: none; border-bottom: none; }
+  .corner.tr { top: 8mm; right: 8mm; border-left: none; border-bottom: none; }
+  .corner.bl { bottom: 8mm; left: 8mm; border-right: none; border-top: none; }
+  .corner.br { bottom: 8mm; right: 8mm; border-left: none; border-top: none; }
+  .inner { position: relative; height: 100%; display: flex; flex-direction: column; align-items: center; text-align: center; z-index: 2; padding: 6mm 4mm; }
+
+  .brand { display: flex; align-items: center; gap: 18px; margin-bottom: 6mm; }
+  .brand-mark img { height: 70px; width: auto; display: block; }
+  .brand-name { text-align: left; border-left: 2px solid #d4af37; padding-left: 14px; }
+  .brand-name .co { font-family: Arial, sans-serif; font-size: 14pt; font-weight: 700; color: #1f3864; letter-spacing: 1px; }
+  .brand-name .tag { font-family: Arial, sans-serif; font-size: 8.5pt; color: #555; letter-spacing: 0.5px; }
+
+  .title-eyebrow { font-family: Arial, sans-serif; font-size: 10pt; letter-spacing: 6px; color: #d4af37; font-weight: 600; text-transform: uppercase; margin-bottom: 4px; }
+  .title { font-family: 'Georgia', serif; font-size: 30pt; color: #1f3864; font-weight: 700; line-height: 1.1; margin-bottom: 2px; }
+  .subtitle { font-family: 'Georgia', serif; font-style: italic; font-size: 13pt; color: #444; }
+
+  .divider { width: 60%; margin: 6mm auto 5mm; display: flex; align-items: center; gap: 8px; }
+  .divider .line { flex: 1; height: 1px; background: #d4af37; }
+  .divider .dot { width: 6px; height: 6px; background: #d4af37; transform: rotate(45deg); }
+
+  .statement { font-family: 'Georgia', serif; font-size: 12pt; color: #333; margin-bottom: 4mm; }
+  .worker-name { font-family: 'Georgia', serif; font-size: 32pt; font-weight: 700; color: #1f3864; margin: 2mm 0 1mm; letter-spacing: 0.5px; line-height: 1.1; }
+  .worker-sub { font-family: Arial, sans-serif; font-size: 9.5pt; color: #555; margin-bottom: 3mm; }
+  .competency-eyebrow { font-family: Arial, sans-serif; font-size: 9pt; letter-spacing: 3px; text-transform: uppercase; color: #555; margin-bottom: 4px; }
+  .competency { font-family: 'Georgia', serif; font-size: 20pt; color: #1f3864; font-weight: 600; line-height: 1.15; margin-bottom: 1mm; }
+
+  .details { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; width: 92%; margin: 6mm auto 5mm; border-top: 1px solid #d4af37; border-bottom: 1px solid #d4af37; padding: 4mm 0; }
+  .detail { text-align: center; padding: 0 8px; border-right: 1px solid #e5e7eb; }
+  .detail:last-child { border-right: none; }
+  .detail .lbl { font-family: Arial, sans-serif; font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; color: #888; margin-bottom: 3px; }
+  .detail .val { font-family: 'Georgia', serif; font-size: 12pt; color: #1f3864; font-weight: 600; }
+
+  .signoff { width: 88%; margin: 4mm auto 0; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20mm; align-items: end; }
+  .sig { text-align: center; }
+  .sig-line { border-bottom: 1.5px solid #1f3864; height: 14mm; margin-bottom: 4px; }
+  .sig-name { font-family: Arial, sans-serif; font-size: 9.5pt; color: #1f3864; font-weight: 600; min-height: 1.2em; }
+  .sig-role { font-family: Arial, sans-serif; font-size: 7.5pt; letter-spacing: 1.5px; text-transform: uppercase; color: #888; margin-top: 2px; }
+
+  .bottom-strip { margin-top: auto; width: 100%; display: flex; justify-content: space-between; align-items: flex-end; padding-top: 4mm; font-family: Arial, sans-serif; font-size: 8pt; color: #666; }
+  .cert-id { text-align: left; }
+  .cert-id .lbl { font-size: 7pt; letter-spacing: 2px; text-transform: uppercase; color: #888; }
+  .cert-id .val { font-family: 'Courier New', monospace; font-size: 10pt; font-weight: bold; color: #1f3864; }
+  .qr-box {
+    width: 22mm; height: 22mm; border: 1.5px solid #1f3864;
+    display: grid; place-items: center; text-align: center;
+    font-size: 6.5pt; color: #888; line-height: 1.2; padding: 2mm;
+  }
+  .legal { text-align: right; max-width: 110mm; font-size: 7.5pt; color: #666; line-height: 1.4; }
+
+  .watermark {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%) rotate(-22deg);
+    font-family: Arial, sans-serif; font-size: 120pt; font-weight: 900;
+    color: rgba(31, 56, 100, 0.04); letter-spacing: 6px;
+    pointer-events: none; z-index: 1;
+  }
+
+  @media print {
+    body { background: white; padding: 0; }
+    .cert { box-shadow: none; margin: 0; }
+    .toolbar { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar">
+  <button onclick="window.print()">Print / Save PDF</button>
+  <a href="/voc-assessments/<%= a.id %>/edit" style="text-decoration:none;"><button class="secondary">Back to VOC</button></a>
+</div>
+
+<div class="cert">
+  <div class="corner tl"></div>
+  <div class="corner tr"></div>
+  <div class="corner bl"></div>
+  <div class="corner br"></div>
+  <div class="watermark">T&amp;S</div>
+
+  <% if (isRevoked) { %>
+    <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-12deg); border:8px solid #dc2626; padding:14px 36px; font-family:Arial,sans-serif; font-size:48pt; font-weight:900; color:#dc2626; letter-spacing:8px; opacity:0.18; z-index:3; pointer-events:none;">REVOKED</div>
+  <% } %>
+
+  <div class="inner">
+
+    <div class="brand">
+      <div class="brand-mark">
+        <img src="/images/logo.jpg" alt="T&amp;S Traffic Control">
+      </div>
+      <div class="brand-name">
+        <div class="co">T&amp;S TRAFFIC CONTROL</div>
+        <div class="tag">9 Epic Pl, Villawood NSW 2163 &nbsp;|&nbsp; ABN 58 655 958 320</div>
+      </div>
+    </div>
+
+    <div class="title-eyebrow">This is to certify</div>
+    <div class="title">Certificate of Verification of Competency</div>
+    <div class="subtitle">issued in accordance with NSW WHS standards and T&amp;S in-house assessment procedures</div>
+
+    <div class="divider"><div class="line"></div><div class="dot"></div><div class="line"></div></div>
+
+    <div class="statement">presented to</div>
+    <div class="worker-name"><%= a.worker_name %></div>
+    <div class="worker-sub">
+      <% if (a.worker_emp_id) { %>Employee ID: <%= a.worker_emp_id %><% } %>
+    </div>
+
+    <div class="competency-eyebrow">has been assessed competent in</div>
+    <div class="competency"><%= a.template_name %></div>
+
+    <div class="details">
+      <div class="detail">
+        <div class="lbl">Assessment Date</div>
+        <div class="val"><%= fmtDateAU(a.assessment_date) %></div>
+      </div>
+      <div class="detail">
+        <div class="lbl">Valid Until</div>
+        <div class="val"><%= fmtDateAU(a.valid_until) %></div>
+      </div>
+      <div class="detail">
+        <div class="lbl">VOC Reference</div>
+        <div class="val"><%= a.voc_number %></div>
+      </div>
+    </div>
+
+    <div class="signoff">
+      <div class="sig">
+        <div class="sig-line"></div>
+        <div class="sig-name"><%= a.assessor_signed_name || a.assessor_name || '' %></div>
+        <div class="sig-role">Assessor</div>
+      </div>
+      <div class="sig">
+        <div class="sig-line"></div>
+        <div class="sig-name"><%= a.manager_signed_name || '' %></div>
+        <div class="sig-role">Manager / Supervisor</div>
+      </div>
+      <div class="sig">
+        <div class="sig-line"></div>
+        <div class="sig-name"><%= a.worker_signed_name || a.worker_name || '' %></div>
+        <div class="sig-role">Worker Acknowledgement</div>
+      </div>
+    </div>
+
+    <div class="bottom-strip">
+      <div class="cert-id">
+        <div class="lbl">Certificate ID</div>
+        <div class="val"><%= certId %></div>
+      </div>
+      <div class="qr-box" style="<%= qrDataUrl ? 'border:none;padding:0;' : '' %>">
+        <% if (qrDataUrl) { %>
+          <img src="<%= qrDataUrl %>" alt="QR verify" style="width:100%; height:100%; display:block;">
+        <% } else { %>
+          <div>QR<br/>verify at<br/>tstc.up.railway.app/<br/>voc/verify</div>
+        <% } %>
+      </div>
+      <div class="legal">
+        This certificate verifies competency at the time of assessment. Validity is subject to ongoing
+        adherence to T&amp;S SOPs, the relevant SWMS, and applicable NSW WHS / road regulations.
+        Re-assessment is required by the expiry date above, or sooner if equipment, procedures,
+        or worker capability changes.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

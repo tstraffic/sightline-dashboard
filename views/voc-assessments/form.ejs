@@ -328,6 +328,12 @@
         <span id="outcomeBanner"></span>
       </div>
       <div class="flex gap-2">
+        <% if (isSubmitted && a.outcome === 'competent') { %>
+          <a href="/voc-assessments/<%= a.id %>/certificate" target="_blank" class="px-4 py-2 bg-white border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-medium rounded-lg">Preview Cert</a>
+          <% if (a.certificate_id) { %>
+            <a href="/voc-assessments/<%= a.id %>/pdf" target="_blank" class="px-4 py-2 bg-white border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-medium rounded-lg">Download PDF</a>
+          <% } %>
+        <% } %>
         <button type="submit" id="saveBtn" class="px-4 py-2 bg-white border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-medium rounded-lg">Save Draft</button>
         <button type="submit" id="submitBtn" formaction="/voc-assessments/<%= a.id %>/submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg">
           <%= isSubmitted ? 'Re-submit' : 'Submit VOC' %>
@@ -335,6 +341,44 @@
       </div>
     </div>
   </form>
+
+  <% if (canAccess(user, 'voc_admin') && isSubmitted && a.outcome === 'competent' && a.certificate_id) { %>
+    <% if (a.certificate_status === 'revoked') { %>
+      <div class="mt-6 bg-white border-2 border-red-200 rounded-xl p-4">
+        <div class="flex items-start gap-3">
+          <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          <div class="flex-1">
+            <h3 class="text-sm font-bold text-red-700">Certificate revoked</h3>
+            <% if (a.certificate_revoked_reason) { %>
+              <p class="text-xs text-gray-700 mt-1"><span class="font-semibold">Reason:</span> <%= a.certificate_revoked_reason %></p>
+            <% } %>
+            <% if (a.certificate_revoked_at) { %>
+              <p class="text-xs text-gray-500 mt-0.5">Revoked <%= new Date(a.certificate_revoked_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) %></p>
+            <% } %>
+            <form method="POST" action="/voc-assessments/<%= a.id %>/unrevoke" class="mt-3" onsubmit="return confirm('Restore this certificate to active?');">
+              <%- include('../partials/csrf') %>
+              <button type="submit" class="px-3 py-1.5 text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-md">Restore certificate</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    <% } else { %>
+      <details class="mt-6 bg-white border border-gray-200 rounded-xl">
+        <summary class="px-4 py-3 cursor-pointer text-sm font-semibold text-gray-700 hover:text-red-700">Revoke certificate</summary>
+        <form method="POST" action="/voc-assessments/<%= a.id %>/revoke" class="px-4 pb-4 space-y-3" onsubmit="return confirm('Revoke this certificate? It will appear as REVOKED on the public verify page immediately.');">
+          <%- include('../partials/csrf') %>
+          <p class="text-xs text-gray-500">Revoking marks the certificate REVOKED on the public verify page and removes it from the worker's wallet downloads. The assessment record is kept.</p>
+          <label class="block">
+            <span class="text-xs font-semibold text-gray-500 uppercase">Reason</span>
+            <textarea name="reason" rows="2" required placeholder="e.g. issued in error, incident review, equipment changed substantively" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-red-500"></textarea>
+          </label>
+          <div class="flex justify-end">
+            <button type="submit" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-semibold rounded-lg">Revoke</button>
+          </div>
+        </form>
+      </details>
+    <% } %>
+  <% } %>
 
   <% if (canAccess(user, 'voc_admin')) { %>
     <form method="POST" action="/voc-assessments/<%= a.id %>/delete" class="mt-4 text-right" onsubmit="return confirm('Delete this VOC permanently?');">

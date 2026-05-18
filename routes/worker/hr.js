@@ -80,7 +80,7 @@ router.get('/hr/certs', (req, res) => {
   // on a given item.
   const vocs = db.prepare(`
     SELECT a.id, a.voc_number, a.outcome, a.valid_from, a.valid_until,
-      a.certificate_status, a.certificate_id, a.assessment_date,
+      a.certificate_status, a.certificate_id, a.pdf_path, a.assessment_date,
       t.name AS equipment_name
     FROM voc_assessments a
     JOIN voc_templates t ON t.id = a.template_id
@@ -96,6 +96,55 @@ router.get('/hr/certs', (req, res) => {
     member,
     vocs,
   });
+});
+
+// GET /w/hr/vocs/:id/pdf — Stream the worker's own VOC certificate PDF.
+//
+// Worker-scoped: only returns the PDF if the assessment belongs to the
+// logged-in crew_member AND outcome=competent AND certificate_status is
+// active (revoked certs disappear from the wallet flow). Regenerates the
+// PDF on the fly if the file isn't on disk (e.g. fresh deploy).
+const certPath = require('path');
+const certFs = require('fs');
+const { renderVocCertificatePdf } = require('../../lib/pdf/vocCertificatePdf');
+const VOC_CERT_DIR = certPath.join(__dirname, '..', '..', 'data', 'uploads', 'voc-certificates');
+
+router.get('/hr/vocs/:id/pdf', async (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const a = db.prepare(`
+    SELECT a.*, t.name AS template_name, t.default_validity_months,
+      cm.full_name AS worker_name, cm.employee_id AS worker_emp_id
+    FROM voc_assessments a
+    JOIN voc_templates t ON t.id = a.template_id
+    JOIN crew_members cm ON cm.id = a.crew_member_id
+    WHERE a.id = ? AND a.crew_member_id = ?
+      AND a.status = 'submitted' AND a.outcome = 'competent'
+      AND COALESCE(a.certificate_status, 'active') = 'active'
+  `).get(req.params.id, worker.id);
+  if (!a || !a.certificate_id) return res.status(404).send('Certificate not available.');
+
+  // Try the stored path first.
+  if (a.pdf_path) {
+    const full = certPath.join(VOC_CERT_DIR, certPath.basename(a.pdf_path));
+    if (certFs.existsSync(full)) {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${a.certificate_id}.pdf"`);
+      return certFs.createReadStream(full).pipe(res);
+    }
+  }
+  // Regenerate.
+  try {
+    const base = process.env.APP_BASE_URL || 'https://tstc.up.railway.app';
+    const verifyUrl = base.replace(/\/$/, '') + '/voc/verify/' + encodeURIComponent(a.certificate_id);
+    const buf = await renderVocCertificatePdf(a, a.certificate_id, verifyUrl);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${a.certificate_id}.pdf"`);
+    return res.end(buf);
+  } catch (e) {
+    console.error('[w-hr-vocs] PDF render failed:', e);
+    return res.status(500).send('Failed to render certificate.');
+  }
 });
 
 // GET /w/hr/documents/:id — Stream a worker's own uploaded document.
