@@ -73,7 +73,11 @@
 </script>
 
 <% if (typeof birthdaysToday !== 'undefined' && birthdaysToday && birthdaysToday.length > 0) { %>
-<!-- Birthday banner — pops when at least one active crew member's DOB is today -->
+<!-- Birthday banner — pops when at least one active crew member's DOB is today.
+     The pink/amber gradient stays the same in both light + dark mode (it's the
+     party background, not a theme surface), so we use scoped class names and
+     !important to override the .dark-glass text-gray-X → light overrides that
+     would otherwise wash out the text against the still-light gradient. -->
 <style>
   .bday-banner { position: relative; overflow: hidden; }
   .bday-banner::before, .bday-banner::after {
@@ -100,6 +104,16 @@
     100% { transform: translateY(160px) rotate(360deg); opacity: 0; }
   }
   @media (prefers-reduced-motion: reduce) { .bday-confetti { display: none; } }
+
+  /* Force readable text colours against the light gradient in both light AND
+     dark mode. Without these, body.dark-glass .text-gray-900 rules turn the
+     names into near-white-on-cream. */
+  .bday-banner .bday-label { color: #BE185D !important; }
+  .bday-banner .bday-name  { color: #111827 !important; }
+  .bday-banner .bday-name:hover { color: #BE185D !important; }
+  .bday-banner .bday-age   { color: #6B7280 !important; }
+  .bday-banner .bday-sep   { color: #9CA3AF !important; }
+  .bday-banner .bday-body  { color: #4B5563 !important; }
 </style>
 <div class="bday-banner bg-gradient-to-br from-pink-50 via-amber-50 to-rose-50 border border-pink-200 rounded-2xl p-4 sm:p-5 mb-5 shadow-sm">
   <div class="bday-confetti" aria-hidden="true">
@@ -110,17 +124,17 @@
       🎂
     </div>
     <div class="flex-1 min-w-0">
-      <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-pink-600 mb-0.5">Birthday today</p>
+      <p class="bday-label text-[10px] font-bold uppercase tracking-[0.15em] mb-0.5">Birthday today</p>
       <% birthdaysToday.forEach((b, i) => { %>
-        <% if (i > 0) { %><span class="text-gray-400 mx-1">·</span><% } %>
-        <a href="/crew/<%= b.crew_member_id %>" class="text-lg font-extrabold text-gray-900 hover:text-pink-600 transition-colors">
+        <% if (i > 0) { %><span class="bday-sep mx-1">·</span><% } %>
+        <a href="/crew/<%= b.crew_member_id %>" class="bday-name text-lg font-extrabold transition-colors">
           <%= b.full_name %>
         </a>
         <% if (b.turning && b.turning > 0 && b.turning < 110) { %>
-          <span class="text-sm font-medium text-gray-500 ml-1">turns <%= b.turning %></span>
+          <span class="bday-age text-sm font-medium ml-1">turns <%= b.turning %></span>
         <% } %>
       <% }) %>
-      <p class="text-sm text-gray-600 mt-1">Drop them a message today — the team is wishing them on the worker portal.</p>
+      <p class="bday-body text-sm mt-1">Drop them a message today — the team is wishing them on the worker portal.</p>
     </div>
   </div>
 </div>
