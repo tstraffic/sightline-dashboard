@@ -94,6 +94,13 @@ const PERMISSIONS = {
   // ── Risk Assessment register (same access pattern as SWMS) ──
   risk_assessments: ['admin', 'safety', 'operations', 'planning'],
 
+  // ── VOC (Verification of Competency) ──
+  // Trainers (operations/safety) and admins create and submit assessments.
+  // Template editing (theory Qs + practical checklist + validity) is
+  // admin-only since changes affect compliance records org-wide.
+  voc:            ['admin', 'operations', 'safety'],
+  voc_admin:      ['admin'],
+
   // ── Finance / Admin ──
   // `finance` is the section gate — controls whether the Finance heading
   // even shows in the sidebar. Individual links inside have their own

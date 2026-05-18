@@ -292,6 +292,8 @@ app.use('/safety-comments', requireLogin, requirePermission('safety_comments'), 
 app.use('/safety-quizzes', requireLogin, requirePermission('safety_quizzes'), require('./routes/safety-quizzes'));
 app.use('/safety-reports', requireLogin, requirePermission('safety_reports'), require('./routes/safety-reports'));
 app.use('/risk-assessments', requireLogin, requirePermission('risk_assessments'), require('./routes/risk-assessments'));
+app.use('/voc-assessments', requireLogin, requirePermission('voc'), require('./routes/voc-assessments'));
+app.use('/voc-templates', requireLogin, requirePermission('voc_admin'), require('./routes/voc-templates'));
 app.use('/exports', requireLogin, requirePermission('exports'), require('./routes/exports'));
 app.use('/reports', requireLogin, requirePermission('reports'), require('./routes/reports'));
 app.use('/marketing', requireLogin, requirePermission('marketing'), require('./routes/marketing'));

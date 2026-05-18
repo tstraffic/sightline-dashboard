@@ -1,0 +1,151 @@
+<% locals.currentPage = 'voc-assessments' %>
+<%
+  const outcomeChips = {
+    competent: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
+    nyc:       'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20',
+  };
+  const statusChips = {
+    draft:     'bg-gray-100 text-gray-700',
+    submitted: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+  };
+  const certChips = {
+    active:  'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
+    expired: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+    revoked: 'bg-gray-100 text-gray-600 ring-1 ring-gray-300',
+  };
+  const today = new Date().toISOString().slice(0, 10);
+  function fmtDate(d) {
+    if (!d) return '-';
+    return new Date(d).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+  function daysUntil(d) {
+    if (!d) return null;
+    return Math.ceil((new Date(d) - new Date(today)) / (24 * 60 * 60 * 1000));
+  }
+%>
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Verifications of Competency</h1>
+    <p class="text-gray-500 text-sm mt-0.5">In-house equipment / operations assessments &middot; theory + practical &middot; tracked to expiry</p>
+  </div>
+  <div class="flex flex-col sm:flex-row gap-2">
+    <% if (canAccess(user, 'voc_admin')) { %>
+      <a href="/voc-templates" class="inline-flex items-center justify-center px-4 py-2 bg-white hover:bg-gray-50 border border-brand-600 text-brand-700 text-sm font-medium rounded-lg transition">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 4a2 2 0 114 0v1a1 1 0 001 1h3a1 1 0 011 1v3a1 1 0 01-1 1h-1a2 2 0 100 4h1a1 1 0 011 1v3a1 1 0 01-1 1h-3a1 1 0 01-1-1v-1a2 2 0 10-4 0v1a1 1 0 01-1 1H7a1 1 0 01-1-1v-3a1 1 0 00-1-1H4a2 2 0 110-4h1a1 1 0 001-1V7a1 1 0 011-1h3a1 1 0 001-1V4z"/></svg>
+        Templates
+      </a>
+    <% } %>
+    <a href="/voc-assessments/new" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">
+      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+      Start New VOC
+    </a>
+  </div>
+</div>
+
+<!-- Filters -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 mb-5">
+  <form method="GET" action="/voc-assessments" class="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2 sm:gap-3">
+    <%- include('../partials/csrf') %>
+    <div class="flex-1 sm:flex-none sm:min-w-[180px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Equipment</label>
+      <select name="template_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% templates.forEach(function(t){ %>
+          <option value="<%= t.id %>" <%= filters.template_id == t.id ? 'selected' : '' %>><%= t.name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="flex-1 sm:flex-none sm:min-w-[120px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
+      <select name="status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <option value="draft"     <%= filters.status === 'draft' ? 'selected' : '' %>>Draft</option>
+        <option value="submitted" <%= filters.status === 'submitted' ? 'selected' : '' %>>Submitted</option>
+      </select>
+    </div>
+    <div class="flex-1 sm:flex-none sm:min-w-[120px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Outcome</label>
+      <select name="outcome" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <option value="competent" <%= filters.outcome === 'competent' ? 'selected' : '' %>>Competent</option>
+        <option value="nyc"       <%= filters.outcome === 'nyc' ? 'selected' : '' %>>Not Yet Competent</option>
+      </select>
+    </div>
+    <div class="flex gap-2">
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg">Apply</button>
+      <a href="/voc-assessments" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg">Clear</a>
+    </div>
+  </form>
+</div>
+
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <% if (assessments.length === 0) { %>
+    <div class="p-8 text-center">
+      <svg class="w-10 h-10 mx-auto mb-2 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+      <p class="text-gray-500 text-sm font-medium">No VOCs recorded yet</p>
+      <p class="text-gray-400 text-xs mt-1">Click "Start New VOC" to assess a worker against an equipment template.</p>
+    </div>
+  <% } else { %>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-200">
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">VOC #</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Worker</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Equipment</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Assessor</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Outcome</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Status</th>
+            <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Valid Until</th>
+            <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <% assessments.forEach(function(a){
+            const dUntil = daysUntil(a.valid_until);
+            const isExpired = a.valid_until && a.valid_until < today;
+            const isRevoked = a.certificate_status === 'revoked';
+            const isExpiring = a.outcome === 'competent' && !isExpired && !isRevoked && a.valid_until && dUntil <= 30;
+          %>
+            <tr class="hover:bg-gray-50 <%= isRevoked ? 'opacity-60' : (isExpired || isExpiring ? 'border-l-4 border-l-orange-400' : '') %>">
+              <td class="px-3 py-2.5 font-mono text-xs text-brand-600 font-semibold"><%= a.voc_number || ('#' + a.id) %></td>
+              <td class="px-3 py-2.5">
+                <div class="font-medium text-gray-900"><%= a.worker_name %></div>
+                <% if (a.worker_emp_id) { %><div class="text-[10px] text-gray-400"><%= a.worker_emp_id %></div><% } %>
+              </td>
+              <td class="px-3 py-2.5 text-gray-700"><%= a.template_name %></td>
+              <td class="px-3 py-2.5 text-gray-700 text-xs hidden md:table-cell"><%= a.assessor_name || '-' %></td>
+              <td class="px-3 py-2.5">
+                <% if (a.outcome) { %>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= outcomeChips[a.outcome] || 'bg-gray-100 text-gray-700' %>"><%= a.outcome === 'competent' ? 'COMPETENT' : 'NOT YET COMPETENT' %></span>
+                <% } else { %>
+                  <span class="text-gray-300 text-xs">-</span>
+                <% } %>
+              </td>
+              <td class="px-3 py-2.5 hidden lg:table-cell">
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= statusChips[a.status] || 'bg-gray-100 text-gray-700' %>"><%= (a.status || 'draft').toUpperCase() %></span>
+                <% if (isRevoked) { %>
+                  <span class="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= certChips.revoked %>">REVOKED</span>
+                <% } %>
+              </td>
+              <td class="px-3 py-2.5 text-xs">
+                <% if (a.valid_until) { %>
+                  <span class="<%= isExpired ? 'text-red-600 font-semibold' : isExpiring ? 'text-amber-600 font-semibold' : 'text-gray-700' %>"><%= fmtDate(a.valid_until) %></span>
+                  <% if (isExpired) { %><span class="block text-[10px] text-red-500">expired</span>
+                  <% } else if (isExpiring) { %><span class="block text-[10px] text-amber-500"><%= dUntil %>d left</span><% } %>
+                <% } else { %>
+                  <span class="text-gray-300">-</span>
+                <% } %>
+              </td>
+              <td class="px-3 py-2.5 text-right">
+                <a href="/voc-assessments/<%= a.id %>/edit" class="px-2.5 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 rounded-lg">Open</a>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <div class="px-3 py-2.5 border-t border-gray-200 text-xs text-gray-400"><%= assessments.length %> VOC<%= assessments.length !== 1 ? 's' : '' %></div>
+  <% } %>
+</div>

@@ -1,0 +1,11 @@
+<%
+  // Reusable T&S logo for VOC forms + certificate. Swap the SVG body for
+  // <img src="/images/ts-logo.png"> once the PNG asset is dropped in.
+  // The `size` local controls the rendered height in px (default 70).
+  const _size = (typeof size !== 'undefined' && size) ? size : 70;
+%>
+<svg viewBox="0 0 640 380" xmlns="http://www.w3.org/2000/svg" style="height:<%= _size %>px; width:auto;" aria-label="T&amp;S Traffic Control logo">
+  <path d="M 60 30 C 230 50 270 170 180 290 C 130 350 200 360 270 360 L 350 360 C 270 360 220 340 260 270 C 320 170 270 60 130 30 Z" fill="#000000"/>
+  <path d="M 170 30 C 340 50 380 170 290 290 C 240 350 310 360 380 360 L 460 360 C 380 360 330 340 370 270 C 430 170 380 60 240 30 Z" fill="#1d1bb3"/>
+  <text x="345" y="290" font-family="Arial Black, Impact, sans-serif" font-size="240" font-weight="900" fill="#000000" letter-spacing="-8">T&amp;S</text>
+</svg>

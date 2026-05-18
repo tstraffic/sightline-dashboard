@@ -74,12 +74,27 @@ router.get('/hr/certs', (req, res) => {
   // Also get crew_member licence info
   const member = db.prepare('SELECT licence_type, licence_expiry, induction_date FROM crew_members WHERE id = ?').get(worker.id);
 
+  // Submitted VOCs for this worker. Drafts are not shown — the wallet
+  // only surfaces completed verifications. Both Competent and NYC
+  // outcomes appear so the worker can see why they're not certified
+  // on a given item.
+  const vocs = db.prepare(`
+    SELECT a.id, a.voc_number, a.outcome, a.valid_from, a.valid_until,
+      a.certificate_status, a.certificate_id, a.assessment_date,
+      t.name AS equipment_name
+    FROM voc_assessments a
+    JOIN voc_templates t ON t.id = a.template_id
+    WHERE a.crew_member_id = ? AND a.status = 'submitted'
+    ORDER BY a.assessment_date DESC, a.id DESC
+  `).all(worker.id);
+
   res.render('worker/hr-certs', {
     title: 'My Wallet',
     currentPage: 'more',
     certs,
     documents,
     member,
+    vocs,
   });
 });
 
