@@ -9720,6 +9720,44 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 196: PIN lockout for worker portal + force-change for named
+  // seed admin accounts.
+  //
+  // (a) Adds pin_failed_attempts + pin_locked_until columns on crew_members
+  //     so routes/worker/auth.js can lock an Employee ID after N wrong
+  //     PINs. The existing global 10/15min limiter is per-IP — useless
+  //     against a distributed brute force of a 4-digit PIN. Per-account
+  //     lockout closes that gap.
+  // (b) Migration 81 already flagged 'admin' (admin123) and the demo
+  //     *_user accounts (password). It missed the named-admin seed users
+  //     suhail.a / saadat / savanah / taj which were seeded with
+  //     individual but well-known dev passwords. Flag them too so they
+  //     can't slip through to production with the seed password intact.
+  // =============================================
+  if (!isMigrationApplied.get(196)) {
+    console.log('Running migration 196: PIN lockout cols + flag named-admin seeds');
+    try { db.exec("ALTER TABLE crew_members ADD COLUMN pin_failed_attempts INTEGER DEFAULT 0"); } catch(e) { /* exists */ }
+    try { db.exec("ALTER TABLE crew_members ADD COLUMN pin_locked_until DATETIME"); } catch(e) { /* exists */ }
+
+    const SEED_GUESSES = {
+      'suhail.a': 'Suhail123',
+      'saadat':   'TandS2026.',
+      'savanah':  'Savanah123',
+      'taj':      'Taj123',
+    };
+    try {
+      for (const [username, seedPw] of Object.entries(SEED_GUESSES)) {
+        const u = db.prepare('SELECT id, password_hash, must_change_password FROM users WHERE username = ?').get(username);
+        if (u && !u.must_change_password && bcrypt.compareSync(seedPw, u.password_hash)) {
+          db.prepare('UPDATE users SET must_change_password = 1 WHERE id = ?').run(u.id);
+          console.log(`Migration 196: flagged ${username} for password change (seed password still in use)`);
+        }
+      }
+    } catch (e) { console.error('Migration 196 flag step error:', e.message); }
+    recordMigration.run(196, 'PIN lockout cols + flag named-admin seeds');
+  }
+
   console.log('All migrations checked/applied.');
 }
 
@@ -10374,25 +10412,67 @@ function initializeDatabase() {
   // Run migrations to add new columns, expand CHECK constraints, and create new tables
   runMigrations(db);
 
-  // Seed default admin user if no users exist
+  // Seed default admin user(s) if no users exist.
+  //
+  // Two distinct paths so the well-known dev passwords (admin/admin123,
+  // *_user/password, named admins) never end up in a production DB on
+  // first boot. The old behaviour seeded them unconditionally, which left
+  // a 'admin/admin123' account on every fresh prod deploy waiting to be
+  // changed by hand.
+  //
+  // Production first boot:
+  //   - If INITIAL_ADMIN_PASSWORD is set, use it.
+  //   - Else generate a strong random password and log it to stdout
+  //     exactly once. The operator captures it from Railway logs, signs
+  //     in, and is forced to change it (must_change_password = 1).
+  //   - No other dev accounts are created.
+  //
+  // Non-production first boot:
+  //   - Keep the existing developer convenience seeds (admin/admin123,
+  //     etc.) but mark every one of them must_change_password = 1 so the
+  //     account is unusable for real work without picking a new password.
   const userCount = db.prepare('SELECT COUNT(*) as count FROM users').get();
   if (userCount.count === 0) {
-    const hash = bcrypt.hashSync('admin123', 12);
+    const isProd = process.env.NODE_ENV === 'production' || process.env.RAILWAY_ENVIRONMENT === 'production';
     const insertUser = db.prepare(`
-      INSERT INTO users (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)
+      INSERT INTO users (username, password_hash, full_name, email, role, must_change_password)
+      VALUES (?, ?, ?, ?, ?, 1)
     `);
 
-    insertUser.run('admin', hash, 'Admin User', 'admin@tstraffic.com.au', 'admin');
-    insertUser.run('suhail.a', bcrypt.hashSync('Suhail123', 12), 'Suhail Ahmed', 'suhail@tstc.com.au', 'admin');
-    insertUser.run('saadat', bcrypt.hashSync('TandS2026.', 12), 'Saadat', 'saadat@tstc.com.au', 'admin');
-    insertUser.run('savanah', bcrypt.hashSync('Savanah123', 12), 'Savanah', 'savanah@tstc.com.au', 'admin');
-    insertUser.run('taj', bcrypt.hashSync('Taj123', 12), 'Taj', 'taj@tstc.com.au', 'admin');
-    insertUser.run('ops_user', bcrypt.hashSync('password', 12), 'Sam Operations', 'sam@tstraffic.com.au', 'operations');
-    insertUser.run('planning_user', bcrypt.hashSync('password', 12), 'Alex Planning', 'alex@tstraffic.com.au', 'planning');
-    insertUser.run('finance_user', bcrypt.hashSync('password', 12), 'Pat Finance', 'pat@tstraffic.com.au', 'finance');
-    insertUser.run('accounts_user', bcrypt.hashSync('password', 12), 'Jordan Accounts', 'jordan@tstraffic.com.au', 'finance');
+    if (isProd) {
+      const explicit = process.env.INITIAL_ADMIN_PASSWORD;
+      const adminPassword = explicit || require('crypto').randomBytes(12).toString('base64').replace(/[+/=]/g, '').slice(0, 16);
+      const hash = bcrypt.hashSync(adminPassword, 12);
+      insertUser.run('admin', hash, 'Admin User', 'admin@tstraffic.com.au', 'admin');
 
-    console.log('Database seeded with admin users only (no demo data).');
+      const banner =
+        '\n' + '='.repeat(60) +
+        '\nFIRST BOOT — seeded a single admin account' +
+        (explicit
+          ? '\n  password: (from INITIAL_ADMIN_PASSWORD env var)'
+          : '\n  username: admin' +
+            '\n  password: ' + adminPassword +
+            '\n  (no INITIAL_ADMIN_PASSWORD set — random password generated)') +
+        '\nThis account is forced to change password on first login.' +
+        '\nSign in NOW, change the password, then delete this log entry.' +
+        '\n' + '='.repeat(60) + '\n';
+      console.warn(banner);
+    } else {
+      // Developer convenience seeds — never used in production.
+      // Every account is must_change_password=1 so even if a dev DB
+      // somehow gets cloned to prod, the seed passwords can't be used.
+      const dev = (pw) => bcrypt.hashSync(pw, 12);
+      insertUser.run('admin',         dev('admin123'),    'Admin User',     'admin@tstraffic.com.au',     'admin');
+      insertUser.run('suhail.a',      dev('Suhail123'),   'Suhail Ahmed',   'suhail@tstc.com.au',         'admin');
+      insertUser.run('saadat',        dev('TandS2026.'),  'Saadat',         'saadat@tstc.com.au',         'admin');
+      insertUser.run('savanah',       dev('Savanah123'),  'Savanah',        'savanah@tstc.com.au',        'admin');
+      insertUser.run('taj',           dev('Taj123'),      'Taj',            'taj@tstc.com.au',            'admin');
+      insertUser.run('ops_user',      dev('password'),    'Sam Operations', 'sam@tstraffic.com.au',       'operations');
+      insertUser.run('planning_user', dev('password'),    'Alex Planning',  'alex@tstraffic.com.au',      'planning');
+      insertUser.run('finance_user',  dev('password'),    'Pat Finance',    'pat@tstraffic.com.au',       'finance');
+      insertUser.run('accounts_user', dev('password'),    'Jordan Accounts','jordan@tstraffic.com.au',    'finance');
+      console.log('Dev DB seeded with seed admin users — all flagged must_change_password=1.');
+    }
   }
 
   // ── One-time cleanup: ensure all demo/seed data is gone ──
