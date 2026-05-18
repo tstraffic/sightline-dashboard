@@ -171,9 +171,15 @@
         <%- include('../partials/csrf') %>
         <input type="hidden" name="description" value="<%= sub.description || '' %>">
 
+        <%
+          // Council Permits are issued externally and often tracked by
+          // reference number / status alone — the actual PDF may arrive
+          // weeks later. So the file is optional for this item type.
+          const fileOptional = sub.item_type === 'council_permit';
+        %>
         <div class="sm:col-span-2">
-          <label class="block text-xs font-medium text-gray-700 mb-1">Files <span class="text-rose-500">*</span></label>
-          <input type="file" name="documents" multiple required
+          <label class="block text-xs font-medium text-gray-700 mb-1">Files <% if (!fileOptional) { %><span class="text-rose-500">*</span><% } else { %><span class="text-gray-400 font-normal">(optional)</span><% } %></label>
+          <input type="file" name="documents" multiple <% if (!fileOptional) { %>required<% } %>
             accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.gif,.webp,.dwg,.dxf"
             class="w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
           <p class="mt-1 text-[11px] text-gray-500">PDF, Word, Excel, images, DWG/DXF — max 25MB / 10 files</p>

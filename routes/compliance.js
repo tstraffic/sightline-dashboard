@@ -521,8 +521,10 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
     req.flash('error', 'Hours spent is required and must be greater than zero.');
     return res.redirect('/compliance/' + sub.parent_id + '/edit');
   }
-  if (files.length === 0) {
-    // No files attached AND no existing files = can't submit.
+  // Council Permits are issued externally and often tracked by reference
+  // number alone — the actual PDF may arrive later. So files are optional
+  // for this item type; the rest still require at least one document.
+  if (files.length === 0 && sub.item_type !== 'council_permit') {
     const existingDocs = db.prepare('SELECT COUNT(*) as c FROM compliance_documents WHERE compliance_id = ?').get(sub.id).c;
     if (existingDocs === 0) {
       req.flash('error', 'At least one file is required to submit.');

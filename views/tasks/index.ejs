@@ -307,11 +307,25 @@
                 const isOverdue = task.due_date && task.status !== 'complete' && task.due_date.split('T')[0] < todayStr;
                 const dueDisplay = task.due_date ? new Date(task.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) : 'No date';
               %>
-              <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow <%= isOverdue ? 'border-l-4 border-l-red-400' : '' %>">
+              <%
+                // Urgency hierarchy on the card:
+                //   - Overdue takes precedence (red left border).
+                //   - High-priority but not overdue → amber left border.
+                //   - High priority also gets a "HIGH" pill so urgency is
+                //     readable at a glance instead of just a 10px dot.
+                const isHigh = task.priority === 'high';
+                const cardEdge = isOverdue ? 'border-l-4 border-l-red-400'
+                  : (isHigh ? 'border-l-4 border-l-amber-400' : '');
+              %>
+              <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow <%= cardEdge %>">
                 <div class="p-4">
                   <div class="flex items-start gap-2 mb-2">
                     <input type="checkbox" class="bulk-checkbox mt-1 rounded bg-white border-gray-300 text-brand-500 focus:ring-brand-500 flex-shrink-0" value="<%= task.id %>">
-                    <span class="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 <%= priorityDots[task.priority] || 'bg-gray-300' %>"></span>
+                    <% if (isHigh) { %>
+                      <span class="mt-0.5 inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded text-white bg-red-500 leading-none flex-shrink-0" title="High priority">HIGH</span>
+                    <% } else { %>
+                      <span class="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 <%= priorityDots[task.priority] || 'bg-gray-300' %>" title="<%= task.priority || 'no' %> priority"></span>
+                    <% } %>
                     <div class="flex-1 min-w-0">
                       <a href="/tasks/<%= task.id %>/edit" class="text-sm font-semibold text-gray-900 hover:text-brand-600 transition line-clamp-2 block"><%= task.title %></a>
                       <% if (task.description) { %>
@@ -391,11 +405,25 @@
                 const isOverdue = task.due_date && task.status !== 'complete' && task.due_date.split('T')[0] < todayStr;
                 const dueDisplay = task.due_date ? new Date(task.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) : 'No date';
               %>
-              <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow <%= isOverdue ? 'border-l-4 border-l-red-400' : '' %>">
+              <%
+                // Urgency hierarchy on the card:
+                //   - Overdue takes precedence (red left border).
+                //   - High-priority but not overdue → amber left border.
+                //   - High priority also gets a "HIGH" pill so urgency is
+                //     readable at a glance instead of just a 10px dot.
+                const isHigh = task.priority === 'high';
+                const cardEdge = isOverdue ? 'border-l-4 border-l-red-400'
+                  : (isHigh ? 'border-l-4 border-l-amber-400' : '');
+              %>
+              <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow <%= cardEdge %>">
                 <div class="p-4">
                   <div class="flex items-start gap-2 mb-2">
                     <input type="checkbox" class="bulk-checkbox mt-1 rounded bg-white border-gray-300 text-brand-500 focus:ring-brand-500 flex-shrink-0" value="<%= task.id %>">
-                    <span class="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 <%= priorityDots[task.priority] || 'bg-gray-300' %>"></span>
+                    <% if (isHigh) { %>
+                      <span class="mt-0.5 inline-flex items-center px-1.5 py-0.5 text-[9px] font-bold rounded text-white bg-red-500 leading-none flex-shrink-0" title="High priority">HIGH</span>
+                    <% } else { %>
+                      <span class="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 <%= priorityDots[task.priority] || 'bg-gray-300' %>" title="<%= task.priority || 'no' %> priority"></span>
+                    <% } %>
                     <div class="flex-1 min-w-0">
                       <a href="/tasks/<%= task.id %>/edit" class="text-sm font-semibold text-gray-900 hover:text-brand-600 transition line-clamp-2 block"><%= task.title %></a>
                       <% if (task.description) { %>

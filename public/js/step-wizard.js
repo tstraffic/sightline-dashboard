@@ -334,6 +334,31 @@
   });
 
   // ========== Submit Spinner ==========
+  // Disables the submit button while saving so users can't double-submit,
+  // but is careful to re-enable it on every path the page can come back:
+  //   - Server returns an error redirect → fresh page load → pageshow fires
+  //   - User hits Back after a successful POST → BFCache restore → pageshow
+  //     fires with event.persisted === true, restoring the old disabled
+  //     state visually; we always re-enable to recover from that.
+  //   - Hard timeout as a final safety net (shortened from 8s to 2.5s; on
+  //     traditional EJS form posts the page navigates away well before that
+  //     fires, but on AJAX forms that fail without a navigation we don't
+  //     want to lock the user out for 8 seconds).
+  function resetSubmitButton(btn) {
+    if (!btn) return;
+    btn.disabled = false;
+    btn.classList.remove('opacity-75', 'cursor-wait');
+    if (btn.dataset.originalHtml) {
+      btn.innerHTML = btn.dataset.originalHtml;
+      delete btn.dataset.originalHtml;
+    }
+  }
+
+  function resetAllSubmitButtons() {
+    document.querySelectorAll('button[type="submit"]').forEach(resetSubmitButton);
+    document.querySelectorAll('form.form-submitting').forEach(f => f.classList.remove('form-submitting'));
+  }
+
   document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('form').forEach(form => {
       form.addEventListener('submit', function() {
@@ -341,11 +366,19 @@
         if (!btn || btn.disabled) return;
         btn.disabled = true;
         btn.classList.add('opacity-75', 'cursor-wait');
-        const orig = btn.innerHTML;
-        btn.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Saving...';
-        // Re-enable after 8s in case of error
-        setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; btn.classList.remove('opacity-75', 'cursor-wait'); }, 8000);
+        btn.dataset.originalHtml = btn.innerHTML;
+        btn.innerHTML = '<svg class="animate-spin w-4 h-4 mr-2 inline-block" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Saving...';
+        // Safety net for AJAX forms that error without navigating away.
+        // For normal EJS form posts the page navigates well before 2.5s
+        // and the timer is discarded; for AJAX failures the button is
+        // usable again quickly instead of being locked for 8 seconds.
+        setTimeout(() => resetSubmitButton(btn), 2500);
       });
     });
   });
+
+  // pageshow fires on initial load AND on BFCache restore. Resetting on
+  // every pageshow means: server-error redirect → fresh form is clickable;
+  // Back-button after submit → restored form is clickable. Cheap insurance.
+  window.addEventListener('pageshow', resetAllSubmitButtons);
 })();
