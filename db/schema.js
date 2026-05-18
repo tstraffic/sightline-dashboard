@@ -9795,6 +9795,112 @@ function runMigrations(db) {
     recordMigration.run(214, 'PIN lockout cols + flag named-admin seeds');
   }
 
+  // =============================================
+  // Migration 215: VOC (Verification of Competency) tables.
+  // voc_templates is the per-equipment definition (theory questions list +
+  // practical checklist + default validity). voc_assessments stores each
+  // filled record (worker + assessor + theory/practical responses +
+  // outcome). Phase 2 fields (certificate_id, certificate_status,
+  // pdf_path, revoke metadata) ship in this migration so Phase 2 won't
+  // need a schema change. Seeds six empty equipment templates — admins
+  // fill the question/checklist content via /voc-templates.
+  // =============================================
+  if (!isMigrationApplied.get(215)) {
+    console.log('Running migration 215: voc_templates + voc_assessments');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS voc_templates (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          item_key TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          default_validity_months INTEGER NOT NULL DEFAULT 24,
+          theory_questions_json TEXT NOT NULL DEFAULT '[]',
+          practical_checklist_json TEXT NOT NULL DEFAULT '[]',
+          active INTEGER NOT NULL DEFAULT 1,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_by_id INTEGER REFERENCES users(id)
+        );
+
+        CREATE TABLE IF NOT EXISTS voc_assessments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          voc_number TEXT UNIQUE,
+          template_id INTEGER NOT NULL REFERENCES voc_templates(id),
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          assessor_user_id INTEGER REFERENCES users(id),
+          manager_user_id INTEGER REFERENCES users(id),
+          assessment_type TEXT,
+          assessment_type_other_text TEXT DEFAULT '',
+          assessment_date DATE,
+          location_site TEXT DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'draft',
+          outcome TEXT,
+          prerequisites_json TEXT NOT NULL DEFAULT '{}',
+          worker_details_json TEXT NOT NULL DEFAULT '{}',
+          theory_responses_json TEXT NOT NULL DEFAULT '[]',
+          theory_correct_count INTEGER DEFAULT 0,
+          theory_total INTEGER DEFAULT 0,
+          theory_pass INTEGER DEFAULT 0,
+          practical_responses_json TEXT NOT NULL DEFAULT '[]',
+          practical_pass INTEGER DEFAULT 0,
+          valid_from DATE,
+          valid_until DATE,
+          reassessment_trigger TEXT DEFAULT '',
+          assessor_comments TEXT DEFAULT '',
+          worker_signed_name TEXT DEFAULT '',
+          worker_signed_date DATE,
+          assessor_signed_name TEXT DEFAULT '',
+          assessor_signed_date DATE,
+          manager_signed_name TEXT DEFAULT '',
+          manager_signed_position TEXT DEFAULT '',
+          manager_signed_date DATE,
+          records_filed_yes INTEGER DEFAULT 0,
+          records_filed_by TEXT DEFAULT '',
+          records_filed_date DATE,
+          copy_to_worker_yes INTEGER DEFAULT 0,
+          matrix_entered_by TEXT DEFAULT '',
+          certificate_id TEXT,
+          certificate_status TEXT DEFAULT 'active',
+          certificate_revoked_at DATETIME,
+          certificate_revoked_by INTEGER REFERENCES users(id),
+          certificate_revoked_reason TEXT DEFAULT '',
+          pdf_path TEXT DEFAULT '',
+          pdf_generated_at DATETIME,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          created_by_id INTEGER REFERENCES users(id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_voc_crew ON voc_assessments(crew_member_id);
+        CREATE INDEX IF NOT EXISTS idx_voc_template ON voc_assessments(template_id);
+        CREATE INDEX IF NOT EXISTS idx_voc_status ON voc_assessments(status, outcome);
+        CREATE INDEX IF NOT EXISTS idx_voc_valid_until ON voc_assessments(valid_until);
+        CREATE INDEX IF NOT EXISTS idx_voc_certificate ON voc_assessments(certificate_id);
+      `);
+
+      // Seed six equipment templates with empty content (admins fill via UI).
+      const seeds = [
+        ['traffic_control_vehicle',   'Traffic Control Vehicle Operations'],
+        ['drop_deck_vehicle',          'Drop Deck Vehicle Operations'],
+        ['trailer_hitch_unhitch',      'Hitching and Unhitching a Trailer'],
+        ['portable_boom_gate',         'Portable Boom Gate Operations'],
+        ['light_tower',                'Light Tower Operations'],
+        ['portable_vms',               'Portable Variable Message Sign (VMS) Operations'],
+      ];
+      const insTpl = db.prepare(`
+        INSERT OR IGNORE INTO voc_templates (item_key, name, sort_order, default_validity_months)
+        VALUES (?, ?, ?, 24)
+      `);
+      seeds.forEach((row, i) => insTpl.run(row[0], row[1], i + 1));
+
+      recordMigration.run(215, 'voc_templates + voc_assessments');
+      console.log('Migration 215 applied: voc_templates + voc_assessments created, 6 templates seeded');
+    } catch (e) {
+      console.error('Migration 215 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

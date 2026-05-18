@@ -1,0 +1,225 @@
+<% locals.currentPage = 'voc-templates' %>
+<%
+  const tpl = template;
+  // Render at least one empty theory question + one empty section/item so
+  // the dynamic-row pattern works out of the box on a fresh template.
+  const theoryRows = theory.length > 0 ? theory : [''];
+  const practicalRows = practical.length > 0 ? practical : [{ section: 'A. Pre-Operational Checks', items: [''] }];
+%>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="mb-4">
+    <a href="/voc-templates" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700">
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      Back to VOC Templates
+    </a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
+    <div class="bg-brand-600 text-white px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
+      <div class="flex items-center gap-3">
+        <%- include('../partials/ts-logo', { size: 36 }) %>
+        <div>
+          <div class="text-xs uppercase tracking-widest opacity-80">VOC Template — Doc No: TSVOC-001 Rev A</div>
+          <h1 class="text-xl font-bold leading-tight"><%= tpl.name %></h1>
+        </div>
+      </div>
+      <div class="text-right text-xs opacity-80">
+        <div>Key: <span class="font-mono"><%= tpl.item_key %></span></div>
+      </div>
+    </div>
+  </div>
+
+  <form method="POST" action="/voc-templates/<%= tpl.id %>" id="vocTemplateForm">
+    <%- include('../partials/csrf') %>
+
+    <!-- Validity -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-3">Validity</h2>
+      <label class="text-xs font-semibold text-gray-500 uppercase">Default validity period (months)</label>
+      <input type="number" name="default_validity_months" min="1" max="120" value="<%= tpl.default_validity_months %>"
+        class="mt-1 w-32 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <p class="mt-2 text-xs text-gray-500 italic">Applied to new VOCs based on this template: expiry = assessment date + this many months.</p>
+    </section>
+
+    <!-- Theory Questions -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+      <div class="bg-brand-50 px-6 py-3 border-b border-gray-200 flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700">Theory Questions</h2>
+          <p class="text-xs text-gray-500 italic mt-0.5">Open-ended preferred (avoid yes/no). Worker passes at ≥80% correct.</p>
+        </div>
+        <button type="button" id="theoryAdd" class="text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-3 py-1.5 rounded-lg">+ Add Question</button>
+      </div>
+      <div class="p-4">
+        <div id="theoryList" class="space-y-2">
+          <% theoryRows.forEach(function(q, i) { %>
+            <div class="flex items-start gap-2" data-theory-row>
+              <span class="mt-2 w-6 text-xs font-semibold text-gray-500 text-right shrink-0" data-theory-num><%= i + 1 %>.</span>
+              <textarea name="theory_q" rows="2" placeholder="e.g. What is the maximum wind speed at which the boom gate may be operated, per manufacturer?"
+                class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= q %></textarea>
+              <button type="button" data-theory-remove class="mt-1 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md" title="Remove">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    </section>
+
+    <!-- Practical Checklist -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+      <div class="bg-brand-50 px-6 py-3 border-b border-gray-200 flex items-center justify-between gap-2 flex-wrap">
+        <div>
+          <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700">Practical Checklist</h2>
+          <p class="text-xs text-gray-500 italic mt-0.5">Group items by section (e.g. Pre-Operational Checks, Setup, Operation, Hazards, Emergency, Shutdown). Worker must achieve Competent on every item.</p>
+        </div>
+        <button type="button" id="practicalAddSection" class="text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 border border-brand-200 px-3 py-1.5 rounded-lg">+ Add Section</button>
+      </div>
+      <div class="p-4 space-y-4" id="practicalList">
+        <% practicalRows.forEach(function(s, sIdx) { %>
+          <div class="border border-gray-200 rounded-lg p-3" data-practical-section data-section-idx="<%= sIdx %>">
+            <div class="flex items-center gap-2 mb-2">
+              <input type="text" name="prac_section" value="<%= s.section || '' %>"
+                placeholder="Section heading, e.g. A. Pre-Operational Checks"
+                class="flex-1 px-3 py-1.5 bg-white border border-gray-300 rounded-md text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <button type="button" data-practical-section-remove class="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md" title="Remove section">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              </button>
+            </div>
+            <div data-practical-items class="space-y-1.5">
+              <% (s.items && s.items.length ? s.items : ['']).forEach(function(item) { %>
+                <div class="flex items-start gap-2" data-practical-item>
+                  <textarea rows="2" placeholder="Task / skill observed, e.g. Conducts visual inspection per checklist"
+                    class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" data-prac-item-text><%= item %></textarea>
+                  <button type="button" data-practical-item-remove class="mt-1 p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-md" title="Remove">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </div>
+              <% }) %>
+            </div>
+            <button type="button" data-practical-item-add class="mt-2 text-xs font-medium text-brand-700 hover:text-brand-800">+ Add Item</button>
+          </div>
+        <% }) %>
+      </div>
+    </section>
+
+    <div class="flex items-center justify-end gap-2 sticky bottom-0 bg-white border-t border-gray-200 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3">
+      <a href="/voc-templates" class="px-4 py-2 text-sm font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg">Cancel</a>
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg">Save Template</button>
+    </div>
+  </form>
+</div>
+
+<script>
+(function () {
+  // Dynamic theory rows
+  const theoryList = document.getElementById('theoryList');
+  const theoryAdd = document.getElementById('theoryAdd');
+
+  function reindexTheory() {
+    theoryList.querySelectorAll('[data-theory-row]').forEach((row, i) => {
+      const num = row.querySelector('[data-theory-num]');
+      if (num) num.textContent = (i + 1) + '.';
+    });
+  }
+
+  theoryList.addEventListener('click', function (e) {
+    if (e.target.closest('[data-theory-remove]')) {
+      const row = e.target.closest('[data-theory-row]');
+      const rows = theoryList.querySelectorAll('[data-theory-row]');
+      if (rows.length > 1) {
+        row.remove();
+        reindexTheory();
+      } else {
+        row.querySelector('textarea').value = '';
+      }
+    }
+  });
+
+  theoryAdd.addEventListener('click', function () {
+    const first = theoryList.querySelector('[data-theory-row]');
+    const clone = first.cloneNode(true);
+    clone.querySelector('textarea').value = '';
+    theoryList.appendChild(clone);
+    reindexTheory();
+    clone.querySelector('textarea').focus();
+  });
+
+  // Practical sections + items
+  const practicalList = document.getElementById('practicalList');
+  const practicalAddSection = document.getElementById('practicalAddSection');
+
+  function reindexSections() {
+    practicalList.querySelectorAll('[data-practical-section]').forEach((sec, idx) => {
+      sec.setAttribute('data-section-idx', idx);
+      // Each item inside needs its name set to prac_item_<idx>[] so the
+      // server can read parallel-array per section.
+      sec.querySelectorAll('[data-practical-item] textarea').forEach(t => {
+        t.name = 'prac_item_' + idx;
+      });
+    });
+  }
+
+  practicalList.addEventListener('click', function (e) {
+    // Remove whole section
+    if (e.target.closest('[data-practical-section-remove]')) {
+      const sec = e.target.closest('[data-practical-section]');
+      const sections = practicalList.querySelectorAll('[data-practical-section]');
+      if (sections.length > 1) {
+        sec.remove();
+        reindexSections();
+      } else {
+        sec.querySelectorAll('textarea, input').forEach(i => { i.value = ''; });
+      }
+      return;
+    }
+    // Remove single item
+    if (e.target.closest('[data-practical-item-remove]')) {
+      const item = e.target.closest('[data-practical-item]');
+      const items = item.parentElement.querySelectorAll('[data-practical-item]');
+      if (items.length > 1) {
+        item.remove();
+      } else {
+        item.querySelector('textarea').value = '';
+      }
+      return;
+    }
+    // Add item to section
+    if (e.target.closest('[data-practical-item-add]')) {
+      const btn = e.target.closest('[data-practical-item-add]');
+      const sec = btn.closest('[data-practical-section]');
+      const items = sec.querySelector('[data-practical-items]');
+      const first = items.querySelector('[data-practical-item]');
+      const clone = first.cloneNode(true);
+      clone.querySelector('textarea').value = '';
+      items.appendChild(clone);
+      reindexSections();
+      clone.querySelector('textarea').focus();
+      return;
+    }
+  });
+
+  practicalAddSection.addEventListener('click', function () {
+    const first = practicalList.querySelector('[data-practical-section]');
+    const clone = first.cloneNode(true);
+    clone.querySelectorAll('input').forEach(i => { i.value = ''; });
+    // Keep one empty item only
+    const items = clone.querySelector('[data-practical-items]');
+    const itemNodes = items.querySelectorAll('[data-practical-item]');
+    itemNodes.forEach((node, i) => {
+      if (i === 0) {
+        node.querySelector('textarea').value = '';
+      } else {
+        node.remove();
+      }
+    });
+    practicalList.appendChild(clone);
+    reindexSections();
+    clone.querySelector('input').focus();
+  });
+
+  // Run once on load so initial server-rendered rows have correct names
+  reindexSections();
+})();
+</script>

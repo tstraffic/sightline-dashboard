@@ -1,0 +1,52 @@
+<% locals.currentPage = 'voc-templates' %>
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">VOC Templates</h1>
+    <p class="text-gray-500 text-sm mt-0.5">Theory questions and practical checklist per equipment item. Trainers see these when running a new VOC.</p>
+  </div>
+  <a href="/voc-assessments" class="inline-flex items-center justify-center px-4 py-2 bg-white hover:bg-gray-50 border border-brand-600 text-brand-700 text-sm font-medium rounded-lg transition">
+    Back to VOCs
+  </a>
+</div>
+
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-200">
+          <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Equipment / Operation</th>
+          <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Theory Qs</th>
+          <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Practical Items</th>
+          <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Validity</th>
+          <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Last Updated</th>
+          <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        <% templates.forEach(function(t) { %>
+          <tr class="hover:bg-gray-50">
+            <td class="px-3 py-3 font-medium text-gray-900"><%= t.name %></td>
+            <td class="px-3 py-3 text-gray-700">
+              <%= t.theory_count %>
+              <% if (t.theory_count === 0) { %>
+                <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20">empty</span>
+              <% } %>
+            </td>
+            <td class="px-3 py-3 text-gray-700">
+              <%= t.practical_count %>
+              <% if (t.practical_count === 0) { %>
+                <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20">empty</span>
+              <% } %>
+            </td>
+            <td class="px-3 py-3 text-gray-700"><%= t.default_validity_months %> months</td>
+            <td class="px-3 py-3 text-gray-500 text-xs"><%= t.updated_at ? new Date(t.updated_at).toLocaleString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : '-' %></td>
+            <td class="px-3 py-3 text-right">
+              <a href="/voc-templates/<%= t.id %>/edit" class="px-3 py-1.5 text-xs font-medium text-brand-600 hover:bg-brand-50 rounded-lg">Edit</a>
+            </td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>

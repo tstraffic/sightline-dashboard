@@ -92,6 +92,59 @@ async function sendCertExpiryReminders() {
       }
     }
   }
+  // ── VOC expiries ──
+  // Same WINDOWS + dedup table, but VOC rows live in voc_assessments and
+  // join to crew_members for the push target. item_key is `voc:<id>` so
+  // it never collides with the crew_members column-based items above.
+  let vocTableExists = false;
+  try {
+    vocTableExists = !!db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='voc_assessments'").get();
+  } catch (e) { /* leave false */ }
+
+  if (vocTableExists) {
+    for (const t of targetDates) {
+      const rows = db.prepare(`
+        SELECT a.id AS voc_id, a.crew_member_id, a.valid_until,
+          t.name AS equipment_name
+        FROM voc_assessments a
+        JOIN voc_templates t ON t.id = a.template_id
+        JOIN crew_members cm ON cm.id = a.crew_member_id
+        WHERE cm.active = 1
+          AND a.status = 'submitted'
+          AND a.outcome = 'competent'
+          AND COALESCE(a.certificate_status, 'active') = 'active'
+          AND a.valid_until = ?
+      `).all(t.date);
+      scanned += rows.length;
+      for (const v of rows) {
+        const itemKey = 'voc:' + v.voc_id;
+        const dup = db.prepare(`
+          SELECT 1 FROM cert_expiry_reminder_log
+          WHERE crew_member_id = ? AND item_key = ? AND days_out = ? AND expiry_date = ?
+        `).get(v.crew_member_id, itemKey, t.days, v.valid_until);
+        if (dup) continue;
+
+        try {
+          await sendPushToCrew(v.crew_member_id, {
+            title: 'VOC expires in ' + t.days + ' day' + (t.days === 1 ? '' : 's'),
+            body: 'Your ' + v.equipment_name + ' VOC expires on ' + v.valid_until + '. Book a re-assessment with your trainer.',
+            url: '/w/hr/certs',
+            type: 'cert_expiry',
+            category: 'cert_expiry',
+          });
+          db.prepare(`
+            INSERT OR IGNORE INTO cert_expiry_reminder_log
+              (crew_member_id, item_key, days_out, expiry_date)
+            VALUES (?, ?, ?, ?)
+          `).run(v.crew_member_id, itemKey, t.days, v.valid_until);
+          sent++;
+        } catch (e) {
+          console.error('[voc-expiry] push error for crew', v.crew_member_id, 'voc', v.voc_id, ':', e.message);
+        }
+      }
+    }
+  }
+
   if (sent > 0 || scanned > 0) {
     console.log('[cert-expiry] scanned ' + scanned + ' candidates, sent ' + sent + ' push(es)');
   }

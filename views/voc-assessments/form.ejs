@@ -1,0 +1,347 @@
+<% locals.currentPage = 'voc-assessments' %>
+<%
+  const wd = workerDetails || {};
+  const pre = prerequisites || {};
+  const prereqList = [
+    { key: 'driver_licence',     label: 'Worker holds a current and valid driver licence appropriate for the vehicle/equipment.' },
+    { key: 'industry_ticket',    label: 'Worker holds the relevant industry ticket(s) / accreditation(s) for the operation.' },
+    { key: 'inductions',         label: 'Worker has completed all required induction(s) (T&S, client, site, project).' },
+    { key: 'sop_read',           label: 'Worker has read and understood the relevant T&S SOP for this operation.' },
+    { key: 'swms_read',          label: 'Worker has read and understood the relevant SWMS for this operation.' },
+    { key: 'fit_for_duty',       label: 'Worker is fit for duty (not fatigued, not under influence, no medical impediment).' },
+    { key: 'ppe',                label: 'Correct PPE is worn (hi-vis, safety boots, helmet, gloves, hearing protection as required).' },
+    { key: 'equipment_inspected', label: 'Equipment is on-site, operational, and inspected pre-assessment.' },
+  ];
+  function fmtDate(d) {
+    if (!d) return '';
+    return new Date(d).toISOString().slice(0, 10);
+  }
+  const outcomeChips = {
+    competent: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
+    nyc:       'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20',
+  };
+%>
+
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="mb-4">
+    <a href="/voc-assessments" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700">
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      Back to VOCs
+    </a>
+  </div>
+
+  <!-- Header -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
+    <div class="bg-brand-600 text-white px-6 py-4 flex items-center justify-between gap-3 flex-wrap">
+      <div class="flex items-center gap-3">
+        <%- include('../partials/ts-logo', { size: 42 }) %>
+        <div>
+          <div class="text-xs uppercase tracking-widest opacity-80">T&amp;S Traffic Control · ABN 58 655 958 320 · Doc No: TSVOC-001 Rev A</div>
+          <h1 class="text-xl font-bold leading-tight">Verification of Competency — <%= a.template_name %></h1>
+        </div>
+      </div>
+      <div class="text-right text-xs opacity-80">
+        <div>VOC <span class="font-mono"><%= a.voc_number || ('#' + a.id) %></span></div>
+        <div>Status: <%= (a.status || 'draft').toUpperCase() %><% if (a.outcome) { %> · <%= a.outcome === 'competent' ? 'COMPETENT' : 'NOT YET COMPETENT' %><% } %></div>
+        <% if (a.valid_until) { %><div>Valid until <%= a.valid_until %></div><% } %>
+      </div>
+    </div>
+  </div>
+
+  <% if (theoryQs.length === 0 || practicalSections.length === 0) { %>
+    <div class="rounded-lg bg-amber-50 border-l-4 border-amber-400 px-4 py-3 mb-6 text-sm text-amber-800">
+      <strong>Template not configured.</strong> This equipment template has
+      <%= theoryQs.length %> theory question<%= theoryQs.length !== 1 ? 's' : '' %> and
+      <%= practicalSections.reduce(function(n, s){ return n + (s.items ? s.items.length : 0); }, 0) %> practical item<%= practicalSections.reduce(function(n, s){ return n + (s.items ? s.items.length : 0); }, 0) !== 1 ? 's' : '' %>.
+      <% if (canAccess(user, 'voc_admin')) { %>
+        <a href="/voc-templates/<%= a.template_id %>/edit" class="font-semibold underline ml-1">Edit template</a>
+      <% } else { %>
+        Ask an admin to populate it via VOC Templates.
+      <% } %>
+    </div>
+  <% } %>
+
+  <form method="POST" action="/voc-assessments/<%= a.id %>" id="vocForm" data-already-submitted="<%= isSubmitted ? '1' : '0' %>">
+    <%- include('../partials/csrf') %>
+
+    <!-- Assessment Details -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Assessment Details</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Worker</label>
+          <div class="mt-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm"><%= a.worker_name %><% if (a.worker_emp_id) { %> · <span class="text-gray-500"><%= a.worker_emp_id %></span><% } %></div>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Date of Assessment</label>
+          <input type="date" name="assessment_date" value="<%= fmtDate(a.assessment_date) %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Location / Site</label>
+          <input type="text" name="location_site" value="<%= a.location_site || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Assessment Type</label>
+          <select name="assessment_type" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <% ['initial', 'reassessment', 'refresher_after_incident', 'other'].forEach(function(t){ %>
+              <option value="<%= t %>" <%= a.assessment_type === t ? 'selected' : '' %>>
+                <%= t === 'initial' ? 'Initial' : t === 'reassessment' ? 'Re-assessment' : t === 'refresher_after_incident' ? 'Refresher (after incident)' : 'Other' %>
+              </option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Assessor</label>
+          <select name="assessor_user_id" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">—</option>
+            <% users.forEach(function(u){ %>
+              <option value="<%= u.id %>" <%= a.assessor_user_id == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Manager / Supervisor</label>
+          <select name="manager_user_id" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">—</option>
+            <% users.forEach(function(u){ %>
+              <option value="<%= u.id %>" <%= a.manager_user_id == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+    </section>
+
+    <!-- Worker Details -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Worker Details</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Position / Role</label><input type="text" name="worker_position" value="<%= wd.position || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Years of Experience</label><input type="text" name="worker_years" value="<%= wd.years_experience || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Driver Licence (No / Class)</label><input type="text" name="worker_licence" value="<%= wd.driver_licence || '' %>" placeholder="e.g. C / LR / MR / HR" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">White Card No</label><input type="text" name="worker_white_card" value="<%= wd.white_card || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div class="sm:col-span-2"><label class="text-xs font-semibold text-gray-500 uppercase">PWZ Licence / TfNSW Accreditation</label><input type="text" name="worker_pwz" value="<%= wd.pwz || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div class="sm:col-span-2"><label class="text-xs font-semibold text-gray-500 uppercase">Other Relevant Tickets / Licences</label><textarea name="worker_other_tickets" rows="2" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= wd.other_tickets || '' %></textarea></div>
+      </div>
+    </section>
+
+    <!-- Pre-requisites -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Pre-requisites — Confirm BEFORE Assessment</h2>
+      <p class="text-xs text-gray-500 italic mb-3">If any item is unchecked, the VOC cannot proceed.</p>
+      <div class="space-y-2">
+        <% prereqList.forEach(function(p){ %>
+          <label class="flex items-start gap-3 p-2 hover:bg-gray-50 rounded">
+            <input type="checkbox" name="prereq_<%= p.key %>" <%= pre[p.key] ? 'checked' : '' %> class="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+            <span class="text-sm text-gray-700"><%= p.label %></span>
+          </label>
+        <% }) %>
+      </div>
+    </section>
+
+    <!-- Theory -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+      <div class="bg-brand-50 px-6 py-3 border-b border-gray-200">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700">Theory Assessment</h2>
+        <p class="text-xs text-gray-500 italic mt-0.5">Worker responds verbally; assessor records the response and marks correct/incorrect. Pass = ≥80%.</p>
+      </div>
+      <% if (theoryQs.length === 0) { %>
+        <div class="p-6 text-center text-sm text-gray-500 italic">No theory questions configured for this template yet.</div>
+      <% } else { %>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50">
+            <tr class="text-left">
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-10">#</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest">Question</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-72">Worker Response</th>
+              <th class="px-3 py-2 text-[10px] font-bold text-gray-400 uppercase tracking-widest w-36 text-center">Correct?</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% theoryQs.forEach(function(q, i){
+              const prev = theoryResponses[i] || {};
+            %>
+              <tr data-theory-row data-q-idx="<%= i %>">
+                <td class="px-3 py-2 align-top text-xs font-semibold text-gray-700"><%= i + 1 %></td>
+                <td class="px-3 py-2 align-top text-sm text-gray-700"><%= q %></td>
+                <td class="px-3 py-2 align-top"><textarea name="theory_answer" rows="2" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"><%= prev.response || '' %></textarea></td>
+                <td class="px-3 py-2 align-top text-center">
+                  <div class="inline-flex items-center gap-3">
+                    <label class="inline-flex items-center gap-1 text-xs">
+                      <input type="radio" name="theory_correct_<%= i %>" value="yes" <%= prev.correct === true ? 'checked' : '' %> data-theory-correct class="w-3.5 h-3.5">
+                      Y
+                    </label>
+                    <label class="inline-flex items-center gap-1 text-xs">
+                      <input type="radio" name="theory_correct_<%= i %>" value="no" <%= prev.correct === false ? 'checked' : '' %> data-theory-correct class="w-3.5 h-3.5">
+                      N
+                    </label>
+                    <input type="hidden" name="theory_correct" value="<%= prev.correct === true ? 'yes' : (prev.correct === false ? 'no' : '') %>" data-theory-correct-hidden>
+                  </div>
+                </td>
+              </tr>
+            <% }) %>
+            <tr class="bg-gray-50">
+              <td colspan="3" class="px-3 py-2 text-right text-xs font-semibold text-gray-600">Theory score</td>
+              <td class="px-3 py-2 text-center">
+                <span id="theoryBadge" class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-gray-100 text-gray-600"></span>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      <% } %>
+    </section>
+
+    <!-- Practical -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+      <div class="bg-brand-50 px-6 py-3 border-b border-gray-200">
+        <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700">Practical Assessment</h2>
+        <p class="text-xs text-gray-500 italic mt-0.5">Tick C (Competent) or NYC (Not Yet Competent) per row. Add notes for any NYC items. All items must be C to pass the practical component.</p>
+      </div>
+      <% if (practicalSections.length === 0) { %>
+        <div class="p-6 text-center text-sm text-gray-500 italic">No practical checklist configured for this template yet.</div>
+      <% } else { %>
+        <% practicalSections.forEach(function(sec, sIdx){ %>
+          <div class="border-t border-gray-100">
+            <div class="bg-gray-100 px-6 py-2 text-xs font-bold text-gray-700 uppercase tracking-wider"><%= sec.section %></div>
+            <table class="w-full text-sm">
+              <tbody class="divide-y divide-gray-100">
+                <% (sec.items || []).forEach(function(item, iIdx){
+                  const ref = String.fromCharCode(65 + sIdx) + (iIdx + 1);
+                  const prev = practicalByRef[ref] || {};
+                %>
+                  <tr data-prac-row data-prac-ref="<%= ref %>">
+                    <td class="px-3 py-2 align-top text-xs font-semibold text-gray-700 w-10"><%= ref %></td>
+                    <td class="px-3 py-2 align-top text-sm text-gray-700"><%= item %></td>
+                    <td class="px-3 py-2 align-top w-32">
+                      <div class="flex items-center gap-3">
+                        <label class="inline-flex items-center gap-1 text-xs">
+                          <input type="radio" name="prac_result_<%= sIdx %>_<%= iIdx %>" value="C" <%= prev.result === 'C' ? 'checked' : '' %> data-prac-result class="w-3.5 h-3.5">
+                          C
+                        </label>
+                        <label class="inline-flex items-center gap-1 text-xs">
+                          <input type="radio" name="prac_result_<%= sIdx %>_<%= iIdx %>" value="NYC" <%= prev.result === 'NYC' ? 'checked' : '' %> data-prac-result class="w-3.5 h-3.5">
+                          NYC
+                        </label>
+                      </div>
+                    </td>
+                    <td class="px-3 py-2 align-top w-72"><textarea name="prac_notes_<%= sIdx %>_<%= iIdx %>" rows="2" placeholder="Assessor notes…" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"><%= prev.notes || '' %></textarea></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% }) %>
+      <% } %>
+    </section>
+
+    <!-- Outcome + sign-off -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Assessment Outcome</h2>
+      <div class="space-y-4">
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Overall Outcome</label>
+          <div class="mt-1 grid grid-cols-1 sm:grid-cols-2 gap-2" id="outcomeSelect">
+            <label class="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50">
+              <input type="radio" name="outcome_select" value="competent" <%= a.outcome === 'competent' ? 'checked' : '' %> class="w-4 h-4">
+              <span class="text-sm font-semibold text-emerald-700">COMPETENT — issue VOC</span>
+            </label>
+            <label class="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-md cursor-pointer hover:bg-gray-50">
+              <input type="radio" name="outcome_select" value="nyc" <%= a.outcome === 'nyc' ? 'checked' : '' %> class="w-4 h-4">
+              <span class="text-sm font-semibold text-orange-700">NOT YET COMPETENT — re-assess after additional training</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase">VOC Valid From</label>
+            <input type="date" name="valid_from" value="<%= fmtDate(a.valid_from) || fmtDate(a.assessment_date) %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-gray-500 uppercase">VOC Expiry / Next Re-assessment</label>
+            <input type="date" name="valid_until" value="<%= fmtDate(a.valid_until) %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <p class="mt-1 text-[11px] text-gray-500 italic">Default: <%= a.default_validity_months %> months from valid-from. Override if needed.</p>
+          </div>
+        </div>
+
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Re-assessment Trigger (if NYC)</label>
+          <textarea name="reassessment_trigger" rows="2" placeholder="What does the worker need to do before re-assessment?" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= a.reassessment_trigger || '' %></textarea>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-gray-500 uppercase">Assessor Comments / Recommendations</label>
+          <textarea name="assessor_comments" rows="3" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= a.assessor_comments || '' %></textarea>
+        </div>
+      </div>
+    </section>
+
+    <!-- Worker Declaration -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Worker Declaration</h2>
+      <p class="text-xs text-gray-500 italic mb-4">I declare that I have been observed performing the tasks listed above. I agree to operate this equipment only in accordance with the T&amp;S SOP, the relevant SWMS, manufacturer's instructions, and applicable NSW WHS / road regulations.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Worker Name</label><input type="text" name="worker_signed_name" value="<%= a.worker_signed_name || a.worker_name || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Date</label><input type="date" name="worker_signed_date" value="<%= fmtDate(a.worker_signed_date) %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+      </div>
+    </section>
+
+    <!-- Assessor Sign-Off -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Assessor Sign-Off</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Assessor Name</label><input type="text" name="assessor_signed_name" value="<%= a.assessor_signed_name || a.assessor_name || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Date</label><input type="date" name="assessor_signed_date" value="<%= fmtDate(a.assessor_signed_date) %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+      </div>
+    </section>
+
+    <!-- Manager / Supervisor Verification -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6" id="managerSection">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Manager / Supervisor Verification <span id="managerRequiredHint" class="ml-2 text-xs text-red-600 hidden">(required for NYC)</span></h2>
+      <p class="text-xs text-gray-500 italic mb-4">Required for: NYC outcomes, re-assessments following an incident, or workers under 6 months tenure.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Manager Name</label><input type="text" name="manager_signed_name" id="managerName" value="<%= a.manager_signed_name || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Position</label><input type="text" name="manager_signed_position" value="<%= a.manager_signed_position || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Date</label><input type="date" name="manager_signed_date" id="managerDate" value="<%= fmtDate(a.manager_signed_date) %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+      </div>
+    </section>
+
+    <!-- Records Management -->
+    <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+      <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-4">Records Management</h2>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <label class="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" name="records_filed_yes" <%= a.records_filed_yes ? 'checked' : '' %> class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+          Filed in worker training record
+        </label>
+        <label class="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" name="copy_to_worker_yes" <%= a.copy_to_worker_yes ? 'checked' : '' %> class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+          Copy provided to worker
+        </label>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Filed By</label><input type="text" name="records_filed_by" value="<%= a.records_filed_by || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div><label class="text-xs font-semibold text-gray-500 uppercase">Filed Date</label><input type="date" name="records_filed_date" value="<%= fmtDate(a.records_filed_date) %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+        <div class="sm:col-span-2"><label class="text-xs font-semibold text-gray-500 uppercase">Entered in training matrix by</label><input type="text" name="matrix_entered_by" value="<%= a.matrix_entered_by || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+      </div>
+    </section>
+
+    <!-- Action bar -->
+    <div class="sticky bottom-0 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 py-3 bg-white border-t border-gray-200 shadow-sm flex items-center justify-between flex-wrap gap-3">
+      <div class="text-sm">
+        <span id="outcomeBanner"></span>
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" id="saveBtn" class="px-4 py-2 bg-white border border-brand-600 text-brand-700 hover:bg-brand-50 text-sm font-medium rounded-lg">Save Draft</button>
+        <button type="submit" id="submitBtn" formaction="/voc-assessments/<%= a.id %>/submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg">
+          <%= isSubmitted ? 'Re-submit' : 'Submit VOC' %>
+        </button>
+      </div>
+    </div>
+  </form>
+
+  <% if (canAccess(user, 'voc_admin')) { %>
+    <form method="POST" action="/voc-assessments/<%= a.id %>/delete" class="mt-4 text-right" onsubmit="return confirm('Delete this VOC permanently?');">
+      <%- include('../partials/csrf') %>
+      <button type="submit" class="text-xs text-red-600 hover:text-red-700 hover:underline">Delete this VOC</button>
+    </form>
+  <% } %>
+</div>
+
+<script src="/js/voc-assessment.js"></script>
