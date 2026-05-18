@@ -69,16 +69,23 @@
 
     // URL helpers — preview mode hits the admin-authed endpoint so the doc
     // actually loads. Real sessions go through the public token-gated route.
-    function docUrl(secId) {
+    // Per-file routes are preferred; the section-level fallback only kicks
+    // in for legacy data where a section has no child files yet.
+    function fileUrl(secId, fileId) {
+      if (fileId == null) {
+        return isPreview
+          ? `/induction/admin/sop-documents/${secId}/file`
+          : `/sop-sign/${session.token}/document/${secId}`;
+      }
       return isPreview
-        ? `/induction/admin/sop-documents/${secId}/file`
-        : `/sop-sign/${session.token}/document/${secId}`;
+        ? `/induction/admin/sop-documents/${secId}/files/${fileId}/file`
+        : `/sop-sign/${session.token}/file/${fileId}`;
     }
-    function pageUrl(secId, pageFile) {
-      // Page images aren't served by the admin endpoint, but server-side
-      // page renders only fire in normal flow anyway; preview will fall back
-      // to client-side PDF.js using the admin doc URL.
-      return `/sop-sign/${session.token}/document/${secId}/page/${encodeURIComponent(pageFile)}`;
+    function filePageUrl(secId, fileId, pageFile) {
+      if (fileId == null) {
+        return `/sop-sign/${session.token}/document/${secId}/page/${encodeURIComponent(pageFile)}`;
+      }
+      return `/sop-sign/${session.token}/file/${fileId}/page/${encodeURIComponent(pageFile)}`;
     }
 
     // Build step list. Step 1 (Welcome / Pick yourself) is conditional.
@@ -180,52 +187,66 @@
 
         <% if (step.kind === 'section') { %>
           <% const sec = step.section; %>
-          <% const isPdf = (sec.mime_type || '').includes('pdf') || /\.pdf$/i.test(sec.original_name || ''); %>
-          <% const hasPageRenders = Array.isArray(sec.pageRenders) && sec.pageRenders.length > 0; %>
+          <% const secFiles = Array.isArray(sec.files) && sec.files.length ? sec.files : []; %>
           <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
             <p class="text-[10px] font-bold text-brand-600 uppercase tracking-widest mb-1">Section <%= step.sectionIndex + 1 %> of <%= sections.length %></p>
             <h2 class="text-xl font-bold text-gray-900 leading-tight mb-1"><%= sec.title %></h2>
-            <% if (sec.original_name) { %>
-              <p class="text-[11px] text-gray-500 mb-4"><%= sec.original_name %></p>
+            <% if (secFiles.length === 1 && secFiles[0].original_name) { %>
+              <p class="text-[11px] text-gray-500 mb-4"><%= secFiles[0].original_name %></p>
+            <% } else if (secFiles.length > 1) { %>
+              <p class="text-[11px] text-gray-500 mb-4"><%= secFiles.length %> documents — scroll through each one below.</p>
             <% } %>
 
             <% if (sec.description) { %>
               <div class="desc-html text-sm text-gray-700 leading-relaxed mb-5"><%- sec.description %></div>
             <% } %>
 
-            <% if (isPdf && hasPageRenders && !isPreview) { %>
-              <!-- Server-side rendered page images (preferred when available). -->
-              <div class="space-y-3">
-                <% sec.pageRenders.forEach((pageFile, pIdx) => { %>
-                  <img src="<%= pageUrl(sec.id, pageFile) %>"
-                       alt="Page <%= pIdx + 1 %>"
-                       loading="<%= pIdx === 0 ? 'eager' : 'lazy' %>"
-                       class="block w-full rounded-xl border border-gray-200 shadow-sm bg-white" />
-                <% }) %>
+            <% secFiles.forEach((file, fIdx) => { %>
+              <% const isPdf = (file.mime_type || '').includes('pdf') || /\.pdf$/i.test(file.original_name || ''); %>
+              <% const hasPageRenders = Array.isArray(file.pageRenders) && file.pageRenders.length > 0; %>
+              <% const fUrl = fileUrl(sec.id, file.id); %>
+              <div class="<%= fIdx > 0 ? 'mt-6 pt-6 border-t border-gray-100' : '' %>">
+                <% if (secFiles.length > 1) { %>
+                  <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">
+                    Document <%= fIdx + 1 %> of <%= secFiles.length %><% if (file.original_name) { %> · <span class="font-medium normal-case tracking-normal text-gray-400"><%= file.original_name %></span><% } %>
+                  </p>
+                <% } %>
+
+                <% if (isPdf && hasPageRenders && !isPreview) { %>
+                  <!-- Server-side rendered page images (preferred when available). -->
+                  <div class="space-y-3">
+                    <% file.pageRenders.forEach((pageFile, pIdx) => { %>
+                      <img src="<%= filePageUrl(sec.id, file.id, pageFile) %>"
+                           alt="Page <%= pIdx + 1 %>"
+                           loading="<%= (fIdx === 0 && pIdx === 0) ? 'eager' : 'lazy' %>"
+                           class="block w-full rounded-xl border border-gray-200 shadow-sm bg-white" />
+                    <% }) %>
+                  </div>
+                  <p class="mt-3 text-xs text-gray-500 text-center">
+                    <a href="<%= fUrl %>" target="_blank" rel="noopener" class="text-brand-600 hover:underline font-medium">Open as PDF</a>
+                  </p>
+                <% } else if (isPdf) { %>
+                  <!-- Client-side PDF.js renders ALL pages, regardless of whether
+                       server-side rendering succeeded. Avoids the iOS Safari
+                       "iframe shows page 1 only" issue. -->
+                  <div class="pdf-render-target space-y-3"
+                       data-pdf-url="<%= fUrl %>"
+                       data-doc-id="sec<%= sec.id %>-file<%= file.id || 'legacy' %>">
+                    <div class="pdf-loading text-center text-xs text-gray-500 py-8">Loading PDF…</div>
+                  </div>
+                  <p class="mt-3 text-xs text-gray-500 text-center">
+                    <a href="<%= fUrl %>" target="_blank" rel="noopener" class="text-brand-600 hover:underline font-medium">Open as PDF</a>
+                  </p>
+                <% } else { %>
+                  <!-- Non-PDF (image/doc/xls) — just link out. -->
+                  <a href="<%= fUrl %>" target="_blank" rel="noopener"
+                     class="block bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:bg-gray-100 transition">
+                    <p class="text-sm font-semibold text-brand-600">Open document</p>
+                    <p class="text-[11px] text-gray-500 mt-1"><%= file.original_name %></p>
+                  </a>
+                <% } %>
               </div>
-              <p class="mt-3 text-xs text-gray-500 text-center">
-                <a href="<%= docUrl(sec.id) %>" target="_blank" rel="noopener" class="text-brand-600 hover:underline font-medium">Open as PDF</a>
-              </p>
-            <% } else if (isPdf) { %>
-              <!-- Client-side PDF.js renders ALL pages, regardless of whether
-                   server-side rendering succeeded. Avoids the iOS Safari
-                   "iframe shows page 1 only" issue. -->
-              <div class="pdf-render-target space-y-3"
-                   data-pdf-url="<%= docUrl(sec.id) %>"
-                   data-doc-id="<%= sec.id %>">
-                <div class="pdf-loading text-center text-xs text-gray-500 py-8">Loading PDF…</div>
-              </div>
-              <p class="mt-3 text-xs text-gray-500 text-center">
-                <a href="<%= docUrl(sec.id) %>" target="_blank" rel="noopener" class="text-brand-600 hover:underline font-medium">Open as PDF</a>
-              </p>
-            <% } else if (sec.id) { %>
-              <!-- Non-PDF (image/doc/xls) — just link out. -->
-              <a href="<%= docUrl(sec.id) %>" target="_blank" rel="noopener"
-                 class="block bg-gray-50 border border-gray-200 rounded-xl p-4 text-center hover:bg-gray-100 transition">
-                <p class="text-sm font-semibold text-brand-600">Open document</p>
-                <p class="text-[11px] text-gray-500 mt-1"><%= sec.original_name %></p>
-              </a>
-            <% } %>
+            <% }) %>
 
             <!-- Per-section acknowledgement -->
             <label class="mt-6 flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-2xl p-4 cursor-pointer">
@@ -355,14 +376,17 @@
       submitBtn.classList.toggle('hidden', !isFinal);
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
-      // If we just entered a section step, render its PDF (once).
+      // If we just entered a section step, render any PDF targets on it
+      // (one section can hold multiple PDFs, shown in succession).
       const activePanel = stepEls[n];
       if (activePanel) {
-        const pdfTarget = activePanel.querySelector('.pdf-render-target');
-        if (pdfTarget && !renderedSectionIds.has(pdfTarget.dataset.docId)) {
-          renderedSectionIds.add(pdfTarget.dataset.docId);
-          renderPdfClientSide(pdfTarget);
-        }
+        const pdfTargets = activePanel.querySelectorAll('.pdf-render-target');
+        pdfTargets.forEach(pdfTarget => {
+          if (!renderedSectionIds.has(pdfTarget.dataset.docId)) {
+            renderedSectionIds.add(pdfTarget.dataset.docId);
+            renderPdfClientSide(pdfTarget);
+          }
+        });
       }
       if (isFinal) sizeSignature();
       syncNextEnabled();

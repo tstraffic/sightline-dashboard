@@ -116,6 +116,53 @@ router.get('/:token/document/:docId', (req, res) => {
   res.sendFile(safe);
 });
 
+// ─────────────────────────────────────────────────────────────────────
+// Per-file routes — used when a section holds multiple files. Mirror the
+// section-level routes above but resolve via sop_document_files.id and that
+// file's page_renders_dir (so legacy backfilled rows read from the parent's
+// original directory and new rows read from their own).
+// ─────────────────────────────────────────────────────────────────────
+
+// GET /sop-sign/:token/file/:fileId/page/:pageFile
+router.get('/:token/file/:fileId/page/:pageFile', (req, res) => {
+  const session = loadSession(req.params.token);
+  if (!session || session.closed_at) return res.status(404).send('Session unavailable');
+  const db = getDb();
+  const file = db.prepare(`
+    SELECT f.id, f.page_renders_dir, f.sop_document_id, d.active AS parent_active
+    FROM sop_document_files f
+    JOIN sop_documents d ON d.id = f.sop_document_id
+    WHERE f.id = ?
+  `).get(req.params.fileId);
+  if (!file || !file.parent_active) return res.status(404).send('File not found');
+  const pageFile = path.basename(req.params.pageFile);
+  const dirKey = (file.page_renders_dir || `file-${file.id}`).replace(/[^A-Za-z0-9_-]/g, '');
+  const safe = path.resolve(SOP_PAGE_DIR, dirKey, pageFile);
+  if (!safe.startsWith(SOP_PAGE_DIR) || !fs.existsSync(safe)) return res.status(404).send('Page missing');
+  res.setHeader('Content-Type', 'image/png');
+  res.setHeader('Cache-Control', 'private, max-age=3600');
+  res.sendFile(safe);
+});
+
+// GET /sop-sign/:token/file/:fileId
+router.get('/:token/file/:fileId', (req, res) => {
+  const session = loadSession(req.params.token);
+  if (!session || session.closed_at) return res.status(404).send('Session unavailable');
+  const db = getDb();
+  const file = db.prepare(`
+    SELECT f.filename, f.original_name, f.mime_type, d.active AS parent_active
+    FROM sop_document_files f
+    JOIN sop_documents d ON d.id = f.sop_document_id
+    WHERE f.id = ?
+  `).get(req.params.fileId);
+  if (!file || !file.parent_active) return res.status(404).send('File not found');
+  const safe = path.resolve(SOP_DOC_DIR, path.basename(file.filename));
+  if (!safe.startsWith(SOP_DOC_DIR) || !fs.existsSync(safe)) return res.status(404).send('File missing');
+  if (file.mime_type) res.setHeader('Content-Type', file.mime_type);
+  res.setHeader('Content-Disposition', 'inline; filename="' + (file.original_name || file.filename) + '"');
+  res.sendFile(safe);
+});
+
 // POST /sop-sign/:token/submit — save signature
 router.post('/:token/submit', (req, res) => {
   const db = getDb();

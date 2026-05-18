@@ -31,8 +31,9 @@
     display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 14px;
     background: rgba(43,127,255,0.15); border: 1px solid rgba(43,127,255,0.3);
     border-radius: 10px; color: #93C5FD; font-weight: 600; font-size: 0.9rem;
-    text-decoration: none; margin-top: 10px; width: 100%;
+    text-decoration: none; margin: 0 0 12px; width: 100%;
   }
+  .sd-fullscreen:active { background: rgba(43,127,255,0.25); }
   .sd-actionbar {
     position: fixed; left: 0; right: 0; bottom: 64px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
     background: rgba(10,22,40,0.96); border-top: 1px solid rgba(255,255,255,0.08); z-index: 40;
@@ -184,13 +185,16 @@
     <% } %>
 
     <% if (swms.file_path) { %>
-      <div class="pdf-viewer"
-           data-pdf-src="/w/safety/swms/<%= swms.id %>/file"
-           data-pdf-name="<%= (swms.file_original_name || swms.title || 'SWMS') %>"></div>
+      <!-- Open-fullscreen sits ABOVE the inline viewer so workers can jump
+           straight to the chrome-free fullscreen reader if they want — no
+           scrolling past pages of inline PDF first. -->
       <a href="/w/safety/swms/<%= swms.id %>/view" class="sd-fullscreen">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5v4m0-4h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg>
         Open full screen
       </a>
+      <div class="pdf-viewer"
+           data-pdf-src="/w/safety/swms/<%= swms.id %>/file"
+           data-pdf-name="<%= (swms.file_original_name || swms.title || 'SWMS') %>"></div>
     <% } else { %>
       <p style="color: rgba(255,255,255,0.5); font-size: 0.85rem;">No document attached.</p>
     <% } %>
