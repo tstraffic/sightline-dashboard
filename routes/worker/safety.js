@@ -1146,4 +1146,24 @@ router.get('/safety/quizzes/:id/results', (req, res) => {
   });
 });
 
+// ─────────────────────────────────────────────────────────────────────
+// /w/safety/training — read-only view of the worker's in-house training
+// records (Portaboom, Trailer, etc.). HR enters these from the employee
+// profile; workers only consume them here.
+// ─────────────────────────────────────────────────────────────────────
+const { forCrewMember: trainingRecordsForCrew } = require('../../lib/trainingRecords');
+router.get('/safety/training', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  let records = [];
+  try { records = trainingRecordsForCrew(db, worker.id); }
+  catch (e) { console.error('[w/safety/training] load failed:', e.message); }
+  res.render('worker/safety/training-list', {
+    title: 'Safety — Training',
+    currentPage: 'safety',
+    subtab: 'training',
+    records,
+  });
+});
+
 module.exports = router;

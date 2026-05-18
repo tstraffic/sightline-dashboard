@@ -200,7 +200,11 @@
       <button onclick="switchEmpTab('documents')" data-tab="documents" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Documents <span class="ml-1 bg-gray-100 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= documents.length %></span></button>
       <button onclick="switchEmpTab('competencies')" data-tab="competencies" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Competencies <span class="ml-1 bg-gray-100 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= competencies.length %></span></button>
       <button onclick="switchEmpTab('workforce')" data-tab="workforce" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Linked Workforce <% if (crewMember) { %><span class="ml-1 w-2 h-2 bg-emerald-500 rounded-full inline-block"></span><% } %></button>
-      <button onclick="switchEmpTab('training')" data-tab="training" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Training <% if (locals.training && training.length > 0) { %><span class="ml-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= training.length %></span><% } %></button>
+      <%
+        var _trainCount = ((locals.training && training.length) || 0)
+                        + ((locals.trainingRecords && trainingRecords.length) || 0);
+      %>
+      <button onclick="switchEmpTab('training')" data-tab="training" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Training <% if (_trainCount > 0) { %><span class="ml-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= _trainCount %></span><% } %></button>
       <%# Toolbox Meetings — every published toolbox + this worker's
           attendance status, scoped to their linked crew_member. %>
       <% var tbCount = (typeof toolboxMeetings !== 'undefined' && toolboxMeetings) ? toolboxMeetings.length : 0; %>
@@ -1323,6 +1327,168 @@
   <!-- TAB: Training                                -->
   <!-- ═══════════════════════════════════════════ -->
   <div id="tab-training" class="emp-tab-content" style="display:none;">
+    <%
+      function _fmtD(s) {
+        if (!s) return '—';
+        var d = new Date(s + 'T00:00:00');
+        if (isNaN(d.getTime())) return s;
+        return d.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' });
+      }
+      var _trainingRecords = (typeof trainingRecords !== 'undefined' && trainingRecords) ? trainingRecords : [];
+      var _trainingNames   = (typeof trainingNameSuggestions !== 'undefined' && trainingNameSuggestions) ? trainingNameSuggestions : [];
+    %>
+
+    <!-- ── In-house training records (Portaboom, Trailer, Spotter, etc.) ── -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-5">
+      <div class="px-4 sm:px-5 py-4 border-b border-gray-200 flex items-start sm:items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="text-sm font-bold text-gray-900">In-house training</h2>
+          <p class="text-xs text-gray-500 mt-0.5">Portaboom, Trailer, Spotter and other operational training delivered internally. Workers see this on the Safety → Training tab.</p>
+        </div>
+        <button type="button" onclick="document.getElementById('tr-add-form').classList.toggle('hidden')"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          Add training
+        </button>
+      </div>
+
+      <% if (!employee.linked_crew_member_id) { %>
+        <p class="px-5 py-6 text-xs text-amber-700 bg-amber-50">Link this employee to a crew member from the <b>Linked Workforce</b> tab before logging training — records are keyed against the crew member ID.</p>
+      <% } else { %>
+        <!-- Datalist for autocomplete on training_name across all forms below -->
+        <datalist id="training-name-list">
+          <% _trainingNames.forEach(function(n) { %><option value="<%= n %>"></option><% }) %>
+        </datalist>
+
+        <!-- Add form (collapsed by default) -->
+        <form method="POST" action="/hr/employees/<%= employee.id %>/training-records"
+              id="tr-add-form" class="hidden bg-gray-50 border-b border-gray-200 px-4 sm:px-5 py-4 space-y-3">
+          <%- include('../partials/csrf') %>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="sm:col-span-2">
+              <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Training name <span class="text-red-500">*</span></label>
+              <input type="text" name="training_name" required list="training-name-list" placeholder="e.g. Portaboom Training"
+                class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Completed</label>
+              <input type="date" name="completed_date" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Expires (optional)</label>
+              <input type="date" name="expiry_date" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Trainer</label>
+              <input type="text" name="trainer_name" placeholder="e.g. John Smith" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Certificate link (optional)</label>
+              <input type="url" name="certificate_url" placeholder="https://…" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm" />
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
+              <textarea name="notes" rows="2" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm"></textarea>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg">Save</button>
+            <button type="button" onclick="document.getElementById('tr-add-form').classList.add('hidden')"
+              class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">Cancel</button>
+          </div>
+        </form>
+
+        <% if (_trainingRecords.length === 0) { %>
+          <div class="px-5 py-8 text-center text-sm text-gray-400">
+            No training recorded yet. Click <b>Add training</b> to log the first one.
+          </div>
+        <% } else { %>
+          <ul class="divide-y divide-gray-100">
+            <% _trainingRecords.forEach(function(t) {
+                 var chip = t.status === 'expired'
+                   ? { label: 'Expired', cls: 'bg-red-100 text-red-700 ring-red-600/20' }
+                   : t.status === 'expiring_soon'
+                     ? { label: 'Expiring soon', cls: 'bg-amber-100 text-amber-800 ring-amber-600/20' }
+                     : t.status === 'no_expiry'
+                       ? { label: 'No expiry', cls: 'bg-gray-100 text-gray-600 ring-gray-500/20' }
+                       : { label: 'Valid', cls: 'bg-emerald-100 text-emerald-700 ring-emerald-600/20' };
+            %>
+              <li class="px-4 sm:px-5 py-3">
+                <div class="flex items-start gap-3">
+                  <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 flex-wrap">
+                      <p class="text-sm font-semibold text-gray-900"><%= t.training_name %></p>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 <%= chip.cls %>"><%= chip.label %></span>
+                    </div>
+                    <p class="text-[11px] text-gray-500 mt-0.5">
+                      Completed <%= _fmtD(t.completed_date) %>
+                      · Expires <%= t.expiry_date ? _fmtD(t.expiry_date) : '—' %>
+                      <% if (t.trainer_name) { %> · Trainer: <%= t.trainer_name %><% } %>
+                      <% if (t.created_by_name) { %> · Logged by <%= t.created_by_name %><% } %>
+                    </p>
+                    <% if (t.notes) { %>
+                      <p class="text-xs text-gray-600 mt-1 whitespace-pre-line"><%= t.notes %></p>
+                    <% } %>
+                    <% if (t.certificate_url) { %>
+                      <a href="<%= t.certificate_url %>" target="_blank" rel="noopener" class="text-xs text-brand-600 hover:underline mt-1 inline-block">Certificate ↗</a>
+                    <% } %>
+                  </div>
+                  <div class="flex items-center gap-1 flex-shrink-0">
+                    <button type="button" onclick="document.getElementById('tr-edit-<%= t.id %>').classList.toggle('hidden')"
+                      class="px-2 py-1 text-xs font-medium text-brand-600 hover:bg-brand-50 rounded">Edit</button>
+                    <form method="POST" action="/hr/training-records/<%= t.id %>/delete" class="inline-flex"
+                          onsubmit="return confirm('Remove this training record?')">
+                      <%- include('../partials/csrf') %>
+                      <button type="submit" class="px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 rounded">Delete</button>
+                    </form>
+                  </div>
+                </div>
+
+                <!-- Inline edit form -->
+                <form method="POST" action="/hr/training-records/<%= t.id %>"
+                      id="tr-edit-<%= t.id %>" class="hidden mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+                  <%- include('../partials/csrf') %>
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div class="sm:col-span-2">
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Training name</label>
+                      <input type="text" name="training_name" required list="training-name-list" value="<%= t.training_name %>"
+                        class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Completed</label>
+                      <input type="date" name="completed_date" value="<%= t.completed_date || '' %>" class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Expires</label>
+                      <input type="date" name="expiry_date" value="<%= t.expiry_date || '' %>" class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Trainer</label>
+                      <input type="text" name="trainer_name" value="<%= t.trainer_name || '' %>" class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                    </div>
+                    <div>
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Certificate URL</label>
+                      <input type="url" name="certificate_url" value="<%= t.certificate_url || '' %>" class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm" />
+                    </div>
+                    <div class="sm:col-span-2">
+                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
+                      <textarea name="notes" rows="2" class="w-full rounded-md border border-gray-300 bg-white px-2.5 py-1.5 text-sm"><%= t.notes || '' %></textarea>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded">Save</button>
+                    <button type="button" onclick="document.getElementById('tr-edit-<%= t.id %>').classList.add('hidden')" class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded">Cancel</button>
+                  </div>
+                </form>
+              </li>
+            <% }); %>
+          </ul>
+        <% } %>
+      <% } %>
+    </div>
+
+    <!-- ── Online module completions (read-only — recorded automatically) ── -->
+    <h3 class="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Online module completions</h3>
     <% if (locals.training && training.length > 0) { %>
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <table class="min-w-full divide-y divide-gray-200">

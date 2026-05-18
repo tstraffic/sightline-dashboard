@@ -9720,6 +9720,43 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 213: training_records — in-house training log.
+  // Free-text training_name so admin can add ad-hoc course types
+  // (Portaboom, Trailer, Spotter, etc.) without first creating a
+  // master row. Keyed on crew_member_id so the worker-side safety
+  // tab can read it without an employees join. employee_id is kept
+  // for HR convenience but is denormalised — crew_member_id is the
+  // source of truth.
+  // =============================================
+  if (!isMigrationApplied.get(213)) {
+    console.log('Running migration 213: training_records');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS training_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+          training_name TEXT NOT NULL,
+          completed_date TEXT,
+          expiry_date TEXT,
+          trainer_name TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          certificate_url TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          created_by_id INTEGER REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_training_records_crew ON training_records(crew_member_id, completed_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_training_records_employee ON training_records(employee_id);
+      `);
+      recordMigration.run(213, 'training_records');
+      console.log('Migration 213 applied: training_records table created');
+    } catch (e) {
+      console.error('Migration 213 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

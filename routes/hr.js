@@ -13,6 +13,7 @@ const { workerInviteEmail, sopSignLinkEmail, pinResetEmail } = require('../servi
 const crypto = require('crypto');
 const { currentVersion: currentSopVersion } = require('../lib/sop');
 const { REQUIRED_MODULES } = require('../lib/induction');
+const { forCrewMember: trainingRecordsForCrew, distinctNames: distinctTrainingNames } = require('../lib/trainingRecords');
 
 // Only admin and finance can see pay rates
 function canViewRates(user) {
@@ -633,6 +634,18 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     inductionMarkedBy = db.prepare('SELECT full_name FROM users WHERE id = ?').get(employee.inducted_marked_by_id);
   }
 
+  // In-house training records (Portaboom, Trailer, Spotter, etc.). Distinct
+  // from training_completions (which is online quiz module passes). Only
+  // loaded when the employee is linked to a crew_member since records are
+  // keyed on crew_member_id.
+  let trainingRecords = [];
+  let trainingNameSuggestions = [];
+  if (employee.linked_crew_member_id) {
+    try { trainingRecords = trainingRecordsForCrew(db, employee.linked_crew_member_id); }
+    catch (e) { console.error('[hr] training records load failed:', e.message); }
+  }
+  try { trainingNameSuggestions = distinctTrainingNames(db); } catch (e) {}
+
   // Toolbox meetings: every published toolbox + this worker's attendance
   // status (attended / caught_up / absent + reason / not recorded).
   // Joined by linked_crew_member_id so we get a row per meeting even if
@@ -669,6 +682,8 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     upcomingShifts,
     recentTimesheets,
     training,
+    trainingRecords,
+    trainingNameSuggestions,
     induction,
     sopStatus,
     sopHistory,
@@ -1504,6 +1519,84 @@ router.post('/competencies/:id/delete', requirePermission('hr_competencies'), (r
   db.prepare('DELETE FROM employee_competencies WHERE id = ?').run(comp.id);
   req.flash('success', 'Competency removed.');
   res.redirect(`/hr/employees/${comp.employee_id}#competencies`);
+});
+
+// ============================================
+// TRAINING RECORDS (in-house) — CRUD
+// Reuses the hr_competencies permission since these are functionally the
+// same audience: HR admins managing per-employee skill/training history.
+// All routes redirect back to the Training tab on the employee profile.
+// ============================================
+function findEmployeeCrewIds(db, employeeId) {
+  const employee = db.prepare('SELECT id, linked_crew_member_id FROM employees WHERE id = ?').get(employeeId);
+  if (!employee || !employee.linked_crew_member_id) return null;
+  return { employeeId: employee.id, crewMemberId: employee.linked_crew_member_id };
+}
+
+router.post('/employees/:id/training-records', requirePermission('hr_competencies'), (req, res) => {
+  const db = getDb();
+  const ids = findEmployeeCrewIds(db, req.params.id);
+  if (!ids) {
+    req.flash('error', 'Link a crew member from the Linked Workforce tab before adding training.');
+    return res.redirect(`/hr/employees/${req.params.id}#training`);
+  }
+  const b = req.body;
+  const trainingName = (b.training_name || '').toString().trim().slice(0, 200);
+  if (!trainingName) {
+    req.flash('error', 'Training name is required.');
+    return res.redirect(`/hr/employees/${ids.employeeId}#training`);
+  }
+  db.prepare(`
+    INSERT INTO training_records
+      (crew_member_id, employee_id, training_name, completed_date, expiry_date,
+       trainer_name, notes, certificate_url, created_by_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    ids.crewMemberId, ids.employeeId, trainingName,
+    b.completed_date || null, b.expiry_date || null,
+    (b.trainer_name || '').toString().trim().slice(0, 200),
+    (b.notes || '').toString().slice(0, 2000),
+    (b.certificate_url || '').toString().trim().slice(0, 500),
+    req.session.user ? req.session.user.id : null
+  );
+  req.flash('success', `Added "${trainingName}".`);
+  res.redirect(`/hr/employees/${ids.employeeId}#training`);
+});
+
+router.post('/training-records/:id', requirePermission('hr_competencies'), (req, res) => {
+  const db = getDb();
+  const rec = db.prepare('SELECT id, employee_id FROM training_records WHERE id = ?').get(req.params.id);
+  if (!rec) { req.flash('error', 'Training record not found.'); return res.redirect('back'); }
+  const b = req.body;
+  const trainingName = (b.training_name || '').toString().trim().slice(0, 200);
+  if (!trainingName) {
+    req.flash('error', 'Training name is required.');
+    return res.redirect(`/hr/employees/${rec.employee_id}#training`);
+  }
+  db.prepare(`
+    UPDATE training_records SET
+      training_name = ?, completed_date = ?, expiry_date = ?,
+      trainer_name = ?, notes = ?, certificate_url = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(
+    trainingName, b.completed_date || null, b.expiry_date || null,
+    (b.trainer_name || '').toString().trim().slice(0, 200),
+    (b.notes || '').toString().slice(0, 2000),
+    (b.certificate_url || '').toString().trim().slice(0, 500),
+    rec.id
+  );
+  req.flash('success', 'Training record updated.');
+  res.redirect(`/hr/employees/${rec.employee_id}#training`);
+});
+
+router.post('/training-records/:id/delete', requirePermission('hr_competencies'), (req, res) => {
+  const db = getDb();
+  const rec = db.prepare('SELECT id, employee_id, training_name FROM training_records WHERE id = ?').get(req.params.id);
+  if (!rec) { req.flash('error', 'Training record not found.'); return res.redirect('back'); }
+  db.prepare('DELETE FROM training_records WHERE id = ?').run(rec.id);
+  req.flash('success', `Removed "${rec.training_name}".`);
+  res.redirect(`/hr/employees/${rec.employee_id}#training`);
 });
 
 // ============================================
