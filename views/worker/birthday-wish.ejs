@@ -1,0 +1,128 @@
+<%
+  function escapeHtml(s) {
+    return String(s || '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+  function fmtClockTime(ts) {
+    if (!ts) return '';
+    const d = new Date(ts.replace(' ', 'T') + (ts.endsWith('Z') ? '' : 'Z'));
+    return d.toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney', hour: 'numeric', minute: '2-digit' });
+  }
+  const firstName = (target.full_name || '').split(' ')[0];
+%>
+<style>
+  /* Reusable floating-balloon backdrop. Pure CSS so it doesn't drag in any
+     JS — animation pauses for users with reduced-motion preferences. */
+  .bday-page-bg { position: relative; }
+  .bday-balloon {
+    position: absolute; width: 28px; height: 36px; border-radius: 50%;
+    opacity: 0.85; box-shadow: inset -4px -6px 8px rgba(0,0,0,0.15);
+    animation: bday-float 9s ease-in-out infinite;
+  }
+  .bday-balloon::after {
+    content: ''; position: absolute; bottom: -10px; left: 50%; width: 1px; height: 14px;
+    background: rgba(255,255,255,0.4); transform: translateX(-50%);
+  }
+  .bday-balloon.b1 { top: 8%;  left: 6%;  background: #F472B6; animation-delay: -0.2s; }
+  .bday-balloon.b2 { top: 18%; right: 8%; background: #FBBF24; animation-delay: -2.1s; }
+  .bday-balloon.b3 { top: 34%; left: 14%; background: #60A5FA; animation-delay: -4.3s; }
+  .bday-balloon.b4 { top: 42%; right: 18%; background: #34D399; animation-delay: -1.5s; }
+  @keyframes bday-float {
+    0%, 100% { transform: translateY(0)    rotate(-3deg); }
+    50%      { transform: translateY(-18px) rotate(3deg); }
+  }
+  @media (prefers-reduced-motion: reduce) { .bday-balloon { animation: none; } }
+
+  .bday-card {
+    background: linear-gradient(160deg, rgba(244,114,182,0.16), rgba(251,191,36,0.10) 60%, rgba(255,255,255,0.04));
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 10px 28px rgba(0,0,0,0.30);
+  }
+  .bday-avatar {
+    background: linear-gradient(135deg, #F472B6, #F59E0B);
+    box-shadow: 0 8px 20px rgba(244,114,182,0.4);
+  }
+  .bday-msg {
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.07);
+  }
+</style>
+
+<div class="bday-page-bg p-4 pb-24">
+  <span class="bday-balloon b1" aria-hidden="true"></span>
+  <span class="bday-balloon b2" aria-hidden="true"></span>
+  <span class="bday-balloon b3" aria-hidden="true"></span>
+  <span class="bday-balloon b4" aria-hidden="true"></span>
+
+  <a href="/w/home" class="inline-flex items-center gap-1 text-xs text-gray-300 mb-3 relative z-10">
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    Back to home
+  </a>
+
+  <!-- Hero card -->
+  <div class="bday-card rounded-2xl p-5 relative z-10">
+    <div class="flex items-center gap-4">
+      <div class="bday-avatar w-16 h-16 rounded-full flex items-center justify-center text-white text-2xl font-extrabold flex-shrink-0">
+        <%= (firstName[0] || '?').toUpperCase() %>
+      </div>
+      <div class="flex-1 min-w-0">
+        <p class="text-[10px] font-bold uppercase tracking-[0.15em] text-pink-300">🎂 Birthday today</p>
+        <p class="text-xl font-extrabold text-white leading-tight truncate"><%= target.full_name %></p>
+        <% if (target.turning && target.turning > 0 && target.turning < 110) { %>
+          <p class="text-xs text-amber-200/80 mt-0.5">Turning <%= target.turning %> today</p>
+        <% } %>
+      </div>
+    </div>
+  </div>
+
+  <!-- Wish form / status -->
+  <% if (isSelf) { %>
+    <div class="mt-4 rounded-xl p-4 text-center" style="background: rgba(244,114,182,0.10); border: 1px solid rgba(244,114,182,0.25);">
+      <p class="text-pink-200 text-sm font-semibold">It's <em>your</em> birthday — enjoy reading what the crew sent you below 🎉</p>
+    </div>
+  <% } else if (alreadyWished) { %>
+    <div class="mt-4 rounded-xl p-4 flex items-center gap-3" style="background: rgba(16,185,129,0.10); border: 1px solid rgba(16,185,129,0.25);">
+      <svg class="w-5 h-5 text-emerald-300 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      <p class="text-emerald-200 text-sm font-medium">You've already wished <%= firstName %> today. One message per person — the wall is below.</p>
+    </div>
+  <% } else { %>
+    <form method="POST" action="/w/birthday/<%= target.crew_member_id %>" class="mt-4 rounded-2xl p-4" style="background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);">
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+      <label class="block text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">Write your wish · one message max</label>
+      <textarea name="message" required maxlength="500" rows="3"
+        placeholder="Have a great day, <%= firstName %>!"
+        class="w-full rounded-xl px-3 py-2.5 text-sm bg-white text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-400"></textarea>
+      <p class="text-[10px] text-gray-500 mt-1">Up to 500 characters. You can only send <strong>one</strong> message to <%= firstName %> for today's birthday.</p>
+      <button type="submit"
+        class="mt-3 w-full inline-flex items-center justify-center gap-2 py-3 rounded-xl text-white text-sm font-bold shadow-md"
+        style="background: linear-gradient(135deg, #F472B6, #F59E0B);">
+        🎉 Send wish
+      </button>
+    </form>
+  <% } %>
+
+  <!-- Message wall -->
+  <div class="mt-6 relative z-10">
+    <p class="text-[10px] font-bold uppercase tracking-widest text-gray-400 mb-2">
+      Wishes today · <%= messages.length %>
+    </p>
+    <% if (messages.length === 0) { %>
+      <div class="rounded-xl p-5 text-center text-sm text-gray-400" style="background: rgba(255,255,255,0.03); border: 1px dashed rgba(255,255,255,0.08);">
+        Be the first to wish <%= firstName %> 🎂
+      </div>
+    <% } else { %>
+      <div class="space-y-2">
+        <% messages.forEach(m => { %>
+          <div class="bday-msg rounded-xl p-3">
+            <div class="flex items-baseline justify-between gap-2">
+              <p class="text-xs font-bold text-white truncate"><%= m.from_name %></p>
+              <p class="text-[10px] text-gray-500 flex-shrink-0"><%= fmtClockTime(m.created_at) %></p>
+            </div>
+            <p class="text-sm text-gray-100 mt-1 whitespace-pre-wrap leading-snug"><%- escapeHtml(m.message) %></p>
+          </div>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+</div>

@@ -213,6 +213,7 @@ app.use('/w', requireWorker, workerLocals, require('./routes/worker/forms'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/custom-checklists'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/notifications'));
 app.use('/w', requireWorker, workerLocals, require('./routes/worker/safety'));
+app.use('/w', requireWorker, workerLocals, require('./routes/worker/birthday'));
 app.get('/w/more', requireWorker, workerLocals, (req, res) => {
   res.locals.isManager = require('./middleware/managerAuth').isManager(req.session.worker);
   res.render('worker/more', { title: 'More', currentPage: 'more' });

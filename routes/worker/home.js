@@ -7,6 +7,7 @@ const {
   loadPreferences, getWeather, geocodeAddress, localIso,
 } = require('../../services/homeContext');
 const { enrichTodaysShifts } = require('../../services/todayBriefing');
+const { todaysBirthdays, messagesForBirthday, hasMessaged } = require('../../lib/birthdays');
 
 // GET /w/home — Worker home screen (dynamic, contextual)
 router.get('/home', async (req, res) => {
@@ -335,6 +336,32 @@ router.get('/home', async (req, res) => {
     }
   } catch (e) { console.error('[home] jobpack nudge failed:', e.message); }
 
+  // Today's birthdays — surface a card on the worker's home so they can
+  // wish coworkers. Two flavours:
+  //   - meIsBirthdayPerson: the logged-in worker's DOB is today → show
+  //     the celebratory pop-up + messages wall on their own home.
+  //   - otherBirthdays: anyone else with a birthday today → small
+  //     "wish them" card linking to /w/birthday/:id.
+  let birthdaysAll = [];
+  try { birthdaysAll = todaysBirthdays(db); }
+  catch (e) { console.error('[worker home] birthdays lookup failed:', e.message); }
+  const myBirthdayRow = birthdaysAll.find(b => b.crew_member_id === worker.id);
+  const otherBirthdays = birthdaysAll.filter(b => b.crew_member_id !== worker.id);
+  // Pre-compute "have I already wished this person?" so the home card can
+  // switch its CTA from "Wish them" to "View messages" without a second
+  // round-trip when the user lands on the wish page.
+  for (const b of otherBirthdays) {
+    try { b.alreadyWished = hasMessaged(db, worker.id, b.crew_member_id, today); }
+    catch (e) { b.alreadyWished = false; }
+  }
+  // For the birthday person themselves: load every wish they've received
+  // today so the pop-up + wall renders the actual messages, not a count.
+  let myBirthdayMessages = [];
+  if (myBirthdayRow) {
+    try { myBirthdayMessages = messagesForBirthday(db, worker.id, today); }
+    catch (e) { console.error('[worker home] birthday messages load failed:', e.message); }
+  }
+
   // Annotate today's shifts with the briefing-card extras: Google Maps
   // deeplink, countdown label, crew count, supervisor user id (for the
   // one-tap "Message" link). Mutates each row; safe — todaysShifts is
@@ -350,6 +377,7 @@ router.get('/home', async (req, res) => {
     recentClocks, compliance, member, employee, today,
     cards, streaks, prefs, timeline, weather, jobPackNudge,
     safetyCounts,
+    myBirthdayRow, otherBirthdays, myBirthdayMessages,
   });
 });
 

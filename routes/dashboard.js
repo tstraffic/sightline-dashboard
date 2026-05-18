@@ -14,6 +14,7 @@ const {
   getMyPlans,
   getRecentActivity,
 } = require('./helpers/dashboard-queries');
+const { todaysBirthdays } = require('../lib/birthdays');
 
 router.get('/', (req, res) => {
   const db = getDb();
@@ -100,6 +101,13 @@ router.get('/', (req, res) => {
     console.error('[dashboard] checklist register summary failed:', e.message);
   }
 
+  // Today's birthdays — surfaced as a banner above the KPI tiles when at
+  // least one active crew member's DOB is today (Sydney). Failures are
+  // non-fatal so legacy DBs without the join still load the dashboard.
+  let birthdaysToday = [];
+  try { birthdaysToday = todaysBirthdays(db); }
+  catch (e) { console.error('[dashboard] birthdays lookup failed:', e.message); }
+
   // Onboarding checklist
   let onboarding = null;
   try {
@@ -158,6 +166,7 @@ router.get('/', (req, res) => {
     myPlans,
     tasksIAssigned,
     userRole: user.role,
+    birthdaysToday,
   });
 });
 

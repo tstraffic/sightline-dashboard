@@ -9650,6 +9650,36 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 211: birthday_messages — coworker birthday wishes.
+  // Each worker can leave AT MOST ONE message per coworker per birthday,
+  // enforced by the UNIQUE constraint below. The birthday_date column
+  // is the Sydney-local YYYY-MM-DD of the birthday, so the same worker
+  // can wish the same person every subsequent year without colliding.
+  // =============================================
+  if (!isMigrationApplied.get(211)) {
+    console.log('Running migration 211: birthday_messages');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS birthday_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          target_crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          from_crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          birthday_date TEXT NOT NULL,
+          message TEXT NOT NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(from_crew_member_id, target_crew_member_id, birthday_date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_birthday_messages_target
+          ON birthday_messages(target_crew_member_id, birthday_date);
+      `);
+      recordMigration.run(211, 'birthday_messages');
+      console.log('Migration 211 applied: birthday_messages table created');
+    } catch (e) {
+      console.error('Migration 211 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
