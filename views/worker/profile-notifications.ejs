@@ -124,7 +124,9 @@ function csrfToken() {
     return out;
   }
 
+  var rendered = false;
   function render(state, message, detail, options) {
+    rendered = true;
     options = options || {};
     title.textContent = message;
     sub.textContent = detail || '';
@@ -134,6 +136,18 @@ function csrfToken() {
     else setDot('rgba(255,255,255,0.3)');
     enableBtn.style.display = options.showEnable ? 'inline-flex' : 'none';
     testBtn.style.display   = options.showTest   ? 'inline-flex' : 'none';
+  }
+
+  // Promise that resolves to `null` after `ms` ms — used to race against
+  // navigator.serviceWorker.ready / pushManager.getSubscription which can
+  // hang silently when a SW is upgrading (especially on iOS PWA).
+  function withTimeout(promise, ms) {
+    return new Promise(function (resolve) {
+      var done = false;
+      var t = setTimeout(function () { if (!done) { done = true; resolve({ timeout: true }); } }, ms);
+      promise.then(function (v) { if (!done) { done = true; clearTimeout(t); resolve({ value: v }); } },
+                   function (e) { if (!done) { done = true; clearTimeout(t); resolve({ error: e }); } });
+    });
   }
 
   // iOS only supports Web Push from an installed (standalone) PWA.
@@ -164,8 +178,28 @@ function csrfToken() {
       return;
     }
     try {
-      var reg = await navigator.serviceWorker.ready;
-      var existing = await reg.pushManager.getSubscription();
+      var regResult = await withTimeout(navigator.serviceWorker.ready, 4000);
+      if (regResult.timeout) {
+        render('warn', 'Service worker is still starting up',
+               'Pull down to refresh, or tap "Enable push" to try anyway.',
+               { showEnable: true });
+        return;
+      }
+      if (regResult.error) {
+        render('bad', 'Could not reach the service worker',
+               (regResult.error && regResult.error.message) || 'Try a refresh.',
+               { showEnable: true });
+        return;
+      }
+      var reg = regResult.value;
+      var subResult = await withTimeout(reg.pushManager.getSubscription(), 3000);
+      if (subResult.timeout || subResult.error) {
+        render('warn', 'Push status check timed out',
+               'Tap "Enable push" to set up notifications on this device.',
+               { showEnable: true });
+        return;
+      }
+      var existing = subResult.value;
       if (existing) {
         // Re-send to server in case the row was lost (idempotent upsert).
         fetch('/w/notifications/push/subscribe', {
@@ -186,6 +220,17 @@ function csrfToken() {
       render('bad', 'Could not check push status', (e && e.message) || 'Unknown error', { showEnable: true });
     }
   }
+
+  // Hard watchdog — if nothing has rendered after 6s the panel falls
+  // back to a recoverable state instead of leaving the worker staring
+  // at "Checking…" forever.
+  setTimeout(function () {
+    if (!rendered) {
+      render('warn', 'Push status is taking a while',
+             'Tap "Enable push" to try setting it up directly, or pull down to refresh.',
+             { showEnable: true });
+    }
+  }, 6000);
 
   async function enable() {
     enableBtn.disabled = true;
