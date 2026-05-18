@@ -205,29 +205,35 @@ function isWorkerCategoryEnabled(db, crewMemberId, category) {
  * mute toggles). If not set, the push always fires (back-compat).
  */
 async function sendPushToCrew(crewMemberId, payload) {
-  if (!vapidConfigured) return;
+  if (!vapidConfigured) {
+    console.warn('[Push] sendPushToCrew called but VAPID not configured');
+    return { sent: 0, failed: 0, reason: 'vapid-not-configured' };
+  }
   const db = getDb();
   if (!isWorkerCategoryEnabled(db, crewMemberId, payload && payload.category)) {
-    return; // worker muted this category
+    return { sent: 0, failed: 0, reason: 'category-muted' };
   }
   const subs = db.prepare('SELECT * FROM worker_push_subscriptions WHERE crew_member_id = ?').all(crewMemberId);
-  if (subs.length === 0) return;
+  if (subs.length === 0) return { sent: 0, failed: 0, reason: 'no-subscriptions' };
   const payloadStr = JSON.stringify(payload);
   console.log('[Push] -> crew', crewMemberId, '(' + subs.length + ' device(s)):', payload.title);
-  const results = [];
+  let sent = 0, failed = 0, lastError = null;
   for (const sub of subs) {
     const pushSub = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
-    results.push(
-      webpush.sendNotification(pushSub, payloadStr).catch(err => {
-        if (err.statusCode === 410 || err.statusCode === 404) {
-          removeWorkerSubscription(sub.endpoint);
-        } else {
-          console.error('[Push] Crew send error', crewMemberId, ':', err.statusCode || err.message);
-        }
-      })
-    );
+    try {
+      await webpush.sendNotification(pushSub, payloadStr);
+      sent++;
+    } catch (err) {
+      failed++;
+      lastError = err.statusCode ? `HTTP ${err.statusCode} ${err.body || ''}`.trim() : err.message;
+      if (err.statusCode === 410 || err.statusCode === 404) {
+        removeWorkerSubscription(sub.endpoint);
+      } else {
+        console.error('[Push] Crew send error', crewMemberId, ':', err.statusCode || err.message, err.body || '');
+      }
+    }
   }
-  return Promise.allSettled(results);
+  return { sent, failed, lastError };
 }
 
 /**
