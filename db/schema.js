@@ -9721,7 +9721,44 @@ function runMigrations(db) {
   }
 
   // =============================================
-  // Migration 196: PIN lockout for worker portal + force-change for named
+  // Migration 213: training_records — in-house training log.
+  // Free-text training_name so admin can add ad-hoc course types
+  // (Portaboom, Trailer, Spotter, etc.) without first creating a
+  // master row. Keyed on crew_member_id so the worker-side safety
+  // tab can read it without an employees join. employee_id is kept
+  // for HR convenience but is denormalised — crew_member_id is the
+  // source of truth.
+  // =============================================
+  if (!isMigrationApplied.get(213)) {
+    console.log('Running migration 213: training_records');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS training_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          employee_id INTEGER REFERENCES employees(id) ON DELETE SET NULL,
+          training_name TEXT NOT NULL,
+          completed_date TEXT,
+          expiry_date TEXT,
+          trainer_name TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          certificate_url TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          created_by_id INTEGER REFERENCES users(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_training_records_crew ON training_records(crew_member_id, completed_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_training_records_employee ON training_records(employee_id);
+      `);
+      recordMigration.run(213, 'training_records');
+      console.log('Migration 213 applied: training_records table created');
+    } catch (e) {
+      console.error('Migration 213 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 214: PIN lockout for worker portal + force-change for named
   // seed admin accounts.
   //
   // (a) Adds pin_failed_attempts + pin_locked_until columns on crew_members
@@ -9735,8 +9772,8 @@ function runMigrations(db) {
   //     individual but well-known dev passwords. Flag them too so they
   //     can't slip through to production with the seed password intact.
   // =============================================
-  if (!isMigrationApplied.get(196)) {
-    console.log('Running migration 196: PIN lockout cols + flag named-admin seeds');
+  if (!isMigrationApplied.get(214)) {
+    console.log('Running migration 214: PIN lockout cols + flag named-admin seeds');
     try { db.exec("ALTER TABLE crew_members ADD COLUMN pin_failed_attempts INTEGER DEFAULT 0"); } catch(e) { /* exists */ }
     try { db.exec("ALTER TABLE crew_members ADD COLUMN pin_locked_until DATETIME"); } catch(e) { /* exists */ }
 
@@ -9751,11 +9788,11 @@ function runMigrations(db) {
         const u = db.prepare('SELECT id, password_hash, must_change_password FROM users WHERE username = ?').get(username);
         if (u && !u.must_change_password && bcrypt.compareSync(seedPw, u.password_hash)) {
           db.prepare('UPDATE users SET must_change_password = 1 WHERE id = ?').run(u.id);
-          console.log(`Migration 196: flagged ${username} for password change (seed password still in use)`);
+          console.log(`Migration 214: flagged ${username} for password change (seed password still in use)`);
         }
       }
-    } catch (e) { console.error('Migration 196 flag step error:', e.message); }
-    recordMigration.run(196, 'PIN lockout cols + flag named-admin seeds');
+    } catch (e) { console.error('Migration 214 flag step error:', e.message); }
+    recordMigration.run(214, 'PIN lockout cols + flag named-admin seeds');
   }
 
   console.log('All migrations checked/applied.');

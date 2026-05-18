@@ -1,0 +1,70 @@
+<%
+  function fmtDate(s) {
+    if (!s) return '';
+    var d = new Date(s + 'T00:00:00');
+    if (isNaN(d.getTime())) return s;
+    return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
+  }
+  function statusChip(t) {
+    if (t.status === 'expired')        return { label: 'Expired',        style: 'background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3);' };
+    if (t.status === 'expiring_soon')  return { label: 'Expiring soon',  style: 'background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3);' };
+    if (t.status === 'no_expiry')      return { label: 'No expiry',      style: 'background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.10);' };
+    return { label: 'Valid', style: 'background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3);' };
+  }
+  var groups = { expired: [], expiring_soon: [], valid: [], no_expiry: [] };
+  (records || []).forEach(function (r) { groups[r.status || 'valid'].push(r); });
+  var sections = [
+    { key: 'expired',       label: 'Expired',        list: groups.expired },
+    { key: 'expiring_soon', label: 'Expiring soon',  list: groups.expiring_soon },
+    { key: 'valid',         label: 'Current',        list: groups.valid },
+    { key: 'no_expiry',     label: 'No expiry set',  list: groups.no_expiry },
+  ];
+%>
+<style>
+  .saf-wrap { padding: 0; color: #fff; }
+  .saf-h1   { font-size: 1.5rem; font-weight: 800; padding: 6px 4px 8px; letter-spacing: -0.01em; }
+  .tr-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px;
+    padding: 12px 14px; margin-bottom: 8px;
+  }
+  .tr-card.expired       { border-left: 3px solid #f87171; }
+  .tr-card.expiring_soon { border-left: 3px solid #fbbf24; }
+  .tr-card.valid         { border-left: 3px solid #34d399; }
+  .tr-title { font-size: 0.95rem; font-weight: 700; }
+  .tr-meta  { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 4px; }
+  .tr-chip  { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .tr-notes { font-size: 0.78rem; color: rgba(255,255,255,0.65); margin-top: 6px; line-height: 1.4; white-space: pre-line; }
+  .tr-empty { text-align: center; padding: 32px 16px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
+  .tr-section-h { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.45); margin: 14px 4px 6px; }
+  .tr-link  { color: #93C5FD; font-size: 0.75rem; text-decoration: underline; }
+</style>
+
+<div class="saf-wrap">
+  <h1 class="saf-h1">Safety</h1>
+  <%- include('./_tabs') %>
+
+  <% if (!records || records.length === 0) { %>
+    <div class="tr-empty">
+      No training recorded yet. Once HR logs your trainings (Portaboom, Trailer, etc.), they'll appear here.
+    </div>
+  <% } else { %>
+    <% sections.forEach(function (sec) { if (sec.list.length === 0) return; %>
+      <p class="tr-section-h"><%= sec.label %> · <%= sec.list.length %></p>
+      <% sec.list.forEach(function (t) { var chip = statusChip(t); %>
+        <div class="tr-card <%= t.status %>">
+          <div class="tr-title"><%= t.training_name %></div>
+          <div class="tr-meta">
+            <span class="tr-chip" style="<%= chip.style %>"><%= chip.label %></span>
+            <% if (t.completed_date) { %><span>Completed <%= fmtDate(t.completed_date) %></span><% } %>
+            <% if (t.expiry_date) { %><span>· Expires <%= fmtDate(t.expiry_date) %></span><% } %>
+            <% if (t.trainer_name) { %><span>· Trainer: <%= t.trainer_name %></span><% } %>
+          </div>
+          <% if (t.notes) { %><div class="tr-notes"><%= t.notes %></div><% } %>
+          <% if (t.certificate_url) { %>
+            <p style="margin-top: 6px;"><a class="tr-link" href="<%= t.certificate_url %>" target="_blank" rel="noopener">View certificate ↗</a></p>
+          <% } %>
+        </div>
+      <% }) %>
+    <% }) %>
+  <% } %>
+</div>
