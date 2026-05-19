@@ -9945,6 +9945,49 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 217: relax toolbox_attendance CHECK to allow 'attending'
+  // and 'absent'.
+  //
+  // Original constraint was CHECK(status IN ('attended','caught_up')).
+  // Migration 204 introduced 'absent' as a worker-side state via the
+  // public picker but never updated the constraint, so 'absent' inserts
+  // were failing CHECK in some paths. PR #378 adds 'attending' (worker
+  // has accepted the invite but hasn't been ticked off yet). Bundle
+  // both into a single rewrite of the table since SQLite can't ALTER
+  // a CHECK constraint in place.
+  // =============================================
+  if (!isMigrationApplied.get(217)) {
+    console.log('Running migration 217: relax toolbox_attendance CHECK');
+    try {
+      db.exec(`
+        CREATE TABLE toolbox_attendance__new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+          status TEXT NOT NULL DEFAULT 'attending'
+            CHECK(status IN ('attending','attended','caught_up','absent')),
+          recorded_by_id INTEGER REFERENCES users(id),
+          recorded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          absence_reason TEXT,
+          UNIQUE(toolbox_id, crew_member_id)
+        );
+        INSERT INTO toolbox_attendance__new
+          (id, toolbox_id, crew_member_id, status, recorded_by_id, recorded_at, absence_reason)
+        SELECT id, toolbox_id, crew_member_id, status, recorded_by_id, recorded_at, absence_reason
+        FROM toolbox_attendance;
+        DROP TABLE toolbox_attendance;
+        ALTER TABLE toolbox_attendance__new RENAME TO toolbox_attendance;
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_att_crew ON toolbox_attendance(crew_member_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_att_tb ON toolbox_attendance(toolbox_id)');
+      recordMigration.run(217, 'toolbox_attendance CHECK + attending/absent');
+      console.log('Migration 217 applied: toolbox_attendance status now allows attending/absent');
+    } catch (e) {
+      console.error('Migration 217 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

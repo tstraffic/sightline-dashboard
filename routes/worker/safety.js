@@ -703,6 +703,41 @@ router.get('/safety/toolboxes/:id', (req, res) => {
   });
 });
 
+// POST /w/safety/toolboxes/:id/accept — worker accepts the invite.
+// Sets toolbox_attendance.status = 'attending' so the office attendance
+// page can see they're planning to be there. Won't downgrade an already-
+// recorded 'attended' or 'caught_up'.
+router.post('/safety/toolboxes/:id/accept', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
+  if (!toolbox || toolbox.status !== 'published') {
+    req.flash('error', 'Toolbox not available.');
+    return res.redirect('/w/safety/toolboxes');
+  }
+  try {
+    const existing = db.prepare(
+      'SELECT status FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?'
+    ).get(toolbox.id, worker.id);
+    if (existing && (existing.status === 'attended' || existing.status === 'caught_up')) {
+      req.flash('error', 'You already have a recorded status for this toolbox.');
+    } else {
+      db.prepare(`
+        INSERT INTO toolbox_attendance
+          (toolbox_id, crew_member_id, status, recorded_by_id)
+        VALUES (?, ?, 'attending', NULL)
+        ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+          status = 'attending', recorded_at = CURRENT_TIMESTAMP, absence_reason = NULL
+      `).run(toolbox.id, worker.id);
+      req.flash('success', "You're on the list — see you there.");
+    }
+  } catch (e) {
+    console.error('[w/safety] toolbox accept error', e.message);
+    req.flash('error', 'Could not record.');
+  }
+  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+});
+
 // POST /w/safety/toolboxes/:id/caught-up — worker self-claim. Idempotent via
 // UNIQUE(toolbox_id, crew_member_id); won't overwrite an existing 'attended'
 // record since INSERT OR IGNORE matches on the unique constraint.
