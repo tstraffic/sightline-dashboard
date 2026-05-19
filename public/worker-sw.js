@@ -2,7 +2,7 @@
 // v7: home-screen install icon switched to the Snow / "Inverted · on light"
 // brand variant so the employee app reads as white-bg on iOS + Android. Bump
 // CACHE_NAME so old clients shed the dark icon and pick up the new manifest.
-const CACHE_NAME = 'atomis-worker-v2';
+const CACHE_NAME = 'atomis-worker-v3';
 const VENDOR_CACHE = 'atomis-worker-vendor-v1';
 
 // All client-side renderer assets (pdfjs, docx-preview, jszip). All are
