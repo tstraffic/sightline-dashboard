@@ -1,12 +1,12 @@
-// T&S Admin Dashboard Service Worker — Network-first with offline fallback
-const CACHE_NAME = 'ts-admin-v29';
+// Atomis Admin Service Worker — Network-first with offline fallback
+const CACHE_NAME = 'atomis-admin-v1';
 const OFFLINE_URL = '/offline.html';
 
 // Assets to pre-cache
 const PRECACHE_URLS = [
   '/css/custom.css',
   '/js/app.js',
-  '/images/logo-colour.jpg',
+  '/images/atomis-mark.svg',
   OFFLINE_URL
 ];
 
@@ -80,14 +80,14 @@ self.addEventListener('push', event => {
   try {
     data = event.data.json();
   } catch (e) {
-    data = { title: 'T&S Notification', body: event.data.text() };
+    data = { title: 'Atomis', body: event.data.text() };
   }
 
-  const title = data.title || 'T&S Operations';
+  const title = data.title || 'Atomis';
   const options = {
     body: data.body || '',
-    icon: '/images/logo-colour.jpg',
-    badge: '/images/logo-colour.jpg',
+    icon: '/images/atomis-icon-192.png',
+    badge: '/images/atomis-icon-192.png',
     tag: data.type || 'general',
     renotify: true,
     data: { url: data.url || '/notifications' },

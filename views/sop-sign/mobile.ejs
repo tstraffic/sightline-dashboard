@@ -5,11 +5,11 @@
   <!-- Allow pinch-zoom on the PDF pages — without this workers can't zoom in
        to read the fine print on iOS Safari / Android Chrome. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-  <meta name="theme-color" content="#1D6AE5">
-  <title>SOP / SWMS Acknowledgement — T&S Traffic Control</title>
-  <link rel="icon" type="image/png" href="/images/logo-colour.png">
+  <meta name="theme-color" content="#10B981">
+  <title>SOP / SWMS Acknowledgement — Atomis</title>
+  <link rel="icon" type="image/svg+xml" href="/images/atomis-mark.svg">
   <script src="https://cdn.tailwindcss.com"></script>
-  <script>tailwindcss.config={theme:{extend:{colors:{brand:{50:'#EBF3FF',100:'#D6E7FF',200:'#ADC9FF',300:'#85ABFF',400:'#5C8DFF',500:'#2B7FFF',600:'#1D6AE5',700:'#1554CC',800:'#0D3FB2',900:'#052A99',950:'#001A66'}}}}}</script>
+  <script>tailwindcss.config={theme:{extend:{colors:{brand:{50:'#ECFDF5',100:'#D1FAE5',200:'#A7F3D0',300:'#6EE7B7',400:'#34D399',500:'#10B981',600:'#059669',700:'#047857',800:'#065F46',900:'#064E3B',950:'#022C22'}}}}}</script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Geist:wght@300..700&display=swap');
     body { font-family: 'Geist', 'Inter', system-ui, -apple-system, sans-serif; -webkit-tap-highlight-color: transparent; }
@@ -29,10 +29,10 @@
     .desc-html ul { list-style: disc; padding-left: 1.25rem; margin-bottom: 0.75rem; }
     .desc-html ol { list-style: decimal; padding-left: 1.25rem; margin-bottom: 0.75rem; }
     .desc-html strong { font-weight: 700; color: #111827; }
-    .desc-html a { color: #1D6AE5; text-decoration: underline; }
+    .desc-html a { color: #059669; text-decoration: underline; }
     .desc-html h3 { font-weight: 700; color: #111827; margin: 0.75rem 0 0.4rem; font-size: 1rem; }
-    /* T&S brand accent bar at the very top of the page */
-    .brand-bar { background: linear-gradient(90deg, #1554CC 0%, #2B7FFF 50%, #1554CC 100%); }
+    /* Atomis brand accent bar at the very top of the page */
+    .brand-bar { background: linear-gradient(90deg, #047857 0%, #10B981 50%, #047857 100%); }
   </style>
 </head>
 <body class="bg-gray-50 min-h-screen">
@@ -41,8 +41,8 @@
 <% if (submitted) { %>
   <!-- Success screen -->
   <div class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
-    <img src="/images/logo-colour.png" alt="T&S Traffic Control"
-         class="h-12 w-auto mb-6" onerror="this.onerror=null;this.src='/images/logo-colour.jpg';" />
+    <img src="/images/atomis-mark.svg" alt="Atomis"
+         class="h-12 w-auto mb-6" />
     <div class="w-20 h-20 rounded-full bg-emerald-500 flex items-center justify-center mb-6 shadow-lg">
       <svg class="w-12 h-12 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
     </div>
@@ -112,8 +112,8 @@
   <!-- Header -->
   <header class="bg-white border-b border-gray-200 sticky top-1 z-10 shadow-sm">
     <div class="max-w-2xl mx-auto px-4 py-3 flex items-center gap-3">
-      <img src="/images/logo-colour.png" alt="T&S Traffic Control"
-           class="h-9 w-auto flex-shrink-0" onerror="this.onerror=null;this.src='/images/logo-colour.jpg';" />
+      <img src="/images/atomis-mark.svg" alt="Atomis"
+           class="h-9 w-auto flex-shrink-0" />
       <div class="flex-1 min-w-0">
         <h1 class="text-sm font-bold text-gray-900 leading-tight">SOP / SWMS Acknowledgement</h1>
         <p class="text-[11px] text-gray-500 truncate"><%= session.title || 'In-person sign-off' %></p>

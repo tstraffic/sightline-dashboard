@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8">
@@ -6,7 +6,7 @@
   <title>Login | T&S Operations Dashboard</title>
   <meta name="theme-color" content="#0A2D66">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="apple-touch-icon" href="/images/logo-colour.jpg">
+  <link rel="apple-touch-icon" href="/images/atomis-mark.svg">
   <link rel="manifest" href="/manifest-admin.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -31,7 +31,7 @@
   <style>
     * { -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 
-    /* ── Background ── */
+    /* â”€â”€ Background â”€â”€ */
     .login-bg {
       background: linear-gradient(135deg, #020817 0%, #0A1628 20%, #0F2847 45%, #132E52 60%, #0A1628 85%, #020817 100%);
       position: relative;
@@ -57,7 +57,7 @@
       50% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
     }
 
-    /* ── Road-marking lines ── */
+    /* â”€â”€ Road-marking lines â”€â”€ */
     .road-lines {
       position: absolute;
       inset: 0;
@@ -87,7 +87,7 @@
       50% { transform: rotate(var(--r, 25deg)) translateX(12px); opacity: 1; }
     }
 
-    /* ── Card entrance ── */
+    /* â”€â”€ Card entrance â”€â”€ */
     @keyframes card-entrance {
       from { opacity: 0; transform: translateY(32px); }
       to   { opacity: 1; transform: translateY(0); }
@@ -105,7 +105,7 @@
       opacity: 0;
     }
 
-    /* ── Glass card (dark) ── */
+    /* â”€â”€ Glass card (dark) â”€â”€ */
     .glass-card {
       background: rgba(255, 255, 255, 0.14);
       backdrop-filter: blur(28px) saturate(200%);
@@ -117,7 +117,7 @@
         inset 0 1px 0 rgba(255, 255, 255, 0.30);
     }
 
-    /* ── Inputs ── */
+    /* â”€â”€ Inputs â”€â”€ */
     .login-input {
       background: rgba(0, 0, 0, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.1);
@@ -184,7 +184,7 @@
       color: #2B7FFF;
     }
 
-    /* ── Submit button ── */
+    /* â”€â”€ Submit button â”€â”€ */
     .login-btn {
       border-radius: 10px !important;
       background: linear-gradient(135deg, #1D6AE5 0%, #2B7FFF 100%);
@@ -217,7 +217,7 @@
       left: 100%;
     }
 
-    /* ── Logo ── */
+    /* â”€â”€ Logo â”€â”€ */
     .login-logo {
       filter: brightness(0) invert(1)
               drop-shadow(0 0 18px rgba(43, 127, 255, 0.45))
@@ -233,7 +233,7 @@
       animation: logo-float 6s ease-in-out infinite;
     }
 
-    /* ── Particles canvas ── */
+    /* â”€â”€ Particles canvas â”€â”€ */
     #particles-canvas {
       position: absolute;
       inset: 0;
@@ -241,7 +241,7 @@
       z-index: 1;
     }
 
-    /* ── Reduced motion ── */
+    /* â”€â”€ Reduced motion â”€â”€ */
     @media (prefers-reduced-motion: reduce) {
       .road-line, .login-logo, .login-bg::before { animation: none !important; }
       .animate-card, .animate-card-delay, .animate-card-delay-2 { animation: none !important; opacity: 1 !important; }
@@ -276,7 +276,7 @@
     <!-- Logo + branding -->
     <div class="text-center mb-8 animate-card">
       <div class="inline-block mb-5">
-        <img src="/images/logo-colour.png" alt="T&S Traffic Control" class="login-logo" style="width:130px;height:auto;">
+        <img src="/images/atomis-mark.svg" alt="Atomis" class="login-logo" style="width:130px;height:auto;">
       </div>
       <h1 style="font-size:22px;font-weight:500;color:rgba(255,255,255,0.90);letter-spacing:0.12em;text-transform:uppercase">T&S Traffic Control</h1>
       <p style="color:rgba(255,255,255,0.35);font-size:11px;letter-spacing:0.18em;margin-top:5px;font-weight:400;text-transform:uppercase">Operations Dashboard</p>
