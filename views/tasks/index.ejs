@@ -102,6 +102,8 @@
   const statusColors = { not_started: 'bg-gray-100 text-gray-700', in_progress: 'bg-blue-100 text-blue-700', blocked: 'bg-red-100 text-red-700', complete: 'bg-emerald-100 text-emerald-700' };
   const statusLabels = { not_started: 'Not Started', in_progress: 'In Progress', blocked: 'Blocked', complete: 'Complete' };
   const priorityDots = { high: 'bg-red-500', medium: 'bg-amber-400', low: 'bg-gray-300' };
+  const priorityBadges = { high: 'bg-red-100 text-red-700 ring-red-200', medium: 'bg-amber-100 text-amber-700 ring-amber-200', low: 'bg-gray-100 text-gray-600 ring-gray-200' };
+  const priorityLabels = { high: 'High', medium: 'Medium', low: 'Low' };
   const typeBadges = { daily: 'bg-amber-50 text-amber-700 ring-amber-200', weekly: 'bg-blue-50 text-blue-700 ring-blue-200', one_off: 'bg-gray-50 text-gray-600 ring-gray-200' };
   const typeLabels = { daily: 'Daily', weekly: 'Weekly', one_off: 'One-off' };
 
@@ -311,7 +313,7 @@
                 <div class="p-4">
                   <div class="flex items-start gap-2 mb-2">
                     <input type="checkbox" class="bulk-checkbox mt-1 rounded bg-white border-gray-300 text-brand-500 focus:ring-brand-500 flex-shrink-0" value="<%= task.id %>">
-                    <span class="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 <%= priorityDots[task.priority] || 'bg-gray-300' %>"></span>
+                    <span class="mt-0.5 flex-shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded-md ring-1 ring-inset uppercase tracking-wide <%= priorityBadges[task.priority] || priorityBadges.low %>" title="Priority"><%= priorityLabels[task.priority] || 'Low' %></span>
                     <div class="flex-1 min-w-0">
                       <a href="/tasks/<%= task.id %>/edit" class="text-sm font-semibold text-gray-900 hover:text-brand-600 transition line-clamp-2 block"><%= task.title %></a>
                       <% if (task.description) { %>
@@ -395,7 +397,7 @@
                 <div class="p-4">
                   <div class="flex items-start gap-2 mb-2">
                     <input type="checkbox" class="bulk-checkbox mt-1 rounded bg-white border-gray-300 text-brand-500 focus:ring-brand-500 flex-shrink-0" value="<%= task.id %>">
-                    <span class="mt-1.5 w-2.5 h-2.5 rounded-full flex-shrink-0 <%= priorityDots[task.priority] || 'bg-gray-300' %>"></span>
+                    <span class="mt-0.5 flex-shrink-0 inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold rounded-md ring-1 ring-inset uppercase tracking-wide <%= priorityBadges[task.priority] || priorityBadges.low %>" title="Priority"><%= priorityLabels[task.priority] || 'Low' %></span>
                     <div class="flex-1 min-w-0">
                       <a href="/tasks/<%= task.id %>/edit" class="text-sm font-semibold text-gray-900 hover:text-brand-600 transition line-clamp-2 block"><%= task.title %></a>
                       <% if (task.description) { %>
