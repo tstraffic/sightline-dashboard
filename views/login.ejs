@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Sign in | Atomis</title>
+  <title>Sign in | T&S Traffic Control</title>
   <meta name="theme-color" content="#0F1115">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <link rel="icon" type="image/svg+xml" href="/images/atomis-favicon-dark.svg">
@@ -250,53 +250,20 @@
     <div class="left">
       <div class="left-inner">
         <div class="brand-row">
-          <!-- Animated mark — satellite orbits the tilted ring -->
-          <svg class="mark-anim" viewBox="0 0 80 80" width="32" height="32" fill="none" style="display:block">
-            <defs>
-              <path id="loginRingPath" d="M 67.81 28.75 A 30 13 -22 0 1 12.19 51.25 A 30 13 -22 0 1 67.81 28.75" fill="none"/>
-            </defs>
-            <g transform="rotate(-22 40 40)">
-              <ellipse cx="40" cy="40" rx="30" ry="13" stroke="#10B981" stroke-width="2.2" opacity="0.55"/>
-            </g>
-            <circle cx="40" cy="40" r="11" fill="#10B981"/>
-            <circle cx="0" cy="0" r="5.5" fill="#10B981">
-              <animateMotion dur="7s" repeatCount="indefinite">
-                <mpath href="#loginRingPath"/>
-              </animateMotion>
-              <animate attributeName="r" values="5.5;6.5;5.5;3.2;5.5" keyTimes="0;0.25;0.5;0.75;1" dur="7s" repeatCount="indefinite"/>
-              <animate attributeName="opacity" values="1;1;0.92;0.55;1" keyTimes="0;0.25;0.5;0.75;1" dur="7s" repeatCount="indefinite"/>
-            </circle>
-          </svg>
-          <span class="wm">atomis</span>
+          <img src="/images/ts-logo-white.png" alt="T&amp;S Traffic Control" style="height:36px;width:auto;display:block">
         </div>
 
         <div class="mark-stage">
-          <!-- Big animated mark -->
-          <svg class="mark-anim" viewBox="0 0 80 80" width="220" height="220" fill="none" style="display:block">
-            <defs>
-              <path id="loginRingBig" d="M 67.81 28.75 A 30 13 -22 0 1 12.19 51.25 A 30 13 -22 0 1 67.81 28.75" fill="none"/>
-            </defs>
-            <g transform="rotate(-22 40 40)">
-              <ellipse cx="40" cy="40" rx="30" ry="13" stroke="#10B981" stroke-width="2.2" opacity="0.55"/>
-            </g>
-            <circle cx="40" cy="40" r="11" fill="#10B981"/>
-            <circle cx="0" cy="0" r="5.5" fill="#10B981">
-              <animateMotion dur="7s" repeatCount="indefinite">
-                <mpath href="#loginRingBig"/>
-              </animateMotion>
-              <animate attributeName="r" values="5.5;6.5;5.5;3.2;5.5" keyTimes="0;0.25;0.5;0.75;1" dur="7s" repeatCount="indefinite"/>
-              <animate attributeName="opacity" values="1;1;0.92;0.55;1" keyTimes="0;0.25;0.5;0.75;1" dur="7s" repeatCount="indefinite"/>
-            </circle>
-          </svg>
+          <img src="/images/ts-logo-white.png" alt="T&amp;S Traffic Control" style="max-width:340px;width:80%;height:auto;display:block">
         </div>
 
         <div class="headline-wrap">
-          <h1 class="headline">simple systems. <em>smarter business.</em></h1>
-          <p class="sub">The operations layer for T&amp;S Traffic Control. Jobs, crews, compliance &mdash; one view, one truth.</p>
+          <h1 class="headline">Operations <em>dashboard.</em></h1>
+          <p class="sub">T&amp;S Traffic Control &mdash; jobs, crews, compliance, one view, one truth.</p>
         </div>
       </div>
 
-      <p class="footer-meta">&copy; <%= new Date().getFullYear() %> Atomis &middot; Built in Villawood, NSW</p>
+      <p class="footer-meta">Powered by Atomis &middot; <%= new Date().getFullYear() %></p>
     </div>
 
     <!-- RIGHT PANE -->
