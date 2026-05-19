@@ -5,12 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#020817">
-  <title>Sign In | T&S Employee Portal</title>
+  <meta name="theme-color" content="#0F1115">
+  <title>Sign in | Atomis Crew</title>
 
+  <link rel="icon" type="image/svg+xml" href="/images/atomis-mark.svg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Geist:wght@300..700&display=swap" rel="stylesheet">
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -18,23 +19,25 @@
       theme: {
         extend: {
           fontFamily: {
-            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            sans: ['Geist', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            display: ['"Bricolage Grotesque"', 'Geist', 'system-ui', 'sans-serif'],
           },
           colors: {
             brand: {
-              50: '#EFF6FF', 100: '#DBEAFE', 200: '#BFDBFE', 300: '#93C5FD',
-              400: '#60A5FA', 500: '#2B7FFF', 600: '#1D6AE5', 700: '#1555C0',
-              800: '#0F3F8E', 900: '#0A2D66', 950: '#051B3F',
+              50: '#ECFDF5', 100: '#D1FAE5', 200: '#A7F3D0', 300: '#6EE7B7',
+              400: '#34D399', 500: '#10B981', 600: '#059669', 700: '#047857',
+              800: '#065F46', 900: '#064E3B', 950: '#022C22',
             }
           }
         }
       }
     }
   </script>
-  <link rel="stylesheet" href="/css/worker.css">
+  <link rel="stylesheet" href="/css/worker.css?v=atomis-1">
   <style>
     body {
-      background: linear-gradient(135deg, #020817 0%, #0A1628 25%, #0F2847 50%, #0A1628 80%, #020817 100%) !important;
+      background: #0F1115 !important;
+      background-image: radial-gradient(ellipse 80% 50% at 80% 20%, rgba(16,185,129,0.08), transparent 60%) !important;
       background-attachment: fixed !important;
     }
   </style>
@@ -43,9 +46,9 @@
   <div class="w-full max-w-sm px-6">
     <!-- Logo & Title -->
     <div class="text-center mb-8">
-      <img src="/images/atomis-mark.svg" alt="Atomis" class="h-20 w-auto mx-auto mb-4 rounded-xl shadow-lg shadow-brand-600/20">
-      <h1 class="text-xl font-bold text-white">Employee Portal</h1>
-      <p class="text-gray-400 text-sm mt-1">Sign in with your Email or Employee ID</p>
+      <img src="/images/atomis-mark.svg" alt="Atomis Crew" class="h-20 w-auto mx-auto mb-4">
+      <h1 style="font-family:'Bricolage Grotesque',Geist,sans-serif;font-size:38px;font-weight:500;color:rgba(255,255,255,0.95);letter-spacing:-0.045em;line-height:1;">atomis crew</h1>
+      <p class="text-gray-400 text-sm mt-2">Sign in to start your shift.</p>
     </div>
 
     <!-- Flash Messages -->
@@ -102,11 +105,11 @@
       </div>
 
       <!-- Submit -->
-      <button type="submit" class="w-full py-3 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white font-semibold rounded-lg transition-all text-base shadow-lg shadow-brand-600/20">
-        Sign In
+      <button type="submit" class="w-full py-3 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 font-semibold rounded-lg transition-all text-base shadow-lg shadow-brand-600/20" style="color:#0F1115">
+        Sign in &rarr;
       </button>
       <div class="text-center mt-3">
-        <a href="/w/forgot-pin" class="text-sm text-brand-400 hover:text-brand-300 transition">Forgot PIN?</a>
+        <a href="/w/forgot-pin" class="text-sm text-brand-400 hover:text-brand-300 transition">Forgot your PIN?</a>
       </div>
     </form>
 

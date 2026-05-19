@@ -132,7 +132,7 @@ router.get('/', (req, res) => {
   } catch (e) { /* preferences column may not exist yet */ }
 
   res.render('dashboard', {
-    title: 'Dashboard',
+    title: 'Today',
     user,
     onboarding,
     kpi: {
