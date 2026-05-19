@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: ts-dashboard
+    name: atomis-dashboard
     runtime: node
     plan: starter
     buildCommand: npm install
