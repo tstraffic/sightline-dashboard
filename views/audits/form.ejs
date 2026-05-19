@@ -2,23 +2,45 @@
 <% function val(k, fallback) { return (a && a[k] != null) ? a[k] : (fallback || ''); } %>
 <% function stateOf(r) { if (!r) return ''; if (r.state) return r.state; if (r.na) return 'na'; if (r.checked) return 'yes'; return ''; } %>
 <% const ctxMap = (typeof attachmentsByContext !== 'undefined') ? (attachmentsByContext || {}) : {}; %>
+<%
+  const linkedJob = (a && a.job_id) ? (jobs || []).find(function(j){ return String(j.id) === String(a.job_id); }) : null;
+  const statusLabel = a && a.status ? a.status.replace('_',' ') : '';
+%>
 
 <div class="px-3 sm:px-4 lg:px-8 py-4 lg:py-6 pb-24">
-  <!-- Sticky header with live score -->
-  <div class="sticky top-[56px] lg:top-0 bg-white/95 backdrop-blur border-b border-gray-200 z-20 -mx-3 sm:-mx-4 lg:-mx-8 px-3 sm:px-4 lg:px-8 py-2.5 lg:py-3 mb-4">
-    <div class="flex items-center justify-between gap-3">
+  <!-- Sticky header with live score + inline Save / Submit -->
+  <div class="sticky top-[56px] lg:top-0 bg-white border-b border-gray-200 shadow-sm z-20 -mx-3 sm:-mx-4 lg:-mx-8 px-3 sm:px-4 lg:px-8 py-2.5 lg:py-3 mb-4">
+    <div class="flex items-center justify-between gap-2 sm:gap-3">
       <div class="min-w-0 flex-1">
-        <h1 class="text-base sm:text-lg lg:text-2xl font-bold text-gray-900 truncate"><%= isEdit ? 'Edit Audit #' + a.id : 'New Site Audit' %></h1>
-        <p class="text-[11px] lg:text-xs text-gray-500 hidden sm:block">Traffic Control Site Safety Audit</p>
-      </div>
-      <div class="flex items-center gap-2 flex-shrink-0">
-        <div class="text-right">
-          <div class="text-[10px] uppercase tracking-wide text-gray-500 font-semibold">Score</div>
-          <div class="flex items-baseline gap-1">
-            <span id="live-percent" class="text-xl lg:text-2xl font-bold text-gray-900"><%= score.percent %>%</span>
-            <span class="text-[10px] lg:text-xs text-gray-500">(<span id="live-score"><%= score.total %></span>/<span id="live-max"><%= score.max %></span>)</span>
-          </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <h1 class="text-base sm:text-lg lg:text-xl font-bold text-gray-900 truncate"><%= isEdit ? 'Edit Audit #' + a.id : 'New Site Audit' %></h1>
+          <% if (isEdit && statusLabel) { %>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide whitespace-nowrap
+              <%= a.status === 'signed_off' ? 'bg-emerald-100 text-emerald-700' : a.status === 'submitted' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700' %>"><%= statusLabel %></span>
+          <% } %>
         </div>
+        <div class="flex items-center gap-2 mt-0.5 text-[11px] sm:text-xs text-gray-500 min-w-0">
+          <span class="flex items-baseline gap-1 flex-shrink-0">
+            <span class="uppercase tracking-wide font-semibold text-gray-400">Score</span>
+            <span id="live-percent" class="text-sm sm:text-base font-bold text-gray-900"><%= score.percent %>%</span>
+            <span class="text-gray-400">(<span id="live-score"><%= score.total %></span>/<span id="live-max"><%= score.max %></span>)</span>
+          </span>
+          <% if (linkedJob) { %>
+            <span class="text-gray-300">·</span>
+            <span class="inline-flex items-center gap-1 min-w-0">
+              <svg class="w-3 h-3 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+              <span class="truncate"><%= linkedJob.job_number %><%= linkedJob.client ? ' — ' + linkedJob.client : '' %></span>
+            </span>
+          <% } %>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+        <button type="submit" form="auditForm" name="submit" value="0" class="px-2.5 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-lg transition whitespace-nowrap">
+          Save
+        </button>
+        <button type="submit" form="auditForm" name="submit" value="1" class="px-2.5 sm:px-3.5 py-2 text-xs sm:text-sm font-bold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-lg transition whitespace-nowrap">
+          Submit
+        </button>
       </div>
     </div>
     <% if (!isEdit) { %>

@@ -155,11 +155,18 @@ router.post('/draft', (req, res) => {
     const b = req.body || {};
     const result = db.prepare(`
       INSERT INTO site_audits (
-        project_site, auditor_id, auditor_name,
+        job_id, project_site, client, location, supervisor_name, tgs_ref, weather,
+        auditor_id, auditor_name,
         audit_datetime, shift, status, created_by_id
-      ) VALUES (?, ?, ?, ?, ?, 'draft', ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', ?)
     `).run(
+      b.job_id || null,
       b.project_site || '',
+      b.client || '',
+      b.location || '',
+      b.supervisor_name || '',
+      b.tgs_ref || '',
+      b.weather || '',
       req.session.user.id,
       b.auditor_name || req.session.user.full_name || '',
       b.audit_datetime || new Date().toISOString().slice(0, 16),
@@ -343,7 +350,7 @@ router.get('/:id/edit', (req, res) => {
   const responses = stored.responses || stored;
   const sectionComments = stored.sectionComments || {};
   const nonconformances = parseJson(audit.nonconformances_json, []) || [];
-  const jobs = db.prepare("SELECT id, job_number, job_name, client, site_address, suburb FROM jobs ORDER BY job_number DESC").all();
+  const jobs = db.prepare("SELECT id, job_number, job_name, client, site_address, suburb FROM jobs ORDER BY job_number").all();
   const attachments = db.prepare('SELECT * FROM audit_attachments WHERE audit_id = ? ORDER BY uploaded_at DESC').all(audit.id);
   const attachmentsByContext = {};
   attachments.forEach(att => {
