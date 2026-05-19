@@ -25,15 +25,30 @@ function confirmAction(message) {
 // Workers get a 24-hour heads-up push for every upcoming shift.
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function() {
-    navigator.serviceWorker.register('/js/worker-sw.js').then(function(registration) {
-      console.log('SW registered:', registration.scope);
-      // After SW is ready, set up push (best-effort, silent on failure).
-      if ('PushManager' in window && 'Notification' in window) {
-        setTimeout(function() { setupWorkerPush(registration); }, 1500);
-      }
-    }).catch(function(error) {
-      console.log('SW registration failed:', error);
-    });
+    // The SW used to live at /js/worker-sw.js (scope /js/), which meant it
+    // never controlled /w/* pages — navigator.serviceWorker.ready hung
+    // forever on the notifications page. Moved to /worker-sw.js so it
+    // matches admin-sw's root scope. Unregister the legacy registration
+    // so devices that already cached it don't end up with both.
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      regs.forEach(function(r) {
+        if (r.active && r.active.scriptURL.indexOf('/js/worker-sw.js') !== -1) {
+          r.unregister();
+        }
+      });
+    }).catch(function(){});
+
+    navigator.serviceWorker.register('/worker-sw.js', { updateViaCache: 'none' })
+      .then(function(registration) {
+        registration.update();
+        console.log('SW registered:', registration.scope);
+        if ('PushManager' in window && 'Notification' in window) {
+          setTimeout(function() { setupWorkerPush(registration); }, 1500);
+        }
+      })
+      .catch(function(error) {
+        console.log('SW registration failed:', error);
+      });
   });
 }
 
