@@ -6,7 +6,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="theme-color" content="#0F1115">
-  <title>Sign in | Atomis Crew</title>
+  <title>Sign in | T&S Crew</title>
 
   <link rel="icon" type="image/svg+xml" href="/images/atomis-favicon-light.svg">
   <link rel="apple-touch-icon" href="/images/atomis-apple-touch-icon-light.png">
@@ -186,27 +186,12 @@
   </style>
 </head>
 <body>
-  <!-- TOP — brand mark with the orbiting satellite -->
+  <!-- TOP — T&S brand mark -->
   <div class="top">
     <div class="mark-stage">
-      <svg class="mark-anim" viewBox="0 0 80 80" width="120" height="120" fill="none">
-        <defs>
-          <path id="wLoginRing" d="M 67.81 28.75 A 30 13 -22 0 1 12.19 51.25 A 30 13 -22 0 1 67.81 28.75" fill="none"/>
-        </defs>
-        <g transform="rotate(-22 40 40)">
-          <ellipse cx="40" cy="40" rx="30" ry="13" stroke="#10B981" stroke-width="2.2" opacity="0.55"/>
-        </g>
-        <circle cx="40" cy="40" r="11" fill="#10B981"/>
-        <circle cx="0" cy="0" r="5.5" fill="#10B981">
-          <animateMotion dur="7s" repeatCount="indefinite">
-            <mpath href="#wLoginRing"/>
-          </animateMotion>
-          <animate attributeName="r" values="5.5;6.5;5.5;3.2;5.5" keyTimes="0;0.25;0.5;0.75;1" dur="7s" repeatCount="indefinite"/>
-          <animate attributeName="opacity" values="1;1;0.92;0.55;1" keyTimes="0;0.25;0.5;0.75;1" dur="7s" repeatCount="indefinite"/>
-        </circle>
-      </svg>
+      <img src="/images/ts-logo-white.png" alt="T&amp;S Traffic Control" style="width:220px;max-width:80vw;height:auto;display:block">
     </div>
-    <h1 class="wm">atomis crew</h1>
+    <h1 class="wm">Crew portal</h1>
     <p class="eyebrow">Sign in to start your shift</p>
   </div>
 
@@ -260,7 +245,8 @@
 
   <!-- BOTTOM -->
   <div class="bottom">
-    <a href="/login">Admin Dashboard &rarr;</a>
+    <div style="margin-bottom:14px"><a href="/login">Admin Dashboard &rarr;</a></div>
+    <div style="opacity:0.7">Powered by Atomis &middot; <%= new Date().getFullYear() %></div>
   </div>
 </body>
 </html>
