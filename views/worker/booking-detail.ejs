@@ -36,7 +36,7 @@
     <p class="text-sm text-gray-400 mt-1">
       Your shift: <%= startDay %>, <%= startDate %> at
       <% if (booking.depot_meeting_time) { %>Depot <%= booking.depot_meeting_time %><% } else { %><%= startTime %><% } %>
-      <% if (endTime) { %> â€“ <%= endTime %> (approx)<% } %>
+      <% if (endTime) { %> &ndash; <%= endTime %> (approx)<% } %>
     </p>
   </div>
 
@@ -63,7 +63,7 @@
     <h3 class="text-xs font-bold uppercase tracking-wider" style="color:#10B981;">Details</h3>
     <div class="space-y-2">
       <% var details = [
-        ['Booking', (startTime || '') + ' â€“ ' + (endTime || '') + ' (approx)'],
+        ['Booking', (startTime || '') + ' &ndash; ' + (endTime || '') + ' (approx)'],
         ['Booking #', booking.booking_number],
         ['Depot', booking.depot || '-'],
         ['Depot Meeting', booking.depot_meeting_time || '-'],
@@ -90,7 +90,7 @@
 
     <!-- Crew and Resources -->
     <%
-      // Sort by tier so Supervisor â†’ TL â†’ TC reads naturally on the list.
+      // Sort by tier so Supervisor &rarr; TL &rarr; TC reads naturally on the list.
       var rolePriority = { supervisor: 0, team_leader: 1, traffic_controller: 2 };
       var sortedCrew = crew.slice().sort(function (a, b) {
         return (rolePriority[a.portal_role] || 9) - (rolePriority[b.portal_role] || 9);
@@ -144,13 +144,13 @@
   <% if (tab === 'docs') { %>
     <%
       var DOC_TYPE_LABEL = {
-        tgs:'TGS', tmp:'TMP', ctmp:'CTMP', rol:'ROL', rol_day:'ROL â€” Day', rol_night:'ROL â€” Night',
+        tgs:'TGS', tmp:'TMP', ctmp:'CTMP', rol:'ROL', rol_day:'ROL &mdash; Day', rol_night:'ROL &mdash; Night',
         stage_plan:'Stage Plan', swms:'SWMS', permit:'Permit', invoice:'Invoice', photo:'Photo', other:'Other',
       };
       function fmtSize(n) { if (!n) return ''; if (n < 1024) return n + ' B'; if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB'; return (n/1048576).toFixed(1) + ' MB'; }
     %>
     <div class="space-y-2">
-      <p class="text-xs text-gray-500 mb-1">Site documents â€” review before commencing work.</p>
+      <p class="text-xs text-gray-500 mb-1">Site documents &mdash; review before commencing work.</p>
       <% if (!jobDocuments || jobDocuments.length === 0) { %>
         <div class="py-6 text-center" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
           <p class="text-sm font-medium" style="color:rgba(255,255,255,0.85);">No documents uploaded yet</p>
@@ -167,7 +167,7 @@
               <p class="text-[11px] text-gray-500">
                 <%= DOC_TYPE_LABEL[doc.doc_type] || doc.doc_type %>
                 <% if (doc.source === 'booking') { %><span class="ml-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold" style="background:rgba(16,185,129,0.18);color:#60A5FA;">THIS SHIFT</span><% } %>
-                <% if (doc.size_bytes) { %> Â· <%= fmtSize(doc.size_bytes) %><% } %>
+                <% if (doc.size_bytes) { %> &middot; <%= fmtSize(doc.size_bytes) %><% } %>
               </p>
             </div>
             <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -234,7 +234,7 @@
     <% if (typeof isTeamLeader !== 'undefined' && isTeamLeader) { %>
       <div class="space-y-2 mt-5">
         <div class="flex items-center justify-between">
-          <p class="text-xs font-bold uppercase tracking-wider" style="color:#10B981;">Crew tasks Â· this shift</p>
+          <p class="text-xs font-bold uppercase tracking-wider" style="color:#10B981;">Crew tasks &middot; this shift</p>
           <span class="text-[11px] text-gray-500"><%= (typeof teamTasks !== 'undefined' ? teamTasks : []).filter(function(t){return t.status==='pending';}).length %> pending</span>
         </div>
         <% if (!teamTasks || teamTasks.length === 0) { %>
@@ -272,14 +272,14 @@
             <input type="hidden" name="booking_id" value="<%= booking.id %>">
             <% if (allocation) { %><input type="hidden" name="allocation_id" value="<%= allocation.id %>"><% } %>
             <select name="crew_member_id" required class="w-full px-3 py-2 text-sm rounded-lg" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#fff;">
-              <option value="" style="color:#000;">Assign toâ€¦</option>
+              <option value="" style="color:#000;">Assign to&hellip;</option>
               <% (crew || []).forEach(function (c) { %>
                 <option value="<%= c.crew_member_id %>" style="color:#000;"><%= c.full_name %></option>
               <% }) %>
             </select>
             <input type="text" name="title" placeholder="What needs doing?" required maxlength="200"
               class="w-full px-3 py-2 text-sm rounded-lg" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#fff;">
-            <!-- Scope toggle â€” pill-style 2-up. Sends scope=general
+            <!-- Scope toggle &mdash; pill-style 2-up. Sends scope=general
                  when the right pill is selected; otherwise the task
                  binds to this shift (booking_id hidden above). -->
             <div class="grid grid-cols-2 gap-1 text-[11px] font-semibold rounded-lg p-0.5" style="background:rgba(255,255,255,0.05);">
@@ -306,7 +306,7 @@
     <% } %>
   <% } %>
 
-  <!-- FORMS TAB â€” shared partial keeps this 1:1 with views/worker/job-detail.ejs -->
+  <!-- FORMS TAB &mdash; shared partial keeps this 1:1 with views/worker/job-detail.ejs -->
   <% if (tab === 'forms') { %>
     <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, docket: typeof docket !== 'undefined' ? docket : null }) %>
   <% } %>

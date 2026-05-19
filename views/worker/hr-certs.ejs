@@ -17,7 +17,7 @@
           <% const exp = new Date(member.licence_expiry); const now = new Date(); const isExpired = exp < now; const isExpiring = !isExpired && exp < new Date(Date.now() + 30*24*60*60*1000); %>
           <span <% if (isExpired) { %>data-attention="rose"<% } %> class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold
             <%= isExpired ? 'bg-red-50 text-red-700' : isExpiring ? 'bg-amber-50 text-amber-700' : 'bg-emerald-50 text-emerald-700' %>">
-            <%= isExpired ? 'Expired' : isExpiring ? 'Expiring Soon' : 'Valid' %> Â· <%= exp.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) %>
+            <%= isExpired ? 'Expired' : isExpiring ? 'Expiring Soon' : 'Valid' %> &middot; <%= exp.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) %>
           </span>
         <% } %>
       </div>
@@ -56,7 +56,7 @@
     </div>
   <% } %>
 
-  <!-- Documents â€” files uploaded via recruitment approval or manually by office.
+  <!-- Documents &mdash; files uploaded via recruitment approval or manually by office.
        Each row shows a live preview underneath (image inline, PDF rendered
        client-side via /js/worker-pdf-viewer.js) so workers can flash the
        document on site without leaving the app shell. -->
@@ -127,7 +127,7 @@
                   <% if (doc.verification_status === 'pending') { %>
                     <p class="text-amber-600">Pending office verification</p>
                   <% } else if (doc.verification_status === 'rejected') { %>
-                    <p class="text-red-600">Rejected â€” contact office</p>
+                    <p class="text-red-600">Rejected &mdash; contact office</p>
                   <% } %>
                 </div>
               </div>

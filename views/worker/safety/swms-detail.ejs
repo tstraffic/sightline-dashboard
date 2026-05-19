@@ -1,10 +1,10 @@
 <%
   function fmt(s) {
-    if (!s) return 'â€”';
+    if (!s) return '&mdash;';
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   function fmtDate(s) {
-    if (!s) return 'â€”';
+    if (!s) return '&mdash;';
     return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
   const isCurrent = !!currentAck;
@@ -25,7 +25,7 @@
   .sd-banner.slate { background-image: linear-gradient(180deg, rgba(148,163,184,0.14) 0%, rgba(148,163,184,0.04) 100%); border: 1px solid rgba(148,163,184,0.30); color: #e2e8f0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
   /* Client-side PDF.js renders each page to a <canvas> inside .pdf-viewer.
      Styles for the canvases come from /js/worker-pdf-viewer.js (injected
-     once on first init). The download button below is in-app â€” it links
+     once on first init). The download button below is in-app &mdash; it links
      to /view (chrome-free fullscreen) and never opens a new tab. */
   .sd-fullscreen {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 14px;
@@ -46,7 +46,7 @@
   }
   .sd-ack-btn:active { transform: translateY(1px); }
   .sd-ack-btn:disabled { opacity: 0.45; box-shadow: none; }
-  /* Signature pad â€” drawn ABOVE the fold (not in the action bar) so the
+  /* Signature pad &mdash; drawn ABOVE the fold (not in the action bar) so the
      keyboard / signing hand doesn't overlap the canvas. The pad uses
      touch-action: none so finger drags don't scroll the page. */
   .sd-sign-card {
@@ -113,9 +113,9 @@
   <div class="sd-title"><%= swms.title %></div>
   <div class="sd-meta">
     <span><%= swms.kind === 'template' ? 'Generic' : 'Job-linked' %></span>
-    <% if (swms.job_number) { %><span>Â· <%= swms.job_number %></span><% } %>
-    <% if (swms.client) { %><span>Â· <%= swms.client %></span><% } %>
-    <% if (swms.version_published_at) { %><span>Â· Version published <%= fmt(swms.version_published_at) %></span><% } %>
+    <% if (swms.job_number) { %><span>&middot; <%= swms.job_number %></span><% } %>
+    <% if (swms.client) { %><span>&middot; <%= swms.client %></span><% } %>
+    <% if (swms.version_published_at) { %><span>&middot; Version published <%= fmt(swms.version_published_at) %></span><% } %>
   </div>
 
   <% if (isLocked) { %>
@@ -186,7 +186,7 @@
 
     <% if (swms.file_path) { %>
       <!-- Open-fullscreen sits ABOVE the inline viewer so workers can jump
-           straight to the chrome-free fullscreen reader if they want â€” no
+           straight to the chrome-free fullscreen reader if they want &mdash; no
            scrolling past pages of inline PDF first. -->
       <a href="/w/safety/swms/<%= swms.id %>/view" class="sd-fullscreen">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5v4m0-4h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg>
@@ -200,7 +200,7 @@
     <% } %>
 
     <% if (!isCurrent) { %>
-      <!-- Signature pad â€” required before the action bar's Acknowledge
+      <!-- Signature pad &mdash; required before the action bar's Acknowledge
            button enables. Stays in the normal flow so the user can see
            the canvas while signing (no overlap with the fixed bottom). -->
       <div class="sd-sign-card">
@@ -232,7 +232,7 @@
   </div>
 
   <script>
-    // Signature pad â€” minimal, works with both touch and mouse. Enables the
+    // Signature pad — minimal, works with both touch and mouse. Enables the
     // Acknowledge button as soon as the worker actually draws something so
     // empty/accidental submissions can't go through.
     (function () {
@@ -315,7 +315,7 @@
         }
         dataInput.value = canvas.toDataURL('image/png');
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Submittingâ€¦';
+        submitBtn.textContent = 'Submitting…';
       });
     })();
   </script>

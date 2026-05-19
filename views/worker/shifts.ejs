@@ -168,13 +168,13 @@
     </a>
   </div>
 
-  <!-- Week strip Mon â†’ Sun -->
+  <!-- Week strip Mon &rarr; Sun -->
   <div class="ws-week" role="list" aria-label="Week days">
     <% weekDays.forEach(function (d) { %>
       <a class="ws-day <%= d.isToday ? 'today' : '' %> <%= d.isPast && !d.count ? 'past' : '' %> <%= d.count > 0 ? 'has-shift' : '' %>"
          href="#date-<%= d.iso %>"
          role="listitem"
-         aria-label="<%= d.letter %> <%= d.day %><%= d.count ? ' â€” ' + d.count + ' shift' + (d.count === 1 ? '' : 's') : '' %>">
+         aria-label="<%= d.letter %> <%= d.day %><%= d.count ? ' &mdash; ' + d.count + ' shift' + (d.count === 1 ? '' : 's') : '' %>">
         <span class="ws-day-letter"><%= d.letter %></span>
         <span class="ws-day-num"><%= d.day %></span>
         <span class="ws-day-bar"></span>
@@ -193,7 +193,7 @@
           <p class="ws-req-head-title">
             <%= requests.length %> shift<%= requests.length === 1 ? '' : 's' %> need confirming
           </p>
-          <p class="ws-req-head-sub">Always visible â€” regardless of the week you're viewing.</p>
+          <p class="ws-req-head-sub">Always visible &mdash; regardless of the week you're viewing.</p>
         </div>
       </div>
       <% requests.forEach(function (s) {
@@ -207,12 +207,12 @@
             <div class="ws-shift-top">
               <span class="ws-shift-time">
                 <%= new Date(s.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday:'short', day:'numeric', month:'short' }) %>
-                Â· <%= fmtTime(s.start_time) %>â€“<%= fmtTime(s.end_time) %>
+                &middot; <%= fmtTime(s.start_time) %>&ndash;<%= fmtTime(s.end_time) %>
               </span>
               <span class="ws-shift-pill allocated">Confirm</span>
             </div>
             <p class="ws-shift-client"><%= s.client || s.job_name || s.job_number %></p>
-            <p class="ws-shift-meta"><%= s.job_number %><% if (s.suburb) { %> Â· <%= s.suburb %><% } %></p>
+            <p class="ws-shift-meta"><%= s.job_number %><% if (s.suburb) { %> &middot; <%= s.suburb %><% } %></p>
           </div>
           <span class="ws-shift-arrow">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -239,7 +239,7 @@
     %>
       <div class="ws-day-head" id="date-<%= date %>">
         <span class="ws-day-title <%= isToday ? 'today' : '' %>">
-          <%= isToday ? 'Today Â· ' + d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short' }) : heading %>
+          <%= isToday ? 'Today &middot; ' + d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short' }) : heading %>
         </span>
         <span class="ws-day-meta"><%= groupedByDate[date].length %> shift<%= groupedByDate[date].length === 1 ? '' : 's' %></span>
       </div>
@@ -254,7 +254,7 @@
           <span class="ws-shift-bar"></span>
           <div class="ws-shift-body">
             <div class="ws-shift-top">
-              <span class="ws-shift-time"><%= fmtTime(s.start_time) %>â€“<%= fmtTime(s.end_time) %></span>
+              <span class="ws-shift-time"><%= fmtTime(s.start_time) %>&ndash;<%= fmtTime(s.end_time) %></span>
               <% if (isAllocated) { %>
                 <span class="ws-shift-pill allocated">Confirm</span>
               <% } else if (s.status === 'confirmed') { %>
@@ -264,7 +264,7 @@
               <% } %>
             </div>
             <p class="ws-shift-client"><%= s.client || s.job_name || s.job_number %></p>
-            <p class="ws-shift-meta"><%= s.job_number %><% if (s.suburb) { %> Â· <%= s.suburb %><% } %></p>
+            <p class="ws-shift-meta"><%= s.job_number %><% if (s.suburb) { %> &middot; <%= s.suburb %><% } %></p>
           </div>
           <span class="ws-shift-arrow">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>

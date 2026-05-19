@@ -1,10 +1,10 @@
 <%
   function fmtDate(s) {
-    if (!s) return 'â€”';
+    if (!s) return '&mdash;';
     return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
   function fmt(s) {
-    if (!s) return 'â€”';
+    if (!s) return '&mdash;';
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   const status = myAttendance && myAttendance.status;
@@ -14,7 +14,7 @@
   const isAbsent    = status === 'absent';
   const isMissed    = !status;
   // Show the Accept button when worker has no response yet OR previously
-  // marked absent â€” they should still be able to flip to "attending".
+  // marked absent &mdash; they should still be able to flip to "attending".
   const canAccept   = isMissed || isAbsent;
 %>
 <style>
@@ -62,12 +62,12 @@
 <div class="tbd-wrap">
   <a href="/w/safety/toolboxes" class="tbd-back">â† Safety / Toolboxes</a>
   <div class="tbd-title"><%= toolbox.title %></div>
-  <div class="tbd-meta"><%= fmtDate(toolbox.held_at) %><% if (toolbox.presenter) { %> Â· Presented by <%= toolbox.presenter %><% } %></div>
+  <div class="tbd-meta"><%= fmtDate(toolbox.held_at) %><% if (toolbox.presenter) { %> &middot; Presented by <%= toolbox.presenter %><% } %></div>
 
   <% if (isAttended) { %>
     <div class="tbd-banner green">âœ“ You attended this toolbox<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
   <% } else if (isAttending) { %>
-    <div class="tbd-banner blue">âœ“ You're on the list â€” see you there<% if (myAttendance.recorded_at) { %> (accepted <%= fmt(myAttendance.recorded_at) %>)<% } %>. The supervisor will mark you off when you arrive.</div>
+    <div class="tbd-banner blue">âœ“ You're on the list &mdash; see you there<% if (myAttendance.recorded_at) { %> (accepted <%= fmt(myAttendance.recorded_at) %>)<% } %>. The supervisor will mark you off when you arrive.</div>
   <% } else if (isCaughtUp) { %>
     <div class="tbd-banner violet">â†» You marked this as caught up<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
   <% } else if (isAbsent) { %>
@@ -112,13 +112,13 @@
     <% if (canAccept) { %>
       <form method="POST" action="/w/safety/toolboxes/<%= toolbox.id %>/accept" data-offline-form data-offline-scope="Toolbox accept" data-success-url="/w/safety/toolboxes/<%= toolbox.id %>">
         <%- include('../../partials/csrf') %>
-        <button type="submit" class="tbd-accept-btn">Accept â€” I'll be there</button>
+        <button type="submit" class="tbd-accept-btn">Accept &mdash; I'll be there</button>
       </form>
     <% } %>
     <% if (isMissed) { %>
       <form method="POST" action="/w/safety/toolboxes/<%= toolbox.id %>/caught-up" data-offline-form data-offline-scope="Toolbox caught up" data-success-url="/w/safety/toolboxes/<%= toolbox.id %>">
         <%- include('../../partials/csrf') %>
-        <button type="submit" class="tbd-caught-btn">I've read this â€” mark caught up</button>
+        <button type="submit" class="tbd-caught-btn">I've read this &mdash; mark caught up</button>
       </form>
     <% } %>
   </div>

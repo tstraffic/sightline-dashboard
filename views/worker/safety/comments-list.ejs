@@ -50,12 +50,12 @@
   <% } else { %>
     <% rows.forEach(r => { %>
       <a href="/w/safety/comments/<%= r.id %>" class="c-card <%= r.office_response ? 'responded' : '' %>">
-        <div class="c-card-title">#<%= r.id %> Â· <%= categoryLabels[r.category] %></div>
+        <div class="c-card-title">#<%= r.id %> &middot; <%= categoryLabels[r.category] %></div>
         <div class="c-card-meta">
           <span class="c-chip" style="<%= CHIP_STATUS[r.status] || CHIP_STATUS.submitted %>"><%= statusLabels[r.status] %></span>
           <span><%= fmt(r.created_at) %></span>
-          <% if (r.job_number) { %><span>Â· <%= r.job_number %></span><% } %>
-          <% if (r.is_anonymous) { %><span class="c-anon">Â· submitted anonymously</span><% } %>
+          <% if (r.job_number) { %><span>&middot; <%= r.job_number %></span><% } %>
+          <% if (r.is_anonymous) { %><span class="c-anon">&middot; submitted anonymously</span><% } %>
         </div>
         <div class="c-snip"><%= r.body %></div>
       </a>

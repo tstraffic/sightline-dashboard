@@ -6,8 +6,8 @@
   function statusMeta(row) {
     if (!row.latest_status) return { label: 'Not started', style: 'background: rgba(16,185,129,0.18); color: #93C5FD; border: 1px solid rgba(16,185,129,0.3);' };
     if (row.latest_status === 'in_progress') return { label: 'Resume', style: 'background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3);' };
-    if (row.latest_passed) return { label: 'Passed Â· ' + row.latest_score + '%', style: 'background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3);' };
-    return { label: 'Failed Â· ' + row.latest_score + '%', style: 'background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3);' };
+    if (row.latest_passed) return { label: 'Passed &middot; ' + row.latest_score + '%', style: 'background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3);' };
+    return { label: 'Failed &middot; ' + row.latest_score + '%', style: 'background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3);' };
   }
 %>
 <style>
@@ -45,7 +45,7 @@
         <div class="qz-meta">
           <span class="qz-chip" style="<%= sm.style %>"><%= sm.label %></span>
           <span><%= r.question_count %> question<%= r.question_count === 1 ? '' : 's' %></span>
-          <% if (r.deadline_at) { %><span>Â· due <%= fmtDate(r.deadline_at) %></span><% } %>
+          <% if (r.deadline_at) { %><span>&middot; due <%= fmtDate(r.deadline_at) %></span><% } %>
         </div>
       </a>
     <% }) %>

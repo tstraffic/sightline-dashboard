@@ -35,16 +35,16 @@
     Profile
   </a>
   <h1 class="nf-h1">Notifications</h1>
-  <p class="nf-sub">Choose what pings your phone. Everything on by default â€” toggle off anything you don't need.</p>
+  <p class="nf-sub">Choose what pings your phone. Everything on by default &mdash; toggle off anything you don't need.</p>
 
-  <!-- Push status panel â€” none of the toggles below matter if push isn't
+  <!-- Push status panel &mdash; none of the toggles below matter if push isn't
        actually set up on this device. This panel shows the live state and
        offers Enable / Send-test so the worker can verify the pipeline. -->
   <div id="push-status-card" class="nf-card" style="padding: 14px; margin-top: 14px;">
     <div style="display: flex; align-items: center; gap: 10px;">
       <span id="push-dot" style="display: inline-block; width: 10px; height: 10px; border-radius: 999px; background: rgba(255,255,255,0.3); flex-shrink: 0;"></span>
       <div style="flex: 1; min-width: 0;">
-        <p id="push-status-title" style="font-size: 0.95rem; font-weight: 700; color: #fff; margin: 0;">Checkingâ€¦</p>
+        <p id="push-status-title" style="font-size: 0.95rem; font-weight: 700; color: #fff; margin: 0;">Checking&hellip;</p>
         <p id="push-status-sub" style="font-size: 0.78rem; color: rgba(255,255,255,0.6); margin-top: 2px;">Working out whether push is set up on this device.</p>
       </div>
     </div>
@@ -95,7 +95,7 @@
   document.getElementById('nf-all-off').addEventListener('click', function (e) { e.preventDefault(); setAll(false); });
 })();
 
-// CSRF helper â€” every state-changing POST below has to include this
+// CSRF helper — every state-changing POST below has to include this
 // header or the global CSRF middleware silently 403s it.
 function csrfToken() {
   var m = document.querySelector('meta[name="csrf-token"]');
@@ -138,7 +138,7 @@ function csrfToken() {
     testBtn.style.display   = options.showTest   ? 'inline-flex' : 'none';
   }
 
-  // Promise that resolves to `null` after `ms` ms â€” used to race against
+  // Promise that resolves to `null` after `ms` ms — used to race against
   // navigator.serviceWorker.ready / pushManager.getSubscription which can
   // hang silently when a SW is upgrading (especially on iOS PWA).
   function withTimeout(promise, ms) {
@@ -163,7 +163,7 @@ function csrfToken() {
   async function check() {
     if (iosNeedsInstall()) {
       render('warn', 'Add to Home Screen to enable push',
-             'On iPhone you have to install the portal as an app before push notifications work. Tap the Share icon â†’ Add to Home Screen, then open the app and come back here.');
+             'On iPhone you have to install the portal as an app before push notifications work. Tap the Share icon → Add to Home Screen, then open the app and come back here.');
       return;
     }
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
@@ -214,16 +214,16 @@ function csrfToken() {
         return;
       }
       render('warn', 'Push not turned on yet for this device',
-             'Tap "Enable push" â€” you\'ll get a one-time browser prompt.',
+             'Tap "Enable push" — you\'ll get a one-time browser prompt.',
              { showEnable: true });
     } catch (e) {
       render('bad', 'Could not check push status', (e && e.message) || 'Unknown error', { showEnable: true });
     }
   }
 
-  // Hard watchdog â€” if nothing has rendered after 6s the panel falls
+  // Hard watchdog — if nothing has rendered after 6s the panel falls
   // back to a recoverable state instead of leaving the worker staring
-  // at "Checkingâ€¦" forever.
+  // at "Checking…" forever.
   setTimeout(function () {
     if (!rendered) {
       render('warn', 'Push status is taking a while',
@@ -234,7 +234,7 @@ function csrfToken() {
 
   async function enable() {
     enableBtn.disabled = true;
-    enableBtn.textContent = 'Workingâ€¦';
+    enableBtn.textContent = 'Working…';
     try {
       var perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
       if (perm !== 'granted') {
@@ -283,7 +283,7 @@ function csrfToken() {
   async function test() {
     testBtn.disabled = true;
     var orig = testBtn.textContent;
-    testBtn.textContent = 'Sendingâ€¦';
+    testBtn.textContent = 'Sending…';
     try {
       var r = await fetch('/w/notifications/push/test', {
         method: 'POST',
@@ -292,7 +292,7 @@ function csrfToken() {
       });
       var data = await r.json().catch(function(){ return {}; });
       if (data && data.success) {
-        testBtn.textContent = 'Sent â€” check your phone';
+        testBtn.textContent = 'Sent — check your phone';
       } else {
         testBtn.textContent = data && data.error ? data.error : 'Test failed';
       }

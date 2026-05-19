@@ -34,7 +34,7 @@
   .ds-error-text { font-size: 0.72rem; font-weight: 600; color: #FCA5A5; margin-top: 4px; display: none; }
   .ds-error-text.show { display: block; }
 
-  /* Inputs â€” solid light fill so iOS doesn't dark-mode-invert them; text
+  /* Inputs &mdash; solid light fill so iOS doesn't dark-mode-invert them; text
      and placeholders explicit for the same reason. color-scheme:light only
      also keeps the native time pickers light. */
   .ds-input, .ds-select, .ds-textarea {
@@ -79,7 +79,7 @@
   .ds-toggle input { width: 18px; height: 18px; accent-color: #10B981; }
   .ds-toggle span  { font-size: 0.85rem; color: rgba(255,255,255,0.85); font-weight: 500; }
 
-  /* Signature pads â€” light surface, dashed border, with a "required" hint */
+  /* Signature pads &mdash; light surface, dashed border, with a "required" hint */
   .ds-sig-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .ds-sig-clear {
     font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,0.65);
@@ -100,7 +100,7 @@
   .ds-sig-hint { font-size: 0.68rem; color: rgba(255,255,255,0.4); text-align: center; margin-top: 6px; }
   .ds-sig-hint.signed { color: #34D399; font-weight: 600; }
 
-  /* Submit button â€” sticks to the bottom of the viewport so it's reachable
+  /* Submit button &mdash; sticks to the bottom of the viewport so it's reachable
      while signing on a phone. Larger, clearer, with disabled-state styling. */
   .ds-submit-bar {
     position: sticky; bottom: 0;
@@ -152,7 +152,7 @@
 
   <form method="POST" action="/w/dockets/sign/<%= allocation.id %>" id="docket-form" novalidate>
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-    <!-- All dockets are daily â€” type is fixed on the server side. -->
+    <!-- All dockets are daily &mdash; type is fixed on the server side. -->
     <input type="hidden" name="docket_type" value="daily_docket">
 
     <!-- Time & Hours -->
@@ -175,7 +175,7 @@
           <p class="ds-error-text" id="err-finish">Finish time is required.</p>
         </div>
       </div>
-      <p class="ds-help">Prefilled from your rostered start/finish â€” edit if the actual times differed.</p>
+      <p class="ds-help">Prefilled from your rostered start/finish &mdash; edit if the actual times differed.</p>
 
       <div class="ds-grid-2" style="margin-top:14px;">
         <div>
@@ -251,7 +251,7 @@
     <!-- Notes -->
     <div class="ds-card">
       <p class="ds-card-title">Notes (optional)</p>
-      <textarea name="notes" rows="2" placeholder="Anything worth flaggingâ€¦" class="ds-textarea"></textarea>
+      <textarea name="notes" rows="2" placeholder="Anything worth flagging&hellip;" class="ds-textarea"></textarea>
     </div>
 
     <!-- Sticky submit -->
