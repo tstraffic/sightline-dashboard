@@ -30,7 +30,7 @@
 <div class="cn-wrap">
   <a href="/w/safety/comments" class="cn-back">â† Safety / Flag &amp; comment</a>
   <h1 class="cn-h1">Flag or share feedback</h1>
-  <p class="cn-sub">Hazards, SWMS confusion, kit problems, ideas for improvement â€” anything safety-related. The office team gets a notification and responds back in this app.</p>
+  <p class="cn-sub">Hazards, SWMS confusion, kit problems, ideas for improvement &mdash; anything safety-related. The office team gets a notification and responds back in this app.</p>
 
   <form method="POST" action="/w/safety/comments" enctype="multipart/form-data">
     <%- include('../../partials/csrf') %>
@@ -53,9 +53,9 @@
       <div class="cn-card">
         <label class="cn-label" for="job_id">Job reference (optional)</label>
         <select name="job_id" id="job_id" class="cn-select">
-          <option value="">â€” None / not job-specific â€”</option>
+          <option value="">&mdash; None / not job-specific &mdash;</option>
           <% jobs.forEach(j => { %>
-            <option value="<%= j.id %>"><%= j.job_number %> Â· <%= j.client %></option>
+            <option value="<%= j.id %>"><%= j.job_number %> &middot; <%= j.client %></option>
           <% }) %>
         </select>
       </div>

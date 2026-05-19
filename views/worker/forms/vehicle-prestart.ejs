@@ -2,7 +2,7 @@
 
 <%
   // Vehicle Pre-Start now renders fully from the published revision of
-  // the system_key='vehicle_prestart' template â€” every element comes
+  // the system_key='vehicle_prestart' template &mdash; every element comes
   // from /checklists/<id> on the admin side. The hardcoded vehicle
   // dropdown / ODO / inspection / photos / notes / signature blocks
   // are all admin-editable elements now (mig 153 seeded them).
@@ -92,7 +92,7 @@
   <% if (allocation) { %>
     <div class="vps-summary">
       <p class="vps-summary-client"><%= allocation.client || allocation.job_name || allocation.job_number %></p>
-      <p class="vps-summary-meta"><%= allocation.job_number %><% if (allocation.site_address || allocation.suburb) { %> Â· <%= allocation.site_address || allocation.suburb %><% } %></p>
+      <p class="vps-summary-meta"><%= allocation.job_number %><% if (allocation.site_address || allocation.suburb) { %> &middot; <%= allocation.site_address || allocation.suburb %><% } %></p>
     </div>
   <% } %>
 

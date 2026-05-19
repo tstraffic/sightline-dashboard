@@ -1,6 +1,6 @@
 <%
   function fmt(s) {
-    if (!s) return 'â€”';
+    if (!s) return '&mdash;';
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   const CHIP_STYLE = {
@@ -37,7 +37,7 @@
   <div class="ud-meta">
     <span class="ud-chip" style="<%= CHIP_STYLE[update.category] || CHIP_STYLE.general %>"><%= categoryLabels[update.category] %></span>
     <span><%= fmt(update.published_at) %></span>
-    <% if (update.published_by_name) { %><span>Â· <%= update.published_by_name %></span><% } %>
+    <% if (update.published_by_name) { %><span>&middot; <%= update.published_by_name %></span><% } %>
   </div>
 
   <div class="ud-body"><%= update.body %></div>

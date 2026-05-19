@@ -1,5 +1,5 @@
 <%
-  // Shared Job-Pack panel â€” used by both booking-detail.ejs (booking-only
+  // Shared Job-Pack panel &mdash; used by both booking-detail.ejs (booking-only
   // shifts) and job-detail.ejs (job-bound shifts) so the worker sees the
   // same UI regardless of how they got to the shift detail page.
   // Required vs Recommended split. Company policy is that all five are
@@ -26,7 +26,7 @@
 <div class="space-y-3">
   <% if (!allocation) { %>
     <div class="py-3 px-3 rounded-lg" style="background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.20);">
-      <p class="text-xs" style="color:#FCA5A5;">Couldn't load checklists for this shift â€” try refreshing or let the office know.</p>
+      <p class="text-xs" style="color:#FCA5A5;">Couldn't load checklists for this shift &mdash; try refreshing or let the office know.</p>
     </div>
   <% } else { %>
     <p class="text-[11px] italic" style="color:rgba(255,255,255,0.5);">Company policy: all five checklists are mandatory every shift.</p>
@@ -54,7 +54,7 @@
               <% if (done) { %>
                 <p class="text-[11px]" style="color:#34D399;">Submitted <%= new Date(done.submitted_at || done.created_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></p>
               <% } else { %>
-                <p class="text-[11px]" style="color:#FBBF24;font-weight:600;">Required <span style="color:rgba(255,255,255,0.45);font-weight:400;">Â· <%= jp.hint %></span></p>
+                <p class="text-[11px]" style="color:#FBBF24;font-weight:600;">Required <span style="color:rgba(255,255,255,0.45);font-weight:400;">&middot; <%= jp.hint %></span></p>
               <% } %>
             </div>
           </div>
@@ -67,7 +67,7 @@
     <div class="rounded-xl overflow-hidden" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
       <div class="px-3.5 pt-3 pb-1">
         <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Recommended checklists</h3>
-        <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Mandatory by company policy â€” you'll get a warning before docket sign if missing</p>
+        <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Mandatory by company policy &mdash; you'll get a warning before docket sign if missing</p>
       </div>
       <% JOB_PACK_RECOMMENDED.forEach(function (jp) { var done = formStatus[jp.key]; var c = jpRow(done, 'recommended'); %>
         <a href="/w/forms/<%= jp.path %>?allocationId=<%= allocation.id %>"
@@ -109,9 +109,9 @@
         <div class="min-w-0">
           <p class="text-sm font-semibold text-white">Docket</p>
           <% if (typeof docket !== 'undefined' && docket) { %>
-            <p class="text-[11px]" style="color:#60A5FA;">Signed Â· <%= docket.total_hours || 0 %> h Â· <%= new Date(docket.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></p>
+            <p class="text-[11px]" style="color:#60A5FA;">Signed &middot; <%= docket.total_hours || 0 %> h &middot; <%= new Date(docket.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></p>
           <% } else { %>
-            <p class="text-[11px]" style="color:rgba(255,255,255,0.5);">Sign at end of shift â€” proof of hours.</p>
+            <p class="text-[11px]" style="color:rgba(255,255,255,0.5);">Sign at end of shift &mdash; proof of hours.</p>
           <% } %>
         </div>
       </div>

@@ -113,7 +113,7 @@
   .ws-day-title.today { color: #FCD34D; }
   .ws-day-meta { font-size: 0.65rem; color: rgba(255,255,255,0.4); }
 
-  /* Shift card â€” three-row layout:
+  /* Shift card &mdash; three-row layout:
        row 1: time chip + booking number (right)
        row 2: title (large)
        row 3: location with pin icon
@@ -213,13 +213,13 @@
       </a>
     </div>
 
-    <!-- Week strip Mon â†’ Sun -->
+    <!-- Week strip Mon &rarr; Sun -->
     <div class="ws-week" role="list" aria-label="Week days">
       <% weekDays.forEach(function (d) { %>
         <a class="ws-day <%= d.isToday ? 'today' : '' %> <%= d.isPast && !d.count ? 'past' : '' %> <%= d.count > 0 ? 'has-shift' : '' %>"
            href="#date-<%= d.iso %>"
            role="listitem"
-           aria-label="<%= d.letter %> <%= d.day %><%= d.count ? ' â€” ' + d.count + ' shift' + (d.count === 1 ? '' : 's') : '' %>">
+           aria-label="<%= d.letter %> <%= d.day %><%= d.count ? ' &mdash; ' + d.count + ' shift' + (d.count === 1 ? '' : 's') : '' %>">
           <span class="ws-day-letter"><%= d.letter %></span>
           <span class="ws-day-num"><%= d.day %></span>
           <span class="ws-day-bar"></span>
@@ -254,11 +254,11 @@
               <div class="ws-shift-top">
                 <span class="ws-shift-time">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2" stroke-linecap="round"/></svg>
-                  <%= fmtTime(s.start_time) %><% if (s.end_time) { %> â€“ <%= fmtTime(s.end_time) %><% } %>
+                  <%= fmtTime(s.start_time) %><% if (s.end_time) { %> &ndash; <%= fmtTime(s.end_time) %><% } %>
                 </span>
                 <span class="ws-shift-num"><%= s.job_number %></span>
               </div>
-              <p class="ws-shift-client"><%= s.client || s.job_name %><% if (s.project_name && s.project_name !== s.client) { %> Â· <%= s.project_name %><% } %></p>
+              <p class="ws-shift-client"><%= s.client || s.job_name %><% if (s.project_name && s.project_name !== s.client) { %> &middot; <%= s.project_name %><% } %></p>
               <% if (s.suburb || s.state) { %>
                 <p class="ws-shift-loc">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -314,11 +314,11 @@
               <div class="ws-shift-top">
                 <span class="ws-shift-time">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2" stroke-linecap="round"/></svg>
-                  <%= fmtTime(s.start_time) %><% if (s.end_time) { %> â€“ <%= fmtTime(s.end_time) %><% } %>
+                  <%= fmtTime(s.start_time) %><% if (s.end_time) { %> &ndash; <%= fmtTime(s.end_time) %><% } %>
                 </span>
                 <span class="ws-shift-num"><%= s.job_number %></span>
               </div>
-              <p class="ws-shift-client"><%= s.client || s.job_name %><% if (s.project_name && s.project_name !== s.client) { %> Â· <%= s.project_name %><% } %></p>
+              <p class="ws-shift-client"><%= s.client || s.job_name %><% if (s.project_name && s.project_name !== s.client) { %> &middot; <%= s.project_name %><% } %></p>
               <% if (s.suburb || s.state) { %>
                 <p class="ws-shift-loc">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -391,11 +391,11 @@
               <div class="ws-shift-top">
                 <span class="ws-shift-time">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2" stroke-linecap="round"/></svg>
-                  <%= fmtTime(s.start_time) %><% if (s.end_time) { %> â€“ <%= fmtTime(s.end_time) %><% } %>
+                  <%= fmtTime(s.start_time) %><% if (s.end_time) { %> &ndash; <%= fmtTime(s.end_time) %><% } %>
                 </span>
                 <span class="ws-shift-num"><%= s.job_number %></span>
               </div>
-              <p class="ws-shift-client"><%= s.client || s.job_name %><% if (s.project_name && s.project_name !== s.client) { %> Â· <%= s.project_name %><% } %></p>
+              <p class="ws-shift-client"><%= s.client || s.job_name %><% if (s.project_name && s.project_name !== s.client) { %> &middot; <%= s.project_name %><% } %></p>
               <% if (s.suburb || s.state) { %>
                 <p class="ws-shift-loc">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>

@@ -54,7 +54,7 @@
     Custom checklists
   </a>
   <h1 class="cf-h1"><%= template.name %></h1>
-  <p class="cf-rev">Revision <%= revision.revision_number %><% if (template.description) { %> Â· <%= template.description %><% } %></p>
+  <p class="cf-rev">Revision <%= revision.revision_number %><% if (template.description) { %> &middot; <%= template.description %><% } %></p>
 
   <form method="POST" action="/w/forms/custom/<%= template.id %>">
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
