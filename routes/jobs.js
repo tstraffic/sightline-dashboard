@@ -532,18 +532,24 @@ router.get('/:id', (req, res) => {
   }
 
   // Site audits attached to this job — also surface under the Safety tab.
+  // Same storage-coercion gotcha as SWMS / RA above: job_id may be stored
+  // as TEXT on legacy rows so SQL `= ?` can silently miss matches. Filter
+  // in JS with String() coercion to be bulletproof.
   let auditsForJob = [];
   try {
-    auditsForJob = db.prepare(`
-      SELECT a.id, a.audit_datetime, a.auditor_name, a.overall_result, a.overall_finding,
+    const rows = db.prepare(`
+      SELECT a.id, a.job_id, a.audit_datetime, a.auditor_name, a.overall_result, a.overall_finding,
         a.score_total, a.score_max, a.score_percent, a.status,
         u.full_name AS auditor_user_name
       FROM site_audits a
       LEFT JOIN users u ON u.id = a.auditor_id
-      WHERE a.job_id = ?
+      WHERE a.job_id IS NOT NULL
       ORDER BY COALESCE(a.audit_datetime, a.created_at) DESC, a.id DESC
-    `).all(job.id);
-  } catch (e) {}
+    `).all();
+    auditsForJob = rows.filter(r => matchesJob(r.job_id));
+  } catch (e) {
+    console.error('[Jobs] Site Audits Safety tab query failed for job', job.id, ':', e.message);
+  }
 
   res.render('jobs/show', {
     title: job.job_number,
