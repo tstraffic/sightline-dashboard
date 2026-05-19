@@ -42,6 +42,7 @@
           <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Employee ID</th>
           <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</th>
           <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Recorded</th>
+          <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest w-20">Invite</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
@@ -49,8 +50,9 @@
           const isAllocated = allocatedSet.has(r.crew_id);
           const isAttended = r.attendance_status === 'attended';
           const isCaughtUp = r.attendance_status === 'caught_up';
+          const isAbsent   = r.attendance_status === 'absent';
         %>
-          <tr class="tb-att-row hover:bg-gray-50/50" data-allocated="<%= isAllocated ? '1' : '0' %>">
+          <tr class="tb-att-row hover:bg-gray-50/50" data-allocated="<%= isAllocated ? '1' : '0' %>" data-crew-id="<%= r.crew_id %>">
             <td class="px-3 py-2">
               <% if (isCaughtUp) { %>
                 <span class="text-xs text-violet-700" title="Worker self-claimed caught up">↻</span>
@@ -68,14 +70,54 @@
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200">Attended</span>
               <% } else if (isCaughtUp) { %>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-violet-50 text-violet-700 ring-violet-200">Caught up</span>
+              <% } else if (isAbsent) { %>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-rose-50 text-rose-700 ring-rose-200">Absent</span>
               <% } else { %>
-                <span class="text-xs text-gray-400">—</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200">Attending</span>
               <% } %>
             </td>
             <td class="px-2 py-2 text-xs text-gray-500 tabular-nums"><%= fmt(r.recorded_at) %></td>
+            <td class="px-2 py-2 text-right">
+              <button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>" title="Remove from invite list">Remove</button>
+            </td>
           </tr>
         <% }) %>
       </tbody>
     </table>
   </form>
+
+  <!-- Remove-invite worker. Mounted outside the attendance form so the
+       per-row Remove buttons don't accidentally submit the bulk save. -->
+  <script>
+    (function () {
+      const csrfMeta = document.querySelector('meta[name="csrf-token"]');
+      const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') :
+        (document.querySelector('input[name="_csrf"]') || {}).value || '';
+      const toolboxId = <%= toolbox.id %>;
+      document.querySelectorAll('.tb-remove-invite').forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const crewId = btn.getAttribute('data-crew-id');
+          const name = btn.getAttribute('data-name') || 'this worker';
+          if (!confirm('Remove ' + name + ' from the invite list? They’ll disappear from this attendance page.')) return;
+          btn.disabled = true;
+          btn.textContent = 'Removing…';
+          try {
+            const r = await fetch('/toolbox-talks/' + toolboxId + '/invitees/' + crewId + '/remove', {
+              method: 'POST',
+              headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrfToken },
+              credentials: 'same-origin',
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || !data.ok) throw new Error(data.error || 'Remove failed');
+            const row = btn.closest('tr');
+            if (row) row.remove();
+          } catch (e) {
+            alert('Could not remove: ' + e.message);
+            btn.disabled = false;
+            btn.textContent = 'Remove';
+          }
+        });
+      });
+    })();
+  </script>
 </div>

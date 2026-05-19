@@ -489,6 +489,54 @@ router.get('/:id/attendance', (req, res) => {
   });
 });
 
+// POST /toolbox-talks/:id/invitees/:crewId/remove — drop a single
+// worker from this toolbox's invite list.
+//
+// If the toolbox is currently "open to everyone" (empty invitees table),
+// we snapshot the current active-crew list into toolbox_invitees first,
+// excluding the worker being removed — that scopes the toolbox so the
+// removal actually has an effect. Subsequent removes just delete one
+// invitee row each.
+//
+// Returns JSON { ok: true } so the attendance page can update its row
+// in place via fetch.
+router.post('/:id/invitees/:crewId/remove', (req, res) => {
+  try {
+    const db = getDb();
+    const toolboxId = parseInt(req.params.id, 10);
+    const crewId = parseInt(req.params.crewId, 10);
+    if (!toolboxId || !crewId) return res.status(400).json({ ok: false, error: 'Bad ids' });
+    const tb = db.prepare('SELECT id, title FROM toolbox_talks WHERE id = ?').get(toolboxId);
+    if (!tb) return res.status(404).json({ ok: false, error: 'Toolbox not found' });
+
+    const currentCount = db.prepare('SELECT COUNT(*) AS c FROM toolbox_invitees WHERE toolbox_id = ?').get(toolboxId).c;
+    db.transaction(() => {
+      if (currentCount === 0) {
+        // Open-to-everyone toolbox: scope it by inserting every active
+        // crew except the one being removed.
+        const ins = db.prepare('INSERT OR IGNORE INTO toolbox_invitees (toolbox_id, crew_member_id) VALUES (?, ?)');
+        for (const cm of selectableCrewMembers()) {
+          if (cm.id !== crewId) ins.run(toolboxId, cm.id);
+        }
+      } else {
+        db.prepare('DELETE FROM toolbox_invitees WHERE toolbox_id = ? AND crew_member_id = ?')
+          .run(toolboxId, crewId);
+      }
+    })();
+
+    try {
+      logActivity({
+        user: req.session.user, action: 'invitee_removed', entityType: 'toolbox_talk',
+        entityId: tb.id, entityLabel: tb.title, details: 'crew_id=' + crewId, ip: req.ip,
+      });
+    } catch (e) {}
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('[toolbox-talks invitee remove]', err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // POST /toolbox-talks/:id/attendance — bulk replace attendance.
 // Accepts an array `attended_crew_ids[]` (checkboxes); each marks attendance
 // as recorded by the current admin user. Workers' self-marked "caught_up"
