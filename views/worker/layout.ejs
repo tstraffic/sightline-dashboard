@@ -36,16 +36,21 @@
   <meta name="theme-color" content="#1D6AE5">
   <title><%= typeof title !== 'undefined' ? title + ' | ' : '' %>T&S Employee Portal</title>
 
+  <!-- Atomis typography: Bricolage Grotesque (display) · Geist (body/UI) · Geist Mono (technical) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Geist:wght@300..700&family=Geist+Mono:wght@400..500&display=swap" rel="stylesheet">
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'] },
+          fontFamily: {
+            sans: ['Geist', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            display: ['"Bricolage Grotesque"', 'Geist', 'system-ui', 'sans-serif'],
+            mono: ['"Geist Mono"', 'JetBrains Mono', 'ui-monospace', 'monospace'],
+          },
           colors: {
             brand: {
               50: '#EFF6FF', 100: '#DBEAFE', 200: '#BFDBFE', 300: '#93C5FD',

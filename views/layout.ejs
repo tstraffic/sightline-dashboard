@@ -23,10 +23,10 @@
   <meta name="apple-mobile-web-app-title" content="T&S Ops">
   <meta name="theme-color" content="#1D6AE5">
 
-  <!-- Inter Font -->
+  <!-- Atomis typography: Bricolage Grotesque (display) · Geist (body/UI) · Geist Mono (technical) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Geist:wght@300..700&family=Geist+Mono:wght@400..500&display=swap" rel="stylesheet">
 
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
@@ -34,7 +34,9 @@
       theme: {
         extend: {
           fontFamily: {
-            sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            sans: ['Geist', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            display: ['"Bricolage Grotesque"', 'Geist', 'system-ui', 'sans-serif'],
+            mono: ['"Geist Mono"', 'JetBrains Mono', 'ui-monospace', 'monospace'],
           },
           colors: {
             brand: {
