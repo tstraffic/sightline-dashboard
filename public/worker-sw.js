@@ -1,9 +1,8 @@
 // Atomis Crew — Service Worker (PWA + push)
-// v6: adds client-side docx renderer assets (docx-preview + jszip), served
-// from /vendor/docx-preview/ and /vendor/jszip/. They share the dedicated
-// vendor cache with pdfjs so the crew can render Word docs offline once
-// they've been loaded once.
-const CACHE_NAME = 'atomis-worker-v1';
+// v7: home-screen install icon switched to the Snow / "Inverted · on light"
+// brand variant so the employee app reads as white-bg on iOS + Android. Bump
+// CACHE_NAME so old clients shed the dark icon and pick up the new manifest.
+const CACHE_NAME = 'atomis-worker-v2';
 const VENDOR_CACHE = 'atomis-worker-vendor-v1';
 
 // All client-side renderer assets (pdfjs, docx-preview, jszip). All are
@@ -103,8 +102,8 @@ self.addEventListener('push', function(event) {
   const title = data.title || 'Atomis Crew';
   const options = {
     body: data.body || '',
-    icon: '/images/atomis-icon-192.png',
-    badge: '/images/atomis-icon-192.png',
+    icon: '/images/atomis-icon-light-192.png',
+    badge: '/images/atomis-icon-light-192.png',
     tag: data.type || 'general',
     data: { url: data.url || '/w/home' },
     vibrate: [180, 80, 180],
