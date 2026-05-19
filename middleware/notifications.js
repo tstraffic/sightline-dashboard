@@ -531,7 +531,7 @@ function sendDailyDigests() {
       if (notifications.length === 0) continue;
 
       const html = dailyDigestEmail(user.full_name, notifications);
-      sendEmail(user.email, `T&S Dashboard: ${notifications.length} new notification${notifications.length === 1 ? '' : 's'}`, html).catch(() => {});
+      sendEmail(user.email, `Atomis: ${notifications.length} new notification${notifications.length === 1 ? '' : 's'}`, html).catch(() => {});
 
       // Mark all as email-sent
       db.prepare(`

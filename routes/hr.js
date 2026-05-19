@@ -1233,8 +1233,8 @@ router.post('/employees/:id/send-invite', requirePermission('hr_employees'), asy
       ? `${baseUrl}/w/reset-pin/${token}`
       : `${baseUrl}/w/setup/${token}`;
     const subject = hasPin
-      ? 'Reset your T&S Worker Portal PIN'
-      : 'Set up your T&S Worker Portal PIN';
+      ? 'Reset your Atomis Crew PIN'
+      : 'Set up your Atomis Crew PIN';
     const html = hasPin
       ? pinResetEmail(crewMember.full_name, linkUrl, TOKEN_EXPIRY_HOURS)
       : workerInviteEmail(crewMember.full_name, linkUrl, TOKEN_EXPIRY_HOURS);

@@ -9,11 +9,11 @@ function baseTemplate(title, bodyContent) {
     <tr><td align="center">
       <table width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
         <!-- Header -->
-        <tr><td style="background:#1D6AE5;padding:20px 24px;border-radius:12px 12px 0 0;">
+        <tr><td style="background:#0F1115;padding:24px;border-radius:12px 12px 0 0;">
           <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
-              <td style="color:#ffffff;font-size:18px;font-weight:700;">T&S Traffic Control</td>
-              <td align="right" style="color:#BFDBFE;font-size:13px;">Operations Dashboard</td>
+              <td style="color:#F5F5F7;font-size:26px;font-weight:500;letter-spacing:-0.04em;font-family:Georgia,serif;">atomis</td>
+              <td align="right" style="color:#10B981;font-size:13px;font-style:italic;">simple systems. smarter business.</td>
             </tr>
           </table>
         </td></tr>
@@ -24,7 +24,7 @@ function baseTemplate(title, bodyContent) {
         </td></tr>
         <!-- Footer -->
         <tr><td style="padding:16px 24px;text-align:center;border-radius:0 0 12px 12px;">
-          <p style="margin:0;color:#9CA3AF;font-size:12px;">&copy; T&S Traffic Control. This is an automated message.</p>
+          <p style="margin:0;color:#9CA3AF;font-size:12px;">&copy; T&S Traffic Control Pty Ltd &middot; Powered by Atomis. This is an automated message.</p>
         </td></tr>
       </table>
     </td></tr>
@@ -35,8 +35,8 @@ function baseTemplate(title, bodyContent) {
 
 function buttonHtml(text, url) {
   return `<table cellpadding="0" cellspacing="0" style="margin:24px 0;">
-    <tr><td style="background:#1D6AE5;border-radius:8px;padding:12px 28px;">
-      <a href="${url}" style="color:#ffffff;text-decoration:none;font-weight:600;font-size:15px;display:inline-block;">${text}</a>
+    <tr><td style="background:#10B981;border-radius:8px;padding:12px 28px;">
+      <a href="${url}" style="color:#0F1115;text-decoration:none;font-weight:600;font-size:15px;display:inline-block;">${text}</a>
     </td></tr>
   </table>`;
 }
@@ -44,18 +44,18 @@ function buttonHtml(text, url) {
 function adminInviteEmail(fullName, inviteUrl, expiresHours) {
   return baseTemplate('You\'ve Been Invited', `
     <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 8px;">Hi ${fullName},</p>
-    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">You've been invited to the <strong>T&S Operations Dashboard</strong>. Click the button below to set your password and activate your account.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">You've been invited to <strong>Atomis</strong>, the operations dashboard for T&S Traffic Control. Click the button below to set your password and activate your account.</p>
     ${buttonHtml('Set Your Password', inviteUrl)}
     <p style="color:#6B7280;font-size:13px;margin:0;">This link expires in ${expiresHours} hours. If you didn't expect this invitation, you can safely ignore this email.</p>
   `);
 }
 
 function workerInviteEmail(fullName, setupUrl, expiresHours) {
-  return baseTemplate('Set Up Your Worker Portal PIN', `
+  return baseTemplate('Set Up Your Atomis Crew PIN', `
     <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 8px;">Hi ${fullName},</p>
-    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">You've been set up on the <strong>T&S Worker Portal</strong>. Tap the button below to create your sign-in PIN.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">You've been set up on <strong>Atomis Crew</strong>, T&S Traffic Control's field operations app. Tap the button below to create your sign-in PIN.</p>
     ${buttonHtml('Set Your PIN', setupUrl)}
-    <p style="color:#6B7280;font-size:13px;margin:0;">This link expires in ${expiresHours} hours. You'll use your email and PIN to sign in at the T&S Employee Portal.</p>
+    <p style="color:#6B7280;font-size:13px;margin:0;">This link expires in ${expiresHours} hours. You'll use your email and PIN to sign in to Atomis Crew.</p>
   `);
 }
 
@@ -69,9 +69,9 @@ function passwordResetEmail(fullName, resetUrl, expiresHours) {
 }
 
 function pinResetEmail(fullName, resetUrl, expiresHours) {
-  return baseTemplate('Reset Your Worker Portal PIN', `
+  return baseTemplate('Reset Your Atomis Crew PIN', `
     <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 8px;">Hi ${fullName},</p>
-    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">We received a request to reset your Worker Portal PIN. Tap the button below to set a new PIN.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">We received a request to reset your Atomis Crew PIN. Tap the button below to set a new PIN.</p>
     ${buttonHtml('Reset PIN', resetUrl)}
     <p style="color:#6B7280;font-size:13px;margin:0;">This link expires in ${expiresHours} hours. If you didn't request this, you can safely ignore this email.</p>
   `);
@@ -109,7 +109,7 @@ function sopSignLinkEmail(fullName, signUrl) {
     <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">As part of working with T&S Traffic Control, we need you to sign off that you've reviewed our Standard Operating Procedures and been adequately educated on them.</p>
     <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Click the button below on your phone, draw your signature and submit. Takes about 30 seconds.</p>
     ${buttonHtml('Sign SOP acknowledgement', signUrl)}
-    <p style="color:#6B7280;font-size:13px;margin:0;">If the button doesn't work, copy and paste this link into your browser:<br><a href="${signUrl}" style="color:#1D6AE5;word-break:break-all;">${signUrl}</a></p>
+    <p style="color:#6B7280;font-size:13px;margin:0;">If the button doesn't work, copy and paste this link into your browser:<br><a href="${signUrl}" style="color:#059669;word-break:break-all;">${signUrl}</a></p>
   `);
 }
 

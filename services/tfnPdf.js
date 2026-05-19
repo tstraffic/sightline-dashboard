@@ -80,7 +80,7 @@ function generateTfnPdf({ employee, declaration, tfn, signatureDataUrl, outPath 
       } catch (e) { /* skip image */ }
     }
     doc.rect(48, sigY + 84, 220, 0.8).fill('#9CA3AF');
-    doc.fontSize(8).fillColor('#9CA3AF').text('Signed electronically via T&S Employee Portal', 48, sigY + 88);
+    doc.fontSize(8).fillColor('#9CA3AF').text('Signed electronically via Atomis Crew', 48, sigY + 88);
 
     // Footer watermark
     doc.fontSize(7).fillColor('#9CA3AF').text(

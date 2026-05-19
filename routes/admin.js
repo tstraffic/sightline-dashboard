@@ -54,7 +54,7 @@ router.post('/users', async (req, res) => {
       const userId = result.lastInsertRowid;
       const { token } = createInvitation({ type: 'admin_user', targetId: userId, email: b.email, createdById: req.session.user.id });
       const inviteUrl = (process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`) + '/invite/' + token;
-      const emailResult = await sendEmail(b.email, 'You\'ve been invited to T&S Operations Dashboard', adminInviteEmail(b.full_name, inviteUrl, TOKEN_EXPIRY_HOURS));
+      const emailResult = await sendEmail(b.email, 'You\'ve been invited to Atomis', adminInviteEmail(b.full_name, inviteUrl, TOKEN_EXPIRY_HOURS));
       logActivity({ user: req.session.user, action: 'create', entityType: 'user', entityId: userId, entityLabel: b.full_name, details: 'Created user via email invitation', ip: req.ip });
       autoAddUserToChannels(Number(userId), b.role);
       if (emailResult) {
@@ -189,7 +189,7 @@ router.post('/users/:id/resend-invite', async (req, res) => {
   }
   const { token } = createInvitation({ type: 'admin_user', targetId: u.id, email: u.email, createdById: req.session.user.id });
   const inviteUrl = (process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`) + '/invite/' + token;
-  await sendEmail(u.email, 'You\'ve been invited to T&S Operations Dashboard', adminInviteEmail(u.full_name, inviteUrl, TOKEN_EXPIRY_HOURS));
+  await sendEmail(u.email, 'You\'ve been invited to Atomis', adminInviteEmail(u.full_name, inviteUrl, TOKEN_EXPIRY_HOURS));
   req.flash('success', `Invitation resent to ${u.email}.`);
   res.redirect('/admin/users');
 });
