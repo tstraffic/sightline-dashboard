@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" fill="none">
+  <!-- Atomis mark · v4 · Inverted (for use on light backgrounds) -->
+  <g transform="rotate(-22 40 40)">
+    <ellipse cx="40" cy="40" rx="30" ry="13" stroke="#10B981" stroke-width="2.2" opacity="0.6"/>
+  </g>
+  <circle cx="40" cy="40" r="11" fill="#10B981"/>
+  <circle cx="67.81" cy="28.75" r="5.5" fill="#10B981"/>
+</svg>
