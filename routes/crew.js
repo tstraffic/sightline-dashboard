@@ -588,7 +588,7 @@ router.post('/:id/send-invite', requireRole('admin', 'operations'), async (req, 
 
   const { token } = createInvitation({ type: 'crew_member', targetId: member.id, email: member.email, createdById: req.session.user.id });
   const setupUrl = (process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`) + '/w/setup/' + token;
-  await sendEmail(member.email, 'Set up your T&S Worker Portal PIN', workerInviteEmail(member.full_name, setupUrl, TOKEN_EXPIRY_HOURS));
+  await sendEmail(member.email, 'Set up your Atomis Crew PIN', workerInviteEmail(member.full_name, setupUrl, TOKEN_EXPIRY_HOURS));
 
   logActivity({
     user: req.session.user,

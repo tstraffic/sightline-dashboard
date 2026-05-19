@@ -164,10 +164,10 @@ async function testTeamsWebhook(webhookUrl) {
   const card = {
     '@type': 'MessageCard',
     '@context': 'http://schema.org/extensions',
-    summary: 'T&S Dashboard — Test Notification',
+    summary: 'Atomis — Test Notification',
     themeColor: '6366f1',
-    title: '✅ T&S Dashboard Connected',
-    text: 'This is a test notification from the T&S Operations Dashboard. If you can see this, the Teams integration is working correctly.',
+    title: '✅ Atomis Connected',
+    text: 'This is a test notification from Atomis. If you can see this, the Teams integration is working correctly.',
   };
 
   const response = await axios.post(webhookUrl, card, {

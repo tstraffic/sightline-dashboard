@@ -1,4 +1,4 @@
-// T&S Dashboard - Client-side JavaScript
+// Atomis Dashboard - Client-side JavaScript
 
 // ===== CSRF Token Helper =====
 var csrfMeta = document.querySelector('meta[name="csrf-token"]');

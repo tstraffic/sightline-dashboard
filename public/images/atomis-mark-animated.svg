@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="80" height="80" fill="none">
+  <!-- Atomis loader · v4 · Tilted orbit · animated -->
+  <defs>
+    <path id="atomisRingPath" d="M 67.81 28.75 A 30 13 -22 0 1 12.19 51.25 A 30 13 -22 0 1 67.81 28.75" fill="none"/>
+  </defs>
+  <!-- Tilted ring -->
+  <g transform="rotate(-22 40 40)">
+    <ellipse cx="40" cy="40" rx="30" ry="13" stroke="#10B981" stroke-width="2.2" opacity="0.55"/>
+  </g>
+  <!-- Core -->
+  <circle cx="40" cy="40" r="11" fill="#10B981"/>
+  <!-- Animated satellite riding the ring -->
+  <circle cx="0" cy="0" r="5.5" fill="#10B981">
+    <animateMotion dur="7s" repeatCount="indefinite">
+      <mpath href="#atomisRingPath"/>
+    </animateMotion>
+    <animate attributeName="r"
+             values="5.5;6.5;5.5;3.2;5.5"
+             keyTimes="0;0.25;0.5;0.75;1"
+             dur="7s" repeatCount="indefinite"/>
+    <animate attributeName="opacity"
+             values="1;1;0.92;0.55;1"
+             keyTimes="0;0.25;0.5;0.75;1"
+             dur="7s" repeatCount="indefinite"/>
+  </circle>
+</svg>

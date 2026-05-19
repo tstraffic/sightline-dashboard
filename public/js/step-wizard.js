@@ -1,4 +1,4 @@
-// T&S Dashboard — Step Wizard + Conditional Fields
+// Atomis Dashboard — Step Wizard + Conditional Fields
 // Provides multi-step form navigation and field visibility logic
 
 (function() {

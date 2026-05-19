@@ -23,8 +23,8 @@ cd "$(dirname "$0")"
 DB_PATH=${DB_PATH:-/app/data/tstraffic.db}
 
 echo ""
-echo "  T&S Traffic Control - Project Dashboard"
-echo "  ========================================="
+echo "  Atomis — Operations Dashboard (T&S Traffic Control)"
+echo "  ===================================================="
 echo ""
 
 if [ -n "$LITESTREAM_BUCKET" ] && command -v litestream >/dev/null 2>&1; then

@@ -68,7 +68,7 @@ router.post('/forgot-password', async (req, res) => {
   if (user && user.email) {
     const { token } = createInvitation({ type: 'password_reset', targetId: user.id, email: user.email, createdById: null });
     const resetUrl = (process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`) + '/reset/' + token;
-    await sendEmail(user.email, 'Reset your T&S Dashboard password', passwordResetEmail(user.full_name, resetUrl, TOKEN_EXPIRY_HOURS));
+    await sendEmail(user.email, 'Reset your Atomis password', passwordResetEmail(user.full_name, resetUrl, TOKEN_EXPIRY_HOURS));
   }
 
   req.flash('success', 'If an account exists with that email, a reset link has been sent.');

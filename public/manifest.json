@@ -1,17 +1,17 @@
 {
-  "name": "T&S Employee Portal",
-  "short_name": "T&S Employee",
-  "description": "T&S Traffic Control Employee Operations Portal",
+  "name": "Atomis Crew",
+  "short_name": "Atomis",
+  "description": "Atomis Crew — field operations app for T&S Traffic Control",
   "start_url": "/w/home",
   "scope": "/w/",
   "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#1D6AE5",
+  "background_color": "#0F1115",
+  "theme_color": "#10B981",
   "orientation": "portrait-primary",
   "icons": [
-    { "src": "/images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/images/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/images/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/images/atomis-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/images/atomis-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/images/atomis-icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/images/atomis-icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

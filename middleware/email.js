@@ -18,8 +18,8 @@ async function sendTaskAssignmentEmail(taskData, ownerUser, jobLabel, assignedBy
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto;">
-      <div style="background: #2B7FFF; padding: 20px 24px; border-radius: 12px 12px 0 0;">
-        <h2 style="color: white; margin: 0; font-size: 18px;">T&S Operations Dashboard</h2>
+      <div style="background: #0F1115; padding: 20px 24px; border-radius: 12px 12px 0 0;">
+        <h2 style="color: #F5F5F7; margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.03em; font-family: Georgia, serif;">atomis</h2>
       </div>
       <div style="border: 1px solid #E5E7EB; border-top: none; padding: 24px; border-radius: 0 0 12px 12px; background: #FAFAFA;">
         <p style="color: #374151; margin: 0 0 16px;">Hi <strong>${ownerUser.full_name}</strong>,</p>
@@ -34,9 +34,9 @@ async function sendTaskAssignmentEmail(taskData, ownerUser, jobLabel, assignedBy
           </table>
         </div>
         <div style="text-align: center;">
-          <a href="${taskUrl}" style="display: inline-block; background: #2B7FFF; color: white; padding: 10px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
+          <a href="${taskUrl}" style="display: inline-block; background: #10B981; color: #0F1115; padding: 10px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
         </div>
-        <p style="color: #9CA3AF; font-size: 12px; margin: 20px 0 0; text-align: center;">T&S Traffic Control Operations Dashboard</p>
+        <p style="color: #9CA3AF; font-size: 12px; margin: 20px 0 0; text-align: center;">T&S Traffic Control Pty Ltd · Powered by Atomis</p>
       </div>
     </div>
   `;
@@ -56,8 +56,8 @@ async function sendTaskStatusEmail(taskData, ownerUser, newStatus, changedByName
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto;">
-      <div style="background: #2B7FFF; padding: 20px 24px; border-radius: 12px 12px 0 0;">
-        <h2 style="color: white; margin: 0; font-size: 18px;">T&S Operations Dashboard</h2>
+      <div style="background: #0F1115; padding: 20px 24px; border-radius: 12px 12px 0 0;">
+        <h2 style="color: #F5F5F7; margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.03em; font-family: Georgia, serif;">atomis</h2>
       </div>
       <div style="border: 1px solid #E5E7EB; border-top: none; padding: 24px; border-radius: 0 0 12px 12px; background: #FAFAFA;">
         <p style="color: #374151; margin: 0 0 16px;">Hi <strong>${ownerUser.full_name}</strong>,</p>
@@ -67,9 +67,9 @@ async function sendTaskStatusEmail(taskData, ownerUser, newStatus, changedByName
           <p style="color: #6B7280; font-size: 14px; margin: 0;">New Status: <strong>${statusLabel}</strong></p>
         </div>
         <div style="text-align: center;">
-          <a href="${taskUrl}" style="display: inline-block; background: #2B7FFF; color: white; padding: 10px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
+          <a href="${taskUrl}" style="display: inline-block; background: #10B981; color: #0F1115; padding: 10px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
         </div>
-        <p style="color: #9CA3AF; font-size: 12px; margin: 20px 0 0; text-align: center;">T&S Traffic Control Operations Dashboard</p>
+        <p style="color: #9CA3AF; font-size: 12px; margin: 20px 0 0; text-align: center;">T&S Traffic Control Pty Ltd · Powered by Atomis</p>
       </div>
     </div>
   `;
@@ -102,9 +102,9 @@ async function sendDeadlineReminderEmail(taskData, ownerUser, daysUntilDue, base
           ${taskData.job_number ? '<p style="color: #6B7280; font-size: 13px; margin: 0;"><strong>Project:</strong> ' + taskData.job_number + '</p>' : ''}
         </div>
         <div style="text-align: center;">
-          <a href="${taskUrl}" style="display: inline-block; background: #2B7FFF; color: white; padding: 10px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
+          <a href="${taskUrl}" style="display: inline-block; background: #10B981; color: #0F1115; padding: 10px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View Task</a>
         </div>
-        <p style="color: #9CA3AF; font-size: 12px; margin: 20px 0 0; text-align: center;">T&S Traffic Control Operations Dashboard</p>
+        <p style="color: #9CA3AF; font-size: 12px; margin: 20px 0 0; text-align: center;">T&S Traffic Control Pty Ltd · Powered by Atomis</p>
       </div>
     </div>
   `;
@@ -123,8 +123,8 @@ async function sendAllocationEmail(allocation, recipientUser, allocatedByName, b
 
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto;">
-      <div style="background: #2B7FFF; padding: 20px 24px; border-radius: 12px 12px 0 0;">
-        <h2 style="color: white; margin: 0; font-size: 18px;">T&S Operations Dashboard</h2>
+      <div style="background: #0F1115; padding: 20px 24px; border-radius: 12px 12px 0 0;">
+        <h2 style="color: #F5F5F7; margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.03em; font-family: Georgia, serif;">atomis</h2>
       </div>
       <div style="border: 1px solid #E5E7EB; border-top: none; padding: 24px; border-radius: 0 0 12px 12px; background: #FAFAFA;">
         <p style="color: #374151; margin: 0 0 16px;">Hi <strong>${recipientUser.full_name}</strong>,</p>
@@ -138,9 +138,9 @@ async function sendAllocationEmail(allocation, recipientUser, allocatedByName, b
           </table>
         </div>
         <div style="text-align: center;">
-          <a href="${allocUrl}" style="display: inline-block; background: #2B7FFF; color: white; padding: 10px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View Allocations</a>
+          <a href="${allocUrl}" style="display: inline-block; background: #10B981; color: #0F1115; padding: 10px 28px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px;">View Allocations</a>
         </div>
-        <p style="color: #9CA3AF; font-size: 12px; margin: 20px 0 0; text-align: center;">T&S Traffic Control Operations Dashboard</p>
+        <p style="color: #9CA3AF; font-size: 12px; margin: 20px 0 0; text-align: center;">T&S Traffic Control Pty Ltd · Powered by Atomis</p>
       </div>
     </div>
   `;

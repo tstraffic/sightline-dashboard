@@ -1,4 +1,4 @@
-/* Worker Portal — Mobile-First Dark Theme */
+/* Atomis Crew — Mobile-First Dark Theme */
 
 /* ── Safe Area ── */
 .safe-area-top { padding-top: env(safe-area-inset-top, 0px); }
@@ -16,8 +16,8 @@ nav a { -webkit-tap-highlight-color: transparent; user-select: none; min-height:
 html {
   /* Set explicit dark background so iOS PWA standalone mode doesn't show
      UA-default white in the safe-area-bottom zone under the home
-     indicator. Matches the body's bottom gradient stop. */
-  background: #0A1628;
+     indicator. Matches Atomis Base. */
+  background: #0F1115;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
 }
@@ -45,7 +45,7 @@ input[type="tel"], input[type="number"], select, textarea {
 /* ══════════════════════════════════════════════
    DARK THEME OVERRIDES
    Transform light Tailwind classes to dark theme
-   matching T&S admin dashboard aesthetic
+   matching the Atomis admin dashboard aesthetic
    ══════════════════════════════════════════════ */
 
 /* ── Background overrides ── */
@@ -72,15 +72,15 @@ input[type="tel"], input[type="number"], select, textarea {
 .text-gray-400 { color: rgba(255,255,255,0.35) !important; }
 .text-gray-300 { color: rgba(255,255,255,0.25) !important; }
 
-/* ── Brand color → T&S Cyan ── */
-.text-brand-600, .text-brand-500 { color: #00D2BE !important; }
-.text-brand-400 { color: #00D2BE !important; }
-.bg-brand-600 { background: #00D2BE !important; color: #020817 !important; }
-.bg-brand-500 { background: #22e8d2 !important; color: #020817 !important; }
-.bg-brand-50 { background: rgba(0,210,190,0.1) !important; }
-.bg-brand-100 { background: rgba(0,210,190,0.15) !important; }
-.border-brand-600, .border-brand-500 { border-color: #00D2BE !important; }
-.ring-brand-500 { --tw-ring-color: rgba(0,210,190,0.4) !important; }
+/* ── Brand color → Atomis Emerald ── */
+.text-brand-600, .text-brand-500 { color: #10B981 !important; }
+.text-brand-400 { color: #6EE7B7 !important; }
+.bg-brand-600 { background: #10B981 !important; color: #0F1115 !important; }
+.bg-brand-500 { background: #34D399 !important; color: #0F1115 !important; }
+.bg-brand-50 { background: rgba(16,185,129,0.1) !important; }
+.bg-brand-100 { background: rgba(16,185,129,0.15) !important; }
+.border-brand-600, .border-brand-500 { border-color: #10B981 !important; }
+.ring-brand-500 { --tw-ring-color: rgba(16,185,129,0.4) !important; }
 
 /* ── Status badge backgrounds (keep legible on dark) ── */
 .bg-emerald-50 { background: rgba(16,185,129,0.12) !important; }

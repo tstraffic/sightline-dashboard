@@ -97,14 +97,14 @@ router.post('/system/test-email', async (req, res) => {
     // Then send a test email
     const result = await sendEmail(
       toEmail,
-      'T&S Dashboard — Test Email',
+      'Atomis — Test Email',
       `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto;">
-        <div style="background: #2B7FFF; padding: 20px 24px; border-radius: 12px 12px 0 0;">
-          <h2 style="color: white; margin: 0; font-size: 18px;">T&S Operations Dashboard</h2>
+        <div style="background: #0F1115; padding: 20px 24px; border-radius: 12px 12px 0 0;">
+          <h2 style="color: #F5F5F7; margin: 0; font-size: 22px; font-weight: 500; letter-spacing: -0.03em; font-family: Georgia, serif;">atomis</h2>
         </div>
         <div style="border: 1px solid #E5E7EB; border-top: none; padding: 24px; border-radius: 0 0 12px 12px; background: #FAFAFA;">
           <h3 style="color: #111827; margin: 0 0 12px;">Email is working!</h3>
-          <p style="color: #6B7280; margin: 0 0 16px;">This is a test email from the T&S Operations Dashboard. If you received this, your SMTP configuration is correct.</p>
+          <p style="color: #6B7280; margin: 0 0 16px;">This is a test email from Atomis. If you received this, your SMTP configuration is correct.</p>
           <p style="color: #9CA3AF; font-size: 12px; margin: 0;">Sent at ${new Date().toLocaleString('en-AU', { timeZone: 'Australia/Sydney' })} AEST</p>
         </div>
       </div>`

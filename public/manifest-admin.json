@@ -1,17 +1,17 @@
 {
-  "name": "T&S Operations Dashboard",
-  "short_name": "T&S Ops",
-  "description": "T&S Traffic Control Operations Management Dashboard",
+  "name": "Atomis",
+  "short_name": "Atomis",
+  "description": "Atomis — Operations Dashboard built for T&S Traffic Control",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#FFFFFF",
-  "theme_color": "#1D6AE5",
+  "background_color": "#0F1115",
+  "theme_color": "#10B981",
   "orientation": "any",
   "icons": [
-    { "src": "/images/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/images/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/images/icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/images/icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/images/atomis-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/images/atomis-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/images/atomis-icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/images/atomis-icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

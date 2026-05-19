@@ -1,5 +1,5 @@
 /**
- * Audit PDF export v5 — professional branded T&S Traffic Control report.
+ * Audit PDF export v5 — professional branded Atomis report (built for T&S Traffic Control).
  *
  * Design: Clean cover page, structured body, proper typography,
  * no blank pages, professional color scheme.
@@ -10,8 +10,8 @@ const fs = require('fs');
 const { AUDIT_SECTIONS, normaliseState } = require('../lib/auditQuestions');
 
 /* ── Brand palette ── */
-const BRAND     = '#1D6AE5';
-const BRAND_BG  = '#EBF2FF';   // light brand tint
+const BRAND     = '#10B981';
+const BRAND_BG  = '#ECFDF5';   // light brand tint
 const GREEN     = '#059669';
 const GREEN_BG  = '#ECFDF5';
 const RED       = '#DC2626';
@@ -26,7 +26,7 @@ const GRAY_BG   = '#F9FAFB';
 const WHITE     = '#FFFFFF';
 const BLACK     = '#111827';
 
-const LOGO_PATH = path.join(__dirname, '..', 'public', 'images', 'logo-colour.png');
+const LOGO_PATH = path.join(__dirname, '..', 'public', 'images', 'atomis-icon-512.png');
 const ML = 50, MR = 50, MT = 50, MB = 60;
 
 /* ── Helpers ── */
@@ -44,7 +44,7 @@ const RED_BADGE = '#C00000';
 const RED_LIGHT = '#FCE4E4';
 const COMMENT_BG = '#F5F5F5';
 const COMMENT_BORDER = '#DDDDDD';
-const BRAND_DARK = '#0F4C99';
+const BRAND_DARK = '#047857';
 
 function findingLabel(f) {
   if (f === 'pass') return 'PASS';
@@ -82,7 +82,7 @@ function generateAuditPdf(opts, out) {
     margins: { top: MT, bottom: MB, left: ML, right: MR },
     info: {
       Title: 'Site Audit #' + a.id + ' — ' + (a.project_site || 'Untitled'),
-      Author: 'T&S Traffic Control',
+      Author: 'Atomis',
     },
   });
   doc.pipe(out);
@@ -139,7 +139,7 @@ function generateAuditPdf(opts, out) {
   font('Helvetica-Bold', 18, BRAND);
   txt('Site Safety Audit', ML + logoW + 12, MT + 4, { width: pw - logoW - 12 });
   font('Helvetica', 9, GRAY);
-  txt('T&S Traffic Control  ·  Audit #' + a.id, ML + logoW + 12, MT + 26, { width: pw - logoW - 12 });
+  txt('Atomis  ·  Audit #' + a.id, ML + logoW + 12, MT + 26, { width: pw - logoW - 12 });
 
   setY(MT + 52);
   line(ML, curY(), ML + pw, curY(), BRAND, 2);
@@ -701,7 +701,7 @@ function generateAuditPdf(opts, out) {
     line(ML, ph - MB + 10, ML + pw, ph - MB + 10, GRAY_LINE, 0.3);
     // Footer text
     font('Helvetica', 5.5, GRAY);
-    txt('T&S Traffic Control  ·  Site Audit #' + a.id + '  ·  Confidential',
+    txt('Atomis  ·  Site Audit #' + a.id + '  ·  Confidential',
       ML, ph - MB + 14, { width: pw - 50 });
     font('Helvetica', 5.5, GRAY);
     txt('Page ' + (p + 1) + ' of ' + totalPages,

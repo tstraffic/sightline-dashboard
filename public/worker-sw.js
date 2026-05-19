@@ -1,10 +1,10 @@
-// Worker Portal — Service Worker (PWA + push)
+// Atomis Crew — Service Worker (PWA + push)
 // v6: adds client-side docx renderer assets (docx-preview + jszip), served
 // from /vendor/docx-preview/ and /vendor/jszip/. They share the dedicated
-// vendor cache with pdfjs so the worker can render Word docs offline once
+// vendor cache with pdfjs so the crew can render Word docs offline once
 // they've been loaded once.
-const CACHE_NAME = 'ts-worker-v25';
-const VENDOR_CACHE = 'ts-worker-vendor-v1';
+const CACHE_NAME = 'atomis-worker-v1';
+const VENDOR_CACHE = 'atomis-worker-vendor-v1';
 
 // All client-side renderer assets (pdfjs, docx-preview, jszip). All are
 // immutable once shipped, so cache-first is safe.
@@ -18,7 +18,7 @@ self.addEventListener('install', function(event) {
         '/css/worker.css',
         '/js/worker.js',
         '/js/worker-pdf-viewer.js',
-        '/images/logo-colour.jpg',
+        '/images/atomis-mark.svg',
       ]);
     })
   );
@@ -99,12 +99,12 @@ self.addEventListener('sync', function(event) {
 // Push — show shift reminder / generic notifications
 self.addEventListener('push', function(event) {
   let data = {};
-  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { title: 'T&S Notification', body: event.data ? event.data.text() : '' }; }
-  const title = data.title || 'T&S Notification';
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = { title: 'Atomis Crew', body: event.data ? event.data.text() : '' }; }
+  const title = data.title || 'Atomis Crew';
   const options = {
     body: data.body || '',
-    icon: '/images/logo-colour.jpg',
-    badge: '/images/logo-colour.jpg',
+    icon: '/images/atomis-icon-192.png',
+    badge: '/images/atomis-icon-192.png',
     tag: data.type || 'general',
     data: { url: data.url || '/w/home' },
     vibrate: [180, 80, 180],

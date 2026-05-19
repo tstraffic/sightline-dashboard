@@ -183,7 +183,7 @@ router.post('/forgot-pin', async (req, res) => {
   if (member && member.email) {
     const { token } = createInvitation({ type: 'pin_reset', targetId: member.id, email: member.email, createdById: null });
     const resetUrl = (process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`) + '/w/reset-pin/' + token;
-    await sendEmail(member.email, 'Reset your T&S Worker Portal PIN', pinResetEmail(member.full_name, resetUrl, TOKEN_EXPIRY_HOURS));
+    await sendEmail(member.email, 'Reset your Atomis Crew PIN', pinResetEmail(member.full_name, resetUrl, TOKEN_EXPIRY_HOURS));
   }
 
   req.flash('success', 'If a matching account exists, a reset link has been sent to your email.');

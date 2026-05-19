@@ -3,25 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Login | T&S Operations Dashboard</title>
-  <meta name="theme-color" content="#0A2D66">
+  <title>Sign in | Atomis</title>
+  <meta name="theme-color" content="#0F1115">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="apple-touch-icon" href="/images/logo-colour.jpg">
+  <link rel="icon" type="image/svg+xml" href="/images/atomis-mark.svg">
+  <link rel="apple-touch-icon" href="/images/atomis-apple-touch-icon.png">
   <link rel="manifest" href="/manifest-admin.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Geist:wght@300..700&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'] },
+          fontFamily: {
+            sans: ['Geist', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+            display: ['"Bricolage Grotesque"', 'Geist', 'system-ui', 'sans-serif'],
+          },
           colors: {
             brand: {
-              50: '#EFF6FF', 100: '#DBEAFE', 200: '#BFDBFE', 300: '#93C5FD',
-              400: '#60A5FA', 500: '#2B7FFF', 600: '#1D6AE5', 700: '#1555C0',
-              800: '#0F3F8E', 900: '#0A2D66', 950: '#051B3F',
+              50: '#ECFDF5', 100: '#D1FAE5', 200: '#A7F3D0', 300: '#6EE7B7',
+              400: '#34D399', 500: '#10B981', 600: '#059669', 700: '#047857',
+              800: '#065F46', 900: '#064E3B', 950: '#022C22',
             }
           }
         }
@@ -47,7 +51,7 @@
       width: 900px;
       height: 900px;
       transform: translate(-50%, -50%);
-      background: radial-gradient(circle, rgba(43,127,255,0.12) 0%, rgba(29,106,229,0.06) 35%, transparent 70%);
+      background: radial-gradient(circle, rgba(16,185,129,0.14) 0%, rgba(5,150,105,0.06) 35%, transparent 70%);
       animation: radial-pulse 8s ease-in-out infinite;
       will-change: opacity, transform;
     }
@@ -131,8 +135,8 @@
     }
     .login-input:focus {
       background: rgba(0, 0, 0, 0.25);
-      border-color: rgba(43, 127, 255, 0.5);
-      box-shadow: 0 0 0 3px rgba(43, 127, 255, 0.15);
+      border-color: rgba(16, 185, 129, 0.5);
+      box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
       outline: none;
     }
 
@@ -149,7 +153,7 @@
       left: 50%;
       width: 0;
       height: 2px;
-      background: linear-gradient(90deg, transparent, #2B7FFF, transparent);
+      background: linear-gradient(90deg, transparent, #10B981, transparent);
       transition: all 0.4s ease;
       transform: translateX(-50%);
       pointer-events: none;
@@ -177,29 +181,29 @@
       transform: translateY(0);
       font-size: 10px;
       font-weight: 600;
-      color: rgba(43, 127, 255, 0.8);
+      color: rgba(16, 185, 129, 0.8);
       letter-spacing: 0.05em;
     }
     .login-input:focus ~ .float-label {
-      color: #2B7FFF;
+      color: #10B981;
     }
 
     /* ── Submit button ── */
     .login-btn {
       border-radius: 10px !important;
-      background: linear-gradient(135deg, #1D6AE5 0%, #2B7FFF 100%);
+      background: linear-gradient(135deg, #059669 0%, #10B981 100%);
       position: relative;
       overflow: hidden;
       transition: all 0.3s ease;
       will-change: transform;
     }
     .login-btn:hover {
-      box-shadow: 0 8px 30px -4px rgba(43, 127, 255, 0.4);
+      box-shadow: 0 8px 30px -4px rgba(16, 185, 129, 0.4);
       transform: translateY(-1px);
     }
     .login-btn:active {
       transform: scale(0.97);
-      box-shadow: 0 4px 12px rgba(43, 127, 255, 0.3);
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
     }
 
     /* Shimmer effect */
@@ -220,8 +224,8 @@
     /* ── Logo ── */
     .login-logo {
       filter: brightness(0) invert(1)
-              drop-shadow(0 0 18px rgba(43, 127, 255, 0.45))
-              drop-shadow(0 0 40px rgba(43, 127, 255, 0.20))
+              drop-shadow(0 0 18px rgba(16, 185, 129, 0.45))
+              drop-shadow(0 0 40px rgba(16, 185, 129, 0.20))
               drop-shadow(0 2px 8px rgba(0, 0, 0, 0.3));
       will-change: transform;
     }
@@ -276,10 +280,10 @@
     <!-- Logo + branding -->
     <div class="text-center mb-8 animate-card">
       <div class="inline-block mb-5">
-        <img src="/images/logo-colour.png" alt="T&S Traffic Control" class="login-logo" style="width:130px;height:auto;">
+        <img src="/images/atomis-mark.svg" alt="Atomis" class="login-logo" style="width:96px;height:auto;">
       </div>
-      <h1 style="font-size:22px;font-weight:500;color:rgba(255,255,255,0.90);letter-spacing:0.12em;text-transform:uppercase">T&S Traffic Control</h1>
-      <p style="color:rgba(255,255,255,0.35);font-size:11px;letter-spacing:0.18em;margin-top:5px;font-weight:400;text-transform:uppercase">Operations Dashboard</p>
+      <h1 style="font-family:'Bricolage Grotesque',Geist,sans-serif;font-size:48px;font-weight:500;color:rgba(255,255,255,0.95);letter-spacing:-0.045em;line-height:1;">atomis</h1>
+      <p style="font-family:'Bricolage Grotesque',Geist,sans-serif;color:rgba(255,255,255,0.55);font-size:15px;margin-top:10px;font-weight:300;letter-spacing:-0.01em">simple systems. <em style="color:#10B981;font-style:italic">smarter business.</em></p>
     </div>
 
     <% if (typeof flash_error !== 'undefined' && flash_error && flash_error.length > 0) { %>
@@ -297,8 +301,8 @@
     <form method="POST" action="/login" class="glass-card rounded-2xl p-7 sm:p-8 space-y-5 animate-card-delay">
       <%- include('partials/csrf') %>
       <div class="text-center mb-1">
-        <h2 style="font-size:20px;font-weight:600;color:#FFFFFF">Welcome back</h2>
-        <p style="color:rgba(255,255,255,0.45);font-size:13px;margin-top:2px">Sign in to your account</p>
+        <h2 style="font-family:'Bricolage Grotesque',Geist,sans-serif;font-size:24px;font-weight:500;color:#FFFFFF;letter-spacing:-0.025em">Welcome back.</h2>
+        <p style="color:rgba(255,255,255,0.55);font-size:13px;margin-top:4px">Sign in to run the day.</p>
       </div>
 
       <div>
@@ -320,11 +324,11 @@
       </div>
 
       <button type="submit" class="login-btn w-full py-3.5 text-white text-[15px] shadow-lg" style="font-weight:600;border-radius:10px">
-        Sign in
+        Sign in &rarr;
       </button>
 
       <div class="text-center">
-        <a href="/forgot-password" class="text-sm text-white/30 hover:text-white/60 transition font-medium">Forgot password?</a>
+        <a href="/forgot-password" class="text-sm text-white/30 hover:text-white/60 transition font-medium">Forgot your password?</a>
       </div>
     </form>
 
