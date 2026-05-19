@@ -5,7 +5,7 @@
     return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
   const CHIP_STATUS = {
-    submitted:    'background: rgba(43,127,255,0.18); color: #93C5FD; border: 1px solid rgba(43,127,255,0.3);',
+    submitted:    'background: rgba(16,185,129,0.18); color: #93C5FD; border: 1px solid rgba(16,185,129,0.3);',
     acknowledged: 'background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3);',
     under_review: 'background: rgba(139,92,246,0.18); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3);',
     closed:       'background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3);',
@@ -17,9 +17,9 @@
   .c-empty { text-align: center; padding: 32px 16px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
   .c-cta {
     display: inline-flex; align-items: center; gap: 8px; padding: 12px 18px;
-    background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff; font-weight: 700; font-size: 0.9rem;
+    background: linear-gradient(135deg, #059669, #10B981); color: #fff; font-weight: 700; font-size: 0.9rem;
     border-radius: 12px; text-decoration: none;
-    box-shadow: 0 6px 18px rgba(29,106,229,0.32);
+    box-shadow: 0 6px 18px rgba(5,150,105,0.32);
     margin: 4px 0 14px;
   }
   .c-card {
@@ -50,12 +50,12 @@
   <% } else { %>
     <% rows.forEach(r => { %>
       <a href="/w/safety/comments/<%= r.id %>" class="c-card <%= r.office_response ? 'responded' : '' %>">
-        <div class="c-card-title">#<%= r.id %> · <%= categoryLabels[r.category] %></div>
+        <div class="c-card-title">#<%= r.id %> Â· <%= categoryLabels[r.category] %></div>
         <div class="c-card-meta">
           <span class="c-chip" style="<%= CHIP_STATUS[r.status] || CHIP_STATUS.submitted %>"><%= statusLabels[r.status] %></span>
           <span><%= fmt(r.created_at) %></span>
-          <% if (r.job_number) { %><span>· <%= r.job_number %></span><% } %>
-          <% if (r.is_anonymous) { %><span class="c-anon">· submitted anonymously</span><% } %>
+          <% if (r.job_number) { %><span>Â· <%= r.job_number %></span><% } %>
+          <% if (r.is_anonymous) { %><span class="c-anon">Â· submitted anonymously</span><% } %>
         </div>
         <div class="c-snip"><%= r.body %></div>
       </a>

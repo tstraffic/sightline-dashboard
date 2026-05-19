@@ -5,7 +5,7 @@
      light-theme cards inside the dark worker layout, so labels disappeared
      into the bg and the inputs rendered as solid white slabs. */
   .ds-wrap   { padding: 0.5rem; padding-bottom: 6rem; }
-  .ds-back   { display: inline-flex; align-items: center; gap: 4px; color: #00D2BE; font-size: 0.85rem; font-weight: 600; }
+  .ds-back   { display: inline-flex; align-items: center; gap: 4px; color: #10B981; font-size: 0.85rem; font-weight: 600; }
   .ds-h1     { font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: -0.01em; margin-top: 0.25rem; }
 
   .ds-card {
@@ -17,10 +17,10 @@
   }
   .ds-card-title {
     font-size: 0.65rem; font-weight: 800; letter-spacing: 0.1em;
-    text-transform: uppercase; color: #00D2BE; margin-bottom: 10px;
+    text-transform: uppercase; color: #10B981; margin-bottom: 10px;
   }
   .ds-summary {
-    background: linear-gradient(155deg, rgba(43,127,255,0.12), rgba(0,210,190,0.05) 60%, rgba(10,22,40,0.6));
+    background: linear-gradient(155deg, rgba(16,185,129,0.12), rgba(16,185,129,0.05) 60%, rgba(10,22,40,0.6));
     border: 1px solid rgba(96,165,250,0.25);
   }
   .ds-summary-client { font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.2; }
@@ -34,7 +34,7 @@
   .ds-error-text { font-size: 0.72rem; font-weight: 600; color: #FCA5A5; margin-top: 4px; display: none; }
   .ds-error-text.show { display: block; }
 
-  /* Inputs — solid light fill so iOS doesn't dark-mode-invert them; text
+  /* Inputs â€” solid light fill so iOS doesn't dark-mode-invert them; text
      and placeholders explicit for the same reason. color-scheme:light only
      also keeps the native time pickers light. */
   .ds-input, .ds-select, .ds-textarea {
@@ -55,8 +55,8 @@
   .ds-input::placeholder, .ds-textarea::placeholder { color: #9CA3AF; }
   .ds-input:focus, .ds-select:focus, .ds-textarea:focus {
     outline: none;
-    border-color: #2B7FFF;
-    box-shadow: 0 0 0 3px rgba(43,127,255,0.25);
+    border-color: #10B981;
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.25);
   }
   .ds-input.ds-error, .ds-textarea.ds-error { border-color: #F87171; box-shadow: 0 0 0 3px rgba(239,68,68,0.18); }
   .ds-textarea { resize: none; min-height: 64px; }
@@ -67,8 +67,8 @@
     margin-top: 12px;
     padding: 12px 14px;
     border-radius: 12px;
-    background: linear-gradient(135deg, rgba(43,127,255,0.18), rgba(0,210,190,0.1));
-    border: 1px solid rgba(43,127,255,0.35);
+    background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.1));
+    border: 1px solid rgba(16,185,129,0.35);
     display: flex; align-items: center; justify-content: space-between;
   }
   .ds-total-label { font-size: 0.78rem; font-weight: 600; color: rgba(255,255,255,0.85); letter-spacing: 0.02em; }
@@ -76,10 +76,10 @@
 
   /* "No client on site" toggle */
   .ds-toggle { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; cursor: pointer; }
-  .ds-toggle input { width: 18px; height: 18px; accent-color: #2B7FFF; }
+  .ds-toggle input { width: 18px; height: 18px; accent-color: #10B981; }
   .ds-toggle span  { font-size: 0.85rem; color: rgba(255,255,255,0.85); font-weight: 500; }
 
-  /* Signature pads — light surface, dashed border, with a "required" hint */
+  /* Signature pads â€” light surface, dashed border, with a "required" hint */
   .ds-sig-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .ds-sig-clear {
     font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,0.65);
@@ -100,7 +100,7 @@
   .ds-sig-hint { font-size: 0.68rem; color: rgba(255,255,255,0.4); text-align: center; margin-top: 6px; }
   .ds-sig-hint.signed { color: #34D399; font-weight: 600; }
 
-  /* Submit button — sticks to the bottom of the viewport so it's reachable
+  /* Submit button â€” sticks to the bottom of the viewport so it's reachable
      while signing on a phone. Larger, clearer, with disabled-state styling. */
   .ds-submit-bar {
     position: sticky; bottom: 0;
@@ -114,9 +114,9 @@
     border-radius: 14px;
     font-size: 1rem; font-weight: 700; letter-spacing: 0.01em;
     color: #fff;
-    background: linear-gradient(135deg, #2B7FFF, #1D6AE5);
+    background: linear-gradient(135deg, #10B981, #059669);
     border: none;
-    box-shadow: 0 8px 24px rgba(29,106,229,0.45);
+    box-shadow: 0 8px 24px rgba(5,150,105,0.45);
     cursor: pointer;
     display: flex; align-items: center; justify-content: center; gap: 8px;
     min-height: 56px;
@@ -152,7 +152,7 @@
 
   <form method="POST" action="/w/dockets/sign/<%= allocation.id %>" id="docket-form" novalidate>
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-    <!-- All dockets are daily — type is fixed on the server side. -->
+    <!-- All dockets are daily â€” type is fixed on the server side. -->
     <input type="hidden" name="docket_type" value="daily_docket">
 
     <!-- Time & Hours -->
@@ -175,7 +175,7 @@
           <p class="ds-error-text" id="err-finish">Finish time is required.</p>
         </div>
       </div>
-      <p class="ds-help">Prefilled from your rostered start/finish — edit if the actual times differed.</p>
+      <p class="ds-help">Prefilled from your rostered start/finish â€” edit if the actual times differed.</p>
 
       <div class="ds-grid-2" style="margin-top:14px;">
         <div>
@@ -251,7 +251,7 @@
     <!-- Notes -->
     <div class="ds-card">
       <p class="ds-card-title">Notes (optional)</p>
-      <textarea name="notes" rows="2" placeholder="Anything worth flagging…" class="ds-textarea"></textarea>
+      <textarea name="notes" rows="2" placeholder="Anything worth flaggingâ€¦" class="ds-textarea"></textarea>
     </div>
 
     <!-- Sticky submit -->
@@ -342,13 +342,13 @@ function clearSig(which) {
 document.getElementById('worker-sig-canvas').addEventListener('pointerup', function() {
   if (workerPad.hasDrawn()) {
     var h = document.getElementById('worker-sig-hint');
-    h.classList.add('signed'); h.textContent = '✓ Signed';
+    h.classList.add('signed'); h.textContent = 'âœ“ Signed';
   }
 });
 document.getElementById('client-sig-canvas').addEventListener('pointerup', function() {
   if (clientPad.hasDrawn()) {
     var h = document.getElementById('client-sig-hint');
-    h.classList.add('signed'); h.textContent = '✓ Signed';
+    h.classList.add('signed'); h.textContent = 'âœ“ Signed';
   }
 });
 

@@ -1,6 +1,6 @@
 <style>
   .nf-wrap { padding: 12px; padding-bottom: 6rem; color: #fff; }
-  .nf-back { display: inline-flex; align-items: center; gap: 4px; color: #00D2BE; font-size: 0.85rem; font-weight: 600; }
+  .nf-back { display: inline-flex; align-items: center; gap: 4px; color: #10B981; font-size: 0.85rem; font-weight: 600; }
   .nf-h1 { font-size: 1.4rem; font-weight: 800; margin-top: 0.25rem; letter-spacing: -0.01em; }
   .nf-sub { font-size: 0.78rem; color: rgba(255,255,255,0.55); margin-top: 4px; }
   .nf-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 4px 14px; margin-top: 14px; }
@@ -21,10 +21,10 @@
     width: 20px; height: 20px; background: #fff; border-radius: 50%;
     transition: transform 0.15s;
   }
-  .nf-switch input:checked + .nf-slider { background: #2B7FFF; }
+  .nf-switch input:checked + .nf-slider { background: #10B981; }
   .nf-switch input:checked + .nf-slider::before { transform: translateX(18px); }
   .nf-submit-bar { position: sticky; bottom: 0; padding: 16px 0 calc(16px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(180deg, transparent, rgba(10,22,40,0.95) 35%); margin-top: 16px; }
-  .nf-submit { width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #2B7FFF, #1D6AE5); border: 0; box-shadow: 0 8px 22px rgba(29,106,229,0.45); }
+  .nf-submit { width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #10B981, #059669); border: 0; box-shadow: 0 8px 22px rgba(5,150,105,0.45); }
   .nf-master { font-size: 0.78rem; color: rgba(255,255,255,0.7); margin-top: 8px; display: flex; gap: 12px; }
   .nf-master a { color: #93C5FD; font-weight: 600; }
 </style>
@@ -35,21 +35,21 @@
     Profile
   </a>
   <h1 class="nf-h1">Notifications</h1>
-  <p class="nf-sub">Choose what pings your phone. Everything on by default — toggle off anything you don't need.</p>
+  <p class="nf-sub">Choose what pings your phone. Everything on by default â€” toggle off anything you don't need.</p>
 
-  <!-- Push status panel — none of the toggles below matter if push isn't
+  <!-- Push status panel â€” none of the toggles below matter if push isn't
        actually set up on this device. This panel shows the live state and
        offers Enable / Send-test so the worker can verify the pipeline. -->
   <div id="push-status-card" class="nf-card" style="padding: 14px; margin-top: 14px;">
     <div style="display: flex; align-items: center; gap: 10px;">
       <span id="push-dot" style="display: inline-block; width: 10px; height: 10px; border-radius: 999px; background: rgba(255,255,255,0.3); flex-shrink: 0;"></span>
       <div style="flex: 1; min-width: 0;">
-        <p id="push-status-title" style="font-size: 0.95rem; font-weight: 700; color: #fff; margin: 0;">Checking…</p>
+        <p id="push-status-title" style="font-size: 0.95rem; font-weight: 700; color: #fff; margin: 0;">Checkingâ€¦</p>
         <p id="push-status-sub" style="font-size: 0.78rem; color: rgba(255,255,255,0.6); margin-top: 2px;">Working out whether push is set up on this device.</p>
       </div>
     </div>
     <div id="push-actions" style="display: flex; gap: 8px; margin-top: 12px; flex-wrap: wrap;">
-      <button type="button" id="push-enable-btn" style="display: none; padding: 9px 14px; border-radius: 10px; font-size: 0.82rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #2B7FFF, #1D6AE5); border: 0;">Enable push</button>
+      <button type="button" id="push-enable-btn" style="display: none; padding: 9px 14px; border-radius: 10px; font-size: 0.82rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #10B981, #059669); border: 0;">Enable push</button>
       <button type="button" id="push-test-btn" style="display: none; padding: 9px 14px; border-radius: 10px; font-size: 0.82rem; font-weight: 700; color: #fff; background: rgba(255,255,255,0.10); border: 1px solid rgba(255,255,255,0.15);">Send test</button>
     </div>
     <p id="push-server-info" style="font-size: 0.72rem; color: rgba(255,255,255,0.45); margin-top: 10px;">Server has <strong><%= subscribedDevices %></strong> device<%= subscribedDevices === 1 ? '' : 's' %> subscribed for your account.</p>
@@ -95,14 +95,14 @@
   document.getElementById('nf-all-off').addEventListener('click', function (e) { e.preventDefault(); setAll(false); });
 })();
 
-// CSRF helper — every state-changing POST below has to include this
+// CSRF helper â€” every state-changing POST below has to include this
 // header or the global CSRF middleware silently 403s it.
 function csrfToken() {
   var m = document.querySelector('meta[name="csrf-token"]');
   return m ? m.content : '';
 }
 
-// ── Push status panel ──
+// â”€â”€ Push status panel â”€â”€
 // Detects browser support + permission + active subscription. If any link in
 // the chain is broken the worker sees exactly what's missing, and gets a one-
 // tap button to fix it.
@@ -138,7 +138,7 @@ function csrfToken() {
     testBtn.style.display   = options.showTest   ? 'inline-flex' : 'none';
   }
 
-  // Promise that resolves to `null` after `ms` ms — used to race against
+  // Promise that resolves to `null` after `ms` ms â€” used to race against
   // navigator.serviceWorker.ready / pushManager.getSubscription which can
   // hang silently when a SW is upgrading (especially on iOS PWA).
   function withTimeout(promise, ms) {
@@ -163,7 +163,7 @@ function csrfToken() {
   async function check() {
     if (iosNeedsInstall()) {
       render('warn', 'Add to Home Screen to enable push',
-             'On iPhone you have to install the portal as an app before push notifications work. Tap the Share icon → Add to Home Screen, then open the app and come back here.');
+             'On iPhone you have to install the portal as an app before push notifications work. Tap the Share icon â†’ Add to Home Screen, then open the app and come back here.');
       return;
     }
     if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) {
@@ -214,16 +214,16 @@ function csrfToken() {
         return;
       }
       render('warn', 'Push not turned on yet for this device',
-             'Tap "Enable push" — you\'ll get a one-time browser prompt.',
+             'Tap "Enable push" â€” you\'ll get a one-time browser prompt.',
              { showEnable: true });
     } catch (e) {
       render('bad', 'Could not check push status', (e && e.message) || 'Unknown error', { showEnable: true });
     }
   }
 
-  // Hard watchdog — if nothing has rendered after 6s the panel falls
+  // Hard watchdog â€” if nothing has rendered after 6s the panel falls
   // back to a recoverable state instead of leaving the worker staring
-  // at "Checking…" forever.
+  // at "Checkingâ€¦" forever.
   setTimeout(function () {
     if (!rendered) {
       render('warn', 'Push status is taking a while',
@@ -234,7 +234,7 @@ function csrfToken() {
 
   async function enable() {
     enableBtn.disabled = true;
-    enableBtn.textContent = 'Working…';
+    enableBtn.textContent = 'Workingâ€¦';
     try {
       var perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
       if (perm !== 'granted') {
@@ -283,7 +283,7 @@ function csrfToken() {
   async function test() {
     testBtn.disabled = true;
     var orig = testBtn.textContent;
-    testBtn.textContent = 'Sending…';
+    testBtn.textContent = 'Sendingâ€¦';
     try {
       var r = await fetch('/w/notifications/push/test', {
         method: 'POST',
@@ -292,7 +292,7 @@ function csrfToken() {
       });
       var data = await r.json().catch(function(){ return {}; });
       if (data && data.success) {
-        testBtn.textContent = 'Sent — check your phone';
+        testBtn.textContent = 'Sent â€” check your phone';
       } else {
         testBtn.textContent = data && data.error ? data.error : 'Test failed';
       }

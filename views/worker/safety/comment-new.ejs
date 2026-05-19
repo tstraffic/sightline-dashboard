@@ -17,20 +17,20 @@
   .cn-grid { display: grid; grid-template-columns: 1fr; gap: 12px; }
   @media (min-width: 480px) { .cn-grid { grid-template-columns: 1fr 1fr; } }
   .cn-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
-  .cn-row input[type=checkbox] { width: 18px; height: 18px; accent-color: #00D2BE; }
+  .cn-row input[type=checkbox] { width: 18px; height: 18px; accent-color: #10B981; }
   .cn-anon-note { font-size: 0.7rem; color: rgba(255,255,255,0.5); padding-left: 28px; margin-top: -4px; line-height: 1.45; }
   .cn-submit {
     width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0;
-    background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
-    box-shadow: 0 6px 20px rgba(29,106,229,0.35);
+    background: linear-gradient(135deg, #059669, #10B981); color: #fff;
+    box-shadow: 0 6px 20px rgba(5,150,105,0.35);
   }
   .cn-submit:active { transform: translateY(1px); }
 </style>
 
 <div class="cn-wrap">
-  <a href="/w/safety/comments" class="cn-back">← Safety / Flag &amp; comment</a>
+  <a href="/w/safety/comments" class="cn-back">â† Safety / Flag &amp; comment</a>
   <h1 class="cn-h1">Flag or share feedback</h1>
-  <p class="cn-sub">Hazards, SWMS confusion, kit problems, ideas for improvement — anything safety-related. The office team gets a notification and responds back in this app.</p>
+  <p class="cn-sub">Hazards, SWMS confusion, kit problems, ideas for improvement â€” anything safety-related. The office team gets a notification and responds back in this app.</p>
 
   <form method="POST" action="/w/safety/comments" enctype="multipart/form-data">
     <%- include('../../partials/csrf') %>
@@ -53,9 +53,9 @@
       <div class="cn-card">
         <label class="cn-label" for="job_id">Job reference (optional)</label>
         <select name="job_id" id="job_id" class="cn-select">
-          <option value="">— None / not job-specific —</option>
+          <option value="">â€” None / not job-specific â€”</option>
           <% jobs.forEach(j => { %>
-            <option value="<%= j.id %>"><%= j.job_number %> · <%= j.client %></option>
+            <option value="<%= j.id %>"><%= j.job_number %> Â· <%= j.client %></option>
           <% }) %>
         </select>
       </div>

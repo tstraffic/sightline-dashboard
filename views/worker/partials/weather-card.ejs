@@ -5,7 +5,7 @@
   // Each weather.kind maps to:
   //   - a mesh-gradient palette (three overlapping radial gradients animated
   //     via background-position) painted behind the content
-  //   - an animated inline SVG icon that loops independently — sun rotation,
+  //   - an animated inline SVG icon that loops independently â€” sun rotation,
   //     drifting clouds, falling rain/snow/lightning
   //
   // Lottie-equivalent feel at <2KB total for the icons + ~1KB of CSS, no
@@ -28,15 +28,15 @@
     color: #fff;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.06), 0 12px 28px rgba(0,0,0,0.34);
   }
-  /* Mesh background — three overlapping radial gradients drifting against
+  /* Mesh background â€” three overlapping radial gradients drifting against
      each other for a soft animated wash. Each kind overrides the colours. */
   .wc-card::before {
     content: '';
     position: absolute; inset: 0;
     z-index: -2;
     background:
-      radial-gradient(120% 80% at 0% 0%, var(--wc-a, rgba(43,127,255,0.45)), transparent 60%),
-      radial-gradient(120% 90% at 100% 100%, var(--wc-b, rgba(0,210,190,0.30)), transparent 55%),
+      radial-gradient(120% 80% at 0% 0%, var(--wc-a, rgba(16,185,129,0.45)), transparent 60%),
+      radial-gradient(120% 90% at 100% 100%, var(--wc-b, rgba(16,185,129,0.30)), transparent 55%),
       radial-gradient(140% 100% at 50% 50%, var(--wc-c, rgba(10,22,40,0.30)), transparent 70%),
       var(--wc-base, #0a1628);
     background-size: 200% 200%, 200% 200%, 200% 200%, 100% 100%;
@@ -81,10 +81,10 @@
   }
 
   /* Per-kind palettes. */
-  .wc-card[data-kind="sunny"]         { --wc-base: #0e3066; --wc-a: rgba(255,200,80,0.40); --wc-b: rgba(43,127,255,0.40); --wc-c: rgba(255,140,40,0.20); }
+  .wc-card[data-kind="sunny"]         { --wc-base: #0e3066; --wc-a: rgba(255,200,80,0.40); --wc-b: rgba(16,185,129,0.40); --wc-c: rgba(255,140,40,0.20); }
   .wc-card[data-kind="partly-cloudy"] { --wc-base: #102b50; --wc-a: rgba(96,165,250,0.45); --wc-b: rgba(180,200,220,0.25); --wc-c: rgba(255,180,90,0.18); }
   .wc-card[data-kind="cloudy"]        { --wc-base: #1f2b3d; --wc-a: rgba(148,163,184,0.45); --wc-b: rgba(100,116,139,0.40); --wc-c: rgba(71,85,105,0.30); }
-  .wc-card[data-kind="rainy"]         { --wc-base: #0c1c3a; --wc-a: rgba(43,127,255,0.50); --wc-b: rgba(99,102,241,0.35); --wc-c: rgba(20,30,55,0.50); }
+  .wc-card[data-kind="rainy"]         { --wc-base: #0c1c3a; --wc-a: rgba(16,185,129,0.50); --wc-b: rgba(99,102,241,0.35); --wc-c: rgba(20,30,55,0.50); }
   .wc-card[data-kind="stormy"]        { --wc-base: #0a0f1f; --wc-a: rgba(99,102,241,0.55); --wc-b: rgba(167,139,250,0.30); --wc-c: rgba(245,158,11,0.20); }
   .wc-card[data-kind="snow"]          { --wc-base: #1b2640; --wc-a: rgba(186,230,253,0.50); --wc-b: rgba(255,255,255,0.25); --wc-c: rgba(125,211,252,0.30); }
   .wc-card[data-kind="fog"]           { --wc-base: #2c3142; --wc-a: rgba(203,213,225,0.40); --wc-b: rgba(148,163,184,0.30); --wc-c: rgba(100,116,139,0.25); }
@@ -157,7 +157,7 @@
 </style>
 
 <div class="wc-card" data-kind="<%= _kind %>">
-  <%# Icon — distinct SVG per kind. All paint white-ish so they read on any palette. %>
+  <%# Icon â€” distinct SVG per kind. All paint white-ish so they read on any palette. %>
   <% if (_kind === 'sunny') { %>
     <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
       <g class="wc-sun-rays" stroke="#fde68a" stroke-width="2.4" stroke-linecap="round">
@@ -216,7 +216,7 @@
     </svg>
   <% } else if (_kind === 'night') { %>
     <svg class="wc-icon" viewBox="0 0 64 64" fill="none" aria-hidden="true">
-      <%# Crescent moon — drawn by subtracting an offset circle so the
+      <%# Crescent moon â€” drawn by subtracting an offset circle so the
           inner curve is genuine moon shape, not just a thin arc. %>
       <path d="M44 36a16 16 0 1 1-16-22 13 13 0 0 0 16 22z" fill="#fde68a" stroke="#fcd34d" stroke-width="1.4"/>
       <g fill="#fef3c7">
@@ -238,13 +238,13 @@
 
   <div class="wc-meta">
     <div class="wc-temp-row">
-      <span class="wc-temp"><%= weather.temp %>°</span>
-      <span class="wc-feels">feels <%= weather.feels_like %>°</span>
+      <span class="wc-temp"><%= weather.temp %>Â°</span>
+      <span class="wc-feels">feels <%= weather.feels_like %>Â°</span>
     </div>
     <p class="wc-desc"><%= weather.description %></p>
     <p class="wc-sub">
-      <% if (weather.hi != null && weather.lo != null) { %>H <%= weather.hi %>° · L <%= weather.lo %>° · <% } %>
-      Wind <%= weather.wind_kmh %> km/h<% if (weather.rain_chance) { %> · <%= weather.rain_chance %>% rain<% } %><% if (weather.uv != null) { %> · UV <%= weather.uv %><% } %>
+      <% if (weather.hi != null && weather.lo != null) { %>H <%= weather.hi %>Â° Â· L <%= weather.lo %>Â° Â· <% } %>
+      Wind <%= weather.wind_kmh %> km/h<% if (weather.rain_chance) { %> Â· <%= weather.rain_chance %>% rain<% } %><% if (weather.uv != null) { %> Â· UV <%= weather.uv %><% } %>
     </p>
   </div>
 </div>
@@ -252,6 +252,6 @@
 <% if (weather.rain_chance && weather.rain_chance >= 40) { %>
   <div class="wc-warn">
     <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 15a4 4 0 004 4h9a5 5 0 10-.1-9.999A5.002 5.002 0 006.1 8H6a4 4 0 00-3 7zm8 2v-4m0 0v-2"/></svg>
-    Wet weather PPE recommended — chance of rain above 40%
+    Wet weather PPE recommended â€” chance of rain above 40%
   </div>
 <% } %>

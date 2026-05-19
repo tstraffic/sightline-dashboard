@@ -9,7 +9,7 @@
     const d1 = new Date(a + 'T00:00:00'); const d2 = new Date(b + 'T00:00:00');
     const sameMonth = d1.getMonth() === d2.getMonth() && d1.getFullYear() === d2.getFullYear();
     const o = { day: 'numeric', month: 'short' };
-    return d1.toLocaleDateString('en-AU', o) + ' – ' + (sameMonth ? d2.getDate() : d2.toLocaleDateString('en-AU', o)) + ' ' + d2.getFullYear();
+    return d1.toLocaleDateString('en-AU', o) + ' â€“ ' + (sameMonth ? d2.getDate() : d2.toLocaleDateString('en-AU', o)) + ' ' + d2.getFullYear();
   }
 %>
 
@@ -24,7 +24,7 @@
       <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
     </div>
     <h1 class="sf-title">Payslips</h1>
-    <p class="sf-sub">Every pay run uploaded by payroll — tap to view or download.</p>
+    <p class="sf-sub">Every pay run uploaded by payroll â€” tap to view or download.</p>
   </div>
 
   <% if (notLinked) { %>
@@ -34,7 +34,7 @@
     </div>
   <% } else if (payslips.length === 0) { %>
     <div class="sf-section" style="text-align: center; padding: 2rem 1rem;">
-      <div style="font-size: 2.4rem; margin-bottom: 0.5rem;">💸</div>
+      <div style="font-size: 2.4rem; margin-bottom: 0.5rem;">ðŸ’¸</div>
       <p class="text-sm font-semibold text-white">No payslips yet</p>
       <p class="text-xs text-white/55 mt-1">Your first payslip will land here after the next pay run.</p>
     </div>
@@ -56,13 +56,13 @@
         const isNew = !p.viewed_at;
       %>
         <a href="/w/hr/payslips/<%= p.id %>" target="_blank" style="display: flex; align-items: center; gap: 10px; padding: 12px; border-radius: 10px; text-decoration: none; background: <%= isNew ? 'rgba(16,185,129,0.06)' : 'rgba(255,255,255,0.02)' %>; border: 1px solid <%= isNew ? 'rgba(16,185,129,0.2)' : 'rgba(255,255,255,0.04)' %>;">
-          <div style="width: 44px; height: 44px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: <%= isNew ? 'rgba(16,185,129,0.18)' : 'rgba(43,127,255,0.15)' %>; color: <%= isNew ? '#34D399' : '#60A5FA' %>; flex-shrink: 0;">
+          <div style="width: 44px; height: 44px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; background: <%= isNew ? 'rgba(16,185,129,0.18)' : 'rgba(16,185,129,0.15)' %>; color: <%= isNew ? '#34D399' : '#60A5FA' %>; flex-shrink: 0;">
             <span style="font-size: 0.58rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; line-height: 1;"><%= new Date(p.pay_date + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' }).toUpperCase() %></span>
             <span style="font-size: 1.1rem; font-weight: 800; line-height: 1.1;"><%= new Date(p.pay_date + 'T00:00:00').getDate() %></span>
           </div>
           <div style="flex: 1; min-width: 0;">
             <p style="font-size: 0.85rem; font-weight: 700; color: #fff; line-height: 1.2;"><%= shortRange(p.period_start, p.period_end) %></p>
-            <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px;">Gross <%= money(p.gross_pay) %> · Tax <%= money(p.tax_withheld) %><% if (p.super_amount) { %> · Super <%= money(p.super_amount) %><% } %></p>
+            <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px;">Gross <%= money(p.gross_pay) %> Â· Tax <%= money(p.tax_withheld) %><% if (p.super_amount) { %> Â· Super <%= money(p.super_amount) %><% } %></p>
           </div>
           <div style="text-align: right; flex-shrink: 0;">
             <p style="font-size: 0.95rem; font-weight: 800; color: #fff;"><%= money(p.net_pay) %></p>
@@ -78,7 +78,7 @@
     </div>
 
     <p style="margin-top: 0.75rem; text-align: center; font-size: 0.68rem; color: rgba(255,255,255,0.4); padding: 0 0.5rem;">
-      PDFs are private — only you and HR can open them.
+      PDFs are private â€” only you and HR can open them.
     </p>
   <% } %>
 </div>

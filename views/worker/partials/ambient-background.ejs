@@ -1,5 +1,5 @@
 <%
-  // <AmbientBackground /> — round-3 particle PR 1.
+  // <AmbientBackground /> â€” round-3 particle PR 1.
   // Six large blurred orbs in the brand palette, drifting slowly behind
   // every worker page. Pure CSS for the motion (each orb owns its own
   // keyframe + duration); a tiny JS shim pauses all animations when
@@ -32,7 +32,7 @@
     opacity: 0.05;
   }
 
-  /* Drift keyframes — each orb uses its own keyframe so the timings
+  /* Drift keyframes â€” each orb uses its own keyframe so the timings
      are visibly different and the field never lines up to a beat. */
   @keyframes wh-orb-drift-1 {
     0%, 100% { transform: translate3d(-20vw, -10vh, 0) scale(1.00); }
@@ -61,12 +61,12 @@
 
   /* Per-orb colour + size + animation pairing. Colours pulled from the
      design-system palette (worker-design.css). */
-  .wh-orb-1 { width: 520px; height: 520px; background: radial-gradient(circle, var(--wd-teal,    #00D2BE), transparent 65%); opacity: 0.07; animation: wh-orb-drift-1 38s ease-in-out infinite; }
-  .wh-orb-2 { width: 440px; height: 440px; background: radial-gradient(circle, var(--wd-blue,    #2B7FFF), transparent 65%); animation: wh-orb-drift-2 44s ease-in-out infinite; }
+  .wh-orb-1 { width: 520px; height: 520px; background: radial-gradient(circle, var(--wd-teal,    #10B981), transparent 65%); opacity: 0.07; animation: wh-orb-drift-1 38s ease-in-out infinite; }
+  .wh-orb-2 { width: 440px; height: 440px; background: radial-gradient(circle, var(--wd-blue,    #10B981), transparent 65%); animation: wh-orb-drift-2 44s ease-in-out infinite; }
   .wh-orb-3 { width: 480px; height: 480px; background: radial-gradient(circle, var(--wd-violet,  #8B5CF6), transparent 65%); animation: wh-orb-drift-3 52s ease-in-out infinite; }
   .wh-orb-4 { width: 380px; height: 380px; background: radial-gradient(circle, var(--wd-emerald, #10B981), transparent 65%); animation: wh-orb-drift-4 46s ease-in-out infinite; }
   .wh-orb-5 { width: 360px; height: 360px; background: radial-gradient(circle, var(--wd-indigo,  #6366F1), transparent 65%); animation: wh-orb-drift-5 50s ease-in-out infinite; }
-  .wh-orb-6 { width: 420px; height: 420px; background: radial-gradient(circle, var(--wd-teal,    #00D2BE), transparent 65%); opacity: 0.04; animation: wh-orb-drift-6 58s ease-in-out infinite; }
+  .wh-orb-6 { width: 420px; height: 420px; background: radial-gradient(circle, var(--wd-teal,    #10B981), transparent 65%); opacity: 0.04; animation: wh-orb-drift-6 58s ease-in-out infinite; }
 
   /* Pause when the document is hidden (tab backgrounded, screen locked,
      or app sent to iOS app switcher). The JS below toggles the class. */

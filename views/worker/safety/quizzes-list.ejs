@@ -4,10 +4,10 @@
     return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
   function statusMeta(row) {
-    if (!row.latest_status) return { label: 'Not started', style: 'background: rgba(43,127,255,0.18); color: #93C5FD; border: 1px solid rgba(43,127,255,0.3);' };
+    if (!row.latest_status) return { label: 'Not started', style: 'background: rgba(16,185,129,0.18); color: #93C5FD; border: 1px solid rgba(16,185,129,0.3);' };
     if (row.latest_status === 'in_progress') return { label: 'Resume', style: 'background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3);' };
-    if (row.latest_passed) return { label: 'Passed · ' + row.latest_score + '%', style: 'background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3);' };
-    return { label: 'Failed · ' + row.latest_score + '%', style: 'background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3);' };
+    if (row.latest_passed) return { label: 'Passed Â· ' + row.latest_score + '%', style: 'background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3);' };
+    return { label: 'Failed Â· ' + row.latest_score + '%', style: 'background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3);' };
   }
 %>
 <style>
@@ -39,13 +39,13 @@
     %>
       <a href="/w/safety/quizzes/<%= r.id %>" class="qz-card<%= r.is_mandatory ? ' mandatory' : '' %>">
         <div class="qz-card-title">
-          <% if (r.is_mandatory) { %><span style="color:#fca5a5; margin-right:6px;">●</span><% } %><%= r.title %>
+          <% if (r.is_mandatory) { %><span style="color:#fca5a5; margin-right:6px;">â—</span><% } %><%= r.title %>
         </div>
         <% if (r.description) { %><div class="qz-snip"><%= r.description %></div><% } %>
         <div class="qz-meta">
           <span class="qz-chip" style="<%= sm.style %>"><%= sm.label %></span>
           <span><%= r.question_count %> question<%= r.question_count === 1 ? '' : 's' %></span>
-          <% if (r.deadline_at) { %><span>· due <%= fmtDate(r.deadline_at) %></span><% } %>
+          <% if (r.deadline_at) { %><span>Â· due <%= fmtDate(r.deadline_at) %></span><% } %>
         </div>
       </a>
     <% }) %>

@@ -146,3 +146,38 @@ input[type="search"], input[type="text"].bg-white {
   border-color: rgba(255,255,255,0.1) !important;
   color: white !important;
 }
+
+/* ════════════════════════════════════════════════════════════════════
+   ATOMIS BRAND LOCKDOWN
+   - Radius system: small UI = 6px, cards = 12px.
+   - Map any lingering cyan/blue Tailwind utility classes onto emerald
+     so worker views that haven't been hand-edited still read as brand.
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* Radius standardisation — cards 12px, small UI 6px. Overrides
+   rounded-3xl / rounded-2xl / rounded-xl on cards and rounded-lg /
+   rounded-md on small UI. Preserves rounded-full (avatars, status dots). */
+.rounded-2xl, .rounded-3xl { border-radius: 12px !important; }
+.rounded-xl { border-radius: 12px !important; }
+.rounded-lg, .rounded-md { border-radius: 6px !important; }
+
+/* Cyan / sky utility classes get redirected to the brand emerald so any
+   inherited markup from before the rebrand still resolves correctly. */
+.text-cyan-400, .text-cyan-500, .text-cyan-600,
+.text-sky-400,  .text-sky-500,  .text-sky-600 { color: #10B981 !important; }
+.bg-cyan-50,   .bg-sky-50    { background: rgba(16,185,129,0.10) !important; }
+.bg-cyan-100,  .bg-sky-100   { background: rgba(16,185,129,0.15) !important; }
+.bg-cyan-500,  .bg-sky-500   { background: #10B981 !important; color: #0F1115 !important; }
+.bg-cyan-600,  .bg-sky-600   { background: #059669 !important; color: #0F1115 !important; }
+.border-cyan-500, .border-sky-500 { border-color: #10B981 !important; }
+.ring-cyan-500, .ring-sky-500 { --tw-ring-color: rgba(16,185,129,0.4) !important; }
+
+/* Mute the heavy "lit-from-above" gradient on shift / quick-action cards
+   so they feel like flat surfaces instead of subtle 3D dishes. */
+.wd-card {
+  background-image: none !important;
+  box-shadow: none !important;
+}
+.wd-stat-tile, .wd-card[data-tone] {
+  background-image: none !important;
+}

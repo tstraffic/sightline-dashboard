@@ -1,6 +1,6 @@
 <%
   function fmt(s) {
-    if (!s) return '—';
+    if (!s) return 'â€”';
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   const score = attempt.score_pct || 0;
@@ -29,19 +29,19 @@
   .qr-cta {
     display: block; text-align: center; width: 100%; padding: 14px; border-radius: 12px;
     font-size: 0.95rem; font-weight: 700; text-decoration: none;
-    background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
-    box-shadow: 0 6px 20px rgba(29,106,229,0.35);
+    background: linear-gradient(135deg, #059669, #10B981); color: #fff;
+    box-shadow: 0 6px 20px rgba(5,150,105,0.35);
     margin-top: 14px;
   }
 </style>
 
 <div class="qr-wrap">
-  <a href="/w/safety/quizzes" class="qr-back">← Safety / Quizzes</a>
+  <a href="/w/safety/quizzes" class="qr-back">â† Safety / Quizzes</a>
   <div class="qr-title"><%= quiz.title %></div>
 
   <div class="qr-hero <%= passed ? 'pass' : 'fail' %>">
     <div class="qr-score-num"><%= score %>%</div>
-    <div class="qr-status"><%= passed ? '✓ Passed' : 'Not yet — need ' + quiz.pass_mark + '%' %></div>
+    <div class="qr-status"><%= passed ? 'âœ“ Passed' : 'Not yet â€” need ' + quiz.pass_mark + '%' %></div>
     <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 6px;">Submitted <%= fmt(attempt.submitted_at) %></p>
   </div>
 
@@ -63,12 +63,12 @@
   %>
     <div class="qr-q-card <%= isCorrect ? 'qr-q-correct' : 'qr-q-wrong' %>">
       <div class="qr-q-text"><%= i + 1 %>. <%= q.question_text %></div>
-      <div class="qr-q-yours"><strong><%= isCorrect ? '✓' : '✗' %> Your answer:</strong> <%= yourLabel %></div>
+      <div class="qr-q-yours"><strong><%= isCorrect ? 'âœ“' : 'âœ—' %> Your answer:</strong> <%= yourLabel %></div>
       <% if (!isCorrect) { %>
         <div class="qr-q-correctv"><strong>Correct:</strong> <%= correctLabel %></div>
       <% } %>
       <% if (q.explanation) { %>
-        <div class="qr-q-explain">💡 <%= q.explanation %></div>
+        <div class="qr-q-explain">ðŸ’¡ <%= q.explanation %></div>
       <% } %>
     </div>
   <% }) %>

@@ -1,10 +1,10 @@
 <%
   function fmt(s) {
-    if (!s) return '—';
+    if (!s) return 'â€”';
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   const CHIP_STATUS = {
-    submitted:    'background: rgba(43,127,255,0.18); color: #93C5FD; border: 1px solid rgba(43,127,255,0.3);',
+    submitted:    'background: rgba(16,185,129,0.18); color: #93C5FD; border: 1px solid rgba(16,185,129,0.3);',
     acknowledged: 'background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3);',
     under_review: 'background: rgba(139,92,246,0.18); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3);',
     closed:       'background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3);',
@@ -30,19 +30,19 @@
   .cd-response-label { font-size: 0.65rem; font-weight: 700; color: #6ee7b7; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
   .cd-response-body { font-size: 0.92rem; line-height: 1.55; white-space: pre-line; color: rgba(255,255,255,0.95); }
   .cd-pending {
-    background: rgba(43,127,255,0.10); border: 1px solid rgba(43,127,255,0.3); border-radius: 12px;
+    background: rgba(16,185,129,0.10); border: 1px solid rgba(16,185,129,0.3); border-radius: 12px;
     padding: 14px 16px; font-size: 0.85rem; color: rgba(255,255,255,0.75); margin-top: 14px;
   }
 </style>
 
 <div class="cd-wrap">
-  <a href="/w/safety/comments" class="cd-back">← Safety / Flag &amp; comment</a>
-  <div class="cd-h1">Comment #<%= comment.id %> · <%= categoryLabels[comment.category] %></div>
+  <a href="/w/safety/comments" class="cd-back">â† Safety / Flag &amp; comment</a>
+  <div class="cd-h1">Comment #<%= comment.id %> Â· <%= categoryLabels[comment.category] %></div>
   <div class="cd-meta">
     <span class="cd-chip" style="<%= CHIP_STATUS[comment.status] || CHIP_STATUS.submitted %>"><%= statusLabels[comment.status] %></span>
     <span><%= fmt(comment.created_at) %></span>
-    <% if (comment.job_number) { %><span>· <%= comment.job_number %></span><% } %>
-    <% if (comment.is_anonymous) { %><span>· anonymous</span><% } %>
+    <% if (comment.job_number) { %><span>Â· <%= comment.job_number %></span><% } %>
+    <% if (comment.is_anonymous) { %><span>Â· anonymous</span><% } %>
   </div>
 
   <div class="cd-body"><%= comment.body %></div>
@@ -59,7 +59,7 @@
 
   <% if (comment.office_response) { %>
     <div class="cd-response">
-      <div class="cd-response-label">Office response · <%= fmt(comment.response_at) %><% if (comment.response_by_name) { %> · <%= comment.response_by_name %><% } %></div>
+      <div class="cd-response-label">Office response Â· <%= fmt(comment.response_at) %><% if (comment.response_by_name) { %> Â· <%= comment.response_by_name %><% } %></div>
       <div class="cd-response-body"><%= comment.office_response %></div>
     </div>
   <% } else { %>

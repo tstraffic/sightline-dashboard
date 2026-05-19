@@ -53,12 +53,9 @@ a, button, input, select, textarea {
   ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 }
 
-/* ===== Page Background â€” Atomis (locked dark) ===== */
+/* ===== Page Background â€” Atomis (locked dark, no glow) ===== */
 body, body.dark-glass {
   background: var(--atomis-base);
-  background-image:
-    radial-gradient(ellipse 80% 50% at 80% 20%, rgba(16,185,129,0.06), transparent 60%);
-  background-attachment: fixed;
   color: var(--dark-text-primary);
 }
 
@@ -91,10 +88,31 @@ body, body.dark-glass {
 .bg-white:not(nav):not(td):not(th):not(tr):not(.fab-menu a):not(#notif-dropdown):not(#quickadd-dropdown):not(.urgency-tile) {
   border-color: rgba(0,0,0,0.06) !important;
 }
-/* Dashboard cards â€” 12px radius */
+/* ===== Radius system (Atomis): small UI = 6px, cards/containers = 12px,
+   nothing else. The rebrand sprayed rounded-2xl/3xl everywhere, which made
+   the radius vocabulary feel undecided. Coerce them globally. */
+.rounded-2xl,
+.rounded-3xl,
 .bg-white[class*="rounded-2xl"],
 .bg-white[class*="rounded-xl"] {
-  border-radius: 12px;
+  border-radius: 12px !important;
+}
+/* Pills, badges, inputs stay tight */
+.rounded-md,
+.rounded-lg {
+  border-radius: 6px !important;
+}
+/* Buttons keep 6px too — but preserve fully-rounded for circular elements */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="number"],
+input[type="search"],
+input[type="tel"],
+input[type="url"],
+select,
+textarea {
+  border-radius: 6px !important;
 }
 
 /* ===== Density â€” Compact Operations UI ===== */
@@ -163,6 +181,19 @@ table {
 .sidebar-nav::-webkit-scrollbar-track { background: transparent; }
 .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 100px; }
 
+/* Sidebar nav icons — uniform 1.5px stroke, outlined. Overrides inline
+   stroke-width on every <svg> inside .sidebar-link so the mixed-weight
+   bag of icons reads as one set. */
+.sidebar-link svg path,
+.sidebar-link svg circle,
+.sidebar-link svg rect,
+.sidebar-link svg line,
+.sidebar-link svg polyline,
+.sidebar-link svg polygon {
+  stroke-width: 1.5 !important;
+}
+.sidebar-link svg { stroke-linecap: round; stroke-linejoin: round; }
+
 /* Sidebar link â€” smooth interactions */
 .sidebar-link {
   position: relative;
@@ -189,19 +220,29 @@ table {
   .sidebar-link:active { transform: scale(0.97); }
 }
 
-/* Sidebar badges */
+/* Sidebar badges — single neutral style by default. Colour (red) is
+   reserved for the Incidents badge which represents a genuine action. */
 .sidebar-badge {
   min-width: 1.25rem;
-  height: 1.25rem;
+  height: 1.1rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-size: 0.625rem;
-  font-weight: 700;
-  border-radius: 9999px;
-  padding: 0 0.25rem;
+  font-weight: 600;
+  border-radius: 6px;
+  padding: 0 0.4rem;
   line-height: 1;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-badge.sidebar-badge-muted {
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.55);
+}
+.sidebar-badge.bg-red-500 {
+  background: rgba(239,68,68,0.18) !important;
+  color: #fca5a5 !important;
+  box-shadow: none;
 }
 
 /* ===== Mobile Touch Targets ===== */
@@ -384,25 +425,10 @@ main > div > *:nth-child(8) { animation-delay: 350ms; }
   left: 0;
 }
 
-/* ===== Hero Banner Animations ===== */
-.hero-banner {
-  position: relative;
-}
-.hero-banner .hero-orb {
-  animation: glow-drift 8s ease-in-out infinite;
-  will-change: transform;
-}
-.hero-banner .hero-orb:nth-child(2) { animation-delay: 2.5s; animation-duration: 10s; }
-.hero-banner .hero-orb:nth-child(3) { animation-delay: 5s; animation-duration: 12s; }
+/* Hero greeting — minimal entrance only, no animated orbs */
 .hero-greeting {
-  animation: fade-in-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s both;
+  animation: fade-in-up 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
-.hero-kpi-card {
-  animation: fade-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
-}
-.hero-kpi-card:nth-child(1) { animation-delay: 0.2s; }
-.hero-kpi-card:nth-child(2) { animation-delay: 0.3s; }
-.hero-kpi-card:nth-child(3) { animation-delay: 0.4s; }
 
 /* KPI number animated countup style */
 .kpi-number {
@@ -418,13 +444,12 @@ main > div > *:nth-child(8) { animation-delay: 350ms; }
   animation: bell-ring 1s ease-in-out;
 }
 
-/* ===== Card Hover Micro-Interactions ===== */
+/* Urgency tile hover — quiet. No scale, no lift. Just a border step. */
 .urgency-tile {
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.25s ease, border-color 0.25s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 .urgency-tile:hover {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 25px -5px rgba(0,0,0,0.1), 0 4px 10px -5px rgba(0,0,0,0.04);
+  background: rgba(255,255,255,0.02);
 }
 
 /* Card content sections â€” stagger children on appear */
@@ -2501,8 +2526,14 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 .dark-glass .hover\:bg-gray-50:hover { background: rgba(255,255,255,0.06) !important; }
 .dark-glass .hover\:bg-gray-100:hover { background: rgba(255,255,255,0.08) !important; }
 .dark-glass .hover\:bg-white:hover { background: rgba(255,255,255,0.10) !important; }
-.dark-glass .bg-brand-50 { background: rgba(16,185,129,0.10) !important; }
-.dark-glass .hover\:bg-brand-50:hover { background: rgba(16,185,129,0.15) !important; }
+/* bg-brand-50 is overused as a default tint. Mute it to neutral surface so
+   emerald only appears where it's intentional (logo, primary CTAs, active
+   nav, success states, links). Only sidebar's explicit "active" state and
+   the .emerald-tint helper get to keep the green hue. */
+.dark-glass .bg-brand-50 { background: rgba(255,255,255,0.04) !important; }
+.dark-glass .hover\:bg-brand-50:hover { background: rgba(255,255,255,0.08) !important; }
+.dark-glass .bg-brand-100 { background: rgba(255,255,255,0.06) !important; }
+.dark-glass .hover\:bg-brand-100:hover { background: rgba(255,255,255,0.10) !important; }
 .dark-glass .bg-\[\#F3F4F6\] { background: rgba(255,255,255,0.04) !important; }
 .dark-glass .bg-\[\#FAFAFA\] { background: rgba(255,255,255,0.03) !important; }
 .dark-glass .bg-\[\#F9FAFB\] { background: rgba(255,255,255,0.04) !important; }
@@ -2675,12 +2706,15 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 .dark-glass .text-green-800 { color: #86efac !important; }
 .dark-glass .border-green-200 { border-color: rgba(34,197,94,0.25) !important; }
 
-.dark-glass .bg-blue-50 { background: rgba(16,185,129,0.15) !important; }
-.dark-glass .bg-blue-100 { background: rgba(16,185,129,0.20) !important; }
+/* Blue family was mistakenly mapped to emerald in the rebrand. Restore it
+   to actual blue so it can carry "info" meaning without bleeding into the
+   accent colour. */
+.dark-glass .bg-blue-50 { background: rgba(59,130,246,0.12) !important; }
+.dark-glass .bg-blue-100 { background: rgba(59,130,246,0.18) !important; }
 .dark-glass .text-blue-700 { color: #93c5fd !important; }
 .dark-glass .text-blue-800 { color: #93c5fd !important; }
 .dark-glass .text-blue-600 { color: #60a5fa !important; }
-.dark-glass .border-blue-200 { border-color: rgba(16,185,129,0.25) !important; }
+.dark-glass .border-blue-200 { border-color: rgba(59,130,246,0.25) !important; }
 
 .dark-glass .bg-purple-50 { background: rgba(147,51,234,0.15) !important; }
 .dark-glass .bg-purple-100 { background: rgba(147,51,234,0.20) !important; }

@@ -5,51 +5,49 @@
   const b = typeof sidebarBadges !== 'undefined' ? sidebarBadges : {};
 %>
 
-<!-- Sidebar -->
-<aside id="sidebar" class="w-[280px] lg:w-[260px] bg-gradient-to-b from-brand-900 via-brand-900 to-brand-950 flex-shrink-0 hidden lg:flex lg:flex-col fixed lg:sticky z-50 inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-out lg:top-0" style="min-height: 100vh; max-height: 100vh;">
+<!-- Sidebar — flat charcoal (no emerald gradient). Emerald is reserved for
+     the logo mark and the active nav item only. -->
+<aside id="sidebar" class="w-[280px] lg:w-[240px] flex-shrink-0 hidden lg:flex lg:flex-col fixed lg:sticky z-50 inset-y-0 left-0 transform -translate-x-full lg:translate-x-0 transition-transform duration-300 ease-out lg:top-0" style="min-height: 100vh; max-height: 100vh; background:#14171D; border-right:1px solid rgba(255,255,255,0.06)">
 
   <!-- Mobile sidebar header -->
-  <div class="lg:hidden px-5 pt-6 pb-4 bg-gradient-to-b from-brand-950 to-brand-900">
+  <div class="lg:hidden px-5 pt-6 pb-4" style="background:#14171D">
     <div class="flex items-center justify-between mb-4">
-      <div class="flex items-center gap-3">
-        <img src="/images/atomis-mark.svg" alt="Atomis" class="h-8 w-auto">
-        <span class="text-white font-bold text-sm" style="font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.03em;">atomis</span>
+      <div class="flex items-center gap-2.5">
+        <img src="/images/atomis-mark.svg" alt="Atomis" class="h-7 w-auto">
+        <span class="text-white text-base font-medium" style="font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.04em;">atomis</span>
       </div>
-      <button id="sidebar-close" class="p-2 text-brand-400 hover:text-white hover:bg-white/10 rounded-xl transition-all active:scale-95" aria-label="Close menu">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      <button id="sidebar-close" class="p-2 text-gray-400 hover:text-white hover:bg-white/5 transition-all active:scale-95" style="border-radius:6px" aria-label="Close menu">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
     </div>
     <% if (user) { %>
-    <div class="flex items-center gap-3 p-3 bg-white/10 rounded-xl backdrop-blur-sm">
-      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-400 to-brand-600 text-white flex items-center justify-center text-sm font-bold shadow-lg">
+    <div class="flex items-center gap-3 p-3" style="background:rgba(255,255,255,0.04);border-radius:8px">
+      <div class="w-9 h-9 flex items-center justify-center text-xs font-semibold text-white" style="background:#22262F;border-radius:6px">
         <%= user.full_name ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'U' %>
       </div>
       <div class="flex-1 min-w-0">
-        <p class="text-white text-sm font-semibold truncate"><%= user.full_name %></p>
-        <p class="text-brand-300 text-xs"><%= user.role.charAt(0).toUpperCase() + user.role.slice(1) %></p>
+        <p class="text-white text-sm font-medium truncate"><%= user.full_name %></p>
+        <p class="text-gray-500 text-[11px] font-mono uppercase tracking-wider mt-0.5"><%= user.role %></p>
       </div>
     </div>
     <% } %>
     <!-- Quick action buttons -->
     <div class="flex gap-2 mt-3">
-      <a href="/profile" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-medium rounded-xl transition-all active:scale-95">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+      <a href="/profile" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-gray-300 text-xs font-medium transition-all active:scale-95" style="background:rgba(255,255,255,0.05);border-radius:6px">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
         Profile
       </a>
-      <a href="/notifications" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2.5 bg-white/10 hover:bg-white/20 text-white text-xs font-medium rounded-xl transition-all active:scale-95">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+      <a href="/notifications" class="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-gray-300 text-xs font-medium transition-all active:scale-95" style="background:rgba(255,255,255,0.05);border-radius:6px">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
         Alerts
       </a>
     </div>
   </div>
 
-  <!-- Desktop logo area -->
-  <a href="/dashboard" class="hidden lg:flex items-center gap-2.5 px-5 py-4 border-b border-white/8 hover:bg-white/5 transition-colors">
-    <img src="/images/atomis-mark.svg" alt="Atomis" class="h-8 w-auto">
-    <div>
-      <span class="text-white font-bold text-base block leading-tight" style="font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.04em;">atomis</span>
-      <span class="text-brand-400/60 text-[10px] font-medium tracking-wider uppercase">Operations</span>
-    </div>
+  <!-- Desktop logo area — wordmark only, no subtitle -->
+  <a href="/dashboard" class="hidden lg:flex items-center gap-2.5 px-5 py-4 hover:bg-white/[0.03] transition-colors" style="border-bottom:1px solid rgba(255,255,255,0.06)">
+    <img src="/images/atomis-mark.svg" alt="Atomis" class="h-7 w-auto">
+    <span class="text-white text-[17px] font-medium" style="font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.04em;">atomis</span>
   </a>
 
   <!-- Scrollable nav area.
@@ -73,7 +71,7 @@
       <% var tOver = (b.tasksPlanningOverdue || 0) + (b.tasksOpsOverdue || 0); %>
       <% var tUp   = (b.tasksPlanning || 0)        + (b.tasksOps || 0); %>
       <% if (tOver) { %><span class="sidebar-badge bg-red-500 text-white"><%= tOver %></span><% } %>
-      <% if (tUp)   { %><span class="sidebar-badge bg-blue-500 text-white"><%= tUp   %></span><% } %>
+      <% if (tUp)   { %><span class="sidebar-badge sidebar-badge-muted"><%= tUp   %></span><% } %>
     </a>
     <% } %>
 
@@ -99,7 +97,7 @@
     <a href="/projects" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'projects' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
       <span class="flex-1">Jobs</span>
-      <% if (b.jobActions) { %><span class="sidebar-badge bg-blue-500 text-white"><%= b.jobActions %></span><% } %>
+      <% if (b.jobActions) { %><span class="sidebar-badge sidebar-badge-muted"><%= b.jobActions %></span><% } %>
     </a>
     <% } %>
     <% if (canAccess(user, 'compliance')) { %>
@@ -107,7 +105,7 @@
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
       <span class="flex-1">Plans & Approvals</span>
       <% if (b.complianceOverdue) { %><span class="sidebar-badge bg-red-500 text-white"><%= b.complianceOverdue %></span><% } %>
-      <% if (b.compliance) { %><span class="sidebar-badge bg-blue-500 text-white"><%= b.compliance %></span><% } %>
+      <% if (b.compliance) { %><span class="sidebar-badge sidebar-badge-muted"><%= b.compliance %></span><% } %>
     </a>
     <a href="/tgs-risk-assessments" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'tgs-risk-assessments' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
@@ -231,7 +229,7 @@
     <a href="/bookings" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'bookings' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
       <span class="flex-1">Bookings</span>
-      <% if (b.allocations) { %><span class="sidebar-badge bg-blue-500 text-white"><%= b.allocations %></span><% } %>
+      <% if (b.allocations) { %><span class="sidebar-badge sidebar-badge-muted"><%= b.allocations %></span><% } %>
     </a>
     <a href="/bookings/map" class="sidebar-link flex items-center px-3 py-2 ml-6 text-xs font-medium rounded-lg <%= typeof currentPage !== 'undefined' && currentPage === 'bookings-map' ? 'bg-white/15 text-white' : 'text-brand-300 hover:bg-white/10 hover:text-white' %> transition-all">
       <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m-6 3l6-3"/></svg>
@@ -257,7 +255,7 @@
     <a href="/leave-approvals" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'leave-approvals' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M2.5 19l19-7.5L2.5 4v7l13 .5-13 .5z"/></svg>
       <span class="flex-1">Leave Approvals</span>
-      <% if (b.leavePending) { %><span class="sidebar-badge bg-amber-500 text-white"><%= b.leavePending %></span><% } %>
+      <% if (b.leavePending) { %><span class="sidebar-badge sidebar-badge-muted"><%= b.leavePending %></span><% } %>
     </a>
     <% } %>
     <% if (canAccess(user, 'equipment')) { %>
@@ -378,7 +376,7 @@
     <a href="/hr/roster" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && (currentPage === 'crew' || currentPage === 'hr-employees' || currentPage === 'hr-roster') ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       <span class="flex-1">Roster</span>
-      <% if (b.crew) { %><span class="sidebar-badge bg-amber-500 text-white"><%= b.crew %></span><% } %>
+      <% if (b.crew) { %><span class="sidebar-badge sidebar-badge-muted"><%= b.crew %></span><% } %>
     </a>
     <a href="/hr/secure-queue" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'hr-secure-queue' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>

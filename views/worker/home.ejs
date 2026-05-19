@@ -42,50 +42,23 @@
 <style>
   .wh-wrap { padding: 0.5rem; }
 
-  /* Hero */
+  /* Hero — flat charcoal surface, thin border. No drifting radials, no
+     glow blobs. The greeting and date carry the whole pane. */
   .wh-hero {
     position: relative;
-    padding: 1rem 1.1rem 1.1rem;
-    border-radius: 16px;
-    /* The static "lit-from-above" sheen + base navy stay put; the two
-       radial accents (blue top-left, teal bottom-right) drift slowly via
-       background-position so the hero feels alive without distracting. */
-    background-color: #0A1628;
-    background-image:
-      linear-gradient(180deg, rgba(255,255,255,0.045) 0%, rgba(255,255,255,0.005) 100%),
-      radial-gradient(120% 80% at 0% 0%, rgba(43,127,255,0.25), transparent 60%),
-      radial-gradient(120% 80% at 100% 100%, rgba(0,210,190,0.18), transparent 55%),
-      linear-gradient(160deg, #0F1F3A, #0A1628);
-    background-repeat: no-repeat;
-    background-size: 100% 100%, 200% 200%, 200% 200%, 100% 100%;
-    background-position: 0 0, 0% 0%, 100% 100%, 0 0;
-    border: 1px solid rgba(255,255,255,0.08);
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.06),
-      0 10px 24px rgba(0,0,0,0.32);
+    padding: 1.1rem 1.1rem 1.2rem;
+    border-radius: 12px;
+    background: #1A1D24;
+    border: 1px solid rgba(255,255,255,0.06);
     overflow: hidden;
-    will-change: background-position;
-    animation: wh-hero-drift 24s ease-in-out infinite alternate;
   }
-  @keyframes wh-hero-drift {
-    0%   { background-position: 0 0, 0% 0%,   100% 100%, 0 0; }
-    100% { background-position: 0 0, 20% 15%, 80% 70%,   0 0; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .wh-hero { animation: none; }
-  }
-  .wh-hero::before {
-    content: ''; position: absolute; inset: -40% -40% 30% 30%;
-    background: radial-gradient(closest-side, rgba(0,210,190,0.18), transparent);
-    filter: blur(40px); pointer-events: none;
-  }
-  .wh-hero-sub { font-size: 0.75rem; color: rgba(255,255,255,0.55); letter-spacing: 0.02em; }
-  .wh-hero-greet { font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: -0.01em; line-height: 1.15; margin-top: 0.125rem; }
-  .wh-hero-ctx { font-size: 0.85rem; color: #93C5FD; margin-top: 0.5rem; font-weight: 500; display: flex; align-items: center; gap: 0.4rem; }
+  .wh-hero-sub { font-family: 'Geist Mono', monospace; font-size: 0.65rem; color: rgba(255,255,255,0.5); letter-spacing: 0.12em; text-transform: uppercase; }
+  .wh-hero-greet { font-family: 'Bricolage Grotesque', Geist, sans-serif; font-size: 1.5rem; font-weight: 500; color: #fff; letter-spacing: -0.025em; line-height: 1.15; margin-top: 0.25rem; }
+  .wh-hero-ctx { font-size: 0.82rem; color: #6EE7B7; margin-top: 0.6rem; font-weight: 500; display: flex; align-items: center; gap: 0.4rem; }
   .wh-hero-ctx.shift { color: #FCD34D; }
   .wh-hero-ctx.compliance { color: #FDA4AF; }
-  .wh-hero-ctx.leave { color: #A78BFA; }
-  .wh-hero-ctx.payslip { color: #34D399; }
+  .wh-hero-ctx.leave { color: #C4B5FD; }
+  .wh-hero-ctx.payslip { color: #6EE7B7; }
   .wh-hero-ctx.birthday, .wh-hero-ctx.anniversary { color: #F9A8D4; }
   .wh-hero-ctx .dot { width: 6px; height: 6px; border-radius: 999px; background: currentColor; opacity: 0.8; animation: wh-pulse 2.4s infinite; }
   @keyframes wh-pulse { 0%,100%{opacity:1} 50%{opacity:0.45} }
@@ -104,14 +77,15 @@
   .wh-stat-unit { font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.45); margin-left: 3px; }
   .wh-stat-sub { font-size: 0.65rem; color: rgba(255,255,255,0.4); margin-top: 4px; }
   .wh-stat-ico { position: absolute; top: 10px; right: 10px; width: 26px; height: 26px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
-  .wh-stat.hrs .wh-stat-ico { background: rgba(43,127,255,0.15); color: #60A5FA; }
+  .wh-stat.hrs .wh-stat-ico { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6); }
   .wh-stat.days .wh-stat-ico { background: rgba(16,185,129,0.15); color: #34D399; }
   .wh-stat.up .wh-stat-ico { background: rgba(245,158,11,0.15); color: #F59E0B; }
   .wh-stat.leave .wh-stat-ico { background: rgba(167,139,250,0.15); color: #A78BFA; }
 
   .wh-section-head { display: flex; align-items: center; justify-content: space-between; margin: 1.25rem 0 0.5rem; padding: 0 2px; }
   .wh-section-title { font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.08em; }
-  .wh-section-link { font-size: 0.75rem; font-weight: 600; color: #60A5FA; display: inline-flex; align-items: center; gap: 2px; }
+  .wh-section-link { font-size: 0.75rem; font-weight: 500; color: rgba(255,255,255,0.55); display: inline-flex; align-items: center; gap: 2px; }
+  .wh-section-link:hover { color: #10B981; }
 
   /* Cards carousel */
   .wh-cards { display: flex; gap: 10px; overflow-x: auto; padding: 2px 2px 8px; scrollbar-width: none; scroll-snap-type: x mandatory; }
@@ -133,14 +107,14 @@
   .wh-card-ic { width: 28px; height: 28px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
   .wh-card-ic.red { background: rgba(239,68,68,0.15); color: #F87171; }
   .wh-card-ic.amber { background: rgba(245,158,11,0.15); color: #F59E0B; }
-  .wh-card-ic.blue { background: rgba(43,127,255,0.15); color: #60A5FA; }
+  .wh-card-ic.blue { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); }
   .wh-card-ic.emerald { background: rgba(16,185,129,0.15); color: #34D399; }
-  .wh-card-ic.indigo { background: rgba(99,102,241,0.15); color: #818CF8; }
-  .wh-card-title { font-size: 0.82rem; font-weight: 700; color: #fff; line-height: 1.2; flex: 1; min-width: 0; }
+  .wh-card-ic.indigo { background: rgba(167,139,250,0.15); color: #A78BFA; }
+  .wh-card-title { font-size: 0.82rem; font-weight: 600; color: #fff; line-height: 1.2; flex: 1; min-width: 0; }
   .wh-card-body { font-size: 0.72rem; color: rgba(255,255,255,0.6); line-height: 1.3; }
-  .wh-card-dismiss { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 999px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.04); }
+  .wh-card-dismiss { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 6px; display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.35); background: rgba(255,255,255,0.04); }
   .wh-card-dismiss:hover { color: #fff; background: rgba(255,255,255,0.1); }
-  .wh-card-cta { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; font-weight: 700; color: #60A5FA; align-self: flex-start; margin-top: auto; padding: 4px 0; }
+  .wh-card-cta { display: inline-flex; align-items: center; gap: 3px; font-size: 0.72rem; font-weight: 600; color: #10B981; align-self: flex-start; margin-top: auto; padding: 4px 0; }
 
   /* Streaks strip */
   .wh-streaks { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
@@ -154,7 +128,7 @@
   .wh-streak-label { font-size: 0.625rem; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.07em; display: flex; align-items: center; gap: 6px; }
   .wh-streak-ic { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; border-radius: 6px; position: relative; overflow: visible; transition: box-shadow 240ms ease; }
   .wh-streak-ic.emerald { background: rgba(16,185,129,0.18); color: #34D399; }
-  .wh-streak-ic.blue { background: rgba(43,127,255,0.18); color: #60A5FA; }
+  .wh-streak-ic.blue { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); }
   .wh-streak-ic.purple { background: rgba(167,139,250,0.18); color: #A78BFA; }
   .wh-streak-ic.amber { background: rgba(245,158,11,0.18); color: #F59E0B; }
 
@@ -238,13 +212,13 @@
   .wh-wday-num { font-family: var(--wd-font-display, 'JetBrains Mono', ui-monospace, monospace); font-size: 0.9rem; font-weight: 700; margin-top: 1px; line-height: 1.1; color: #fff; font-feature-settings: "tnum" 1; }
   .wh-wday.past .wh-wday-num { opacity: 0.45; }
   .wh-wday-pill { display: inline-block; height: 4px; width: 20px; border-radius: 2px; margin-top: 4px; background: rgba(255,255,255,0.08); }
-  .wh-wday.has-shift .wh-wday-pill { background: #00D2BE; }
-  .wh-wday.has-shift-night .wh-wday-pill { background: #3B82F6; }
+  .wh-wday.has-shift .wh-wday-pill { background: #10B981; }
+  .wh-wday.has-shift-night .wh-wday-pill { background: rgba(255,255,255,0.4); }
   .wh-wday.has-leave .wh-wday-pill { background: #F59E0B; }
   .wh-wday.has-leave-pending .wh-wday-pill { background: linear-gradient(90deg, #F59E0B 50%, transparent 50%); background-size: 4px 4px; }
 
   /* Weather */
-  .wh-weather { background: linear-gradient(135deg, rgba(43,127,255,0.12), rgba(10,22,40,0.5)); border: 1px solid rgba(96,165,250,0.25); border-radius: 14px; padding: 14px; display: flex; align-items: center; gap: 14px; }
+  .wh-weather { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 14px; display: flex; align-items: center; gap: 14px; }
   .wh-weather-temp { font-size: 2.4rem; font-weight: 800; color: #fff; line-height: 1; }
   .wh-weather-meta { flex: 1; min-width: 0; }
   .wh-weather-desc { font-size: 0.85rem; color: #fff; font-weight: 600; text-transform: capitalize; }
@@ -257,7 +231,7 @@
   .wh-timeline-sub { font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px; }
   .wh-timeline-hint { display: inline-flex; align-items: center; gap: 4px; font-size: 0.6rem; font-weight: 600; color: rgba(255,205,84,0.85); background: rgba(245,158,11,0.10); border: 1px solid rgba(245,158,11,0.18); border-radius: 999px; padding: 3px 8px; margin-top: 8px; }
   .wh-timeline-track { position: relative; height: 14px; margin-top: 14px; background: rgba(255,255,255,0.04); border-radius: 999px; overflow: visible; }
-  .wh-timeline-fill { position: absolute; top: 0; bottom: 0; left: 0; right: 0; background: linear-gradient(90deg, rgba(43,127,255,0.55), rgba(0,210,190,0.55)); border-radius: 999px; }
+  .wh-timeline-fill { position: absolute; top: 0; bottom: 0; left: 0; right: 0; background: rgba(16,185,129,0.55); border-radius: 999px; }
   .wh-timeline-block-dot { position: absolute; top: 50%; transform: translate(-50%, -50%); width: 12px; height: 12px; border-radius: 999px; background: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,0.18); z-index: 1; }
   .wh-timeline-now { position: absolute; top: -6px; bottom: -6px; width: 2px; background: #F59E0B; box-shadow: 0 0 8px rgba(245,158,11,0.6); z-index: 2; transition: left 1s linear; }
   .wh-timeline-now::before { content: ''; position: absolute; top: -5px; left: -5px; width: 12px; height: 12px; border-radius: 999px; background: #F59E0B; box-shadow: 0 0 10px rgba(245,158,11,0.8); }
@@ -280,26 +254,23 @@
   .wh-alert h4 { font-size: 0.8rem; font-weight: 700; color: #F59E0B; }
   .wh-alert ul { margin-top: 4px; font-size: 0.75rem; color: #FCD34D; line-height: 1.4; }
 
-  /* Shift card — dark-theme tinted card so it doesn't look like a stray
-     light surface dropped onto the rest of the worker home. Brand-blue
-     accent strip down the left, glassy navy fill behind, rgba whites for
-     text + borders. Allocated shifts get a faint amber tint so they read
-     as "needs your attention" without the harsh full-white treatment. */
+  /* Shift card — flat charcoal surface with a thin emerald left accent so
+     it reads as "your next shift" without a heavy navy gradient. Allocated
+     shifts swap the accent to amber (needs attention). */
   .wh-shift {
-    background: linear-gradient(155deg, rgba(43,127,255,0.08), rgba(10,22,40,0.6) 60%);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
+    background: #1A1D24;
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 12px;
     overflow: hidden;
     position: relative;
-    box-shadow: 0 6px 24px rgba(0,0,0,0.25);
   }
   .wh-shift::before {
     content: '';
     position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-    background: linear-gradient(180deg, #2B7FFF, #00D2BE);
+    background: #10B981;
   }
   .wh-shift.is-allocated::before {
-    background: linear-gradient(180deg, #F59E0B, #F97316);
+    background: #F59E0B;
   }
   .wh-shift-header {
     padding: 10px 14px;
@@ -333,7 +304,7 @@
   .wh-act-btn {
     display: inline-flex; align-items: center; justify-content: center;
     gap: 4px; padding: 10px; font-size: 0.82rem; font-weight: 600;
-    border-radius: 10px;
+    border-radius: 6px;
     background: rgba(255,255,255,0.06);
     color: rgba(255,255,255,0.85);
     border: 1px solid rgba(255,255,255,0.08);
@@ -341,11 +312,10 @@
   }
   .wh-act-btn:active { background: rgba(255,255,255,0.10); }
   .wh-act-btn.primary {
-    background: linear-gradient(135deg, #2B7FFF, #1D6AE5);
-    color: #fff; border-color: rgba(43,127,255,0.6);
-    box-shadow: 0 6px 18px rgba(43,127,255,0.30);
+    background: #10B981;
+    color: #0F1115; border-color: transparent;
   }
-  .wh-act-btn.primary:active { background: linear-gradient(135deg, #1D6AE5, #1453B8); }
+  .wh-act-btn.primary:active { background: #059669; }
   /* Status pill (the "ALLOCATED" / "CONFIRMED" badge in the header) */
   .wh-shift-status {
     display: inline-flex; align-items: center; padding: 3px 9px;
@@ -365,7 +335,7 @@
     font-size: 0.65rem; font-weight: 700; letter-spacing: 0.02em;
     margin-left: 6px;
   }
-  .wh-countdown.before { background: rgba(43,127,255,0.18); color: #93C5FD; border: 1px solid rgba(43,127,255,0.35); }
+  .wh-countdown.before { background: rgba(16,185,129,0.14); color: #6EE7B7; border: 1px solid rgba(16,185,129,0.30); }
   .wh-countdown.on { background: rgba(245,158,11,0.18); color: #FCD34D; border: 1px solid rgba(245,158,11,0.35); }
   .wh-countdown.after { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.1); }
   .wh-meta-row.linkrow {
@@ -373,14 +343,14 @@
   }
   .wh-meta-row a.wh-meta-link {
     display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 9px; border-radius: 8px;
-    background: rgba(43,127,255,0.14); border: 1px solid rgba(43,127,255,0.28);
-    color: #93C5FD; font-size: 0.7rem; font-weight: 600;
+    padding: 4px 9px; border-radius: 6px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
+    color: rgba(255,255,255,0.85); font-size: 0.7rem; font-weight: 500;
     text-decoration: none;
   }
-  .wh-meta-row a.wh-meta-link:active { background: rgba(43,127,255,0.22); }
-  .wh-meta-row a.wh-meta-link.dm { background: rgba(0,210,190,0.12); border-color: rgba(0,210,190,0.28); color: #6EE7B7; }
-  .wh-meta-row a.wh-meta-link.dm:active { background: rgba(0,210,190,0.2); }
+  .wh-meta-row a.wh-meta-link:active { background: rgba(255,255,255,0.10); }
+  .wh-meta-row a.wh-meta-link.dm { background: rgba(16,185,129,0.12); border-color: rgba(16,185,129,0.28); color: #6EE7B7; }
+  .wh-meta-row a.wh-meta-link.dm:active { background: rgba(16,185,129,0.20); }
   .wh-meta-row a.wh-meta-link svg { width: 12px; height: 12px; }
 
   .wh-empty { text-align: center; padding: 24px 12px; background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.08); border-radius: 12px; }
@@ -393,15 +363,15 @@
   .wh-qa-lbl { font-size: 0.68rem; font-weight: 600; line-height: 1.1; }
   .wh-qa-ic.g { background: rgba(16,185,129,0.15); color: #34D399; }
   .wh-qa-ic.r { background: rgba(239,68,68,0.15); color: #F87171; }
-  .wh-qa-ic.b { background: rgba(43,127,255,0.15); color: #60A5FA; }
+  .wh-qa-ic.b { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); }
   .wh-qa-ic.y { background: rgba(245,158,11,0.15); color: #F59E0B; }
   .wh-qa-ic.p { background: rgba(167,139,250,0.15); color: #A78BFA; }
-  .wh-qa-ic.t { background: rgba(0,210,190,0.15); color: #00D2BE; }
+  .wh-qa-ic.t { background: rgba(16,185,129,0.15); color: #34D399; }
 
   /* Upcoming list */
-  .wh-up-item { display: flex; gap: 10px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 12px; align-items: center; }
+  .wh-up-item { display: flex; gap: 10px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.05); border-radius: 8px; align-items: center; }
   .wh-up-item + .wh-up-item { margin-top: 6px; }
-  .wh-up-date { width: 44px; min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px; background: rgba(43,127,255,0.12); color: #60A5FA; flex-shrink: 0; }
+  .wh-up-date { width: 44px; min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 6px; background: rgba(16,185,129,0.12); color: #6EE7B7; flex-shrink: 0; }
   .wh-up-date .d { font-size: 1.1rem; font-weight: 800; line-height: 1; }
   .wh-up-date .m { font-size: 0.55rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 2px; }
   .wh-up-body { flex: 1; min-width: 0; }
@@ -419,7 +389,7 @@
 
   /* FAB */
   .wh-fab { position: fixed; right: 16px; bottom: calc(78px + env(safe-area-inset-bottom, 0px)); z-index: 50; }
-  .wh-fab-main { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #1D6AE5, #00D2BE); color: #fff; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(29,106,229,0.45), 0 2px 6px rgba(0,0,0,0.3); transition: transform 0.25s ease; }
+  .wh-fab-main { width: 52px; height: 52px; border-radius: 50%; background: #10B981; color: #0F1115; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 24px rgba(0,0,0,0.4); transition: transform 0.25s ease; }
   .wh-fab-main:active { transform: scale(0.92); }
   .wh-fab-main svg { transition: transform 0.3s ease; }
   .wh-fab.open .wh-fab-main svg { transform: rotate(45deg); }
@@ -837,9 +807,9 @@
       </a>
     <% } %>
     <% if (safetyCounts.unread > 0) { %>
-      <a href="/w/safety/updates" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background-image: linear-gradient(180deg, rgba(43,127,255,0.14) 0%, rgba(43,127,255,0.04) 100%); border: 1px solid rgba(43,127,255,0.30); border-radius: 12px; text-decoration: none; color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-        <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(43,127,255,0.18); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <svg width="18" height="18" fill="none" stroke="#93C5FD" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+      <a href="/w/safety/updates" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-left: 3px solid #10B981; border-radius: 8px; text-decoration: none; color: #fff;">
+        <div style="width: 32px; height: 32px; border-radius: 6px; background: rgba(16,185,129,0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+          <svg width="16" height="16" fill="none" stroke="#34D399" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
         </div>
         <div style="flex: 1; min-width: 0;">
           <p style="font-size: 0.85rem; font-weight: 700; color: #fff;"><%= safetyCounts.unread %> unread safety update<%= safetyCounts.unread === 1 ? '' : 's' %></p>
@@ -956,23 +926,23 @@
   <div class="wh-section-head">
     <span class="wh-section-title">
       Coming up
-      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:999px;background:rgba(43,127,255,0.18);color:#93C5FD;font-size:0.62rem;font-weight:800;letter-spacing:0;"><%= upcomingShifts.length %></span>
+      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:6px;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);font-size:0.62rem;font-weight:600;letter-spacing:0;"><%= upcomingShifts.length %></span>
     </span>
     <a href="/w/shifts" class="wh-section-link">See all ›</a>
   </div>
 
   <!-- Hero: the next shift -->
-  <a href="<%= nextLink %>" style="display:block;text-decoration:none;position:relative;border-radius:16px;overflow:hidden;background:linear-gradient(155deg, rgba(43,127,255,0.14), rgba(0,210,190,0.06) 60%, rgba(10,22,40,0.7));border:1px solid rgba(96,165,250,0.28);box-shadow:0 6px 24px rgba(0,0,0,0.25);">
-    <span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:linear-gradient(180deg,#2B7FFF,#00D2BE);"></span>
+  <a href="<%= nextLink %>" style="display:block;text-decoration:none;position:relative;border-radius:12px;overflow:hidden;background:#1A1D24;border:1px solid rgba(255,255,255,0.06);">
+    <span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#10B981;"></span>
     <div style="display:flex;gap:12px;padding:14px 14px 12px 16px;align-items:stretch;">
-      <div style="width:54px;flex-shrink:0;border-radius:12px;background:rgba(43,127,255,0.18);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 0;">
-        <span style="font-size:0.55rem;font-weight:700;color:#93C5FD;text-transform:uppercase;letter-spacing:0.08em;line-height:1;"><%= ndDow %></span>
-        <span style="font-size:1.5rem;font-weight:800;line-height:1;margin-top:3px;"><%= ndNum %></span>
-        <span style="font-size:0.55rem;font-weight:700;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;line-height:1;"><%= ndMon %></span>
+      <div style="width:54px;flex-shrink:0;border-radius:6px;background:rgba(16,185,129,0.14);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 0;">
+        <span style="font-size:0.55rem;font-weight:600;color:#6EE7B7;text-transform:uppercase;letter-spacing:0.08em;line-height:1;"><%= ndDow %></span>
+        <span style="font-size:1.5rem;font-weight:600;line-height:1;margin-top:3px;font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.02em;"><%= ndNum %></span>
+        <span style="font-size:0.55rem;font-weight:600;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;line-height:1;"><%= ndMon %></span>
       </div>
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-          <span style="font-size:0.62rem;font-weight:800;letter-spacing:0.08em;text-transform:uppercase;color:#93C5FD;"><%= relDay(nextShift.allocation_date) %></span>
+          <span style="font-size:0.6rem;font-weight:600;letter-spacing:0.1em;text-transform:uppercase;color:#6EE7B7;font-family:'Geist Mono',monospace;"><%= relDay(nextShift.allocation_date) %></span>
           <% if (isAllocated) { %>
             <span style="display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:0.58rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;background:rgba(245,158,11,0.18);color:#FCD34D;border:1px solid rgba(245,158,11,0.35);">Tap to confirm</span>
           <% } else if (nextShift.status === 'confirmed') { %>
@@ -1002,7 +972,7 @@
         const link = s.job_id ? ('/w/jobs/' + s.job_id) : '/w/shifts';
       %>
         <a href="<%= link %>" class="wh-up-item" style="text-decoration: none;">
-          <div class="wh-up-date"<%= s.shift_type === 'night' ? ' style="background: rgba(59,130,246,0.12); color: #93C5FD;"' : '' %>>
+          <div class="wh-up-date"<%= s.shift_type === 'night' ? ' style="background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7);"' : '' %>>
             <span class="d"><%= dNum %></span><span class="m"><%= dMon %></span>
           </div>
           <div class="wh-up-body">

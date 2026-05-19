@@ -24,9 +24,9 @@
   </style>
   <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
   <link rel="manifest" href="/manifest.json">
-  <!-- iOS uses apple-touch-icon for Add-to-Home-Screen — without these it
-       falls back to a screenshot or stretches the manifest icon. -->
-  <link rel="icon" type="image/svg+xml" href="/images/atomis-mark.svg">
+  <!-- Worker portal favicon is the white-background variant so it visually
+       differentiates from the admin tab (which keeps the dark mark). -->
+  <link rel="icon" type="image/svg+xml" href="/images/atomis-favicon-light.svg">
   <link rel="apple-touch-icon" href="/images/atomis-apple-touch-icon.png">
   <link rel="apple-touch-icon" sizes="180x180" href="/images/atomis-apple-touch-icon.png">
   <link rel="icon" type="image/png" sizes="192x192" href="/images/atomis-icon-192.png">
@@ -103,15 +103,15 @@
     .wh-ptr {
       position: fixed; top: 0; left: 50%;
       transform: translate(-50%, 0);
-      width: 36px; height: 36px;
+      width: 34px; height: 34px;
       border-radius: 50%;
-      background: rgba(26,29,36,0.92);
-      border: 1px solid rgba(16,185,129,0.25);
+      background: #22262F;
+      border: 1px solid rgba(255,255,255,0.10);
       display: flex; align-items: center; justify-content: center;
       z-index: 80;
       opacity: 0;
       pointer-events: none;
-      box-shadow: 0 8px 18px rgba(0,0,0,0.4);
+      box-shadow: 0 6px 14px rgba(0,0,0,0.4);
     }
     .wh-ptr-spinner {
       width: 14px; height: 14px;
@@ -129,27 +129,25 @@
     }
   </style>
 
-  <!-- Top Header (Traffio-style: initials + title + refresh).
-       Solid #0A1628 background that fully covers the iOS safe-area-top
-       zone so the notch area reads as "the header", not as empty body
-       space above the header. -->
-  <header class="shrink-0 safe-area-top" style="background: #0A1628; border-bottom: 1px solid rgba(255,255,255,0.06);">
+  <!-- Top Header — Atomis charcoal. Covers the iOS safe-area-top zone so
+       the notch reads as the header rather than empty body. -->
+  <header class="shrink-0 safe-area-top" style="background: #14171D; border-bottom: 1px solid rgba(255,255,255,0.06);">
     <div class="flex items-center justify-between px-4 h-11">
       <% if (typeof worker !== 'undefined' && worker) { %>
-        <a href="/w/profile" aria-label="Profile" class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold shrink-0 active:scale-95 transition" style="background: rgba(0,210,190,0.15); color: #00D2BE; border: 1px solid rgba(0,210,190,0.3);">
+        <a href="/w/profile" aria-label="Profile" class="w-8 h-8 flex items-center justify-center text-[11px] font-semibold shrink-0 active:scale-95 transition" style="background:#22262F;color:#F5F5F7;border:1px solid rgba(255,255,255,0.08);border-radius:6px">
           <%= worker.full_name.split(' ').map(n => n[0]).join('').slice(0,2) %>
         </a>
       <% } else { %>
         <div class="w-8"></div>
       <% } %>
       <div class="text-center">
-        <p class="text-sm font-semibold text-white"><%= typeof title !== 'undefined' ? title : 'Home' %></p>
+        <p class="text-sm font-medium text-white" style="font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.015em"><%= typeof title !== 'undefined' ? title : 'Home' %></p>
         <% if (typeof worker !== 'undefined' && worker) { %>
-          <p class="text-[10px] text-gray-500 truncate max-w-[200px]"><%= worker.full_name %> - T&S Traffic Control PTY...</p>
+          <p class="text-[10px] text-gray-500 truncate max-w-[200px]" style="font-family:'Geist Mono',monospace;letter-spacing:0.04em"><%= worker.full_name %></p>
         <% } %>
       </div>
       <button onclick="location.reload()" class="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-white transition">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
       </button>
     </div>
   </header>
@@ -194,11 +192,10 @@
     .wh-tab-indicator {
       position: absolute;
       bottom: 4px;
-      height: 3px;
-      width: 24px;
+      height: 2px;
       left: 0;
-      background: #00D2BE;
-      border-radius: 999px;
+      background: #10B981;
+      border-radius: 2px;
       pointer-events: none;
       transform: translateX(var(--wh-tab-x, 0)) translateX(-50%);
       width: var(--wh-tab-w, 24px);
@@ -206,7 +203,6 @@
                   width 320ms cubic-bezier(0.22, 1, 0.36, 1),
                   opacity 200ms ease;
       opacity: 0;
-      box-shadow: 0 0 12px rgba(0,210,190,0.45);
     }
     .wh-tab-bar[data-tab-ready] .wh-tab-indicator { opacity: 1; }
     /* Active icon scale + idle micro-pulse on the active tab. Pure CSS. */
@@ -222,14 +218,14 @@
       .wh-tab-bar a svg { transition: none; }
     }
   </style>
-  <nav class="fixed bottom-0 left-0 right-0 z-50" style="background: #0A1628; border-top: 1px solid rgba(255,255,255,0.06);">
+  <nav class="fixed bottom-0 left-0 right-0 z-50" style="background: #14171D; border-top: 1px solid rgba(255,255,255,0.06);">
     <div class="flex items-center justify-around h-16 px-0.5 max-w-[520px] mx-auto wh-tab-bar" id="wh-tab-bar">
       <span class="wh-tab-indicator" aria-hidden="true"></span>
       <% const cp = typeof currentPage !== 'undefined' ? currentPage : ''; %>
       <% const moreActive = ['more','profile','hr','wallet','leave','timesheets','availability','dockets','customise','chat','clock'].includes(cp); %>
 
       <!-- Home -->
-      <a href="/w/home" data-haptic data-tab="home" class="<%= cp === 'home' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'home' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/home" data-haptic data-tab="home" class="<%= cp === 'home' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'home' ? 'text-[#10B981]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
         </svg>
@@ -237,7 +233,7 @@
       </a>
 
       <!-- Jobs -->
-      <a href="/w/jobs" data-haptic data-tab="jobs" class="<%= (cp === 'jobs' || cp === 'shifts') ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'jobs' || cp === 'shifts' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/jobs" data-haptic data-tab="jobs" class="<%= (cp === 'jobs' || cp === 'shifts') ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'jobs' || cp === 'shifts' ? 'text-[#10B981]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
         </svg>
@@ -245,7 +241,7 @@
       </a>
 
       <!-- Forms (centre, replaces Clock — see comment above the nav). -->
-      <a href="/w/forms" data-haptic data-tab="forms" class="<%= cp === 'forms' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'forms' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/forms" data-haptic data-tab="forms" class="<%= cp === 'forms' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'forms' ? 'text-[#10B981]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
         </svg>
@@ -253,7 +249,7 @@
       </a>
 
       <!-- Feed -->
-      <a href="/w/feed" data-haptic data-tab="feed" class="<%= cp === 'feed' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'feed' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/feed" data-haptic data-tab="feed" class="<%= cp === 'feed' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'feed' ? 'text-[#10B981]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
         </svg>
@@ -261,7 +257,7 @@
       </a>
 
       <!-- Safety -->
-      <a href="/w/safety" data-haptic data-tab="safety" class="<%= cp === 'safety' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'safety' ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/safety" data-haptic data-tab="safety" class="<%= cp === 'safety' ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= cp === 'safety' ? 'text-[#10B981]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
         </svg>
@@ -269,7 +265,7 @@
       </a>
 
       <!-- More -->
-      <a href="/w/more" data-haptic data-tab="more" class="<%= moreActive ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= moreActive ? 'text-[#00D2BE]' : 'text-gray-500' %>">
+      <a href="/w/more" data-haptic data-tab="more" class="<%= moreActive ? 'is-active ' : '' %>flex flex-col items-center justify-center gap-0.5 flex-1 py-1.5 transition-colors <%= moreActive ? 'text-[#10B981]' : 'text-gray-500' %>">
         <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
         </svg>
