@@ -1,4 +1,4 @@
-/* Hire docket v2 — compact form classes + pill button styles + signature pad */
+﻿/* Hire docket v2 â€” compact form classes + pill button styles + signature pad */
 
 .hd-label {
   display: block;
@@ -22,8 +22,8 @@
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 .hd-input:focus {
-  border-color: #2B7FFF;
-  box-shadow: 0 0 0 3px rgba(43, 127, 255, 0.18);
+  border-color: #10B981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
 }
 .hd-input[readonly] { color: #6b7280; }
 
@@ -51,7 +51,7 @@
 }
 .hd-pill input[type="radio"],
 .hd-pill input[type="checkbox"] {
-  /* Keep the input but hide it — the label IS the button */
+  /* Keep the input but hide it â€” the label IS the button */
   position: absolute;
   opacity: 0;
   pointer-events: none;
@@ -60,17 +60,17 @@
 }
 .hd-pill.is-active,
 .hd-pill:has(input:checked) {
-  background: #2B7FFF;
+  background: #10B981;
   color: #fff;
-  border-color: #1D6AE5;
+  border-color: #059669;
 }
 .hd-pill:hover:not(.is-active) {
   background: #f3f4f6;
 }
-/* Keyboard focus — the input is visually hidden but still focusable, so
+/* Keyboard focus â€” the input is visually hidden but still focusable, so
    surface a ring on the label whenever the hidden input is :focus-visible. */
 .hd-pill:has(input:focus-visible) {
-  outline: 2px solid #2B7FFF;
+  outline: 2px solid #10B981;
   outline-offset: 2px;
 }
 .hd-pill-sm { padding: 4px 10px; font-size: 11px; min-height: 28px; }
@@ -86,14 +86,14 @@
   font-size: 12px;
   font-weight: 500;
   color: #fff;
-  background: #2B7FFF;
-  border: 1px solid #1D6AE5;
+  background: #10B981;
+  border: 1px solid #059669;
   border-radius: 8px;
   cursor: pointer;
   transition: background 120ms ease;
   flex-shrink: 0;
 }
-.hd-add-btn-sm:hover { background: #1D6AE5; }
+.hd-add-btn-sm:hover { background: #059669; }
 
 /* ---- Signature pad ---- */
 .hd-signature-pad {
@@ -104,7 +104,7 @@
 }
 .hd-signature-pad-wrap { max-width: 400px; }
 .hd-signature-existing { max-width: 400px; }
-.hd-sig-status.is-saving { color: #2563eb; }
+.hd-sig-status.is-saving { color: #059669; }
 .hd-sig-status.is-saved { color: #059669; }
 .hd-sig-status.is-error { color: #dc2626; }
 

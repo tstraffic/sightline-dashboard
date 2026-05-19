@@ -44,12 +44,15 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.05),
     0 10px 24px rgba(0, 0, 0, 0.35);
 
-  /* Brand + status. Each colour pairs with a 10%-opacity tint. */
-  --wd-teal: #00d2be;        --wd-teal-bg:    rgba(0, 210, 190, 0.10);
-  --wd-blue: #2b7fff;        --wd-blue-bg:    rgba(43, 127, 255, 0.10);
+  /* Brand + status. Each colour pairs with a 10%-opacity tint. Atomis
+     consolidates the previous teal/blue brand tokens onto Emerald. The
+     old --wd-teal / --wd-blue names are kept as aliases so partials that
+     still reference them resolve to the brand colour. */
+  --wd-emerald: #10b981;     --wd-emerald-bg: rgba(16, 185, 129, 0.10);
+  --wd-teal: #10b981;        --wd-teal-bg:    rgba(16, 185, 129, 0.10);
+  --wd-blue: #10b981;        --wd-blue-bg:    rgba(16, 185, 129, 0.10);
   --wd-amber: #f59e0b;       --wd-amber-bg:   rgba(245, 158, 11, 0.10);
   --wd-rose: #f43f5e;        --wd-rose-bg:    rgba(244, 63, 94, 0.10);
-  --wd-emerald: #10b981;     --wd-emerald-bg: rgba(16, 185, 129, 0.10);
   --wd-violet: #8b5cf6;      --wd-violet-bg:  rgba(139, 92, 246, 0.10);
   --wd-indigo: #6366f1;      --wd-indigo-bg:  rgba(99, 102, 241, 0.10);
   --wd-neutral: rgba(255, 255, 255, 0.75);
@@ -66,11 +69,11 @@
   --wd-tap-scale: 0.96;
   --wd-tap-duration: 140ms;
 
-  /* Typography. Inter for headings + body, JetBrains Mono for the big
+  /* Typography. Geist for headings + body, Geist Mono for the big
      numbers (stat counts, temperature, streak counters) — gives the UI
      a "tech product" feel without making body text feel like a terminal. */
-  --wd-font-sans:    'Inter', system-ui, -apple-system, sans-serif;
-  --wd-font-display: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --wd-font-sans:    'Geist', 'Inter', system-ui, -apple-system, sans-serif;
+  --wd-font-display: '"Geist Mono"', 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
 
   /* Status tone gradients: top-bright, bottom-dim wash so warning /
      danger / success cards feel "lit from above" the same way iOS
@@ -312,20 +315,20 @@
 .wd-btn[data-size="sm"] { min-height: 36px; padding: 0 var(--wd-space-3); font-size: 0.8rem; }
 .wd-btn[data-size="lg"] { min-height: 52px; padding: 0 var(--wd-space-6); font-size: 0.95rem; border-radius: var(--wd-radius-lg); }
 
-/* Kinds. Primary uses the existing brand-blue gradient that already
-   anchors the worker portal's CTAs; ghost is borderless for inline
-   secondary actions; danger uses rose. */
+/* Kinds. Primary + accent both use the Atomis emerald gradient (legacy
+   accent kind kept as an alias since some partials still use it); ghost
+   is borderless for inline secondary actions; danger uses rose. */
 .wd-btn[data-kind="primary"] {
-  background: linear-gradient(135deg, #1d6ae5, #2b7fff);
-  color: #fff;
-  box-shadow: 0 6px 16px rgba(29, 106, 229, 0.32);
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #0F1115;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.32);
 }
-.wd-btn[data-kind="primary"]:hover { background: linear-gradient(135deg, #1a5cc8, #2479f0); }
+.wd-btn[data-kind="primary"]:hover { background: linear-gradient(135deg, #047857, #10b981); }
 
 .wd-btn[data-kind="accent"] {
-  background: linear-gradient(135deg, #00b3a0, #00d2be);
-  color: #0a1628;
-  box-shadow: 0 6px 16px rgba(0, 210, 190, 0.32);
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #0F1115;
+  box-shadow: 0 6px 16px rgba(16, 185, 129, 0.32);
 }
 
 .wd-btn[data-kind="secondary"] {
