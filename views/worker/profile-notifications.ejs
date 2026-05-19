@@ -247,11 +247,17 @@ function csrfToken() {
       if (!keyRes.ok) throw new Error('VAPID key not available');
       var keyData = await keyRes.json();
       if (!keyData.publicKey) throw new Error('Server has no push key configured');
-      var reg = await navigator.serviceWorker.ready;
-      var sub = await reg.pushManager.subscribe({
+      var regResult = await withTimeout(navigator.serviceWorker.ready, 5000);
+      if (regResult.timeout) throw new Error('Service worker did not become ready in time. Pull down to refresh and try again.');
+      if (regResult.error) throw regResult.error;
+      var reg = regResult.value;
+      var subResult = await withTimeout(reg.pushManager.subscribe({
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(keyData.publicKey),
-      });
+      }), 8000);
+      if (subResult.timeout) throw new Error('Browser took too long to subscribe to push. Try again or restart the app.');
+      if (subResult.error) throw subResult.error;
+      var sub = subResult.value;
       var save = await fetch('/w/notifications/push/subscribe', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken() },

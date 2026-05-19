@@ -53,7 +53,7 @@ app.use(express.json());
 // updates can take 24+ hours to roll out on iOS PWAs. The SW itself uses
 // caches.match() to control resource caching internally; this header just
 // forces the browser to always re-fetch the SW script.
-app.get(['/js/worker-sw.js', '/js/admin-sw.js'], (req, res, next) => {
+app.get(['/worker-sw.js', '/admin-sw.js', '/js/worker-sw.js'], (req, res, next) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.setHeader('Expires', '0');
