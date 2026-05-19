@@ -48,9 +48,10 @@
       <tbody class="divide-y divide-gray-100">
         <% rows.forEach(r => {
           const isAllocated = allocatedSet.has(r.crew_id);
-          const isAttended = r.attendance_status === 'attended';
-          const isCaughtUp = r.attendance_status === 'caught_up';
-          const isAbsent   = r.attendance_status === 'absent';
+          const isAttended  = r.attendance_status === 'attended';
+          const isAttending = r.attendance_status === 'attending';
+          const isCaughtUp  = r.attendance_status === 'caught_up';
+          const isAbsent    = r.attendance_status === 'absent';
         %>
           <tr class="tb-att-row hover:bg-gray-50/50" data-allocated="<%= isAllocated ? '1' : '0' %>" data-crew-id="<%= r.crew_id %>">
             <td class="px-3 py-2">
@@ -68,12 +69,14 @@
             <td class="px-2 py-2">
               <% if (isAttended) { %>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200">Attended</span>
+              <% } else if (isAttending) { %>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200">Attending</span>
               <% } else if (isCaughtUp) { %>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-violet-50 text-violet-700 ring-violet-200">Caught up</span>
               <% } else if (isAbsent) { %>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-rose-50 text-rose-700 ring-rose-200">Absent</span>
               <% } else { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200">Attending</span>
+                <span class="text-xs text-gray-400">—</span>
               <% } %>
             </td>
             <td class="px-2 py-2 text-xs text-gray-500 tabular-nums"><%= fmt(r.recorded_at) %></td>
