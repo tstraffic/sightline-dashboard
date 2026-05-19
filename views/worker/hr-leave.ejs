@@ -43,7 +43,7 @@
   .lv-cell.lv-has { color: #fff; }
   .lv-cell.lv-has { background: rgba(255,255,255,0.05); }
   .lv-cell.lv-today { box-shadow: 0 0 0 2px #F59E0B; color: #F59E0B; }
-  .lv-cell.lv-selected { box-shadow: 0 0 0 2px #2B7FFF; background: rgba(43,127,255,0.12); color: #fff; }
+  .lv-cell.lv-selected { box-shadow: 0 0 0 2px #10B981; background: rgba(16,185,129,0.12); color: #fff; }
   .lv-cell.lv-empty { background: transparent; border-color: transparent; cursor: default; }
   .lv-cell.lv-past { opacity: 0.35; cursor: default; }
   .lv-cell .lv-d { font-size: 1.05rem; font-weight: 700; line-height: 1; margin-top: 2px; }
@@ -79,7 +79,7 @@
   }
   .lv-fab:active { transform: scale(0.95); }
 
-  /* Sheet (modal) — sits above the worker portal's bottom tab nav (which
+  /* Sheet (modal) â€” sits above the worker portal's bottom tab nav (which
      is z-50 in views/worker/layout.ejs). The Submit / Cancel buttons used
      to render *behind* the nav strip on small phones because z-70 wasn't
      enough to beat its safe-area treatment. Belt-and-braces fix: bump
@@ -100,7 +100,7 @@
   }
   .lv-sheet.open { transform: translateY(0); }
   /* Hide the worker portal bottom tab nav while the sheet is open. The
-     nav has no id/class hook of its own — match it via the [aria-label]
+     nav has no id/class hook of its own â€” match it via the [aria-label]
      fallback used by the layout, plus a generic position-fixed nav as a
      safety net. */
   body.lv-sheet-active nav.fixed,
@@ -180,7 +180,7 @@
 
 <div class="lv-wrap">
 
-  <!-- Quick inline form — works without ANY JavaScript. Submits directly
+  <!-- Quick inline form â€” works without ANY JavaScript. Submits directly
        to /w/hr/leave with mode=single + a single date input. The slide-up
        sheet remains as a richer option (multiple dates / recurring) but
        this guarantees a worker can always file a leave request even if
@@ -216,13 +216,13 @@
         <label class="lv-label">Period</label>
         <select name="shift_period" class="lv-select">
           <option value="full_day">Full day</option>
-          <option value="day">Day 6a–6p</option>
-          <option value="night">Night 6p–6a</option>
+          <option value="day">Day 6aâ€“6p</option>
+          <option value="night">Night 6pâ€“6a</option>
         </select>
       </div>
       <div style="grid-column:span 2;">
         <label class="lv-label">Reason (optional)</label>
-        <input type="text" name="reason" class="lv-input" placeholder="Optional…" maxlength="200">
+        <input type="text" name="reason" class="lv-input" placeholder="Optionalâ€¦" maxlength="200">
       </div>
       <button type="submit" class="lv-btn-primary" style="grid-column:span 2;">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -283,22 +283,22 @@
       <span class="lv-legend-sw" style="background: rgba(245,158,11,0.2); color: #F59E0B;">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19l19-7.5L2.5 4v7l13 .5-13 .5z"/></svg>
       </span>
-      On leave 6am–6pm
+      On leave 6amâ€“6pm
     </div>
     <div class="lv-legend-row"><span class="lv-legend-sw" style="background-image: repeating-linear-gradient(45deg, rgba(245,158,11,0.3), rgba(245,158,11,0.3) 2px, transparent 2px, transparent 5px);"></span>Awaiting approval</div>
     <div class="lv-legend-row">
       <span class="lv-legend-sw" style="background: rgba(59,130,246,0.2); color: #3B82F6;">
         <svg class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor"><path d="M2.5 19l19-7.5L2.5 4v7l13 .5-13 .5z"/></svg>
       </span>
-      On leave 6pm–6am
+      On leave 6pmâ€“6am
     </div>
   </div>
 
-  <!-- ── Your leave — bucketed so the list doesn't snowball ──
-       Pending          → action items (worker can still cancel)
-       Upcoming         → approved leave whose end date is today or later
-       Recent past      → approved leave that's already finished
-       Archived         → cancelled + rejected (hidden by default in a
+  <!-- â”€â”€ Your leave â€” bucketed so the list doesn't snowball â”€â”€
+       Pending          â†’ action items (worker can still cancel)
+       Upcoming         â†’ approved leave whose end date is today or later
+       Recent past      â†’ approved leave that's already finished
+       Archived         â†’ cancelled + rejected (hidden by default in a
                           <details> so the list stays short on screen) -->
   <%
     function leaveItem(l, csrfToken) {
@@ -307,13 +307,13 @@
                     : l.status === 'cancelled' ? '#64748B'
                     : '#F59E0B';
       const stLabel = (l.status || 'pending').charAt(0).toUpperCase() + (l.status || 'pending').slice(1);
-      const periodLabel = l.shift_period === 'day' ? '6am–6pm' : l.shift_period === 'night' ? '6pm–6am' : 'Full day';
-      const dateRange = fmtDate(l.start_date) + (l.start_date !== l.end_date ? ' – ' + fmtDate(l.end_date) : '');
+      const periodLabel = l.shift_period === 'day' ? '6amâ€“6pm' : l.shift_period === 'night' ? '6pmâ€“6am' : 'Full day';
+      const dateRange = fmtDate(l.start_date) + (l.start_date !== l.end_date ? ' â€“ ' + fmtDate(l.end_date) : '');
       let html = '<div class="lv-history-item">';
       html += '<div class="min-w-0 flex-1 pr-2">';
       html += '<div class="flex items-center gap-2"><span class="lv-status-dot" style="background:' + stColor + ';"></span>';
       html += '<p class="text-sm font-semibold text-white">' + dateRange + '</p></div>';
-      html += '<p class="text-[11px] text-white/55 mt-0.5">' + ((l.leave_type || 'annual').charAt(0).toUpperCase() + (l.leave_type || 'annual').slice(1)) + ' · ' + periodLabel + ' · ' + stLabel + '</p>';
+      html += '<p class="text-[11px] text-white/55 mt-0.5">' + ((l.leave_type || 'annual').charAt(0).toUpperCase() + (l.leave_type || 'annual').slice(1)) + ' Â· ' + periodLabel + ' Â· ' + stLabel + '</p>';
       if (l.reason) html += '<p class="text-[11px] text-white/45 mt-1 italic">' + l.reason + '</p>';
       html += '</div>';
       if (l.status === 'pending') {
@@ -333,7 +333,7 @@
     const archived = (recentLeave || []).filter(l => l.status === 'cancelled' || l.status === 'rejected').sort((a, b) => b.start_date.localeCompare(a.start_date));
   %>
 
-  <% /* Every group is now a <details> so the page stays compact —
+  <% /* Every group is now a <details> so the page stays compact â€”
         Pending and Upcoming default to OPEN (action items the worker
         usually wants to see); Recent past and Archived default to
         CLOSED so the page doesn't snowball as history accumulates. */ %>
@@ -378,7 +378,7 @@
         <% if (past.length > 5) { %>
           <details class="mt-1">
             <summary style="cursor:pointer;font-size:0.7rem;color:rgba(255,255,255,0.45);padding:6px 4px;list-style:none;">
-              Show <%= past.length - 5 %> older approved leave<%= past.length - 5 === 1 ? '' : 's' %> ›
+              Show <%= past.length - 5 %> older approved leave<%= past.length - 5 === 1 ? '' : 's' %> â€º
             </summary>
             <% past.slice(5).forEach(l => { %><%- leaveItem(l, typeof csrfToken !== 'undefined' ? csrfToken : '') %><% }) %>
           </details>
@@ -390,7 +390,7 @@
   <% if (archived.length > 0) { leaveSection('Archived (cancelled & rejected)', archived, 'rgba(255,255,255,0.4)', { dim: true }) } %>
 
   <% if (pending.length === 0 && upcoming.length === 0 && past.length === 0 && archived.length === 0) { %>
-    <p class="text-xs text-white/35 italic mt-5 px-1 text-center">No leave on record yet — use Quick add above to file your first request.</p>
+    <p class="text-xs text-white/35 italic mt-5 px-1 text-center">No leave on record yet â€” use Quick add above to file your first request.</p>
   <% } %>
 </div>
 
@@ -419,7 +419,7 @@
       <label for="mode-recur">Recurring</label>
     </div>
 
-    <!-- Single — give the input the real `dates` name so the form
+    <!-- Single â€” give the input the real `dates` name so the form
          submits the picked date natively even if the JS submit handler
          is somehow blocked or hasn't loaded. The handler still runs and
          is harmless: it overwrites the dates container with another
@@ -447,7 +447,7 @@
       </div>
     </div>
 
-    <!-- Recurring — required attrs make HTML5 validation block submit
+    <!-- Recurring â€” required attrs make HTML5 validation block submit
          when start / until are blank, instead of submitting empty
          and bouncing with a "no dates resolved" flash. The required
          attr is only enforced when the panel is visible (the inputs
@@ -475,7 +475,7 @@
         <label class="lv-label">On days (optional)</label>
         <div class="lv-wd">
           <% ['M','T','W','T','F','S','S'].forEach((l, i) => {
-             const dayVal = (i + 1) % 7; // JS: 0=Sun … here 0=Mon -> map: M=1,T=2,...,S=0 %>
+             const dayVal = (i + 1) % 7; // JS: 0=Sun â€¦ here 0=Mon -> map: M=1,T=2,...,S=0 %>
             <input type="checkbox" id="wd-<%= i %>" name="recur_weekdays" value="<%= dayVal %>">
             <label for="wd-<%= i %>"><%= l %></label>
           <% }) %>
@@ -491,9 +491,9 @@
         <input type="radio" name="shift_period" id="sp-full" value="full_day" checked>
         <label for="sp-full">Full day</label>
         <input type="radio" name="shift_period" id="sp-day" value="day">
-        <label for="sp-day">Day 6a–6p</label>
+        <label for="sp-day">Day 6aâ€“6p</label>
         <input type="radio" name="shift_period" id="sp-night" value="night">
-        <label for="sp-night">Night 6p–6a</label>
+        <label for="sp-night">Night 6pâ€“6a</label>
       </div>
     </div>
 
@@ -593,7 +593,7 @@
       var arr = Array.from(selectedDates).sort();
       wrap.innerHTML = arr.map(function (d) {
         var short = new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' });
-        return '<span class="lv-chip">' + short + '<button type="button" onclick="lvRemoveDate(\'' + d + '\')">×</button></span>';
+        return '<span class="lv-chip">' + short + '<button type="button" onclick="lvRemoveDate(\'' + d + '\')">Ã—</button></span>';
       }).join('');
     }
 
@@ -605,7 +605,7 @@
 
     // Build hidden dates[] inputs before submit. In single mode the
     // lv-single-date input itself carries name="dates" so we don't
-    // need to add anything — just validate the field has a value.
+    // need to add anything â€” just validate the field has a value.
     document.getElementById('lv-form').addEventListener('submit', function (e) {
       var mode = modeInput.value;
       var container = document.getElementById('lv-dates-container');

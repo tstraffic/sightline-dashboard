@@ -1,10 +1,10 @@
 <%
   function fmt(s) {
-    if (!s) return '—';
+    if (!s) return 'â€”';
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   const CHIP_STYLE = {
-    general:       'background: rgba(43,127,255,0.18); color: #93C5FD; border: 1px solid rgba(43,127,255,0.3);',
+    general:       'background: rgba(16,185,129,0.18); color: #93C5FD; border: 1px solid rgba(16,185,129,0.3);',
     alert:         'background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3);',
     reminder:      'background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3);',
     toolbox:       'background: rgba(139,92,246,0.18); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3);',
@@ -24,7 +24,7 @@
   }
   .ud-attach {
     display: inline-flex; align-items: center; gap: 8px; padding: 10px 14px;
-    background: rgba(43,127,255,0.15); border: 1px solid rgba(43,127,255,0.3);
+    background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3);
     border-radius: 10px; color: #93C5FD; font-weight: 600; font-size: 0.85rem;
     text-decoration: none; margin-top: 12px;
   }
@@ -32,12 +32,12 @@
 </style>
 
 <div class="ud-wrap">
-  <a href="/w/safety/updates" class="ud-back">← Safety / Updates</a>
+  <a href="/w/safety/updates" class="ud-back">â† Safety / Updates</a>
   <div class="ud-title"><%= update.title %></div>
   <div class="ud-meta">
     <span class="ud-chip" style="<%= CHIP_STYLE[update.category] || CHIP_STYLE.general %>"><%= categoryLabels[update.category] %></span>
     <span><%= fmt(update.published_at) %></span>
-    <% if (update.published_by_name) { %><span>· <%= update.published_by_name %></span><% } %>
+    <% if (update.published_by_name) { %><span>Â· <%= update.published_by_name %></span><% } %>
   </div>
 
   <div class="ud-body"><%= update.body %></div>

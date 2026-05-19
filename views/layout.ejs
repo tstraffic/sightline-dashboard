@@ -14,7 +14,9 @@
   <meta name="application-name" content="Atomis">
   <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
   <link rel="manifest" href="/manifest-admin.json">
-  <link rel="icon" type="image/svg+xml" href="/images/atomis-mark.svg">
+  <!-- Admin favicon keeps the dark Atomis background so the office tab
+       reads on-brand against any browser tab colour. -->
+  <link rel="icon" type="image/svg+xml" href="/images/atomis-favicon-dark.svg">
   <link rel="icon" type="image/png" sizes="192x192" href="/images/atomis-icon-192.png">
   <link rel="icon" type="image/png" sizes="512x512" href="/images/atomis-icon-512.png">
   <link rel="apple-touch-icon" href="/images/atomis-apple-touch-icon.png">
@@ -193,9 +195,11 @@
       </a>
       <% } %>
     </div>
-    <button type="button" id="globalFabToggle" aria-label="Quick actions"
-      class="w-14 h-14 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 text-white rounded-full shadow-xl flex items-center justify-center transition-transform">
-      <svg id="globalFabIcon" class="w-6 h-6 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+    <button type="button" id="globalFabToggle" aria-label="Quick actions" title="Quick actions"
+      class="group flex items-center gap-2 h-11 px-4 text-white text-sm font-medium transition-transform"
+      style="background:#22262F;border:1px solid rgba(255,255,255,0.08);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.35)">
+      <svg id="globalFabIcon" class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+      <span class="hidden sm:inline">New</span>
     </button>
   </div>
   <script>

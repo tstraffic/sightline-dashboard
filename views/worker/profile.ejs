@@ -20,7 +20,7 @@
     position: relative;
     padding: 1.25rem 1rem 1rem;
     border-radius: 16px;
-    background: linear-gradient(160deg, rgba(43,127,255,0.15), rgba(10,22,40,0.6));
+    background: linear-gradient(160deg, rgba(16,185,129,0.15), rgba(10,22,40,0.6));
     border: 1px solid rgba(255,255,255,0.08);
     text-align: center;
     margin-top: 0.5rem;
@@ -30,7 +30,7 @@
     width: 96px; height: 96px; border-radius: 999px;
     display: flex; align-items: center; justify-content: center;
     font-size: 2rem; font-weight: 700; color: #fff;
-    background: linear-gradient(135deg, #1D6AE5, #00D2BE);
+    background: linear-gradient(135deg, #059669, #10B981);
     box-shadow: 0 8px 24px rgba(0,0,0,0.3), inset 0 0 0 3px rgba(255,255,255,0.1);
     overflow: hidden;
   }
@@ -38,7 +38,7 @@
   .pf-camera {
     position: absolute; right: -2px; bottom: -2px;
     width: 32px; height: 32px; border-radius: 999px;
-    background: #1D6AE5; color: #fff;
+    background: #059669; color: #fff;
     display: flex; align-items: center; justify-content: center;
     box-shadow: 0 2px 8px rgba(0,0,0,0.3);
     border: 2px solid #0A1628; cursor: pointer;
@@ -64,7 +64,7 @@
     border: 1px solid rgba(255,255,255,0.1); border-radius: 10px;
     padding: 0.6rem 0.75rem; font-size: 0.875rem;
   }
-  .pf-input:focus { outline: none; border-color: #1D6AE5; box-shadow: 0 0 0 3px rgba(29,106,229,0.2); }
+  .pf-input:focus { outline: none; border-color: #059669; box-shadow: 0 0 0 3px rgba(5,150,105,0.2); }
   .pf-input.is-invalid { border-color: #F87171; box-shadow: 0 0 0 3px rgba(248,113,113,0.15); }
   .pf-input[readonly] { opacity: 0.55; cursor: not-allowed; }
   .pf-help { font-size: 0.65rem; color: rgba(255,255,255,0.35); margin-top: 0.25rem; }
@@ -74,9 +74,9 @@
 
   .pf-btn-primary {
     display: inline-flex; align-items: center; justify-content: center; gap: 0.375rem;
-    padding: 0.6rem 1rem; background: #1D6AE5; color: #fff;
+    padding: 0.6rem 1rem; background: #059669; color: #fff;
     font-weight: 700; font-size: 0.85rem; border-radius: 10px;
-    box-shadow: 0 2px 8px rgba(29,106,229,0.3);
+    box-shadow: 0 2px 8px rgba(5,150,105,0.3);
   }
   .pf-btn-primary:disabled { opacity: 0.4; box-shadow: none; cursor: not-allowed; }
   .pf-btn-secondary {
@@ -142,7 +142,7 @@
     border: 1px solid rgba(255,255,255,0.08); border-radius: 10px;
     cursor: pointer;
   }
-  .pf-check input { accent-color: #1D6AE5; }
+  .pf-check input { accent-color: #059669; }
   .pf-check span { font-size: 0.85rem; color: rgba(255,255,255,0.85); }
 </style>
 
@@ -168,7 +168,7 @@
     </div>
     <p class="pf-name"><%= displayName %></p>
     <p class="pf-meta">
-      <% if (empCode) { %><%= empCode %><span class="dot">·</span><% } %>
+      <% if (empCode) { %><%= empCode %><span class="dot">Â·</span><% } %>
       <% if (roleLabel) { %><span class="capitalize"><%= roleLabel %></span><% } %>
     </p>
     <div class="pf-lock-chip">
@@ -182,7 +182,7 @@
     <div class="pf-section">
       <div class="pf-section-title">
         Kudos received
-        <a href="/w/feed?filter=mentions" class="text-xs font-semibold" style="color: #60A5FA; text-transform: none; letter-spacing: normal;">See all →</a>
+        <a href="/w/feed?filter=mentions" class="text-xs font-semibold" style="color: #60A5FA; text-transform: none; letter-spacing: normal;">See all â†’</a>
       </div>
       <div style="display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center;">
         <div style="width: 68px; height: 68px; border-radius: 16px; background: linear-gradient(135deg, #F59E0B, #EC4899); display: flex; flex-direction: column; align-items: center; justify-content: center;">
@@ -192,9 +192,9 @@
         <div style="min-width: 0;">
           <% if (kudosSummary.topValue) { %>
             <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Most recognised for</p>
-            <span style="display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= kudosSummary.topValue.colour %>22; color: <%= kudosSummary.topValue.colour %>;">★ <%= kudosSummary.topValue.name %></span>
+            <span style="display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= kudosSummary.topValue.colour %>22; color: <%= kudosSummary.topValue.colour %>;">â˜… <%= kudosSummary.topValue.name %></span>
           <% } else if (kudosSummary.received === 0) { %>
-            <p style="font-size: 0.82rem; color: rgba(255,255,255,0.6);">No kudos yet — send one to a teammate and start the love.</p>
+            <p style="font-size: 0.82rem; color: rgba(255,255,255,0.6);">No kudos yet â€” send one to a teammate and start the love.</p>
           <% } else { %>
             <p style="font-size: 0.82rem; color: rgba(255,255,255,0.75);">Recognised <%= kudosSummary.received %> time<%= kudosSummary.received === 1 ? '' : 's' %>.</p>
           <% } %>
@@ -206,7 +206,7 @@
             <a href="/w/feed/<%= r.id %>" style="display: block; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); text-decoration: none;">
               <div style="display: flex; align-items: start; gap: 8px;">
                 <% if (r.value_name) { %><span style="display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; font-size: 0.62rem; font-weight: 700; background: <%= r.value_colour %>22; color: <%= r.value_colour %>; flex-shrink: 0;"><%= r.value_name %></span><% } %>
-                <p style="font-size: 0.78rem; color: rgba(255,255,255,0.78); line-height: 1.3; flex: 1;">"<%= r.message.slice(0, 140) %><%= r.message.length > 140 ? '…' : '' %>" <span style="color: rgba(255,255,255,0.4);">— <%= r.sender_name %></span></p>
+                <p style="font-size: 0.78rem; color: rgba(255,255,255,0.78); line-height: 1.3; flex: 1;">"<%= r.message.slice(0, 140) %><%= r.message.length > 140 ? 'â€¦' : '' %>" <span style="color: rgba(255,255,255,0.4);">â€” <%= r.sender_name %></span></p>
               </div>
             </a>
           <% }) %>
@@ -251,7 +251,7 @@
           <label class="pf-label">State</label>
           <select name="state" class="pf-input">
             <% ['','NSW','VIC','QLD','WA','SA','TAS','ACT','NT'].forEach(s => { %>
-              <option value="<%= s %>" <%= state === s ? 'selected' : '' %>><%= s || '—' %></option>
+              <option value="<%= s %>" <%= state === s ? 'selected' : '' %>><%= s || 'â€”' %></option>
             <% }) %>
           </select>
         </div>
@@ -291,7 +291,7 @@
               <% if (c.relationship) { %><p class="pf-contact-rel"><%= c.relationship %></p><% } %>
             </div>
             <% if (c.is_primary) { %>
-              <span class="pf-contact-primary">★ Primary</span>
+              <span class="pf-contact-primary">â˜… Primary</span>
             <% } %>
           </div>
           <div class="pf-contact-body">
@@ -318,7 +318,7 @@
     <div class="pf-section-title">Settings</div>
     <a href="/w/profile/notifications" class="w-full flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition" style="text-decoration: none;">
       <div class="flex items-center gap-3">
-        <div class="w-9 h-9 rounded-full flex items-center justify-center" style="background: rgba(43,127,255,0.15); color: #93C5FD;">
+        <div class="w-9 h-9 rounded-full flex items-center justify-center" style="background: rgba(16,185,129,0.15); color: #93C5FD;">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
         </div>
         <div class="text-left">
@@ -362,7 +362,7 @@
     <div class="pf-field">
       <label class="pf-label">New PIN</label>
       <input type="password" name="new_pin" class="pf-input" inputmode="numeric" pattern="\d{4,6}" maxlength="6" required>
-      <p class="pf-help">4–6 digits. Avoid sequences like 1234 or 0000.</p>
+      <p class="pf-help">4â€“6 digits. Avoid sequences like 1234 or 0000.</p>
     </div>
     <div class="pf-field">
       <label class="pf-label">Confirm new PIN</label>

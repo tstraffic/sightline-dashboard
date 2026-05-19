@@ -8,7 +8,7 @@
   .qt-back { display: inline-flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.55); font-size: 0.8rem; text-decoration: none; margin: 4px 0 8px; }
   .qt-title { font-size: 1.05rem; font-weight: 700; margin: 4px 0 4px; }
   .qt-progress { height: 6px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow: hidden; margin: 10px 0 18px; }
-  .qt-progress > div { height: 100%; background: linear-gradient(135deg, #1D6AE5, #00D2BE); }
+  .qt-progress > div { height: 100%; background: linear-gradient(135deg, #059669, #10B981); }
   .qt-counter { font-size: 0.72rem; color: rgba(255,255,255,0.55); margin-bottom: 8px; }
   .qt-question {
     font-size: 1.1rem; font-weight: 700; line-height: 1.35;
@@ -20,8 +20,8 @@
     background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px;
     margin-bottom: 8px; cursor: pointer;
   }
-  .qt-option:has(input:checked) { background: rgba(43,127,255,0.15); border-color: rgba(43,127,255,0.5); }
-  .qt-option input { width: 18px; height: 18px; accent-color: #00D2BE; flex-shrink: 0; }
+  .qt-option:has(input:checked) { background: rgba(16,185,129,0.15); border-color: rgba(16,185,129,0.5); }
+  .qt-option input { width: 18px; height: 18px; accent-color: #10B981; flex-shrink: 0; }
   .qt-option-text { font-size: 0.92rem; }
   .qt-bar {
     position: fixed; left: 0; right: 0; bottom: 64px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
@@ -32,12 +32,12 @@
     flex: 1; padding: 12px; border-radius: 10px; font-size: 0.9rem; font-weight: 700; border: 0; cursor: pointer;
   }
   .qt-btn.prev { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); }
-  .qt-btn.next { background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff; box-shadow: 0 6px 16px rgba(29,106,229,0.3); }
+  .qt-btn.next { background: linear-gradient(135deg, #059669, #10B981); color: #fff; box-shadow: 0 6px 16px rgba(5,150,105,0.3); }
   .qt-btn.submit { background: linear-gradient(135deg, #10B981, #34D399); color: #fff; box-shadow: 0 6px 16px rgba(16,185,129,0.3); }
 </style>
 
 <div class="qt-wrap">
-  <a href="/w/safety/quizzes/<%= quiz.id %>" class="qt-back">← Save &amp; exit</a>
+  <a href="/w/safety/quizzes/<%= quiz.id %>" class="qt-back">â† Save &amp; exit</a>
   <div class="qt-title"><%= quiz.title %></div>
   <div class="qt-counter">Question <%= questionIndex %> of <%= total %></div>
   <div class="qt-progress"><div style="width: <%= pct %>%"></div></div>
@@ -69,10 +69,10 @@
 
     <div class="qt-bar">
       <% if (questionIndex > 1) { %>
-        <button type="submit" name="action" value="prev" class="qt-btn prev">← Back</button>
+        <button type="submit" name="action" value="prev" class="qt-btn prev">â† Back</button>
       <% } %>
       <% if (!isLast) { %>
-        <button type="submit" name="action" value="next" class="qt-btn next">Next →</button>
+        <button type="submit" name="action" value="next" class="qt-btn next">Next â†’</button>
       <% } else { %>
         <button type="submit" name="action" value="submit" class="qt-btn submit">Submit quiz</button>
       <% } %>

@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
   <meta charset="UTF-8">
@@ -8,115 +8,258 @@
   <meta name="theme-color" content="#0F1115">
   <title>Sign in | Atomis Crew</title>
 
-  <link rel="icon" type="image/svg+xml" href="/images/atomis-mark.svg">
+  <link rel="icon" type="image/svg+xml" href="/images/atomis-favicon-light.svg">
+  <link rel="apple-touch-icon" href="/images/atomis-apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Geist:wght@300..700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Geist:wght@300..700&family=Geist+Mono:wght@400..500&display=swap" rel="stylesheet">
 
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Geist', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
-            display: ['"Bricolage Grotesque"', 'Geist', 'system-ui', 'sans-serif'],
-          },
-          colors: {
-            brand: {
-              50: '#ECFDF5', 100: '#D1FAE5', 200: '#A7F3D0', 300: '#6EE7B7',
-              400: '#34D399', 500: '#10B981', 600: '#059669', 700: '#047857',
-              800: '#065F46', 900: '#064E3B', 950: '#022C22',
-            }
-          }
-        }
-      }
-    }
-  </script>
-  <link rel="stylesheet" href="/css/worker.css?v=atomis-1">
   <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --base: #0F1115;
+      --surface: #1A1D24;
+      --surface-2: #22262F;
+      --emerald: #10B981;
+      --text: #F5F5F7;
+      --text-mute: #8B8E95;
+      --text-faint: #5A5D64;
+      --border: rgba(245,245,247,0.06);
+      --border-strong: rgba(245,245,247,0.12);
+      --danger: #EF4444;
+      --font-display: 'Bricolage Grotesque', sans-serif;
+      --font-body: 'Geist', 'Inter', system-ui, sans-serif;
+      --font-mono: 'Geist Mono', monospace;
+    }
+    html, body { height: 100%; }
     body {
-      background: #0F1115 !important;
-      background-image: radial-gradient(ellipse 80% 50% at 80% 20%, rgba(16,185,129,0.08), transparent 60%) !important;
-      background-attachment: fixed !important;
+      font-family: var(--font-body);
+      background: var(--base);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: space-between;
+      padding: env(safe-area-inset-top, 0px) 24px env(safe-area-inset-bottom, 0px);
+    }
+    .top {
+      width: 100%;
+      max-width: 380px;
+      padding-top: 48px;
+      text-align: center;
+    }
+    .mark-stage {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 28px;
+    }
+    .wm {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 32px;
+      letter-spacing: -0.04em;
+      color: var(--text);
+    }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--emerald);
+      margin-top: 12px;
+    }
+    .sub {
+      font-size: 14px;
+      color: var(--text-mute);
+      margin-top: 8px;
+    }
+
+    .form-wrap {
+      width: 100%;
+      max-width: 380px;
+      flex: 0 0 auto;
+    }
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-mute);
+      margin-bottom: 8px;
+    }
+    .field input {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      padding: 14px 14px;
+      color: var(--text);
+      font-family: var(--font-body);
+      font-size: 16px;
+      transition: border-color 0.15s, background-color 0.15s;
+    }
+    .field input:focus {
+      outline: none;
+      border-color: var(--emerald);
+      background: #1F232B;
+    }
+    .field input::placeholder { color: var(--text-faint); }
+    .field input.pin {
+      text-align: center;
+      letter-spacing: 0.5em;
+      font-family: var(--font-mono);
+    }
+    .field input.pin::placeholder { letter-spacing: normal; }
+
+    .btn-primary {
+      width: 100%;
+      background: var(--emerald);
+      color: var(--base);
+      border: none;
+      padding: 14px;
+      border-radius: 6px;
+      font-family: var(--font-body);
+      font-weight: 600;
+      font-size: 15px;
+      cursor: pointer;
+      transition: opacity 0.15s, transform 0.15s;
+    }
+    .btn-primary:active { transform: translateY(1px); opacity: 0.92; }
+
+    .forgot {
+      text-align: center;
+      margin-top: 16px;
+      font-size: 12px;
+    }
+    .forgot a {
+      color: var(--text-mute);
+      text-decoration: none;
+      border-bottom: 1px solid var(--border-strong);
+      padding-bottom: 1px;
+    }
+
+    .err {
+      background: rgba(239,68,68,0.10);
+      border: 1px solid rgba(239,68,68,0.22);
+      color: #fca5a5;
+      font-size: 13px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+    .ok {
+      background: rgba(16,185,129,0.10);
+      border: 1px solid rgba(16,185,129,0.22);
+      color: #6ee7b7;
+      font-size: 13px;
+      padding: 10px 14px;
+      border-radius: 6px;
+      margin-bottom: 16px;
+    }
+
+    .bottom {
+      width: 100%;
+      max-width: 380px;
+      text-align: center;
+      padding: 24px 0 32px;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--text-faint);
+    }
+    .bottom a {
+      color: var(--text-mute);
+      text-decoration: none;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .mark-anim animateMotion, .mark-anim animate { display: none; }
     }
   </style>
 </head>
-<body class="h-full font-sans antialiased flex items-center justify-center safe-area-top safe-area-bottom">
-  <div class="w-full max-w-sm px-6">
-    <!-- Logo & Title -->
-    <div class="text-center mb-8">
-      <img src="/images/atomis-mark.svg" alt="Atomis Crew" class="h-20 w-auto mx-auto mb-4">
-      <h1 style="font-family:'Bricolage Grotesque',Geist,sans-serif;font-size:38px;font-weight:500;color:rgba(255,255,255,0.95);letter-spacing:-0.045em;line-height:1;">atomis crew</h1>
-      <p class="text-gray-400 text-sm mt-2">Sign in to start your shift.</p>
+<body>
+  <!-- TOP — brand mark with the orbiting satellite -->
+  <div class="top">
+    <div class="mark-stage">
+      <svg class="mark-anim" viewBox="0 0 80 80" width="120" height="120" fill="none">
+        <defs>
+          <path id="wLoginRing" d="M 67.81 28.75 A 30 13 -22 0 1 12.19 51.25 A 30 13 -22 0 1 67.81 28.75" fill="none"/>
+        </defs>
+        <g transform="rotate(-22 40 40)">
+          <ellipse cx="40" cy="40" rx="30" ry="13" stroke="#10B981" stroke-width="2.2" opacity="0.55"/>
+        </g>
+        <circle cx="40" cy="40" r="11" fill="#10B981"/>
+        <circle cx="0" cy="0" r="5.5" fill="#10B981">
+          <animateMotion dur="7s" repeatCount="indefinite">
+            <mpath href="#wLoginRing"/>
+          </animateMotion>
+          <animate attributeName="r" values="5.5;6.5;5.5;3.2;5.5" keyTimes="0;0.25;0.5;0.75;1" dur="7s" repeatCount="indefinite"/>
+          <animate attributeName="opacity" values="1;1;0.92;0.55;1" keyTimes="0;0.25;0.5;0.75;1" dur="7s" repeatCount="indefinite"/>
+        </circle>
+      </svg>
     </div>
+    <h1 class="wm">atomis crew</h1>
+    <p class="eyebrow">Sign in to start your shift</p>
+  </div>
 
-    <!-- Flash Messages -->
+  <!-- FORM -->
+  <div class="form-wrap">
     <% if (typeof flash_error !== 'undefined' && flash_error && flash_error.length > 0) { %>
       <% flash_error.forEach(msg => { %>
-        <div class="mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-sm backdrop-blur-sm"><%= msg %></div>
+        <div class="err"><%= msg %></div>
       <% }) %>
     <% } %>
     <script>
-      // Fallback: show error from URL query param if flash didn't work
       (function() {
         var params = new URLSearchParams(window.location.search);
         var err = params.get('err');
-        if (err && !document.querySelector('.bg-red-500\\/10')) {
+        if (err && !document.querySelector('.err')) {
           var div = document.createElement('div');
-          div.className = 'mb-4 p-3 bg-red-500/10 border border-red-500/20 rounded-xl text-red-300 text-sm backdrop-blur-sm';
+          div.className = 'err';
           div.textContent = err;
           var form = document.querySelector('form');
           form.parentNode.insertBefore(div, form);
-          // Clean URL
           history.replaceState(null, '', '/w/login');
         }
       })();
     </script>
     <% if (typeof flash_success !== 'undefined' && flash_success && flash_success.length > 0) { %>
       <% flash_success.forEach(msg => { %>
-        <div class="mb-4 p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-emerald-300 text-sm backdrop-blur-sm"><%= msg %></div>
+        <div class="ok"><%= msg %></div>
       <% }) %>
     <% } %>
 
-    <!-- Login Form -->
-    <form method="POST" action="/w/login" class="rounded-xl p-6 space-y-5" style="background: rgba(10,22,40,0.7); backdrop-filter: blur(16px); border: 1px solid rgba(255,255,255,0.08);">
+    <form method="POST" action="/w/login">
       <%- include('../partials/csrf') %>
-      <!-- Email or Employee ID -->
-      <div>
-        <label for="employee_id" class="block text-sm font-medium text-gray-300 mb-1">Email or Employee ID</label>
+      <div class="field">
+        <label for="employee_id">Email or Employee ID</label>
         <input type="text" id="employee_id" name="employee_id" required autofocus
-          inputmode="email"
-          autocomplete="username"
-          placeholder="e.g. john@email.com or EMP-001"
-          class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white text-base placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+          inputmode="email" autocomplete="username"
+          placeholder="john@email.com or EMP-001">
       </div>
-
-      <!-- PIN -->
-      <div>
-        <label for="pin" class="block text-sm font-medium text-gray-300 mb-1">PIN</label>
-        <input type="password" id="pin" name="pin" required
-          inputmode="numeric"
-          autocomplete="current-password"
-          maxlength="6"
-          pattern="[0-9]{4,6}"
-          placeholder="4-6 digit PIN"
-          class="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg text-white text-base text-center tracking-[0.5em] placeholder:tracking-normal placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent transition">
+      <div class="field">
+        <label for="pin">PIN</label>
+        <input type="password" id="pin" name="pin" required class="pin"
+          inputmode="numeric" autocomplete="current-password"
+          maxlength="6" pattern="[0-9]{4,6}" placeholder="••••">
       </div>
-
-      <!-- Submit -->
-      <button type="submit" class="w-full py-3 bg-brand-600 hover:bg-brand-500 active:bg-brand-700 font-semibold rounded-lg transition-all text-base shadow-lg shadow-brand-600/20" style="color:#0F1115">
-        Sign in &rarr;
-      </button>
-      <div class="text-center mt-3">
-        <a href="/w/forgot-pin" class="text-sm text-brand-400 hover:text-brand-300 transition">Forgot your PIN?</a>
+      <button type="submit" class="btn-primary">Sign in &rarr;</button>
+      <div class="forgot">
+        <a href="/w/forgot-pin">Forgot your PIN?</a>
       </div>
     </form>
+  </div>
 
-    <!-- Admin Link -->
-    <p class="text-center text-gray-600 text-xs mt-6">
-      <a href="/login" class="hover:text-gray-400 transition">Admin Dashboard &rarr;</a>
-    </p>
+  <!-- BOTTOM -->
+  <div class="bottom">
+    <a href="/login">Admin Dashboard &rarr;</a>
   </div>
 </body>
 </html>

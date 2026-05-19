@@ -7,7 +7,7 @@
   </a>
 
   <div class="sf-hero">
-    <div class="sf-hero-ic" style="background: rgba(43,127,255,0.2); color: #60A5FA;">
+    <div class="sf-hero-ic" style="background: rgba(16,185,129,0.2); color: #60A5FA;">
       <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M5 6h14a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2z"/></svg>
     </div>
     <h1 class="sf-title">Bank Account</h1>
@@ -19,16 +19,16 @@
       <div class="sf-section-title">
         Current on file
         <% if (current.status === 'synced') { %>
-          <span class="sf-pill ok">✓ Synced to QBO</span>
+          <span class="sf-pill ok">âœ“ Synced to QBO</span>
         <% } else if (current.status === 'rejected') { %>
           <span class="sf-pill bad">Rejected</span>
         <% } else { %>
-          <span class="sf-pill warn">⧗ Pending admin approval</span>
+          <span class="sf-pill warn">â§— Pending admin approval</span>
         <% } %>
       </div>
       <div class="sf-readrow"><span class="sf-k">Account name</span><span class="sf-v"><%= current.account_name %></span></div>
-      <div class="sf-readrow"><span class="sf-k">BSB</span><span class="sf-v">•••-•••<%= current.bsb_last3 %></span></div>
-      <div class="sf-readrow"><span class="sf-k">Account number</span><span class="sf-v">••••••<%= current.account_last3 %></span></div>
+      <div class="sf-readrow"><span class="sf-k">BSB</span><span class="sf-v">â€¢â€¢â€¢-â€¢â€¢â€¢<%= current.bsb_last3 %></span></div>
+      <div class="sf-readrow"><span class="sf-k">Account number</span><span class="sf-v">â€¢â€¢â€¢â€¢â€¢â€¢<%= current.account_last3 %></span></div>
       <% if (current.synced_at) { %>
         <p class="sf-meta">Synced to QBO <%= new Date(current.synced_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) %></p>
       <% } else { %>
@@ -61,7 +61,7 @@
       <span>Enter your portal PIN to confirm</span>
     </div>
     <div class="sf-field">
-      <input type="password" name="pin_confirm" class="sf-input sf-pin" inputmode="numeric" required pattern="\d{4,6}" maxlength="6" placeholder="••••">
+      <input type="password" name="pin_confirm" class="sf-input sf-pin" inputmode="numeric" required pattern="\d{4,6}" maxlength="6" placeholder="â€¢â€¢â€¢â€¢">
     </div>
 
     <div class="flex justify-end mt-4">

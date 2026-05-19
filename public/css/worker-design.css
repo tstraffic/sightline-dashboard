@@ -264,8 +264,8 @@
   border: 1px solid transparent;
   line-height: 1.2;
 }
-.wd-status-pill[data-kind="teal"]    { background: var(--wd-teal-bg);    color: var(--wd-teal);    border-color: rgba(0,210,190,0.25); }
-.wd-status-pill[data-kind="blue"]    { background: var(--wd-blue-bg);    color: #93c5fd;           border-color: rgba(43,127,255,0.25); }
+.wd-status-pill[data-kind="teal"]    { background: var(--wd-teal-bg);    color: var(--wd-teal);    border-color: rgba(16,185,129,0.25); }
+.wd-status-pill[data-kind="blue"]    { background: var(--wd-blue-bg);    color: var(--wd-blue);    border-color: rgba(16,185,129,0.25); }
 .wd-status-pill[data-kind="amber"]   { background: var(--wd-amber-bg);   color: #fcd34d;           border-color: rgba(245,158,11,0.25); }
 .wd-status-pill[data-kind="rose"]    { background: var(--wd-rose-bg);    color: #fda4af;           border-color: rgba(244,63,94,0.25); }
 .wd-status-pill[data-kind="emerald"] { background: var(--wd-emerald-bg); color: #6ee7b7;           border-color: rgba(16,185,129,0.25); }

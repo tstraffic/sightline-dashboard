@@ -2,7 +2,7 @@
 
 <%
   // Vehicle Pre-Start now renders fully from the published revision of
-  // the system_key='vehicle_prestart' template — every element comes
+  // the system_key='vehicle_prestart' template â€” every element comes
   // from /checklists/<id> on the admin side. The hardcoded vehicle
   // dropdown / ODO / inspection / photos / notes / signature blocks
   // are all admin-editable elements now (mig 153 seeded them).
@@ -10,12 +10,12 @@
 
 <style>
   .vps-wrap   { padding: 0.5rem; padding-bottom: 6rem; }
-  .vps-back   { display: inline-flex; align-items: center; gap: 4px; color: #00D2BE; font-size: 0.85rem; font-weight: 600; }
+  .vps-back   { display: inline-flex; align-items: center; gap: 4px; color: #10B981; font-size: 0.85rem; font-weight: 600; }
   .vps-h1     { font-size: 1.4rem; font-weight: 800; color: #fff; margin-top: 0.25rem; letter-spacing: -0.01em; }
   .vps-sub    { font-size: 0.78rem; color: rgba(255,255,255,0.55); margin-top: 4px; }
 
   .vps-summary {
-    background: linear-gradient(155deg, rgba(43,127,255,0.12), rgba(0,210,190,0.05) 60%, rgba(10,22,40,0.6));
+    background: linear-gradient(155deg, rgba(16,185,129,0.12), rgba(16,185,129,0.05) 60%, rgba(10,22,40,0.6));
     border: 1px solid rgba(96,165,250,0.25);
     border-radius: 14px;
     padding: 12px 14px;
@@ -25,7 +25,7 @@
   .vps-summary-meta   { font-size: 0.72rem; color: rgba(255,255,255,0.55); margin-top: 2px; }
 
   .vps-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 14px; margin-top: 12px; }
-  .vps-section-title { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: #00D2BE; margin-bottom: 10px; }
+  .vps-section-title { font-size: 0.65rem; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: #10B981; margin-bottom: 10px; }
 
   .vps-q { padding: 10px 0; border-top: 1px solid rgba(255,255,255,0.05); }
   .vps-q:first-child { border-top: none; padding-top: 0; }
@@ -51,7 +51,7 @@
     border: 1px solid rgba(255,255,255,0.18); border-radius: 8px;
     padding: 9px 12px; font-size: 0.9rem; color-scheme: light;
   }
-  .vps-input:focus, .vps-textarea:focus { outline: none; border-color: #2B7FFF; box-shadow: 0 0 0 3px rgba(43,127,255,0.18); }
+  .vps-input:focus, .vps-textarea:focus { outline: none; border-color: #10B981; box-shadow: 0 0 0 3px rgba(16,185,129,0.18); }
   .vps-textarea { resize: vertical; min-height: 60px; }
 
   .vps-inline-row { padding: 8px 0; border-top: 1px solid rgba(255,255,255,0.05); display: flex; align-items: center; justify-content: space-between; gap: 12px; }
@@ -73,8 +73,8 @@
 
   .vps-submit-bar { position: sticky; bottom: 0; padding: 16px 0 calc(16px + env(safe-area-inset-bottom, 0px)); background: linear-gradient(180deg, transparent, rgba(10,22,40,0.95) 35%); margin-top: 16px; }
   .vps-submit { width: 100%; padding: 16px; border-radius: 14px; font-size: 1rem; font-weight: 700;
-                color: #fff; background: linear-gradient(135deg, #2B7FFF, #1D6AE5);
-                border: none; box-shadow: 0 8px 24px rgba(29,106,229,0.45); cursor: pointer;
+                color: #fff; background: linear-gradient(135deg, #10B981, #059669);
+                border: none; box-shadow: 0 8px 24px rgba(5,150,105,0.45); cursor: pointer;
                 display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; }
 
   .vps-unit { font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.8); padding: 0 10px; }
@@ -92,7 +92,7 @@
   <% if (allocation) { %>
     <div class="vps-summary">
       <p class="vps-summary-client"><%= allocation.client || allocation.job_name || allocation.job_number %></p>
-      <p class="vps-summary-meta"><%= allocation.job_number %><% if (allocation.site_address || allocation.suburb) { %> · <%= allocation.site_address || allocation.suburb %><% } %></p>
+      <p class="vps-summary-meta"><%= allocation.job_number %><% if (allocation.site_address || allocation.suburb) { %> Â· <%= allocation.site_address || allocation.suburb %><% } %></p>
     </div>
   <% } %>
 

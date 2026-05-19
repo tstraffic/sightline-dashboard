@@ -8,7 +8,7 @@
     if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
     return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' });
   }
-  const reactionEmoji = { clap: '👏', heart: '❤️', raise: '🙌', flex: '💪', fire: '🔥' };
+  const reactionEmoji = { clap: 'ðŸ‘', heart: 'â¤ï¸', raise: 'ðŸ™Œ', flex: 'ðŸ’ª', fire: 'ðŸ”¥' };
 %>
 <% items.forEach(function (k) { %>
   <div class="kd-item <%= k.is_leadership ? 'leadership' : '' %>" id="kudos-<%= k.id %>" data-id="<%= k.id %>">
@@ -18,9 +18,9 @@
         <p class="kd-top-line">
           <strong><%= k.sender_name %></strong> gave kudos to
           <% (k.recipients || []).forEach(function (r, i) { %><strong><%= r.name %></strong><%= i < k.recipients.length - 1 ? ', ' : '' %><% }); %>
-          <% if (k.is_leadership) { %><span class="kd-leadership-badge">★ Leadership</span><% } %>
+          <% if (k.is_leadership) { %><span class="kd-leadership-badge">â˜… Leadership</span><% } %>
         </p>
-        <p class="kd-top-time"><%= timeAgo(k.created_at) %><% if (k.visibility === 'team') { %> · Team<% } %></p>
+        <p class="kd-top-time"><%= timeAgo(k.created_at) %><% if (k.visibility === 'team') { %> Â· Team<% } %></p>
       </div>
       <div class="kd-action-menu">
         <button type="button" class="kd-action" aria-label="More" onclick="kdToggleMenu(this)">
@@ -48,7 +48,7 @@
     </div>
 
     <% if (k.value_name) { %>
-      <span class="kd-value" style="background: <%= (k.value_colour || '#2B7FFF') %>20; color: <%= k.value_colour || '#2B7FFF' %>;">★ <%= k.value_name %></span>
+      <span class="kd-value" style="background: <%= (k.value_colour || '#10B981') %>20; color: <%= k.value_colour || '#10B981' %>;">â˜… <%= k.value_name %></span>
     <% } %>
     <p class="kd-msg"><%= k.message %></p>
     <% if (k.photo_url) { %><div class="kd-photo"><img src="<%= k.photo_url %>" alt=""></div><% } %>

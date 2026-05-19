@@ -21,7 +21,7 @@
   <div class="mg-section-head"><span class="mg-section-title">Manage</span></div>
   <div class="mg-quick-grid">
     <a href="/w/manage/shifts" class="mg-quick">
-      <div class="mg-quick-ic" style="background: rgba(43,127,255,0.15); color: #60A5FA;"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
+      <div class="mg-quick-ic" style="background: rgba(16,185,129,0.15); color: #60A5FA;"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
       <div><p class="mg-quick-title">All shifts today</p><p class="mg-quick-sub">Board by site</p></div>
     </a>
     <a href="/w/manage/leave" class="mg-quick">
@@ -39,7 +39,7 @@
   </div>
 
   <!-- Today's shifts -->
-  <div class="mg-section-head"><span class="mg-section-title">Today at a glance</span><a href="/w/manage/shifts" class="mg-section-link">View all ›</a></div>
+  <div class="mg-section-head"><span class="mg-section-title">Today at a glance</span><a href="/w/manage/shifts" class="mg-section-link">View all â€º</a></div>
   <% if (shifts.length === 0) { %>
     <div class="mg-empty">No crew allocated today.</div>
   <% } else { %>
@@ -48,13 +48,13 @@
         <div class="mg-row">
           <div class="mg-row-body">
             <p class="mg-row-title"><%= s.crew_name %></p>
-            <p class="mg-row-sub"><%= s.client %><% if (s.suburb) { %> · <%= s.suburb %><% } %> · <%= fmtTime(s.start_time) %>–<%= fmtTime(s.end_time) %></p>
+            <p class="mg-row-sub"><%= s.client %><% if (s.suburb) { %> Â· <%= s.suburb %><% } %> Â· <%= fmtTime(s.start_time) %>â€“<%= fmtTime(s.end_time) %></p>
           </div>
           <span class="mg-state <%= s.clockState %>"><%= s.clockState === 'in' ? 'On site' : s.clockState === 'out' ? 'Off' : s.clockState === 'late' ? 'Late' : s.clockState === 'pending' ? 'Starting' : 'Scheduled' %></span>
         </div>
       <% }); %>
       <% if (shifts.length > 8) { %>
-        <a href="/w/manage/shifts" class="mg-row" style="justify-content: center; color: #60A5FA; font-weight: 600; font-size: 0.8rem;">+ <%= shifts.length - 8 %> more shifts →</a>
+        <a href="/w/manage/shifts" class="mg-row" style="justify-content: center; color: #60A5FA; font-weight: 600; font-size: 0.8rem;">+ <%= shifts.length - 8 %> more shifts â†’</a>
       <% } %>
     </div>
   <% } %>

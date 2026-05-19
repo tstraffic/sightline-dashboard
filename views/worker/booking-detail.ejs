@@ -1,7 +1,7 @@
 <div class="px-4 pt-3 pb-4 space-y-4">
   <!-- Back + Title -->
   <div class="flex items-center gap-3">
-    <a href="/w/jobs" class="text-sm font-medium" style="color:#00D2BE;">&larr; Jobs</a>
+    <a href="/w/jobs" class="text-sm font-medium" style="color:#10B981;">&larr; Jobs</a>
     <span class="text-sm text-gray-400">|</span>
     <span class="text-sm font-semibold"><%= booking.booking_number %></span>
   </div>
@@ -36,34 +36,34 @@
     <p class="text-sm text-gray-400 mt-1">
       Your shift: <%= startDay %>, <%= startDate %> at
       <% if (booking.depot_meeting_time) { %>Depot <%= booking.depot_meeting_time %><% } else { %><%= startTime %><% } %>
-      <% if (endTime) { %> – <%= endTime %> (approx)<% } %>
+      <% if (endTime) { %> â€“ <%= endTime %> (approx)<% } %>
     </p>
   </div>
 
   <!-- Tabs: DETAILS / DOCS / FORMS -->
   <div class="flex border-b" style="border-color:rgba(255,255,255,0.08);">
     <a href="?tab=details" class="px-4 py-2.5 text-sm font-semibold transition-colors <%= tab === 'details' ? 'border-b-2' : '' %>"
-      style="<%= tab === 'details' ? 'color:#00D2BE;border-color:#00D2BE;' : 'color:rgba(255,255,255,0.45);' %>">DETAILS</a>
+      style="<%= tab === 'details' ? 'color:#10B981;border-color:#10B981;' : 'color:rgba(255,255,255,0.45);' %>">DETAILS</a>
     <a href="?tab=docs" class="px-4 py-2.5 text-sm font-semibold transition-colors <%= tab === 'docs' ? 'border-b-2' : '' %>"
-      style="<%= tab === 'docs' ? 'color:#00D2BE;border-color:#00D2BE;' : 'color:rgba(255,255,255,0.45);' %>">DOCS</a>
+      style="<%= tab === 'docs' ? 'color:#10B981;border-color:#10B981;' : 'color:rgba(255,255,255,0.45);' %>">DOCS</a>
     <a href="?tab=tasks" class="px-4 py-2.5 text-sm font-semibold transition-colors <%= tab === 'tasks' ? 'border-b-2' : '' %>"
-      style="<%= tab === 'tasks' ? 'color:#00D2BE;border-color:#00D2BE;' : 'color:rgba(255,255,255,0.45);' %>">
+      style="<%= tab === 'tasks' ? 'color:#10B981;border-color:#10B981;' : 'color:rgba(255,255,255,0.45);' %>">
       TASKS
       <% var pendingMine = (typeof myTasks !== 'undefined' ? myTasks : []).filter(function(t){return t.status==='pending';}).length; if (pendingMine) { %>
         <span class="ml-1 inline-block px-1.5 py-0.5 rounded-full text-[10px] font-bold" style="background:rgba(245,158,11,0.20);color:#FCD34D;"><%= pendingMine %></span>
       <% } %>
     </a>
     <a href="?tab=forms" class="px-4 py-2.5 text-sm font-semibold transition-colors <%= tab === 'forms' ? 'border-b-2' : '' %>"
-      style="<%= tab === 'forms' ? 'color:#00D2BE;border-color:#00D2BE;' : 'color:rgba(255,255,255,0.45);' %>">FORMS</a>
+      style="<%= tab === 'forms' ? 'color:#10B981;border-color:#10B981;' : 'color:rgba(255,255,255,0.45);' %>">FORMS</a>
   </div>
 
   <!-- DETAILS TAB -->
   <% if (tab === 'details') { %>
   <div class="space-y-3">
-    <h3 class="text-xs font-bold uppercase tracking-wider" style="color:#00D2BE;">Details</h3>
+    <h3 class="text-xs font-bold uppercase tracking-wider" style="color:#10B981;">Details</h3>
     <div class="space-y-2">
       <% var details = [
-        ['Booking', (startTime || '') + ' – ' + (endTime || '') + ' (approx)'],
+        ['Booking', (startTime || '') + ' â€“ ' + (endTime || '') + ' (approx)'],
         ['Booking #', booking.booking_number],
         ['Depot', booking.depot || '-'],
         ['Depot Meeting', booking.depot_meeting_time || '-'],
@@ -83,14 +83,14 @@
 
     <% if (booking.notes || booking.requirements_text) { %>
     <div class="mt-3">
-      <h3 class="text-xs font-bold uppercase tracking-wider mb-2" style="color:#00D2BE;">Description</h3>
+      <h3 class="text-xs font-bold uppercase tracking-wider mb-2" style="color:#10B981;">Description</h3>
       <p class="text-sm text-gray-400 whitespace-pre-wrap"><%= booking.requirements_text || booking.notes || '' %></p>
     </div>
     <% } %>
 
     <!-- Crew and Resources -->
     <%
-      // Sort by tier so Supervisor → TL → TC reads naturally on the list.
+      // Sort by tier so Supervisor â†’ TL â†’ TC reads naturally on the list.
       var rolePriority = { supervisor: 0, team_leader: 1, traffic_controller: 2 };
       var sortedCrew = crew.slice().sort(function (a, b) {
         return (rolePriority[a.portal_role] || 9) - (rolePriority[b.portal_role] || 9);
@@ -102,7 +102,7 @@
       }
     %>
     <div class="mt-3">
-      <h3 class="text-xs font-bold uppercase tracking-wider mb-2" style="color:#00D2BE;">Crew and resources</h3>
+      <h3 class="text-xs font-bold uppercase tracking-wider mb-2" style="color:#10B981;">Crew and resources</h3>
       <% if (sortedCrew.length > 0) { %>
         <div class="space-y-2">
           <% sortedCrew.forEach(function(c) { var t = portalTitleDark(c.portal_role); %>
@@ -116,14 +116,14 @@
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style="background:<%= t.bg %>;color:<%= t.color %>;"><%= t.label %></span>
               </div>
               <% if (c.phone) { %>
-                <a href="tel:<%= c.phone %>" class="inline-flex items-center gap-1 text-xs mt-0.5" style="color:#00D2BE;">
+                <a href="tel:<%= c.phone %>" class="inline-flex items-center gap-1 text-xs mt-0.5" style="color:#10B981;">
                   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
                   <%= c.phone %>
                 </a>
               <% } %>
             </div>
             <% if (c.phone) { %>
-              <a href="tel:<%= c.phone %>" class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style="background:rgba(0,210,190,0.15);color:#00D2BE;min-width:40px;min-height:40px;" aria-label="Call <%= c.full_name %>">
+              <a href="tel:<%= c.phone %>" class="w-10 h-10 rounded-full flex items-center justify-center shrink-0" style="background:rgba(16,185,129,0.15);color:#10B981;min-width:40px;min-height:40px;" aria-label="Call <%= c.full_name %>">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
               </a>
             <% } %>
@@ -144,13 +144,13 @@
   <% if (tab === 'docs') { %>
     <%
       var DOC_TYPE_LABEL = {
-        tgs:'TGS', tmp:'TMP', ctmp:'CTMP', rol:'ROL', rol_day:'ROL — Day', rol_night:'ROL — Night',
+        tgs:'TGS', tmp:'TMP', ctmp:'CTMP', rol:'ROL', rol_day:'ROL â€” Day', rol_night:'ROL â€” Night',
         stage_plan:'Stage Plan', swms:'SWMS', permit:'Permit', invoice:'Invoice', photo:'Photo', other:'Other',
       };
       function fmtSize(n) { if (!n) return ''; if (n < 1024) return n + ' B'; if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB'; return (n/1048576).toFixed(1) + ' MB'; }
     %>
     <div class="space-y-2">
-      <p class="text-xs text-gray-500 mb-1">Site documents — review before commencing work.</p>
+      <p class="text-xs text-gray-500 mb-1">Site documents â€” review before commencing work.</p>
       <% if (!jobDocuments || jobDocuments.length === 0) { %>
         <div class="py-6 text-center" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);border-radius:12px;">
           <p class="text-sm font-medium" style="color:rgba(255,255,255,0.85);">No documents uploaded yet</p>
@@ -166,8 +166,8 @@
               <p class="text-sm font-semibold text-white truncate"><%= doc.title || doc.original_name %></p>
               <p class="text-[11px] text-gray-500">
                 <%= DOC_TYPE_LABEL[doc.doc_type] || doc.doc_type %>
-                <% if (doc.source === 'booking') { %><span class="ml-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold" style="background:rgba(43,127,255,0.18);color:#60A5FA;">THIS SHIFT</span><% } %>
-                <% if (doc.size_bytes) { %> · <%= fmtSize(doc.size_bytes) %><% } %>
+                <% if (doc.source === 'booking') { %><span class="ml-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold" style="background:rgba(16,185,129,0.18);color:#60A5FA;">THIS SHIFT</span><% } %>
+                <% if (doc.size_bytes) { %> Â· <%= fmtSize(doc.size_bytes) %><% } %>
               </p>
             </div>
             <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -195,7 +195,7 @@
     <!-- My Tasks -->
     <div class="space-y-2">
       <div class="flex items-center justify-between">
-        <p class="text-xs font-bold uppercase tracking-wider" style="color:#00D2BE;">My tasks for this shift</p>
+        <p class="text-xs font-bold uppercase tracking-wider" style="color:#10B981;">My tasks for this shift</p>
         <span class="text-[11px] text-gray-500"><%= (typeof myTasks !== 'undefined' ? myTasks : []).filter(function(t){return t.status==='pending';}).length %> pending</span>
       </div>
       <% if (!myTasks || myTasks.length === 0) { %>
@@ -221,7 +221,7 @@
               <% } %>
               <div class="flex items-center gap-1.5 flex-wrap mt-1">
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:<%= pr.bg %>;color:<%= pr.color %>;"><%= pr.label %></span>
-                <% if (t.is_general) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(43,127,255,0.18);color:#60A5FA;">GENERAL</span><% } else { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(0,210,190,0.18);color:#5EEAD4;">THIS SHIFT</span><% } %>
+                <% if (t.is_general) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(16,185,129,0.18);color:#60A5FA;">GENERAL</span><% } else { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(16,185,129,0.18);color:#5EEAD4;">THIS SHIFT</span><% } %>
                 <% if (t.due_at) { %><span class="text-[10px]" style="color:rgba(255,255,255,0.4);">Due <%= new Date(t.due_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></span><% } %>
               </div>
             </div>
@@ -234,7 +234,7 @@
     <% if (typeof isTeamLeader !== 'undefined' && isTeamLeader) { %>
       <div class="space-y-2 mt-5">
         <div class="flex items-center justify-between">
-          <p class="text-xs font-bold uppercase tracking-wider" style="color:#00D2BE;">Crew tasks · this shift</p>
+          <p class="text-xs font-bold uppercase tracking-wider" style="color:#10B981;">Crew tasks Â· this shift</p>
           <span class="text-[11px] text-gray-500"><%= (typeof teamTasks !== 'undefined' ? teamTasks : []).filter(function(t){return t.status==='pending';}).length %> pending</span>
         </div>
         <% if (!teamTasks || teamTasks.length === 0) { %>
@@ -253,7 +253,7 @@
                   <span class="text-[11px] font-medium" style="color:rgba(255,255,255,0.75);"><%= t.assignee_name %></span>
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:<%= rp.bg %>;color:<%= rp.color %>;"><%= rp.label %></span>
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:<%= pr.bg %>;color:<%= pr.color %>;"><%= pr.label %></span>
-                  <% if (t.is_general) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(43,127,255,0.18);color:#60A5FA;">GENERAL</span><% } %>
+                  <% if (t.is_general) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(16,185,129,0.18);color:#60A5FA;">GENERAL</span><% } %>
                   <% if (t.due_at) { %><span class="text-[10px]" style="color:rgba(255,255,255,0.4);">Due <%= new Date(t.due_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></span><% } %>
                 </div>
               </div>
@@ -262,7 +262,7 @@
         <% } %>
 
         <!-- Quick add form for TLs -->
-        <details class="mt-3 rounded-lg" style="background:rgba(43,127,255,0.08);border:1px solid rgba(43,127,255,0.25);">
+        <details class="mt-3 rounded-lg" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);">
           <summary class="cursor-pointer px-3 py-2 text-sm font-semibold flex items-center gap-2" style="color:#60A5FA;">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
             Assign a task
@@ -272,14 +272,14 @@
             <input type="hidden" name="booking_id" value="<%= booking.id %>">
             <% if (allocation) { %><input type="hidden" name="allocation_id" value="<%= allocation.id %>"><% } %>
             <select name="crew_member_id" required class="w-full px-3 py-2 text-sm rounded-lg" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#fff;">
-              <option value="" style="color:#000;">Assign to…</option>
+              <option value="" style="color:#000;">Assign toâ€¦</option>
               <% (crew || []).forEach(function (c) { %>
                 <option value="<%= c.crew_member_id %>" style="color:#000;"><%= c.full_name %></option>
               <% }) %>
             </select>
             <input type="text" name="title" placeholder="What needs doing?" required maxlength="200"
               class="w-full px-3 py-2 text-sm rounded-lg" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#fff;">
-            <!-- Scope toggle — pill-style 2-up. Sends scope=general
+            <!-- Scope toggle â€” pill-style 2-up. Sends scope=general
                  when the right pill is selected; otherwise the task
                  binds to this shift (booking_id hidden above). -->
             <div class="grid grid-cols-2 gap-1 text-[11px] font-semibold rounded-lg p-0.5" style="background:rgba(255,255,255,0.05);">
@@ -298,7 +298,7 @@
                 <option value="high"   style="color:#000;">High</option>
                 <option value="low"    style="color:#000;">Low</option>
               </select>
-              <button type="submit" class="flex-1 px-4 py-2 text-sm font-semibold rounded-lg" style="background:#2B7FFF;color:#fff;">Add task</button>
+              <button type="submit" class="flex-1 px-4 py-2 text-sm font-semibold rounded-lg" style="background:#10B981;color:#fff;">Add task</button>
             </div>
           </form>
         </details>
@@ -306,7 +306,7 @@
     <% } %>
   <% } %>
 
-  <!-- FORMS TAB — shared partial keeps this 1:1 with views/worker/job-detail.ejs -->
+  <!-- FORMS TAB â€” shared partial keeps this 1:1 with views/worker/job-detail.ejs -->
   <% if (tab === 'forms') { %>
     <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, docket: typeof docket !== 'undefined' ? docket : null }) %>
   <% } %>

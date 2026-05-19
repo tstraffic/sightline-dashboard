@@ -7,60 +7,11 @@
   const isFinance = ['admin', 'finance'].includes(normalRole);
 %>
 
-<!-- Hero Banner -->
-<div class="hero-banner relative bg-gradient-to-br from-brand-900 via-brand-800 to-brand-700 rounded-2xl p-4 sm:p-5 mb-4 overflow-hidden">
-  <!-- Animated decorative orbs -->
-  <div class="hero-orb absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-white/[0.07] to-transparent rounded-full -translate-y-1/2 translate-x-1/4"></div>
-  <div class="hero-orb absolute bottom-0 left-1/4 w-56 h-56 bg-gradient-to-t from-white/[0.04] to-transparent rounded-full translate-y-1/2"></div>
-  <div class="hero-orb absolute top-1/2 right-1/3 w-32 h-32 bg-brand-400/10 rounded-full blur-2xl"></div>
-  <div class="relative z-10 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-    <div class="hero-greeting">
-      <p class="text-brand-300 text-[10px] uppercase tracking-[0.15em] font-semibold mb-1"><%= normalRole %> Dashboard</p>
-      <h1 class="text-xl sm:text-2xl font-extrabold text-white tracking-tight"><span id="greeting">Hello</span>, <%= user.full_name.split(' ')[0] %></h1>
-      <p class="text-brand-200/80 text-sm mt-1 font-medium" id="today-date"></p>
-    </div>
-    <div class="flex gap-3 sm:gap-4">
-      <% if (isOps) { %>
-      <div class="hero-kpi-card text-center bg-white/[0.08] backdrop-blur-sm rounded-xl px-4 py-3 min-w-[80px] ring-1 ring-white/10 hover:bg-white/[0.12] transition-colors">
-        <p class="text-2xl sm:text-3xl font-extrabold text-white leading-none"><span class="kpi-number" data-count="<%= kpi.activeJobs %>">0</span></p>
-        <p class="text-brand-300 text-[9px] uppercase tracking-wider font-semibold mt-1.5">Active Jobs</p>
-      </div>
-      <div class="hero-kpi-card text-center bg-white/[0.08] backdrop-blur-sm rounded-xl px-4 py-3 min-w-[80px] ring-1 ring-white/10 hover:bg-white/[0.12] transition-colors">
-        <p class="text-2xl sm:text-3xl font-extrabold text-white leading-none"><span class="kpi-number" data-count="<%= allocatedToday %>">0</span><span class="text-brand-400 text-lg font-bold">/<%= totalActiveCrew %></span></p>
-        <p class="text-brand-300 text-[9px] uppercase tracking-wider font-semibold mt-1.5">Crew Today</p>
-      </div>
-      <div class="hero-kpi-card text-center bg-white/[0.08] backdrop-blur-sm rounded-xl px-4 py-3 min-w-[80px] ring-1 ring-white/10 hover:bg-white/[0.12] transition-colors">
-        <p class="text-2xl sm:text-3xl font-extrabold text-white leading-none"><span class="kpi-number" data-count="<%= Math.round(kpi.crewHoursThisWeek) %>">0</span></p>
-        <p class="text-brand-300 text-[9px] uppercase tracking-wider font-semibold mt-1.5">Hours (7d)</p>
-      </div>
-      <% } else if (normalRole === 'planning') { %>
-      <div class="hero-kpi-card text-center bg-white/[0.08] backdrop-blur-sm rounded-xl px-4 py-3 min-w-[80px] ring-1 ring-white/10 hover:bg-white/[0.12] transition-colors">
-        <p class="text-2xl sm:text-3xl font-extrabold text-white leading-none"><span class="kpi-number" data-count="<%= kpi.rolPending + kpi.tmpPending %>">0</span></p>
-        <p class="text-brand-300 text-[9px] uppercase tracking-wider font-semibold mt-1.5">Pending</p>
-      </div>
-      <div class="hero-kpi-card text-center bg-white/[0.08] backdrop-blur-sm rounded-xl px-4 py-3 min-w-[80px] ring-1 ring-white/10 hover:bg-white/[0.12] transition-colors">
-        <p class="text-2xl sm:text-3xl font-extrabold text-white leading-none"><span class="kpi-number" data-count="<%= kpi.overdueCompliance %>">0</span></p>
-        <p class="text-brand-300 text-[9px] uppercase tracking-wider font-semibold mt-1.5">Overdue</p>
-      </div>
-      <div class="hero-kpi-card text-center bg-white/[0.08] backdrop-blur-sm rounded-xl px-4 py-3 min-w-[80px] ring-1 ring-white/10 hover:bg-white/[0.12] transition-colors">
-        <p class="text-2xl sm:text-3xl font-extrabold text-white leading-none"><span class="kpi-number" data-count="<%= kpi.ticketsExpiring %>">0</span></p>
-        <p class="text-brand-300 text-[9px] uppercase tracking-wider font-semibold mt-1.5">Expiring</p>
-      </div>
-      <% } else if (normalRole === 'finance') { %>
-      <div class="hero-kpi-card text-center bg-white/[0.08] backdrop-blur-sm rounded-xl px-4 py-3 min-w-[80px] ring-1 ring-white/10 hover:bg-white/[0.12] transition-colors">
-        <p class="text-2xl sm:text-3xl font-extrabold text-white leading-none">$<span class="kpi-number" data-count="<%= Math.round(kpi.totalContractValue / 1000) %>">0</span>k</p>
-        <p class="text-brand-300 text-[9px] uppercase tracking-wider font-semibold mt-1.5">Contract Value</p>
-      </div>
-      <div class="hero-kpi-card text-center bg-white/[0.08] backdrop-blur-sm rounded-xl px-4 py-3 min-w-[80px] ring-1 ring-white/10 hover:bg-white/[0.12] transition-colors">
-        <p class="text-2xl sm:text-3xl font-extrabold text-white leading-none">$<span class="kpi-number" data-count="<%= Math.round(kpi.totalSpend / 1000) %>">0</span>k</p>
-        <p class="text-brand-300 text-[9px] uppercase tracking-wider font-semibold mt-1.5">Total Spend</p>
-      </div>
-      <div class="hero-kpi-card text-center bg-white/[0.08] backdrop-blur-sm rounded-xl px-4 py-3 min-w-[80px] ring-1 ring-white/10 hover:bg-white/[0.12] transition-colors">
-        <p class="text-2xl sm:text-3xl font-extrabold text-white leading-none"><span class="kpi-number" data-count="<%= kpi.accountsOverdue %>">0</span></p>
-        <p class="text-brand-300 text-[9px] uppercase tracking-wider font-semibold mt-1.5">Invoices Due</p>
-      </div>
-      <% } %>
-    </div>
+<!-- Greeting -->
+<div class="hero-banner flex items-baseline justify-between gap-4 mb-6 px-1">
+  <div class="hero-greeting">
+    <h1 class="text-xl sm:text-2xl font-display font-medium text-gray-900 tracking-tight" style="letter-spacing:-0.025em"><span id="greeting">Hello</span>, <%= user.full_name.split(' ')[0] %>.</h1>
+    <p class="text-[12px] font-mono text-gray-500 mt-1 tracking-wide uppercase" id="today-date"></p>
   </div>
 </div>
 <script>
@@ -165,85 +116,54 @@
 </div>
 <% } %>
 
-<!-- Urgency Tiles -->
-<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2 sm:gap-3 mb-5 stagger-children">
-  <!-- CRITICAL: Overdue Tasks -->
-  <a href="/tasks" class="urgency-tile group rounded-xl p-3 border-l-4 <%= kpi.overdueTasks > 0 ? 'bg-red-50/60 border-l-red-500 border-t border-r border-b border-t-red-200 border-r-red-200 border-b-red-200' : 'bg-white border-l-gray-200 border border-gray-200' %> hover:shadow-md transition-shadow">
-    <div class="flex items-center justify-between">
-      <p class="text-2xl font-extrabold <%= kpi.overdueTasks > 0 ? 'text-red-600' : 'text-emerald-600' %>"><span class="kpi-number" data-count="<%= kpi.overdueTasks %>">0</span></p>
-      <% if (kpi.overdueTasks > 0) { %><svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><% } %>
-    </div>
-    <p class="text-[10px] font-medium text-gray-400 uppercase tracking-wider mt-0.5">Overdue Tasks</p>
+<!-- KPI / Urgency Tiles — single unified grid.
+     Tile pattern: charcoal surface, thin 2px left border that carries the
+     status colour (red/amber/blue/neutral). Numbers fade to grey when 0
+     so the eye is drawn only to non-zero values. -->
+<%
+  function tileClasses(value, level) {
+    // level: 'critical' (red), 'warn' (amber), 'info' (blue), 'kpi' (neutral)
+    if (!value) {
+      return { border: 'border-l-gray-200 dark-glass-border-mute', num: 'text-gray-400' };
+    }
+    if (level === 'critical') return { border: 'border-l-red-500',   num: 'text-red-600' };
+    if (level === 'warn')     return { border: 'border-l-amber-500', num: 'text-amber-600' };
+    if (level === 'info')     return { border: 'border-l-brand-500', num: 'text-gray-900' };
+    return                            { border: 'border-l-gray-300', num: 'text-gray-900' };
+  }
+  // Build the list once so the grid is single-source-of-truth and we don't
+  // duplicate the same metric in two cards.
+  const tiles = [];
+  if (isOps) {
+    tiles.push({ link: '/projects',                     value: kpi.activeJobs,            label: 'Active Jobs',       level: 'kpi' });
+    tiles.push({ link: '/allocations',                  value: allocatedToday,            label: 'Crew Today',        level: 'kpi',  suffix: '/' + totalActiveCrew });
+    tiles.push({ link: '/timesheets',                   value: Math.round(kpi.crewHoursThisWeek), label: 'Hours (7d)', level: 'kpi' });
+  } else if (normalRole === 'planning') {
+    tiles.push({ link: '/compliance',                   value: kpi.rolPending + kpi.tmpPending, label: 'Pending',     level: 'kpi' });
+  } else if (normalRole === 'finance') {
+    tiles.push({ link: '/budgets',                      value: Math.round(kpi.totalContractValue / 1000), prefix: '$', suffix: 'k', label: 'Contract', level: 'kpi' });
+    tiles.push({ link: '/budgets',                      value: Math.round(kpi.totalSpend / 1000), prefix: '$', suffix: 'k', label: 'Spend',         level: 'kpi' });
+  }
+  tiles.push({ link: '/tasks',                          value: kpi.overdueTasks,          label: 'Overdue Tasks',     level: 'critical' });
+  tiles.push({ link: '/incidents',                      value: kpi.openIncidents,         label: 'Open Incidents',    level: 'critical' });
+  tiles.push({ link: '/compliance',                     value: kpi.overdueCompliance,     label: 'Overdue Plans',     level: 'critical' });
+  tiles.push({ link: '/allocations',                    value: kpi.crewGaps,              label: 'Crew Gaps',         level: 'critical' });
+  tiles.push({ link: '/timesheets?approved=0',          value: kpi.pendingTimesheets,     label: 'Pending Timesheets',level: 'warn' });
+  tiles.push({ link: '/crew',                           value: kpi.ticketsExpiring,       label: 'Expiring Tickets',  level: 'warn' });
+  tiles.push({ link: '/allocations',                    value: kpi.unconfirmedAllocations, label: 'Unconfirmed',      level: 'info' });
+%>
+<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2 mb-6 stagger-children">
+  <% tiles.forEach(function(t) {
+    const c = tileClasses(t.value, t.level);
+  %>
+  <a href="<%= t.link %>" class="urgency-tile group block p-3 bg-white border border-gray-200 border-l-[3px] <%= c.border %> hover:border-gray-300 transition-colors" style="border-radius:8px">
+    <p class="font-display font-medium leading-none <%= c.num %>" style="font-size:26px;letter-spacing:-0.03em">
+      <% if (t.prefix) { %><span class="text-base font-medium opacity-60"><%= t.prefix %></span><% } %><span class="kpi-number" data-count="<%= t.value %>">0</span><% if (t.suffix) { %><span class="text-base font-medium opacity-60"><%= t.suffix %></span><% } %>
+    </p>
+    <p class="text-[10px] font-mono text-gray-500 uppercase mt-2" style="letter-spacing:0.1em"><%= t.label %></p>
   </a>
-  <!-- CRITICAL: Open Incidents -->
-  <a href="/incidents" class="urgency-tile group rounded-xl p-3 border-l-4 <%= kpi.openIncidents > 0 ? 'bg-red-50/60 border-l-red-500 border-t border-r border-b border-t-red-200 border-r-red-200 border-b-red-200' : 'bg-white border-l-gray-200 border border-gray-200' %> hover:shadow-md transition-shadow">
-    <div class="flex items-center justify-between">
-      <p class="text-2xl font-extrabold <%= kpi.openIncidents > 0 ? 'text-red-600' : 'text-emerald-600' %>"><span class="kpi-number" data-count="<%= kpi.openIncidents %>">0</span></p>
-      <% if (kpi.openIncidents > 0) { %><svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><% } %>
-    </div>
-    <p class="text-[10px] font-medium text-gray-400 uppercase tracking-wider mt-0.5">Open Incidents</p>
-  </a>
-  <!-- WARNING: Pending Timesheets -->
-  <a href="/timesheets?approved=0" class="urgency-tile group rounded-xl p-3 border-l-4 <%= kpi.pendingTimesheets > 0 ? 'bg-amber-50/60 border-l-amber-500 border-t border-r border-b border-t-amber-200 border-r-amber-200 border-b-amber-200' : 'bg-white border-l-gray-200 border border-gray-200' %> hover:shadow-md transition-shadow">
-    <div class="flex items-center justify-between">
-      <p class="text-2xl font-extrabold <%= kpi.pendingTimesheets > 0 ? 'text-amber-600' : 'text-emerald-600' %>"><span class="kpi-number" data-count="<%= kpi.pendingTimesheets %>">0</span></p>
-      <% if (kpi.pendingTimesheets > 0) { %><svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg><% } %>
-    </div>
-    <p class="text-[10px] font-medium text-gray-400 uppercase tracking-wider mt-0.5">Pending Timesheets</p>
-  </a>
-  <!-- INFO: Unconfirmed -->
-  <a href="/allocations" class="urgency-tile group rounded-xl p-3 border-l-4 <%= kpi.unconfirmedAllocations > 0 ? 'bg-blue-50/60 border-l-blue-500 border-t border-r border-b border-t-blue-200 border-r-blue-200 border-b-blue-200' : 'bg-white border-l-gray-200 border border-gray-200' %> hover:shadow-md transition-shadow">
-    <div class="flex items-center justify-between">
-      <p class="text-2xl font-extrabold <%= kpi.unconfirmedAllocations > 0 ? 'text-blue-600' : 'text-emerald-600' %>"><span class="kpi-number" data-count="<%= kpi.unconfirmedAllocations %>">0</span></p>
-      <% if (kpi.unconfirmedAllocations > 0) { %><svg class="w-3.5 h-3.5 text-blue-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"/></svg><% } %>
-    </div>
-    <p class="text-[10px] font-medium text-gray-400 uppercase tracking-wider mt-0.5">Unconfirmed</p>
-  </a>
-  <!-- CRITICAL: Overdue Plans -->
-  <a href="/compliance" class="urgency-tile group rounded-xl p-3 border-l-4 <%= kpi.overdueCompliance > 0 ? 'bg-red-50/60 border-l-red-500 border-t border-r border-b border-t-red-200 border-r-red-200 border-b-red-200' : 'bg-white border-l-gray-200 border border-gray-200' %> hover:shadow-md transition-shadow">
-    <div class="flex items-center justify-between">
-      <p class="text-2xl font-extrabold <%= kpi.overdueCompliance > 0 ? 'text-red-600' : 'text-emerald-600' %>"><span class="kpi-number" data-count="<%= kpi.overdueCompliance %>">0</span></p>
-      <% if (kpi.overdueCompliance > 0) { %><svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><% } %>
-    </div>
-    <p class="text-[10px] font-medium text-gray-400 uppercase tracking-wider mt-0.5">Overdue Plans</p>
-  </a>
-  <!-- WARNING: Expiring Tickets -->
-  <a href="/crew" class="urgency-tile group rounded-xl p-3 border-l-4 <%= kpi.ticketsExpiring > 0 ? 'bg-amber-50/60 border-l-amber-500 border-t border-r border-b border-t-amber-200 border-r-amber-200 border-b-amber-200' : 'bg-white border-l-gray-200 border border-gray-200' %> hover:shadow-md transition-shadow">
-    <div class="flex items-center justify-between">
-      <p class="text-2xl font-extrabold <%= kpi.ticketsExpiring > 0 ? 'text-amber-600' : 'text-emerald-600' %>"><span class="kpi-number" data-count="<%= kpi.ticketsExpiring %>">0</span></p>
-      <% if (kpi.ticketsExpiring > 0) { %><svg class="w-3.5 h-3.5 text-amber-400" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/></svg><% } %>
-    </div>
-    <p class="text-[10px] font-medium text-gray-400 uppercase tracking-wider mt-0.5">Expiring Tickets</p>
-  </a>
-  <!-- CRITICAL: Crew Gaps -->
-  <a href="/allocations" class="urgency-tile group rounded-xl p-3 border-l-4 <%= kpi.crewGaps > 0 ? 'bg-red-50/60 border-l-red-500 border-t border-r border-b border-t-red-200 border-r-red-200 border-b-red-200' : 'bg-white border-l-gray-200 border border-gray-200' %> hover:shadow-md transition-shadow">
-    <div class="flex items-center justify-between">
-      <p class="text-2xl font-extrabold <%= kpi.crewGaps > 0 ? 'text-red-600' : 'text-emerald-600' %>"><span class="kpi-number" data-count="<%= kpi.crewGaps %>">0</span></p>
-      <% if (kpi.crewGaps > 0) { %><svg class="w-4 h-4 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg><% } %>
-    </div>
-    <p class="text-[10px] font-medium text-gray-400 uppercase tracking-wider mt-0.5">Crew Gaps</p>
-  </a>
+  <% }) %>
 </div>
-
-<!-- Needs Attention -->
-<% if (actionItems.length > 0) { %>
-<div class="needs-attention-card bg-white border border-red-200 rounded-2xl p-4 mb-5">
-  <div class="flex items-center gap-2 mb-3">
-    <div class="attention-dot w-2 h-2 rounded-full bg-red-500"></div>
-    <h2 class="text-sm font-bold text-gray-900">Needs Attention</h2>
-    <span class="text-[10px] font-medium text-red-600 bg-red-50 px-2 py-0.5 rounded-full"><%= actionItems.length %> item<%= actionItems.length !== 1 ? 's' : '' %></span>
-  </div>
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-2">
-    <% actionItems.forEach(item => { %>
-    <a href="<%= item.link %>" class="flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-gray-50 transition group border border-gray-100">
-      <div class="w-2 h-2 rounded-full flex-shrink-0 <%= item.color === 'red' ? 'bg-red-500' : 'bg-amber-400' %>"></div>
-      <span class="text-sm text-gray-700 group-hover:text-gray-900 truncate"><%= item.text %></span>
-      <svg class="w-3.5 h-3.5 text-gray-300 ml-auto flex-shrink-0 group-hover:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-    </a>
-    <% }) %>
-  </div>
-</div>
-<% } %>
 
 <!-- Missing site docs — the bookings that need a TGS / TMP / ROL upload before the crew rolls up -->
 <% if (typeof missingDocsList !== 'undefined' && missingDocsList && missingDocsList.length) { %>
@@ -281,50 +201,64 @@
 </div>
 <% } %>
 
-<!-- Checklist Register summary — auto-replacement for the manual spreadsheet -->
+<!-- Checklist Register — single column, sorted by completion % (lowest first).
+     Failing rows rise to the top where attention is actually needed.
+     A small delta arrow indicates the change vs last week. -->
 <%
-  function checkClass(p, required) {
-    if (!required) return 'text-gray-400';
-    if (p >= 95) return 'text-emerald-700 bg-emerald-50';
-    if (p >= 75) return 'text-amber-700 bg-amber-50';
-    return 'text-red-700 bg-red-50';
-  }
   function checkBar(p, required) {
     if (!required) return 'bg-gray-200';
-    if (p >= 95) return 'bg-emerald-500';
+    if (p >= 95) return 'bg-brand-500';
     if (p >= 75) return 'bg-amber-400';
     return 'bg-red-500';
   }
 %>
-<% if (checklistSummary) { %>
-<div class="bg-white border border-gray-200 rounded-2xl p-4 mb-5">
-  <div class="flex items-center justify-between gap-2 mb-3">
-    <div class="flex items-center gap-2">
-      <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M9 11l3 3 5-5"/><path d="M21 12c0 6-4.5 9-9 10C7.5 21 3 18 3 12V6l9-3 9 3z"/></svg>
-      <h2 class="text-sm font-bold text-gray-900">Checklist Register</h2>
-      <span class="text-[10px] font-medium text-gray-500 bg-gray-50 px-2 py-0.5 rounded-full">Auto</span>
+<% if (checklistSummary) {
+  // Build a single ranked list keyed by row label so we can attach the
+  // last-week pct as a delta. Required-zero rows sink to the bottom.
+  const lastByLabel = {};
+  (checklistSummary.lastWeek || []).forEach(function (r) { lastByLabel[r.label] = r; });
+  const ranked = (checklistSummary.month || []).map(function (r) {
+    const last = lastByLabel[r.label];
+    const delta = (r.required && last && last.required) ? (r.completion_pct - last.completion_pct) : null;
+    return Object.assign({}, r, { delta: delta });
+  }).sort(function (a, b) {
+    // Required-zero rows go last; otherwise lowest completion first.
+    if (!a.required && b.required) return 1;
+    if (a.required && !b.required) return -1;
+    return (a.completion_pct || 0) - (b.completion_pct || 0);
+  });
+%>
+<div class="bg-white border border-gray-200 p-4 mb-6" style="border-radius:12px">
+  <div class="flex items-baseline justify-between gap-2 mb-4">
+    <div>
+      <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Checklist Register</h2>
+      <p class="text-[11px] font-mono text-gray-500 mt-0.5" style="letter-spacing:0.08em"><%= checklistSummary.monthLabel.toUpperCase() %></p>
     </div>
-    <a href="/checklist-register" class="text-xs font-semibold text-brand-700 hover:underline">Full breakdown →</a>
+    <a href="/checklist-register" class="text-xs font-medium text-gray-500 hover:text-gray-900">Full breakdown &rarr;</a>
   </div>
 
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-    <% [{ key: 'month', label: checklistSummary.monthLabel, rows: checklistSummary.month }, { key: 'last', label: 'Last week (' + checklistSummary.lastWeekRange + ')', rows: checklistSummary.lastWeek }].forEach(function (col) { %>
-      <div>
-        <p class="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2"><%= col.label %></p>
-        <div class="space-y-1.5">
-          <% col.rows.forEach(function (row) { %>
-            <div class="flex items-center gap-3 text-xs">
-              <span class="w-44 truncate text-gray-700"><%= row.label %></span>
-              <span class="w-20 text-right tabular-nums text-gray-500"><%= row.completed %> / <%= row.required %></span>
-              <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                <div class="h-full <%= checkBar(row.completion_pct, row.required) %>" style="width: <%= row.required ? row.completion_pct : 0 %>%"></div>
-              </div>
-              <span class="w-10 text-right text-[11px] font-bold <%= checkClass(row.completion_pct, row.required) %> px-1.5 py-0.5 rounded">
-                <%= row.required ? row.completion_pct + '%' : '—' %>
-              </span>
-            </div>
-          <% }) %>
+  <div class="space-y-2">
+    <% ranked.forEach(function (row) { %>
+      <div class="flex items-center gap-3 text-xs">
+        <span class="w-40 truncate text-gray-700 font-medium"><%= row.label %></span>
+        <span class="w-16 text-right tabular-nums font-mono text-[11px] text-gray-400"><%= row.completed %>/<%= row.required %></span>
+        <div class="flex-1 h-1 bg-gray-100 overflow-hidden" style="border-radius:6px">
+          <div class="h-full <%= checkBar(row.completion_pct, row.required) %>" style="width: <%= row.required ? row.completion_pct : 0 %>%; border-radius:6px"></div>
         </div>
+        <span class="w-10 text-right tabular-nums font-mono text-[11px] font-medium <%= !row.required ? 'text-gray-300' : row.completion_pct >= 95 ? 'text-gray-900' : row.completion_pct >= 75 ? 'text-amber-600' : 'text-red-600' %>">
+          <%= row.required ? row.completion_pct + '%' : '—' %>
+        </span>
+        <span class="w-14 text-right tabular-nums font-mono text-[10px]">
+          <% if (row.delta === null) { %>
+            <span class="text-gray-300">—</span>
+          <% } else if (row.delta > 0) { %>
+            <span class="text-brand-600">&uarr; <%= row.delta %>%</span>
+          <% } else if (row.delta < 0) { %>
+            <span class="text-red-500">&darr; <%= Math.abs(row.delta) %>%</span>
+          <% } else { %>
+            <span class="text-gray-400">— 0%</span>
+          <% } %>
+        </span>
       </div>
     <% }) %>
   </div>

@@ -1,10 +1,10 @@
 <%
   function fmt(s) {
-    if (!s) return '—';
+    if (!s) return 'â€”';
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   function fmtDate(s) {
-    if (!s) return '—';
+    if (!s) return 'â€”';
     return new Date(s).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
   const isCurrent = !!currentAck;
@@ -25,28 +25,28 @@
   .sd-banner.slate { background-image: linear-gradient(180deg, rgba(148,163,184,0.14) 0%, rgba(148,163,184,0.04) 100%); border: 1px solid rgba(148,163,184,0.30); color: #e2e8f0; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05); }
   /* Client-side PDF.js renders each page to a <canvas> inside .pdf-viewer.
      Styles for the canvases come from /js/worker-pdf-viewer.js (injected
-     once on first init). The download button below is in-app — it links
+     once on first init). The download button below is in-app â€” it links
      to /view (chrome-free fullscreen) and never opens a new tab. */
   .sd-fullscreen {
     display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 14px;
-    background: rgba(43,127,255,0.15); border: 1px solid rgba(43,127,255,0.3);
+    background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3);
     border-radius: 10px; color: #93C5FD; font-weight: 600; font-size: 0.9rem;
     text-decoration: none; margin: 0 0 12px; width: 100%;
   }
-  .sd-fullscreen:active { background: rgba(43,127,255,0.25); }
+  .sd-fullscreen:active { background: rgba(16,185,129,0.25); }
   .sd-actionbar {
     position: fixed; left: 0; right: 0; bottom: 64px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
     background: rgba(10,22,40,0.96); border-top: 1px solid rgba(255,255,255,0.08); z-index: 40;
   }
   .sd-ack-btn {
     width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0;
-    background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
-    box-shadow: 0 6px 20px rgba(29,106,229,0.35);
+    background: linear-gradient(135deg, #059669, #10B981); color: #fff;
+    box-shadow: 0 6px 20px rgba(5,150,105,0.35);
     transition: opacity 0.15s;
   }
   .sd-ack-btn:active { transform: translateY(1px); }
   .sd-ack-btn:disabled { opacity: 0.45; box-shadow: none; }
-  /* Signature pad — drawn ABOVE the fold (not in the action bar) so the
+  /* Signature pad â€” drawn ABOVE the fold (not in the action bar) so the
      keyboard / signing hand doesn't overlap the canvas. The pad uses
      touch-action: none so finger drags don't scroll the page. */
   .sd-sign-card {
@@ -99,23 +99,23 @@
     font-family: inherit;
   }
   .sd-field input:focus, .sd-field textarea:focus {
-    outline: none; border-color: rgba(43,127,255,0.6);
+    outline: none; border-color: rgba(16,185,129,0.6);
   }
   .sd-field textarea { resize: vertical; min-height: 70px; }
   .sd-req-btn {
     width: 100%; padding: 12px; border-radius: 10px; font-size: 0.9rem; font-weight: 700; border: 0;
-    background: linear-gradient(135deg, #1D6AE5, #2B7FFF); color: #fff;
+    background: linear-gradient(135deg, #059669, #10B981); color: #fff;
   }
 </style>
 
 <div class="sd-wrap">
-  <a href="/w/safety/swms" class="sd-back">← Safety / SWMS</a>
+  <a href="/w/safety/swms" class="sd-back">â† Safety / SWMS</a>
   <div class="sd-title"><%= swms.title %></div>
   <div class="sd-meta">
     <span><%= swms.kind === 'template' ? 'Generic' : 'Job-linked' %></span>
-    <% if (swms.job_number) { %><span>· <%= swms.job_number %></span><% } %>
-    <% if (swms.client) { %><span>· <%= swms.client %></span><% } %>
-    <% if (swms.version_published_at) { %><span>· Version published <%= fmt(swms.version_published_at) %></span><% } %>
+    <% if (swms.job_number) { %><span>Â· <%= swms.job_number %></span><% } %>
+    <% if (swms.client) { %><span>Â· <%= swms.client %></span><% } %>
+    <% if (swms.version_published_at) { %><span>Â· Version published <%= fmt(swms.version_published_at) %></span><% } %>
   </div>
 
   <% if (isLocked) { %>
@@ -175,7 +175,7 @@
         <% } %>
       </div>
     <% } else if (priorOnly) { %>
-      <div class="sd-banner amber" data-attention="amber">⚠ This SWMS has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-sign below.</div>
+      <div class="sd-banner amber" data-attention="amber">âš  This SWMS has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-sign below.</div>
     <% } else { %>
       <div class="sd-banner rose" data-attention="rose">You have not acknowledged this SWMS yet. Read it through, sign at the bottom, then tap acknowledge.</div>
     <% } %>
@@ -186,7 +186,7 @@
 
     <% if (swms.file_path) { %>
       <!-- Open-fullscreen sits ABOVE the inline viewer so workers can jump
-           straight to the chrome-free fullscreen reader if they want — no
+           straight to the chrome-free fullscreen reader if they want â€” no
            scrolling past pages of inline PDF first. -->
       <a href="/w/safety/swms/<%= swms.id %>/view" class="sd-fullscreen">
         <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5v4m0-4h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg>
@@ -200,7 +200,7 @@
     <% } %>
 
     <% if (!isCurrent) { %>
-      <!-- Signature pad — required before the action bar's Acknowledge
+      <!-- Signature pad â€” required before the action bar's Acknowledge
            button enables. Stays in the normal flow so the user can see
            the canvas while signing (no overlap with the fixed bottom). -->
       <div class="sd-sign-card">
@@ -232,7 +232,7 @@
   </div>
 
   <script>
-    // Signature pad — minimal, works with both touch and mouse. Enables the
+    // Signature pad â€” minimal, works with both touch and mouse. Enables the
     // Acknowledge button as soon as the worker actually draws something so
     // empty/accidental submissions can't go through.
     (function () {
@@ -315,7 +315,7 @@
         }
         dataInput.value = canvas.toDataURL('image/png');
         submitBtn.disabled = true;
-        submitBtn.textContent = 'Submitting…';
+        submitBtn.textContent = 'Submittingâ€¦';
       });
     })();
   </script>

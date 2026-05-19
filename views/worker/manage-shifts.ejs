@@ -15,9 +15,9 @@
     <p class="mg-hero-label">Shift board</p>
     <h1 class="mg-hero-title"><%= shown.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long', day: 'numeric', month: 'long' }) %></h1>
     <div style="display: flex; gap: 6px; margin-top: 10px;">
-      <a href="?date=<%= iso(prev) %>" class="mg-btn-ghost">← Prev</a>
+      <a href="?date=<%= iso(prev) %>" class="mg-btn-ghost">â† Prev</a>
       <a href="?date=<%= iso(today) %>" class="mg-btn-ghost">Today</a>
-      <a href="?date=<%= iso(next) %>" class="mg-btn-ghost">Next →</a>
+      <a href="?date=<%= iso(next) %>" class="mg-btn-ghost">Next â†’</a>
     </div>
   </div>
 
@@ -31,30 +31,30 @@
         <div style="min-width: 0; flex: 1;">
           <p class="mg-job-client"><%= job.client %></p>
           <p class="mg-job-meta">
-            <%= job.job_number %><% if (job.suburb) { %> · <%= job.suburb %><% } %>
-            <% if (job.supervisor) { %> · Supervisor: <%= job.supervisor %><% } %>
-            · <%= job.members.length %> on crew
+            <%= job.job_number %><% if (job.suburb) { %> Â· <%= job.suburb %><% } %>
+            <% if (job.supervisor) { %> Â· Supervisor: <%= job.supervisor %><% } %>
+            Â· <%= job.members.length %> on crew
           </p>
         </div>
         <% if (job.weather) { %>
-          <div style="flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(43,127,255,0.1); border: 1px solid rgba(43,127,255,0.2);">
+          <div style="flex-shrink: 0; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.2);">
             <span style="font-size: 1.25rem; line-height: 1;"><%= job.weather.emoji %></span>
             <div style="line-height: 1.1;">
-              <p style="font-size: 0.82rem; font-weight: 700; color: #fff;"><%= job.weather.temp %>°</p>
+              <p style="font-size: 0.82rem; font-weight: 700; color: #fff;"><%= job.weather.temp %>Â°</p>
               <p style="font-size: 0.6rem; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 0.03em;"><% if (job.weather.rain_chance >= 40) { %><%= job.weather.rain_chance %>% rain<% } else { %><%= job.weather.description %><% } %></p>
             </div>
           </div>
         <% } %>
       </div>
       <% if (job.weather && job.weather.rain_chance >= 40) { %>
-        <div style="margin: 0; padding: 8px 14px; background: rgba(245,158,11,0.1); border-top: 1px solid rgba(245,158,11,0.2); color: #FBBF24; font-size: 0.7rem; font-weight: 600;">⚠️ Wet weather PPE recommended — <%= job.weather.rain_chance %>% chance of rain</div>
+        <div style="margin: 0; padding: 8px 14px; background: rgba(245,158,11,0.1); border-top: 1px solid rgba(245,158,11,0.2); color: #FBBF24; font-size: 0.7rem; font-weight: 600;">âš ï¸ Wet weather PPE recommended â€” <%= job.weather.rain_chance %>% chance of rain</div>
       <% } %>
       <div class="mg-list" style="padding: 10px;">
         <% job.members.forEach(function (m) { %>
           <div class="mg-row">
             <div class="mg-row-body">
-              <p class="mg-row-title"><%= m.crew_name %> <% if (m.role_on_site) { %><span style="color: rgba(255,255,255,0.4); font-size: 0.7rem; font-weight: 500;"> · <%= m.role_on_site.replace(/_/g, ' ') %></span><% } %></p>
-              <p class="mg-row-sub"><%= fmtTime(m.start_time) %>–<%= fmtTime(m.end_time) %> · <%= m.shift_type || 'day' %> shift · <%= m.clockLabel %></p>
+              <p class="mg-row-title"><%= m.crew_name %> <% if (m.role_on_site) { %><span style="color: rgba(255,255,255,0.4); font-size: 0.7rem; font-weight: 500;"> Â· <%= m.role_on_site.replace(/_/g, ' ') %></span><% } %></p>
+              <p class="mg-row-sub"><%= fmtTime(m.start_time) %>â€“<%= fmtTime(m.end_time) %> Â· <%= m.shift_type || 'day' %> shift Â· <%= m.clockLabel %></p>
             </div>
             <% if (m.crew_phone) { %><a href="tel:<%= m.crew_phone %>" class="mg-btn-ghost" style="font-size: 0.7rem;">Call</a><% } %>
           </div>
