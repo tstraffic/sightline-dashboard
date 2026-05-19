@@ -9901,6 +9901,50 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 216: backfill site_audits.job_id from project_site.
+  //
+  // Before the /audits/draft autosave was fixed to carry job_id, drafts
+  // were inserted unlinked. If a user submitted from the edit screen
+  // without re-picking the job (project_site was auto-filled, so it
+  // looked linked), the audit landed in the register with job_id NULL
+  // and never surfaced in the job's Safety tab. This backfill walks
+  // orphan audits and links them when project_site contains exactly
+  // one known job_number as a substring — a confident match. Audits
+  // with zero or ambiguous matches are left alone so they don't get
+  // mis-linked.
+  // =============================================
+  if (!isMigrationApplied.get(216)) {
+    console.log('Running migration 216: backfill site_audits.job_id from project_site');
+    try {
+      const orphans = db.prepare(`
+        SELECT id, project_site FROM site_audits
+        WHERE job_id IS NULL AND TRIM(COALESCE(project_site, '')) <> ''
+      `).all();
+      const allJobs = db.prepare(`
+        SELECT id, job_number FROM jobs WHERE TRIM(COALESCE(job_number, '')) <> ''
+      `).all();
+      const update = db.prepare('UPDATE site_audits SET job_id = ? WHERE id = ?');
+      let linked = 0, ambiguous = 0, unmatched = 0;
+      for (const a of orphans) {
+        const haystack = (a.project_site || '').toLowerCase();
+        const hits = allJobs.filter(j => haystack.includes(j.job_number.toLowerCase()));
+        if (hits.length === 1) {
+          update.run(hits[0].id, a.id);
+          linked++;
+        } else if (hits.length > 1) {
+          ambiguous++;
+        } else {
+          unmatched++;
+        }
+      }
+      console.log(`Migration 216 applied: backfilled job_id on ${linked} site_audits (${ambiguous} ambiguous, ${unmatched} no match, ${orphans.length} total orphans)`);
+      recordMigration.run(216, 'backfill site_audits.job_id from project_site');
+    } catch (e) {
+      console.error('Migration 216 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
