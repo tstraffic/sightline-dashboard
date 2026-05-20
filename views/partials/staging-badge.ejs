@@ -1,0 +1,23 @@
+<%# Staging environment banner — only renders when ATOMIS_ENV=staging.
+   Keeps Suhail + Saadat from confusing staging with prod when both are
+   open in tabs. Bright orange, top of every page, dismissible only by
+   navigating away. Don't make it pretty — it's supposed to be obvious. %>
+<% if (process.env.ATOMIS_ENV === 'staging') { %>
+  <div role="status" aria-live="polite" style="
+    position: sticky;
+    top: 0;
+    z-index: 10000;
+    background: #F97316;
+    color: #fff;
+    text-align: center;
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(0,0,0,0.15);
+  ">
+    Staging &middot; <%= process.env.RAILWAY_GIT_COMMIT_SHA ? process.env.RAILWAY_GIT_COMMIT_SHA.slice(0, 7) : 'local' %> &middot; not production
+  </div>
+<% } %>
