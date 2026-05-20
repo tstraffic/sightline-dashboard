@@ -10,6 +10,7 @@
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:report": "playwright show-report",
     "test:smoke": "playwright test auth.spec.js smoke.spec.js worker.spec.js",
+    "test:cross-tenant": "node --test tests/cross-tenant/*.test.js",
     "lint:tenant": "node scripts/check-raw-db.js"
   },
   "engines": {
