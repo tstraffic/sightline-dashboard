@@ -15,6 +15,10 @@ const SKIP_PATHS = [
 const SKIP_PREFIXES = [
   '/sop-sign/',
   '/toolbox-attend/',
+  // /wq/:code is the participant entry point for Safety > Workshops.
+  // Office staff scan the room QR; the session_code in the URL is the
+  // capability that gates POSTs to start / submit / poll the leaderboard.
+  '/wq/',
 ];
 
 function csrfProtection(req, res, next) {

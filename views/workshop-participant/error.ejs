@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Workshop session — T&S</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: #10141b; color: #eef2f6;
+    font-family: 'Barlow', system-ui, sans-serif;
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .box { max-width: 400px; text-align: center; }
+  .kicker {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 700;
+    font-size: 12px; letter-spacing: 2.5px; text-transform: uppercase;
+    color: #ff6a1f; margin-bottom: 12px;
+  }
+  h1 {
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 800;
+    font-size: 28px; text-transform: uppercase; line-height: 1.05;
+    margin-bottom: 12px;
+  }
+  p { color: #93a1b0; line-height: 1.5; font-size: 14.5px; }
+</style>
+</head>
+<body>
+  <div class="box">
+    <% if (reason === 'not_found') { %>
+      <p class="kicker">Session not found</p>
+      <h1>Check the code</h1>
+      <p>The session code in this link doesn't match an open workshop. Re-scan the QR on the meeting-room screen, or ask the facilitator to share it again.</p>
+    <% } else if (reason === 'closed') { %>
+      <p class="kicker">Session closed</p>
+      <h1>This workshop has wrapped up</h1>
+      <p>The facilitator has closed this session. Ask them to start a new one if you'd like to play.</p>
+    <% } else { %>
+      <p class="kicker">Workshop unavailable</p>
+      <h1>Something's off</h1>
+      <p>This workshop is configured but the content isn't loaded on the server. Let the facilitator know.</p>
+    <% } %>
+  </div>
+</body>
+</html>

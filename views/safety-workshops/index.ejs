@@ -1,0 +1,64 @@
+<% locals.currentPage = 'safety-workshops' %>
+<%
+  function fmtDate(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleDateString('en-AU', {
+      timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric',
+    });
+  }
+%>
+
+<div class="max-w-6xl mx-auto space-y-5">
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Workshops</h1>
+      <p class="text-sm text-gray-500 mt-0.5">
+        Facilitator-led office crew exercises. Open a session, share the QR
+        code on the meeting-room screen, watch the leaderboard fill up.
+      </p>
+    </div>
+    <a href="/safety-workshops/attempts/all" class="px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg inline-flex items-center gap-1.5">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+      All attempts
+    </a>
+  </div>
+
+  <% if (!rows.length) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-10 text-center text-sm text-gray-500">
+      No workshops yet. (Migration 220 seeds <code class="text-xs bg-gray-100 px-1.5 py-0.5 rounded">swms-01</code> on first run.)
+    </div>
+  <% } else { %>
+    <div class="grid gap-3 md:grid-cols-2">
+      <% rows.forEach(r => { %>
+        <a href="/safety-workshops/<%= r.slug %>" class="block bg-white border border-gray-200 hover:border-brand-400 hover:shadow-md transition rounded-xl shadow-sm p-5 group">
+          <div class="flex items-start justify-between gap-3">
+            <div class="min-w-0">
+              <p class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Workshop</p>
+              <h2 class="text-base font-bold text-gray-900 mt-1 group-hover:text-brand-700"><%= r.title %></h2>
+              <% if (r.description) { %>
+                <p class="text-sm text-gray-500 mt-1.5 line-clamp-3"><%= r.description %></p>
+              <% } %>
+            </div>
+            <% if (!r.available) { %>
+              <span class="text-[10px] font-bold tracking-widest text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full whitespace-nowrap">No content</span>
+            <% } %>
+          </div>
+          <div class="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100 text-xs text-gray-500">
+            <span class="inline-flex items-center gap-1">
+              <span class="font-semibold text-gray-900 tabular-nums"><%= r.attempts %></span>
+              <span>attempts</span>
+            </span>
+            <% if (r.open_sessions > 0) { %>
+              <span class="inline-flex items-center gap-1 text-emerald-700">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                <span class="font-semibold tabular-nums"><%= r.open_sessions %></span>
+                <span>open session<%= r.open_sessions === 1 ? '' : 's' %></span>
+              </span>
+            <% } %>
+            <span class="ml-auto">Last: <%= fmtDate(r.last_attempt) %></span>
+          </div>
+        </a>
+      <% }) %>
+    </div>
+  <% } %>
+</div>

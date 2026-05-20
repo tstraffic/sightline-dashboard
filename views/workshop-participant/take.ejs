@@ -1,0 +1,757 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title><%= workshop.title %> — T&S</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700;800&family=Barlow+Semi+Condensed:wght@600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#10141b; --panel:#1a212c; --panel2:#222b38; --panel3:#2b3543;
+    --line:#3a4654; --text:#eef2f6; --dim:#93a1b0; --dimmer:#6c7a89;
+    --brand:#3a78c2; --orange:#ff6a1f; --yellow:#ffcf3a;
+    --extreme:#e23b3b; --high:#ef7d2e; --medium:#f2c637; --low:#3fae5a;
+    --ok:#39c977; --no:#ff5252;
+    --rad:14px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:'Barlow',system-ui,sans-serif;
+    font-size:16px;line-height:1.5;
+    background-image:
+      radial-gradient(900px 500px at 80% -10%, rgba(58,120,194,.16), transparent),
+      radial-gradient(700px 600px at -10% 110%, rgba(255,106,31,.10), transparent);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:560px;margin:0 auto;min-height:100dvh;display:flex;flex-direction:column}
+  header{
+    display:flex;align-items:center;gap:10px;
+    padding:14px 18px;border-bottom:1px solid var(--line);
+    position:sticky;top:0;background:rgba(16,20,27,.92);backdrop-filter:blur(8px);z-index:10;
+  }
+  .logo-mark{height:34px;width:34px;border-radius:8px;background:#ff6a1f;display:flex;align-items:center;justify-content:center;font-family:'Barlow Condensed',sans-serif;font-weight:800;color:#15110c;font-size:18px}
+  .logo-sub{font-family:'Barlow Condensed',sans-serif;font-weight:700;
+    font-size:12px;letter-spacing:1.5px;color:var(--dim);text-transform:uppercase;white-space:nowrap}
+  .htitle{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-weight:700;
+    font-size:13px;letter-spacing:1.5px;color:var(--orange);text-transform:uppercase}
+  main{flex:1;padding:20px 18px 36px;display:flex;flex-direction:column}
+  h1{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:34px;
+     line-height:1.02;letter-spacing:.3px;text-transform:uppercase}
+  h2{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:24px;
+     line-height:1.05;text-transform:uppercase;letter-spacing:.3px}
+  .kicker{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:13px;
+     letter-spacing:2.5px;text-transform:uppercase;color:var(--orange)}
+  .lead{color:var(--dim);margin-top:8px}
+  .mono{font-variant-numeric:tabular-nums}
+  input[type=text]{
+    width:100%;background:var(--panel);border:1px solid var(--line);color:var(--text);
+    font-family:'Barlow',sans-serif;font-size:18px;padding:14px 16px;border-radius:12px;outline:none;
+  }
+  input[type=text]:focus{border-color:var(--brand)}
+  .btn{
+    display:flex;align-items:center;justify-content:center;gap:8px;width:100%;
+    background:var(--orange);color:#15110c;border:none;cursor:pointer;
+    font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:19px;
+    letter-spacing:1px;text-transform:uppercase;padding:16px;border-radius:12px;
+    transition:transform .06s ease,filter .15s ease;
+  }
+  .btn:active{transform:translateY(1px)}
+  .btn:disabled{background:var(--panel3);color:var(--dimmer);cursor:not-allowed}
+  .btn.ghost{background:transparent;color:var(--dim);border:1px solid var(--line);font-size:15px}
+  .btn.ghost:active{filter:brightness(1.2)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--rad);padding:16px}
+  .stack{display:flex;flex-direction:column;gap:12px}
+  .spacer{flex:1}
+  .fadein{animation:fade .35s ease both}
+  @keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+  .prog{display:flex;gap:6px;margin-bottom:14px}
+  .prog .dot{flex:1;height:6px;border-radius:3px;background:var(--panel3)}
+  .prog .dot.done{background:var(--ok)}
+  .prog .dot.done.bad{background:var(--no)}
+  .prog .dot.done.part{background:var(--medium)}
+  .prog .dot.now{background:var(--orange)}
+  .opt{
+    display:flex;align-items:center;gap:12px;width:100%;text-align:left;cursor:pointer;
+    background:var(--panel);border:1.5px solid var(--line);border-radius:12px;
+    padding:13px 14px;color:var(--text);font-size:15.5px;font-family:'Barlow',sans-serif;
+    transition:border-color .12s,background .12s;
+  }
+  .opt:active{background:var(--panel2)}
+  .opt .mk{
+    width:24px;height:24px;border-radius:6px;border:2px solid var(--line);flex:none;
+    display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;
+  }
+  .opt.multi .mk{border-radius:6px}
+  .opt.single .mk{border-radius:50%}
+  .opt.sel{border-color:var(--orange);background:#241a10}
+  .opt.sel .mk{background:var(--orange);border-color:var(--orange);color:#15110c}
+  .opt.lock{cursor:default;pointer-events:none}
+  .opt.right{border-color:var(--ok);background:#11251a}
+  .opt.right .mk{background:var(--ok);border-color:var(--ok);color:#0c1a11}
+  .opt.wrong{border-color:var(--no);background:#2a1414}
+  .opt.wrong .mk{background:var(--no);border-color:var(--no);color:#2a0d0d}
+  .opt.missed{border-color:var(--ok);border-style:dashed;background:transparent}
+  .opt .tag{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-weight:700;
+    font-size:11px;letter-spacing:1px;text-transform:uppercase;flex:none}
+  .tag.t-ok{color:var(--ok)} .tag.t-no{color:var(--no)} .tag.t-miss{color:var(--dim)}
+  .matrix-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  table.mx{border-collapse:separate;border-spacing:4px;width:100%;min-width:330px}
+  table.mx th,table.mx td{padding:0}
+  .mx .corner{background:transparent}
+  .mx .lk,.mx .im{
+    font-family:'Barlow Condensed',sans-serif;font-weight:700;color:var(--dim);
+    font-size:10.5px;letter-spacing:.4px;text-transform:uppercase;text-align:center;line-height:1.1;
+  }
+  .mx .im{text-align:right;padding-right:6px !important;white-space:nowrap}
+  .mx .cell{
+    width:100%;min-width:50px;height:50px;border-radius:8px;cursor:pointer;border:2px solid transparent;
+    font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:15px;color:#15110c;
+    display:flex;align-items:center;justify-content:center;transition:transform .06s;
+  }
+  .cell:active{transform:scale(.94)}
+  .cell.x-extreme{background:var(--extreme);color:#fff}
+  .cell.x-high{background:var(--high)}
+  .cell.x-medium{background:var(--medium)}
+  .cell.x-low{background:var(--low);color:#fff}
+  .cell.sel{border-color:#fff;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--orange)}
+  .cell.lock{pointer-events:none}
+  .cell.is-right{border-color:#fff;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--ok)}
+  .cell.is-wrong{border-color:#fff;box-shadow:0 0 0 2px var(--bg),0 0 0 4px var(--no);opacity:.92}
+  .legend{display:flex;flex-wrap:wrap;gap:10px 14px;margin-top:12px}
+  .legend span{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--dim);
+    font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;letter-spacing:.3px}
+  .legend i{width:13px;height:13px;border-radius:3px;display:inline-block}
+  .fb{border-radius:var(--rad);padding:14px 15px;border:1px solid;animation:fade .3s ease both}
+  .fb.good{background:#11251a;border-color:#2d6b48}
+  .fb.bad{background:#2a1414;border-color:#7a3030}
+  .fb.part{background:#2a2410;border-color:#7a6a2c}
+  .fb .verdict{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;
+    text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+  .fb.good .verdict{color:var(--ok)} .fb.bad .verdict{color:var(--no)}
+  .fb.part .verdict{color:var(--yellow)}
+  .clause{
+    margin-top:10px;background:rgba(0,0,0,.28);border-left:3px solid var(--brand);
+    border-radius:6px;padding:10px 12px;font-size:14.5px;color:#dde4ec;
+  }
+  .clause .src{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11.5px;
+    letter-spacing:1.3px;text-transform:uppercase;color:var(--brand);display:block;margin-bottom:3px}
+  .score-ring{
+    width:150px;height:150px;border-radius:50%;margin:6px auto 4px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:conic-gradient(var(--ringclr) calc(var(--pct)*1%), var(--panel3) 0);
+  }
+  .score-ring .inner{
+    width:120px;height:120px;border-radius:50%;background:var(--bg);
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+  }
+  .score-ring .num{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:46px;line-height:1}
+  .score-ring .den{color:var(--dim);font-size:13px;letter-spacing:1px;font-weight:600}
+  .brk-row{display:flex;align-items:center;gap:10px;padding:11px 13px;
+    background:var(--panel);border:1px solid var(--line);border-radius:11px}
+  .brk-row .n{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;
+    width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex:none}
+  .brk-row .lbl{font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;letter-spacing:.4px}
+  .brk-row .pts{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:16px}
+  .lb-row{display:flex;align-items:center;gap:12px;padding:13px 14px;
+    background:var(--panel);border:1px solid var(--line);border-radius:12px}
+  .lb-row.me{border-color:var(--orange);background:#241a10}
+  .lb-rank{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;
+    width:34px;text-align:center;flex:none;color:var(--dim)}
+  .lb-rank.medal{font-size:22px}
+  .lb-name{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:19px;
+    text-transform:uppercase;line-height:1}
+  .lb-meta{font-size:12px;color:var(--dimmer);letter-spacing:.4px;text-transform:uppercase;font-weight:600}
+  .lb-score{margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:24px}
+  .note{font-size:12.5px;color:var(--dimmer);text-align:center;line-height:1.45}
+  .closing{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:21px;
+    text-transform:uppercase;line-height:1.15;text-align:center;color:var(--text)}
+  .closing b{color:var(--orange);font-weight:800}
+  .divider{height:1px;background:var(--line);margin:4px 0}
+  .pill{display:inline-flex;align-items:center;gap:6px;background:var(--panel2);
+    border:1px solid var(--line);border-radius:999px;padding:5px 11px;font-size:12px;
+    font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;letter-spacing:.5px;color:var(--dim)}
+  .pill-adv{background:#33240f;border:1px solid var(--orange);color:var(--yellow);align-self:flex-start}
+  .casebar{background:var(--panel2);border:1px solid var(--line);border-radius:11px;overflow:hidden;margin-bottom:2px}
+  .casebar-head{display:flex;align-items:center;gap:10px;width:100%;cursor:pointer;
+    background:transparent;border:none;color:var(--text);padding:11px 13px;text-align:left}
+  .casebar-head .cb-tag{font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:13px;
+    background:var(--brand);color:#fff;border-radius:5px;padding:3px 7px;flex:none}
+  .casebar-head .cb-lbl{font-family:'Barlow Semi Condensed',sans-serif;font-weight:600;
+    font-size:13px;letter-spacing:.4px;color:var(--dim);text-transform:uppercase}
+  .casebar-head .cb-chev{margin-left:auto;color:var(--dim);font-size:13px;transition:transform .15s}
+  .casebar.open .cb-chev{transform:rotate(180deg)}
+  .casebar-body{padding:0 13px 13px;font-size:14.5px;line-height:1.55;color:#dde4ec}
+  .spin{width:38px;height:38px;border-radius:50%;border:3px solid var(--panel3);
+    border-top-color:var(--orange);animation:rot .8s linear infinite;margin:8px auto}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  .err{color:var(--no);font-size:13px;margin-top:4px}
+  .sess-code{font-family:'Barlow Condensed',sans-serif;font-weight:800;letter-spacing:2px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo-mark">T&amp;S</span>
+    <span class="logo-sub">Traffic Control</span>
+    <span class="htitle">Session <span class="sess-code"><%= session.code %></span></span>
+  </header>
+  <main id="app"></main>
+</div>
+
+<%# Inject content + session data for the script below. Escape `<` to %>
+<%# guard against any in-question text containing a `</script>` sequence. %>
+<script id="ws-data" type="application/json"><%- JSON.stringify({
+  sessionCode: session.code,
+  workshopTitle: workshop.title,
+  CASES: workshop.cases,
+  IMPACTS: workshop.IMPACTS,
+  LIKE: workshop.LIKE,
+  BANDS: workshop.BANDS,
+  CLAUSE_DETAIL: workshop.CLAUSE_DETAIL
+}).replace(/</g, '\\u003c') %></script>
+
+<script>
+"use strict";
+
+// =====================================================================
+// SWMS Workshop participant view — dashboard-integrated port of the
+// standalone artifact. UI behaviour matches the artifact verbatim; the
+// only changes are:
+//   - cases/matrix/clause data injected from the server (no hardcoded
+//     copy in this file)
+//   - case assignment + score submission + leaderboard via fetch to
+//     /wq/:code/* instead of window.storage
+//   - facilitator screens (gate, setup, QR, status) removed — the
+//     facilitator runs everything from the admin dashboard now
+// =====================================================================
+
+var WS = JSON.parse(document.getElementById("ws-data").textContent);
+var SID = Math.random().toString(36).slice(2, 10);
+
+var CASES = WS.CASES;
+var IMPACTS = WS.IMPACTS;
+var LIKE = WS.LIKE;
+var BANDS = WS.BANDS;
+var CLAUSE_DETAIL = WS.CLAUSE_DETAIL;
+var SESSION_CODE = WS.sessionCode;
+
+var S = {
+  screen: "start",
+  name: "",
+  caseId: null,
+  qi: 0,
+  order: [],
+  results: [],
+  picked: null,
+  answered: false,
+  briefOpen: false,
+  startErr: ""
+};
+
+var app = document.getElementById("app");
+
+// ---- helpers ----
+function el(tag, cls, html) {
+  var e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (html != null) e.innerHTML = html;
+  return e;
+}
+function shuffle(n) {
+  var a = []; for (var i = 0; i < n; i++) a.push(i);
+  for (var j = a.length - 1; j > 0; j--) {
+    var k = Math.floor(Math.random() * (j + 1));
+    var t = a[j]; a[j] = a[k]; a[k] = t;
+  }
+  return a;
+}
+function curCase() {
+  for (var i = 0; i < CASES.length; i++) if (CASES[i].id === S.caseId) return CASES[i];
+  return null;
+}
+function bandClass(b) { return "x-" + b; }
+function cellCoords(code) {
+  return {
+    imp: parseInt(code.charAt(0), 10),
+    lk: { E: 1, D: 2, C: 3, B: 4, A: 5 }[code.charAt(1)]
+  };
+}
+function matrixMinDist(acc, pk) {
+  if (!pk) return 99; var p = cellCoords(pk), best = 99;
+  for (var i = 0; i < acc.length; i++) {
+    var x = cellCoords(acc[i]);
+    var d = Math.abs(x.imp - p.imp) + Math.abs(x.lk - p.lk);
+    if (d < best) best = d;
+  }
+  return best;
+}
+function cellBand(code) {
+  var c = cellCoords(code); return BANDS[c.imp][c.lk - 1];
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function (m) {
+    return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m];
+  });
+}
+
+// ---- server calls ----
+function apiClaim(name) {
+  return fetch("/wq/" + encodeURIComponent(SESSION_CODE) + "/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name: name })
+  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
+}
+function apiSubmit(payload) {
+  return fetch("/wq/" + encodeURIComponent(SESSION_CODE) + "/submit", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
+}
+function apiLeaderboard() {
+  return fetch("/wq/" + encodeURIComponent(SESSION_CODE) + "/leaderboard")
+    .then(function (r) { return r.json(); });
+}
+
+// =====================================================================
+// SCREENS
+// =====================================================================
+
+function render() {
+  app.innerHTML = "";
+  if (S.screen === "start")    return screenStart();
+  if (S.screen === "claiming") return screenClaiming();
+  if (S.screen === "brief")    return screenBrief();
+  if (S.screen === "quiz")     return screenQuiz();
+  if (S.screen === "score")    return screenScore();
+  if (S.screen === "board")    return screenBoard();
+}
+
+function screenStart() {
+  var c = el("div", "stack fadein");
+  c.appendChild(el("div", "kicker", "Office Crew Exercise"));
+  c.appendChild(el("h1", "", escapeHtml(WS.workshopTitle).replace(" ", "<br>")));
+  c.appendChild(el("p", "lead", "You'll be given one real traffic incident at random. Eight questions — six core, two advanced. Use your printed SWMS 01 v3.0; the answer is in the document."));
+  var p = el("div", "panel stack");
+  p.appendChild(el("label", "kicker", "Your name"));
+  var inp = el("input"); inp.type = "text"; inp.placeholder = "Type your name"; inp.value = S.name;
+  inp.autocomplete = "off";
+  inp.addEventListener("input", function () { S.name = inp.value; go.disabled = inp.value.trim().length < 2; });
+  p.appendChild(inp);
+  if (S.startErr) p.appendChild(el("p", "err", escapeHtml(S.startErr)));
+  c.appendChild(p);
+  c.appendChild(el("div", "spacer"));
+  var go = el("button", "btn", "Get my case →");
+  go.disabled = S.name.trim().length < 2;
+  go.addEventListener("click", function () {
+    S.name = S.name.trim();
+    S.startErr = "";
+    S.screen = "claiming"; render();
+    apiClaim(S.name).then(function (r) {
+      if (!r.ok) {
+        S.startErr = r.body && r.body.error === "session_closed"
+          ? "This session has been closed by the facilitator."
+          : "Couldn't start — please try again.";
+        S.screen = "start"; render();
+        return;
+      }
+      startCase(r.body.caseId);
+    }).catch(function () {
+      S.startErr = "Network error — check your signal and try again.";
+      S.screen = "start"; render();
+    });
+  });
+  c.appendChild(go);
+  c.appendChild(el("p", "note", "Workshop tool · T&S Traffic Control · Session " + SESSION_CODE));
+  app.appendChild(c);
+}
+
+function screenClaiming() {
+  var c = el("div", "stack fadein");
+  c.style.minHeight = "60vh";
+  c.style.justifyContent = "center";
+  c.style.alignItems = "center";
+  c.appendChild(el("div", "spin"));
+  c.appendChild(el("div", "kicker", "Assigning your case…"));
+  c.appendChild(el("p", "note", "Picking a real incident for you to work through."));
+  app.appendChild(c);
+}
+
+function startCase(caseId) {
+  var cs = null;
+  for (var i = 0; i < CASES.length; i++) if (CASES[i].id === caseId) cs = CASES[i];
+  if (!cs) cs = CASES[0];
+  S.caseId = cs.id; S.qi = 0; S.results = []; S.picked = null;
+  S.answered = false; S.briefOpen = false;
+  S.order = cs.questions.map(function (q) {
+    return (q.kind === "single" || q.kind === "multi") ? shuffle(q.options.length) : null;
+  });
+  S.screen = "brief"; render();
+}
+
+function screenBrief() {
+  var cs = curCase();
+  var c = el("div", "stack fadein");
+  c.appendChild(el("div", "kicker", "Case " + cs.letter + " · " + escapeHtml(cs.where)));
+  c.appendChild(el("h2", "", escapeHtml(cs.title)));
+  var p = el("div", "panel");
+  p.appendChild(el("div", "kicker", "The Incident"));
+  p.appendChild(el("p", "", '<span style="display:block;margin-top:8px;font-size:16px;line-height:1.55">' + escapeHtml(cs.brief) + "</span>"));
+  c.appendChild(p);
+  c.appendChild(el("p", "note", "Eight questions — six core, then two advanced. Instant feedback after each, with the SWMS clause. This is your case for the exercise."));
+  c.appendChild(el("div", "spacer"));
+  var b = el("button", "btn", "Start the questions →");
+  b.addEventListener("click", function () { S.screen = "quiz"; render(); });
+  c.appendChild(b);
+  app.appendChild(c);
+}
+
+function screenQuiz() {
+  app.innerHTML = "";
+  var cs = curCase();
+  var q = cs.questions[S.qi];
+  var c = el("div", "stack");
+
+  var prog = el("div", "prog");
+  for (var i = 0; i < cs.questions.length; i++) {
+    var d = el("div", "dot");
+    if (i < S.results.length) {
+      var r = S.results[i];
+      d.className = "dot done" + (r.pts === r.max ? "" : (r.pts === 0 ? " bad" : " part"));
+    } else if (i === S.qi) { d.className = "dot now"; }
+    prog.appendChild(d);
+  }
+  c.appendChild(prog);
+
+  var bar = el("div", "casebar" + (S.briefOpen ? " open" : ""));
+  var head = el("button", "casebar-head");
+  head.appendChild(el("span", "cb-tag", "CASE " + cs.letter));
+  head.appendChild(el("span", "cb-lbl", S.briefOpen ? "Hide the incident" : "Re-read the incident"));
+  head.appendChild(el("span", "cb-chev", "▾"));
+  head.addEventListener("click", function () { S.briefOpen = !S.briefOpen; screenQuiz(); });
+  bar.appendChild(head);
+  if (S.briefOpen) bar.appendChild(el("div", "casebar-body", escapeHtml(cs.brief)));
+  c.appendChild(bar);
+
+  if (q.advanced) c.appendChild(el("div", "pill pill-adv", "★ ADVANCED — stretch question"));
+  c.appendChild(el("div", "kicker", "Case " + cs.letter + " · Question " + (S.qi + 1) + " of " + cs.questions.length + " · " + q.short));
+  c.appendChild(el("h2", "", escapeHtml(q.prompt)));
+
+  if (q.kind === "single" || q.kind === "multi") buildOptions(c, q);
+  else if (q.kind === "matrix") buildMatrix(c, q);
+
+  var act = el("div", "stack"); act.id = "act"; act.style.marginTop = "4px";
+  c.appendChild(act);
+  app.appendChild(c);
+  renderAction();
+}
+
+function buildOptions(container, q) {
+  var multi = q.kind === "multi";
+  var ord = S.order[S.qi];
+  var box = el("div", "stack");
+  if (multi && !S.answered) box.appendChild(el("div", "pill", "✓ Select every control that applies"));
+  ord.forEach(function (idx) {
+    var o = q.options[idx];
+    var btn = el("div", "opt " + (multi ? "multi" : "single"));
+    var mk = el("span", "mk", "");
+    var txt = el("span", "", escapeHtml(o.t));
+    btn.appendChild(mk); btn.appendChild(txt);
+    btn.dataset.idx = idx;
+
+    if (!S.answered) {
+      var on = multi ? (S.picked && S.picked.indexOf(idx) > -1) : (S.picked === idx);
+      if (on) { btn.classList.add("sel"); mk.textContent = multi ? "✓" : "●"; }
+      btn.addEventListener("click", function () {
+        if (multi) {
+          if (!S.picked) S.picked = [];
+          var p = S.picked.indexOf(idx);
+          if (p > -1) S.picked.splice(p, 1); else S.picked.push(idx);
+        } else { S.picked = idx; }
+        screenQuiz();
+      });
+    } else {
+      btn.classList.add("lock");
+      var picked = multi ? (S.picked && S.picked.indexOf(idx) > -1) : (S.picked === idx);
+      if (o.c && picked) { btn.classList.add("right"); mk.textContent = "✓"; appendTag(btn, "t-ok", "Correct"); }
+      else if (o.c && !picked) { btn.classList.add("missed"); appendTag(btn, "t-miss", "Missed"); }
+      else if (!o.c && picked) { btn.classList.add("wrong"); mk.textContent = "✗"; appendTag(btn, "t-no", "Wrong"); }
+    }
+    box.appendChild(btn);
+  });
+  container.appendChild(box);
+}
+function appendTag(btn, cls, txt) { var t = el("span", "tag " + cls, txt); btn.appendChild(t); }
+
+function buildMatrix(container, q) {
+  var wrap = el("div", "panel");
+  var scroll = el("div", "matrix-scroll");
+  var tbl = el("table", "mx");
+  var hr = el("tr");
+  hr.appendChild(el("th", "corner"));
+  LIKE.forEach(function (l) {
+    hr.appendChild(el("th", "lk", l.c + "<br>" + l.label.replace(" ", "<br>")));
+  });
+  tbl.appendChild(hr);
+  IMPACTS.forEach(function (im) {
+    var tr = el("tr");
+    tr.appendChild(el("td", "im", im.n + ". " + im.label));
+    LIKE.forEach(function (l, ci) {
+      var code = im.n + l.c;
+      var band = BANDS[im.n][ci];
+      var td = el("td");
+      var cell = el("div", "cell " + bandClass(band), code);
+      cell.dataset.code = code;
+      if (!S.answered) {
+        if (S.picked === code) cell.classList.add("sel");
+        cell.addEventListener("click", function () { S.picked = code; screenQuiz(); });
+      } else {
+        cell.classList.add("lock");
+        var isAccept = q.accept.indexOf(code) > -1;
+        if (isAccept) cell.classList.add("is-right");
+        if (S.picked === code && !isAccept) cell.classList.add("is-wrong");
+      }
+      td.appendChild(cell);
+      tr.appendChild(td);
+    });
+    tbl.appendChild(tr);
+  });
+  scroll.appendChild(tbl);
+  wrap.appendChild(scroll);
+  var lg = el("div", "legend");
+  [["extreme", "Extreme"], ["high", "High"], ["medium", "Medium"], ["low", "Low"]].forEach(function (p) {
+    var s = el("span", "");
+    var i = el("i", ""); i.style.background = "var(--" + p[0] + ")";
+    s.appendChild(i); s.appendChild(document.createTextNode(p[1]));
+    lg.appendChild(s);
+  });
+  wrap.appendChild(lg);
+  container.appendChild(wrap);
+}
+
+function renderAction() {
+  var act = document.getElementById("act");
+  if (!act) return;
+  act.innerHTML = "";
+  var cs = curCase(), q = cs.questions[S.qi];
+
+  if (!S.answered) {
+    var ready = q.kind === "multi" ? (S.picked && S.picked.length > 0) : (S.picked !== null && S.picked !== undefined);
+    var sub = el("button", "btn", "Lock in answer");
+    sub.disabled = !ready;
+    sub.addEventListener("click", function () { submitAnswer(); });
+    act.appendChild(sub);
+  } else {
+    var r = S.results[S.qi];
+    var cls = r.pts === r.max ? "good" : (r.pts === 0 ? "bad" : "part");
+    var verdict = r.pts === r.max ? "Spot on" : (r.pts === 0 ? "Not quite" : "Partly right");
+    var icon = r.pts === r.max ? "✓" : (r.pts === 0 ? "✗" : "◑");
+    var fb = el("div", "fb " + cls);
+    var v = el("div", "verdict", '<span>' + icon + '</span> ' + verdict +
+      ' <span style="margin-left:auto;font-size:15px;color:var(--dim)">+' + r.pts + " / " + r.max + "</span>");
+    fb.appendChild(v);
+    var fbText = q.fb;
+    if (q.kind === "matrix" && S.picked) {
+      var corr = q.accept[0], md = matrixMinDist(q.accept, S.picked);
+      var bn = { extreme: "Extreme", high: "High", medium: "Medium", low: "Low" };
+      if (md === 1) fbText = "You tapped " + S.picked + " (" + bn[cellBand(S.picked)] + ") — one band off, so part marks. The SWMS rates it " + corr + " (" + bn[cellBand(corr)] + "). " + q.fb;
+      else if (md > 1) fbText = "You tapped " + S.picked + " (" + bn[cellBand(S.picked)] + "), but the SWMS rates it " + corr + " (" + bn[cellBand(corr)] + "). " + q.fb;
+    }
+    fb.appendChild(el("p", "", '<span style="display:block;margin-top:6px;font-size:14.5px;line-height:1.5">' + escapeHtml(fbText) + "</span>"));
+    var cl = el("div", "clause");
+    cl.appendChild(el("span", "src", escapeHtml(q.src)));
+    cl.appendChild(document.createTextNode(clauseDetail(cs.id, S.qi)));
+    fb.appendChild(cl);
+    act.appendChild(fb);
+
+    var last = S.qi === cs.questions.length - 1;
+    var nx = el("button", "btn", last ? "See my scorecard →" : "Next question →");
+    nx.addEventListener("click", function () {
+      if (last) { S.screen = "score"; render(); }
+      else { S.qi++; S.picked = null; S.answered = false; screenQuiz(); }
+    });
+    act.appendChild(nx);
+  }
+}
+
+function clauseDetail(caseId, qi) {
+  var K = CLAUSE_DETAIL[caseId] || [];
+  return " " + (K[qi] || "");
+}
+
+function submitAnswer() {
+  var cs = curCase(), q = cs.questions[S.qi];
+  var MAX = 20, pts = 0;
+  if (q.kind === "single") {
+    pts = q.options[S.picked].c ? MAX : 0;
+  } else if (q.kind === "matrix") {
+    var md = matrixMinDist(q.accept, S.picked);
+    pts = md === 0 ? MAX : (md === 1 ? 12 : 0);
+  } else {
+    var totalC = 0, pc = 0, pw = 0;
+    q.options.forEach(function (o, i) {
+      if (o.c) totalC++;
+      var picked = S.picked.indexOf(i) > -1;
+      if (picked && o.c) pc++;
+      if (picked && !o.c) pw++;
+    });
+    var ratio = (pc - pw) / totalC;
+    if (ratio < 0) ratio = 0; if (ratio > 1) ratio = 1;
+    pts = Math.round(ratio * MAX);
+  }
+  S.results[S.qi] = { pts: pts, max: MAX, kind: q.kind, short: q.short, advanced: !!q.advanced, picked: S.picked };
+  S.answered = true;
+  screenQuiz();
+  setTimeout(function () { window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" }); }, 60);
+}
+
+function scoreCard(kick, sub, t, m) {
+  var pc = m ? Math.round(t / m * 100) : 0;
+  var clr = pc >= 80 ? "var(--ok)" : (pc >= 50 ? "var(--medium)" : "var(--no)");
+  var card = el("div", "scard"); card.style.flex = "1";
+  card.style.background = "var(--panel)"; card.style.border = "1px solid var(--line)";
+  card.style.borderRadius = "11px"; card.style.padding = "11px 12px"; card.style.textAlign = "center";
+  var k = el("div", ""); k.textContent = kick;
+  k.style.cssText = "font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--dim)";
+  card.appendChild(k);
+  var v = el("div", "", t + "/" + m); v.style.cssText = "font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:26px;line-height:1.15"; v.style.color = clr;
+  card.appendChild(v);
+  var s = el("div", ""); s.textContent = sub + " · " + pc + "%";
+  s.style.cssText = "font-size:11px;color:var(--dimmer);letter-spacing:.3px";
+  card.appendChild(s);
+  return card;
+}
+
+function screenScore() {
+  var cs = curCase();
+  var total = 0, max = 0;
+  S.results.forEach(function (r) { total += r.pts; max += r.max; });
+  var pct = Math.round(total / max * 100);
+  var ringclr = pct >= 80 ? "var(--ok)" : (pct >= 50 ? "var(--medium)" : "var(--no)");
+  var verdict = pct >= 80 ? "Strong — you can find it in the SWMS."
+              : pct >= 50 ? "Solid start. Know where to look next time."
+                          : "Worth another look at the document.";
+  var c = el("div", "stack fadein");
+  c.appendChild(el("div", "kicker", "Case " + cs.letter + " · " + escapeHtml(S.name)));
+  c.appendChild(el("h2", "", "Your scorecard"));
+
+  var ring = el("div", "score-ring");
+  ring.style.setProperty("--pct", pct);
+  ring.style.setProperty("--ringclr", ringclr);
+  var inner = el("div", "inner");
+  inner.appendChild(el("div", "num", total));
+  inner.appendChild(el("div", "den", "OUT OF " + max));
+  ring.appendChild(inner);
+  c.appendChild(ring);
+  c.appendChild(el("p", "lead", '<span style="display:block;text-align:center">' + verdict + "</span>"));
+
+  var coreT = 0, coreM = 0, advT = 0, advM = 0;
+  S.results.forEach(function (r) {
+    if (r.advanced) { advT += r.pts; advM += r.max; } else { coreT += r.pts; coreM += r.max; }
+  });
+  var split = el("div", ""); split.style.cssText = "display:flex;gap:10px";
+  split.appendChild(scoreCard("Core skills", "Q1–6", coreT, coreM));
+  if (advM > 0) split.appendChild(scoreCard("Advanced", "Stretch", advT, advM));
+  c.appendChild(split);
+
+  c.appendChild(el("div", "divider"));
+  c.appendChild(el("div", "kicker", "Question breakdown"));
+  S.results.forEach(function (r, i) {
+    var row = el("div", "brk-row");
+    var n = el("div", "n", (i + 1));
+    var clr = r.pts === r.max ? "var(--ok)" : (r.pts === 0 ? "var(--no)" : "var(--medium)");
+    n.style.background = clr; n.style.color = "#10141b";
+    row.appendChild(n);
+    row.appendChild(el("div", "lbl", escapeHtml(r.short)));
+    var pts = el("div", "pts", "+" + r.pts); pts.style.color = clr;
+    row.appendChild(pts);
+    c.appendChild(row);
+  });
+
+  c.appendChild(el("div", "spacer"));
+  var b = el("button", "btn", "Submit to leaderboard →");
+  b.addEventListener("click", function () {
+    b.disabled = true; b.textContent = "Submitting…";
+    apiSubmit({
+      name: S.name,
+      caseId: cs.id,
+      score: total,
+      maxScore: max,
+      answers: S.results.map(function (r) { return { short: r.short, pts: r.pts, max: r.max, picked: r.picked }; })
+    }).then(function (r) {
+      if (r.ok) { S.screen = "board"; render(); }
+      else {
+        b.disabled = false; b.textContent = "Try again — submit";
+        var err = el("p", "err", "Couldn't save your score. " + (r.body && r.body.error ? "(" + r.body.error + ")" : ""));
+        c.insertBefore(err, b);
+      }
+    }).catch(function () {
+      b.disabled = false; b.textContent = "Try again — submit";
+      var err = el("p", "err", "Network error — try again."); c.insertBefore(err, b);
+    });
+  });
+  c.appendChild(b);
+  app.appendChild(c);
+}
+
+function screenBoard() {
+  var c = el("div", "stack fadein");
+  c.appendChild(el("div", "kicker", WS.workshopTitle));
+  c.appendChild(el("h2", "", "Leaderboard"));
+  var listBox = el("div", "stack"); listBox.id = "lbList";
+  listBox.appendChild(el("p", "lead", "Loading scores…"));
+  c.appendChild(listBox);
+
+  c.appendChild(el("div", "divider"));
+  c.appendChild(el("div", "closing", 'Know the right thing.<br>Do the right thing.<br><b>Call out the wrong thing.</b>'));
+  c.appendChild(el("p", "note", "Scores are shared live with everyone in this session."));
+
+  var ref = el("button", "btn ghost", "↻ Refresh leaderboard");
+  ref.addEventListener("click", function () { loadAndRender(); });
+  c.appendChild(ref);
+  app.appendChild(c);
+
+  function loadAndRender() {
+    apiLeaderboard().then(function (j) {
+      listBox.innerHTML = "";
+      var list = (j && j.attempts) || [];
+      if (!list.length) { listBox.appendChild(el("p", "lead", "No scores yet — be the first.")); return; }
+      var medals = ["\u{1F947}", "\u{1F948}", "\u{1F949}"];
+      list.forEach(function (e, i) {
+        var isMe = (e.player_name || "").trim().toLowerCase() === (S.name || "").trim().toLowerCase();
+        var row = el("div", "lb-row" + (isMe ? " me" : ""));
+        var rk = el("div", "lb-rank" + (i < 3 ? " medal" : ""), i < 3 ? medals[i] : (i + 1));
+        row.appendChild(rk);
+        var mid = el("div", "");
+        mid.appendChild(el("div", "lb-name", escapeHtml(e.player_name) + (isMe ? '  <span style="font-size:11px;color:var(--orange)">(you)</span>' : "")));
+        mid.appendChild(el("div", "lb-meta", "Case " + e.case_letter));
+        row.appendChild(mid);
+        var sc = el("div", "lb-score", e.score);
+        var _p = e.max_score ? (e.score / e.max_score * 100) : 0;
+        sc.style.color = _p >= 80 ? "var(--ok)" : (_p >= 50 ? "var(--yellow)" : "var(--dim)");
+        row.appendChild(sc);
+        listBox.appendChild(row);
+      });
+    }).catch(function () {
+      listBox.innerHTML = "";
+      listBox.appendChild(el("p", "err", "Couldn't load leaderboard."));
+    });
+  }
+  loadAndRender();
+  // Auto-refresh every 6s while on this screen
+  var poll = setInterval(function () {
+    if (S.screen !== "board") { clearInterval(poll); return; }
+    loadAndRender();
+  }, 6000);
+}
+
+// boot
+render();
+</script>
+</body>
+</html>

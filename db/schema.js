@@ -10108,6 +10108,95 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 220: Workshop tables (Safety > Workshops).
+  //
+  // Office-crew workshop tool: a facilitator opens a session from the admin
+  // dashboard, participants scan a QR code on their phones, each gets a
+  // random case (A–D) and works through 8 questions, live leaderboard on
+  // the meeting-room screen.
+  //
+  // Four tables:
+  //   workshop_definitions  — one row per workshop type. Seeded with swms-01.
+  //   workshop_sessions     — a workshop run; session_code is the QR target.
+  //   workshop_assignments  — which case each player claimed (sticky by
+  //                           name within a session — refresh keeps you on
+  //                           the same case).
+  //   workshop_attempts     — one row per completed attempt
+  //                           (score + raw answers_json for later analysis).
+  //
+  // All CREATE TABLE statements are IF NOT EXISTS; the seed is INSERT OR
+  // IGNORE. Safe on prod and idempotent on re-run.
+  // =============================================
+  if (!isMigrationApplied.get(220)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS workshop_definitions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          slug TEXT UNIQUE NOT NULL,
+          title TEXT NOT NULL,
+          description TEXT,
+          status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','archived')),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS workshop_sessions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          workshop_id INTEGER NOT NULL REFERENCES workshop_definitions(id) ON DELETE CASCADE,
+          facilitator_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          session_code TEXT UNIQUE NOT NULL,
+          status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed','archived')),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          closed_at DATETIME
+        );
+        CREATE INDEX IF NOT EXISTS idx_workshop_sessions_code ON workshop_sessions(session_code);
+        CREATE INDEX IF NOT EXISTS idx_workshop_sessions_status ON workshop_sessions(status);
+
+        CREATE TABLE IF NOT EXISTS workshop_assignments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER NOT NULL REFERENCES workshop_sessions(id) ON DELETE CASCADE,
+          player_name TEXT NOT NULL,
+          case_letter TEXT NOT NULL,
+          user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          claimed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(session_id, player_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_workshop_assignments_session ON workshop_assignments(session_id);
+
+        CREATE TABLE IF NOT EXISTS workshop_attempts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          session_id INTEGER REFERENCES workshop_sessions(id) ON DELETE CASCADE,
+          workshop_id INTEGER NOT NULL REFERENCES workshop_definitions(id),
+          case_letter TEXT NOT NULL,
+          player_name TEXT NOT NULL,
+          user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          score INTEGER NOT NULL DEFAULT 0,
+          max_score INTEGER NOT NULL DEFAULT 0,
+          answers_json TEXT,
+          started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          completed_at DATETIME
+        );
+        CREATE INDEX IF NOT EXISTS idx_workshop_attempts_session ON workshop_attempts(session_id);
+        CREATE INDEX IF NOT EXISTS idx_workshop_attempts_workshop ON workshop_attempts(workshop_id);
+      `);
+      // Seed the swms-01 workshop definition. INSERT OR IGNORE keeps re-runs
+      // safe — if the slug already exists (manual edit, restored DB), we
+      // leave the existing row alone.
+      db.prepare(`
+        INSERT OR IGNORE INTO workshop_definitions (slug, title, description)
+        VALUES (?, ?, ?)
+      `).run(
+        'swms-01',
+        'SWMS 01 — Mini-SWMS Challenge',
+        'Office crew exercise: four real traffic incidents, eight questions each. Tests recall and application of SWMS 01 Traffic Operations v3.0 (11 May 2026).'
+      );
+      recordMigration.run(220, 'workshop_* tables + swms-01 seed');
+      console.log('Migration 220 applied: workshop tables created and swms-01 seeded');
+    } catch (e) {
+      console.error('Migration 220 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
