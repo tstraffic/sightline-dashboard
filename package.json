@@ -8,7 +8,8 @@
     "dev": "node --watch server.js",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report"
+    "test:e2e:report": "playwright show-report",
+    "lint:tenant": "node scripts/check-raw-db.js"
   },
   "engines": {
     "node": ">=18.0.0"
