@@ -10051,6 +10051,30 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 218: Promote weather + GPS to first-class columns on incidents.
+  //
+  // The worker portal incident form (routes/worker/incidents.js) reads
+  // weather_conditions, gps_lat, gps_lng from req.body but used to smash
+  // them into the free-text location / persons_involved fields — workable
+  // for display, useless for filtering, sorting, or charting. Add real
+  // columns so the data is queryable. ALTER ADD COLUMN is idempotent
+  // here (wrapped in try/catch). Existing rows get NULL — historical
+  // weather/GPS still readable inside the legacy text columns.
+  // =============================================
+  if (!isMigrationApplied.get(218)) {
+    console.log('Running migration 218: weather + GPS columns on incidents');
+    try {
+      try { db.exec("ALTER TABLE incidents ADD COLUMN weather_conditions TEXT DEFAULT ''"); } catch (e) { /* column may exist */ }
+      try { db.exec("ALTER TABLE incidents ADD COLUMN gps_lat REAL"); } catch (e) { /* column may exist */ }
+      try { db.exec("ALTER TABLE incidents ADD COLUMN gps_lng REAL"); } catch (e) { /* column may exist */ }
+      recordMigration.run(218, 'weather_conditions + gps_lat + gps_lng columns on incidents');
+      console.log('Migration 218 applied: incidents now has dedicated weather + GPS columns');
+    } catch (e) {
+      console.error('Migration 218 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
