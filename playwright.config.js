@@ -1,4 +1,4 @@
-// Playwright config for the ts-dashboard e2e suite.
+// Playwright config for the atomis e2e suite.
 //
 // Notes:
 //  - We spin up the Express server ourselves (see webServer below) so the
