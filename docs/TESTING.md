@@ -46,21 +46,36 @@ Coverage today:
 **Run this after every Phase 2 module merge before going to bed.** If it's
 red on Monday morning, you find out before the crew does.
 
-## Layer 3 — Cross-tenant leak detector (Phase 0 Prompt 00.F)
+## Layer 3 — Cross-tenant leak detector
 
 ```sh
 npm run test:cross-tenant
 ```
 
-The thing that catches "tenant A can see tenant B's data." Creates two fake
-tenants, inserts one row in each, asserts neither can see the other's rows
-across every business-data table. Built in Prompt 00.F (next).
+The thing that catches "tenant A can see tenant B's data." Built with
+`node --test` (no new dep — built into Node 22+).
 
-- Runs in: ~5 seconds (no browser, just direct DB calls)
+- `tests/cross-tenant/fixture.js` — `createTwoTenants()` spins up a fresh
+  in-memory SQLite, creates a `tenants` table and a `test_data` placeholder,
+  inserts two seeded tenants, returns scoped `dbA` and `dbB` wrappers.
+- `tests/cross-tenant/wrapper.test.js` — exhaustive `assertScoped`
+  variants: every shape of unscoped query throws, every shape of scoped
+  query passes, whitelisted tables pass without scoping, non-table SQL
+  (PRAGMA, BEGIN, EXPLAIN) is ignored.
+- `tests/cross-tenant/leak.test.js` — end-to-end leak proofs: insert as
+  tenant-a, query as tenant-b, assert zero leakage. Mismatched-tenant
+  UPDATE changes 0 rows. The `tenants` table itself is readable
+  unscoped (by design).
+
+- Runs in: ~120ms (in-memory, no browser, no file I/O)
 - What it catches: the highest-impact failure mode of the whole migration
 - What it doesn't catch: bugs that only surface under concurrent load
 
-Wired to run before every PR merge in CI once 00.F lands.
+**Phase 2 expands this.** Each module prompt (02.B run per module) will
+copy the `test_data` pattern in `leak.test.js` against the real business
+table (`jobs`, `crew_members`, `allocations`, …) once those tables get
+their `tenant_id` columns. The work pattern: insert two rows scoped to
+different tenants, assert neither leaks.
 
 ## When to run what
 
