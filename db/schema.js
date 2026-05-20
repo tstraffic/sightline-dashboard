@@ -4203,7 +4203,9 @@ function runMigrations(db) {
 
   // Migration 84: Job system rearchitecture — auto-codes, plan revisions, plan flags, dual-view
   if (!isMigrationApplied.get(84)) {
-    // 1. Job code sequence table for TSJ-XXXX auto-generation
+    // 1. Job code sequence table for J-XXXX auto-generation
+    // (Comment originally said TSJ-XXXX; codes were normalised to J- by
+    // mig 106 and lib/jobNumbers.js. Comment updated for accuracy.)
     db.prepare(`CREATE TABLE IF NOT EXISTS job_code_sequence (
       id INTEGER PRIMARY KEY,
       last_number INTEGER NOT NULL DEFAULT 0
