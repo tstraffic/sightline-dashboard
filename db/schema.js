@@ -10778,17 +10778,26 @@ function initializeDatabase() {
       // Developer convenience seeds — never used in production.
       // Every account is must_change_password=1 so even if a dev DB
       // somehow gets cloned to prod, the seed passwords can't be used.
+      //
+      // Generic dev users (admin, ops_user, planning_user, etc.) seed
+      // on every fresh non-prod DB. T&S-named admins (suhail.a, saadat,
+      // savanah, taj) are gated by SEED_T_AND_S_DATA so white-label
+      // dev DBs don't ship with those identities.
       const dev = (pw) => bcrypt.hashSync(pw, 12);
       insertUser.run('admin',         dev('admin123'),    'Admin User',     'admin@tstraffic.com.au',     'admin');
-      insertUser.run('suhail.a',      dev('Suhail123'),   'Suhail Ahmed',   'suhail@tstc.com.au',         'admin');
-      insertUser.run('saadat',        dev('TandS2026.'),  'Saadat',         'saadat@tstc.com.au',         'admin');
-      insertUser.run('savanah',       dev('Savanah123'),  'Savanah',        'savanah@tstc.com.au',        'admin');
-      insertUser.run('taj',           dev('Taj123'),      'Taj',            'taj@tstc.com.au',            'admin');
       insertUser.run('ops_user',      dev('password'),    'Sam Operations', 'sam@tstraffic.com.au',       'operations');
       insertUser.run('planning_user', dev('password'),    'Alex Planning',  'alex@tstraffic.com.au',      'planning');
       insertUser.run('finance_user',  dev('password'),    'Pat Finance',    'pat@tstraffic.com.au',       'finance');
       insertUser.run('accounts_user', dev('password'),    'Jordan Accounts','jordan@tstraffic.com.au',    'finance');
-      console.log('Dev DB seeded with seed admin users — all flagged must_change_password=1.');
+      if (SEED_T_AND_S_DATA) {
+        insertUser.run('suhail.a',  dev('Suhail123'),   'Suhail Ahmed', 'suhail@tstc.com.au',   'admin');
+        insertUser.run('saadat',    dev('TandS2026.'),  'Saadat',       'saadat@tstc.com.au',   'admin');
+        insertUser.run('savanah',   dev('Savanah123'),  'Savanah',      'savanah@tstc.com.au',  'admin');
+        insertUser.run('taj',       dev('Taj123'),      'Taj',          'taj@tstc.com.au',      'admin');
+        console.log('Dev DB seeded with generic + T&S-named admin users — all flagged must_change_password=1.');
+      } else {
+        console.log('Dev DB seeded with generic admin users only (set SEED_T_AND_S_DATA=true for T&S-named admins). All flagged must_change_password=1.');
+      }
     }
   }
 
@@ -10827,21 +10836,36 @@ function initializeDatabase() {
     console.error('Demo cleanup error (non-fatal):', e.message);
   }
 
-  // Ensure key users always exist (survives DB resets)
-  const ensureUser = db.prepare(`
-    INSERT OR IGNORE INTO users (username, password_hash, full_name, email, role) VALUES (?, ?, ?, ?, ?)
-  `);
-  const ensureUsers = [
-    ['suhail.a', 'Suhail123', 'Suhail Ahmed', 'suhail@tstc.com.au', 'admin'],
-    ['saadat', 'TandS2026.', 'Saadat', 'saadat@tstc.com.au', 'admin'],
-    ['savanah', 'Savanah123', 'Savanah', 'savanah@tstc.com.au', 'admin'],
-    ['taj', 'Taj123', 'Taj', 'taj@tstc.com.au', 'admin'],
-  ];
-  for (const [uname, pwd, fullName, email, role] of ensureUsers) {
-    if (!db.prepare('SELECT id FROM users WHERE username = ?').get(uname)) {
-      ensureUser.run(uname, bcrypt.hashSync(pwd, 12), fullName, email, role);
-      console.log(`Created ${uname} user.`);
+  // Ensure key T&S admin accounts always exist (survives DB resets).
+  //
+  // Phase A audit fix: this block previously ran unconditionally on every
+  // startup and re-created suhail.a / saadat / savanah / taj with their
+  // dev passwords if missing — *without* setting must_change_password=1.
+  // That meant any account deletion (or a fresh white-label DB) would
+  // immediately reintroduce live T&S admins with known credentials.
+  //
+  // Now gated by SEED_T_AND_S_DATA, and every insert is flagged
+  // must_change_password=1 so the dev passwords are unusable for real
+  // work even if the gate is on.
+  if (SEED_T_AND_S_DATA) {
+    const ensureUser = db.prepare(`
+      INSERT OR IGNORE INTO users (username, password_hash, full_name, email, role, must_change_password)
+      VALUES (?, ?, ?, ?, ?, 1)
+    `);
+    const ensureUsers = [
+      ['suhail.a', 'Suhail123', 'Suhail Ahmed', 'suhail@tstc.com.au', 'admin'],
+      ['saadat', 'TandS2026.', 'Saadat', 'saadat@tstc.com.au', 'admin'],
+      ['savanah', 'Savanah123', 'Savanah', 'savanah@tstc.com.au', 'admin'],
+      ['taj', 'Taj123', 'Taj', 'taj@tstc.com.au', 'admin'],
+    ];
+    for (const [uname, pwd, fullName, email, role] of ensureUsers) {
+      if (!db.prepare('SELECT id FROM users WHERE username = ?').get(uname)) {
+        ensureUser.run(uname, bcrypt.hashSync(pwd, 12), fullName, email, role);
+        console.log(`Created ${uname} user (must_change_password=1).`);
+      }
     }
+  } else {
+    console.log('ensureUsers: skipped T&S named-admin re-seed (set SEED_T_AND_S_DATA=true to enable)');
   }
 
   db.close();
