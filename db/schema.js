@@ -10365,6 +10365,14 @@ function initializeDatabase() {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
+  // Whitelabel seed gate — must be declared in this scope because the
+  // dev-user seed (line ~10825) and the T&S named-admin re-seed
+  // (line ~10883) live in initializeDatabase, not in runMigrations where
+  // the same const is declared at line 35. Without this, prod startup
+  // crashed with `ReferenceError: SEED_T_AND_S_DATA is not defined` and
+  // Railway entered a restart loop (commit 6e7e36a regression).
+  const SEED_T_AND_S_DATA = process.env.SEED_T_AND_S_DATA === 'true';
+
   // Create tables
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (
