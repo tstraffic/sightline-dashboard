@@ -7,7 +7,7 @@
   </div>
 </div>
 
-<div style="padding-bottom: 60px;">
+<div style="padding-bottom: calc(60px + env(safe-area-inset-bottom, 0px));">
   <% if (typeof canPost !== 'undefined' && canPost === false) { %>
     <!-- Read-only (announcement channel) -->
     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm mx-3 mt-3"
@@ -16,7 +16,7 @@
          data-current-user-name="<%= worker.full_name %>">
       <div class="chat-pinned hidden border-b border-gray-200 bg-amber-50 px-3 py-2 text-xs"></div>
       <div class="chat-typing hidden px-4 py-1 text-xs text-gray-400 italic"></div>
-      <div class="chat-messages overflow-y-auto p-4 space-y-1" style="max-height: calc(100vh - 220px);">
+      <div class="chat-messages overflow-y-auto p-4 space-y-1" style="max-height: calc(100dvh - 220px);">
         <div class="text-center text-gray-400 text-sm py-4">Loading...</div>
       </div>
       <div class="border-t border-gray-200 p-3 text-center">
