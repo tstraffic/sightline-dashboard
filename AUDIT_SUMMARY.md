@@ -31,7 +31,7 @@
 4. **Rate-limit `/forgot-password` + `/w/forgot-pin`** — reuse existing `loginLimiter`. 20 min.
 5. **Wire SWMS expiry reminders** — clone [services/certExpiryReminders.js](services/certExpiryReminders.js) for SWMS. 2-3 hrs.
 6. **Strip PII `console.log` from job + induction + email paths** — replace with logger respecting `LOG_LEVEL`. 1 hr.
-7. **Wire `payAsYouGo` PAYG calc** — function already exists in [lib/payroll.js](lib/payroll.js), just isn't called.
+7. ~~Wire `payAsYouGo` PAYG calc~~ — **CORRECTED during Phase A**: already wired at [routes/payroll-runs.js:545](routes/payroll-runs.js:545) (employee total) and [routes/payroll-runs.js:656](routes/payroll-runs.js:656) (per-line). Audit grep missed it.
 8. **Add worker decline endpoint** — `POST /w/shifts/:id/decline` mirroring confirm. 2-3 hrs.
 9. **Move weekly-summary recipients to `system_config`** — kill the hardcoded "Taj + Saadat" at [server.js:416-423](server.js:416). 1 hr.
 10. ~~Remove the offline "data will sync" banner~~ — **CORRECTED during Phase A**: there IS a real IndexedDB queue at [public/js/worker-offline-queue.js](public/js/worker-offline-queue.js) with retry, dead-letter, and per-form opt-in. Banner is honest. Audit sub-agent missed it.
