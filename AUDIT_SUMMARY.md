@@ -34,7 +34,7 @@
 7. **Wire `payAsYouGo` PAYG calc** — function already exists in [lib/payroll.js](lib/payroll.js), just isn't called.
 8. **Add worker decline endpoint** — `POST /w/shifts/:id/decline` mirroring confirm. 2-3 hrs.
 9. **Move weekly-summary recipients to `system_config`** — kill the hardcoded "Taj + Saadat" at [server.js:416-423](server.js:416). 1 hr.
-10. **Remove the offline "data will sync" banner from worker PWA** until a real IndexedDB queue ships. The banner is lying. ([public/worker-sw.js:93-100](public/worker-sw.js:93))
+10. ~~Remove the offline "data will sync" banner~~ — **CORRECTED during Phase A**: there IS a real IndexedDB queue at [public/js/worker-offline-queue.js](public/js/worker-offline-queue.js) with retry, dead-letter, and per-form opt-in. Banner is honest. Audit sub-agent missed it.
 
 ## Top 5 structural problems (weeks of work)
 
