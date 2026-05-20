@@ -10077,6 +10077,37 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 219: swms_expiry_reminder_log
+  //
+  // Companion to services/swmsExpiryReminders.js. The cron fires reminders
+  // at 30 / 14 / 7 days before swms.expiry_date and dedupes via this table
+  // so re-running the job same-day (or hitting the same window after a
+  // process restart) doesn't spam office staff. Unique tuple is
+  // (swms_id, days_out, expiry_date) — if the SWMS gets its expiry
+  // extended, the next window's reminder is a different expiry_date so it
+  // fires again, which is what we want.
+  // =============================================
+  if (!isMigrationApplied.get(219)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS swms_expiry_reminder_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          swms_id INTEGER NOT NULL REFERENCES swms(id) ON DELETE CASCADE,
+          days_out INTEGER NOT NULL,
+          expiry_date DATE NOT NULL,
+          sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(swms_id, days_out, expiry_date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_swms_exp_log_swms ON swms_expiry_reminder_log(swms_id);
+      `);
+      recordMigration.run(219, 'swms_expiry_reminder_log table');
+      console.log('Migration 219 applied: swms_expiry_reminder_log');
+    } catch (e) {
+      console.error('Migration 219 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
