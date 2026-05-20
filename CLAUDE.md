@@ -1,10 +1,12 @@
-# T&S Operations Dashboard — Project Context
+# Atomis — Platform Context
 
 ## Overview
-Full-stack operations management platform for **T&S Traffic Control** (Sydney traffic management company). Two interfaces in a single codebase:
+Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney traffic management company) is the launch customer. The platform currently runs single-tenant against T&S's data; multi-tenancy migration is planned per `atomis-migration` v0.2. Two interfaces in a single codebase:
 
 1. **Admin Dashboard** — Desktop + mobile responsive web app for office staff (management, operations, admin roles)
-2. **Worker Portal** — Mobile-first PWA for field crew members (under `/w/` prefix)
+2. **Worker Portal** ("Atomis Crew") — Mobile-first PWA for field crew members (under `/w/` prefix)
+
+**Domain**: `atomis.com.au` (purchased; wildcard DNS + per-tenant subdomains land in Phase 3 of the migration).
 
 ## Tech Stack
 - **Backend**: Node.js, Express, EJS templates, express-ejs-layouts
