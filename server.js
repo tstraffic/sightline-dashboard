@@ -198,6 +198,23 @@ const loginLimiter = rateLimit({
 app.post('/login', loginLimiter);
 app.post('/w/login', loginLimiter);
 
+// Rate limiting on password / PIN reset endpoints. Lower cap, longer
+// window than login because the legitimate use case is rare (a few times
+// a year per worker, even rarer for office staff) and the abuse vector
+// is email-spam DoS — the response sends a reset email regardless of
+// whether the address exists, so spammers can use these endpoints to
+// hammer inboxes. The cap also prevents a single attacker grinding
+// through usernames hoping to trigger reset-link interception.
+const resetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,                    // 5 reset attempts per IP per hour
+  message: 'Too many password reset attempts, please try again in 1 hour.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.post('/forgot-password', resetLimiter);
+app.post('/w/forgot-pin', resetLimiter);
+
 // Worker Portal routes (must be BEFORE blockWorkerFromAdmin)
 app.use('/w', require('./routes/worker/auth'));
 // Apply managerLocals once so every /w page has res.locals.isManager available
