@@ -18,6 +18,7 @@ const { initVapid } = require('./services/pushNotification');
 const { sendUpcomingShiftReminders } = require('./services/shiftReminders');
 const { sendCertExpiryReminders } = require('./services/certExpiryReminders');
 const { csrfProtection } = require('./middleware/csrf');
+const { tenantMiddleware } = require('./middleware/tenant');
 
 // Initialize database and seed data
 initializeDatabase();
@@ -151,6 +152,13 @@ app.use((req, res, next) => {
 
 // CSRF protection (after session + flash, before routes)
 app.use(csrfProtection);
+
+// Tenant resolution — attaches req.tenant + req.db (tenantDb wrapper).
+// Phase 0: hardcoded to 'ts'. Phase 3 Prompt 03.A swaps in real
+// subdomain lookup. Routes that haven't been migrated to req.db yet
+// keep using getDb() directly; those are flagged by `npm run lint:tenant`
+// as the Phase 2 work list.
+app.use(tenantMiddleware);
 
 // Notification count available in all templates (header bell badge)
 app.use(notificationCountMiddleware);
