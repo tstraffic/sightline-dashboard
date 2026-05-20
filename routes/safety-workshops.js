@@ -28,6 +28,64 @@ const WORKSHOPS = {
   'swms-01': swms01,
 };
 
+// ── Soft launch gate ──
+// Workshops is new and we don't want every admin opening it before it's
+// been piloted. Anyone with the safety_workshops permission can REACH
+// this router (gated upstream in server.js), but they need the shared
+// password below to actually use it. Cleared by setting an unlock flag
+// on the admin session, scoped to that browser session.
+//
+// To change the password without a code push, set WORKSHOPS_PASSWORD on
+// Railway. To remove the lock entirely, set WORKSHOPS_UNLOCKED=true and
+// the middleware short-circuits.
+const WORKSHOPS_PASSWORD = (process.env.WORKSHOPS_PASSWORD || 'safety').trim();
+const WORKSHOPS_GATE_DISABLED = process.env.WORKSHOPS_UNLOCKED === 'true';
+
+// Render the unlock screen. Lives above the gate middleware so visiting
+// it doesn't redirect-loop.
+router.get('/unlock', (req, res) => {
+  if (WORKSHOPS_GATE_DISABLED || (req.session && req.session.workshopsUnlocked)) {
+    return res.redirect('/safety-workshops');
+  }
+  res.render('safety-workshops/unlock', {
+    title: 'Workshops',
+    currentPage: 'safety-workshops',
+  });
+});
+
+// Validate the password. On success, set the per-session flag and bounce
+// back to the workshops list. On failure, flash + redirect to the unlock
+// screen — no specific error wording so we don't leak "the password
+// exists, you got it wrong" vs "the password was removed" etc.
+router.post('/unlock', (req, res) => {
+  const pw = String((req.body && req.body.password) || '').trim();
+  if (pw && pw === WORKSHOPS_PASSWORD) {
+    req.session.workshopsUnlocked = true;
+    try {
+      logActivity({
+        user: req.session.user,
+        action: 'unlock',
+        entityType: 'workshops_module',
+        entityId: 0,
+        entityLabel: 'Workshops module unlocked',
+        ip: req.ip,
+      });
+    } catch (e) {}
+    return res.redirect('/safety-workshops');
+  }
+  req.flash('error', 'Wrong password.');
+  return res.redirect('/safety-workshops/unlock');
+});
+
+// Gate everything below this line. Anything registered AFTER this
+// router.use call inherits the check; the two /unlock routes above
+// stay reachable.
+router.use((req, res, next) => {
+  if (WORKSHOPS_GATE_DISABLED) return next();
+  if (req.session && req.session.workshopsUnlocked) return next();
+  return res.redirect('/safety-workshops/unlock');
+});
+
 // Unambiguous 6-char session-code alphabet. Skips 0/O/I/1/L to keep the
 // QR code legible and easy to type by hand if the camera fails.
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -267,6 +325,9 @@ router.get('/sessions/:code/live', (req, res) => {
 // =====================================================================
 // POST /safety-workshops/sessions/:code/close — close session
 // =====================================================================
+// Locks submissions but preserves all scores + assignments. Use this
+// when the workshop is done and you want the leaderboard to stay
+// visible without anyone else joining.
 router.post('/sessions/:code/close', (req, res) => {
   const db = getDb();
   const session = db
@@ -293,6 +354,88 @@ router.post('/sessions/:code/close', (req, res) => {
   } catch (e) {}
   req.flash('success', 'Session ' + session.session_code + ' closed.');
   return res.redirect('/safety-workshops/sessions/' + session.session_code);
+});
+
+// =====================================================================
+// POST /safety-workshops/sessions/:code/restart — wipe scores, replay
+// =====================================================================
+// "Play another round" — clear all attempts + case assignments for
+// this session, force status back to 'open'. Same session_code so the
+// QR projected on the meeting-room screen still works; participants
+// just refresh their phones to re-enter their name.
+router.post('/sessions/:code/restart', (req, res) => {
+  const db = getDb();
+  const session = db
+    .prepare('SELECT * FROM workshop_sessions WHERE session_code = ?')
+    .get(req.params.code);
+  if (!session) {
+    req.flash('error', 'Session not found.');
+    return res.redirect('/safety-workshops');
+  }
+  // Wrap the wipe + status flip in a transaction so the dashboard never
+  // shows the "in-between" state where assignments are gone but old
+  // attempts still rank on the leaderboard.
+  const restart = db.transaction(() => {
+    db.prepare('DELETE FROM workshop_attempts    WHERE session_id = ?').run(session.id);
+    db.prepare('DELETE FROM workshop_assignments WHERE session_id = ?').run(session.id);
+    db.prepare(
+      `UPDATE workshop_sessions
+       SET status = 'open', closed_at = NULL
+       WHERE id = ?`
+    ).run(session.id);
+  });
+  restart();
+  try {
+    logActivity({
+      user: req.session.user,
+      action: 'restart',
+      entityType: 'workshop_session',
+      entityId: session.id,
+      entityLabel: session.session_code,
+      ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash(
+    'success',
+    'Session ' + session.session_code + ' restarted — scores cleared. Tell the room to refresh their phones.'
+  );
+  return res.redirect('/safety-workshops/sessions/' + session.session_code);
+});
+
+// =====================================================================
+// POST /safety-workshops/sessions/:code/delete — destroy session
+// =====================================================================
+// Removes the session row entirely. workshop_attempts and
+// workshop_assignments cascade via ON DELETE CASCADE in migration 220
+// (with foreign_keys = ON set per connection in db/database.js).
+// Mainly for cleaning up test sessions from the history view.
+router.post('/sessions/:code/delete', (req, res) => {
+  const db = getDb();
+  const session = db
+    .prepare(
+      `SELECT s.*, w.slug
+       FROM workshop_sessions s
+       JOIN workshop_definitions w ON w.id = s.workshop_id
+       WHERE s.session_code = ?`
+    )
+    .get(req.params.code);
+  if (!session) {
+    req.flash('error', 'Session not found.');
+    return res.redirect('/safety-workshops');
+  }
+  db.prepare('DELETE FROM workshop_sessions WHERE id = ?').run(session.id);
+  try {
+    logActivity({
+      user: req.session.user,
+      action: 'delete',
+      entityType: 'workshop_session',
+      entityId: session.id,
+      entityLabel: session.session_code,
+      ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash('success', 'Session ' + session.session_code + ' deleted.');
+  return res.redirect('/safety-workshops/' + session.slug);
 });
 
 // =====================================================================
