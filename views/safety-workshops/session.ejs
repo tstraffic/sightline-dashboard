@@ -24,16 +24,44 @@
         Facilitator: <%= session.facilitator_name || '—' %> · Started <%= fmtTime(session.created_at) %>
       </p>
     </div>
-    <% if (session.status === 'open') { %>
-      <form method="POST" action="/safety-workshops/sessions/<%= session.session_code %>/close" onsubmit="return confirm('Close this session? Participants will not be able to join or submit after this.');">
+    <div class="flex items-center gap-2 flex-wrap">
+      <% if (session.status === 'open') { %>
+        <%# Restart — same QR code, fresh scoreboard. The dominant action. %>
+        <form method="POST" action="/safety-workshops/sessions/<%= session.session_code %>/restart" onsubmit="return confirm('Restart this session? All scores and case assignments will be cleared. The QR code stays the same — tell the room to refresh their phones.');">
+          <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+          <button type="submit" class="px-3 py-2 bg-white border border-amber-200 hover:bg-amber-50 text-amber-700 text-sm font-medium rounded-lg inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Restart round
+          </button>
+        </form>
+        <%# Close — preserves scores, blocks new submissions. %>
+        <form method="POST" action="/safety-workshops/sessions/<%= session.session_code %>/close" onsubmit="return confirm('Close this session? Scores stay on the leaderboard but no one can join or submit after this.');">
+          <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+          <button type="submit" class="px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg">
+            Close session
+          </button>
+        </form>
+      <% } else { %>
+        <span class="text-[10px] font-bold tracking-widest text-gray-500 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full uppercase">Closed</span>
+        <%# Reopen-by-restart: if the facilitator wants to run another round %>
+        <%# on a closed session, restart wipes scores AND flips status to open. %>
+        <form method="POST" action="/safety-workshops/sessions/<%= session.session_code %>/restart" onsubmit="return confirm('Reopen this session and clear all scores? The QR code stays the same.');">
+          <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+          <button type="submit" class="px-3 py-2 bg-white border border-amber-200 hover:bg-amber-50 text-amber-700 text-sm font-medium rounded-lg inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Reopen & restart
+          </button>
+        </form>
+      <% } %>
+      <%# Delete — destructive, both open and closed sessions. %>
+      <form method="POST" action="/safety-workshops/sessions/<%= session.session_code %>/delete" onsubmit="return confirm('Delete session <%= session.session_code %> and all its scores? This cannot be undone.');">
         <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-        <button type="submit" class="px-3 py-2 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 text-sm font-medium rounded-lg">
-          Close session
+        <button type="submit" class="px-3 py-2 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 text-sm font-medium rounded-lg inline-flex items-center gap-1.5">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>
+          Delete
         </button>
       </form>
-    <% } else { %>
-      <span class="text-[10px] font-bold tracking-widest text-gray-500 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full uppercase">Closed</span>
-    <% } %>
+    </div>
   </div>
 
   <div class="grid md:grid-cols-5 gap-5">

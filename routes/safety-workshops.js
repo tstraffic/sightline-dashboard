@@ -267,6 +267,9 @@ router.get('/sessions/:code/live', (req, res) => {
 // =====================================================================
 // POST /safety-workshops/sessions/:code/close — close session
 // =====================================================================
+// Locks submissions but preserves all scores + assignments. Use this
+// when the workshop is done and you want the leaderboard to stay
+// visible without anyone else joining.
 router.post('/sessions/:code/close', (req, res) => {
   const db = getDb();
   const session = db
@@ -293,6 +296,88 @@ router.post('/sessions/:code/close', (req, res) => {
   } catch (e) {}
   req.flash('success', 'Session ' + session.session_code + ' closed.');
   return res.redirect('/safety-workshops/sessions/' + session.session_code);
+});
+
+// =====================================================================
+// POST /safety-workshops/sessions/:code/restart — wipe scores, replay
+// =====================================================================
+// "Play another round" — clear all attempts + case assignments for
+// this session, force status back to 'open'. Same session_code so the
+// QR projected on the meeting-room screen still works; participants
+// just refresh their phones to re-enter their name.
+router.post('/sessions/:code/restart', (req, res) => {
+  const db = getDb();
+  const session = db
+    .prepare('SELECT * FROM workshop_sessions WHERE session_code = ?')
+    .get(req.params.code);
+  if (!session) {
+    req.flash('error', 'Session not found.');
+    return res.redirect('/safety-workshops');
+  }
+  // Wrap the wipe + status flip in a transaction so the dashboard never
+  // shows the "in-between" state where assignments are gone but old
+  // attempts still rank on the leaderboard.
+  const restart = db.transaction(() => {
+    db.prepare('DELETE FROM workshop_attempts    WHERE session_id = ?').run(session.id);
+    db.prepare('DELETE FROM workshop_assignments WHERE session_id = ?').run(session.id);
+    db.prepare(
+      `UPDATE workshop_sessions
+       SET status = 'open', closed_at = NULL
+       WHERE id = ?`
+    ).run(session.id);
+  });
+  restart();
+  try {
+    logActivity({
+      user: req.session.user,
+      action: 'restart',
+      entityType: 'workshop_session',
+      entityId: session.id,
+      entityLabel: session.session_code,
+      ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash(
+    'success',
+    'Session ' + session.session_code + ' restarted — scores cleared. Tell the room to refresh their phones.'
+  );
+  return res.redirect('/safety-workshops/sessions/' + session.session_code);
+});
+
+// =====================================================================
+// POST /safety-workshops/sessions/:code/delete — destroy session
+// =====================================================================
+// Removes the session row entirely. workshop_attempts and
+// workshop_assignments cascade via ON DELETE CASCADE in migration 220
+// (with foreign_keys = ON set per connection in db/database.js).
+// Mainly for cleaning up test sessions from the history view.
+router.post('/sessions/:code/delete', (req, res) => {
+  const db = getDb();
+  const session = db
+    .prepare(
+      `SELECT s.*, w.slug
+       FROM workshop_sessions s
+       JOIN workshop_definitions w ON w.id = s.workshop_id
+       WHERE s.session_code = ?`
+    )
+    .get(req.params.code);
+  if (!session) {
+    req.flash('error', 'Session not found.');
+    return res.redirect('/safety-workshops');
+  }
+  db.prepare('DELETE FROM workshop_sessions WHERE id = ?').run(session.id);
+  try {
+    logActivity({
+      user: req.session.user,
+      action: 'delete',
+      entityType: 'workshop_session',
+      entityId: session.id,
+      entityLabel: session.session_code,
+      ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash('success', 'Session ' + session.session_code + ' deleted.');
+  return res.redirect('/safety-workshops/' + session.slug);
 });
 
 // =====================================================================
