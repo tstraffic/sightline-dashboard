@@ -126,11 +126,13 @@ router.post('/incidents', upload.array('photos', 5), (req, res) => {
     const photoPaths = (req.files || []).map(f => '/uploads/incidents/' + f.filename);
     const photoPath = photoPaths.join(',');
 
-    // Build location with GPS if available
-    let fullLocation = location || '';
-    if (gps_lat && gps_lng) {
-      fullLocation += fullLocation ? ` (GPS: ${gps_lat}, ${gps_lng})` : `GPS: ${gps_lat}, ${gps_lng}`;
-    }
+    // GPS + weather now go to first-class columns (mig 218). Coerce GPS to
+    // numbers — only persist if both are present and parse to finite floats;
+    // otherwise leave NULL. Weather stays text.
+    const gpsLatNum = (gps_lat !== undefined && gps_lat !== '') ? parseFloat(gps_lat) : null;
+    const gpsLngNum = (gps_lng !== undefined && gps_lng !== '') ? parseFloat(gps_lng) : null;
+    const gpsValid = Number.isFinite(gpsLatNum) && Number.isFinite(gpsLngNum);
+    const weather = (weather_conditions || '').toString().trim();
 
     // Use admin user id=1 as reported_by_id (FK constraint requires users reference)
     // The actual crew member is linked via incident_crew_members
@@ -143,13 +145,14 @@ router.post('/incidents', upload.array('photos', 5), (req, res) => {
       INSERT INTO incidents (
         job_id, incident_number, incident_type, severity, title, description,
         location, incident_date, incident_time, reported_by_id,
-        persons_involved, investigation_status, photo_path, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reported', ?, CURRENT_TIMESTAMP)
+        weather_conditions, gps_lat, gps_lng,
+        investigation_status, photo_path, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'reported', ?, CURRENT_TIMESTAMP)
     `).run(
       job_id, incidentNumber, incident_type, severity, title, description,
-      fullLocation, incident_date || sydneyToday(),
+      location || '', incident_date || sydneyToday(),
       incident_time || '', reportedById,
-      weather_conditions ? `Weather: ${weather_conditions}` : '',
+      weather, gpsValid ? gpsLatNum : null, gpsValid ? gpsLngNum : null,
       photoPath
     );
 

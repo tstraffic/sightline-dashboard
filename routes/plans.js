@@ -71,13 +71,17 @@ router.post('/', uploadPlanFile(false), (req, res) => {
   const b = req.body;
 
   // Auto-generate document code: TSTGS-XXXX-XX or TSTMP-XXXX-XX
-  // Extract job sequence number from job code (TSJ-XXXX → XXXX)
+  // Extract job sequence number from job code (J-XXXX → XXXX). Job codes
+  // were normalised to the J- prefix by migration 106; the previous
+  // TSJ- regex never matched, so every plan code was being built from
+  // the strip-non-digits fallback — close enough by accident, but the
+  // pattern is now correct.
   let jobSeq = '0000';
   if (b.job_id) {
     const parentJob = db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(b.job_id);
     if (parentJob && parentJob.job_number) {
-      const seqMatch = parentJob.job_number.match(/TSJ-(\d+)/);
-      if (seqMatch) jobSeq = seqMatch[1];
+      const seqMatch = parentJob.job_number.match(/J-(\d+)/);
+      if (seqMatch) jobSeq = seqMatch[1].padStart(4, '0').slice(-4);
       else jobSeq = parentJob.job_number.replace(/[^0-9]/g, '').padStart(4, '0').slice(-4);
     }
   }

@@ -171,8 +171,6 @@ function handleSubmission(req, res) {
       // Dynamically build INSERT based on columns that actually exist in the DB
       const existingCols = db.prepare("PRAGMA table_info(induction_submissions)").all().map(c => c.name);
 
-      console.log('DB columns found:', existingCols.length, 'Payment type:', paymentType);
-
       if (existingCols.length === 0) {
         throw new Error('induction_submissions table not found — migrations may not have run');
       }
@@ -292,10 +290,9 @@ function handleSubmission(req, res) {
       }
 
       const sql = `INSERT INTO induction_submissions (${colNames.join(', ')}) VALUES (${colNames.map(c => '$' + c).join(', ')})`;
-      console.log('Running INSERT with', colNames.length, 'named params for:', computedFullName);
       db.prepare(sql).run(params);
 
-      console.log('Induction submitted successfully:', computedFullName, paymentType);
+      console.log('[Induction] submission saved (' + colNames.length + ' cols)');
 
       if (wantsJSON) {
         return res.json({ ok: true });

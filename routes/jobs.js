@@ -119,7 +119,6 @@ router.post('/', (req, res) => {
   // Auto-generate J-XXXX job number
   const jobNumber = generateJobNumber();
 
-  console.log('[Jobs] POST / — creating job:', jobNumber, 'client_id:', b.client_id, 'suburb:', b.suburb);
   // Resolve client name from client_id
   let clientName = b.client || '';
   if (b.client_id) {

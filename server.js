@@ -17,6 +17,7 @@ const { chatUnreadCountMiddleware } = require('./middleware/chat');
 const { initVapid } = require('./services/pushNotification');
 const { sendUpcomingShiftReminders } = require('./services/shiftReminders');
 const { sendCertExpiryReminders } = require('./services/certExpiryReminders');
+const { sendSwmsExpiryReminders } = require('./services/swmsExpiryReminders');
 const { csrfProtection } = require('./middleware/csrf');
 const { tenantMiddleware } = require('./middleware/tenant');
 
@@ -197,6 +198,23 @@ const loginLimiter = rateLimit({
 });
 app.post('/login', loginLimiter);
 app.post('/w/login', loginLimiter);
+
+// Rate limiting on password / PIN reset endpoints. Lower cap, longer
+// window than login because the legitimate use case is rare (a few times
+// a year per worker, even rarer for office staff) and the abuse vector
+// is email-spam DoS — the response sends a reset email regardless of
+// whether the address exists, so spammers can use these endpoints to
+// hammer inboxes. The cap also prevents a single attacker grinding
+// through usernames hoping to trigger reset-link interception.
+const resetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5,                    // 5 reset attempts per IP per hour
+  message: 'Too many password reset attempts, please try again in 1 hour.',
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.post('/forgot-password', resetLimiter);
+app.post('/w/forgot-pin', resetLimiter);
 
 // Worker Portal routes (must be BEFORE blockWorkerFromAdmin)
 app.use('/w', require('./routes/worker/auth'));
@@ -430,6 +448,18 @@ app.listen(PORT, () => {
     const now = new Date();
     if (now.getHours() === 7 && now.getMinutes() >= 30 && now.getMinutes() < 45) {
       sendCertExpiryReminders().catch(e => console.error('[cron] cert-expiry error:', e.message));
+    }
+  }, 15 * 60 * 1000);
+
+  // SWMS expiry reminders — daily at 7:45 AM, just after cert expiry. Fires
+  // for active SWMS docs expiring in 30 / 14 / 7 days, deduped via
+  // swms_expiry_reminder_log (mig 219). Goes to admin / safety / operations
+  // users via the notifications table + push, not to individual workers —
+  // SWMS renewal is an office responsibility, not a worker action.
+  setInterval(() => {
+    const now = new Date();
+    if (now.getHours() === 7 && now.getMinutes() >= 45 && now.getMinutes() < 60) {
+      sendSwmsExpiryReminders().catch(e => console.error('[cron] swms-expiry error:', e.message));
     }
   }, 15 * 60 * 1000);
 });

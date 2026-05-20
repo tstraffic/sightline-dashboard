@@ -196,8 +196,48 @@ router.post('/shifts/:id/confirm', (req, res) => {
     return res.redirect('/w/shifts');
   }
 
-  db.prepare('UPDATE crew_allocations SET status = ? WHERE id = ?').run('confirmed', req.params.id);
+  db.prepare('UPDATE crew_allocations SET status = ?, confirmed_at = CURRENT_TIMESTAMP WHERE id = ?').run('confirmed', req.params.id);
+  // Keep booking_crew in sync if this alloc was sourced from a booking
+  // (mirrors routes/worker/jobs.js:560).
+  if (allocation.booking_id) {
+    db.prepare("UPDATE booking_crew SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP WHERE booking_id = ? AND crew_member_id = ?")
+      .run(allocation.booking_id, worker.id);
+  }
   req.flash('success', 'Shift confirmed.');
+  res.redirect('/w/shifts/' + req.params.id);
+});
+
+// POST /w/shifts/:id/decline — Worker declines a shift.
+//
+// A parallel decline endpoint already lives in routes/worker/jobs.js:522
+// at POST /w/jobs/:id/respond (action=decline) for the job-detail flow.
+// This route exists so the shift-detail view (which posts to /w/shifts/...)
+// has UX parity with confirm. Status flow mirrors the existing decline:
+// crew_allocations.status = 'declined' AND booking_crew sync if linked.
+router.post('/shifts/:id/decline', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+
+  const allocation = db.prepare('SELECT * FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(req.params.id, worker.id);
+  if (!allocation) {
+    req.flash('error', 'Shift not found.');
+    return res.redirect('/w/shifts');
+  }
+  if (allocation.status === 'declined') {
+    req.flash('info', 'You already declined this shift.');
+    return res.redirect('/w/shifts/' + req.params.id);
+  }
+  if (allocation.status === 'completed' || allocation.status === 'cancelled') {
+    req.flash('error', `Shift is already ${allocation.status} and cannot be declined.`);
+    return res.redirect('/w/shifts/' + req.params.id);
+  }
+
+  db.prepare("UPDATE crew_allocations SET status = 'declined' WHERE id = ?").run(req.params.id);
+  if (allocation.booking_id) {
+    db.prepare("UPDATE booking_crew SET status = 'declined' WHERE booking_id = ? AND crew_member_id = ?")
+      .run(allocation.booking_id, worker.id);
+  }
+  req.flash('success', 'Shift declined.');
   res.redirect('/w/shifts/' + req.params.id);
 });
 

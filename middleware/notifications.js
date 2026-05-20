@@ -618,8 +618,24 @@ function generateWeeklySummaries() {
     message += '\n\n' + summaries.slice(0, 10).map(s => s.summary).join('\n');
     if (summaries.length > 10) message += `\n... and ${summaries.length - 10} more jobs`;
 
-    // Notify Taj and Saadat specifically (by username)
-    const notifyUsers = db.prepare("SELECT id, full_name, email FROM users WHERE username IN ('taj', 'saadat') AND active = 1").all();
+    // Recipient list: configurable via system_config.weekly_summary_recipients
+    // (comma-separated usernames). Falls back to all active admin users so a
+    // fresh white-label deployment doesn't silently send to nobody — and so
+    // the old T&S-specific "taj, saadat" hardcode is no longer baked in.
+    // Set the key explicitly from /settings to override the admin-fallback.
+    let notifyUsers;
+    const cfgRow = db.prepare("SELECT value FROM system_config WHERE key = 'weekly_summary_recipients'").get();
+    const cfgList = cfgRow && cfgRow.value
+      ? String(cfgRow.value).split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    if (cfgList.length > 0) {
+      const placeholders = cfgList.map(() => '?').join(',');
+      notifyUsers = db.prepare(
+        `SELECT id, full_name, email FROM users WHERE username IN (${placeholders}) AND active = 1`
+      ).all(...cfgList);
+    } else {
+      notifyUsers = db.prepare("SELECT id, full_name, email FROM users WHERE role = 'admin' AND active = 1").all();
+    }
 
     const insertNotif = db.prepare(`
       INSERT INTO notifications (user_id, type, title, message, link, job_id)
