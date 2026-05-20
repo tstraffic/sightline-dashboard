@@ -43,7 +43,7 @@
   .cus-save { display: inline-flex; align-items: center; justify-content: center; gap: 6px; width: 100%; padding: 0.75rem; background: #059669; color: #fff; font-weight: 700; border-radius: 12px; box-shadow: 0 4px 12px rgba(5,150,105,0.3); margin-top: 1rem; }
   .cus-save:disabled { opacity: 0.5; box-shadow: none; cursor: not-allowed; }
 
-  .cus-toast { position: fixed; left: 50%; bottom: 90px; transform: translateX(-50%); padding: 0.625rem 1rem; border-radius: 12px; background: rgba(16,185,129,0.95); color: #fff; font-size: 0.8rem; font-weight: 600; z-index: 90; box-shadow: 0 6px 20px rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  .cus-toast { position: fixed; left: 50%; bottom: calc(90px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); padding: 0.625rem 1rem; border-radius: 12px; background: rgba(16,185,129,0.95); color: #fff; font-size: 0.8rem; font-weight: 600; z-index: 90; box-shadow: 0 6px 20px rgba(0,0,0,0.3); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
   .cus-toast.show { opacity: 1; }
 </style>
 
