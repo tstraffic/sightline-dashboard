@@ -141,7 +141,9 @@ async function sendEmail(to, subject, html, opts) {
         console.error('[Email/Resend] API error:', error.message || JSON.stringify(error));
         return null;
       }
-      console.log('[Email/Resend] Sent:', subject, '→', to, '| id:', data?.id);
+      // Log subject + Resend message id for ops tracking; recipient is PII so
+      // omit it (id is enough to look the message up in Resend dashboard).
+      console.log('[Email/Resend] Sent:', subject, '| id:', data?.id);
       return data;
     } catch (err) {
       console.error('[Email/Resend] Send error:', err.message);
@@ -163,7 +165,7 @@ async function sendEmail(to, subject, html, opts) {
       attachments: attachments || undefined,
       cc, bcc, replyTo,
     });
-    console.log('[Email/SMTP] Sent:', subject, '→', to);
+    console.log('[Email/SMTP] Sent:', subject);
     return info;
   } catch (err) {
     console.error('[Email/SMTP] Send error:', err.message);
