@@ -18,6 +18,23 @@ function runMigrations(db) {
   const isMigrationApplied = db.prepare('SELECT 1 FROM schema_migrations WHERE version = ?');
   const recordMigration = db.prepare('INSERT INTO schema_migrations (version, name) VALUES (?, ?)');
 
+  // ── Whitelabel-prep seed gates (Phase A audit fix) ──
+  // Some historical seed migrations imported T&S customer-operational data
+  // (Villawood depot crew, 2026 TGS Register, Abergeldie client list, T&S
+  // fleet) or test fixtures (EMP-TEST/PIN-1234 dummy worker). Fresh white-
+  // label deployments must not inherit any of that, so the seed bodies are
+  // gated by the env vars below. Defaults to skip.
+  //
+  // T&S production is unaffected: these migrations were recorded in
+  // schema_migrations months ago, so they don't re-run anyway. The gates
+  // matter only for new (buyer) deployments and dev DB rebuilds.
+  //
+  // To re-hydrate a fresh T&S-like DB (staging, restore-from-scratch),
+  // set SEED_T_AND_S_DATA=true. For dev/staging that wants the EMP-TEST
+  // preview account, set SEED_TEST_USERS=true.
+  const SEED_T_AND_S_DATA = process.env.SEED_T_AND_S_DATA === 'true';
+  const SEED_TEST_USERS = process.env.SEED_TEST_USERS === 'true';
+
   // =============================================
   // Migration 1: Job Register Improvements
   // =============================================
@@ -3435,7 +3452,14 @@ function runMigrations(db) {
   }
 
   // Migration 64: Import 2026 TGS Register into Plans & Approvals
+  // Seed body is T&S-customer-specific (92 TGS entries assigned to T&S staff).
+  // Gated by SEED_T_AND_S_DATA. T&S production already has this migration
+  // recorded so this gate has no effect there. Fresh deployments skip.
   if (!isMigrationApplied.get(64)) {
+    if (!SEED_T_AND_S_DATA) {
+      console.log('Migration 64: skipped T&S TGS Register seed (set SEED_T_AND_S_DATA=true to enable)');
+      recordMigration.run(64, 'Import 2026 TGS Register (skipped, not a T&S deployment)');
+    } else {
     console.log('Running migration 64: Import 2026 TGS Register (92 entries)');
     try {
       // Map PM short names to user IDs
@@ -3546,6 +3570,7 @@ function runMigrations(db) {
     }
     recordMigration.run(64, 'Import 2026 TGS Register');
     console.log('Migration 64 complete — 92 TGS entries imported.');
+    } // end else (SEED_T_AND_S_DATA)
   }
 
   // Migration 65: Add police_notification and letter_drop to compliance item_type CHECK
@@ -4022,7 +4047,14 @@ function runMigrations(db) {
   }
 
   // Migration 83: Import/update clients from Dashboard CSV export
+  // Seed body lists 80+ T&S customer/supplier records (incl. Abergeldie,
+  // T&S Traffic Control self-reference). Gated by SEED_T_AND_S_DATA so
+  // fresh white-label deployments don't inherit T&S's client list.
   if (!isMigrationApplied.get(83)) {
+    if (!SEED_T_AND_S_DATA) {
+      console.log('Migration 83: skipped T&S client CSV import (set SEED_T_AND_S_DATA=true to enable)');
+      recordMigration.run(83, 'Import/update clients from Dashboard CSV export (skipped, not a T&S deployment)');
+    } else {
     const csvClients83 = [
       {extId:"74577",name:"2 Way Concrete",abn:"",phone:"",email:"",billingAddr:"",billingAttn:"",billingSub:"",billingSt:"",billingPC:"",cancel:3,creditStop:0,notes:"",payTerms:"30 days"},
       {extId:"94296",name:"Abergeldie Complex Infrastructure",abn:"",phone:"",email:"",billingAddr:"",billingAttn:"",billingSub:"",billingSt:"",billingPC:"",cancel:3,creditStop:0,notes:"",payTerms:"30 days"},
@@ -4166,6 +4198,7 @@ function runMigrations(db) {
 
     recordMigration.run(83, 'Import/update clients from Dashboard CSV export');
     console.log(`Migration 83 complete. Clients: ${inserted83} inserted, ${updated83} updated.`);
+    } // end else (SEED_T_AND_S_DATA)
   }
 
   // Migration 84: Job system rearchitecture — auto-codes, plan revisions, plan flags, dual-view
@@ -4306,7 +4339,13 @@ function runMigrations(db) {
   }
 
   // Migration 90: Seed Villawood depot crew members from Traffio export
+  // Inserts 54 named TCs (real names, phones, emails) into crew_members.
+  // Gated by SEED_T_AND_S_DATA so new tenants get an empty roster.
   if (!isMigrationApplied.get(90)) {
+    if (!SEED_T_AND_S_DATA) {
+      console.log('Migration 90: skipped Villawood depot crew seed (set SEED_T_AND_S_DATA=true to enable)');
+      recordMigration.run(90, 'Seed Villawood depot crew members from Traffio export (skipped, not a T&S deployment)');
+    } else {
     try {
       db.exec(`
         INSERT OR IGNORE INTO crew_members (full_name, employee_id, role, phone, email, licence_type, active) VALUES
@@ -4371,10 +4410,16 @@ function runMigrations(db) {
     } catch (e) {
       console.error('Migration 90 error:', e.message);
     }
+    } // end else (SEED_T_AND_S_DATA)
   }
 
   // Migration 91: Seed Villawood crew into employees table (HR roster)
+  // Same gating as mig 90 — T&S-specific employee roster.
   if (!isMigrationApplied.get(91)) {
+    if (!SEED_T_AND_S_DATA) {
+      console.log('Migration 91: skipped Villawood employees seed (set SEED_T_AND_S_DATA=true to enable)');
+      recordMigration.run(91, 'Seed Villawood depot into employees table for HR roster (skipped, not a T&S deployment)');
+    } else {
     try {
       const villawood = [
         ['Abdalaziz','Rabeea','','0481568010','abdalazizrabeea24@gmail.com','EMP-150863'],
@@ -4444,6 +4489,7 @@ function runMigrations(db) {
     } catch (e) {
       console.error('Migration 91 error:', e.message);
     }
+    } // end else (SEED_T_AND_S_DATA)
   }
 
   // =============================================
@@ -5099,7 +5145,15 @@ function runMigrations(db) {
   }
 
   // Migration 114: Seed test dummy worker account for Worker Portal Preview
+  // Creates EMP-TEST / PIN 1234 traffic_controller for dev/staging demos.
+  // Gated by SEED_TEST_USERS so production deployments (incl. white-label)
+  // don't ship with a live test account in the crew roster. T&S production
+  // already has this migration recorded — gate has no effect there.
   if (!isMigrationApplied.get(114)) {
+    if (!SEED_TEST_USERS) {
+      console.log('Migration 114: skipped EMP-TEST dummy worker (set SEED_TEST_USERS=true for dev/staging)');
+      recordMigration.run(114, 'Seed test dummy worker (skipped, set SEED_TEST_USERS=true to enable)');
+    } else {
     try {
       const pinHash = bcrypt.hashSync('1234', 12);
       const existing = db.prepare("SELECT id FROM crew_members WHERE employee_id = 'EMP-TEST'").get();
@@ -5127,6 +5181,7 @@ function runMigrations(db) {
     } catch (e) { console.log('Migration 114 error (non-fatal):', e.message); }
     recordMigration.run(114, 'Seed test dummy worker (EMP-TEST / PIN 1234) for portal preview');
     console.log('Migration 114 applied: test dummy worker seeded');
+    } // end else (SEED_TEST_USERS)
   }
 
   // Migration 116: Add shift_period to employee_leave for day/night/full_day split
@@ -6900,6 +6955,14 @@ function runMigrations(db) {
       addCol('default_driver_id', 'default_driver_id INTEGER REFERENCES crew_members(id) ON DELETE SET NULL');
       db.exec("CREATE INDEX IF NOT EXISTS idx_equipment_licence_plate ON equipment(licence_plate)");
 
+      // Vehicle columns above are generic and apply to any tenant. The fleet
+      // seed below is T&S-specific (real plates, VINs, depot, driver names)
+      // and is gated by SEED_T_AND_S_DATA so new deployments get the schema
+      // but not the T&S fleet rows.
+      let inserted = 0, updated = 0;
+      if (!SEED_T_AND_S_DATA) {
+        console.log('Migration 149: equipment vehicle schema applied; skipped T&S fleet seed (set SEED_T_AND_S_DATA=true)');
+      } else {
       // Seed the T&S fleet. Asset numbers are the canonical "Name" column from
       // Traffio; ON CONFLICT(asset_number) DO UPDATE keeps fields fresh on
       // re-deploy without duplicating rows. ODO + licence dates are taken from
@@ -6954,7 +7017,6 @@ function runMigrations(db) {
         } catch (e) { return null; }
       }
 
-      let inserted = 0, updated = 0;
       for (const v of fleet) {
         const exists = db.prepare("SELECT id FROM equipment WHERE asset_number = ?").get(v.asset);
         upsert.run(
@@ -6967,6 +7029,7 @@ function runMigrations(db) {
         );
         if (exists) updated++; else inserted++;
       }
+      } // end else (SEED_T_AND_S_DATA — fleet seed)
 
       recordMigration.run(149, 'equipment vehicle columns + T&S fleet seed');
       console.log(`Migration 149 applied: equipment vehicle columns + seed (${inserted} new, ${updated} updated)`);
