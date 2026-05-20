@@ -1,0 +1,63 @@
+<% locals.currentPage = 'safety-workshops' %>
+<%
+  function fmtDateTime(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleString('en-AU', {
+      timeZone: 'Australia/Sydney',
+      day: 'numeric', month: 'short',
+      hour: 'numeric', minute: '2-digit',
+    });
+  }
+%>
+
+<div class="max-w-6xl mx-auto space-y-5">
+  <a href="/safety-workshops" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    All workshops
+  </a>
+
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Workshop attempts</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Most recent 200 attempts across all workshops and sessions.</p>
+  </div>
+
+  <% if (!rows.length) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-10 text-center text-sm text-gray-500">
+      No attempts yet.
+    </div>
+  <% } else { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50 border-b border-gray-200">
+          <tr>
+            <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Player</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Workshop</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Case</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Score</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Session</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Completed</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <% rows.forEach(r => {
+            const pct = r.max_score ? Math.round((r.score / r.max_score) * 100) : 0;
+            const tone = pct >= 80 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-gray-500';
+          %>
+            <tr class="hover:bg-gray-50/50">
+              <td class="px-3 py-2 font-semibold text-gray-900"><%= r.player_name %></td>
+              <td class="px-2 py-2 text-xs text-gray-600"><%= r.workshop_title %></td>
+              <td class="px-2 py-2 text-xs text-gray-600">Case <%= r.case_letter %></td>
+              <td class="px-2 py-2 text-xs font-mono font-bold tabular-nums <%= tone %>"><%= r.score %><span class="text-gray-400 font-normal">/<%= r.max_score %></span></td>
+              <td class="px-2 py-2 text-xs text-gray-500 font-mono">
+                <% if (r.session_code) { %>
+                  <a href="/safety-workshops/sessions/<%= r.session_code %>" class="text-brand-700 hover:text-brand-800"><%= r.session_code %></a>
+                <% } else { %>—<% } %>
+              </td>
+              <td class="px-2 py-2 text-xs text-gray-500 tabular-nums"><%= fmtDateTime(r.completed_at || r.started_at) %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>

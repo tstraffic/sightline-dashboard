@@ -319,6 +319,11 @@ app.use('/safety-updates', requireLogin, requirePermission('safety_updates'), re
 app.use('/toolbox-talks', requireLogin, requirePermission('toolbox_talks'), require('./routes/toolbox-talks'));
 app.use('/safety-comments', requireLogin, requirePermission('safety_comments'), require('./routes/safety-comments'));
 app.use('/safety-quizzes', requireLogin, requirePermission('safety_quizzes'), require('./routes/safety-quizzes'));
+app.use('/safety-workshops', requireLogin, requirePermission('safety_workshops'), require('./routes/safety-workshops'));
+// /wq/:code is public-no-auth (capability = session_code from QR). CSRF
+// is skipped for this prefix in middleware/csrf.js; the session_code
+// lives in the URL so it's already in any request.
+app.use('/wq', require('./routes/workshop-participant'));
 app.use('/safety-reports', requireLogin, requirePermission('safety_reports'), require('./routes/safety-reports'));
 app.use('/risk-assessments', requireLogin, requirePermission('risk_assessments'), require('./routes/risk-assessments'));
 app.use('/voc-assessments', requireLogin, requirePermission('voc'), require('./routes/voc-assessments'));

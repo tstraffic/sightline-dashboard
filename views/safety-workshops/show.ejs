@@ -1,0 +1,93 @@
+<% locals.currentPage = 'safety-workshops' %>
+<%
+  function fmtDateTime(s) {
+    if (!s) return '—';
+    return new Date(s).toLocaleString('en-AU', {
+      timeZone: 'Australia/Sydney',
+      day: 'numeric', month: 'short', year: 'numeric',
+      hour: 'numeric', minute: '2-digit',
+    });
+  }
+  function statusBadge(s) {
+    if (s === 'open')   return '<span class="inline-flex items-center gap-1 text-[10px] font-bold tracking-widest text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full uppercase"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>Open</span>';
+    if (s === 'closed') return '<span class="text-[10px] font-bold tracking-widest text-gray-500 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full uppercase">Closed</span>';
+    return '<span class="text-[10px] font-bold tracking-widest text-gray-400 bg-gray-50 border border-gray-200 px-2 py-0.5 rounded-full uppercase">' + s + '</span>';
+  }
+%>
+
+<div class="max-w-5xl mx-auto space-y-5">
+  <a href="/safety-workshops" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    All workshops
+  </a>
+
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div class="min-w-0">
+      <p class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Workshop</p>
+      <h1 class="text-2xl font-bold text-gray-900 mt-1"><%= workshop.title %></h1>
+      <% if (workshop.description) { %>
+        <p class="text-sm text-gray-600 mt-2 max-w-2xl"><%= workshop.description %></p>
+      <% } %>
+    </div>
+    <form method="POST" action="/safety-workshops/<%= workshop.slug %>/sessions">
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+      <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m6-6H6"/></svg>
+        Start a new session
+      </button>
+    </form>
+  </div>
+
+  <!-- Cases overview -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-200 bg-gray-50">
+      <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Cases in this workshop</p>
+    </div>
+    <ul class="divide-y divide-gray-100">
+      <% cases.forEach(c => { %>
+        <li class="px-4 py-3 flex items-center gap-3">
+          <span class="w-7 h-7 rounded-md bg-brand-600 text-white text-xs font-bold flex items-center justify-center shrink-0"><%= c.letter %></span>
+          <span class="text-sm font-semibold text-gray-900 flex-1 min-w-0 truncate"><%= c.title %></span>
+          <span class="text-xs text-gray-500 hidden sm:inline"><%= c.where %></span>
+        </li>
+      <% }) %>
+    </ul>
+  </div>
+
+  <!-- Sessions history -->
+  <div>
+    <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase px-1 mb-2">Recent sessions</p>
+    <% if (!sessions.length) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-8 text-center text-sm text-gray-500">
+        No sessions yet. Start one with the button above.
+      </div>
+    <% } else { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Code</th>
+              <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</th>
+              <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Facilitator</th>
+              <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Attempts</th>
+              <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Started</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% sessions.forEach(s => { %>
+              <tr class="hover:bg-gray-50/50">
+                <td class="px-3 py-2">
+                  <a href="/safety-workshops/sessions/<%= s.session_code %>" class="font-mono font-bold text-brand-700 hover:text-brand-800"><%= s.session_code %></a>
+                </td>
+                <td class="px-2 py-2"><%- statusBadge(s.status) %></td>
+                <td class="px-2 py-2 text-xs text-gray-600"><%= s.facilitator_name || '—' %></td>
+                <td class="px-2 py-2 text-xs text-gray-900 tabular-nums font-semibold"><%= s.attempts %></td>
+                <td class="px-2 py-2 text-xs text-gray-500 tabular-nums"><%= fmtDateTime(s.created_at) %></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    <% } %>
+  </div>
+</div>

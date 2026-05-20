@@ -1,0 +1,184 @@
+<% locals.currentPage = 'safety-workshops' %>
+<%
+  function fmtTime(s) {
+    if (!s) return '';
+    return new Date(s).toLocaleTimeString('en-AU', {
+      timeZone: 'Australia/Sydney', hour: 'numeric', minute: '2-digit',
+    });
+  }
+%>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+<div class="max-w-6xl mx-auto space-y-5">
+  <a href="/safety-workshops/<%= session.workshop_slug %>" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    Back to <%= session.workshop_title %>
+  </a>
+
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <p class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Live session · <%= session.workshop_title %></p>
+      <h1 class="text-3xl font-bold text-gray-900 mt-1 font-mono tracking-wide"><%= session.session_code %></h1>
+      <p class="text-sm text-gray-500 mt-1">
+        Facilitator: <%= session.facilitator_name || '—' %> · Started <%= fmtTime(session.created_at) %>
+      </p>
+    </div>
+    <% if (session.status === 'open') { %>
+      <form method="POST" action="/safety-workshops/sessions/<%= session.session_code %>/close" onsubmit="return confirm('Close this session? Participants will not be able to join or submit after this.');">
+        <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+        <button type="submit" class="px-3 py-2 bg-white border border-rose-200 hover:bg-rose-50 text-rose-700 text-sm font-medium rounded-lg">
+          Close session
+        </button>
+      </form>
+    <% } else { %>
+      <span class="text-[10px] font-bold tracking-widest text-gray-500 bg-gray-100 border border-gray-200 px-3 py-1 rounded-full uppercase">Closed</span>
+    <% } %>
+  </div>
+
+  <div class="grid md:grid-cols-5 gap-5">
+    <!-- LEFT: QR + URL + case assignments -->
+    <div class="md:col-span-2 space-y-4">
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase mb-3">Scan to join</p>
+        <div id="qrBox" class="bg-white border border-gray-200 rounded-lg p-3 flex items-center justify-center min-h-[220px]"></div>
+        <div class="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-xs font-mono text-gray-700 break-all"><%= participantUrl %></div>
+        <p class="text-xs text-gray-500 mt-3">Project this screen in the workshop room. Office staff scan with their phone.</p>
+      </div>
+
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+          <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Case assignments</p>
+          <span id="assignedCount" class="text-xs font-semibold text-gray-500 tabular-nums"><%= assignments.length %> joined</span>
+        </div>
+        <ul id="assignList" class="divide-y divide-gray-100">
+          <% cases.forEach(c => {
+            const who = assignments.find(a => a.case_letter === c.letter);
+          %>
+            <li class="px-4 py-2.5 flex items-center gap-3">
+              <span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0"><%= c.letter %></span>
+              <span class="text-xs text-gray-600 flex-1 min-w-0 truncate"><%= c.title %></span>
+              <% if (who) { %>
+                <span class="text-xs font-semibold text-emerald-700 truncate"><%= who.player_name %></span>
+              <% } else { %>
+                <span class="text-[10px] text-gray-400 uppercase tracking-widest">Free</span>
+              <% } %>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    </div>
+
+    <!-- RIGHT: leaderboard -->
+    <div class="md:col-span-3">
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+          <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Leaderboard</p>
+          <span class="text-xs text-gray-400">Auto-refreshing</span>
+        </div>
+        <div id="leaderboard">
+          <% if (!attempts.length) { %>
+            <p class="px-5 py-10 text-center text-sm text-gray-500">Waiting on first submission…</p>
+          <% } else { %>
+            <ol class="divide-y divide-gray-100">
+              <% attempts.forEach((a, i) => {
+                const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
+                const pct = a.max_score ? Math.round((a.score / a.max_score) * 100) : 0;
+                const tone = pct >= 80 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-gray-500';
+              %>
+                <li class="px-4 py-2.5 flex items-center gap-3">
+                  <span class="w-7 text-center text-sm font-bold text-gray-700"><%= medal %></span>
+                  <span class="font-semibold text-gray-900 flex-1 min-w-0 truncate"><%= a.player_name %></span>
+                  <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Case <%= a.case_letter %></span>
+                  <span class="font-mono font-bold tabular-nums <%= tone %>"><%= a.score %><span class="text-gray-400 font-normal">/<%= a.max_score %></span></span>
+                </li>
+              <% }) %>
+            </ol>
+          <% } %>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var participantUrl = <%- JSON.stringify(participantUrl) %>;
+  var sessionCode = <%- JSON.stringify(session.session_code) %>;
+  var sessionStatus = <%- JSON.stringify(session.status) %>;
+  var caseTitles = <%- JSON.stringify(cases) %>;
+
+  // ── Render QR code (qrcodejs from CDN) ──
+  if (window.QRCode) {
+    try {
+      new QRCode(document.getElementById('qrBox'), {
+        text: participantUrl, width: 220, height: 220,
+        colorDark: '#111827', colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M,
+      });
+    } catch (e) {
+      document.getElementById('qrBox').textContent = 'QR render failed — use the URL below.';
+    }
+  } else {
+    document.getElementById('qrBox').textContent = 'QR library failed to load — use the URL below.';
+  }
+
+  // ── Auto-refresh participants + leaderboard every 4s ──
+  if (sessionStatus !== 'open') return; // closed sessions don't poll
+  var pollUrl = '/safety-workshops/sessions/' + encodeURIComponent(sessionCode) + '/live';
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (m) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m];
+    });
+  }
+  function renderAssignments(assignments) {
+    document.getElementById('assignedCount').textContent =
+      assignments.length + ' joined';
+    var byCase = {};
+    assignments.forEach(function (a) { byCase[a.case_letter] = a; });
+    var html = caseTitles.map(function (c) {
+      var who = byCase[c.letter];
+      return '<li class="px-4 py-2.5 flex items-center gap-3">' +
+        '<span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">' + c.letter + '</span>' +
+        '<span class="text-xs text-gray-600 flex-1 min-w-0 truncate">' + escapeHtml(c.title) + '</span>' +
+        (who
+          ? '<span class="text-xs font-semibold text-emerald-700 truncate">' + escapeHtml(who.player_name) + '</span>'
+          : '<span class="text-[10px] text-gray-400 uppercase tracking-widest">Free</span>') +
+        '</li>';
+    }).join('');
+    document.getElementById('assignList').innerHTML = html;
+  }
+  function renderLeaderboard(attempts) {
+    var box = document.getElementById('leaderboard');
+    if (!attempts.length) {
+      box.innerHTML = '<p class="px-5 py-10 text-center text-sm text-gray-500">Waiting on first submission…</p>';
+      return;
+    }
+    var medals = ['🥇', '🥈', '🥉'];
+    var html = '<ol class="divide-y divide-gray-100">' + attempts.map(function (a, i) {
+      var medal = i < 3 ? medals[i] : (i + 1) + '.';
+      var pct = a.max_score ? Math.round((a.score / a.max_score) * 100) : 0;
+      var tone = pct >= 80 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-gray-500';
+      return '<li class="px-4 py-2.5 flex items-center gap-3">' +
+        '<span class="w-7 text-center text-sm font-bold text-gray-700">' + medal + '</span>' +
+        '<span class="font-semibold text-gray-900 flex-1 min-w-0 truncate">' + escapeHtml(a.player_name) + '</span>' +
+        '<span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Case ' + a.case_letter + '</span>' +
+        '<span class="font-mono font-bold tabular-nums ' + tone + '">' + a.score + '<span class="text-gray-400 font-normal">/' + a.max_score + '</span></span>' +
+        '</li>';
+    }).join('') + '</ol>';
+    box.innerHTML = html;
+  }
+  function poll() {
+    fetch(pollUrl, { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (j) {
+        if (!j) return;
+        renderAssignments(j.assignments || []);
+        renderLeaderboard(j.attempts || []);
+        if (j.status !== 'open') location.reload(); // session was closed elsewhere
+      })
+      .catch(function () { /* swallow transient network errors */ });
+  }
+  setInterval(poll, 4000);
+})();
+</script>

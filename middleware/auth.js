@@ -86,6 +86,10 @@ const PERMISSIONS = {
   // ── Safety Quizzes (knowledge-check builder; office authors, workers take) ──
   safety_quizzes: ['admin', 'safety', 'operations', 'planning'],
 
+  // ── Safety Workshops (facilitator-led office crew exercise; admins run
+  //     sessions, office staff scan a QR and play on their phones) ──
+  safety_workshops: ['admin', 'safety', 'operations', 'planning'],
+
   // ── Safety Reports (compliance + engagement dashboards; tighter than other
   //     Safety modules — admin/safety/management only, not ops/planning) ──
   safety_reports: ['admin', 'safety', 'management'],
