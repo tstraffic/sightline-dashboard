@@ -28,6 +28,64 @@ const WORKSHOPS = {
   'swms-01': swms01,
 };
 
+// ── Soft launch gate ──
+// Workshops is new and we don't want every admin opening it before it's
+// been piloted. Anyone with the safety_workshops permission can REACH
+// this router (gated upstream in server.js), but they need the shared
+// password below to actually use it. Cleared by setting an unlock flag
+// on the admin session, scoped to that browser session.
+//
+// To change the password without a code push, set WORKSHOPS_PASSWORD on
+// Railway. To remove the lock entirely, set WORKSHOPS_UNLOCKED=true and
+// the middleware short-circuits.
+const WORKSHOPS_PASSWORD = (process.env.WORKSHOPS_PASSWORD || 'safety').trim();
+const WORKSHOPS_GATE_DISABLED = process.env.WORKSHOPS_UNLOCKED === 'true';
+
+// Render the unlock screen. Lives above the gate middleware so visiting
+// it doesn't redirect-loop.
+router.get('/unlock', (req, res) => {
+  if (WORKSHOPS_GATE_DISABLED || (req.session && req.session.workshopsUnlocked)) {
+    return res.redirect('/safety-workshops');
+  }
+  res.render('safety-workshops/unlock', {
+    title: 'Workshops',
+    currentPage: 'safety-workshops',
+  });
+});
+
+// Validate the password. On success, set the per-session flag and bounce
+// back to the workshops list. On failure, flash + redirect to the unlock
+// screen — no specific error wording so we don't leak "the password
+// exists, you got it wrong" vs "the password was removed" etc.
+router.post('/unlock', (req, res) => {
+  const pw = String((req.body && req.body.password) || '').trim();
+  if (pw && pw === WORKSHOPS_PASSWORD) {
+    req.session.workshopsUnlocked = true;
+    try {
+      logActivity({
+        user: req.session.user,
+        action: 'unlock',
+        entityType: 'workshops_module',
+        entityId: 0,
+        entityLabel: 'Workshops module unlocked',
+        ip: req.ip,
+      });
+    } catch (e) {}
+    return res.redirect('/safety-workshops');
+  }
+  req.flash('error', 'Wrong password.');
+  return res.redirect('/safety-workshops/unlock');
+});
+
+// Gate everything below this line. Anything registered AFTER this
+// router.use call inherits the check; the two /unlock routes above
+// stay reachable.
+router.use((req, res, next) => {
+  if (WORKSHOPS_GATE_DISABLED) return next();
+  if (req.session && req.session.workshopsUnlocked) return next();
+  return res.redirect('/safety-workshops/unlock');
+});
+
 // Unambiguous 6-char session-code alphabet. Skips 0/O/I/1/L to keep the
 // QR code legible and easy to type by hand if the camera fails.
 const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
