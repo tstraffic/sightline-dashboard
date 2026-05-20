@@ -1,8 +1,8 @@
 // Atomis Crew — Service Worker (PWA + push)
-// v7: home-screen install icon switched to the Snow / "Inverted · on light"
-// brand variant so the employee app reads as white-bg on iOS + Android. Bump
-// CACHE_NAME so old clients shed the dark icon and pick up the new manifest.
-const CACHE_NAME = 'atomis-worker-v4';
+// v8: switch HTML fetch from network-first to stale-while-revalidate so
+// cached pages return instantly on tap and refresh in the background. Bump
+// CACHE_NAME so existing installs flush the old network-first cache.
+const CACHE_NAME = 'atomis-worker-v5';
 const VENDOR_CACHE = 'atomis-worker-vendor-v1';
 
 // All client-side renderer assets (pdfjs, docx-preview, jszip). All are
@@ -41,7 +41,11 @@ self.addEventListener('activate', function(event) {
 
 // Fetch — split strategies:
 //   - /vendor/{pdfjs,docx-preview,jszip}/* : cache-first (immutable bundles)
-//   - everything else : network-first (fallback to cache when offline)
+//   - everything else : stale-while-revalidate (cached response returns
+//     instantly; a network refresh runs in the background and updates the
+//     cache for the next visit). Trade: first nav after a server-side data
+//     change shows stale data once, then auto-refreshes on the next tap.
+//     Pull-to-refresh remains for users who want fresh data right now.
 self.addEventListener('fetch', function(event) {
   if (event.request.method !== 'GET') return;
   if (!event.request.url.startsWith(self.location.origin)) return;
@@ -67,16 +71,16 @@ self.addEventListener('fetch', function(event) {
   }
 
   event.respondWith(
-    fetch(event.request).then(function(response) {
-      if (response.ok) {
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then(function(cache) {
-          cache.put(event.request, responseClone);
+    caches.open(CACHE_NAME).then(function(cache) {
+      return cache.match(event.request).then(function(cached) {
+        const networkFetch = fetch(event.request).then(function(response) {
+          if (response.ok) cache.put(event.request, response.clone());
+          return response;
+        }).catch(function() {
+          return cached;
         });
-      }
-      return response;
-    }).catch(function() {
-      return caches.match(event.request);
+        return cached || networkFetch;
+      });
     })
   );
 });
