@@ -1,4 +1,46 @@
-/* Atomis Crew — Mobile-First Dark Theme */
+/* Atomis Crew — Worker Portal Theme (dark + light)
+ *
+ * Drives the mobile-first field crew app. The original portal was dark-only;
+ * theme parity with the admin dashboard was added in PR #408, gated by
+ * `<html data-theme="light|dark">` set in views/worker/layout.ejs.
+ *
+ * Pattern: dark is the default rule (no prefix). Light-mode counterparts
+ * are scoped to `:root[data-theme="light"]` and use !important to win
+ * against the dark utility-class !important rules below.
+ */
+
+/* ── Surfaces (drive layout chrome via classes, not inline styles) ── */
+.wh-header { background: #14171D; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.wh-header-avatar { background: #22262F; color: #F5F5F7; border: 1px solid rgba(255,255,255,0.08); }
+.wh-header-title { color: #fff; }
+.wh-header-sub { color: rgba(255,255,255,0.45); }
+.wh-header-btn { color: rgba(255,255,255,0.50); border-radius: 6px; }
+.wh-header-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
+.wh-tabnav { background: #14171D; border-top: 1px solid rgba(255,255,255,0.06); }
+
+:root[data-theme="light"] .wh-header {
+  background: #FFFFFF !important;
+  border-bottom-color: rgba(15,17,21,0.08) !important;
+}
+:root[data-theme="light"] .wh-header-avatar {
+  background: #F1F3F6 !important;
+  color: #0F1115 !important;
+  border-color: rgba(15,17,21,0.10) !important;
+}
+:root[data-theme="light"] .wh-header-title { color: #0F1115 !important; }
+:root[data-theme="light"] .wh-header-sub { color: #555A63 !important; }
+:root[data-theme="light"] .wh-header-btn { color: #555A63 !important; }
+:root[data-theme="light"] .wh-header-btn:hover { color: #0F1115 !important; background: rgba(15,17,21,0.05) !important; }
+:root[data-theme="light"] .wh-tabnav {
+  background: #FFFFFF !important;
+  border-top-color: rgba(15,17,21,0.08) !important;
+}
+
+/* Theme toggle icon visibility — moon in dark, sun in light. */
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
 /* ── Safe Area ── */
 .safe-area-top { padding-top: env(safe-area-inset-top, 0px); }
@@ -16,11 +58,20 @@ nav a { -webkit-tap-highlight-color: transparent; user-select: none; min-height:
 html {
   /* Set explicit dark background so iOS PWA standalone mode doesn't show
      UA-default white in the safe-area-bottom zone under the home
-     indicator. Matches Atomis Base. */
+     indicator. Matches Atomis Base. Flipped per-theme. */
   background: #0F1115;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
 }
+:root[data-theme="light"] html,
+:root[data-theme="light"] body.worker-portal { background: #F7F8FA !important; }
+body.worker-portal { color: rgba(255,255,255,0.92); }
+:root[data-theme="light"] body.worker-portal { color: #0F1115 !important; }
+
+/* Prevent horizontal overflow on mobile. Any view that accidentally
+   includes a wider element should clip rather than introduce a scroll
+   bar that breaks the column. */
+html, body { overflow-x: hidden; max-width: 100vw; }
 
 /* ── Input Zoom Prevention (iOS) ── */
 input[type="text"], input[type="password"], input[type="email"],
@@ -32,6 +83,7 @@ input[type="tel"], input[type="number"], select, textarea {
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 4px; }
+:root[data-theme="light"] ::-webkit-scrollbar-thumb { background: rgba(15,17,21,0.18); }
 
 /* ── PWA Standalone ──
    Top safe-area is handled by the `.safe-area-top` class on <header>
@@ -45,7 +97,9 @@ input[type="tel"], input[type="number"], select, textarea {
 /* ══════════════════════════════════════════════
    DARK THEME OVERRIDES
    Transform light Tailwind classes to dark theme
-   matching the Atomis admin dashboard aesthetic
+   matching the Atomis admin dashboard aesthetic.
+   Each rule has a `:root[data-theme="light"]` reset below to restore
+   the Tailwind defaults for light mode.
    ══════════════════════════════════════════════ */
 
 /* ── Background overrides ── */
@@ -53,6 +107,11 @@ input[type="tel"], input[type="number"], select, textarea {
 .bg-gray-50 { background: rgba(255,255,255,0.03) !important; }
 .bg-gray-100 { background: rgba(255,255,255,0.06) !important; }
 .bg-gray-200 { background: rgba(255,255,255,0.08) !important; }
+
+:root[data-theme="light"] .bg-white { background: #FFFFFF !important; }
+:root[data-theme="light"] .bg-gray-50 { background: #F9FAFB !important; }
+:root[data-theme="light"] .bg-gray-100 { background: #F3F4F6 !important; }
+:root[data-theme="light"] .bg-gray-200 { background: #E5E7EB !important; }
 
 /* ── Border overrides ── */
 .border-gray-100, .border-gray-200, .border-gray-300 {
@@ -63,6 +122,12 @@ input[type="tel"], input[type="number"], select, textarea {
   border-color: rgba(255,255,255,0.06) !important;
 }
 
+:root[data-theme="light"] .border-gray-100 { border-color: #F3F4F6 !important; }
+:root[data-theme="light"] .border-gray-200 { border-color: #E5E7EB !important; }
+:root[data-theme="light"] .border-gray-300 { border-color: #D1D5DB !important; }
+:root[data-theme="light"] .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #F3F4F6 !important; }
+:root[data-theme="light"] .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #E5E7EB !important; }
+
 /* ── Text overrides ── */
 .text-gray-900 { color: rgba(255,255,255,0.92) !important; }
 .text-gray-800 { color: rgba(255,255,255,0.85) !important; }
@@ -72,7 +137,16 @@ input[type="tel"], input[type="number"], select, textarea {
 .text-gray-400 { color: rgba(255,255,255,0.35) !important; }
 .text-gray-300 { color: rgba(255,255,255,0.25) !important; }
 
-/* ── Brand color → Atomis Emerald ── */
+:root[data-theme="light"] .text-gray-900 { color: #111827 !important; }
+:root[data-theme="light"] .text-gray-800 { color: #1F2937 !important; }
+:root[data-theme="light"] .text-gray-700 { color: #374151 !important; }
+:root[data-theme="light"] .text-gray-600 { color: #4B5563 !important; }
+:root[data-theme="light"] .text-gray-500 { color: #6B7280 !important; }
+:root[data-theme="light"] .text-gray-400 { color: #9CA3AF !important; }
+:root[data-theme="light"] .text-gray-300 { color: #D1D5DB !important; }
+:root[data-theme="light"] .text-white { color: #111827 !important; }
+
+/* ── Brand color → Atomis Emerald (same in both modes) ── */
 .text-brand-600, .text-brand-500 { color: #10B981 !important; }
 .text-brand-400 { color: #6EE7B7 !important; }
 .bg-brand-600 { background: #10B981 !important; color: #0F1115 !important; }
@@ -82,12 +156,23 @@ input[type="tel"], input[type="number"], select, textarea {
 .border-brand-600, .border-brand-500 { border-color: #10B981 !important; }
 .ring-brand-500 { --tw-ring-color: rgba(16,185,129,0.4) !important; }
 
+:root[data-theme="light"] .text-brand-600 { color: #047857 !important; }
+:root[data-theme="light"] .text-brand-500 { color: #059669 !important; }
+:root[data-theme="light"] .bg-brand-50 { background: #ECFDF5 !important; }
+:root[data-theme="light"] .bg-brand-100 { background: #D1FAE5 !important; }
+
 /* ── Status badge backgrounds (keep legible on dark) ── */
 .bg-emerald-50 { background: rgba(16,185,129,0.12) !important; }
 .bg-amber-50 { background: rgba(245,158,11,0.12) !important; }
 .bg-red-50 { background: rgba(239,68,68,0.12) !important; }
 .bg-blue-50 { background: rgba(59,130,246,0.12) !important; }
 .bg-purple-50 { background: rgba(139,92,246,0.12) !important; }
+
+:root[data-theme="light"] .bg-emerald-50 { background: #ECFDF5 !important; }
+:root[data-theme="light"] .bg-amber-50 { background: #FFFBEB !important; }
+:root[data-theme="light"] .bg-red-50 { background: #FEF2F2 !important; }
+:root[data-theme="light"] .bg-blue-50 { background: #EFF6FF !important; }
+:root[data-theme="light"] .bg-purple-50 { background: #FAF5FF !important; }
 
 /* ── Ring overrides for badges ── */
 .ring-emerald-500\/20 { --tw-ring-color: rgba(16,185,129,0.2) !important; }
@@ -109,6 +194,11 @@ a.active\:bg-gray-50:active, .active\:bg-gray-50:active {
   background: rgba(255,255,255,0.08) !important;
 }
 
+:root[data-theme="light"] a.active\:bg-gray-50:active,
+:root[data-theme="light"] .active\:bg-gray-50:active { background: #F9FAFB !important; }
+:root[data-theme="light"] .hover\:bg-gray-50:hover { background: #F9FAFB !important; }
+:root[data-theme="light"] .hover\:bg-gray-100:hover { background: #F3F4F6 !important; }
+
 /* ── Form inputs (dark) ── */
 .bg-white.border.rounded-lg,
 input.bg-white, select.bg-white, textarea.bg-white {
@@ -123,6 +213,23 @@ input::placeholder, textarea::placeholder {
   color: rgba(255,255,255,0.3) !important;
 }
 
+:root[data-theme="light"] input.bg-white,
+:root[data-theme="light"] select.bg-white,
+:root[data-theme="light"] textarea.bg-white,
+:root[data-theme="light"] .bg-white.border.rounded-lg {
+  background: #FFFFFF !important;
+  border-color: #D1D5DB !important;
+  color: #111827 !important;
+}
+:root[data-theme="light"] input::placeholder,
+:root[data-theme="light"] textarea::placeholder {
+  color: #9CA3AF !important;
+}
+:root[data-theme="light"] .placeholder-gray-400::placeholder,
+:root[data-theme="light"] .placeholder-gray-500::placeholder {
+  color: #9CA3AF !important;
+}
+
 /* ── Rounded card containers ── */
 .rounded-xl.border.border-gray-200,
 .rounded-lg.border.border-gray-200,
@@ -130,21 +237,36 @@ input::placeholder, textarea::placeholder {
 .border.border-gray-200.rounded-lg {
   border-color: rgba(255,255,255,0.08) !important;
 }
+:root[data-theme="light"] .rounded-xl.border.border-gray-200,
+:root[data-theme="light"] .rounded-lg.border.border-gray-200,
+:root[data-theme="light"] .border.border-gray-200.rounded-xl,
+:root[data-theme="light"] .border.border-gray-200.rounded-lg {
+  border-color: #E5E7EB !important;
+}
 
 /* ── Tab bar (light → dark) ── */
 .border-b.border-gray-200 {
   border-color: rgba(255,255,255,0.08) !important;
 }
+:root[data-theme="light"] .border-b.border-gray-200 { border-color: #E5E7EB !important; }
 
 /* ── Shadow overrides (subtle glow on dark) ── */
 .shadow-sm { box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important; }
 .shadow-lg { box-shadow: 0 8px 24px rgba(0,0,0,0.4) !important; }
+:root[data-theme="light"] .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important; }
+:root[data-theme="light"] .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.05) !important; }
 
 /* ── Search input on forms page ── */
 input[type="search"], input[type="text"].bg-white {
   background: rgba(255,255,255,0.06) !important;
   border-color: rgba(255,255,255,0.1) !important;
   color: white !important;
+}
+:root[data-theme="light"] input[type="search"],
+:root[data-theme="light"] input[type="text"].bg-white {
+  background: #FFFFFF !important;
+  border-color: #D1D5DB !important;
+  color: #111827 !important;
 }
 
 /* ════════════════════════════════════════════════════════════════════
@@ -180,4 +302,39 @@ input[type="search"], input[type="text"].bg-white {
 }
 .wd-stat-tile, .wd-card[data-tone] {
   background-image: none !important;
+}
+
+/* Light-mode card surface: white with hairline border + subtle shadow. */
+:root[data-theme="light"] .wd-card {
+  background-color: #FFFFFF !important;
+  border-color: #E5E7EB !important;
+  color: #111827 !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 1px 3px rgba(0,0,0,0.04) !important;
+}
+:root[data-theme="light"] .wd-card[data-tone="warning"] {
+  background-color: #FFFBEB !important;
+  border-color: #FDE68A !important;
+}
+:root[data-theme="light"] .wd-card[data-tone="success"] {
+  background-color: #ECFDF5 !important;
+  border-color: #A7F3D0 !important;
+}
+:root[data-theme="light"] .wd-card[data-tone="accent"] {
+  background-color: #F0FDFA !important;
+  border-color: #99F6E4 !important;
+}
+:root[data-theme="light"] .wd-card[data-tone="rose"] {
+  background-color: #FFF1F2 !important;
+  border-color: #FECDD3 !important;
+}
+
+/* Worker-design text token overrides for light mode — the variables in
+   worker-design.css are set in dark mode at :root. */
+:root[data-theme="light"] {
+  --wd-text-strong: #0F1115;
+  --wd-text-base: rgba(15, 17, 21, 0.86);
+  --wd-text-muted: rgba(15, 17, 21, 0.55);
+  --wd-text-dim: rgba(15, 17, 21, 0.40);
+  --wd-elev-1-border: rgba(15, 17, 21, 0.08);
+  --wd-neutral-bg: rgba(15, 17, 21, 0.04);
 }

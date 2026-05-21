@@ -1,24 +1,50 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
+  <script>
+    // Theme bootstrap — shares the 'atomis-theme' localStorage key with the
+    // admin dashboard so a worker who toggles on one side carries it across.
+    // Runs before render to prevent FOUC.
+    (function () {
+      try {
+        var saved = localStorage.getItem('atomis-theme');
+        var t = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+    window.toggleAtomisTheme = function () {
+      var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      var next = cur === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('atomis-theme', next); } catch (e) {}
+    };
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.theme-toggle');
+      if (!btn) return;
+      e.preventDefault();
+      window.toggleAtomisTheme();
+    });
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="T&S Crew">
   <meta name="theme-color" content="#0F1115">
-  <!-- The worker portal mixes a dark page background with intentionally
-       white form cards. Tell the browser we're rendering "light" form
-       controls so iOS Safari / Chrome dark mode doesn't auto-invert input
-       backgrounds (which made text fields look like blank white blocks). -->
-  <meta name="color-scheme" content="dark">
+  <!-- Both schemes so native controls (date/time pickers, selects) adapt
+       to whichever theme the page is in (set by the bootstrap above). -->
+  <meta name="color-scheme" content="dark light">
   <style>
-    /* Backstop: any input/select/textarea inside a worker form must use a
-       white bg + dark text regardless of OS dark-mode. The Tailwind classes
-       on each input set this too — these rules just make the floor explicit. */
-    input[type=text], input[type=number], input[type=tel], input[type=email],
-    input[type=password], input[type=search], input[type=date], input[type=time],
-    input[type=datetime-local], input[type=url], select, textarea {
+    /* Backstop: in dark mode keep form controls forced to light scheme so
+       iOS doesn't auto-invert them. Light mode lets the browser pick. */
+    :root[data-theme="dark"] input[type=text], :root[data-theme="dark"] input[type=number],
+    :root[data-theme="dark"] input[type=tel], :root[data-theme="dark"] input[type=email],
+    :root[data-theme="dark"] input[type=password], :root[data-theme="dark"] input[type=search],
+    :root[data-theme="dark"] input[type=date], :root[data-theme="dark"] input[type=time],
+    :root[data-theme="dark"] input[type=datetime-local], :root[data-theme="dark"] input[type=url],
+    :root[data-theme="dark"] select, :root[data-theme="dark"] textarea {
       color-scheme: light;
     }
   </style>
@@ -78,11 +104,11 @@
     }
   </script>
   <link rel="stylesheet" href="/css/custom.css?v=atomis-5">
-  <link rel="stylesheet" href="/css/worker.css?v=atomis-1">
-  <link rel="stylesheet" href="/css/worker-design.css?v=atomis-1">
+  <link rel="stylesheet" href="/css/worker.css?v=atomis-2">
+  <link rel="stylesheet" href="/css/worker-design.css?v=atomis-2">
   <link rel="stylesheet" href="/css/chat.css?v=atomis-1">
 </head>
-<body class="worker-portal h-full font-sans antialiased flex flex-col" style="color: rgba(255,255,255,0.92);">
+<body class="worker-portal h-full font-sans antialiased flex flex-col">
 
   <%- include('../partials/staging-badge') %>
 
@@ -132,26 +158,33 @@
     }
   </style>
 
-  <!-- Top Header — Atomis charcoal. Covers the iOS safe-area-top zone so
-       the notch reads as the header rather than empty body. -->
-  <header class="shrink-0 safe-area-top" style="background: #14171D; border-bottom: 1px solid rgba(255,255,255,0.06);">
-    <div class="flex items-center justify-between px-4 h-11">
+  <!-- Top Header — Atomis charcoal in dark mode, white in light mode (see
+       worker.css overrides for `.wh-header`). Covers the iOS safe-area-top
+       zone so the notch reads as the header rather than empty body. -->
+  <header class="wh-header shrink-0 safe-area-top">
+    <div class="flex items-center justify-between px-3 h-11 gap-2">
       <% if (typeof worker !== 'undefined' && worker) { %>
-        <a href="/w/profile" aria-label="Profile" class="w-8 h-8 flex items-center justify-center text-[11px] font-semibold shrink-0 active:scale-95 transition" style="background:#22262F;color:#F5F5F7;border:1px solid rgba(255,255,255,0.08);border-radius:6px">
+        <a href="/w/profile" aria-label="Profile" class="wh-header-avatar w-8 h-8 flex items-center justify-center text-[11px] font-semibold shrink-0 active:scale-95 transition" style="border-radius:6px">
           <%= worker.full_name.split(' ').map(n => n[0]).join('').slice(0,2) %>
         </a>
       <% } else { %>
-        <div class="w-8"></div>
+        <div class="w-8 shrink-0"></div>
       <% } %>
-      <div class="text-center">
-        <p class="text-sm font-medium text-white" style="font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.015em"><%= typeof title !== 'undefined' ? title : 'Home' %></p>
+      <div class="text-center min-w-0 flex-1">
+        <p class="wh-header-title text-sm font-medium truncate" style="font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.015em"><%= typeof title !== 'undefined' ? title : 'Home' %></p>
         <% if (typeof worker !== 'undefined' && worker) { %>
-          <p class="text-[10px] text-gray-500 truncate max-w-[200px]" style="font-family:'Geist Mono',monospace;letter-spacing:0.04em"><%= worker.full_name %></p>
+          <p class="wh-header-sub text-[10px] truncate" style="font-family:'Geist Mono',monospace;letter-spacing:0.04em"><%= worker.full_name %></p>
         <% } %>
       </div>
-      <button onclick="location.reload()" class="w-8 h-8 flex items-center justify-center text-gray-500 hover:text-white transition">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-      </button>
+      <div class="flex items-center gap-0.5 shrink-0">
+        <button type="button" class="theme-toggle wh-header-btn w-8 h-8 flex items-center justify-center transition" aria-label="Toggle theme" title="Toggle light/dark theme">
+          <svg class="icon-moon w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="icon-sun w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        </button>
+        <button onclick="location.reload()" class="wh-header-btn w-8 h-8 flex items-center justify-center transition" aria-label="Reload">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        </button>
+      </div>
     </div>
   </header>
 
@@ -174,8 +207,10 @@
   <% } %>
 
   <!-- Main Content — centred mobile-width column on desktop so the portal
-       doesn't look empty on wide screens -->
-  <main class="flex-1 overflow-auto w-full max-w-[520px] mx-auto" style="padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px));">
+       doesn't look empty on wide screens. Padding-inline picks up the
+       safe-area on devices with notches / Dynamic Island so content
+       doesn't get cropped against the curved edges. -->
+  <main class="flex-1 overflow-auto w-full max-w-[520px] mx-auto" style="padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
     <%- body %>
   </main>
 
@@ -221,7 +256,7 @@
       .wh-tab-bar a svg { transition: none; }
     }
   </style>
-  <nav class="fixed bottom-0 left-0 right-0 z-50" style="background: #14171D; border-top: 1px solid rgba(255,255,255,0.06); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
+  <nav class="wh-tabnav fixed bottom-0 left-0 right-0 z-50" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
     <div class="flex items-center justify-around h-16 px-0.5 max-w-[520px] mx-auto wh-tab-bar" id="wh-tab-bar">
       <span class="wh-tab-indicator" aria-hidden="true"></span>
       <% const cp = typeof currentPage !== 'undefined' ? currentPage : ''; %>
