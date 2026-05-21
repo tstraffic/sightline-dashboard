@@ -17,6 +17,12 @@
       document.documentElement.setAttribute('data-theme', next);
       try { localStorage.setItem('atomis-theme', next); } catch (e) {}
     };
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.theme-toggle');
+      if (!btn) return;
+      e.preventDefault();
+      window.toggleAtomisTheme();
+    });
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -91,6 +97,15 @@
     .ts-logo-light { display: none; }
     :root[data-theme="light"] .ts-logo-dark { display: none; }
     :root[data-theme="light"] .ts-logo-light { display: block; }
+    /* Reserve identical box for both logo variants so the left pane
+       doesn't shift dimensions when the toggle flips. */
+    .ts-logo-dark, .ts-logo-light {
+      width: 80%;
+      max-width: 340px;
+      height: 220px;
+      object-fit: contain;
+      object-position: center;
+    }
     html, body { height: 100%; }
     body {
       font-family: var(--font-body);
@@ -322,8 +337,8 @@
     <div class="left">
       <div class="left-inner">
         <div class="mark-stage">
-          <img class="ts-logo-dark" src="/images/ts-logo-white.png" alt="T&amp;S Traffic Control" style="max-width:340px;width:80%;height:auto">
-          <img class="ts-logo-light" src="/images/logo-colour.png" alt="T&amp;S Traffic Control" style="max-width:340px;width:80%;height:auto">
+          <img class="ts-logo-dark" src="/images/ts-logo-white.png" alt="T&amp;S Traffic Control">
+          <img class="ts-logo-light" src="/images/logo-colour.png" alt="T&amp;S Traffic Control">
         </div>
 
         <div class="headline-wrap">
@@ -337,7 +352,7 @@
 
     <!-- RIGHT PANE -->
     <div class="right" style="position:relative">
-      <button type="button" class="theme-toggle" onclick="window.toggleAtomisTheme()" aria-label="Toggle theme" title="Toggle light/dark theme">
+      <button type="button" class="theme-toggle" aria-label="Toggle theme" title="Toggle light/dark theme">
         <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
         <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
       </button>

@@ -19,6 +19,16 @@
       try { localStorage.setItem('atomis-theme', next); } catch (e) {}
       document.dispatchEvent(new CustomEvent('atomis:theme', { detail: next }));
     };
+    // Delegated click handler — bulletproofs the inline onclick on
+    // .theme-toggle. If the inline handler ever fails to fire (stale SW
+    // cache, CSP, click swallowed by SVG child, etc.) this still catches
+    // the click via bubble phase.
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.theme-toggle');
+      if (!btn) return;
+      e.preventDefault();
+      window.toggleAtomisTheme();
+    });
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
