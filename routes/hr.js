@@ -74,9 +74,21 @@ function refreshCompetencyStatuses(db, employeeId) {
 // ============================================
 // HR DASHBOARD
 // ============================================
+// The set of document types every active worker must have on file.
+// "Missing" means no row at all in employee_documents for that type —
+// not just unverified. Edit this list to change what the dashboard's
+// Missing Documents tab flags.
+const MANDATORY_DOC_TYPES = [
+  { key: 'white_card',       label: 'White Card' },
+  { key: 'licence',          label: 'Driver Licence' },
+  { key: 'contract',         label: 'Signed Contract' },
+  { key: 'induction_record', label: 'Induction Record' },
+];
+
 router.get('/', requirePermission('hr_dashboard'), (req, res) => {
   const db = getDb();
-  const { company, division, region, employment_type, manager_id } = req.query;
+  const { company, division, region, employment_type, manager_id, tab } = req.query;
+  const activeTab = tab === 'missing-docs' ? 'missing-docs' : 'overview';
 
   let baseWhere = '1=1';
   const params = [];
@@ -120,17 +132,34 @@ router.get('/', requirePermission('hr_dashboard'), (req, res) => {
     ORDER BY full_name
   `).all();
 
-  // Missing mandatory documents
-  const missingDocs = db.prepare(`
-    SELECT e.id, e.full_name, e.employee_code, e.company,
-      COUNT(CASE WHEN ed.verification_status != 'verified' THEN 1 END) as unverified_count
+  // Missing mandatory documents — for each active worker, which of the
+  // required document TYPES they don't have on file at all (no row in
+  // employee_documents, not just unverified).
+  const docTypeKeys = MANDATORY_DOC_TYPES.map(d => d.key);
+  const placeholders = docTypeKeys.map(() => '?').join(',');
+  const activeEmployees = db.prepare(`
+    SELECT e.id, e.full_name, e.employee_code, e.company, e.employment_status, e.start_date
     FROM employees e
-    LEFT JOIN employee_documents ed ON ed.employee_id = e.id AND ed.mandatory = 1
-    WHERE e.active = 1
-    GROUP BY e.id
-    HAVING unverified_count > 0
-    ORDER BY unverified_count DESC LIMIT 10
-  `).all();
+    WHERE ${baseWhere} AND e.active = 1 AND e.deleted_at IS NULL
+      AND e.employment_status IN ('active', 'reserved', 'on_leave')
+    ORDER BY e.full_name
+  `).all(...params);
+  const existingTypesByEmp = db.prepare(`
+    SELECT employee_id, document_type FROM employee_documents
+    WHERE document_type IN (${placeholders})
+  `).all(...docTypeKeys);
+  const docMap = {};
+  for (const row of existingTypesByEmp) {
+    (docMap[row.employee_id] = docMap[row.employee_id] || new Set()).add(row.document_type);
+  }
+  const missingDocs = activeEmployees
+    .map(emp => {
+      const have = docMap[emp.id] || new Set();
+      const missing = MANDATORY_DOC_TYPES.filter(d => !have.has(d.key));
+      return { ...emp, missing, missing_count: missing.length };
+    })
+    .filter(e => e.missing_count > 0)
+    .sort((a, b) => b.missing_count - a.missing_count || a.full_name.localeCompare(b.full_name));
 
   // Employment type breakdown for reports section
   const employmentTypes = db.prepare(`
@@ -160,8 +189,10 @@ router.get('/', requirePermission('hr_dashboard'), (req, res) => {
     expiringCompetencies,
     blockedWorkers,
     missingDocs,
+    mandatoryDocTypes: MANDATORY_DOC_TYPES,
     employmentTypes,
     headcountByDivision,
+    activeTab,
     filters: { company, division, region, employment_type, manager_id },
     filterOptions: { companies, divisions, regions, managers },
     user: req.session.user
