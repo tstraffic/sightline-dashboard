@@ -103,6 +103,83 @@ body, body.dark-glass {
 :root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
+/* ===== Sidebar — light theme overrides ===== */
+:root[data-theme="light"] #sidebar {
+  background: #FFFFFF !important;
+  border-right-color: rgba(15, 17, 21, 0.08) !important;
+}
+:root[data-theme="light"] #sidebar > a[href="/dashboard"] {
+  border-bottom-color: rgba(15, 17, 21, 0.08) !important;
+}
+:root[data-theme="light"] #sidebar > a[href="/dashboard"]:hover {
+  background: rgba(15, 17, 21, 0.04) !important;
+}
+/* Mobile sidebar header bar */
+:root[data-theme="light"] #sidebar > div.lg\:hidden {
+  background: #FFFFFF !important;
+}
+/* "Control Room" wordmark + close button */
+:root[data-theme="light"] #sidebar .text-white { color: #0F1115 !important; }
+:root[data-theme="light"] #sidebar-close { color: #555A63 !important; }
+:root[data-theme="light"] #sidebar-close:hover {
+  background: rgba(15, 17, 21, 0.06) !important;
+  color: #0F1115 !important;
+}
+/* T&S logo: white PNG isn't visible on light. Swap via filter (the
+   logo is a pure-white silhouette so invert reads as black). */
+:root[data-theme="light"] #sidebar img[src*="ts-logo-white"] {
+  filter: invert(1);
+}
+
+/* Nav links */
+:root[data-theme="light"] #sidebar .sidebar-link {
+  color: #374151 !important;
+}
+:root[data-theme="light"] #sidebar .sidebar-link:hover {
+  background: rgba(15, 17, 21, 0.05) !important;
+  color: #0F1115 !important;
+}
+/* Active link — Tailwind compiled `bg-white/15 text-white ring-white/10`.
+   Use ~= so `active:bg-white/15` (the hover/active variant on inactive
+   links) doesn't accidentally match. */
+:root[data-theme="light"] #sidebar a.sidebar-link[class~="bg-white/15"] {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #047857 !important;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.22) !important;
+}
+
+/* Section headings ("PLANNING", "SAFETY" etc.) — text-brand-400/45 */
+:root[data-theme="light"] #sidebar .text-brand-400\/45,
+:root[data-theme="light"] #sidebar p[class*="text-brand-400"] {
+  color: rgba(15, 17, 21, 0.42) !important;
+}
+/* Section dividers — border-white/10 */
+:root[data-theme="light"] #sidebar .border-white\/10,
+:root[data-theme="light"] #sidebar [class*="border-white/10"] {
+  border-color: rgba(15, 17, 21, 0.08) !important;
+}
+
+/* Mobile sidebar user/profile chips */
+:root[data-theme="light"] #sidebar [style*="background:rgba(255,255,255,0.04)"],
+:root[data-theme="light"] #sidebar [style*="background:rgba(255,255,255,0.05)"] {
+  background: rgba(15, 17, 21, 0.04) !important;
+}
+:root[data-theme="light"] #sidebar [style*="background:#22262F"] {
+  background: #F1F3F6 !important;
+  color: #0F1115 !important;
+}
+:root[data-theme="light"] #sidebar .text-gray-300,
+:root[data-theme="light"] #sidebar .text-gray-400,
+:root[data-theme="light"] #sidebar .text-gray-500 {
+  color: #555A63 !important;
+}
+
+/* Muted badges (counts next to nav items) */
+:root[data-theme="light"] #sidebar .sidebar-badge-muted {
+  background: rgba(15, 17, 21, 0.08) !important;
+  color: #374151 !important;
+}
+
 /* ===== Typography Refinements ===== */
 .line-clamp-2 {
   display: -webkit-box;
