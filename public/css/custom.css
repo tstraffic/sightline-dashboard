@@ -272,6 +272,54 @@ body, body.dark-glass {
   background-color: #F9FAFB;
   color: #6B7280;
 }
+/* Native <select> dropdown options — dark-glass paints them dark blue, which
+   then bleeds into the page when the dropdown opens in light mode. Override
+   to match Tailwind's default light option styling. */
+:root[data-theme="light"] body.dark-glass select option {
+  background-color: #FFFFFF !important;
+  color: #111827 !important;
+}
+/* Labels — dark-glass dims them to 70% white. Restore proper light contrast. */
+:root[data-theme="light"] body.dark-glass label {
+  color: #374151 !important;
+}
+
+/* ===== Dark-mode readability backstops =====
+   Forms with brand-tinted row backgrounds (e.g. compliance/_parent_form.ejs
+   sub-plan picker uses `hover:bg-brand-50/40` and `has-[:checked]:bg-brand-50`).
+   The compiled class names for those Tailwind variants are NOT just
+   `.bg-brand-50` — they're `.hover\:bg-brand-50\/40` and
+   `.has-\[\:checked\]\:bg-brand-50`. The `.dark-glass .bg-brand-50` override
+   doesn't match them, so on dark mode the rows keep their bright emerald-50
+   fill and the white-ish text on top becomes unreadable. Plus, the
+   `has-[:checked]` selector unexpectedly matches `<select>` rows because the
+   default option counts as `:checked`, so it triggers even with no checkbox
+   ticked. These backstops dim the brand wash to a dark-tinted surface so
+   labels stay legible. */
+.dark-glass [class*="bg-brand-50/"] {
+  background-color: rgba(16,185,129,0.06) !important;
+}
+.dark-glass [class*="hover:bg-brand-50/"]:hover {
+  background-color: rgba(16,185,129,0.10) !important;
+}
+.dark-glass [class*="bg-brand-100/"] {
+  background-color: rgba(16,185,129,0.08) !important;
+}
+/* `has-[:checked]:bg-brand-50` — applies the same dark tint when an inner
+   input is checked (or, in the select case, has any selected option). */
+.dark-glass [class*=":bg-brand-50"]:has(:checked) {
+  background-color: rgba(16,185,129,0.10) !important;
+}
+.dark-glass [class*=":bg-brand-100"]:has(:checked) {
+  background-color: rgba(16,185,129,0.12) !important;
+}
+/* Ensure label/span text inside the dark-glass shell is at least 85% white
+   when no explicit colour class was set. Catches the common pattern of an
+   un-classed <span> inside a form row. */
+.dark-glass label > span:not([class*="text-"]),
+.dark-glass form span:not([class*="text-"]) {
+  color: rgba(255,255,255,0.85);
+}
 
 /* ===== Typography Refinements ===== */
 .line-clamp-2 {
