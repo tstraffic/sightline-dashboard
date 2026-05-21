@@ -8,13 +8,17 @@
         </button>
         <% } %>
         <a href="/dashboard" class="header-logo-wrap flex items-center gap-2.5 sm:gap-3 group">
-          <img src="/images/atomis-mark.svg" alt="Atomis" class="h-6 sm:h-7 w-auto">
+          <img src="/images/atomis-mark-animated.svg" alt="Atomis" class="h-6 sm:h-7 w-auto">
           <% if (typeof title !== 'undefined' && title) { %>
           <span class="hidden sm:block text-gray-500 font-medium text-[14px] leading-none border-l border-gray-200 pl-3 ml-1" style="font-family:'Geist',sans-serif;letter-spacing:-0.01em"><%= title %></span>
           <% } %>
         </a>
       </div>
       <div class="flex items-center gap-1.5 sm:gap-3">
+        <button type="button" class="theme-toggle" onclick="window.toggleAtomisTheme()" aria-label="Toggle theme" title="Toggle light/dark theme">
+          <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+          <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+        </button>
         <% if (user) { %>
           <!-- Notification Bell + Popup -->
           <div class="relative" id="notif-container">
