@@ -104,6 +104,12 @@ body, body.dark-glass {
 :root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
+/* Sidebar T&S mark: white PNG in dark, coloured PNG in light */
+.sidebar-ts-mark-dark { display: block; }
+.sidebar-ts-mark-light { display: none; }
+:root[data-theme="light"] .sidebar-ts-mark-dark { display: none; }
+:root[data-theme="light"] .sidebar-ts-mark-light { display: block; }
+
 /* ===== Sidebar — light theme overrides ===== */
 :root[data-theme="light"] #sidebar {
   background: #FFFFFF !important;
