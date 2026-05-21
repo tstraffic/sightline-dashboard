@@ -757,9 +757,16 @@ table {
   .overflow-x-auto::-webkit-scrollbar { display: none; }
 }
 
-/* ===== PWA Standalone ===== */
+/* ===== PWA Standalone =====
+ * Body-level safe-area padding is applied to ADMIN pages only. The worker
+ * portal handles its own safe-area at the chrome layer (header carries
+ * .safe-area-top, tab nav extends edge-to-edge). Padding the body for
+ * worker.body would double-up: the body padding zone renders in the page
+ * bg (#F7F8FA in light mode) above the white header, producing a visible
+ * grey gap below the status bar. Same on the bottom edge under the tab
+ * bar. The :not(.worker-portal) scope keeps the admin behaviour intact. */
 @media (display-mode: standalone) {
-  body {
+  body:not(.worker-portal) {
     padding-top: env(safe-area-inset-top);
     padding-bottom: env(safe-area-inset-bottom);
     padding-left: env(safe-area-inset-left);

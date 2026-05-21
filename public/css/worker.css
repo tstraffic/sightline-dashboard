@@ -18,6 +18,30 @@
 .wh-header-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
 .wh-tabnav { background: #14171D; border-top: 1px solid rgba(255,255,255,0.06); }
 
+/* T&S wordmark next to the SA badge in the header. Two variants — one for
+ * each theme — so the logo stays legible on both surfaces. They share a
+ * fixed display box so toggling the theme doesn't shift the avatar. */
+.wh-header-brand {
+  display: inline-flex; align-items: center;
+  height: 28px;
+  flex-shrink: 0;
+}
+.wh-header-brand img {
+  height: 22px;
+  width: auto;
+  max-width: 110px;
+  object-fit: contain;
+  display: block;
+}
+/* Specificity note: `.wh-header-brand img { display: block }` above would
+ * otherwise win against a plain `.wh-header-brand-light` class selector
+ * (0,1,1 beats 0,1,0). Pin the variant rule to the descendant pattern so
+ * the hidden image actually stays hidden. */
+.wh-header-brand img.wh-header-brand-dark  { display: block; }
+.wh-header-brand img.wh-header-brand-light { display: none; }
+:root[data-theme="light"] .wh-header-brand img.wh-header-brand-dark  { display: none; }
+:root[data-theme="light"] .wh-header-brand img.wh-header-brand-light { display: block; }
+
 :root[data-theme="light"] .wh-header {
   background: #FFFFFF !important;
   /* Slightly stronger border + thin shadow so the bar is visually
@@ -58,6 +82,10 @@ main { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem);
 /* ── Touch Targets ── */
 a, button { min-height: 44px; }
 nav a { -webkit-tap-highlight-color: transparent; user-select: none; min-height: auto; }
+/* Header chrome elements opt out of the global 44px min — they live inside
+ * the h-11 header bar and need to be sized exactly by their utility
+ * classes so they don't stretch and touch the header borders. */
+.wh-header a, .wh-header button { min-height: 0; }
 
 /* ── Scrolling ── */
 html {
@@ -150,6 +178,24 @@ input[type="tel"], input[type="number"], select, textarea {
 :root[data-theme="light"] .text-gray-400 { color: #9CA3AF !important; }
 :root[data-theme="light"] .text-gray-300 { color: #D1D5DB !important; }
 :root[data-theme="light"] .text-white { color: #111827 !important; }
+/* Tailwind opacity-suffixed white utilities (text-white/40, text-white/50,
+ * etc.) are scattered across the worker portal and were designed for dark
+ * surfaces — they render as nearly-transparent white on the light page bg
+ * and become invisible. Map each tier onto a readable gray so the views
+ * don't need a per-file refactor. */
+:root[data-theme="light"] .text-white\/90 { color: #111827 !important; }
+:root[data-theme="light"] .text-white\/80 { color: #1F2937 !important; }
+:root[data-theme="light"] .text-white\/75 { color: #1F2937 !important; }
+:root[data-theme="light"] .text-white\/70 { color: #374151 !important; }
+:root[data-theme="light"] .text-white\/60 { color: #4B5563 !important; }
+:root[data-theme="light"] .text-white\/55 { color: #4B5563 !important; }
+:root[data-theme="light"] .text-white\/50 { color: #6B7280 !important; }
+:root[data-theme="light"] .text-white\/45 { color: #6B7280 !important; }
+:root[data-theme="light"] .text-white\/40 { color: #6B7280 !important; }
+:root[data-theme="light"] .text-white\/35 { color: #9CA3AF !important; }
+:root[data-theme="light"] .text-white\/30 { color: #9CA3AF !important; }
+:root[data-theme="light"] .text-white\/25 { color: #9CA3AF !important; }
+:root[data-theme="light"] .text-white\/20 { color: #D1D5DB !important; }
 
 /* ── Brand color → Atomis Emerald (same in both modes) ── */
 .text-brand-600, .text-brand-500 { color: #10B981 !important; }
@@ -357,3 +403,266 @@ input[type="search"], input[type="text"].bg-white {
 :root[data-theme="light"] .wd-stat-tile-value { color: #0F1115 !important; }
 :root[data-theme="light"] .wd-stat-tile-unit { color: #9CA3AF !important; }
 :root[data-theme="light"] .wd-stat-tile-sub { color: #6B7280 !important; }
+
+/* ── Wet weather PPE callout (.wc-warn) ──
+ * Default amber-on-amber + #fde68a text reads on the dark page; on the
+ * light page bg the whole pill washes out. Bump bg saturation + flip
+ * text to a real readable amber-on-cream. */
+:root[data-theme="light"] .wc-warn {
+  background: #FEF3C7 !important;
+  border-color: #FBBF24 !important;
+  color: #92400E !important;
+}
+
+/* ── Home page CTA alerts (SWMS / SOP / Quiz "needs your ack") ──
+ * Replaces a previous batch of inline styles in views/worker/home.ejs
+ * that hard-coded color: #fff + rgba(244,63,94,0.14) bg — invisible on
+ * the light page bg. The view now applies .wh-cta-alert + a --tone
+ * modifier and we theme both modes here. */
+.wh-cta-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.wh-cta-alert__icon {
+  width: 36px; height: 36px;
+  border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.wh-cta-alert__title { font-size: 0.85rem; font-weight: 700; }
+.wh-cta-alert__sub   { font-size: 0.7rem; margin-top: 2px; }
+.wh-cta-alert__body  { flex: 1; min-width: 0; }
+.wh-cta-alert__chev  { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* Rose (SWMS / SOP need ack) — danger-tinted. */
+.wh-cta-alert--rose {
+  background-image: linear-gradient(180deg, rgba(244,63,94,0.14) 0%, rgba(244,63,94,0.04) 100%);
+  border: 1px solid rgba(244,63,94,0.30);
+  color: #fff;
+}
+.wh-cta-alert--rose .wh-cta-alert__icon { background: rgba(244,63,94,0.18); color: #fda4af; }
+.wh-cta-alert--rose .wh-cta-alert__sub  { color: rgba(255,255,255,0.55); }
+.wh-cta-alert--rose .wh-cta-alert__chev { color: rgba(255,255,255,0.4); }
+
+:root[data-theme="light"] .wh-cta-alert--rose {
+  background-image: linear-gradient(180deg, #FFE4E6 0%, #FFF1F2 100%) !important;
+  border-color: #FECDD3 !important;
+  color: #881337 !important;
+}
+:root[data-theme="light"] .wh-cta-alert--rose .wh-cta-alert__icon { background: #FECDD3 !important; color: #BE123C !important; }
+:root[data-theme="light"] .wh-cta-alert--rose .wh-cta-alert__sub  { color: #9F1239 !important; }
+:root[data-theme="light"] .wh-cta-alert--rose .wh-cta-alert__chev { color: #BE123C !important; }
+
+/* Violet (Quizzes outstanding). */
+.wh-cta-alert--violet {
+  background-image: linear-gradient(180deg, rgba(139,92,246,0.14) 0%, rgba(139,92,246,0.04) 100%);
+  border: 1px solid rgba(139,92,246,0.30);
+  color: #fff;
+}
+.wh-cta-alert--violet .wh-cta-alert__icon { background: rgba(139,92,246,0.18); color: #c4b5fd; }
+.wh-cta-alert--violet .wh-cta-alert__sub  { color: rgba(255,255,255,0.55); }
+.wh-cta-alert--violet .wh-cta-alert__chev { color: rgba(255,255,255,0.4); }
+
+:root[data-theme="light"] .wh-cta-alert--violet {
+  background-image: linear-gradient(180deg, #EDE9FE 0%, #F5F3FF 100%) !important;
+  border-color: #DDD6FE !important;
+  color: #4C1D95 !important;
+}
+:root[data-theme="light"] .wh-cta-alert--violet .wh-cta-alert__icon { background: #DDD6FE !important; color: #6D28D9 !important; }
+:root[data-theme="light"] .wh-cta-alert--violet .wh-cta-alert__sub  { color: #5B21B6 !important; }
+:root[data-theme="light"] .wh-cta-alert--violet .wh-cta-alert__chev { color: #6D28D9 !important; }
+
+/* Generic feed/unread alert (used by .wh-cta-alert--feed for "X new feed
+ * updates") — kept neutral grey so it doesn't fight the rose/violet ones. */
+.wh-cta-alert--feed {
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #fff;
+}
+.wh-cta-alert--feed .wh-cta-alert__icon { background: rgba(255,255,255,0.10); color: #d1d5db; }
+.wh-cta-alert--feed .wh-cta-alert__sub  { color: rgba(255,255,255,0.55); }
+.wh-cta-alert--feed .wh-cta-alert__chev { color: rgba(255,255,255,0.4); }
+
+:root[data-theme="light"] .wh-cta-alert--feed {
+  background-image: linear-gradient(180deg, #F9FAFB 0%, #FFFFFF 100%) !important;
+  border-color: #E5E7EB !important;
+  color: #111827 !important;
+}
+:root[data-theme="light"] .wh-cta-alert--feed .wh-cta-alert__icon { background: #F3F4F6 !important; color: #4B5563 !important; }
+:root[data-theme="light"] .wh-cta-alert--feed .wh-cta-alert__sub  { color: #4B5563 !important; }
+:root[data-theme="light"] .wh-cta-alert--feed .wh-cta-alert__chev { color: #6B7280 !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SAFETY SUB-NAV (.saf-tab*)
+   Tab strip across /w/safety/{swms,sop-register,updates,toolboxes,...}.
+   The inline style version painted text white and the underline emerald;
+   in light mode that was white-on-white. Class-based now so it themes.
+   ═══════════════════════════════════════════════════════════════════════ */
+.saf-tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.saf-tab {
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  color: rgba(255,255,255,0.55);
+  min-height: 0;
+}
+.saf-tab.is-active { color: #fff; border-bottom-color: #10B981; }
+:root[data-theme="light"] .saf-tabs { border-bottom-color: #E5E7EB; }
+:root[data-theme="light"] .saf-tab { color: #6B7280; }
+:root[data-theme="light"] .saf-tab.is-active { color: #0F1115; border-bottom-color: #10B981; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SAFETY LIST PAGES (.saf-*)
+   All the dark text/bg values used in views/worker/safety/*-list.ejs.
+   The styles are defined inline in those views; this block overrides them
+   for light mode so the page actually reads.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"] .saf-wrap { color: #0F1115; }
+:root[data-theme="light"] .saf-h1   { color: #0F1115; }
+:root[data-theme="light"] .saf-sub  { color: #6B7280; }
+:root[data-theme="light"] .saf-helptext { color: #6B7280; }
+
+:root[data-theme="light"] .saf-stat {
+  background: #FFFFFF;
+  border-color: #E5E7EB;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+:root[data-theme="light"] .saf-stat .n { color: #0F1115; }
+:root[data-theme="light"] .saf-stat .l { color: #6B7280; }
+:root[data-theme="light"] .saf-stat.attention { background: #FEF2F2; border-color: #FECDD3; }
+:root[data-theme="light"] .saf-stat.attention .n { color: #BE123C; }
+:root[data-theme="light"] .saf-stat.done { background: #ECFDF5; border-color: #A7F3D0; }
+:root[data-theme="light"] .saf-stat.done .n { color: #047857; }
+
+:root[data-theme="light"] .saf-group-h {
+  background: #FFFFFF;
+  border-color: #E5E7EB;
+  color: #0F1115;
+}
+:root[data-theme="light"] .saf-group-h .count          { background: #F3F4F6; color: #374151; }
+:root[data-theme="light"] .saf-group-h .count.attention { background: #FFE4E6; color: #BE123C; }
+:root[data-theme="light"] .saf-group-h .count.done      { background: #D1FAE5; color: #047857; }
+:root[data-theme="light"] .saf-group-h .count.locked    { background: #E5E7EB; color: #4B5563; }
+:root[data-theme="light"] .saf-group-h .chev { opacity: 0.7; }
+
+:root[data-theme="light"] .saf-card {
+  background: #FFFFFF;
+  border-color: #E5E7EB;
+  color: #0F1115;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+:root[data-theme="light"] .saf-card:active { background: #F9FAFB; }
+:root[data-theme="light"] .saf-card.attention { background: #FEF2F2; border-color: #FECDD3; }
+:root[data-theme="light"] .saf-card.locked    { background: #F9FAFB; border-color: #E5E7EB; }
+:root[data-theme="light"] .saf-card-icon          { background: #F3F4F6; color: #4B5563; }
+:root[data-theme="light"] .saf-card-icon.attention { background: #FFE4E6; color: #BE123C; }
+:root[data-theme="light"] .saf-card-icon.done      { background: #D1FAE5; color: #047857; }
+:root[data-theme="light"] .saf-card-icon.locked    { background: #E5E7EB; color: #4B5563; }
+:root[data-theme="light"] .saf-card-title .name      { color: #0F1115; }
+:root[data-theme="light"] .saf-card-title .name.dim  { color: #4B5563; }
+:root[data-theme="light"] .saf-card-meta             { color: #6B7280; }
+
+:root[data-theme="light"] .saf-empty         { color: #6B7280; }
+:root[data-theme="light"] .saf-empty strong  { color: #0F1115; }
+
+:root[data-theme="light"] .saf-chip          { background: #F3F4F6; color: #374151; border-color: #E5E7EB; }
+:root[data-theme="light"] .saf-chip-needs    { background: #FEF2F2; color: #BE123C; }
+:root[data-theme="light"] .saf-chip-done     { background: #ECFDF5; color: #047857; }
+:root[data-theme="light"] .saf-chip-pending  { background: #FFFBEB; color: #B45309; }
+:root[data-theme="light"] .saf-chip-locked   { background: #F3F4F6; color: #4B5563; }
+:root[data-theme="light"] .saf-chip-kind     { background: #F3F4F6; color: #4B5563; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INLINE-STYLE NUKES — forms, feed, and a handful of other worker pages
+   set `style="color:white"` / `style="color:rgba(255,255,255,X)"` /
+   `style="background:rgba(255,255,255,X)"` directly on elements. CSS
+   attribute selectors + !important are the only way to override those
+   without touching every view. Light-mode only — dark mode keeps the
+   intended white text.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"] body.worker-portal [style*="color:white"],
+:root[data-theme="light"] body.worker-portal [style*="color: white"],
+:root[data-theme="light"] body.worker-portal [style*="color:#fff"],
+:root[data-theme="light"] body.worker-portal [style*="color: #fff"],
+:root[data-theme="light"] body.worker-portal [style*="color:#FFF"],
+:root[data-theme="light"] body.worker-portal [style*="color: #FFF"] {
+  color: #0F1115 !important;
+}
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.9"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.9"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255, 255, 255, 0.9"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255, 255, 255, 0.9"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.8"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.8"] {
+  color: #111827 !important;
+}
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.7"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.7"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255, 255, 255, 0.7"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255, 255, 255, 0.7"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.65"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.65"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.6"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.6"] {
+  color: #374151 !important;
+}
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.55"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.55"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.5"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.5"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.45"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.45"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.4"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.4"] {
+  color: #6B7280 !important;
+}
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.35"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.35"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.3"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.3"] {
+  color: #9CA3AF !important;
+}
+
+/* Inline-style backgrounds that paint white-on-near-transparent need to
+ * flip to a real surface in light mode. Same approach — attribute
+ * selector + !important. */
+:root[data-theme="light"] body.worker-portal [style*="background:rgba(255,255,255,0"],
+:root[data-theme="light"] body.worker-portal [style*="background: rgba(255,255,255,0"],
+:root[data-theme="light"] body.worker-portal [style*="background-color:rgba(255,255,255,0"],
+:root[data-theme="light"] body.worker-portal [style*="background-color: rgba(255,255,255,0"] {
+  background: #FFFFFF !important;
+  border-color: #E5E7EB !important;
+}
+
+/* Inline white borders → light-grey hairline. */
+:root[data-theme="light"] body.worker-portal [style*="border-bottom:1px solid rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border-bottom: 1px solid rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border:1px solid rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border: 1px solid rgba(255"] {
+  border-color: #E5E7EB !important;
+}
+
+/* The Home empty-state calendar icon (.wh-empty-ic) — bump contrast so
+ * the icon doesn't disappear inside the light circle. */
+:root[data-theme="light"] .wh-empty-ic { color: #374151 !important; background: #E5E7EB !important; }
+
+/* Form-list row separators on /w/forms use inline white borders. Already
+ * caught by the nuke above. Anchor links inside the list lose their
+ * default white text once .text-white kicks in, so make sure the row
+ * stays readable. */
+:root[data-theme="light"] .form-item { color: #0F1115 !important; }
+:root[data-theme="light"] .form-item:active { background: #F9FAFB !important; }

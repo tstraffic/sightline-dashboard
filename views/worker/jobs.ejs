@@ -180,6 +180,49 @@
   .ws-empty-title { font-size: 1rem; font-weight: 700; color: rgba(255,255,255,0.78); }
   .ws-empty-sub { font-size: 0.85rem; color: rgba(255,255,255,0.5); margin-top: 10px; max-width: 280px; margin-left: auto; margin-right: auto; line-height: 1.45; }
   .ws-empty-sub strong { color: rgba(255,255,255,0.85); font-weight: 700; }
+
+  /* ────────────────────────────────────────────────────────────────────
+     LIGHT MODE — every .ws-* class above is white-on-dark. On light bg
+     they render as white-on-white. Flip each colour token to its light
+     counterpart. Surfaces become real white cards with E5E7EB borders. */
+  :root[data-theme="light"] .ws-h1 { color: #0F1115; }
+  :root[data-theme="light"] .ws-tab { color: #6B7280; }
+  :root[data-theme="light"] .ws-tab.active { color: #047857; border-bottom-color: #10B981; }
+
+  :root[data-theme="light"] .ws-month-btn { background: #F3F4F6; color: #374151; }
+  :root[data-theme="light"] .ws-month-btn:active { background: #E5E7EB; }
+  :root[data-theme="light"] .ws-month-label { color: #0F1115; }
+
+  :root[data-theme="light"] .ws-day { background: #FFFFFF; color: #374151; border-color: #E5E7EB; }
+  :root[data-theme="light"] .ws-day-letter { color: #6B7280; }
+  :root[data-theme="light"] .ws-day-num { color: #0F1115; }
+  :root[data-theme="light"] .ws-day.past .ws-day-num { color: #9CA3AF; }
+  :root[data-theme="light"] .ws-day-bar { background: #E5E7EB; }
+
+  :root[data-theme="light"] .ws-section-title.past { color: #6B7280; }
+  :root[data-theme="light"] .ws-day-title { color: #4B5563; }
+  :root[data-theme="light"] .ws-day-meta  { color: #6B7280; }
+
+  :root[data-theme="light"] .ws-shift {
+    background: #FFFFFF;
+    border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  :root[data-theme="light"] .ws-shift:active { background: #F9FAFB; }
+  :root[data-theme="light"] .ws-shift.is-past .ws-shift-bar { background: #E5E7EB; }
+  :root[data-theme="light"] .ws-shift-time { background: #F3F4F6; color: #0F1115; }
+  :root[data-theme="light"] .ws-shift-time svg { color: #6B7280; }
+  :root[data-theme="light"] .ws-shift.is-past .ws-shift-time { color: #6B7280; }
+  :root[data-theme="light"] .ws-shift-num { color: #9CA3AF; }
+  :root[data-theme="light"] .ws-shift-client { color: #0F1115; }
+  :root[data-theme="light"] .ws-shift.is-past .ws-shift-client { color: #4B5563; }
+  :root[data-theme="light"] .ws-shift-loc { color: #6B7280; }
+
+  :root[data-theme="light"] .ws-empty { color: #6B7280; }
+  :root[data-theme="light"] .ws-empty-ic { color: #D1D5DB; }
+  :root[data-theme="light"] .ws-empty-title { color: #0F1115; }
+  :root[data-theme="light"] .ws-empty-sub { color: #6B7280; }
+  :root[data-theme="light"] .ws-empty-sub strong { color: #0F1115; }
 </style>
 
 <div class="ws-wrap">

@@ -176,6 +176,55 @@
   .lv-history-item + .lv-history-item { margin-top: 0.375rem; }
 
   .lv-status-dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+
+  /* ────────────────────────────────────────────────────────────────────
+     LIGHT MODE — Leave calendar was almost entirely invisible on a white
+     bg (white month label, white day headers, white cell numbers). Flip
+     every token to a slate/white pairing. */
+  :root[data-theme="light"] .lv-monthbar button,
+  :root[data-theme="light"] .lv-monthbar a { color: #4B5563; }
+  :root[data-theme="light"] .lv-monthbar button:hover,
+  :root[data-theme="light"] .lv-monthbar a:hover { background: #F3F4F6; color: #0F1115; }
+  :root[data-theme="light"] .lv-monthbar .lv-month { color: #0F1115; }
+  :root[data-theme="light"] .lv-head { color: #6B7280; }
+  :root[data-theme="light"] .lv-cell {
+    background: #FFFFFF;
+    border-color: #E5E7EB;
+    color: #6B7280;
+  }
+  :root[data-theme="light"] .lv-cell.lv-has { color: #0F1115; background: #F9FAFB; }
+  :root[data-theme="light"] .lv-cell.lv-selected { color: #047857; background: #ECFDF5; }
+  :root[data-theme="light"] .lv-legend {
+    background: #FFFFFF;
+    border: 1px solid #E5E7EB;
+    color: #374151;
+  }
+  :root[data-theme="light"] .lv-sheet { background: #FFFFFF; color: #0F1115; }
+  :root[data-theme="light"] .lv-sheet-handle { background: #D1D5DB; }
+  :root[data-theme="light"] .lv-label { color: #6B7280; }
+  :root[data-theme="light"] .lv-input,
+  :root[data-theme="light"] .lv-select,
+  :root[data-theme="light"] .lv-textarea {
+    background: #FFFFFF;
+    border-color: #D1D5DB;
+    color: #0F1115;
+  }
+  :root[data-theme="light"] .lv-select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Cpath stroke='%236B7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' fill='none' d='M6 8l4 4 4-4'/%3E%3C/svg%3E"); }
+  :root[data-theme="light"] .lv-select option { background: #FFFFFF; color: #0F1115; }
+  :root[data-theme="light"] .lv-seg { background: #F3F4F6; }
+  :root[data-theme="light"] .lv-seg label { color: #6B7280; }
+  :root[data-theme="light"] .lv-seg input:checked + label { background: #FFFFFF; color: #0F1115; box-shadow: 0 1px 2px rgba(0,0,0,0.05); }
+  :root[data-theme="light"] .lv-wd label {
+    background: #FFFFFF;
+    border-color: #E5E7EB;
+    color: #6B7280;
+  }
+  :root[data-theme="light"] .lv-selected-chips { background: #F9FAFB; border-color: #E5E7EB; }
+  :root[data-theme="light"] .lv-btn-secondary { background: #F3F4F6; color: #374151; }
+  :root[data-theme="light"] .lv-history-item {
+    background: #FFFFFF;
+    border-color: #E5E7EB;
+  }
 </style>
 
 <div class="lv-wrap">

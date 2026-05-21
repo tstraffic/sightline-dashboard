@@ -1,13 +1,15 @@
 <%
   // Shared sub-tab strip for the Safety section. Pass subtab = 'swms',
   // 'sop-register', 'updates', 'toolboxes', 'quizzes', or 'comments'.
+  // Styling lives on .saf-tab* in worker.css so the strip themes correctly
+  // in both light and dark modes.
 %>
-<div style="display:flex; gap:0; border-bottom: 1px solid rgba(255,255,255,0.08); margin-bottom: 12px; overflow-x: auto; -webkit-overflow-scrolling: touch;">
-  <a href="/w/safety/swms" style="padding: 10px 14px; font-size: 0.82rem; font-weight: 600; text-decoration: none; white-space: nowrap; border-bottom: 2px solid <%= subtab === 'swms' ? '#10B981' : 'transparent' %>; color: <%= subtab === 'swms' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">SWMS</a>
-  <a href="/w/safety/sop-register" style="padding: 10px 14px; font-size: 0.82rem; font-weight: 600; text-decoration: none; white-space: nowrap; border-bottom: 2px solid <%= subtab === 'sop-register' ? '#10B981' : 'transparent' %>; color: <%= subtab === 'sop-register' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">SOP</a>
-  <a href="/w/safety/updates" style="padding: 10px 14px; font-size: 0.82rem; font-weight: 600; text-decoration: none; white-space: nowrap; border-bottom: 2px solid <%= subtab === 'updates' ? '#10B981' : 'transparent' %>; color: <%= subtab === 'updates' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">Updates</a>
-  <a href="/w/safety/toolboxes" style="padding: 10px 14px; font-size: 0.82rem; font-weight: 600; text-decoration: none; white-space: nowrap; border-bottom: 2px solid <%= subtab === 'toolboxes' ? '#10B981' : 'transparent' %>; color: <%= subtab === 'toolboxes' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">Toolbox Meetings</a>
-  <a href="/w/safety/quizzes" style="padding: 10px 14px; font-size: 0.82rem; font-weight: 600; text-decoration: none; white-space: nowrap; border-bottom: 2px solid <%= subtab === 'quizzes' ? '#10B981' : 'transparent' %>; color: <%= subtab === 'quizzes' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">Quizzes</a>
-  <a href="/w/safety/training" style="padding: 10px 14px; font-size: 0.82rem; font-weight: 600; text-decoration: none; white-space: nowrap; border-bottom: 2px solid <%= subtab === 'training' ? '#10B981' : 'transparent' %>; color: <%= subtab === 'training' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">Training</a>
-  <a href="/w/safety/comments" style="padding: 10px 14px; font-size: 0.82rem; font-weight: 600; text-decoration: none; white-space: nowrap; border-bottom: 2px solid <%= subtab === 'comments' ? '#10B981' : 'transparent' %>; color: <%= subtab === 'comments' ? '#fff' : 'rgba(255,255,255,0.55)' %>;">Flag &amp; comment</a>
+<div class="saf-tabs">
+  <a href="/w/safety/swms"         class="saf-tab <%= subtab === 'swms'         ? 'is-active' : '' %>">SWMS</a>
+  <a href="/w/safety/sop-register" class="saf-tab <%= subtab === 'sop-register' ? 'is-active' : '' %>">SOP</a>
+  <a href="/w/safety/updates"      class="saf-tab <%= subtab === 'updates'      ? 'is-active' : '' %>">Updates</a>
+  <a href="/w/safety/toolboxes"    class="saf-tab <%= subtab === 'toolboxes'    ? 'is-active' : '' %>">Toolbox Meetings</a>
+  <a href="/w/safety/quizzes"      class="saf-tab <%= subtab === 'quizzes'      ? 'is-active' : '' %>">Quizzes</a>
+  <a href="/w/safety/training"     class="saf-tab <%= subtab === 'training'     ? 'is-active' : '' %>">Training</a>
+  <a href="/w/safety/comments"     class="saf-tab <%= subtab === 'comments'     ? 'is-active' : '' %>">Flag &amp; comment</a>
 </div>

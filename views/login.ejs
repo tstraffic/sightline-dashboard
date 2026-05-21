@@ -251,13 +251,29 @@
       font-family: var(--font-body);
       font-size: 14px;
       transition: border-color 0.15s, background-color 0.15s;
+      /* Tell the browser this control honours both schemes so iOS doesn't
+       * paint a dark interior in light mode (and vice versa). */
+      color-scheme: light dark;
     }
     .field input:focus {
       outline: none;
       border-color: var(--emerald);
-      background: #14171D;
+      background: var(--surface-2);
     }
     .field input::placeholder { color: var(--text-faint); }
+    /* Autofill — iOS / Chrome paint their own yellow-or-dark bg over our
+     * one, ignoring `background` rules. Use -webkit-box-shadow to mask it
+     * with the theme's input bg, and force text colour with -webkit-text-
+     * fill-color so the autofilled text doesn't render as inverted. */
+    .field input:-webkit-autofill,
+    .field input:-webkit-autofill:hover,
+    .field input:-webkit-autofill:focus,
+    .field input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px var(--base) inset !important;
+      -webkit-text-fill-color: var(--text) !important;
+      caret-color: var(--text);
+      transition: background-color 9999s ease-in-out 0s;
+    }
 
     .btn-primary {
       width: 100%;

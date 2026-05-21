@@ -111,4 +111,103 @@
   .kd-lb-name { flex: 1; min-width: 0; font-size: 0.85rem; color: #fff; font-weight: 600; }
   .kd-lb-count { font-size: 0.85rem; color: #fff; font-weight: 800; }
   .kd-lb-count-unit { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-left: 2px; font-weight: 600; }
+
+  /* ════════════════════════════════════════════════════════════════════
+     LIGHT MODE — every .kd-* class above hard-codes white-on-dark colors
+     and a near-transparent white surface. On the light page bg the entire
+     feed page reads as white-on-white. Each rule below has a counterpart
+     in the dark block; only the visual tokens flip.
+     ════════════════════════════════════════════════════════════════════ */
+  :root[data-theme="light"] .kd-pill {
+    color: #4B5563;
+    background: #FFFFFF;
+    border-color: #E5E7EB;
+  }
+  :root[data-theme="light"] .kd-pill.on {
+    color: #047857;
+    background: #ECFDF5;
+    border-color: #10B981;
+  }
+
+  :root[data-theme="light"] .kd-item {
+    background: #FFFFFF;
+    border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  :root[data-theme="light"] .kd-item.leadership {
+    background: linear-gradient(160deg, #FFFBEB, #FFFFFF);
+    border-color: rgba(245,158,11,0.55);
+    box-shadow: 0 0 0 1px rgba(245,158,11,0.25);
+  }
+  :root[data-theme="light"] .kd-top-line { color: #4B5563; }
+  :root[data-theme="light"] .kd-top-line strong { color: #0F1115; }
+  :root[data-theme="light"] .kd-top-time { color: #9CA3AF; }
+
+  :root[data-theme="light"] .kd-msg { color: #111827; }
+
+  :root[data-theme="light"] .kd-reaction {
+    background: #F9FAFB;
+    border-color: #E5E7EB;
+    color: #374151;
+  }
+  :root[data-theme="light"] .kd-reaction:hover { background: #F3F4F6; }
+  :root[data-theme="light"] .kd-reaction.on {
+    background: #ECFDF5;
+    border-color: #10B981;
+    color: #047857;
+  }
+
+  :root[data-theme="light"] .kd-actions { border-top-color: #E5E7EB; }
+  :root[data-theme="light"] .kd-action  { color: #4B5563; }
+  :root[data-theme="light"] .kd-action:hover { background: #F3F4F6; color: #0F1115; }
+
+  :root[data-theme="light"] .kd-menu {
+    background: #FFFFFF;
+    border-color: #E5E7EB;
+    box-shadow: 0 10px 30px rgba(15,17,21,0.10);
+  }
+  :root[data-theme="light"] .kd-menu button,
+  :root[data-theme="light"] .kd-menu a { color: #0F1115; }
+  :root[data-theme="light"] .kd-menu button:hover,
+  :root[data-theme="light"] .kd-menu a:hover { background: #F3F4F6; }
+  :root[data-theme="light"] .kd-menu button.danger { color: #DC2626; }
+
+  :root[data-theme="light"] .kd-comments    { border-top-color: #E5E7EB; }
+  :root[data-theme="light"] .kd-comment-body { background: #F9FAFB; }
+  :root[data-theme="light"] .kd-comment-name { color: #0F1115; }
+  :root[data-theme="light"] .kd-comment-msg  { color: #111827; }
+  :root[data-theme="light"] .kd-comment-when { color: #9CA3AF; }
+
+  :root[data-theme="light"] .kd-comment-input {
+    background: #FFFFFF;
+    border-color: #D1D5DB;
+    color: #0F1115;
+  }
+  :root[data-theme="light"] .kd-comment-input:focus { border-color: #10B981; }
+
+  :root[data-theme="light"] .kd-milestone {
+    background: linear-gradient(135deg, #FFFBEB, #FCE7F3);
+    border-color: rgba(245,158,11,0.45);
+  }
+  :root[data-theme="light"] .kd-milestone-ic { background: #FFFFFF; }
+  :root[data-theme="light"] .kd-milestone-msg { color: #0F1115; }
+  :root[data-theme="light"] .kd-milestone-msg strong { color: #B45309; }
+
+  :root[data-theme="light"] .kd-empty {
+    background: #FFFFFF;
+    border-color: #E5E7EB;
+    color: #6B7280;
+  }
+
+  :root[data-theme="light"] .kd-lb-cat {
+    background: #FFFFFF;
+    border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  :root[data-theme="light"] .kd-lb-title { color: #6B7280; }
+  :root[data-theme="light"] .kd-lb-row { border-bottom-color: #F3F4F6; }
+  :root[data-theme="light"] .kd-lb-rank { color: #9CA3AF; }
+  :root[data-theme="light"] .kd-lb-name { color: #0F1115; }
+  :root[data-theme="light"] .kd-lb-count { color: #0F1115; }
+  :root[data-theme="light"] .kd-lb-count-unit { color: #9CA3AF; }
 </style>
