@@ -10197,6 +10197,40 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 221: link seek_applicants to crew_members + backfill Hired
+  //
+  // Before this, an applicant moved to status='Hired' on the Recruitment
+  // tab was never converted into a crew_members row, so they never showed
+  // up on the roster. Add a linked_crew_member_id column to track the
+  // conversion (idempotent on re-saves) and backfill anyone currently
+  // marked Hired without a link.
+  // =============================================
+  if (!isMigrationApplied.get(221)) {
+    console.log('Running migration 221: seek_applicants.linked_crew_member_id + Hired backfill');
+    try {
+      try { db.exec("ALTER TABLE seek_applicants ADD COLUMN linked_crew_member_id INTEGER REFERENCES crew_members(id)"); } catch (e) { /* column may exist */ }
+
+      const { convertSeekApplicantToCrew } = require('../lib/seekApplicantConverter');
+      const orphans = db.prepare(
+        "SELECT * FROM seek_applicants WHERE LOWER(status) = 'hired' AND linked_crew_member_id IS NULL"
+      ).all();
+      let converted = 0;
+      for (const applicant of orphans) {
+        try {
+          convertSeekApplicantToCrew(db, applicant);
+          converted++;
+        } catch (e) {
+          console.error(`Migration 221: failed to convert seek_applicant id=${applicant.id} (${applicant.applicant_name}):`, e.message);
+        }
+      }
+      recordMigration.run(221, 'seek_applicants.linked_crew_member_id + Hired backfill');
+      console.log(`Migration 221 applied: backfilled ${converted}/${orphans.length} Hired applicants into crew_members`);
+    } catch (e) {
+      console.error('Migration 221 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

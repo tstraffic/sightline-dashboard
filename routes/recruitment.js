@@ -4,6 +4,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
+const { convertSeekApplicantToCrew } = require('../lib/seekApplicantConverter');
 
 // Status / dropdown vocab — kept in code (not DB) so the UI never gets out of
 // sync with the tracker's expected values.
@@ -134,7 +135,7 @@ router.post('/', (req, res) => {
 // don't blow away the name/phone/notes.
 router.post('/:id', (req, res) => {
   const db = getDb();
-  const row = db.prepare('SELECT id FROM seek_applicants WHERE id = ?').get(req.params.id);
+  const row = db.prepare('SELECT id, status, linked_crew_member_id FROM seek_applicants WHERE id = ?').get(req.params.id);
   if (!row) { req.flash('error', 'Applicant not found.'); return res.redirect(backUrl(req)); }
 
   const sets = [];
@@ -176,10 +177,31 @@ router.post('/:id', (req, res) => {
   params.push(row.id);
   db.prepare(`UPDATE seek_applicants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
+  // Auto-convert to crew_member on transition to "Hired" (idempotent — skips
+  // if already linked). Without this, Hired applicants never appear on the
+  // roster, which is the bug we're fixing.
+  let converted = null;
+  const newStatus = (req.body.status || '').toString();
+  const becameHired = newStatus === 'Hired' && (row.status || '').toLowerCase() !== 'hired';
+  if ((newStatus === 'Hired') && !row.linked_crew_member_id) {
+    try {
+      const applicant = db.prepare('SELECT * FROM seek_applicants WHERE id = ?').get(row.id);
+      converted = convertSeekApplicantToCrew(db, applicant);
+      if (!req.xhr) {
+        req.flash('success', `${applicant.applicant_name} added to roster as ${converted.employeeCode}.`);
+      }
+    } catch (e) {
+      console.error('Recruitment Hired → crew conversion failed:', e);
+      if (!req.xhr) {
+        req.flash('error', `Marked Hired but failed to add to roster: ${e.message}`);
+      }
+    }
+  }
+
   // AJAX inline-edit returns JSON so the page doesn't have to reload on every
   // dropdown change.
   if ((req.headers.accept || '').includes('application/json') || req.xhr) {
-    return res.json({ ok: true });
+    return res.json({ ok: true, converted, becameHired });
   }
   res.redirect(backUrl(req));
 });
