@@ -1,6 +1,25 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
+  <script>
+    // Theme bootstrap — runs before render to prevent FOUC
+    (function () {
+      try {
+        var saved = localStorage.getItem('atomis-theme');
+        var t = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+    window.toggleAtomisTheme = function () {
+      var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      var next = cur === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('atomis-theme', next); } catch (e) {}
+      document.dispatchEvent(new CustomEvent('atomis:theme', { detail: next }));
+    };
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title><%= typeof title !== 'undefined' ? title + ' | ' : '' %>T&S Traffic Control</title>

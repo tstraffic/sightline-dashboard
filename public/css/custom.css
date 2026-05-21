@@ -53,11 +53,55 @@ a, button, input, select, textarea {
   ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 }
 
-/* ===== Page Background â€” Atomis (locked dark, no glow) ===== */
+/* ===== Light theme overrides ===== */
+:root[data-theme="light"] {
+  --atomis-base: #F7F8FA;
+  --atomis-surface: #FFFFFF;
+  --atomis-surface-2: #F1F3F6;
+  --atomis-text: #0F1115;
+  --atomis-text-mute: #555A63;
+  --atomis-text-faint: #8B8E95;
+  --dark-surface: rgba(15,17,21,0.04);
+  --dark-surface-hover: rgba(15,17,21,0.08);
+  --dark-border: rgba(15,17,21,0.10);
+  --dark-border-strong: rgba(15,17,21,0.18);
+  --dark-text-primary: rgba(15,17,21,0.92);
+  --dark-text-secondary: rgba(15,17,21,0.60);
+  --dark-text-tertiary: rgba(15,17,21,0.42);
+  --dark-input-bg: #FFFFFF;
+  --dark-input-border: rgba(15,17,21,0.14);
+}
+
+/* ===== Page Background - Atomis (theme-aware via tokens) ===== */
 body, body.dark-glass {
   background: var(--atomis-base);
   color: var(--dark-text-primary);
 }
+
+/* ===== Theme toggle button ===== */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--dark-text-secondary);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
+}
+.theme-toggle:hover {
+  background: var(--dark-surface-hover);
+  color: var(--dark-text-primary);
+  border-color: var(--dark-border);
+}
+.theme-toggle:active { transform: scale(0.94); }
+.theme-toggle .icon-sun { display: none; }
+.theme-toggle .icon-moon { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
+:root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
 /* ===== Typography Refinements ===== */
 .line-clamp-2 {
