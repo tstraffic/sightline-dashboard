@@ -255,22 +255,31 @@ body, body.dark-glass {
 /* Rings */
 :root[data-theme="light"] body.dark-glass .ring-black\/5 { --tw-ring-color: rgba(0,0,0,0.05) !important; }
 
-/* Inputs — dark-glass styles them dark; flip back for light */
+/* Inputs — dark-glass styles them dark with `color: #fff !important`. In
+   light mode that turns typed text white-on-white (invisible). All three
+   properties here MUST use !important to beat the dark-glass !important. */
 :root[data-theme="light"] body.dark-glass input,
 :root[data-theme="light"] body.dark-glass textarea,
 :root[data-theme="light"] body.dark-glass select {
-  background-color: #FFFFFF;
-  color: #111827;
-  border-color: #D1D5DB;
+  background-color: #FFFFFF !important;
+  color: #111827 !important;
+  border-color: #D1D5DB !important;
+}
+/* Checkbox / radio inputs: don't force a white background — let the browser
+   render the native control. Text color is irrelevant for these. */
+:root[data-theme="light"] body.dark-glass input[type="checkbox"],
+:root[data-theme="light"] body.dark-glass input[type="radio"] {
+  background-color: initial !important;
 }
 :root[data-theme="light"] body.dark-glass input::placeholder,
 :root[data-theme="light"] body.dark-glass textarea::placeholder {
-  color: #9CA3AF;
+  color: #9CA3AF !important;
 }
 :root[data-theme="light"] body.dark-glass input:disabled,
-:root[data-theme="light"] body.dark-glass textarea:disabled {
-  background-color: #F9FAFB;
-  color: #6B7280;
+:root[data-theme="light"] body.dark-glass textarea:disabled,
+:root[data-theme="light"] body.dark-glass select:disabled {
+  background-color: #F9FAFB !important;
+  color: #6B7280 !important;
 }
 /* Native <select> dropdown options — dark-glass paints them dark blue, which
    then bleeds into the page when the dropdown opens in light mode. Override
@@ -305,13 +314,43 @@ body, body.dark-glass {
 .dark-glass [class*="bg-brand-100/"] {
   background-color: rgba(16,185,129,0.08) !important;
 }
-/* `has-[:checked]:bg-brand-50` — applies the same dark tint when an inner
-   input is checked (or, in the select case, has any selected option). */
-.dark-glass [class*=":bg-brand-50"]:has(:checked) {
+/* `has-[:checked]:bg-brand-50` / `has-[:checked]:bg-brand-100`. Target the
+   compiled class directly (NOT via `:has(:checked)`) so the override fires
+   unconditionally — the Tailwind rule itself decides when to paint, we just
+   replace its colour. This catches the select-with-implicit-selected-option
+   edge case where `:has(:checked)` is true even with nothing user-ticked. */
+.dark-glass [class*="has-[:checked]:bg-brand-50"],
+.dark-glass [class*="has-\\[\\:checked\\]\\:bg-brand-50"] {
   background-color: rgba(16,185,129,0.10) !important;
 }
-.dark-glass [class*=":bg-brand-100"]:has(:checked) {
+.dark-glass [class*="has-[:checked]:bg-brand-100"],
+.dark-glass [class*="has-\\[\\:checked\\]\\:bg-brand-100"] {
   background-color: rgba(16,185,129,0.12) !important;
+}
+/* Borders on the same rows — `has-[:checked]:border-brand-400` etc. */
+.dark-glass [class*="has-[:checked]:border-brand"] {
+  border-color: rgba(16,185,129,0.42) !important;
+}
+.dark-glass [class*="hover:border-brand"]:hover {
+  border-color: rgba(16,185,129,0.32) !important;
+}
+/* ----- Light-mode resets for the same variant patterns. Tailwind's defaults
+   are fine — restore the pale emerald wash and brand border so a light-mode
+   user sees the intended hover/checked highlight. */
+:root[data-theme="light"] body.dark-glass [class*="bg-brand-50/"] {
+  background-color: rgba(236,253,245,0.5) !important;
+}
+:root[data-theme="light"] body.dark-glass [class*="hover:bg-brand-50/"]:hover {
+  background-color: #ECFDF5 !important;
+}
+:root[data-theme="light"] body.dark-glass [class*="has-[:checked]:bg-brand-50"] {
+  background-color: #ECFDF5 !important;
+}
+:root[data-theme="light"] body.dark-glass [class*="has-[:checked]:border-brand"] {
+  border-color: #34D399 !important;
+}
+:root[data-theme="light"] body.dark-glass [class*="hover:border-brand"]:hover {
+  border-color: #6EE7B7 !important;
 }
 /* Ensure label/span text inside the dark-glass shell is at least 85% white
    when no explicit colour class was set. Catches the common pattern of an
