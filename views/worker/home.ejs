@@ -397,6 +397,99 @@
   .wh-fab.open .wh-fab-menu { opacity: 1 !important; pointer-events: auto; transform: translateY(0); }
   .wh-fab-action { display: inline-flex; align-items: center; gap: 10px; padding: 8px 12px 8px 10px; background: #0F1B30; color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; font-size: 0.8rem; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
   .wh-fab-action-ic { width: 28px; height: 28px; border-radius: 999px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  /* Manager card (replaces inline styles so it can flip per theme). */
+  .wh-manager-card {
+    display: flex; align-items: center; gap: 12px;
+    margin-top: 12px; padding: 14px 16px; border-radius: 14px;
+    text-decoration: none;
+    background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(236,72,153,0.14));
+    border: 1px solid rgba(245,158,11,0.30);
+  }
+  .wh-manager-icon {
+    width: 40px; height: 40px; border-radius: 12px;
+    background: linear-gradient(135deg, #F59E0B, #EC4899);
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .wh-manager-body { flex: 1; min-width: 0; }
+  .wh-manager-eyebrow {
+    font-size: 0.65rem; font-weight: 700;
+    color: rgba(255,255,255,0.55);
+    text-transform: uppercase; letter-spacing: 0.08em;
+  }
+  .wh-manager-title { font-size: 0.95rem; font-weight: 800; color: #fff; margin-top: 1px; }
+  .wh-manager-sub { font-size: 0.72rem; color: rgba(255,255,255,0.60); margin-top: 1px; }
+  .wh-manager-chev { width: 16px; height: 16px; color: rgba(255,255,255,0.50); flex-shrink: 0; }
+
+  /* ────────────────────────────────────────────────────────────────────
+     LIGHT MODE — flip the home page's hand-rolled `.wh-*` classes from
+     dark surfaces + white text to light surfaces + dark text. The dark
+     theme rules above all use rgba(255,255,255,X) and #fff which become
+     invisible against a light bg, so every one gets a counterpart here.
+     ──────────────────────────────────────────────────────────────────── */
+  :root[data-theme="light"] .wh-shift { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-shift-header { background: #F9FAFB; border-bottom-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-shift-actions { background: #F9FAFB; border-top-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-shift-body { color: #111827; }
+  :root[data-theme="light"] .wh-shift-client { color: #0F1115; }
+  :root[data-theme="light"] .wh-shift-job { color: #6B7280; }
+  :root[data-theme="light"] .wh-meta-row { color: #374151; }
+  :root[data-theme="light"] .wh-meta-row svg { color: #9CA3AF; }
+  :root[data-theme="light"] .wh-meta-row strong { color: #0F1115; }
+  :root[data-theme="light"] .wh-act-btn {
+    background: #FFFFFF; color: #374151; border-color: #D1D5DB;
+  }
+  :root[data-theme="light"] .wh-act-btn:active { background: #F9FAFB; }
+  :root[data-theme="light"] .wh-act-btn.primary { background: #10B981; color: #FFFFFF; border-color: transparent; }
+  :root[data-theme="light"] .wh-shift-meta-time { color: #4B5563; }
+  :root[data-theme="light"] .wh-empty { background: #F9FAFB; border-color: #E5E7EB; color: #6B7280; }
+  :root[data-theme="light"] .wh-empty-ic { background: #F3F4F6; color: #9CA3AF; }
+  :root[data-theme="light"] .wh-up-item { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-up-title { color: #0F1115; }
+  :root[data-theme="light"] .wh-up-sub { color: #6B7280; }
+  :root[data-theme="light"] .wh-qa-btn { background: #FFFFFF; border-color: #E5E7EB; color: #374151; }
+  :root[data-theme="light"] .wh-act-item { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-act-txt { color: #374151; }
+  :root[data-theme="light"] .wh-act-when { color: #9CA3AF; }
+  :root[data-theme="light"] .wh-wday { background: #FFFFFF; border-color: #E5E7EB; color: #6B7280; }
+  :root[data-theme="light"] .wh-wday-num { color: #0F1115; }
+  :root[data-theme="light"] .wh-wday-pill { background: #E5E7EB; }
+  :root[data-theme="light"] .wh-weather { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-weather-temp { color: #0F1115; }
+  :root[data-theme="light"] .wh-weather-desc { color: #0F1115; }
+  :root[data-theme="light"] .wh-weather-sub { color: #6B7280; }
+  :root[data-theme="light"] .wh-timeline { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-timeline-head { color: #0F1115; }
+  :root[data-theme="light"] .wh-timeline-sub { color: #6B7280; }
+  :root[data-theme="light"] .wh-timeline-legend-row { color: #374151; }
+  :root[data-theme="light"] .wh-timeline-legend-time { color: #0F1115; }
+  :root[data-theme="light"] .wh-timeline-legend-lbl { color: #6B7280; }
+  :root[data-theme="light"] .wh-timeline-track { background: #F3F4F6; }
+  :root[data-theme="light"] .wh-streak-value { color: #0F1115; }
+  :root[data-theme="light"] .wh-streak-unit { color: #9CA3AF; }
+  :root[data-theme="light"] .wh-streak-bar { background: #F3F4F6; }
+  /* Manager card — flip the white-on-orange text to dark-on-orange so
+     the "Operations overview" headline reads on a pale gradient. */
+  :root[data-theme="light"] .wh-manager-card {
+    background: linear-gradient(135deg, rgba(245,158,11,0.12), rgba(236,72,153,0.08));
+    border-color: rgba(245,158,11,0.35);
+  }
+  :root[data-theme="light"] .wh-manager-eyebrow { color: #9A3412; }
+  :root[data-theme="light"] .wh-manager-title { color: #0F1115; }
+  :root[data-theme="light"] .wh-manager-sub { color: #4B5563; }
+  :root[data-theme="light"] .wh-manager-chev { color: #9CA3AF; }
+  /* Stat tiles (.wd-stat-tile primitive used inside .wh-stats) — solid
+     white card on light bg so the count + label read. */
+  :root[data-theme="light"] .wd-stat-tile {
+    background-color: #FFFFFF !important;
+    background-image: none !important;
+    border-color: #E5E7EB !important;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
+  }
+  :root[data-theme="light"] .wd-stat-tile-label { color: #6B7280 !important; }
+  :root[data-theme="light"] .wd-stat-tile-value { color: #0F1115 !important; }
+  :root[data-theme="light"] .wd-stat-tile-unit { color: #9CA3AF !important; }
+  :root[data-theme="light"] .wd-stat-tile-sub { color: #6B7280 !important; }
 </style>
 
 <div class="wh-wrap">
@@ -577,16 +670,16 @@
 <% } %>
 
 <% if (section === 'manager' && typeof isManager !== 'undefined' && isManager) { %>
-  <a href="/w/manage" style="display: block; margin-top: 12px; padding: 14px 16px; border-radius: 14px; background: linear-gradient(135deg, rgba(245,158,11,0.18), rgba(236,72,153,0.14)); border: 1px solid rgba(245,158,11,0.3); text-decoration: none; display: flex; align-items: center; gap: 12px;">
-    <div style="width: 40px; height: 40px; border-radius: 12px; background: linear-gradient(135deg, #F59E0B, #EC4899); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+  <a href="/w/manage" class="wh-manager-card">
+    <div class="wh-manager-icon">
       <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
     </div>
-    <div style="flex: 1; min-width: 0;">
-      <p style="font-size: 0.65rem; font-weight: 700; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.08em;">Manager tools</p>
-      <p style="font-size: 0.95rem; font-weight: 800; color: #fff; margin-top: 1px;">Operations overview</p>
-      <p style="font-size: 0.72rem; color: rgba(255,255,255,0.6); margin-top: 1px;">All shifts, leave approvals, moderation</p>
+    <div class="wh-manager-body">
+      <p class="wh-manager-eyebrow">Manager tools</p>
+      <p class="wh-manager-title">Operations overview</p>
+      <p class="wh-manager-sub">All shifts, leave approvals, moderation</p>
     </div>
-    <svg style="width: 16px; height: 16px; color: rgba(255,255,255,0.5); flex-shrink: 0;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    <svg class="wh-manager-chev" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
   </a>
 <% } %>
 
