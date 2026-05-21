@@ -98,10 +98,180 @@ body, body.dark-glass {
   border-color: var(--dark-border);
 }
 .theme-toggle:active { transform: scale(0.94); }
+.theme-toggle > svg { pointer-events: none; }
 .theme-toggle .icon-sun { display: none; }
 .theme-toggle .icon-moon { display: block; }
 :root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
 :root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+
+/* Sidebar T&S mark: white PNG in dark, coloured PNG in light */
+.sidebar-ts-mark-dark { display: block; }
+.sidebar-ts-mark-light { display: none; }
+:root[data-theme="light"] .sidebar-ts-mark-dark { display: none; }
+:root[data-theme="light"] .sidebar-ts-mark-light { display: block; }
+
+/* ===== Sidebar — light theme overrides ===== */
+:root[data-theme="light"] #sidebar {
+  background: #FFFFFF !important;
+  border-right-color: rgba(15, 17, 21, 0.08) !important;
+}
+:root[data-theme="light"] #sidebar > a[href="/dashboard"] {
+  border-bottom-color: rgba(15, 17, 21, 0.08) !important;
+}
+:root[data-theme="light"] #sidebar > a[href="/dashboard"]:hover {
+  background: rgba(15, 17, 21, 0.04) !important;
+}
+/* Mobile sidebar header bar */
+:root[data-theme="light"] #sidebar > div.lg\:hidden {
+  background: #FFFFFF !important;
+}
+/* "Control Room" wordmark + close button */
+:root[data-theme="light"] #sidebar .text-white { color: #0F1115 !important; }
+:root[data-theme="light"] #sidebar-close { color: #555A63 !important; }
+:root[data-theme="light"] #sidebar-close:hover {
+  background: rgba(15, 17, 21, 0.06) !important;
+  color: #0F1115 !important;
+}
+/* Nav links */
+:root[data-theme="light"] #sidebar .sidebar-link {
+  color: #374151 !important;
+}
+:root[data-theme="light"] #sidebar .sidebar-link:hover {
+  background: rgba(15, 17, 21, 0.05) !important;
+  color: #0F1115 !important;
+}
+/* Active link — Tailwind compiled `bg-white/15 text-white ring-white/10`.
+   Use ~= so `active:bg-white/15` (the hover/active variant on inactive
+   links) doesn't accidentally match. */
+:root[data-theme="light"] #sidebar a.sidebar-link[class~="bg-white/15"] {
+  background: rgba(16, 185, 129, 0.12) !important;
+  color: #047857 !important;
+  box-shadow: inset 0 0 0 1px rgba(16, 185, 129, 0.22) !important;
+}
+
+/* Section headings ("PLANNING", "SAFETY" etc.) — text-brand-400/45 */
+:root[data-theme="light"] #sidebar .text-brand-400\/45,
+:root[data-theme="light"] #sidebar p[class*="text-brand-400"] {
+  color: rgba(15, 17, 21, 0.42) !important;
+}
+/* Section dividers — border-white/10 */
+:root[data-theme="light"] #sidebar .border-white\/10,
+:root[data-theme="light"] #sidebar [class*="border-white/10"] {
+  border-color: rgba(15, 17, 21, 0.08) !important;
+}
+
+/* Mobile sidebar user/profile chips */
+:root[data-theme="light"] #sidebar [style*="background:rgba(255,255,255,0.04)"],
+:root[data-theme="light"] #sidebar [style*="background:rgba(255,255,255,0.05)"] {
+  background: rgba(15, 17, 21, 0.04) !important;
+}
+:root[data-theme="light"] #sidebar [style*="background:#22262F"] {
+  background: #F1F3F6 !important;
+  color: #0F1115 !important;
+}
+:root[data-theme="light"] #sidebar .text-gray-300,
+:root[data-theme="light"] #sidebar .text-gray-400,
+:root[data-theme="light"] #sidebar .text-gray-500 {
+  color: #555A63 !important;
+}
+
+/* Muted badges (counts next to nav items) */
+:root[data-theme="light"] #sidebar .sidebar-badge-muted {
+  background: rgba(15, 17, 21, 0.08) !important;
+  color: #374151 !important;
+}
+
+/* =================================================================
+   LIGHT THEME RESETS
+   The dark-glass block (~line 2625+) hardcodes dozens of Tailwind
+   utilities (.bg-white, .text-gray-700, .border-gray-200, etc.) to
+   dark equivalents and always applies because <body> always has the
+   dark-glass class. In light mode we undo those overrides by
+   re-asserting the original Tailwind values with higher specificity.
+   ================================================================= */
+
+/* Surfaces */
+:root[data-theme="light"] body.dark-glass .bg-white {
+  background: #FFFFFF !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: #E5E7EB !important;
+}
+:root[data-theme="light"] body.dark-glass .bg-white\/70 {
+  background: rgba(255,255,255,0.85) !important;
+  backdrop-filter: blur(12px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(160%) !important;
+}
+:root[data-theme="light"] body.dark-glass .bg-gray-50 { background: #F9FAFB !important; }
+:root[data-theme="light"] body.dark-glass .bg-gray-100 { background: #F3F4F6 !important; }
+:root[data-theme="light"] body.dark-glass .bg-gray-200 { background: #E5E7EB !important; }
+:root[data-theme="light"] body.dark-glass .bg-gray-300 { background: #D1D5DB !important; }
+:root[data-theme="light"] body.dark-glass .hover\:bg-gray-50:hover { background: #F9FAFB !important; }
+:root[data-theme="light"] body.dark-glass .hover\:bg-gray-100:hover { background: #F3F4F6 !important; }
+:root[data-theme="light"] body.dark-glass .hover\:bg-white:hover { background: #FFFFFF !important; }
+:root[data-theme="light"] body.dark-glass .bg-brand-50 { background: #ECFDF5 !important; }
+:root[data-theme="light"] body.dark-glass .hover\:bg-brand-50:hover { background: #ECFDF5 !important; }
+:root[data-theme="light"] body.dark-glass .bg-brand-100 { background: #D1FAE5 !important; }
+:root[data-theme="light"] body.dark-glass .hover\:bg-brand-100:hover { background: #D1FAE5 !important; }
+:root[data-theme="light"] body.dark-glass .bg-\[\#F3F4F6\] { background: #F3F4F6 !important; }
+:root[data-theme="light"] body.dark-glass .bg-\[\#FAFAFA\] { background: #FAFAFA !important; }
+:root[data-theme="light"] body.dark-glass .bg-\[\#F9FAFB\] { background: #F9FAFB !important; }
+
+/* Text */
+:root[data-theme="light"] body.dark-glass .text-gray-900 { color: #111827 !important; }
+:root[data-theme="light"] body.dark-glass .text-gray-800 { color: #1F2937 !important; }
+:root[data-theme="light"] body.dark-glass .text-gray-700 { color: #374151 !important; }
+:root[data-theme="light"] body.dark-glass .text-gray-600 { color: #4B5563 !important; }
+:root[data-theme="light"] body.dark-glass .text-gray-500 { color: #6B7280 !important; }
+:root[data-theme="light"] body.dark-glass .text-gray-400 { color: #9CA3AF !important; }
+:root[data-theme="light"] body.dark-glass .text-gray-300 { color: #D1D5DB !important; }
+:root[data-theme="light"] body.dark-glass .text-\[\#111827\] { color: #111827 !important; }
+:root[data-theme="light"] body.dark-glass .text-\[\#374151\] { color: #374151 !important; }
+:root[data-theme="light"] body.dark-glass .text-\[\#6B7280\] { color: #6B7280 !important; }
+:root[data-theme="light"] body.dark-glass .text-\[\#9CA3AF\] { color: #9CA3AF !important; }
+:root[data-theme="light"] body.dark-glass .text-black { color: #000000 !important; }
+:root[data-theme="light"] body.dark-glass .hover\:text-gray-900:hover { color: #111827 !important; }
+:root[data-theme="light"] body.dark-glass .hover\:text-gray-700:hover { color: #374151 !important; }
+
+/* Borders */
+:root[data-theme="light"] body.dark-glass .border-gray-200 { border-color: #E5E7EB !important; }
+:root[data-theme="light"] body.dark-glass .border-gray-100 { border-color: #F3F4F6 !important; }
+:root[data-theme="light"] body.dark-glass .border-gray-300 { border-color: #D1D5DB !important; }
+:root[data-theme="light"] body.dark-glass .border-gray-200\/60 { border-color: rgba(229,231,235,0.60) !important; }
+:root[data-theme="light"] body.dark-glass .border-gray-200\/80 { border-color: rgba(229,231,235,0.80) !important; }
+:root[data-theme="light"] body.dark-glass .border-gray-100\/80 { border-color: rgba(243,244,246,0.80) !important; }
+:root[data-theme="light"] body.dark-glass .border-b { border-color: #E5E7EB !important; }
+:root[data-theme="light"] body.dark-glass .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #E5E7EB !important; }
+:root[data-theme="light"] body.dark-glass .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #F3F4F6 !important; }
+:root[data-theme="light"] body.dark-glass .border-brand-200 { border-color: #A7F3D0 !important; }
+
+/* Shadows */
+:root[data-theme="light"] body.dark-glass .shadow-sm { box-shadow: 0 1px 2px rgba(0,0,0,0.05) !important; }
+:root[data-theme="light"] body.dark-glass .shadow-md { box-shadow: 0 4px 6px -1px rgba(0,0,0,0.08), 0 2px 4px -2px rgba(0,0,0,0.05) !important; }
+:root[data-theme="light"] body.dark-glass .shadow-lg { box-shadow: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.05) !important; }
+:root[data-theme="light"] body.dark-glass .shadow-xl { box-shadow: 0 20px 25px -5px rgba(0,0,0,0.08), 0 8px 10px -6px rgba(0,0,0,0.04) !important; }
+:root[data-theme="light"] body.dark-glass .shadow-2xl { box-shadow: 0 25px 50px -12px rgba(0,0,0,0.15) !important; }
+
+/* Rings */
+:root[data-theme="light"] body.dark-glass .ring-black\/5 { --tw-ring-color: rgba(0,0,0,0.05) !important; }
+
+/* Inputs — dark-glass styles them dark; flip back for light */
+:root[data-theme="light"] body.dark-glass input,
+:root[data-theme="light"] body.dark-glass textarea,
+:root[data-theme="light"] body.dark-glass select {
+  background-color: #FFFFFF;
+  color: #111827;
+  border-color: #D1D5DB;
+}
+:root[data-theme="light"] body.dark-glass input::placeholder,
+:root[data-theme="light"] body.dark-glass textarea::placeholder {
+  color: #9CA3AF;
+}
+:root[data-theme="light"] body.dark-glass input:disabled,
+:root[data-theme="light"] body.dark-glass textarea:disabled {
+  background-color: #F9FAFB;
+  color: #6B7280;
+}
 
 /* ===== Typography Refinements ===== */
 .line-clamp-2 {
