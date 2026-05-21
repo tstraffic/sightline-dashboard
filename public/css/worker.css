@@ -496,3 +496,173 @@ input[type="search"], input[type="text"].bg-white {
 :root[data-theme="light"] .wh-cta-alert--feed .wh-cta-alert__icon { background: #F3F4F6 !important; color: #4B5563 !important; }
 :root[data-theme="light"] .wh-cta-alert--feed .wh-cta-alert__sub  { color: #4B5563 !important; }
 :root[data-theme="light"] .wh-cta-alert--feed .wh-cta-alert__chev { color: #6B7280 !important; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SAFETY SUB-NAV (.saf-tab*)
+   Tab strip across /w/safety/{swms,sop-register,updates,toolboxes,...}.
+   The inline style version painted text white and the underline emerald;
+   in light mode that was white-on-white. Class-based now so it themes.
+   ═══════════════════════════════════════════════════════════════════════ */
+.saf-tabs {
+  display: flex; gap: 0;
+  border-bottom: 1px solid rgba(255,255,255,0.08);
+  margin-bottom: 12px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.saf-tab {
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  color: rgba(255,255,255,0.55);
+  min-height: 0;
+}
+.saf-tab.is-active { color: #fff; border-bottom-color: #10B981; }
+:root[data-theme="light"] .saf-tabs { border-bottom-color: #E5E7EB; }
+:root[data-theme="light"] .saf-tab { color: #6B7280; }
+:root[data-theme="light"] .saf-tab.is-active { color: #0F1115; border-bottom-color: #10B981; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SAFETY LIST PAGES (.saf-*)
+   All the dark text/bg values used in views/worker/safety/*-list.ejs.
+   The styles are defined inline in those views; this block overrides them
+   for light mode so the page actually reads.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"] .saf-wrap { color: #0F1115; }
+:root[data-theme="light"] .saf-h1   { color: #0F1115; }
+:root[data-theme="light"] .saf-sub  { color: #6B7280; }
+:root[data-theme="light"] .saf-helptext { color: #6B7280; }
+
+:root[data-theme="light"] .saf-stat {
+  background: #FFFFFF;
+  border-color: #E5E7EB;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+:root[data-theme="light"] .saf-stat .n { color: #0F1115; }
+:root[data-theme="light"] .saf-stat .l { color: #6B7280; }
+:root[data-theme="light"] .saf-stat.attention { background: #FEF2F2; border-color: #FECDD3; }
+:root[data-theme="light"] .saf-stat.attention .n { color: #BE123C; }
+:root[data-theme="light"] .saf-stat.done { background: #ECFDF5; border-color: #A7F3D0; }
+:root[data-theme="light"] .saf-stat.done .n { color: #047857; }
+
+:root[data-theme="light"] .saf-group-h {
+  background: #FFFFFF;
+  border-color: #E5E7EB;
+  color: #0F1115;
+}
+:root[data-theme="light"] .saf-group-h .count          { background: #F3F4F6; color: #374151; }
+:root[data-theme="light"] .saf-group-h .count.attention { background: #FFE4E6; color: #BE123C; }
+:root[data-theme="light"] .saf-group-h .count.done      { background: #D1FAE5; color: #047857; }
+:root[data-theme="light"] .saf-group-h .count.locked    { background: #E5E7EB; color: #4B5563; }
+:root[data-theme="light"] .saf-group-h .chev { opacity: 0.7; }
+
+:root[data-theme="light"] .saf-card {
+  background: #FFFFFF;
+  border-color: #E5E7EB;
+  color: #0F1115;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+:root[data-theme="light"] .saf-card:active { background: #F9FAFB; }
+:root[data-theme="light"] .saf-card.attention { background: #FEF2F2; border-color: #FECDD3; }
+:root[data-theme="light"] .saf-card.locked    { background: #F9FAFB; border-color: #E5E7EB; }
+:root[data-theme="light"] .saf-card-icon          { background: #F3F4F6; color: #4B5563; }
+:root[data-theme="light"] .saf-card-icon.attention { background: #FFE4E6; color: #BE123C; }
+:root[data-theme="light"] .saf-card-icon.done      { background: #D1FAE5; color: #047857; }
+:root[data-theme="light"] .saf-card-icon.locked    { background: #E5E7EB; color: #4B5563; }
+:root[data-theme="light"] .saf-card-title .name      { color: #0F1115; }
+:root[data-theme="light"] .saf-card-title .name.dim  { color: #4B5563; }
+:root[data-theme="light"] .saf-card-meta             { color: #6B7280; }
+
+:root[data-theme="light"] .saf-empty         { color: #6B7280; }
+:root[data-theme="light"] .saf-empty strong  { color: #0F1115; }
+
+:root[data-theme="light"] .saf-chip          { background: #F3F4F6; color: #374151; border-color: #E5E7EB; }
+:root[data-theme="light"] .saf-chip-needs    { background: #FEF2F2; color: #BE123C; }
+:root[data-theme="light"] .saf-chip-done     { background: #ECFDF5; color: #047857; }
+:root[data-theme="light"] .saf-chip-pending  { background: #FFFBEB; color: #B45309; }
+:root[data-theme="light"] .saf-chip-locked   { background: #F3F4F6; color: #4B5563; }
+:root[data-theme="light"] .saf-chip-kind     { background: #F3F4F6; color: #4B5563; }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   INLINE-STYLE NUKES — forms, feed, and a handful of other worker pages
+   set `style="color:white"` / `style="color:rgba(255,255,255,X)"` /
+   `style="background:rgba(255,255,255,X)"` directly on elements. CSS
+   attribute selectors + !important are the only way to override those
+   without touching every view. Light-mode only — dark mode keeps the
+   intended white text.
+   ═══════════════════════════════════════════════════════════════════════ */
+:root[data-theme="light"] body.worker-portal [style*="color:white"],
+:root[data-theme="light"] body.worker-portal [style*="color: white"],
+:root[data-theme="light"] body.worker-portal [style*="color:#fff"],
+:root[data-theme="light"] body.worker-portal [style*="color: #fff"],
+:root[data-theme="light"] body.worker-portal [style*="color:#FFF"],
+:root[data-theme="light"] body.worker-portal [style*="color: #FFF"] {
+  color: #0F1115 !important;
+}
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.9"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.9"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255, 255, 255, 0.9"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255, 255, 255, 0.9"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.8"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.8"] {
+  color: #111827 !important;
+}
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.7"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.7"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255, 255, 255, 0.7"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255, 255, 255, 0.7"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.65"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.65"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.6"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.6"] {
+  color: #374151 !important;
+}
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.55"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.55"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.5"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.5"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.45"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.45"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.4"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.4"] {
+  color: #6B7280 !important;
+}
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.35"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.35"],
+:root[data-theme="light"] body.worker-portal [style*="color:rgba(255,255,255,0.3"],
+:root[data-theme="light"] body.worker-portal [style*="color: rgba(255,255,255,0.3"] {
+  color: #9CA3AF !important;
+}
+
+/* Inline-style backgrounds that paint white-on-near-transparent need to
+ * flip to a real surface in light mode. Same approach — attribute
+ * selector + !important. */
+:root[data-theme="light"] body.worker-portal [style*="background:rgba(255,255,255,0"],
+:root[data-theme="light"] body.worker-portal [style*="background: rgba(255,255,255,0"],
+:root[data-theme="light"] body.worker-portal [style*="background-color:rgba(255,255,255,0"],
+:root[data-theme="light"] body.worker-portal [style*="background-color: rgba(255,255,255,0"] {
+  background: #FFFFFF !important;
+  border-color: #E5E7EB !important;
+}
+
+/* Inline white borders → light-grey hairline. */
+:root[data-theme="light"] body.worker-portal [style*="border-bottom:1px solid rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border-bottom: 1px solid rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border:1px solid rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border: 1px solid rgba(255"] {
+  border-color: #E5E7EB !important;
+}
+
+/* The Home empty-state calendar icon (.wh-empty-ic) — bump contrast so
+ * the icon doesn't disappear inside the light circle. */
+:root[data-theme="light"] .wh-empty-ic { color: #374151 !important; background: #E5E7EB !important; }
+
+/* Form-list row separators on /w/forms use inline white borders. Already
+ * caught by the nuke above. Anchor links inside the list lose their
+ * default white text once .text-white kicks in, so make sure the row
+ * stays readable. */
+:root[data-theme="light"] .form-item { color: #0F1115 !important; }
+:root[data-theme="light"] .form-item:active { background: #F9FAFB !important; }
