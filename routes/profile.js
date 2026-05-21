@@ -9,15 +9,23 @@ const { passwordResetEmail } = require('../services/emailTemplates');
 // GET /profile — show profile page
 router.get('/', (req, res) => {
   const db = getDb();
-  const user = db.prepare('SELECT id, username, full_name, email, role, email_notifications_enabled, notification_frequency, created_at, preferences FROM users WHERE id = ?').get(req.session.user.id);
+  const user = db.prepare('SELECT id, username, full_name, email, role, email_notifications_enabled, notification_frequency, created_at FROM users WHERE id = ?').get(req.session.user.id);
 
   if (!user) {
     req.flash('error', 'User not found.');
     return res.redirect('/dashboard');
   }
 
+  // Read preferences defensively — the column was added in migration 40
+  // but selecting it inline would 500 the whole page if that migration
+  // hadn't run for some reason. Read separately so any failure here
+  // just leaves prefs={} and the page still renders.
   let prefs = {};
-  try { prefs = JSON.parse(user.preferences || '{}'); } catch (e) {}
+  try {
+    const row = db.prepare('SELECT preferences FROM users WHERE id = ?').get(req.session.user.id);
+    const parsed = JSON.parse((row && row.preferences) || '{}');
+    if (parsed && typeof parsed === 'object') prefs = parsed;
+  } catch (e) { /* column missing or bad JSON — fall through with empty prefs */ }
 
   res.render('profile', {
     title: 'My Profile',
