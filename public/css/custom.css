@@ -366,10 +366,45 @@ body, body.dark-glass {
 }
 /* Ensure label/span text inside the dark-glass shell is at least 85% white
    when no explicit colour class was set. Catches the common pattern of an
-   un-classed <span> inside a form row. */
-.dark-glass label > span:not([class*="text-"]),
-.dark-glass form span:not([class*="text-"]) {
+   un-classed <span> inside a form row.
+   IMPORTANT: scoped to dark mode only. In light mode the same selector
+   forced unclassed spans white, which turned amber/red/blue callout text
+   invisible on its tinted background (e.g. note-share modal warning,
+   inline form helpers). Light mode now lets the span inherit from its
+   parent's text-{colour}-{700,800} class. */
+:root:not([data-theme="light"]) body.dark-glass label > span:not([class*="text-"]),
+:root:not([data-theme="light"]) body.dark-glass form span:not([class*="text-"]) {
   color: rgba(255,255,255,0.85);
+}
+/* Callout fallback: any tinted callout (bg-amber-50 / bg-red-50 / bg-blue-50
+   / bg-emerald-50 etc.) that sets its own text-{colour}-{700,800,900} should
+   pass that colour down to inner <span>/<p>/<strong> by inheritance. The
+   light-mode reset above already lets this work, but Tailwind's preflight
+   doesn't always reset child colour. Force inheritance for known callout
+   patterns in light mode so any nested text reads against the tinted bg. */
+:root[data-theme="light"] body.dark-glass [class*="bg-amber-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-amber-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-yellow-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-yellow-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-orange-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-orange-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-red-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-red-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-rose-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-rose-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-blue-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-blue-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-sky-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-sky-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-emerald-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-emerald-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-green-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-green-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-purple-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-purple-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-teal-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-teal-5"] p:not([class*="text-"]) {
+  color: inherit !important;
 }
 
 /* =================================================================
