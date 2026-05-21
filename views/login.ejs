@@ -97,12 +97,15 @@
     .ts-logo-light { display: none; }
     :root[data-theme="light"] .ts-logo-dark { display: none; }
     :root[data-theme="light"] .ts-logo-light { display: block; }
-    /* Reserve identical box for both logo variants so the left pane
-       doesn't shift dimensions when the toggle flips. */
+    /* Pin both variants to the SAME bounding box and let object-fit center
+       each within it. The two source PNGs differ in natural aspect ratio
+       (1024x640 vs 512x332), so without this lock the rendered logos look
+       different sizes when you toggle. Fixed pixel box → identical visual
+       footprint in either theme. */
     .ts-logo-dark, .ts-logo-light {
-      width: 80%;
-      max-width: 340px;
-      height: 220px;
+      width: 320px;
+      max-width: 80%;
+      height: 200px;
       object-fit: contain;
       object-position: center;
     }
