@@ -1,0 +1,303 @@
+<% locals.currentPage = 'bookings' %>
+<%
+  function fmtTime(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Australia/Sydney' }).toLowerCase().replace(' ', '');
+  }
+  function initials(name) {
+    if (!name) return '?';
+    return name.split(' ').map(function (n) { return n[0]; }).join('').substring(0, 2).toUpperCase();
+  }
+  var toneStyles = {
+    gray:    { border: 'border-gray-300',    chip: 'bg-gray-50 text-gray-700',       header: 'bg-gray-50 text-gray-800',       dot: 'bg-gray-400' },
+    blue:    { border: 'border-blue-400',    chip: 'bg-blue-50 text-blue-700',       header: 'bg-blue-50/70 text-blue-800',    dot: 'bg-blue-500' },
+    amber:   { border: 'border-amber-400',   chip: 'bg-amber-50 text-amber-700',     header: 'bg-amber-50/70 text-amber-800',  dot: 'bg-amber-500' },
+    emerald: { border: 'border-emerald-400', chip: 'bg-emerald-50 text-emerald-700', header: 'bg-emerald-50/70 text-emerald-800', dot: 'bg-emerald-500' },
+  };
+%>
+
+<div class="space-y-4">
+
+  <!-- Header + day navigator + new-booking button -->
+  <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+    <div class="flex items-center gap-3 flex-wrap">
+      <h1 class="text-2xl font-bold text-gray-900">Bookings</h1>
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-violet-50 text-violet-700 ring-1 ring-violet-600/20">BOARD · BETA</span>
+      <a href="/bookings" class="text-xs text-gray-500 hover:text-gray-800 underline">classic list →</a>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <!-- Day navigator -->
+      <div class="inline-flex items-stretch rounded-lg border border-gray-200 bg-white shadow-sm overflow-hidden">
+        <a href="/bookings/board?date=<%= prevDate %>" class="px-2 py-1.5 text-gray-500 hover:bg-gray-50" title="Previous day" aria-label="Previous day">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        </a>
+        <form method="GET" action="/bookings/board" class="flex items-stretch border-x border-gray-200">
+          <input type="date" name="date" value="<%= dateStr %>" onchange="this.form.submit()"
+            class="px-3 py-1.5 text-sm text-gray-900 bg-white border-0 focus:outline-none focus:ring-2 focus:ring-brand-500 tabular-nums" style="min-width: 12ch">
+        </form>
+        <a href="/bookings/board?date=<%= nextDate %>" class="px-2 py-1.5 text-gray-500 hover:bg-gray-50" title="Next day" aria-label="Next day">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </a>
+        <% if (!isToday) { %>
+          <a href="/bookings/board" class="px-2.5 py-1.5 text-xs font-semibold text-brand-600 hover:bg-brand-50 border-l border-gray-200">Today</a>
+        <% } %>
+      </div>
+      <button type="button" id="openQuickBook" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold transition shadow-sm">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        New booking
+      </button>
+    </div>
+  </div>
+
+  <!-- Day label -->
+  <p class="text-sm text-gray-500"><span class="font-semibold text-gray-700"><%= dayLabel %></span> · <%= columns.reduce(function (a, c) { return a + c.bookings.length; }, 0) %> bookings</p>
+
+  <!-- Kanban-style board — horizontal scroll on small screens -->
+  <div class="overflow-x-auto pb-2 -mx-1 px-1">
+    <div class="flex gap-3 min-w-max">
+      <% columns.forEach(function (col) { var t = toneStyles[col.tone] || toneStyles.gray; %>
+      <section class="flex-shrink-0 w-80 bg-gray-50/60 rounded-xl border border-gray-200 flex flex-col" data-column="<%= col.key %>">
+        <header class="px-3 py-2 border-b border-gray-200 flex items-center justify-between <%= t.header %> rounded-t-xl">
+          <div class="flex items-center gap-2 min-w-0">
+            <span class="w-1.5 h-1.5 rounded-full <%= t.dot %>"></span>
+            <h2 class="text-xs font-bold uppercase tracking-widest truncate"><%= col.label %></h2>
+          </div>
+          <span class="text-xs font-bold tabular-nums opacity-70"><%= col.bookings.length %></span>
+        </header>
+        <div class="p-2 space-y-2 flex-1 min-h-[100px]">
+          <% if (!col.bookings.length) { %>
+            <p class="text-center text-xs text-gray-400 italic py-6">empty</p>
+          <% } %>
+          <% col.bookings.forEach(function (b) {
+            var bTone = b.status === 'conflict' ? toneStyles.amber
+                      : (b.status === 'green_to_go' ? toneStyles.emerald
+                      : (b.status === 'locked' || b.status === 'confirmed' ? toneStyles.blue : toneStyles.gray));
+          %>
+          <!-- DREAM CARD -->
+          <a href="/bookings/<%= b.id %>" class="block bg-white rounded-lg border <%= bTone.border %> border-l-4 shadow-sm hover:shadow-md transition group" data-booking-id="<%= b.id %>">
+            <!-- Status header strip -->
+            <div class="<%= bTone.header %> px-3 py-1.5 rounded-tr-lg flex items-center justify-between gap-2">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="text-[11px] font-bold uppercase tracking-wider truncate"><%= (b.status || 'unconfirmed').replace(/_/g, ' ') %></span>
+                <% if (b.is_emergency) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-100 text-red-700">EMERGENCY</span><% } %>
+                <% if (b.is_callout) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-100 text-amber-700">CALLOUT</span><% } %>
+              </div>
+              <span class="text-[10px] text-gray-500 font-mono shrink-0">#<%= b.booking_number || b.id %></span>
+            </div>
+
+            <!-- Body -->
+            <div class="p-3 space-y-2">
+              <!-- Title + time -->
+              <div class="flex items-start justify-between gap-2">
+                <h3 class="text-sm font-semibold text-gray-900 group-hover:text-brand-700 line-clamp-2"><%= b.title || (b.site_address || 'Untitled booking') %></h3>
+                <span class="text-[11px] font-semibold text-gray-600 tabular-nums shrink-0"><%= fmtTime(b.start_datetime) %> → <%= fmtTime(b.end_datetime) %></span>
+              </div>
+
+              <!-- Site / client info -->
+              <div class="space-y-0.5 text-[11px] text-gray-600">
+                <% if (b.client_name || b.job_name) { %>
+                  <p class="flex items-center gap-1.5 truncate">
+                    <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5"/></svg>
+                    <span class="truncate"><%= b.client_name || '' %><%= b.client_name && b.job_name ? ' · ' : '' %><%= b.job_name || '' %></span>
+                  </p>
+                <% } %>
+                <% if (b.site_address) { %>
+                  <p class="flex items-center gap-1.5 truncate">
+                    <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    <span class="truncate"><%= b.site_address %><%= b.suburb ? ', ' + b.suburb : '' %></span>
+                  </p>
+                <% } %>
+                <% if (b.requester_name || b.depot) { %>
+                  <p class="flex items-center gap-1.5 truncate text-gray-500">
+                    <svg class="w-3 h-3 text-gray-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+                    <span class="truncate">
+                      <% if (b.requester_name) { %>Requester: <%= b.requester_name %><% } %>
+                      <% if (b.requester_name && b.depot) { %> · <% } %>
+                      <% if (b.depot) { %>Depot: <%= b.depot %><% } %>
+                    </span>
+                  </p>
+                <% } %>
+              </div>
+
+              <!-- Vehicle pills -->
+              <% if (b.vehicles && b.vehicles.length) { %>
+                <div class="flex flex-wrap gap-1 pt-1 border-t border-gray-100">
+                  <% b.vehicles.slice(0, 4).forEach(function (v) { %>
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-gray-100 text-gray-700">
+                      <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14M5 17a2 2 0 11-4 0 2 2 0 014 0zm14 0a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                      <%= (v.registration || v.vehicle_name || (v.vehicle_role || 'veh').toUpperCase()) %>
+                    </span>
+                  <% }); %>
+                  <% if (b.vehicles.length > 4) { %><span class="text-[10px] text-gray-400 self-center">+<%= b.vehicles.length - 4 %></span><% } %>
+                </div>
+              <% } %>
+
+              <!-- Crew list with inline warnings -->
+              <% if (b.crew && b.crew.length) { %>
+                <div class="space-y-1 pt-1 border-t border-gray-100">
+                  <% b.crew.slice(0, 5).forEach(function (c) {
+                    var roleAbbr = (c.role_on_site === 'team_leader' || c.portal_role === 'team_leader') ? 'TL'
+                                 : (c.role_on_site === 'supervisor' || c.portal_role === 'supervisor') ? 'SUP'
+                                 : 'TC';
+                    var statusReserved = c.employment_status === 'reserved';
+                  %>
+                    <div class="flex items-center gap-2 text-[11px]">
+                      <span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold shrink-0"><%= initials(c.full_name) %></span>
+                      <span class="font-medium text-gray-500 shrink-0 w-7"><%= roleAbbr %></span>
+                      <span class="font-medium text-gray-900 truncate flex-1"><%= c.full_name %></span>
+                      <% if (statusReserved) { %>
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-blue-50 text-blue-700 ring-1 ring-blue-600/20 shrink-0">RES</span>
+                      <% } %>
+                      <% c.warnings.forEach(function (w) { %>
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-red-50 text-red-700 ring-1 ring-red-600/20 shrink-0">
+                          <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                          <%= w %>
+                        </span>
+                      <% }); %>
+                      <% if (c.bc_status === 'confirmed') { %>
+                        <span class="text-emerald-500 shrink-0" title="Confirmed">✓</span>
+                      <% } %>
+                    </div>
+                  <% }); %>
+                  <% if (b.crew.length > 5) { %><p class="text-[10px] text-gray-400 pl-7">+<%= b.crew.length - 5 %> more</p><% } %>
+                </div>
+              <% } else { %>
+                <p class="pt-1 border-t border-gray-100 text-[11px] text-gray-400 italic">No crew assigned</p>
+              <% } %>
+
+              <!-- Footer counters -->
+              <div class="flex items-center gap-3 pt-1 border-t border-gray-100 text-[10px] text-gray-500">
+                <span class="inline-flex items-center gap-1">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  <%= b.crew_confirmed %>/<%= b.crew_count %>
+                </span>
+                <span class="inline-flex items-center gap-1">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14"/></svg>
+                  <%= b.vehicle_count %>
+                </span>
+              </div>
+            </div>
+          </a>
+          <% }); %>
+        </div>
+      </section>
+      <% }); %>
+    </div>
+  </div>
+</div>
+
+<!-- ============================================================
+     QUICK BOOK slide-over — 5 fields, ⌘↵ saves, "Full setup →"
+     opens the deep form. The whole panel is keyboard-driven.
+     ============================================================ -->
+<div id="quickBookBackdrop" class="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm hidden"></div>
+<aside id="quickBookPanel" class="fixed top-0 right-0 z-50 h-full w-full sm:w-[420px] bg-white shadow-2xl translate-x-full transition-transform duration-200 flex flex-col" aria-label="New booking" role="dialog">
+  <header class="px-5 py-4 border-b border-gray-200 flex items-center justify-between bg-brand-50">
+    <div>
+      <h2 class="text-lg font-bold text-gray-900">New booking</h2>
+      <p class="text-xs text-gray-500 mt-0.5">5 fields. Save as a draft on the board.</p>
+    </div>
+    <button type="button" id="closeQuickBook" class="p-1.5 rounded-lg text-gray-500 hover:bg-white" aria-label="Close">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </header>
+
+  <form id="quickBookForm" method="POST" action="/bookings/quick" class="flex-1 overflow-y-auto p-5 space-y-4">
+    <%- include('../partials/csrf') %>
+
+    <div>
+      <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Client</label>
+      <input list="qb-clients" name="client_name" id="qbClient" placeholder="Start typing…" autocomplete="off"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <datalist id="qb-clients">
+        <% clients.forEach(function (c) { %><option value="<%= c.company_name %>"><% }); %>
+      </datalist>
+    </div>
+
+    <div>
+      <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Site / project</label>
+      <input list="qb-jobs" name="site_label" id="qbSite" placeholder="Job name or site label"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <datalist id="qb-jobs">
+        <% jobs.forEach(function (j) { %><option value="<%= j.job_name %><%= j.site_address ? ' — ' + j.site_address : '' %>"><% }); %>
+      </datalist>
+      <p class="text-[10px] text-gray-400 mt-1">Optional — full address can be set later.</p>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <div>
+        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date</label>
+        <input type="date" name="start_date" value="<%= dateStr %>" required
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Time</label>
+        <div class="flex items-center gap-1">
+          <input type="time" name="start_time" value="06:00" required
+            class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <span class="text-gray-300 text-xs">→</span>
+          <input type="time" name="end_time" value="14:30"
+            class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <label class="block text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1">Depot</label>
+      <select name="depot" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">— pick —</option>
+        <% depots.forEach(function (d) { %><option value="<%= d %>"><%= d %></option><% }); %>
+      </select>
+    </div>
+
+    <input type="hidden" name="title" value="">
+  </form>
+
+  <footer class="px-5 py-3 border-t border-gray-200 flex items-center justify-between gap-3 bg-gray-50">
+    <a href="/bookings/new" class="text-xs font-semibold text-gray-600 hover:text-gray-900">Full setup →</a>
+    <button type="submit" form="quickBookForm" class="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold transition shadow-sm">
+      Save <kbd class="text-[10px] font-mono opacity-80 bg-emerald-700/40 px-1 rounded">⌘↵</kbd>
+    </button>
+  </footer>
+</aside>
+
+<script>
+(function () {
+  var btn = document.getElementById('openQuickBook');
+  var panel = document.getElementById('quickBookPanel');
+  var backdrop = document.getElementById('quickBookBackdrop');
+  var closeBtn = document.getElementById('closeQuickBook');
+  var form = document.getElementById('quickBookForm');
+  var firstField = document.getElementById('qbClient');
+
+  function open() {
+    panel.classList.remove('translate-x-full');
+    backdrop.classList.remove('hidden');
+    setTimeout(function () { firstField && firstField.focus(); }, 50);
+  }
+  function close() {
+    panel.classList.add('translate-x-full');
+    backdrop.classList.add('hidden');
+  }
+
+  btn && btn.addEventListener('click', open);
+  closeBtn && closeBtn.addEventListener('click', close);
+  backdrop && backdrop.addEventListener('click', close);
+
+  // Keyboard: ⌘↵ saves, Esc closes
+  document.addEventListener('keydown', function (e) {
+    if (panel.classList.contains('translate-x-full')) return; // closed
+    if (e.key === 'Escape') { close(); }
+    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') { e.preventDefault(); form.requestSubmit(); }
+  });
+
+  // 'n' opens quick book when not typing in a field
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'n' || e.metaKey || e.ctrlKey || e.altKey) return;
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+    e.preventDefault();
+    open();
+  });
+})();
+</script>

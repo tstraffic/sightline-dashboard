@@ -29,6 +29,18 @@ const uploadDoc = multer({ storage: bookingStorage, limits: { fileSize: 50 * 102
 const DEPOTS = ['Villawood', 'Penrith', 'Campbelltown', 'Parramatta'];
 const VALID_STATUSES = ['client_booking', 'unconfirmed', 'confirmed', 'locked', 'conflict', 'green_to_go', 'in_progress', 'complete', 'finalised', 'cancelled', 'late_cancellation', 'on_hold'];
 
+// Per-user feature flag for the new bookings board UI. Stored in
+// users.preferences JSON; ?v2=1/0 query overrides for safe trials.
+function bookingsV2Enabled(req) {
+  if (req.query && req.query.v2 != null) return req.query.v2 !== '0' && req.query.v2 !== 'false';
+  if (!req.session || !req.session.user) return false;
+  try {
+    const row = getDb().prepare('SELECT preferences FROM users WHERE id = ?').get(req.session.user.id);
+    const prefs = JSON.parse((row && row.preferences) || '{}');
+    return !!prefs.bookings_v2;
+  } catch (e) { return false; }
+}
+
 // Auto-vehicle sync — every "Nx TC Crew" booking_requirement row carries
 // 1 ute. After requirements are saved we make sure booking_vehicles has
 // at least that many ute-role rows (placeholder rows the allocator can
@@ -265,7 +277,7 @@ router.get('/', (req, res) => {
   let contacts = []; try { contacts = db.prepare("SELECT id, full_name, company_id FROM client_contacts ORDER BY full_name").all(); } catch (e) {}
   let crewForSelect = []; try { crewForSelect = db.prepare("SELECT id, full_name, role, portal_role FROM crew_members WHERE active = 1 ORDER BY full_name").all(); } catch (e) {}
 
-  res.render('bookings/index', { title: 'Bookings Board', bookings, stats, depots: DEPOTS, currentView: view, currentDate: dateStr, currentDepot: depot, currentStatus: status, currentSearch: search, currentDeleted: deletedFilter, user: req.session.user, jobs, clients, supervisors, contacts, crewForSelect });
+  res.render('bookings/index', { title: 'Bookings Board', bookings, stats, depots: DEPOTS, currentView: view, currentDate: dateStr, currentDepot: depot, currentStatus: status, currentSearch: search, currentDeleted: deletedFilter, user: req.session.user, jobs, clients, supervisors, contacts, crewForSelect, v2Enabled: bookingsV2Enabled(req) });
 });
 
 // GET /new
@@ -380,6 +392,187 @@ router.post('/', (req, res) => {
   // user's save. Skips if the user already pinned the marker manually
   // OR coords are already populated.
   setImmediate(() => { geocodeBookingIfNeeded(bookingId).catch(() => {}); });
+});
+
+// ============================================================
+// BOOKINGS v2 — board view + 5-field Quick Book slide-over.
+// Gated by per-user `bookings_v2` preference (or ?v2=1 override).
+// Co-exists with the classic /bookings list — no URLs broken.
+// ============================================================
+
+// Lifecycle columns displayed on the board (in order). Statuses not
+// listed here are bucketed into 'unconfirmed' so nothing disappears.
+const V2_LIFECYCLE = [
+  { key: 'client_booking', label: 'Client booking', tone: 'gray' },
+  { key: 'unconfirmed',    label: 'Unconfirmed',    tone: 'gray' },
+  { key: 'confirmed',      label: 'Confirmed',      tone: 'blue' },
+  { key: 'locked',         label: 'Locked',         tone: 'blue' },
+  { key: 'conflict',       label: 'Conflict',       tone: 'amber' },
+  { key: 'green_to_go',    label: 'Green to go',    tone: 'emerald' },
+  { key: 'complete',       label: 'Complete',       tone: 'gray' },
+];
+
+// GET /board — Status-aware board (Kanban) + Quick Book slide-over.
+router.get('/board', (req, res) => {
+  if (!bookingsV2Enabled(req)) {
+    req.flash('error', 'Bookings v2 is not enabled for your account. Enable it from /profile.');
+    return res.redirect('/profile');
+  }
+  const db = getDb();
+  const dateStr = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+  // Day window — bookings whose start_datetime falls on this date.
+  const rows = db.prepare(`
+    SELECT b.id, b.booking_number, b.title, b.status, b.start_datetime, b.end_datetime,
+      b.site_address, b.suburb, b.state, b.depot, b.is_emergency, b.is_callout,
+      b.order_number, b.location_notes,
+      j.job_name, j.job_number, c.company_name AS client_name,
+      cm_req.full_name AS requester_name, cm_plan.full_name AS planner_name,
+      (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id) AS crew_count,
+      (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id AND bc.status = 'confirmed') AS crew_confirmed,
+      (SELECT COUNT(*) FROM booking_vehicles bv WHERE bv.booking_id = b.id) AS vehicle_count
+    FROM bookings b
+    LEFT JOIN jobs j ON b.job_id = j.id
+    LEFT JOIN clients c ON b.client_id = c.id
+    LEFT JOIN crew_members cm_req ON b.requester_id = cm_req.id
+    LEFT JOIN crew_members cm_plan ON b.planner_id = cm_plan.id
+    WHERE DATE(b.start_datetime) = ?
+      AND b.status NOT IN ('cancelled','late_cancellation')
+    ORDER BY b.start_datetime
+  `).all(dateStr);
+
+  // Attach crew chips (lightweight — name + role + portal_role) per booking
+  const bookingIds = rows.map(r => r.id);
+  let crewByBooking = {};
+  let vehiclesByBooking = {};
+  if (bookingIds.length) {
+    const placeholders = bookingIds.map(() => '?').join(',');
+    const crewRows = db.prepare(`
+      SELECT bc.booking_id, bc.crew_member_id, bc.status AS bc_status, bc.role_on_site,
+        cm.full_name, cm.role, cm.portal_role,
+        COALESCE(e.employment_status, 'active') AS employment_status
+      FROM booking_crew bc
+      JOIN crew_members cm ON cm.id = bc.crew_member_id
+      LEFT JOIN employees e ON e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL
+      WHERE bc.booking_id IN (${placeholders})
+      ORDER BY bc.created_at
+    `).all(...bookingIds);
+    for (const c of crewRows) (crewByBooking[c.booking_id] = crewByBooking[c.booking_id] || []).push(c);
+
+    const vRows = db.prepare(`
+      SELECT booking_id, vehicle_name, registration, vehicle_role
+      FROM booking_vehicles WHERE booking_id IN (${placeholders})
+      ORDER BY created_at
+    `).all(...bookingIds);
+    for (const v of vRows) (vehiclesByBooking[v.booking_id] = vehiclesByBooking[v.booking_id] || []).push(v);
+  }
+
+  // Find scheduling conflicts: a crew member assigned to another booking
+  // on the same date. Used for inline chip warnings on the dream card.
+  const conflictIds = new Set();
+  if (bookingIds.length) {
+    const allCrewIds = Object.values(crewByBooking).flat().map(c => c.crew_member_id);
+    if (allCrewIds.length) {
+      const phc = allCrewIds.map(() => '?').join(',');
+      const conflictRows = db.prepare(`
+        SELECT bc.crew_member_id, COUNT(DISTINCT bc.booking_id) AS bookings_today
+        FROM booking_crew bc
+        JOIN bookings b ON b.id = bc.booking_id
+        WHERE bc.crew_member_id IN (${phc})
+          AND DATE(b.start_datetime) = ?
+          AND b.status NOT IN ('cancelled','late_cancellation','complete')
+        GROUP BY bc.crew_member_id
+        HAVING bookings_today > 1
+      `).all(...allCrewIds, dateStr);
+      for (const r of conflictRows) conflictIds.add(r.crew_member_id);
+    }
+  }
+
+  // Map booking → enriched payload for the card render
+  const bookings = rows.map(r => {
+    const crew = (crewByBooking[r.id] || []).map(c => ({
+      ...c,
+      warnings: conflictIds.has(c.crew_member_id) ? ['Schedule clash'] : [],
+    }));
+    const vehicles = vehiclesByBooking[r.id] || [];
+    // Group lifecycle column key (statuses outside V2_LIFECYCLE bucket into 'unconfirmed')
+    const colKeys = V2_LIFECYCLE.map(c => c.key);
+    const column = colKeys.includes(r.status) ? r.status : (r.status === 'in_progress' ? 'green_to_go' : (r.status === 'finalised' ? 'complete' : 'unconfirmed'));
+    return { ...r, crew, vehicles, column };
+  });
+
+  // Group by column
+  const columns = V2_LIFECYCLE.map(col => ({
+    ...col,
+    bookings: bookings.filter(b => b.column === col.key),
+  }));
+
+  // Quick-book preselect data
+  let clients = []; try { clients = db.prepare("SELECT id, company_name FROM clients ORDER BY company_name").all(); } catch (e) {}
+  let jobs = []; try { jobs = db.prepare("SELECT id, job_number, job_name, client_id, client, site_address FROM jobs WHERE status NOT IN ('closed','completed') ORDER BY job_name").all(); } catch (e) {}
+
+  // Day navigator metadata
+  const d = new Date(dateStr + 'T00:00:00');
+  const prevDate = new Date(d); prevDate.setDate(prevDate.getDate() - 1);
+  const nextDate = new Date(d); nextDate.setDate(nextDate.getDate() + 1);
+  const isToday = dateStr === new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+
+  res.render('bookings/board', {
+    title: 'Bookings — Board',
+    currentPage: 'bookings',
+    columns,
+    dateStr,
+    isToday,
+    prevDate: prevDate.toISOString().substring(0,10),
+    nextDate: nextDate.toISOString().substring(0,10),
+    dayLabel: d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }),
+    clients,
+    jobs,
+    depots: DEPOTS,
+    user: req.session.user,
+  });
+});
+
+// POST /quick — 5-field create from the board's slide-over. Returns
+// JSON when Accept: application/json so the board can refresh inline.
+router.post('/quick', (req, res) => {
+  if (!bookingsV2Enabled(req)) return res.status(403).json({ error: 'bookings_v2 not enabled' });
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const b = req.body;
+  // Required: client (or free-text site), date, start_time. Everything
+  // else is optional and can be filled in later from the detail page.
+  if (!b.start_date || !b.start_time) {
+    if (isJson) return res.status(400).json({ error: 'Date and start time are required' });
+    req.flash('error', 'Date and start time are required.');
+    return res.redirect('/bookings/board');
+  }
+  const startTime = b.start_time;
+  const endTime = b.end_time || '14:30';
+  const bookingNumber = generateBookingNumber(db);
+  const title = (b.title && b.title.trim()) || (b.site_label && b.site_label.trim()) || ('Quick booking ' + bookingNumber);
+  // Try to resolve job_id from the job-name freeform field if provided
+  let jobId = b.job_id ? parseInt(b.job_id, 10) : null;
+  let clientId = b.client_id ? parseInt(b.client_id, 10) : null;
+  if (!clientId && b.client_name) {
+    const c = db.prepare("SELECT id FROM clients WHERE LOWER(company_name) = LOWER(?)").get(b.client_name.trim());
+    if (c) clientId = c.id;
+  }
+  const result = db.prepare(`
+    INSERT INTO bookings (booking_number, job_id, client_id, title, status, depot,
+      start_datetime, end_datetime, site_address, created_by_id, booking_type, is_booking_pool)
+    VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, 'regular', 0)
+  `).run(
+    bookingNumber, jobId, clientId, title, b.depot || '',
+    b.start_date + 'T' + startTime + ':00',
+    b.start_date + 'T' + endTime + ':00',
+    b.site_address || b.site_label || '',
+    req.session.user.id
+  );
+  const newId = result.lastInsertRowid;
+  logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: newId, details: `Quick-created booking ${bookingNumber}`, req });
+  if (isJson) return res.json({ ok: true, id: newId, booking_number: bookingNumber });
+  req.flash('success', `Booking ${bookingNumber} created — open it to add crew & vehicles.`);
+  res.redirect('/bookings/' + newId);
 });
 
 // GET /resources — Available crew (JSON) with qualification data

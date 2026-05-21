@@ -45,6 +45,13 @@
     </div>
   </div>
   <div class="bookings-header-right">
+    <% if (typeof v2Enabled !== 'undefined' && v2Enabled) { %>
+      <a href="/bookings/board" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-bold border border-violet-200 transition" title="New bookings board (beta)">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h7"/></svg>
+        Board view
+        <span class="inline-flex items-center px-1 py-0 rounded text-[9px] font-bold bg-violet-600 text-white">BETA</span>
+      </a>
+    <% } %>
     <button class="bookings-action-btn" title="Export" onclick="exportBookingsCSV()">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
       Export

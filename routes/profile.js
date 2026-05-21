@@ -9,16 +9,20 @@ const { passwordResetEmail } = require('../services/emailTemplates');
 // GET /profile — show profile page
 router.get('/', (req, res) => {
   const db = getDb();
-  const user = db.prepare('SELECT id, username, full_name, email, role, email_notifications_enabled, notification_frequency, created_at FROM users WHERE id = ?').get(req.session.user.id);
+  const user = db.prepare('SELECT id, username, full_name, email, role, email_notifications_enabled, notification_frequency, created_at, preferences FROM users WHERE id = ?').get(req.session.user.id);
 
   if (!user) {
     req.flash('error', 'User not found.');
     return res.redirect('/dashboard');
   }
 
+  let prefs = {};
+  try { prefs = JSON.parse(user.preferences || '{}'); } catch (e) {}
+
   res.render('profile', {
     title: 'My Profile',
     profile: user,
+    prefs,
     emailEnabled: emailConfigured(),
     flash_success: req.flash('success'),
     flash_error: req.flash('error'),
@@ -133,6 +137,26 @@ router.post('/dismiss-onboarding', (req, res) => {
     db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify(current), req.session.user.id);
   } catch (e) { /* ignore */ }
   res.json({ success: true });
+});
+
+// POST /profile/toggle-bookings-v2 — flip the per-user feature flag for
+// the new bookings board UI. Stored in users.preferences JSON.
+router.post('/toggle-bookings-v2', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  try {
+    const current = JSON.parse(db.prepare('SELECT preferences FROM users WHERE id = ?').get(req.session.user.id)?.preferences || '{}');
+    const next = !current.bookings_v2;
+    current.bookings_v2 = next;
+    db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify(current), req.session.user.id);
+    if (isJson) return res.json({ ok: true, enabled: next });
+    req.flash('success', next ? 'New bookings board enabled — try it at /bookings/board.' : 'Reverted to the classic bookings list.');
+    res.redirect(next ? '/bookings/board' : '/bookings');
+  } catch (e) {
+    if (isJson) return res.status(500).json({ error: e.message });
+    req.flash('error', 'Failed to save preference.');
+    res.redirect('/profile');
+  }
 });
 
 module.exports = router;
