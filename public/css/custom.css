@@ -109,6 +109,18 @@ body, body.dark-glass {
 .sidebar-ts-mark-light { display: none; }
 :root[data-theme="light"] .sidebar-ts-mark-dark { display: none; }
 :root[data-theme="light"] .sidebar-ts-mark-light { display: block; }
+/* Lock both mark variants to the same bounding box so toggling theme
+   doesn't change the logo's visual size. h-7 / h-8 from Tailwind only
+   set height — without a fixed width the two PNGs render at slightly
+   different widths because their natural aspect ratios differ
+   (1024x640 vs 512x332). */
+.sidebar-ts-mark-dark,
+.sidebar-ts-mark-light {
+  width: 52px;
+  object-fit: contain;
+  object-position: left center;
+  flex-shrink: 0;
+}
 
 /* ===== Sidebar — light theme overrides ===== */
 :root[data-theme="light"] #sidebar {
@@ -3024,13 +3036,17 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 .dark-glass .ring-black\/5 { --tw-ring-color: rgba(255,255,255,0.08) !important; }
 .dark-glass .ring-1 { --tw-ring-color: rgba(255,255,255,0.08); }
 
-/* --- Header (nav) --- */
+/* --- Header (nav) ---
+   Match the page bg (#0F1115) instead of using a navy tint that creates
+   a visible band against the slate page. Slight alpha + backdrop blur
+   so anything that scrolls under reads through with the same character
+   the light-mode `bg-white/70` gives. */
 .dark-glass > .flex > .flex-1 > nav,
 .dark-glass nav.sticky,
 .dark-glass nav[class*="bg-white"] {
-  background: rgba(10,22,40,0.80) !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  background: rgba(15,17,21,0.78) !important;
+  backdrop-filter: blur(16px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
   border-bottom-color: var(--dark-border) !important;
 }
 
