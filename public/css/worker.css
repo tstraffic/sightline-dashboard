@@ -20,20 +20,25 @@
 
 :root[data-theme="light"] .wh-header {
   background: #FFFFFF !important;
-  border-bottom-color: rgba(15,17,21,0.08) !important;
+  /* Slightly stronger border + thin shadow so the bar is visually
+     distinct from the page even when both are white. Without this it
+     reads as a big empty gap at the top of the screen. */
+  border-bottom-color: #E5E7EB !important;
+  box-shadow: 0 1px 0 rgba(15,17,21,0.04) !important;
 }
 :root[data-theme="light"] .wh-header-avatar {
-  background: #F1F3F6 !important;
+  background: #F3F4F6 !important;
   color: #0F1115 !important;
-  border-color: rgba(15,17,21,0.10) !important;
+  border-color: #D1D5DB !important;
 }
 :root[data-theme="light"] .wh-header-title { color: #0F1115 !important; }
-:root[data-theme="light"] .wh-header-sub { color: #555A63 !important; }
-:root[data-theme="light"] .wh-header-btn { color: #555A63 !important; }
-:root[data-theme="light"] .wh-header-btn:hover { color: #0F1115 !important; background: rgba(15,17,21,0.05) !important; }
+:root[data-theme="light"] .wh-header-sub { color: #6B7280 !important; }
+:root[data-theme="light"] .wh-header-btn { color: #6B7280 !important; }
+:root[data-theme="light"] .wh-header-btn:hover { color: #0F1115 !important; background: #F3F4F6 !important; }
 :root[data-theme="light"] .wh-tabnav {
   background: #FFFFFF !important;
-  border-top-color: rgba(15,17,21,0.08) !important;
+  border-top-color: #E5E7EB !important;
+  box-shadow: 0 -1px 0 rgba(15,17,21,0.04) !important;
 }
 
 /* Theme toggle icon visibility — moon in dark, sun in light. */
@@ -338,3 +343,17 @@ input[type="search"], input[type="text"].bg-white {
   --wd-elev-1-border: rgba(15, 17, 21, 0.08);
   --wd-neutral-bg: rgba(15, 17, 21, 0.04);
 }
+
+/* Stat tile (.wd-stat-tile) — used on the worker home stats grid. Dark
+   default is rgba(255,255,255,0.025); flip to solid white in light mode
+   so the count + label read against the page bg. */
+:root[data-theme="light"] .wd-stat-tile {
+  background-color: #FFFFFF !important;
+  background-image: none !important;
+  border-color: #E5E7EB !important;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.04) !important;
+}
+:root[data-theme="light"] .wd-stat-tile-label { color: #6B7280 !important; }
+:root[data-theme="light"] .wd-stat-tile-value { color: #0F1115 !important; }
+:root[data-theme="light"] .wd-stat-tile-unit { color: #9CA3AF !important; }
+:root[data-theme="light"] .wd-stat-tile-sub { color: #6B7280 !important; }
