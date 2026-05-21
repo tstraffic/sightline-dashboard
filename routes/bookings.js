@@ -619,6 +619,7 @@ router.get('/', (req, res) => {
     jobs,
     depots: DEPOTS,
     statuses: VALID_STATUSES,
+    addons: QUICK_ADDONS,
     filters: { depot: filterDepot, status: filterStatus, q: req.query.q || '' },
     openBookingId,
     user: req.session.user,
@@ -631,46 +632,154 @@ router.get('/board', (req, res) => {
   res.redirect('/bookings' + qs);
 });
 
-// POST /quick — 5-field create from the slide-over. Returns JSON when
-// Accept: application/json so the board can refresh inline.
+// Add-on equipment types the Quick Book stepper exposes. These map
+// straight to booking_equipment rows; the resource_type on the
+// requirement row uses the same labels so reporting stays consistent.
+const QUICK_ADDONS = [
+  { key: 'portaboom',         label: 'Portaboom',           category: 'sign' },
+  { key: 'arrow_board',       label: 'Arrow Board',         category: 'arrow_board' },
+  { key: 'vms_board',         label: 'VMS Board',           category: 'vms' },
+  { key: 'speed_advisory',    label: 'Speed Advisory Sign', category: 'sign' },
+  { key: 'light_tower',       label: 'Light Tower',         category: 'lighting' },
+  { key: 'pod_truck',         label: 'Pod Truck',           category: 'vehicle' },
+  { key: 'tma',               label: 'TMA',                 category: 'vehicle' },
+];
+
+// GET /api/places — address autocomplete via Nominatim (OpenStreetMap).
+// Free, AU-biased. Returns up to 8 suggestions as { label, lat, lng,
+// suburb, state, postcode, formatted }.
+router.get('/api/places', async (req, res) => {
+  const q = (req.query.q || '').trim();
+  if (q.length < 3) return res.json({ results: [] });
+  try {
+    const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8&countrycodes=au&q=' + encodeURIComponent(q);
+    const resp = await fetch(url, { headers: { 'User-Agent': 'Atomis/1.0 (operations dashboard)' } });
+    if (!resp.ok) return res.json({ results: [] });
+    const rows = await resp.json();
+    const results = (rows || []).map(r => {
+      const a = r.address || {};
+      return {
+        label: r.display_name,
+        lat: parseFloat(r.lat),
+        lng: parseFloat(r.lon),
+        site_address: [a.house_number, a.road].filter(Boolean).join(' ') || r.name || '',
+        suburb: a.suburb || a.city || a.town || a.village || '',
+        state: (a.state || '').replace(/^.*?\b(NSW|VIC|QLD|WA|SA|TAS|ACT|NT)\b.*$/i, (m, s) => s.toUpperCase()) || a.state || '',
+        postcode: a.postcode || '',
+      };
+    });
+    res.json({ results });
+  } catch (e) {
+    res.json({ results: [], error: e.message });
+  }
+});
+
+// POST /quick — Quick Book create from the slide-over. Persists the
+// booking, the crew composition as `Nx TC Crew` requirement rows, and
+// the add-ons as booking_equipment rows. Auto-creates ute placeholders
+// via the existing syncTCCrewVehicles. JSON-aware.
 router.post('/quick', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const b = req.body;
-  // Required: client (or free-text site), date, start_time. Everything
-  // else is optional and can be filled in later from the detail page.
-  if (!b.start_date || !b.start_time) {
-    if (isJson) return res.status(400).json({ error: 'Date and start time are required' });
-    req.flash('error', 'Date and start time are required.');
-    return res.redirect('/bookings/board');
+
+  // Required per the brief: client, site_address, site_label, date, time, depot.
+  // Validate everything that has a UI field; complain in plain English.
+  const missing = [];
+  if (!b.client_name) missing.push('client');
+  if (!b.site_address) missing.push('site address');
+  if (!b.start_date) missing.push('date');
+  if (!b.start_time) missing.push('start time');
+  if (missing.length) {
+    const msg = 'Missing: ' + missing.join(', ');
+    if (isJson) return res.status(400).json({ error: msg });
+    req.flash('error', msg); return res.redirect('/bookings');
   }
   const startTime = b.start_time;
   const endTime = b.end_time || '14:30';
   const bookingNumber = generateBookingNumber(db);
   const title = (b.title && b.title.trim()) || (b.site_label && b.site_label.trim()) || ('Quick booking ' + bookingNumber);
-  // Try to resolve job_id from the job-name freeform field if provided
-  let jobId = b.job_id ? parseInt(b.job_id, 10) : null;
+
+  // Resolve / auto-create client and project.
   let clientId = b.client_id ? parseInt(b.client_id, 10) : null;
   if (!clientId && b.client_name) {
-    const c = db.prepare("SELECT id FROM clients WHERE LOWER(company_name) = LOWER(?)").get(b.client_name.trim());
-    if (c) clientId = c.id;
+    const existing = db.prepare("SELECT id FROM clients WHERE LOWER(company_name) = LOWER(?)").get(b.client_name.trim());
+    if (existing) clientId = existing.id;
+    else {
+      // Create the client on the fly so allocators don't have to leave
+      // the slide-over for a one-time client.
+      try {
+        const ins = db.prepare("INSERT INTO clients (company_name, created_at) VALUES (?, CURRENT_TIMESTAMP)").run(b.client_name.trim());
+        clientId = ins.lastInsertRowid;
+      } catch (e) { /* schema may differ — leave clientId null */ }
+    }
   }
+  let jobId = b.job_id ? parseInt(b.job_id, 10) : null;
+  if (!jobId && b.site_label) {
+    const proj = db.prepare("SELECT id FROM jobs WHERE LOWER(job_name) = LOWER(?) LIMIT 1").get(b.site_label.trim());
+    if (proj) jobId = proj.id;
+    else if (clientId) {
+      try {
+        const ins = db.prepare("INSERT INTO jobs (job_name, client_id, status, created_at) VALUES (?, ?, 'active', CURRENT_TIMESTAMP)").run(b.site_label.trim(), clientId);
+        jobId = ins.lastInsertRowid;
+      } catch (e) { /* table may not allow these columns — leave jobId null */ }
+    }
+  }
+
+  // Parse optional lat/lng from the address autocomplete picker.
+  const lat = b.latitude ? parseFloat(b.latitude) : null;
+  const lng = b.longitude ? parseFloat(b.longitude) : null;
   const result = db.prepare(`
     INSERT INTO bookings (booking_number, job_id, client_id, title, status, depot,
-      start_datetime, end_datetime, site_address, created_by_id, booking_type, is_booking_pool)
-    VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, 'regular', 0)
+      start_datetime, end_datetime, site_address, suburb, state, postcode,
+      latitude, longitude, marker_is_accurate,
+      created_by_id, booking_type, is_booking_pool)
+    VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regular', 0)
   `).run(
     bookingNumber, jobId, clientId, title, b.depot || '',
     b.start_date + 'T' + startTime + ':00',
     b.start_date + 'T' + endTime + ':00',
     b.site_address || b.site_label || '',
+    b.suburb || '', b.state || '', b.postcode || '',
+    lat, lng, lat ? 1 : 0,
     req.session.user.id
   );
   const newId = result.lastInsertRowid;
+
+  // Crew composition steppers: crew_size_1..5 → "Nx TC Crew" requirement rows.
+  const insertReq = db.prepare("INSERT INTO booking_requirements (booking_id, resource_type, quantity_required) VALUES (?, ?, ?)");
+  let totalCrews = 0;
+  for (let n = 1; n <= 5; n++) {
+    const qty = parseInt(b['crew_size_' + n], 10);
+    if (Number.isFinite(qty) && qty > 0) {
+      insertReq.run(newId, n + 'x TC Crew', qty);
+      totalCrews += qty;
+    }
+  }
+  // Default to 1× 2-man crew if the user didn't pick anything (brief rule).
+  if (totalCrews === 0) {
+    insertReq.run(newId, '2x TC Crew', 1);
+  }
+  // Sync ute placeholders for every TC-Crew requirement.
+  try { syncTCCrewVehicles(db, newId); } catch (e) { console.error('syncTCCrewVehicles:', e.message); }
+
+  // Add-ons: each addon_<key>=qty → booking_equipment row.
+  const insertEq = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_name, equipment_type, quantity) VALUES (?, ?, ?, ?)");
+  QUICK_ADDONS.forEach(a => {
+    const qty = parseInt(b['addon_' + a.key], 10);
+    if (Number.isFinite(qty) && qty > 0) {
+      try { insertEq.run(newId, a.label, a.category, qty); } catch (e) { /* swallow */ }
+    }
+  });
+
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: newId, details: `Quick-created booking ${bookingNumber}`, req });
+
+  // Background geocode if we don't have coords yet.
+  if (!lat || !lng) setImmediate(() => { geocodeBookingIfNeeded(newId).catch(() => {}); });
+
   if (isJson) return res.json({ ok: true, id: newId, booking_number: bookingNumber });
-  req.flash('success', `Booking ${bookingNumber} created — open it to add crew & vehicles.`);
-  res.redirect('/bookings/' + newId);
+  req.flash('success', `Booking ${bookingNumber} created.`);
+  res.redirect('/bookings?b=' + newId);
 });
 
 // GET /resources — Available crew (JSON) with qualification data

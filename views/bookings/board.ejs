@@ -349,30 +349,38 @@
 <template id="bk2-quickbook-template">
   <form id="bk2-quickbook-form" method="POST" action="/bookings/quick">
     <%- include('../partials/csrf') %>
-    <p style="font-size:12px;color:#6B7280;margin-bottom:14px">5 fields. Press <kbd style="background:#F3F4F6;padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:10px">⌘↵</kbd> to save.</p>
+    <p style="font-size:12px;color:#6B7280;margin-bottom:14px">Press <kbd style="background:#F3F4F6;padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:10px">⌘↵</kbd> to save.</p>
 
-    <label class="bk2-row"><span class="lbl">Client</span><span class="val">
+    <label class="bk2-row"><span class="lbl">Client *</span><span class="val">
       <input list="bk2-clients" name="client_name" autocomplete="off" placeholder="Start typing…" required
         style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
     </span></label>
 
-    <label class="bk2-row"><span class="lbl">Site / project</span><span class="val">
-      <input list="bk2-jobs" name="site_label" placeholder="Job name or site label"
+    <label class="bk2-row"><span class="lbl">Site / project *</span><span class="val">
+      <input list="bk2-jobs" name="site_label" placeholder="Job name or site label" required
         style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
     </span></label>
 
-    <label class="bk2-row"><span class="lbl">Site address</span><span class="val">
-      <input type="text" name="site_address" placeholder="Street address" required
-        style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
-      <p style="font-size:10px;color:#9CA3AF;margin-top:4px">Phase 2 wires Google Places autocomplete with map pin preview.</p>
+    <label class="bk2-row"><span class="lbl">Site address *</span><span class="val">
+      <span style="position:relative;display:block">
+        <input type="text" name="site_address" id="bk2-addr-input" placeholder="Start typing the address…" autocomplete="off" required
+          style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
+        <div id="bk2-addr-suggest" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #E5E7EB;border-radius:8px;margin-top:4px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:60;max-height:240px;overflow:auto;display:none"></div>
+      </span>
+      <input type="hidden" name="suburb"   id="bk2-addr-suburb">
+      <input type="hidden" name="state"    id="bk2-addr-state">
+      <input type="hidden" name="postcode" id="bk2-addr-postcode">
+      <input type="hidden" name="latitude" id="bk2-addr-lat">
+      <input type="hidden" name="longitude" id="bk2-addr-lng">
+      <p id="bk2-addr-hint" style="font-size:10px;color:#9CA3AF;margin-top:4px">Autocomplete via OpenStreetMap (AU-biased).</p>
     </span></label>
 
-    <label class="bk2-row"><span class="lbl">Date</span><span class="val">
+    <label class="bk2-row"><span class="lbl">Date *</span><span class="val">
       <input type="date" name="start_date" value="<%= dateStr %>" required
         style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
     </span></label>
 
-    <label class="bk2-row"><span class="lbl">Time</span><span class="val">
+    <label class="bk2-row"><span class="lbl">Time *</span><span class="val">
       <span style="display:flex;align-items:center;gap:6px">
         <input type="time" name="start_time" value="06:00" required style="flex:1;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
         <span style="color:#9CA3AF">→</span>
@@ -380,14 +388,46 @@
       </span>
     </span></label>
 
-    <label class="bk2-row"><span class="lbl">Depot</span><span class="val">
-      <select name="depot" style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
+    <label class="bk2-row"><span class="lbl">Depot *</span><span class="val">
+      <select name="depot" required style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
         <option value="">— pick —</option>
         <% depots.forEach(function (d) { %><option value="<%= d %>"><%= d %></option><% }); %>
       </select>
     </span></label>
 
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:16px;padding-top:14px;border-top:1px solid #E5E7EB">
+    <!-- Crew composition stepper -->
+    <fieldset style="margin-top:14px;border:1px solid #E5E7EB;border-radius:10px;padding:12px">
+      <legend style="padding:0 6px;font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em">Crew composition</legend>
+      <div id="bk2-crew-stepper" style="display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;font-size:13px">
+        <% [1,2,3,4,5].forEach(function (n) { %>
+          <span><%= n %>-man crew <span style="color:#9CA3AF;font-size:11px">· <%= n %> TCs + 1 ute</span></span>
+          <span class="bk2-stepper" data-stepper-name="crew_size_<%= n %>">
+            <button type="button" data-step="-1">−</button>
+            <input type="number" name="crew_size_<%= n %>" value="<%= n === 2 ? 1 : 0 %>" min="0" max="20" readonly>
+            <button type="button" data-step="+1">+</button>
+          </span>
+        <% }); %>
+      </div>
+    </fieldset>
+
+    <!-- Add-ons stepper -->
+    <fieldset style="margin-top:10px;border:1px solid #E5E7EB;border-radius:10px;padding:12px">
+      <legend style="padding:0 6px;font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em">Add-ons</legend>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;font-size:13px">
+        <% addons.forEach(function (a) { %>
+          <span><%= a.label %></span>
+          <span class="bk2-stepper" data-stepper-name="addon_<%= a.key %>">
+            <button type="button" data-step="-1">−</button>
+            <input type="number" name="addon_<%= a.key %>" value="0" min="0" max="20" readonly>
+            <button type="button" data-step="+1">+</button>
+          </span>
+        <% }); %>
+      </div>
+    </fieldset>
+
+    <p id="bk2-qb-summary" style="margin-top:12px;padding:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:12px;color:#065F46;line-height:1.5">1× 2-man crew · 1 ute</p>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid #E5E7EB">
       <a href="/bookings/new" style="font-size:12px;font-weight:600;color:#6B7280;text-decoration:none">Full setup →</a>
       <button type="submit" style="background:#059669;color:#fff;border:0;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
         Save <kbd style="background:rgba(255,255,255,0.2);padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:10px;margin-left:4px">⌘↵</kbd>
@@ -528,7 +568,7 @@
     soState.bookingId = null;
     soState.data = null;
     soTitle.textContent = 'New booking';
-    soSub.textContent = 'Quick Book · 5 fields';
+    soSub.textContent = 'Quick Book';
     soStatusPill.textContent = 'NEW';
     soStatusPill.className = 'bk2-status-pill';
     soStatusPill.style.background = '#EDE9FE';
@@ -540,9 +580,110 @@
     soBody.appendChild(tpl.content.cloneNode(true));
     var form = $('#bk2-quickbook-form');
     form.addEventListener('submit', handleQuickSubmit);
+    wireSteppers(form);
+    wireAddressAutocomplete(form);
+    refreshSummary(form);
     pushUrl({ b: 'new' });
     openSlideover();
     setTimeout(function () { var first = soBody.querySelector('input[name="client_name"]'); first && first.focus(); }, 80);
+  }
+
+  // ---------- Steppers + live summary ----------
+  function wireSteppers(form) {
+    form.querySelectorAll('.bk2-stepper').forEach(function (s) {
+      var input = s.querySelector('input');
+      s.querySelectorAll('button').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var delta = parseInt(btn.dataset.step, 10);
+          var v = Math.max(0, Math.min(20, parseInt(input.value, 10) + delta));
+          input.value = v;
+          refreshSummary(form);
+        });
+      });
+    });
+  }
+  function refreshSummary(form) {
+    var crews = [];
+    [1,2,3,4,5].forEach(function (n) {
+      var q = parseInt((form.querySelector('input[name="crew_size_' + n + '"]') || {}).value, 10) || 0;
+      if (q > 0) crews.push(q + '× ' + n + '-man crew');
+    });
+    var addons = [];
+    form.querySelectorAll('input[name^="addon_"]').forEach(function (inp) {
+      var q = parseInt(inp.value, 10) || 0;
+      if (q > 0) {
+        var label = inp.closest('.bk2-stepper').previousElementSibling || inp.closest('div').previousElementSibling;
+        // The label is the previous sibling cell in the grid — use data-stepper-name fallback.
+        var key = inp.name.replace('addon_', '').replace(/_/g, ' ');
+        var labelText = label && label.textContent ? label.textContent.trim() : key;
+        addons.push(q + '× ' + labelText);
+      }
+    });
+    var summary = $('#bk2-qb-summary', form);
+    if (!summary) return;
+    var totalCrews = crews.reduce(function (a, c) { return a + parseInt(c, 10); }, 0);
+    if (!crews.length) crews.push('1× 2-man crew (default)');
+    var line = crews.join(' + ') + ' · ' + Math.max(1, totalCrews) + ' ute' + (totalCrews > 1 ? 's' : '');
+    if (addons.length) line += ', with ' + addons.join(', ');
+    summary.textContent = line + '.';
+  }
+
+  // ---------- Address autocomplete (Nominatim / OSM) ----------
+  function wireAddressAutocomplete(form) {
+    var input = $('#bk2-addr-input', form);
+    var box = $('#bk2-addr-suggest', form);
+    var hint = $('#bk2-addr-hint', form);
+    if (!input || !box) return;
+    var timer = null;
+    var picked = false;
+    function clearMeta() {
+      form.querySelector('#bk2-addr-suburb').value = '';
+      form.querySelector('#bk2-addr-state').value = '';
+      form.querySelector('#bk2-addr-postcode').value = '';
+      form.querySelector('#bk2-addr-lat').value = '';
+      form.querySelector('#bk2-addr-lng').value = '';
+    }
+    function hide() { box.style.display = 'none'; box.innerHTML = ''; }
+    input.addEventListener('input', function () {
+      picked = false;
+      clearMeta();
+      var q = input.value.trim();
+      if (q.length < 3) { hide(); return; }
+      clearTimeout(timer);
+      timer = setTimeout(function () {
+        fetch('/bookings/api/places?q=' + encodeURIComponent(q), { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var list = data.results || [];
+            if (!list.length) { hide(); return; }
+            box.innerHTML = list.map(function (r, i) {
+              return '<div class="bk2-place-row" data-i="' + i + '" style="padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #F3F4F6">' +
+                '<div style="font-weight:600;color:#111827">' + esc(r.site_address || r.label.split(',')[0]) + '</div>' +
+                '<div style="color:#9CA3AF;font-size:11px">' + esc((r.suburb || '') + (r.state ? ' ' + r.state : '') + (r.postcode ? ' ' + r.postcode : '')) + '</div>' +
+                '</div>';
+            }).join('');
+            box.style.display = 'block';
+            box.dataset.json = JSON.stringify(list);
+            box.querySelectorAll('.bk2-place-row').forEach(function (row) {
+              row.addEventListener('click', function () {
+                var idx = parseInt(row.dataset.i, 10);
+                var r = list[idx];
+                input.value = r.site_address || r.label.split(',')[0];
+                form.querySelector('#bk2-addr-suburb').value = r.suburb || '';
+                form.querySelector('#bk2-addr-state').value = r.state || '';
+                form.querySelector('#bk2-addr-postcode').value = r.postcode || '';
+                form.querySelector('#bk2-addr-lat').value = r.lat || '';
+                form.querySelector('#bk2-addr-lng').value = r.lng || '';
+                hide();
+                picked = true;
+                if (hint && r.lat && r.lng) hint.textContent = 'Pinned at ' + r.lat.toFixed(4) + ', ' + r.lng.toFixed(4) + ' (' + (r.suburb || r.state || 'AU') + ').';
+              });
+            });
+          })
+          .catch(function () { hide(); });
+      }, 250);
+    });
+    document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== input) hide(); });
   }
 
   function handleQuickSubmit(e) {
