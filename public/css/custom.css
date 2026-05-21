@@ -109,6 +109,18 @@ body, body.dark-glass {
 .sidebar-ts-mark-light { display: none; }
 :root[data-theme="light"] .sidebar-ts-mark-dark { display: none; }
 :root[data-theme="light"] .sidebar-ts-mark-light { display: block; }
+/* Lock both mark variants to the same bounding box so toggling theme
+   doesn't change the logo's visual size. h-7 / h-8 from Tailwind only
+   set height — without a fixed width the two PNGs render at slightly
+   different widths because their natural aspect ratios differ
+   (1024x640 vs 512x332). */
+.sidebar-ts-mark-dark,
+.sidebar-ts-mark-light {
+  width: 52px;
+  object-fit: contain;
+  object-position: left center;
+  flex-shrink: 0;
+}
 
 /* ===== Sidebar — light theme overrides ===== */
 :root[data-theme="light"] #sidebar {
@@ -354,10 +366,45 @@ body, body.dark-glass {
 }
 /* Ensure label/span text inside the dark-glass shell is at least 85% white
    when no explicit colour class was set. Catches the common pattern of an
-   un-classed <span> inside a form row. */
-.dark-glass label > span:not([class*="text-"]),
-.dark-glass form span:not([class*="text-"]) {
+   un-classed <span> inside a form row.
+   IMPORTANT: scoped to dark mode only. In light mode the same selector
+   forced unclassed spans white, which turned amber/red/blue callout text
+   invisible on its tinted background (e.g. note-share modal warning,
+   inline form helpers). Light mode now lets the span inherit from its
+   parent's text-{colour}-{700,800} class. */
+:root:not([data-theme="light"]) body.dark-glass label > span:not([class*="text-"]),
+:root:not([data-theme="light"]) body.dark-glass form span:not([class*="text-"]) {
   color: rgba(255,255,255,0.85);
+}
+/* Callout fallback: any tinted callout (bg-amber-50 / bg-red-50 / bg-blue-50
+   / bg-emerald-50 etc.) that sets its own text-{colour}-{700,800,900} should
+   pass that colour down to inner <span>/<p>/<strong> by inheritance. The
+   light-mode reset above already lets this work, but Tailwind's preflight
+   doesn't always reset child colour. Force inheritance for known callout
+   patterns in light mode so any nested text reads against the tinted bg. */
+:root[data-theme="light"] body.dark-glass [class*="bg-amber-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-amber-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-yellow-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-yellow-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-orange-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-orange-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-red-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-red-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-rose-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-rose-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-blue-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-blue-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-sky-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-sky-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-emerald-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-emerald-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-green-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-green-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-purple-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-purple-5"] p:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-teal-5"] span:not([class*="text-"]),
+:root[data-theme="light"] body.dark-glass [class*="bg-teal-5"] p:not([class*="text-"]) {
+  color: inherit !important;
 }
 
 /* =================================================================
@@ -3024,13 +3071,17 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 .dark-glass .ring-black\/5 { --tw-ring-color: rgba(255,255,255,0.08) !important; }
 .dark-glass .ring-1 { --tw-ring-color: rgba(255,255,255,0.08); }
 
-/* --- Header (nav) --- */
+/* --- Header (nav) ---
+   Match the page bg (#0F1115) instead of using a navy tint that creates
+   a visible band against the slate page. Slight alpha + backdrop blur
+   so anything that scrolls under reads through with the same character
+   the light-mode `bg-white/70` gives. */
 .dark-glass > .flex > .flex-1 > nav,
 .dark-glass nav.sticky,
 .dark-glass nav[class*="bg-white"] {
-  background: rgba(10,22,40,0.80) !important;
-  backdrop-filter: blur(16px) saturate(180%) !important;
-  -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
+  background: rgba(15,17,21,0.78) !important;
+  backdrop-filter: blur(16px) saturate(160%) !important;
+  -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
   border-bottom-color: var(--dark-border) !important;
 }
 
