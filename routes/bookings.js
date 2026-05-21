@@ -486,7 +486,22 @@ router.get('/:id', (req, res) => {
     });
   }
 
-  const allCrew = db.prepare("SELECT id, full_name, role, employee_id FROM crew_members WHERE active = 1 ORDER BY full_name").all();
+  // Available crew for the picker — joined to employees so the UI can
+  // split into Active + Reserved sections. Reserved workers are
+  // accepted-but-not-yet-working; allocator can still pick them, just
+  // from a separate group. Skip anyone inactive/terminated.
+  const allCrew = db.prepare(`
+    SELECT cm.id, cm.full_name, cm.role, cm.employee_id,
+      COALESCE(e.employment_status, 'active') AS employment_status
+    FROM crew_members cm
+    LEFT JOIN employees e ON e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL
+    WHERE cm.active = 1
+      AND COALESCE(e.employment_status, 'active') IN ('active', 'reserved', 'on_leave')
+    ORDER BY
+      CASE COALESCE(e.employment_status, 'active')
+        WHEN 'active' THEN 0 WHEN 'reserved' THEN 1 ELSE 2 END,
+      cm.full_name
+  `).all();
 
   // Per-worker Job-Pack completion grid: for every crew member on this
   // booking, which of the five Job-Pack checklists have they filed against
@@ -765,10 +780,20 @@ router.post('/:id/undelete', (req, res) => {
 // Crew management
 router.post('/:id/crew', (req, res) => {
   const db = getDb();
-  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) { req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) {
+    if (isJson) return res.status(404).json({ error: 'Booking not found' });
+    req.flash('error', 'Booking not found.'); return res.redirect('/bookings');
+  }
   const { crew_member_id, role_on_site } = req.body;
-  if (!crew_member_id) { req.flash('error', 'Select a crew member.'); return res.redirect('/bookings/' + req.params.id); }
-  if (db.prepare("SELECT id FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, crew_member_id)) { req.flash('error', 'Already assigned.'); return res.redirect('/bookings/' + req.params.id); }
+  if (!crew_member_id) {
+    if (isJson) return res.status(400).json({ error: 'Select a crew member' });
+    req.flash('error', 'Select a crew member.'); return res.redirect('/bookings/' + req.params.id);
+  }
+  if (db.prepare("SELECT id FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, crew_member_id)) {
+    if (isJson) return res.status(409).json({ error: 'Already assigned' });
+    req.flash('error', 'Already assigned.'); return res.redirect('/bookings/' + req.params.id);
+  }
 
   // Conflict detection — warn if crew member has overlapping bookings on same date
   const thisBooking = db.prepare("SELECT start_datetime, end_datetime, booking_number FROM bookings WHERE id=?").get(req.params.id);
@@ -808,14 +833,22 @@ router.post('/:id/crew', (req, res) => {
     }
   }
 
+  if (isJson) {
+    const cm = db.prepare("SELECT cm.id, cm.full_name, cm.role, COALESCE(e.employment_status,'active') AS employment_status FROM crew_members cm LEFT JOIN employees e ON e.linked_crew_member_id = cm.id WHERE cm.id = ?").get(crew_member_id);
+    return res.json({ ok: true, crew: cm });
+  }
   req.flash('success', 'Crew member added — they can now see this shift in their portal.'); res.redirect('/bookings/' + req.params.id);
 });
 
 // Remove crew from booking + delete matching allocation
 router.post('/:id/crew/:crewId/remove', (req, res) => {
   const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   db.prepare("DELETE FROM booking_crew WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
   db.prepare("DELETE FROM crew_allocations WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  // Also clear them as driver on any vehicles on this booking
+  db.prepare("UPDATE booking_vehicles SET crew_member_id = NULL WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  if (isJson) return res.json({ ok: true });
   req.flash('success', 'Removed from booking and worker portal.');
   res.redirect('/bookings/' + req.params.id);
 });
@@ -823,8 +856,10 @@ router.post('/:id/crew/:crewId/remove', (req, res) => {
 // Confirm crew assignment
 router.post('/:id/crew/:crewId/confirm', (req, res) => {
   const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   db.prepare("UPDATE booking_crew SET status='confirmed', confirmed_at=CURRENT_TIMESTAMP WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
   db.prepare("UPDATE crew_allocations SET status='confirmed', confirmed_at=CURRENT_TIMESTAMP WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  if (isJson) return res.json({ ok: true });
   req.flash('success', 'Confirmed.');
   res.redirect('/bookings/' + req.params.id);
 });
@@ -846,17 +881,23 @@ router.post('/:id/notes/:noteId/delete', (req, res) => { getDb().prepare("DELETE
 // POST /:id/vehicles/:vehicleId/driver — assign or clear the driver
 router.post('/:id/vehicles/:vehicleId/driver', (req, res) => {
   const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const cid = req.body.crew_member_id || null;
   if (cid) {
     // Driver must be on this booking — block stray assignments.
     const ok = db.prepare("SELECT 1 FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, cid);
     if (!ok) {
+      if (isJson) return res.status(400).json({ error: "Driver isn't on the booking crew" });
       req.flash('error', "Driver isn't on the booking crew.");
       return res.redirect('/bookings/' + req.params.id);
     }
   }
   db.prepare("UPDATE booking_vehicles SET crew_member_id = ? WHERE id = ? AND booking_id = ?")
     .run(cid, req.params.vehicleId, req.params.id);
+  if (isJson) {
+    const driver = cid ? db.prepare("SELECT id, full_name FROM crew_members WHERE id = ?").get(cid) : null;
+    return res.json({ ok: true, driver });
+  }
   req.flash('success', cid ? 'Driver assigned.' : 'Driver cleared.');
   res.redirect('/bookings/' + req.params.id);
 });
