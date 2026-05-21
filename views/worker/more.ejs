@@ -1,8 +1,7 @@
-<div class="space-y-5 px-4 pt-4">
-  <div>
-    <h1 class="text-xl font-bold text-gray-900">More</h1>
-    <p class="text-sm text-gray-500 mt-0.5">All features & settings</p>
-  </div>
+<div class="space-y-5 px-5 pt-3">
+  <!-- Page title ("More") is already in the layout header — duplicating it
+       here (as #409 did) pushed the first card down by ~50px and made the
+       top of the screen feel empty on light backgrounds. -->
 
   <!-- Manager tools (manager-only, own block so it stands out) -->
   <% if (typeof isManager !== 'undefined' && isManager) { %>
@@ -11,78 +10,78 @@
         <div class="w-9 h-9 rounded-lg flex items-center justify-center" style="background: linear-gradient(135deg, #F59E0B, #EC4899);">
           <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         </div>
-        <div class="flex-1"><p class="text-sm font-bold text-gray-900">Manager tools</p><p class="text-xs text-gray-500">Shifts, leave approvals, kudos moderation</p></div>
-        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="flex-1"><p class="text-sm font-bold text-gray-900">Manager tools</p><p class="text-xs text-gray-600">Shifts, leave approvals, kudos moderation</p></div>
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </a>
     </div>
   <% } %>
 
   <!-- Work -->
   <div>
-    <h2 class="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-2">Work</h2>
+    <h2 class="text-[11px] font-bold text-gray-500 uppercase tracking-widest px-1 mb-2">Work</h2>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
       <a href="/w/availability" class="flex items-center gap-3 p-4 active:bg-gray-50 transition">
         <div class="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
           <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         </div>
-        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Availability</p><p class="text-xs text-gray-500">4-week availability calendar</p></div>
-        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Availability</p><p class="text-xs text-gray-600">4-week availability calendar</p></div>
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </a>
       <a href="/w/dockets" class="flex items-center gap-3 p-4 active:bg-gray-50 transition">
         <div class="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
           <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
         </div>
-        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Dockets</p><p class="text-xs text-gray-500">Sign off work dockets</p></div>
-        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Dockets</p><p class="text-xs text-gray-600">Sign off work dockets</p></div>
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </a>
       <a href="/w/forms" class="flex items-center gap-3 p-4 active:bg-gray-50 transition">
         <div class="w-9 h-9 rounded-lg bg-red-50 flex items-center justify-center">
           <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
         </div>
-        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Safety Forms</p><p class="text-xs text-gray-500">Prestart, Take 5, incidents, hazards</p></div>
-        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Safety Forms</p><p class="text-xs text-gray-600">Prestart, Take 5, incidents, hazards</p></div>
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </a>
     </div>
   </div>
 
   <!-- Account -->
   <div>
-    <h2 class="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-2">Account</h2>
+    <h2 class="text-[11px] font-bold text-gray-500 uppercase tracking-widest px-1 mb-2">Account</h2>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
       <a href="/w/profile" class="flex items-center gap-3 p-4 active:bg-gray-50 transition">
         <div class="w-9 h-9 rounded-lg bg-brand-50 flex items-center justify-center">
           <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
         </div>
-        <div class="flex-1"><p class="text-sm font-medium text-gray-900">My Profile</p><p class="text-xs text-gray-500">Contact details, change PIN</p></div>
-        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="flex-1"><p class="text-sm font-medium text-gray-900">My Profile</p><p class="text-xs text-gray-600">Contact details, change PIN</p></div>
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </a>
       <a href="/w/hr" class="flex items-center gap-3 p-4 active:bg-gray-50 transition">
         <div class="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center">
           <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 9h3.75M15 12h3.75M15 15h3.75M4.5 19.5h15a2.25 2.25 0 002.25-2.25V6.75A2.25 2.25 0 0019.5 4.5h-15a2.25 2.25 0 00-2.25 2.25v10.5A2.25 2.25 0 004.5 19.5z"/></svg>
         </div>
-        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Wallet & HR</p><p class="text-xs text-gray-500">Payslips, certs, bank, TFN, super</p></div>
-        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Wallet & HR</p><p class="text-xs text-gray-600">Payslips, certs, bank, TFN, super</p></div>
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </a>
       <a href="/w/hr/leave" class="flex items-center gap-3 p-4 active:bg-gray-50 transition">
         <div class="w-9 h-9 rounded-lg bg-teal-50 flex items-center justify-center">
           <svg class="w-5 h-5 text-teal-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
         </div>
-        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Leave</p><p class="text-xs text-gray-500">Request and review leave</p></div>
-        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Leave</p><p class="text-xs text-gray-600">Request and review leave</p></div>
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </a>
     </div>
   </div>
 
   <!-- Settings -->
   <div>
-    <h2 class="text-[11px] font-bold text-gray-400 uppercase tracking-widest px-3 mb-2">Settings</h2>
+    <h2 class="text-[11px] font-bold text-gray-500 uppercase tracking-widest px-1 mb-2">Settings</h2>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm divide-y divide-gray-100">
       <a href="/w/home/customise" class="flex items-center gap-3 p-4 active:bg-gray-50 transition">
         <div class="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center">
           <svg class="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.343 3.94c.09-.542.56-.94 1.11-.94h1.093c.55 0 1.02.398 1.11.94l.149.894c.07.424.384.764.78.93.398.164.855.142 1.205-.108l.737-.527a1.125 1.125 0 011.45.12l.773.774c.39.389.44 1.002.12 1.45l-.527.737c-.25.35-.272.806-.107 1.204.165.397.505.71.93.78l.893.15c.543.09.94.56.94 1.109v1.094c0 .55-.397 1.02-.94 1.11l-.893.149c-.425.07-.765.383-.93.78-.165.398-.143.854.107 1.204l.527.738c.32.447.269 1.06-.12 1.45l-.774.773a1.125 1.125 0 01-1.449.12l-.738-.527c-.35-.25-.806-.272-1.204-.107-.397.165-.71.505-.78.929l-.15.894c-.09.542-.56.94-1.11.94h-1.094c-.55 0-1.019-.398-1.11-.94l-.148-.894c-.071-.424-.384-.764-.781-.93-.398-.164-.854-.142-1.204.108l-.738.527c-.447.32-1.06.269-1.45-.12l-.773-.774a1.125 1.125 0 01-.12-1.45l.527-.737c.25-.35.273-.806.108-1.204-.165-.397-.506-.71-.93-.78l-.894-.15c-.542-.09-.94-.56-.94-1.109v-1.094c0-.55.398-1.02.94-1.11l.894-.149c.424-.07.765-.383.93-.78.165-.398.143-.854-.108-1.204l-.526-.738a1.125 1.125 0 01.12-1.45l.773-.773a1.125 1.125 0 011.45-.12l.737.527c.35.25.807.272 1.204.107.397-.165.71-.505.78-.929l.15-.894z"/></svg>
         </div>
-        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Customise Home</p><p class="text-xs text-gray-500">Reorder and toggle sections</p></div>
-        <svg class="w-4 h-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+        <div class="flex-1"><p class="text-sm font-medium text-gray-900">Customise Home</p><p class="text-xs text-gray-600">Reorder and toggle sections</p></div>
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
       </a>
     </div>
   </div>
