@@ -117,35 +117,50 @@
     color: #fff;
     box-shadow: 0 1px 2px rgba(0,0,0,0.3);
   }
-  /* Priority colour accents when active */
-  .tf-seg input.p-low:checked + label    { color: #047857; }
-  .tf-seg input.p-medium:checked + label { color: #B45309; }
-  .tf-seg input.p-high:checked + label   { color: #B91C1C; }
-  .dark-glass .tf-seg input.p-low:checked + label    { color: #34D399; }
-  .dark-glass .tf-seg input.p-medium:checked + label { color: #FBBF24; }
-  .dark-glass .tf-seg input.p-high:checked + label   { color: #F87171; }
+  /* Priority colour accents when active — tinted bg + bold colour text so
+     the choice reads at a glance instead of as a generic white pill. */
+  .tf-seg input.p-low:checked + label    { background: #ECFDF5; color: #047857; box-shadow: inset 0 0 0 1px rgba(16,185,129,0.30), 0 1px 2px rgba(0,0,0,0.04); }
+  .tf-seg input.p-medium:checked + label { background: #FFFBEB; color: #B45309; box-shadow: inset 0 0 0 1px rgba(251,191,36,0.32), 0 1px 2px rgba(0,0,0,0.04); }
+  .tf-seg input.p-high:checked + label   { background: #FEF2F2; color: #B91C1C; box-shadow: inset 0 0 0 1px rgba(239,68,68,0.30), 0 1px 2px rgba(0,0,0,0.04); }
+  .dark-glass .tf-seg input.p-low:checked + label    { background: rgba(16,185,129,0.18); color: #6EE7B7; box-shadow: inset 0 0 0 1px rgba(16,185,129,0.30); }
+  .dark-glass .tf-seg input.p-medium:checked + label { background: rgba(251,191,36,0.18); color: #FCD34D; box-shadow: inset 0 0 0 1px rgba(251,191,36,0.30); }
+  .dark-glass .tf-seg input.p-high:checked + label   { background: rgba(239,68,68,0.20); color: #FCA5A5; box-shadow: inset 0 0 0 1px rgba(239,68,68,0.30); }
 
-  /* Chips */
+  /* Status colour accents — same idea, matches the task-list status badges
+     (not_started=gray, in_progress=blue, blocked=red, complete=emerald). */
+  .tf-seg input.s-not_started:checked + label { background: #F1F5F9; color: #334155; box-shadow: inset 0 0 0 1px rgba(100,116,139,0.25), 0 1px 2px rgba(0,0,0,0.04); }
+  .tf-seg input.s-in_progress:checked + label { background: #EFF6FF; color: #1D4ED8; box-shadow: inset 0 0 0 1px rgba(59,130,246,0.30), 0 1px 2px rgba(0,0,0,0.04); }
+  .tf-seg input.s-blocked:checked + label     { background: #FEF2F2; color: #B91C1C; box-shadow: inset 0 0 0 1px rgba(239,68,68,0.30), 0 1px 2px rgba(0,0,0,0.04); }
+  .tf-seg input.s-complete:checked + label    { background: #ECFDF5; color: #047857; box-shadow: inset 0 0 0 1px rgba(16,185,129,0.30), 0 1px 2px rgba(0,0,0,0.04); }
+  .dark-glass .tf-seg input.s-not_started:checked + label { background: rgba(148,163,184,0.18); color: #CBD5E1; box-shadow: inset 0 0 0 1px rgba(148,163,184,0.30); }
+  .dark-glass .tf-seg input.s-in_progress:checked + label { background: rgba(59,130,246,0.20); color: #93C5FD; box-shadow: inset 0 0 0 1px rgba(59,130,246,0.30); }
+  .dark-glass .tf-seg input.s-blocked:checked + label     { background: rgba(239,68,68,0.20); color: #FCA5A5; box-shadow: inset 0 0 0 1px rgba(239,68,68,0.30); }
+  .dark-glass .tf-seg input.s-complete:checked + label    { background: rgba(16,185,129,0.20); color: #6EE7B7; box-shadow: inset 0 0 0 1px rgba(16,185,129,0.30); }
+
+  /* Chips — solid darker blue so the owner reads as a clear assignment,
+     not a faint pale-blue ghost on the white card. */
   .owner-chip {
     display: inline-flex; align-items: center; gap: 0.375rem;
     padding: 0.25rem 0.625rem 0.25rem 0.75rem;
-    background: #EFF6FF; color: #1D6AE5;
+    background: #2563EB; color: #fff;
     font-size: 0.75rem; font-weight: 600;
     border-radius: 9999px;
-    border: 1px solid rgba(43,127,255,0.2);
+    border: 1px solid #1D4ED8;
+    box-shadow: 0 1px 2px rgba(29,78,216,0.20);
   }
   .dark-glass .owner-chip {
-    background: rgba(43,127,255,0.15);
-    color: #93C5FD;
-    border-color: rgba(43,127,255,0.3);
+    background: rgba(59,130,246,0.30);
+    color: #DBEAFE;
+    border-color: rgba(59,130,246,0.45);
   }
   .owner-chip button {
     display: inline-flex; align-items: center; justify-content: center;
     width: 14px; height: 14px; border-radius: 9999px;
-    background: rgba(43,127,255,0.15); color: inherit;
+    background: rgba(255,255,255,0.22); color: inherit;
     font-size: 10px; line-height: 1;
   }
   .owner-chip button:hover { background: #EF4444; color: #fff; }
+  .dark-glass .owner-chip button { background: rgba(255,255,255,0.15); }
 
   /* Action bar */
   .tf-actionbar {
@@ -367,7 +382,7 @@
                    const curStatus = isEdit ? task.status : 'not_started';
                    const checked = curStatus === opt.key;
               %>
-                <input type="radio" name="status" id="status-<%= opt.key %>" value="<%= opt.key %>" <%= checked ? 'checked' : '' %> <%= disabled %>>
+                <input type="radio" name="status" id="status-<%= opt.key %>" value="<%= opt.key %>" <%= checked ? 'checked' : '' %> <%= disabled %> class="s-<%= opt.key %>">
                 <label for="status-<%= opt.key %>"><%= opt.label %></label>
               <% }) %>
             </div>
