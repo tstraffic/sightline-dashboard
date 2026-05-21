@@ -18,6 +18,30 @@
 .wh-header-btn:hover { color: #fff; background: rgba(255,255,255,0.05); }
 .wh-tabnav { background: #14171D; border-top: 1px solid rgba(255,255,255,0.06); }
 
+/* T&S wordmark next to the SA badge in the header. Two variants — one for
+ * each theme — so the logo stays legible on both surfaces. They share a
+ * fixed display box so toggling the theme doesn't shift the avatar. */
+.wh-header-brand {
+  display: inline-flex; align-items: center;
+  height: 28px;
+  flex-shrink: 0;
+}
+.wh-header-brand img {
+  height: 22px;
+  width: auto;
+  max-width: 110px;
+  object-fit: contain;
+  display: block;
+}
+/* Specificity note: `.wh-header-brand img { display: block }` above would
+ * otherwise win against a plain `.wh-header-brand-light` class selector
+ * (0,1,1 beats 0,1,0). Pin the variant rule to the descendant pattern so
+ * the hidden image actually stays hidden. */
+.wh-header-brand img.wh-header-brand-dark  { display: block; }
+.wh-header-brand img.wh-header-brand-light { display: none; }
+:root[data-theme="light"] .wh-header-brand img.wh-header-brand-dark  { display: none; }
+:root[data-theme="light"] .wh-header-brand img.wh-header-brand-light { display: block; }
+
 :root[data-theme="light"] .wh-header {
   background: #FFFFFF !important;
   /* Slightly stronger border + thin shadow so the bar is visually
@@ -154,6 +178,24 @@ input[type="tel"], input[type="number"], select, textarea {
 :root[data-theme="light"] .text-gray-400 { color: #9CA3AF !important; }
 :root[data-theme="light"] .text-gray-300 { color: #D1D5DB !important; }
 :root[data-theme="light"] .text-white { color: #111827 !important; }
+/* Tailwind opacity-suffixed white utilities (text-white/40, text-white/50,
+ * etc.) are scattered across the worker portal and were designed for dark
+ * surfaces — they render as nearly-transparent white on the light page bg
+ * and become invisible. Map each tier onto a readable gray so the views
+ * don't need a per-file refactor. */
+:root[data-theme="light"] .text-white\/90 { color: #111827 !important; }
+:root[data-theme="light"] .text-white\/80 { color: #1F2937 !important; }
+:root[data-theme="light"] .text-white\/75 { color: #1F2937 !important; }
+:root[data-theme="light"] .text-white\/70 { color: #374151 !important; }
+:root[data-theme="light"] .text-white\/60 { color: #4B5563 !important; }
+:root[data-theme="light"] .text-white\/55 { color: #4B5563 !important; }
+:root[data-theme="light"] .text-white\/50 { color: #6B7280 !important; }
+:root[data-theme="light"] .text-white\/45 { color: #6B7280 !important; }
+:root[data-theme="light"] .text-white\/40 { color: #6B7280 !important; }
+:root[data-theme="light"] .text-white\/35 { color: #9CA3AF !important; }
+:root[data-theme="light"] .text-white\/30 { color: #9CA3AF !important; }
+:root[data-theme="light"] .text-white\/25 { color: #9CA3AF !important; }
+:root[data-theme="light"] .text-white\/20 { color: #D1D5DB !important; }
 
 /* ── Brand color → Atomis Emerald (same in both modes) ── */
 .text-brand-600, .text-brand-500 { color: #10B981 !important; }

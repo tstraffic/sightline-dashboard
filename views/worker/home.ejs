@@ -355,6 +355,8 @@
 
   .wh-empty { text-align: center; padding: 24px 12px; background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.08); border-radius: 12px; }
   .wh-empty-ic { width: 40px; height: 40px; border-radius: 999px; margin: 0 auto 8px; background: rgba(255,255,255,0.04); display: flex; align-items: center; justify-content: center; color: rgba(255,255,255,0.3); }
+  .wh-empty-title { font-size: 0.875rem; font-weight: 600; color: rgba(255,255,255,0.78); }
+  .wh-empty-sub   { font-size: 0.75rem; color: rgba(255,255,255,0.45); margin-top: 4px; }
 
   /* Quick actions */
   .wh-qa { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
@@ -442,8 +444,10 @@
   :root[data-theme="light"] .wh-act-btn:active { background: #F9FAFB; }
   :root[data-theme="light"] .wh-act-btn.primary { background: #10B981; color: #FFFFFF; border-color: transparent; }
   :root[data-theme="light"] .wh-shift-meta-time { color: #4B5563; }
-  :root[data-theme="light"] .wh-empty { background: #F9FAFB; border-color: #E5E7EB; color: #6B7280; }
-  :root[data-theme="light"] .wh-empty-ic { background: #F3F4F6; color: #9CA3AF; }
+  :root[data-theme="light"] .wh-empty { background: #FFFFFF; border-color: #E5E7EB; color: #6B7280; }
+  :root[data-theme="light"] .wh-empty-ic { background: #F3F4F6; color: #4B5563; }
+  :root[data-theme="light"] .wh-empty-title { color: #111827; }
+  :root[data-theme="light"] .wh-empty-sub   { color: #6B7280; }
   :root[data-theme="light"] .wh-up-item { background: #FFFFFF; border-color: #E5E7EB; }
   :root[data-theme="light"] .wh-up-title { color: #0F1115; }
   :root[data-theme="light"] .wh-up-sub { color: #6B7280; }
@@ -465,6 +469,14 @@
   :root[data-theme="light"] .wh-timeline-legend-time { color: #0F1115; }
   :root[data-theme="light"] .wh-timeline-legend-lbl { color: #6B7280; }
   :root[data-theme="light"] .wh-timeline-track { background: #F3F4F6; }
+  :root[data-theme="light"] .wh-streak {
+    background-color: #FFFFFF;
+    background-image: none;
+    border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+  }
+  :root[data-theme="light"] .wh-streak-label { color: #6B7280; }
+  :root[data-theme="light"] .wh-streak-ic.blue { background: #EFF6FF; color: #2563EB; }
   :root[data-theme="light"] .wh-streak-value { color: #0F1115; }
   :root[data-theme="light"] .wh-streak-unit { color: #9CA3AF; }
   :root[data-theme="light"] .wh-streak-bar { background: #F3F4F6; }
@@ -935,8 +947,8 @@
   <% if (todaysShifts.length === 0) { %>
     <div class="wh-empty">
       <div class="wh-empty-ic"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></div>
-      <p class="text-sm text-white/70 font-semibold">No shift today</p>
-      <p class="text-xs text-white/40 mt-1">Enjoy the day off</p>
+      <p class="wh-empty-title">No shift today</p>
+      <p class="wh-empty-sub">Enjoy the day off</p>
     </div>
   <% } else { %>
     <% todaysShifts.forEach(shift => { %>

@@ -1,10 +1,36 @@
 <!DOCTYPE html>
 <html lang="en" class="h-full">
 <head>
+  <script>
+    // Theme bootstrap — shares the 'atomis-theme' localStorage key with the
+    // admin dashboard + worker portal so the choice carries across.
+    (function () {
+      try {
+        var saved = localStorage.getItem('atomis-theme');
+        var t = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+        document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      }
+    })();
+    window.toggleAtomisTheme = function () {
+      var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+      var next = cur === 'light' ? 'dark' : 'light';
+      document.documentElement.setAttribute('data-theme', next);
+      try { localStorage.setItem('atomis-theme', next); } catch (e) {}
+    };
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest && e.target.closest('.theme-toggle');
+      if (!btn) return;
+      e.preventDefault();
+      window.toggleAtomisTheme();
+    });
+  </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="color-scheme" content="dark light">
   <meta name="theme-color" content="#0F1115">
   <title>Sign in | T&S Crew</title>
 
@@ -33,6 +59,40 @@
       --font-body: 'Geist', 'Inter', system-ui, sans-serif;
       --font-mono: 'Geist Mono', monospace;
     }
+    :root[data-theme="light"] {
+      --base: #F7F8FA;
+      --surface: #FFFFFF;
+      --surface-2: #F1F3F6;
+      --text: #0F1115;
+      --text-mute: #555A63;
+      --text-faint: #8B8E95;
+      --border: rgba(15, 17, 21, 0.08);
+      --border-strong: rgba(15, 17, 21, 0.16);
+    }
+
+    /* Theme toggle — pinned top-right */
+    .theme-toggle {
+      position: absolute; top: calc(env(safe-area-inset-top, 0px) + 12px); right: 16px;
+      width: 36px; height: 36px; border-radius: 10px;
+      display: inline-flex; align-items: center; justify-content: center;
+      background: transparent; color: var(--text-mute);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      transition: background-color 0.15s, color 0.15s, border-color 0.15s, transform 0.15s;
+      z-index: 5;
+    }
+    .theme-toggle:hover { background: var(--surface-2); color: var(--text); border-color: var(--border-strong); }
+    .theme-toggle:active { transform: scale(0.94); }
+    .theme-toggle .icon-sun { display: none; }
+    .theme-toggle .icon-moon { display: block; }
+    :root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
+    :root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+
+    /* Theme-swapped T&S logo — white-on-dark vs colour-on-light. */
+    .ts-logo-dark { display: block; }
+    .ts-logo-light { display: none; }
+    :root[data-theme="light"] .ts-logo-dark { display: none; }
+    :root[data-theme="light"] .ts-logo-light { display: block; }
     html, body { height: 100%; }
     body {
       font-family: var(--font-body);
@@ -104,13 +164,25 @@
       font-family: var(--font-body);
       font-size: 16px;
       transition: border-color 0.15s, background-color 0.15s;
+      color-scheme: light dark;
     }
     .field input:focus {
       outline: none;
       border-color: var(--emerald);
-      background: #1F232B;
+      background: var(--surface-2);
     }
     .field input::placeholder { color: var(--text-faint); }
+    /* Autofill — mirror the admin login fix so iOS doesn't paint the
+     * input dark when the user taps it in light mode. */
+    .field input:-webkit-autofill,
+    .field input:-webkit-autofill:hover,
+    .field input:-webkit-autofill:focus,
+    .field input:-webkit-autofill:active {
+      -webkit-box-shadow: 0 0 0 1000px var(--surface) inset !important;
+      -webkit-text-fill-color: var(--text) !important;
+      caret-color: var(--text);
+      transition: background-color 9999s ease-in-out 0s;
+    }
     .field input.pin {
       text-align: center;
       letter-spacing: 0.5em;
@@ -186,10 +258,16 @@
   </style>
 </head>
 <body>
-  <!-- TOP — T&S brand mark -->
+  <button type="button" class="theme-toggle" aria-label="Toggle theme" title="Toggle light/dark theme">
+    <svg class="icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+    <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
+  </button>
+
+  <!-- TOP — T&S brand mark (logo swaps per theme: white-on-dark vs colour-on-light) -->
   <div class="top">
     <div class="mark-stage">
-      <img src="/images/ts-logo-white.png" alt="T&amp;S Traffic Control" style="width:220px;max-width:80vw;height:auto;display:block">
+      <img class="ts-logo-dark" src="/images/ts-logo-white.png" alt="T&amp;S Traffic Control" style="width:220px;max-width:80vw;height:auto">
+      <img class="ts-logo-light" src="/images/logo-colour.png" alt="T&amp;S Traffic Control" style="width:220px;max-width:80vw;height:auto">
     </div>
     <h1 class="wm">Field Station</h1>
     <p class="eyebrow">Sign in to start your shift</p>
@@ -246,7 +324,8 @@
   <!-- BOTTOM -->
   <div class="bottom">
     <div style="opacity:0.7;display:inline-flex;align-items:center;gap:6px">
-      <img src="/images/atomis-mark.svg" alt="" style="width:12px;height:12px;display:block" aria-hidden="true">
+      <img class="ts-logo-dark" src="/images/atomis-mark.svg" alt="" style="width:12px;height:12px" aria-hidden="true">
+      <img class="ts-logo-light" src="/images/atomis-mark-light-bg.svg" alt="" style="width:12px;height:12px" aria-hidden="true">
       <span>Powered by Atomis &middot; <%= new Date().getFullYear() %></span>
     </div>
   </div>
