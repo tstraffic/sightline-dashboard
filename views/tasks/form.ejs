@@ -162,7 +162,9 @@
   .owner-chip button:hover { background: #EF4444; color: #fff; }
   .dark-glass .owner-chip button { background: rgba(255,255,255,0.15); }
 
-  /* Action bar */
+  /* Action bar — sits at the bottom of the form card and is sticky while
+     scrolling. Match the card bg in either mode so it reads as part of the
+     card, not a separate dark band stuck under it. */
   .tf-actionbar {
     position: sticky;
     bottom: 0;
@@ -174,8 +176,15 @@
     border-radius: 0 0 1rem 1rem;
   }
   .dark-glass .tf-actionbar {
-    background: rgba(10,22,40,0.85);
+    background: rgba(15,17,21,0.85);
     border-top-color: rgba(255,255,255,0.08);
+  }
+  /* Light mode reset — .dark-glass body is always on, so the rule above
+     would paint the bar dark even in light mode (which is the bug the
+     user reported: dark slate strip under a white card). Restore white. */
+  :root[data-theme="light"] body.dark-glass .tf-actionbar {
+    background: rgba(255,255,255,0.95);
+    border-top-color: #E5E7EB;
   }
   .tf-btn-primary {
     display: inline-flex; align-items: center; gap: 0.5rem;

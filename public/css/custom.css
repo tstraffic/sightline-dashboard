@@ -3009,7 +3009,7 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
   border-color: var(--dark-border) !important;
 }
 .dark-glass .bg-white\/70 {
-  background: rgba(10,22,40,0.75) !important;
+  background: rgba(15,17,21,0.75) !important;
   backdrop-filter: blur(16px) saturate(180%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(180%) !important;
 }
@@ -3088,7 +3088,7 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 /* --- Header dropdowns (notifications, quick-add) --- */
 .dark-glass #notif-dropdown,
 .dark-glass #quickadd-dropdown {
-  background: rgba(10,22,40,0.95) !important;
+  background: rgba(15,17,21,0.95) !important;
   backdrop-filter: blur(20px) !important;
   -webkit-backdrop-filter: blur(20px) !important;
   border-color: var(--dark-border) !important;
@@ -3347,7 +3347,7 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 
 /* --- Modals --- */
 .dark-glass .booking-modal {
-  background: rgba(10,22,40,0.97) !important;
+  background: rgba(15,17,21,0.97) !important;
   backdrop-filter: blur(20px) !important;
 }
 .dark-glass .booking-modal-tabs { background: rgba(255,255,255,0.03) !important; border-bottom-color: var(--dark-border) !important; }
@@ -3405,7 +3405,7 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 .dark-glass .resource-warning-badge { background: rgba(239,68,68,0.15) !important; color: #fca5a5 !important; }
 
 /* --- KPI / stat cards --- */
-.dark-glass .card-action-btn { background: rgba(10,22,40,0.85) !important; color: var(--dark-text-tertiary) !important; box-shadow: 0 1px 4px rgba(0,0,0,0.3) !important; }
+.dark-glass .card-action-btn { background: rgba(15,17,21,0.85) !important; color: var(--dark-text-tertiary) !important; box-shadow: 0 1px 4px rgba(0,0,0,0.3) !important; }
 .dark-glass .card-action-btn:hover { color: #60a5fa !important; background: rgba(16,185,129,0.15) !important; }
 .dark-glass .crew-count-badge.all-confirmed { background: rgba(22,163,74,0.20) !important; color: #86efac !important; }
 .dark-glass .crew-count-badge.partial { background: rgba(217,119,6,0.20) !important; color: #fcd34d !important; }
@@ -3416,7 +3416,7 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 
 /* --- FAB / floating action button --- */
 .dark-glass [class*="fab-menu"] {
-  background: rgba(10,22,40,0.95) !important;
+  background: rgba(15,17,21,0.95) !important;
   border-color: var(--dark-border) !important;
 }
 
@@ -3448,7 +3448,7 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 
 /* --- Bookings subnav bar --- */
 .dark-glass .bookings-subnav {
-  background: rgba(10,22,40,0.80) !important;
+  background: rgba(15,17,21,0.80) !important;
   border-bottom-color: var(--dark-border) !important;
   backdrop-filter: blur(12px) !important;
 }
