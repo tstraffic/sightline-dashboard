@@ -490,6 +490,22 @@
   :root[data-theme="light"] .wd-stat-tile-value { color: #0F1115 !important; }
   :root[data-theme="light"] .wd-stat-tile-unit { color: #9CA3AF !important; }
   :root[data-theme="light"] .wd-stat-tile-sub { color: #6B7280 !important; }
+  /* Section labels (SAFETY / THIS WEEK / TODAY / etc.) — dark default is
+     rgba(255,255,255,0.4); on the light page bg that's invisible. */
+  :root[data-theme="light"] .wh-section-title { color: #6B7280; }
+  :root[data-theme="light"] .wh-section-link  { color: #4B5563; }
+  /* "For you" card carousel (.wh-card) — title was #fff and body was
+     rgba(255,255,255,0.6); both wash out on the light page bg. */
+  :root[data-theme="light"] .wh-card {
+    background-color: #FFFFFF !important;
+    background-image: none !important;
+    border-color: #E5E7EB;
+  }
+  :root[data-theme="light"] .wh-card-title { color: #0F1115; }
+  :root[data-theme="light"] .wh-card-body  { color: #4B5563; }
+  :root[data-theme="light"] .wh-card-dismiss { color: #9CA3AF; background: #F3F4F6; }
+  :root[data-theme="light"] .wh-card-dismiss:hover { color: #111827; background: #E5E7EB; }
+  :root[data-theme="light"] .wh-card-ic.blue { background: #EFF6FF; color: #2563EB; }
 </style>
 
 <div class="wh-wrap">
@@ -864,51 +880,51 @@
   <div class="wh-section-head"><span class="wh-section-title">Safety</span></div>
   <div style="display: flex; flex-direction: column; gap: 8px;">
     <% if (safetyCounts.swmsNeedsAck > 0) { %>
-      <a href="/w/safety/swms" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background-image: linear-gradient(180deg, rgba(244,63,94,0.14) 0%, rgba(244,63,94,0.04) 100%); border: 1px solid rgba(244,63,94,0.30); border-radius: 12px; text-decoration: none; color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-        <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(244,63,94,0.18); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <svg width="18" height="18" fill="none" stroke="#fda4af" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+      <a href="/w/safety/swms" class="wh-cta-alert wh-cta-alert--rose">
+        <div class="wh-cta-alert__icon">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
         </div>
-        <div style="flex: 1; min-width: 0;">
-          <p style="font-size: 0.85rem; font-weight: 700; color: #fff;"><%= safetyCounts.swmsNeedsAck %> SWMS need<%= safetyCounts.swmsNeedsAck === 1 ? 's' : '' %> your acknowledgement</p>
-          <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px;">Tap to review and confirm</p>
+        <div class="wh-cta-alert__body">
+          <p class="wh-cta-alert__title"><%= safetyCounts.swmsNeedsAck %> SWMS need<%= safetyCounts.swmsNeedsAck === 1 ? 's' : '' %> your acknowledgement</p>
+          <p class="wh-cta-alert__sub">Tap to review and confirm</p>
         </div>
-        <svg width="18" height="18" fill="none" stroke="rgba(255,255,255,0.4)" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        <svg class="wh-cta-alert__chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
       </a>
     <% } %>
     <% if (safetyCounts.sopNeedsAck > 0) { %>
-      <a href="/w/safety/sop-register" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background-image: linear-gradient(180deg, rgba(244,63,94,0.14) 0%, rgba(244,63,94,0.04) 100%); border: 1px solid rgba(244,63,94,0.30); border-radius: 12px; text-decoration: none; color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-        <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(244,63,94,0.18); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <svg width="18" height="18" fill="none" stroke="#fda4af" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      <a href="/w/safety/sop-register" class="wh-cta-alert wh-cta-alert--rose">
+        <div class="wh-cta-alert__icon">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
         </div>
-        <div style="flex: 1; min-width: 0;">
-          <p style="font-size: 0.85rem; font-weight: 700; color: #fff;"><%= safetyCounts.sopNeedsAck %> SOP<%= safetyCounts.sopNeedsAck === 1 ? '' : 's' %> need<%= safetyCounts.sopNeedsAck === 1 ? 's' : '' %> your acknowledgement</p>
-          <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px;">Tap to review and confirm</p>
+        <div class="wh-cta-alert__body">
+          <p class="wh-cta-alert__title"><%= safetyCounts.sopNeedsAck %> SOP<%= safetyCounts.sopNeedsAck === 1 ? '' : 's' %> need<%= safetyCounts.sopNeedsAck === 1 ? 's' : '' %> your acknowledgement</p>
+          <p class="wh-cta-alert__sub">Tap to review and confirm</p>
         </div>
-        <svg width="18" height="18" fill="none" stroke="rgba(255,255,255,0.4)" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        <svg class="wh-cta-alert__chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
       </a>
     <% } %>
     <% if (safetyCounts.quizzesOutstanding > 0) { %>
-      <a href="/w/safety/quizzes" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background-image: linear-gradient(180deg, rgba(139,92,246,0.14) 0%, rgba(139,92,246,0.04) 100%); border: 1px solid rgba(139,92,246,0.30); border-radius: 12px; text-decoration: none; color: #fff; box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);">
-        <div style="width: 36px; height: 36px; border-radius: 999px; background: rgba(139,92,246,0.18); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <svg width="18" height="18" fill="none" stroke="#c4b5fd" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+      <a href="/w/safety/quizzes" class="wh-cta-alert wh-cta-alert--violet">
+        <div class="wh-cta-alert__icon">
+          <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
         </div>
-        <div style="flex: 1; min-width: 0;">
-          <p style="font-size: 0.85rem; font-weight: 700; color: #fff;"><%= safetyCounts.quizzesOutstanding %> quiz<%= safetyCounts.quizzesOutstanding === 1 ? '' : 'zes' %> to complete</p>
-          <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px;">Quick knowledge checks</p>
+        <div class="wh-cta-alert__body">
+          <p class="wh-cta-alert__title"><%= safetyCounts.quizzesOutstanding %> quiz<%= safetyCounts.quizzesOutstanding === 1 ? '' : 'zes' %> to complete</p>
+          <p class="wh-cta-alert__sub">Quick knowledge checks</p>
         </div>
-        <svg width="18" height="18" fill="none" stroke="rgba(255,255,255,0.4)" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        <svg class="wh-cta-alert__chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
       </a>
     <% } %>
     <% if (safetyCounts.unread > 0) { %>
-      <a href="/w/safety/updates" style="display: flex; align-items: center; gap: 12px; padding: 12px 14px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-left: 3px solid #10B981; border-radius: 8px; text-decoration: none; color: #fff;">
-        <div style="width: 32px; height: 32px; border-radius: 6px; background: rgba(16,185,129,0.15); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-          <svg width="16" height="16" fill="none" stroke="#34D399" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+      <a href="/w/safety/updates" class="wh-cta-alert wh-cta-alert--feed" style="border-left: 3px solid #10B981;">
+        <div class="wh-cta-alert__icon" style="background: rgba(16,185,129,0.15); color: #10B981;">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
         </div>
-        <div style="flex: 1; min-width: 0;">
-          <p style="font-size: 0.85rem; font-weight: 700; color: #fff;"><%= safetyCounts.unread %> unread safety update<%= safetyCounts.unread === 1 ? '' : 's' %></p>
-          <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 2px;">Tap to read the latest bulletins</p>
+        <div class="wh-cta-alert__body">
+          <p class="wh-cta-alert__title"><%= safetyCounts.unread %> unread safety update<%= safetyCounts.unread === 1 ? '' : 's' %></p>
+          <p class="wh-cta-alert__sub">Tap to read the latest bulletins</p>
         </div>
-        <svg width="18" height="18" fill="none" stroke="rgba(255,255,255,0.4)" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        <svg class="wh-cta-alert__chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
       </a>
     <% } %>
   </div>

@@ -103,8 +103,8 @@
       }
     }
   </script>
-  <link rel="stylesheet" href="/css/custom.css?v=atomis-5">
-  <link rel="stylesheet" href="/css/worker.css?v=atomis-3">
+  <link rel="stylesheet" href="/css/custom.css?v=atomis-6">
+  <link rel="stylesheet" href="/css/worker.css?v=atomis-4">
   <link rel="stylesheet" href="/css/worker-design.css?v=atomis-3">
   <link rel="stylesheet" href="/css/chat.css?v=atomis-1">
 </head>
@@ -164,11 +164,11 @@
   <header class="wh-header shrink-0 safe-area-top">
     <div class="flex items-center justify-between px-3 h-11 gap-2">
       <% if (typeof worker !== 'undefined' && worker) { %>
-        <a href="/w/profile" aria-label="Profile" class="wh-header-avatar w-8 h-8 flex items-center justify-center text-[11px] font-semibold shrink-0 active:scale-95 transition" style="border-radius:6px">
+        <a href="/w/profile" aria-label="Profile" class="wh-header-avatar w-7 h-7 flex items-center justify-center text-[10px] font-semibold shrink-0 active:scale-95 transition" style="border-radius:6px">
           <%= worker.full_name.split(' ').map(n => n[0]).join('').slice(0,2) %>
         </a>
       <% } else { %>
-        <div class="w-8 shrink-0"></div>
+        <div class="w-7 shrink-0"></div>
       <% } %>
       <div class="text-center min-w-0 flex-1">
         <p class="wh-header-title text-sm font-medium truncate" style="font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.015em"><%= typeof title !== 'undefined' ? title : 'Home' %></p>

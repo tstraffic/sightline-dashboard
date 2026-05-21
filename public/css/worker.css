@@ -58,6 +58,10 @@ main { padding-bottom: calc(4.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem);
 /* ── Touch Targets ── */
 a, button { min-height: 44px; }
 nav a { -webkit-tap-highlight-color: transparent; user-select: none; min-height: auto; }
+/* Header chrome elements opt out of the global 44px min — they live inside
+ * the h-11 header bar and need to be sized exactly by their utility
+ * classes so they don't stretch and touch the header borders. */
+.wh-header a, .wh-header button { min-height: 0; }
 
 /* ── Scrolling ── */
 html {
@@ -357,3 +361,96 @@ input[type="search"], input[type="text"].bg-white {
 :root[data-theme="light"] .wd-stat-tile-value { color: #0F1115 !important; }
 :root[data-theme="light"] .wd-stat-tile-unit { color: #9CA3AF !important; }
 :root[data-theme="light"] .wd-stat-tile-sub { color: #6B7280 !important; }
+
+/* ── Wet weather PPE callout (.wc-warn) ──
+ * Default amber-on-amber + #fde68a text reads on the dark page; on the
+ * light page bg the whole pill washes out. Bump bg saturation + flip
+ * text to a real readable amber-on-cream. */
+:root[data-theme="light"] .wc-warn {
+  background: #FEF3C7 !important;
+  border-color: #FBBF24 !important;
+  color: #92400E !important;
+}
+
+/* ── Home page CTA alerts (SWMS / SOP / Quiz "needs your ack") ──
+ * Replaces a previous batch of inline styles in views/worker/home.ejs
+ * that hard-coded color: #fff + rgba(244,63,94,0.14) bg — invisible on
+ * the light page bg. The view now applies .wh-cta-alert + a --tone
+ * modifier and we theme both modes here. */
+.wh-cta-alert {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  text-decoration: none;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05);
+}
+.wh-cta-alert__icon {
+  width: 36px; height: 36px;
+  border-radius: 999px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.wh-cta-alert__title { font-size: 0.85rem; font-weight: 700; }
+.wh-cta-alert__sub   { font-size: 0.7rem; margin-top: 2px; }
+.wh-cta-alert__body  { flex: 1; min-width: 0; }
+.wh-cta-alert__chev  { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* Rose (SWMS / SOP need ack) — danger-tinted. */
+.wh-cta-alert--rose {
+  background-image: linear-gradient(180deg, rgba(244,63,94,0.14) 0%, rgba(244,63,94,0.04) 100%);
+  border: 1px solid rgba(244,63,94,0.30);
+  color: #fff;
+}
+.wh-cta-alert--rose .wh-cta-alert__icon { background: rgba(244,63,94,0.18); color: #fda4af; }
+.wh-cta-alert--rose .wh-cta-alert__sub  { color: rgba(255,255,255,0.55); }
+.wh-cta-alert--rose .wh-cta-alert__chev { color: rgba(255,255,255,0.4); }
+
+:root[data-theme="light"] .wh-cta-alert--rose {
+  background-image: linear-gradient(180deg, #FFE4E6 0%, #FFF1F2 100%) !important;
+  border-color: #FECDD3 !important;
+  color: #881337 !important;
+}
+:root[data-theme="light"] .wh-cta-alert--rose .wh-cta-alert__icon { background: #FECDD3 !important; color: #BE123C !important; }
+:root[data-theme="light"] .wh-cta-alert--rose .wh-cta-alert__sub  { color: #9F1239 !important; }
+:root[data-theme="light"] .wh-cta-alert--rose .wh-cta-alert__chev { color: #BE123C !important; }
+
+/* Violet (Quizzes outstanding). */
+.wh-cta-alert--violet {
+  background-image: linear-gradient(180deg, rgba(139,92,246,0.14) 0%, rgba(139,92,246,0.04) 100%);
+  border: 1px solid rgba(139,92,246,0.30);
+  color: #fff;
+}
+.wh-cta-alert--violet .wh-cta-alert__icon { background: rgba(139,92,246,0.18); color: #c4b5fd; }
+.wh-cta-alert--violet .wh-cta-alert__sub  { color: rgba(255,255,255,0.55); }
+.wh-cta-alert--violet .wh-cta-alert__chev { color: rgba(255,255,255,0.4); }
+
+:root[data-theme="light"] .wh-cta-alert--violet {
+  background-image: linear-gradient(180deg, #EDE9FE 0%, #F5F3FF 100%) !important;
+  border-color: #DDD6FE !important;
+  color: #4C1D95 !important;
+}
+:root[data-theme="light"] .wh-cta-alert--violet .wh-cta-alert__icon { background: #DDD6FE !important; color: #6D28D9 !important; }
+:root[data-theme="light"] .wh-cta-alert--violet .wh-cta-alert__sub  { color: #5B21B6 !important; }
+:root[data-theme="light"] .wh-cta-alert--violet .wh-cta-alert__chev { color: #6D28D9 !important; }
+
+/* Generic feed/unread alert (used by .wh-cta-alert--feed for "X new feed
+ * updates") — kept neutral grey so it doesn't fight the rose/violet ones. */
+.wh-cta-alert--feed {
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0.02) 100%);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: #fff;
+}
+.wh-cta-alert--feed .wh-cta-alert__icon { background: rgba(255,255,255,0.10); color: #d1d5db; }
+.wh-cta-alert--feed .wh-cta-alert__sub  { color: rgba(255,255,255,0.55); }
+.wh-cta-alert--feed .wh-cta-alert__chev { color: rgba(255,255,255,0.4); }
+
+:root[data-theme="light"] .wh-cta-alert--feed {
+  background-image: linear-gradient(180deg, #F9FAFB 0%, #FFFFFF 100%) !important;
+  border-color: #E5E7EB !important;
+  color: #111827 !important;
+}
+:root[data-theme="light"] .wh-cta-alert--feed .wh-cta-alert__icon { background: #F3F4F6 !important; color: #4B5563 !important; }
+:root[data-theme="light"] .wh-cta-alert--feed .wh-cta-alert__sub  { color: #4B5563 !important; }
+:root[data-theme="light"] .wh-cta-alert--feed .wh-cta-alert__chev { color: #6B7280 !important; }
