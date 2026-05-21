@@ -147,35 +147,8 @@ router.post('/dismiss-onboarding', (req, res) => {
   res.json({ success: true });
 });
 
-// POST /profile/toggle-bookings-v2 — flip the per-user feature flag for
-// the new bookings board UI. Stored in users.preferences JSON.
-router.post('/toggle-bookings-v2', (req, res) => {
-  const db = getDb();
-  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  try {
-    // Make sure the column exists — first time someone hits this on an
-    // old DB the migration may not have run. Idempotent.
-    try { db.exec("ALTER TABLE users ADD COLUMN preferences TEXT DEFAULT '{}'"); } catch (e) { /* already exists */ }
-
-    const row = db.prepare('SELECT preferences FROM users WHERE id = ?').get(req.session.user.id);
-    let current = {};
-    try {
-      const parsed = JSON.parse((row && row.preferences) || '{}');
-      if (parsed && typeof parsed === 'object') current = parsed;
-    } catch (e) { /* bad JSON — start fresh */ }
-
-    const next = !current.bookings_v2;
-    current.bookings_v2 = next;
-    db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify(current), req.session.user.id);
-    if (isJson) return res.json({ ok: true, enabled: next });
-    req.flash('success', next ? 'New bookings board enabled — try it at /bookings/board.' : 'Reverted to the classic bookings list.');
-    res.redirect(next ? '/bookings/board' : '/bookings');
-  } catch (e) {
-    console.error('[Profile] toggle-bookings-v2 error:', e.message);
-    if (isJson) return res.status(500).json({ error: e.message });
-    req.flash('error', 'Failed to save preference: ' + e.message);
-    res.redirect('/profile');
-  }
-});
+// POST /profile/toggle-bookings-v2 — retired. The day board is now
+// /bookings for everyone; this endpoint just redirects safely.
+router.post('/toggle-bookings-v2', (req, res) => res.redirect('/bookings'));
 
 module.exports = router;

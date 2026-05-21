@@ -29,17 +29,7 @@ const uploadDoc = multer({ storage: bookingStorage, limits: { fileSize: 50 * 102
 const DEPOTS = ['Villawood', 'Penrith', 'Campbelltown', 'Parramatta'];
 const VALID_STATUSES = ['client_booking', 'unconfirmed', 'confirmed', 'locked', 'conflict', 'green_to_go', 'in_progress', 'complete', 'finalised', 'cancelled', 'late_cancellation', 'on_hold'];
 
-// Per-user feature flag for the new bookings board UI. Stored in
-// users.preferences JSON; ?v2=1/0 query overrides for safe trials.
-function bookingsV2Enabled(req) {
-  if (req.query && req.query.v2 != null) return req.query.v2 !== '0' && req.query.v2 !== 'false';
-  if (!req.session || !req.session.user) return false;
-  try {
-    const row = getDb().prepare('SELECT preferences FROM users WHERE id = ?').get(req.session.user.id);
-    const prefs = JSON.parse((row && row.preferences) || '{}');
-    return !!prefs.bookings_v2;
-  } catch (e) { return false; }
-}
+// (Beta flag retired — the day board is now /bookings for everyone.)
 
 // Auto-vehicle sync — every "Nx TC Crew" booking_requirement row carries
 // 1 ute. After requirements are saved we make sure booking_vehicles has
@@ -201,8 +191,10 @@ function loadBookingDetail(db, bookingId) {
   return { ...row, supervisor_name: supervisorName, internal_notes: row.notes || '', crew, notes, vehicles, dockets, documents, activity, requirements, equipment: equipmentList, job: jobInfo, client: clientInfo };
 }
 
-// GET / — Board view
-router.get('/', (req, res) => {
+// GET /classic — legacy list view (was GET /). Preserved for any old
+// bookmarks or links; the canonical experience is now GET / (the day
+// board with universal slide-over).
+router.get('/classic', (req, res) => {
   const db = getDb();
   const view = req.query.view || 'board';
   // Use Australia/Sydney local date as default (not UTC — avoids showing yesterday after midnight AEST)
@@ -277,7 +269,7 @@ router.get('/', (req, res) => {
   let contacts = []; try { contacts = db.prepare("SELECT id, full_name, company_id FROM client_contacts ORDER BY full_name").all(); } catch (e) {}
   let crewForSelect = []; try { crewForSelect = db.prepare("SELECT id, full_name, role, portal_role FROM crew_members WHERE active = 1 ORDER BY full_name").all(); } catch (e) {}
 
-  res.render('bookings/index', { title: 'Bookings Board', bookings, stats, depots: DEPOTS, currentView: view, currentDate: dateStr, currentDepot: depot, currentStatus: status, currentSearch: search, currentDeleted: deletedFilter, user: req.session.user, jobs, clients, supervisors, contacts, crewForSelect, v2Enabled: bookingsV2Enabled(req) });
+  res.render('bookings/index', { title: 'Bookings (classic)', bookings, stats, depots: DEPOTS, currentView: view, currentDate: dateStr, currentDepot: depot, currentStatus: status, currentSearch: search, currentDeleted: deletedFilter, user: req.session.user, jobs, clients, supervisors, contacts, crewForSelect, v2Enabled: false });
 });
 
 // GET /new
@@ -494,15 +486,11 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
   return blocks;
 }
 
-// GET /board — Day-focused Board view + universal slide-over shell.
-// Phase 1 of the brief's bookings revamp. Single-column wide cards,
-// sorted by start time. Status as a per-card banner. View switcher
-// (Board/List/Calendar/Map) is client-side on the same page.
-router.get('/board', (req, res) => {
-  if (!bookingsV2Enabled(req)) {
-    req.flash('error', 'Bookings v2 is not enabled for your account. Enable it from /profile.');
-    return res.redirect('/profile');
-  }
+// GET / — Day-focused Board view + universal slide-over.
+// Single-column wide cards sorted by start time, status as a per-card
+// banner. View switcher (Board/List/Calendar/Map) is client-side on
+// the same page. /bookings/board is kept as a redirect alias below.
+router.get('/', (req, res) => {
   const db = getDb();
   const dateStr = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
   const filterDepot = req.query.depot || '';
@@ -637,10 +625,15 @@ router.get('/board', (req, res) => {
   });
 });
 
-// POST /quick — 5-field create from the board's slide-over. Returns
-// JSON when Accept: application/json so the board can refresh inline.
+// GET /board — Permanent alias of GET / so old bookmarks survive.
+router.get('/board', (req, res) => {
+  const qs = req.originalUrl.includes('?') ? req.originalUrl.slice(req.originalUrl.indexOf('?')) : '';
+  res.redirect('/bookings' + qs);
+});
+
+// POST /quick — 5-field create from the slide-over. Returns JSON when
+// Accept: application/json so the board can refresh inline.
 router.post('/quick', (req, res) => {
-  if (!bookingsV2Enabled(req)) return res.status(403).json({ error: 'bookings_v2 not enabled' });
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const b = req.body;
