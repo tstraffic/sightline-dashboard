@@ -371,8 +371,10 @@ router.post('/', (req, res) => {
   });
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: bookingId, details: `Created booking ${bookingNumber}`, req });
-  req.flash('success', `Booking ${bookingNumber} created.`);
-  res.redirect('/bookings');
+  req.flash('success', `Booking ${bookingNumber} created — now assign your crew and vehicles below.`);
+  // Land the planner directly on the detail page so the crew + vehicle
+  // picker is right in front of them (was redirecting to the list).
+  res.redirect('/bookings/' + bookingId);
 
   // Background geocode after the response goes out — never blocks the
   // user's save. Skips if the user already pinned the marker manually

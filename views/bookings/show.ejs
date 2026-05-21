@@ -263,9 +263,209 @@
 </div>
 <% } %>
 
+<!-- ====================================================================
+     CREW & VEHICLES — the heart of every booking. Lives at the top of
+     the page so it's the first thing a planner sees after creating a
+     booking. Chips on the left = active + reserved crew, click to add.
+     Cards on the right = vehicles, drop a crew chip onto one to make
+     them the driver. Everything updates inline (no page reload).
+     ==================================================================== -->
+<%
+  var assignedIds = (b.personnel || []).map(function (p) { return p.id; });
+  var activePool = (typeof allCrew !== 'undefined' ? allCrew : []).filter(function (c) { return (c.employment_status || 'active') === 'active'; });
+  var reservedPool = (typeof allCrew !== 'undefined' ? allCrew : []).filter(function (c) { return c.employment_status === 'reserved'; });
+  var leavePool = (typeof allCrew !== 'undefined' ? allCrew : []).filter(function (c) { return c.employment_status === 'on_leave'; });
+  var nothingAssignedYet = (!b.personnel || !b.personnel.length) && (!b.allVehicles || !b.allVehicles.length);
+%>
+
+<% if (nothingAssignedYet) { %>
+<div class="bg-gradient-to-r from-brand-50 to-emerald-50 border border-brand-200 rounded-xl p-4 mb-5 flex items-center gap-3">
+  <div class="w-10 h-10 bg-brand-600 rounded-lg flex items-center justify-center flex-shrink-0">
+    <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+  </div>
+  <div class="min-w-0">
+    <p class="text-sm font-bold text-gray-900">Next step — assign your crew &amp; vehicles</p>
+    <p class="text-xs text-gray-600">Click a name from the pool below to add them. Drag onto a vehicle to make them the driver. Everything saves as you go.</p>
+  </div>
+</div>
+<% } %>
+
+<section id="sec-crew-vehicles" class="bg-white border border-gray-200 rounded-xl shadow-sm mb-5 overflow-hidden">
+  <header class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+    <div>
+      <h2 class="text-sm font-bold text-gray-900">Crew &amp; Vehicles</h2>
+      <p class="text-[11px] text-gray-500 mt-0.5">Click a chip to add · drag onto a vehicle to assign driver · click an assigned chip to confirm</p>
+    </div>
+    <div class="flex items-center gap-3 text-xs">
+      <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-500"></span><span id="crewConfirmedCount" class="font-bold tabular-nums"><%= confirmedCount %></span><span class="text-gray-500">confirmed</span></span>
+      <span class="text-gray-300">/</span>
+      <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-blue-500"></span><span id="crewAssignedCount" class="font-bold tabular-nums"><%= b.personnel ? b.personnel.length : 0 %></span><span class="text-gray-500">assigned</span></span>
+      <span class="text-gray-300">/</span>
+      <span class="inline-flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-brand-500"></span><span class="font-bold tabular-nums"><%= b.allVehicles ? b.allVehicles.length : 0 %></span><span class="text-gray-500">vehicles</span></span>
+    </div>
+  </header>
+
+  <div class="grid grid-cols-1 lg:grid-cols-5 gap-0 divide-y lg:divide-y-0 lg:divide-x divide-gray-200">
+
+    <!-- CREW SIDE -->
+    <div class="lg:col-span-3 p-5" id="crewPanel" data-booking-id="<%= b.id %>">
+      <!-- Assigned strip -->
+      <div class="flex items-center justify-between mb-2">
+        <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">On this booking</p>
+        <input type="text" id="crewPoolSearch" placeholder="Search pool…" autocomplete="off"
+          class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-700 text-xs w-44 focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div id="assignedCrew" class="min-h-[3rem] flex flex-wrap gap-2 p-2 rounded-lg bg-gray-50 border-2 border-dashed border-gray-200 mb-4 transition">
+        <% if (!b.personnel || !b.personnel.length) { %>
+          <span class="text-xs text-gray-400 self-center px-2" data-empty>No crew yet — click someone from the pool below.</span>
+        <% } %>
+        <% (b.personnel || []).forEach(function (p) { %>
+          <span class="crew-chip assigned <%= p.confirmed ? 'confirmed' : 'unconfirmed' %>"
+                data-crew-id="<%= p.id %>" data-name="<%= p.name %>" data-role="<%= p.role || '' %>"
+                draggable="true" title="<%= p.confirmed ? 'Confirmed · drag onto vehicle to assign as driver' : 'Click to confirm · drag onto vehicle to assign as driver' %>">
+            <span class="crew-chip-avatar"><%= p.name ? p.name.split(' ').map(function (n) { return n[0]; }).join('').substring(0,2) : '?' %></span>
+            <span class="crew-chip-name"><%= p.name %></span>
+            <% if (p.confirmed) { %><span class="crew-chip-tick" aria-hidden="true">✓</span><% } %>
+            <button type="button" class="crew-chip-x" data-action="remove" title="Remove from booking" aria-label="Remove">×</button>
+          </span>
+        <% }); %>
+      </div>
+
+      <!-- Pool: Active + Reserved + On Leave sections -->
+      <% function renderCrewSection(title, list, colorClass, dotClass) { %>
+        <% if (list && list.length) { %>
+          <div class="mb-3" data-pool-section>
+            <p class="text-[10px] font-bold uppercase tracking-widest mb-2 <%= colorClass %> flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full <%= dotClass %>"></span>
+              <%= title %>
+              <span class="text-gray-400 font-medium ml-1">(<span class="pool-count"><%= list.length %></span>)</span>
+            </p>
+            <div class="flex flex-wrap gap-1.5">
+              <% list.forEach(function (c) { var isAssigned = assignedIds.indexOf(c.id) !== -1; %>
+                <span class="crew-chip pool <%= isAssigned ? 'is-assigned' : '' %>"
+                      data-crew-id="<%= c.id %>" data-name="<%= c.full_name %>" data-role="<%= c.role || '' %>"
+                      data-search="<%= (c.full_name + ' ' + (c.role || '')).toLowerCase() %>"
+                      draggable="true"
+                      title="<%= isAssigned ? 'Already on this booking' : 'Click to add · drag onto vehicle for one-step driver assign' %>">
+                  <span class="crew-chip-avatar"><%= c.full_name ? c.full_name.split(' ').map(function (n) { return n[0]; }).join('').substring(0,2) : '?' %></span>
+                  <span class="crew-chip-name"><%= c.full_name %></span>
+                </span>
+              <% }); %>
+            </div>
+          </div>
+        <% } %>
+      <% } %>
+      <% renderCrewSection('Active', activePool, 'text-emerald-700', 'bg-emerald-500'); %>
+      <% renderCrewSection('Reserved', reservedPool, 'text-blue-700', 'bg-blue-500'); %>
+      <% if (leavePool.length) { renderCrewSection('On Leave', leavePool, 'text-gray-500', 'bg-gray-400'); } %>
+
+      <% if (!activePool.length && !reservedPool.length && !leavePool.length) { %>
+        <p class="text-sm text-gray-400">No crew available — add some via the <a href="/hr/roster" class="text-brand-600 hover:underline">Roster</a>.</p>
+      <% } %>
+    </div>
+
+    <!-- VEHICLES SIDE -->
+    <div class="lg:col-span-2 p-5" id="vehiclesPanel">
+      <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Vehicles on this booking</p>
+      <% if (b.allVehicles && b.allVehicles.length > 0) { %>
+        <div class="space-y-2 mb-3" id="vehicleList">
+          <% b.allVehicles.forEach(v => {
+            var driver = v.crew_member_id ? (b.personnel || []).find(function(p) { return p.id == v.crew_member_id; }) : null;
+          %>
+            <div class="vehicle-card p-3 rounded-lg bg-gray-50 border-2 border-gray-100 transition" data-vehicle-id="<%= v.id %>">
+              <div class="flex items-center justify-between gap-2">
+                <div class="min-w-0 flex-1">
+                  <span class="text-sm font-medium text-gray-900"><%= v.vehicle_name || v.registration || '(unnamed vehicle)' %></span>
+                  <% if (v.vehicle_name && v.registration) { %><span class="text-xs text-gray-400 ml-2"><%= v.registration %></span><% } %>
+                  <% if (v.vehicle_role) { %><span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700"><%= v.vehicle_role %></span><% } %>
+                </div>
+                <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/remove" class="inline shrink-0">
+                  <%- include('../partials/csrf') %>
+                  <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Remove">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                </form>
+              </div>
+              <div class="mt-2 flex items-center gap-2 flex-wrap">
+                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Driver</span>
+                <span class="driver-chip-slot flex-1 min-w-[100px]">
+                  <% if (driver) { %>
+                    <span class="crew-chip assigned confirmed" data-crew-id="<%= driver.id %>">
+                      <span class="crew-chip-avatar"><%= driver.name ? driver.name.split(' ').map(function(n){return n[0];}).join('').substring(0,2) : '?' %></span>
+                      <span class="crew-chip-name"><%= driver.name %></span>
+                      <button type="button" class="crew-chip-x" data-action="clear-driver" data-vehicle-id="<%= v.id %>" title="Clear driver">×</button>
+                    </span>
+                  <% } else { %>
+                    <span class="text-xs text-gray-400">— drop a crew chip here —</span>
+                  <% } %>
+                </span>
+                <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/driver" class="inline">
+                  <%- include('../partials/csrf') %>
+                  <select name="crew_member_id" onchange="this.form.submit()"
+                    class="px-2 py-1 bg-white border border-gray-300 rounded text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 max-w-[120px]">
+                    <option value="">— pick —</option>
+                    <% (b.personnel || []).forEach(function (p) { %>
+                      <option value="<%= p.id %>" <%= v.crew_member_id == p.id ? 'selected' : '' %>><%= p.name %></option>
+                    <% }) %>
+                  </select>
+                </form>
+              </div>
+            </div>
+          <% }); %>
+        </div>
+      <% } else { %>
+        <div class="p-4 rounded-lg bg-gray-50 border-2 border-dashed border-gray-200 text-center text-xs text-gray-400 mb-3">
+          No vehicles yet — add a ute or truck below.
+        </div>
+      <% } %>
+
+      <details class="rounded-lg border border-gray-200 bg-white">
+        <summary class="cursor-pointer px-3 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50 select-none">
+          + Add vehicle
+        </summary>
+        <form method="POST" action="/bookings/<%= b.id %>/vehicles" class="space-y-2 p-3 border-t border-gray-100">
+          <%- include('../partials/csrf') %>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">From register</label>
+            <select name="from_register" id="vehicle-select" onchange="if(this.value){var o=this.options[this.selectedIndex];document.getElementById('vn').value=o.text.split(' (')[0];document.getElementById('vr').value=o.getAttribute('data-rego')||''}"
+              class="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <option value="">— select vehicle —</option>
+              <% if (typeof allEquipment !== 'undefined') { allEquipment.filter(eq => ['vehicle','vms','lighting'].includes(eq.category) || (eq.asset_name||'').toLowerCase().includes('ute') || (eq.asset_name||'').toLowerCase().includes('truck')).forEach(eq => { %>
+                <option value="<%= eq.id %>" data-rego=""><%= eq.asset_name %> (<%= eq.category %>)</option>
+              <% }); } %>
+            </select>
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <input type="text" name="vehicle_name" id="vn" placeholder="Vehicle name" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <input type="text" name="registration" id="vr" placeholder="Rego" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div class="grid grid-cols-2 gap-2">
+            <select name="vehicle_role" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs">
+              <option value="">Role</option>
+              <option value="ute">Ute</option>
+              <option value="vms_ute">VMS Ute</option>
+              <option value="tma">TMA</option>
+              <option value="pod_truck">Pod Truck</option>
+              <option value="pilot">Pilot</option>
+              <option value="other">Other</option>
+            </select>
+            <select name="crew_member_id" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs">
+              <option value="">Driver — pick later</option>
+              <% (b.personnel || []).forEach(function (p) { %>
+                <option value="<%= p.id %>"><%= p.name %></option>
+              <% }) %>
+            </select>
+          </div>
+          <button type="submit" class="w-full px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition">Add vehicle</button>
+        </form>
+      </details>
+    </div>
+  </div>
+</section>
+
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-  <!-- Left column: Crew + Notes -->
+  <!-- Left column: Tasks + Dockets + Notes -->
   <div class="lg:col-span-2 space-y-5">
 
     <!-- Job-Pack completion grid -->
@@ -426,66 +626,7 @@
       </form>
     </div>
 
-    <!-- Crew / Personnel — chip-cloud picker, click to assign, drag to vehicle -->
-    <%
-      var assignedIds = (b.personnel || []).map(function (p) { return p.id; });
-      var activePool = (typeof allCrew !== 'undefined' ? allCrew : []).filter(function (c) { return (c.employment_status || 'active') === 'active'; });
-      var reservedPool = (typeof allCrew !== 'undefined' ? allCrew : []).filter(function (c) { return c.employment_status === 'reserved'; });
-      var leavePool = (typeof allCrew !== 'undefined' ? allCrew : []).filter(function (c) { return c.employment_status === 'on_leave'; });
-    %>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5" id="crewPanel" data-booking-id="<%= b.id %>">
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Crew <span class="text-gray-400 font-medium normal-case tracking-normal">(<span id="crewConfirmedCount"><%= confirmedCount %></span>/<span id="crewAssignedCount"><%= b.personnel ? b.personnel.length : 0 %></span> confirmed)</span></h2>
-        <input type="text" id="crewPoolSearch" placeholder="Search pool…" autocomplete="off"
-          class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-700 text-xs w-44 focus:outline-none focus:ring-2 focus:ring-brand-500">
-      </div>
-
-      <!-- Assigned crew (drop targets for re-ordering not supported, just remove on click) -->
-      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">On this booking <span class="text-gray-300">— click chip to confirm · drag onto a vehicle to assign driver</span></p>
-      <div id="assignedCrew" class="min-h-[3rem] flex flex-wrap gap-2 p-2 rounded-lg bg-gray-50 border border-dashed border-gray-200 mb-4">
-        <% if (!b.personnel || !b.personnel.length) { %>
-          <span class="text-xs text-gray-400 self-center px-2" data-empty>No crew yet — click someone from the pool below.</span>
-        <% } %>
-        <% (b.personnel || []).forEach(function (p) { %>
-          <span class="crew-chip assigned <%= p.confirmed ? 'confirmed' : 'unconfirmed' %>"
-                data-crew-id="<%= p.id %>" data-name="<%= p.name %>" data-role="<%= p.role || '' %>"
-                draggable="true" title="<%= p.confirmed ? 'Confirmed — click to keep · drag onto vehicle to assign as driver' : 'Click to confirm · drag onto vehicle to assign as driver' %>">
-            <span class="crew-chip-avatar"><%= p.name ? p.name.split(' ').map(function (n) { return n[0]; }).join('').substring(0,2) : '?' %></span>
-            <span class="crew-chip-name"><%= p.name %></span>
-            <% if (p.confirmed) { %><span class="crew-chip-tick" aria-hidden="true">✓</span><% } %>
-            <button type="button" class="crew-chip-x" data-action="remove" title="Remove from booking" aria-label="Remove">×</button>
-          </span>
-        <% }); %>
-      </div>
-
-      <!-- Pool: Active + Reserved sections -->
-      <% function renderSection(title, list, badgeCls) { %>
-        <% if (list && list.length) { %>
-          <div class="mb-3" data-pool-section>
-            <p class="text-[10px] font-bold uppercase tracking-widest mb-2 <%= badgeCls %>"><%= title %> <span class="text-gray-400 font-medium">(<span class="pool-count"><%= list.length %></span>)</span></p>
-            <div class="flex flex-wrap gap-1.5">
-              <% list.forEach(function (c) { var isAssigned = assignedIds.indexOf(c.id) !== -1; %>
-                <span class="crew-chip pool <%= isAssigned ? 'is-assigned' : '' %>"
-                      data-crew-id="<%= c.id %>" data-name="<%= c.full_name %>" data-role="<%= c.role || '' %>"
-                      data-search="<%= (c.full_name + ' ' + (c.role || '')).toLowerCase() %>"
-                      draggable="true"
-                      title="<%= isAssigned ? 'Already on this booking — click to remove' : 'Click to add · drag onto vehicle for one-step driver assign' %>">
-                  <span class="crew-chip-avatar"><%= c.full_name ? c.full_name.split(' ').map(function (n) { return n[0]; }).join('').substring(0,2) : '?' %></span>
-                  <span class="crew-chip-name"><%= c.full_name %></span>
-                </span>
-              <% }); %>
-            </div>
-          </div>
-        <% } %>
-      <% } %>
-      <% renderSection('Active', activePool, 'text-emerald-600'); %>
-      <% renderSection('Reserved', reservedPool, 'text-blue-600'); %>
-      <% if (leavePool.length) { renderSection('On Leave', leavePool, 'text-gray-500'); } %>
-
-      <% if (!activePool.length && !reservedPool.length && !leavePool.length) { %>
-        <p class="text-sm text-gray-400">No crew members available — add some via the Roster.</p>
-      <% } %>
-    </div>
+<!-- Crew block moved to the top of the two-column grid (see <%= 'sec-crew-vehicles' %>). -->
 
     <!-- Dockets -->
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
@@ -707,105 +848,7 @@
       </div>
     </div>
 
-    <!-- Vehicles — every vehicle can be assigned to a worker on the
-         shift so accountability (fuel, vehicle pre-start, post-shift
-         checklist) ties back to a person. Drag a crew chip onto a
-         vehicle card to assign that worker as driver. -->
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5" id="vehiclesPanel">
-      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-1">Vehicles</h2>
-      <p class="text-[10px] text-gray-400 mb-3">Drag a crew chip onto a vehicle to assign the driver — or use the dropdown.</p>
-      <% if (b.allVehicles && b.allVehicles.length > 0) { %>
-        <div class="space-y-2 mb-3" id="vehicleList">
-          <% b.allVehicles.forEach(v => {
-            var driver = v.crew_member_id ? (b.personnel || []).find(function(p) { return p.id == v.crew_member_id; }) : null;
-          %>
-            <div class="vehicle-card p-3 rounded-lg bg-gray-50 border border-transparent transition" data-vehicle-id="<%= v.id %>">
-              <div class="flex items-center justify-between gap-2">
-                <div class="min-w-0 flex-1">
-                  <span class="text-sm font-medium text-gray-900"><%= v.vehicle_name || v.registration %></span>
-                  <% if (v.vehicle_name && v.registration) { %><span class="text-xs text-gray-400 ml-2"><%= v.registration %></span><% } %>
-                  <% if (v.vehicle_role) { %><span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700"><%= v.vehicle_role %></span><% } %>
-                </div>
-                <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/remove" class="inline shrink-0">
-                  <%- include('../partials/csrf') %>
-                  <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Remove">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-                  </button>
-                </form>
-              </div>
-              <div class="mt-2 flex items-center gap-2">
-                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Driver</span>
-                <span class="driver-chip-slot flex-1">
-                  <% if (driver) { %>
-                    <span class="crew-chip assigned confirmed" data-crew-id="<%= driver.id %>">
-                      <span class="crew-chip-avatar"><%= driver.name ? driver.name.split(' ').map(function(n){return n[0];}).join('').substring(0,2) : '?' %></span>
-                      <span class="crew-chip-name"><%= driver.name %></span>
-                      <button type="button" class="crew-chip-x" data-action="clear-driver" data-vehicle-id="<%= v.id %>" title="Clear driver">×</button>
-                    </span>
-                  <% } else { %>
-                    <span class="text-xs text-gray-400">— drop a crew chip here or pick below —</span>
-                  <% } %>
-                </span>
-                <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/driver" class="inline">
-                  <%- include('../partials/csrf') %>
-                  <select name="crew_member_id" onchange="this.form.submit()"
-                    class="px-2 py-1 bg-white border border-gray-300 rounded text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 max-w-[150px]">
-                    <option value="">— pick —</option>
-                    <% (b.personnel || []).forEach(function (p) { %>
-                      <option value="<%= p.id %>" <%= v.crew_member_id == p.id ? 'selected' : '' %>><%= p.name %></option>
-                    <% }) %>
-                  </select>
-                </form>
-              </div>
-            </div>
-          <% }); %>
-        </div>
-      <% } else { %>
-        <p class="text-sm text-gray-400 mb-3">No vehicles assigned.</p>
-      <% } %>
-
-      <form method="POST" action="/bookings/<%= b.id %>/vehicles" class="space-y-2">
-        <%- include('../partials/csrf') %>
-        <div class="flex items-end gap-2">
-          <div class="flex-1">
-            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">From Register</label>
-            <select name="from_register" id="vehicle-select" onchange="if(this.value){var o=this.options[this.selectedIndex];document.getElementById('vn').value=o.text.split(' (')[0];document.getElementById('vr').value=o.getAttribute('data-rego')||''}"
-              class="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
-              <option value="">-- Select vehicle --</option>
-              <% if (typeof allEquipment !== 'undefined') { allEquipment.filter(eq => ['vehicle','vms','lighting'].includes(eq.category) || (eq.asset_name||'').toLowerCase().includes('ute') || (eq.asset_name||'').toLowerCase().includes('truck')).forEach(eq => { %>
-                <option value="<%= eq.id %>" data-rego=""><%= eq.asset_name %> (<%= eq.category %>)</option>
-              <% }); } %>
-            </select>
-          </div>
-        </div>
-        <div class="grid grid-cols-12 gap-2 items-end">
-          <div class="col-span-5">
-            <input type="text" name="vehicle_name" id="vn" placeholder="Vehicle name" class="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
-          </div>
-          <div class="col-span-3">
-            <input type="text" name="registration" id="vr" placeholder="Rego" class="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
-          </div>
-          <div class="col-span-3">
-            <select name="vehicle_role" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs">
-              <option value="">Role</option>
-              <option value="ute">Ute</option>
-              <option value="vms_ute">VMS Ute</option>
-              <option value="tma">TMA</option>
-              <option value="pod_truck">Pod Truck</option>
-              <option value="pilot">Pilot</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
-          <button type="submit" class="col-span-1 px-2 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg transition">Add</button>
-        </div>
-        <select name="crew_member_id" class="w-full px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs">
-          <option value="">Driver — unassigned (pick later)</option>
-          <% (b.personnel || []).forEach(function (p) { %>
-            <option value="<%= p.id %>"><%= p.name %></option>
-          <% }) %>
-        </select>
-      </form>
-    </div>
+<!-- Vehicles block moved to the combined Crew & Vehicles card at the top of the grid. -->
 
     <!-- Documents -->
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
