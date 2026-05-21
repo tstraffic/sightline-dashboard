@@ -59,13 +59,16 @@
   </div>
   <% } %>
 
-  <!-- All / Active / Reserved / Deleted tabs -->
+  <!-- All / Active / Reserved / On Leave / Deactivated / Terminated / Deleted tabs -->
   <%
     var tabAll = !locals.showDeleted && !filters.status;
     var tabActive = !locals.showDeleted && filters.status === 'active';
     var tabReserved = !locals.showDeleted && filters.status === 'reserved';
+    var tabOnLeave = !locals.showDeleted && filters.status === 'on_leave';
+    var tabInactive = !locals.showDeleted && (filters.status === 'inactive' || filters.status === 'deactivated');
+    var tabTerminated = !locals.showDeleted && filters.status === 'terminated';
   %>
-  <div class="flex gap-2 border-b border-gray-200 overflow-x-auto">
+  <div class="flex gap-1 border-b border-gray-200 overflow-x-auto">
     <a href="/hr/roster" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= tabAll ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
       All <span class="text-xs font-bold <%= tabAll ? 'text-brand-600' : 'text-gray-400' %>"><%= stats.totalActiveAll %></span>
     </a>
@@ -74,6 +77,15 @@
     </a>
     <a href="/hr/roster?status=reserved" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= tabReserved ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
       Reserved <span class="text-xs font-bold <%= tabReserved ? 'text-blue-600' : 'text-gray-400' %>"><%= stats.totalReserved %></span>
+    </a>
+    <a href="/hr/roster?status=on_leave" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= tabOnLeave ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      On Leave <span class="text-xs font-bold <%= tabOnLeave ? 'text-blue-600' : 'text-gray-400' %>"><%= stats.totalOnLeave %></span>
+    </a>
+    <a href="/hr/roster?status=inactive" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= tabInactive ? 'border-gray-600 text-gray-700' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      Deactivated <span class="text-xs font-bold <%= tabInactive ? 'text-gray-700' : 'text-gray-400' %>"><%= stats.totalDeactivated %></span>
+    </a>
+    <a href="/hr/roster?status=terminated" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= tabTerminated ? 'border-red-600 text-red-600' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      Terminated <span class="text-xs font-bold <%= tabTerminated ? 'text-red-600' : 'text-gray-400' %>"><%= stats.totalTerminated %></span>
     </a>
     <a href="/hr/roster?view=deleted" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= locals.showDeleted ? 'border-gray-700 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
@@ -222,14 +234,32 @@
     </button>
   </div>
   <% } else { %>
-  <div id="rosterBulk" style="display:none" class="sticky top-0 z-30 bg-red-50 border border-red-200 rounded-xl shadow-sm p-3 flex items-center justify-between gap-3">
+  <div id="rosterBulk" style="display:none" class="sticky top-0 z-30 bg-white border border-brand-200 rounded-xl shadow-md p-3 flex flex-wrap items-center justify-between gap-3">
     <div class="flex items-center gap-2">
-      <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-      <span id="rosterBulkCount" class="text-sm font-semibold text-red-700">0 selected</span>
+      <svg class="w-5 h-5 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+      <span id="rosterBulkCount" class="text-sm font-semibold text-gray-700">0 selected</span>
     </div>
-    <button type="button" id="rosterDeleteBtn" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white text-sm font-medium rounded-lg transition">
-      Delete Selected
-    </button>
+    <div class="flex flex-wrap items-center gap-2">
+      <!-- Bulk status change -->
+      <form method="POST" action="/hr/roster/bulk-status" id="rosterBulkStatusForm" class="flex items-center gap-2">
+        <%- include('../partials/csrf') %>
+        <input type="hidden" name="employee_ids" id="rosterBulkStatusIds">
+        <label class="text-xs text-gray-500 font-medium">Set status:</label>
+        <select name="employment_status" id="rosterBulkStatusSelect" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-700 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">— pick —</option>
+          <option value="active">Active</option>
+          <option value="reserved">Reserved</option>
+          <option value="on_leave">On Leave</option>
+          <option value="inactive">Deactivated</option>
+          <option value="terminated">Terminated</option>
+        </select>
+        <button type="submit" id="rosterBulkStatusBtn" disabled class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition">Apply</button>
+      </form>
+      <span class="text-gray-300">|</span>
+      <button type="button" id="rosterDeleteBtn" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition">
+        Delete
+      </button>
+    </div>
   </div>
   <% } %>
 
@@ -536,6 +566,30 @@ document.addEventListener('DOMContentLoaded', function() {
   if (modalBg) modalBg.addEventListener('click', function() { modal.style.display = 'none'; });
   if (modalNo) modalNo.addEventListener('click', function() { modal.style.display = 'none'; });
   if (modalYes) modalYes.addEventListener('click', function() { if (form) form.submit(); });
+
+  // Bulk status change
+  var bulkStatusForm   = document.getElementById('rosterBulkStatusForm');
+  var bulkStatusSelect = document.getElementById('rosterBulkStatusSelect');
+  var bulkStatusBtn    = document.getElementById('rosterBulkStatusBtn');
+  var bulkStatusIds    = document.getElementById('rosterBulkStatusIds');
+  if (bulkStatusSelect) {
+    bulkStatusSelect.addEventListener('change', function() {
+      bulkStatusBtn.disabled = !bulkStatusSelect.value || checked().length === 0;
+    });
+  }
+  // Keep Apply button gated on selection count too
+  document.addEventListener('change', function(e) {
+    if (e.target && e.target.classList.contains('roster-chk') && bulkStatusBtn) {
+      bulkStatusBtn.disabled = !bulkStatusSelect.value || checked().length === 0;
+    }
+  });
+  if (bulkStatusForm) {
+    bulkStatusForm.addEventListener('submit', function(e) {
+      var ids = Array.from(checked()).map(function(cb) { return cb.value; });
+      if (!ids.length || !bulkStatusSelect.value) { e.preventDefault(); return; }
+      bulkStatusIds.value = ids.join(',');
+    });
+  }
 });
 
 // Inline pill selects (payment-type, portal-role). Submit via fetch so
@@ -561,6 +615,15 @@ document.addEventListener('DOMContentLoaded', function() {
     on_management_payroll: {
       '0': 'bg-gray-50 text-gray-400 ring-gray-300/40',
       '1': 'bg-violet-50 text-violet-700 ring-violet-600/20',
+    },
+    employment_status: {
+      active:      'bg-emerald-50 text-emerald-700 ring-emerald-600/20',
+      reserved:    'bg-blue-50 text-blue-700 ring-blue-600/20',
+      on_leave:    'bg-blue-50 text-blue-700 ring-blue-600/20',
+      inactive:    'bg-gray-100 text-gray-500 ring-gray-300/40',
+      deactivated: 'bg-gray-100 text-gray-500 ring-gray-300/40',
+      terminated:  'bg-red-50 text-red-700 ring-red-600/20',
+      offboarded:  'bg-gray-100 text-gray-500 ring-gray-300/40',
     },
   };
   function swapColors(sel) {

@@ -180,7 +180,13 @@ router.get('/roster', requirePermission('hr_employees'), (req, res) => {
   const params = [];
   if (payment_type) { where += ' AND e.payment_type = ?'; params.push(payment_type); }
   if (employment_type) { where += ' AND e.employment_type = ?'; params.push(employment_type); }
-  if (status) { where += ' AND e.employment_status = ?'; params.push(status); }
+  if (status === 'inactive' || status === 'deactivated') {
+    where += " AND e.employment_status IN ('inactive', 'deactivated')";
+  } else if (status === 'terminated') {
+    where += " AND e.employment_status IN ('terminated', 'offboarded')";
+  } else if (status) {
+    where += ' AND e.employment_status = ?'; params.push(status);
+  }
   if (level) { where += ' AND (e.traffic_role_level = ? OR e.role_title = ?)'; params.push(level, level); }
   if (search) { where += ' AND (e.full_name LIKE ? OR e.employee_code LIKE ? OR e.email LIKE ? OR e.phone LIKE ?)'; const s = `%${search}%`; params.push(s, s, s, s); }
   if (induction === 'inducted') { where += ' AND e.inducted_at IS NOT NULL'; }
@@ -1745,21 +1751,48 @@ router.get('/compliance', requirePermission('hr_compliance_view'), (req, res) =>
 // ============================================
 router.post('/employees/:id/employment-status', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const allowed = ['active', 'reserved', 'on_leave', 'inactive', 'terminated'];
   const next = String(req.body.employment_status || '').trim();
   if (!allowed.includes(next)) {
+    if (isJson) return res.status(400).json({ error: 'Invalid status' });
     req.flash('error', 'Invalid status.');
-    return res.redirect('back' in req ? 'back' : '/hr/roster');
+    return res.redirect(req.get('referer') || '/hr/roster');
   }
   const emp = db.prepare('SELECT id FROM employees WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
-  if (!emp) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/roster'); }
+  if (!emp) {
+    if (isJson) return res.status(404).json({ error: 'Employee not found' });
+    req.flash('error', 'Employee not found.'); return res.redirect('/hr/roster');
+  }
   // active flag: 1 for active/reserved/on_leave (can still access portal), 0 for inactive/terminated
   const activeFlag = (next === 'inactive' || next === 'terminated') ? 0 : 1;
   db.prepare('UPDATE employees SET employment_status = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .run(next, activeFlag, emp.id);
+  if (isJson) return res.json({ ok: true, employment_status: next });
   req.flash('success', `Status updated to ${next.replace(/_/g, ' ')}.`);
-  const ref = req.get('referer') || '/hr/roster';
-  res.redirect(ref);
+  res.redirect(req.get('referer') || '/hr/roster');
+});
+
+// Bulk employment-status change — used by the roster bulk bar.
+router.post('/roster/bulk-status', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const allowed = ['active', 'reserved', 'on_leave', 'inactive', 'terminated'];
+  const next = String(req.body.employment_status || '').trim();
+  if (!allowed.includes(next)) {
+    req.flash('error', 'Invalid status.');
+    return res.redirect(req.get('referer') || '/hr/roster');
+  }
+  let ids = req.body.employee_ids;
+  if (!ids) { req.flash('error', 'No employees selected.'); return res.redirect('/hr/roster'); }
+  if (!Array.isArray(ids)) ids = String(ids).split(',');
+  ids = ids.map(id => parseInt(id, 10)).filter(n => Number.isFinite(n));
+  if (!ids.length) { req.flash('error', 'No valid employees selected.'); return res.redirect('/hr/roster'); }
+  const activeFlag = (next === 'inactive' || next === 'terminated') ? 0 : 1;
+  const placeholders = ids.map(() => '?').join(',');
+  const result = db.prepare(`UPDATE employees SET employment_status = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE deleted_at IS NULL AND id IN (${placeholders})`)
+    .run(next, activeFlag, ...ids);
+  req.flash('success', `Updated ${result.changes} employee${result.changes === 1 ? '' : 's'} to ${next.replace(/_/g, ' ')}.`);
+  res.redirect(req.get('referer') || '/hr/roster');
 });
 
 // ============================================
