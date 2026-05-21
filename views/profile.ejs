@@ -195,7 +195,7 @@
           <% } %>
         </div>
         <form method="POST" action="/profile/toggle-bookings-v2" class="shrink-0">
-          <%- include('./partials/csrf') %>
+          <%- include('partials/csrf') %>
           <% var v2On = typeof prefs !== 'undefined' && prefs.bookings_v2; %>
           <button type="submit" class="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold transition <%= v2On ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-brand-600 hover:bg-brand-500 text-white' %>">
             <span class="inline-flex w-8 h-4 rounded-full relative <%= v2On ? 'bg-emerald-500' : 'bg-gray-300' %>">
