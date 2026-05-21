@@ -49,10 +49,11 @@
 
     /* ============ Left: brand pane ============ */
     .left {
-      padding: 56px 56px 48px;
+      padding: 56px;
       display: flex;
       flex-direction: column;
-      justify-content: space-between;
+      align-items: center;
+      justify-content: center;
       position: relative;
       overflow: hidden;
       border-right: 1px solid var(--border);
@@ -61,10 +62,18 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: radial-gradient(ellipse 700px 500px at 70% 30%, rgba(16,185,129,0.06), transparent 65%);
+      background: radial-gradient(ellipse 700px 500px at 50% 50%, rgba(16,185,129,0.06), transparent 65%);
       pointer-events: none;
     }
-    .left-inner { position: relative; z-index: 1; }
+    .left-inner {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      gap: 40px;
+    }
 
     .brand-row {
       display: flex;
@@ -79,11 +88,9 @@
     }
 
     .mark-stage {
-      margin-top: 64px;
       display: flex;
       align-items: center;
       justify-content: center;
-      flex: 1;
     }
 
     .headline-wrap {
@@ -115,7 +122,9 @@
       letter-spacing: 0.14em;
       text-transform: uppercase;
       color: var(--text-faint);
-      position: relative;
+      position: absolute;
+      left: 56px;
+      bottom: 48px;
       z-index: 1;
     }
 
@@ -227,13 +236,14 @@
       .login-shell { display: flex; flex-direction: column; min-height: 100vh; }
       body { overflow: auto; }
       .left {
-        padding: 32px 28px 24px;
+        padding: 32px 28px 64px;
         border-right: none;
         border-bottom: 1px solid var(--border);
         min-height: 50vh;
       }
-      .mark-stage { margin-top: 28px; margin-bottom: 28px; }
+      .left-inner { gap: 28px; }
       .headline { font-size: 28px; }
+      .footer-meta { left: 28px; bottom: 20px; }
       .right { padding: 36px 28px 48px; background: var(--base); }
     }
 
@@ -255,7 +265,7 @@
 
         <div class="headline-wrap">
           <h1 class="headline">Control <em>Room.</em></h1>
-          <p class="sub">A safe way home.</p>
+          <p class="sub">A Safe Way Home.</p>
         </div>
       </div>
 
@@ -265,7 +275,7 @@
     <!-- RIGHT PANE -->
     <div class="right">
       <div class="right-inner">
-        <img src="/images/atomis-mark.svg" alt="Atomis" style="width:30px;height:30px;display:block;margin-bottom:18px;opacity:0.9">
+        <img src="/images/atomis-mark-animated.svg" alt="Atomis" style="width:56px;height:56px;display:block;margin-bottom:22px;opacity:0.95">
         <h2>Welcome back.</h2>
         <p class="lead">Sign in to run the day.</p>
 
