@@ -39,7 +39,7 @@
     %>
       <a href="/w/safety/quizzes/<%= r.id %>" class="qz-card<%= r.is_mandatory ? ' mandatory' : '' %>">
         <div class="qz-card-title">
-          <% if (r.is_mandatory) { %><span style="color:#fca5a5; margin-right:6px;">â—</span><% } %><%= r.title %>
+          <% if (r.is_mandatory) { %><span style="color:#fca5a5; margin-right:6px;">●</span><% } %><%= r.title %>
         </div>
         <% if (r.description) { %><div class="qz-snip"><%= r.description %></div><% } %>
         <div class="qz-meta">

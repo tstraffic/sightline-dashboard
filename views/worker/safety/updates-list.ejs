@@ -45,7 +45,7 @@
     <% rows.forEach(r => { %>
       <a href="/w/safety/updates/<%= r.id %>" class="upd-card<%= r.read_id ? '' : ' unread' %>">
         <% if (!r.read_id) { %><span class="upd-dot" aria-label="Unread"></span><% } %>
-        <div class="upd-title"><% if (r.pinned) { %><span class="upd-pin">ðŸ“Œ</span><% } %><%= r.title %></div>
+        <div class="upd-title"><% if (r.pinned) { %><span class="upd-pin">📌</span><% } %><%= r.title %></div>
         <% if (r.body) { %><div class="upd-snippet"><%= r.body %></div><% } %>
         <div class="upd-meta">
           <span class="upd-chip" style="<%= CHIP_STYLE[r.category] || CHIP_STYLE.general %>"><%= categoryLabels[r.category] %></span>

@@ -37,7 +37,7 @@
 </style>
 
 <div class="qt-wrap">
-  <a href="/w/safety/quizzes/<%= quiz.id %>" class="qt-back">â† Save &amp; exit</a>
+  <a href="/w/safety/quizzes/<%= quiz.id %>" class="qt-back">← Save &amp; exit</a>
   <div class="qt-title"><%= quiz.title %></div>
   <div class="qt-counter">Question <%= questionIndex %> of <%= total %></div>
   <div class="qt-progress"><div style="width: <%= pct %>%"></div></div>
@@ -69,7 +69,7 @@
 
     <div class="qt-bar">
       <% if (questionIndex > 1) { %>
-        <button type="submit" name="action" value="prev" class="qt-btn prev">â† Back</button>
+        <button type="submit" name="action" value="prev" class="qt-btn prev">← Back</button>
       <% } %>
       <% if (!isLast) { %>
         <button type="submit" name="action" value="next" class="qt-btn next">Next &rarr;</button>

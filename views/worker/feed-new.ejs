@@ -32,7 +32,7 @@
         <% values.forEach(function (v) { %>
           <label style="cursor: pointer;">
             <input type="radio" name="value_id" value="<%= v.id %>" style="display: none;" class="kd-val">
-            <span data-colour="<%= v.colour %>" style="display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= v.colour %>20; color: <%= v.colour %>; border: 1.5px solid transparent; transition: all 0.15s;">â˜… <%= v.name %></span>
+            <span data-colour="<%= v.colour %>" style="display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= v.colour %>20; color: <%= v.colour %>; border: 1.5px solid transparent; transition: all 0.15s;">★ <%= v.name %></span>
           </label>
         <% }) %>
       </div>
@@ -45,7 +45,7 @@
         <p style="font-size: 0.7rem; color: rgba(255,255,255,0.4);"><span id="kd-char-count">0</span>/280</p>
       </div>
       <textarea name="message" id="kd-message" required maxlength="280" placeholder="What did they do well?" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 0.6rem 0.75rem; color: #fff; font-size: 0.875rem; min-height: 90px; resize: vertical;"></textarea>
-      <button type="button" id="kd-voice" style="margin-top: 6px; font-size: 0.72rem; font-weight: 600; color: #60A5FA; padding: 4px 8px;">ðŸŽ¤ Voice-to-text</button>
+      <button type="button" id="kd-voice" style="margin-top: 6px; font-size: 0.72rem; font-weight: 600; color: #60A5FA; padding: 4px 8px;">🎤 Voice-to-text</button>
       <label style="display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 0.72rem; color: rgba(255,255,255,0.55); display: none;" id="kd-profanity-wrap">
         <input type="checkbox" name="allow_profanity" value="1" id="kd-profanity">
         <span>Send anyway (includes filtered language)</span>
@@ -62,7 +62,7 @@
     <div style="background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 1rem; margin-bottom: 0.75rem;">
       <p style="font-size: 0.68rem; font-weight: 700; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 10px;">Who can see this?</p>
       <div style="display: flex; gap: 6px;">
-        <% [['public','Everyone','ðŸŒ'],['team','My team','ðŸ‘¥']].forEach(function (opt) { %>
+        <% [['public','Everyone','🌏'],['team','My team','👥']].forEach(function (opt) { %>
           <label style="flex: 1; cursor: pointer;">
             <input type="radio" name="visibility" value="<%= opt[0] %>" <%= opt[0] === 'public' ? 'checked' : '' %> style="display: none;" class="kd-vis">
             <span style="display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.04); border: 1.5px solid rgba(255,255,255,0.1);">
@@ -74,7 +74,7 @@
       </div>
     </div>
 
-    <button type="submit" id="kd-submit" style="width: 100%; padding: 0.8rem; background: linear-gradient(135deg, #F59E0B, #EC4899); color: #fff; font-weight: 800; font-size: 0.9rem; border-radius: 12px; box-shadow: 0 6px 18px rgba(245,158,11,0.3);">Send kudos âœ¨</button>
+    <button type="submit" id="kd-submit" style="width: 100%; padding: 0.8rem; background: linear-gradient(135deg, #F59E0B, #EC4899); color: #fff; font-weight: 800; font-size: 0.9rem; border-radius: 12px; box-shadow: 0 6px 18px rgba(245,158,11,0.3);">Send kudos ✨</button>
   </form>
 
   <% if (flash_error && flash_error.length) { %>
@@ -96,7 +96,7 @@
     selected.forEach(function (c, id) {
       var s = document.createElement('span');
       s.style.cssText = 'display:inline-flex; align-items:center; gap:4px; padding:4px 8px 4px 10px; background:rgba(16,185,129,0.2); color:#93C5FD; border-radius:999px; font-size:0.75rem; font-weight:700;';
-      s.innerHTML = c.full_name + ' <button type="button" style="color:inherit; opacity:0.7; margin-left:2px;" onclick="kdRemove(' + id + ')">Ã—</button>' +
+      s.innerHTML = c.full_name + ' <button type="button" style="color:inherit; opacity:0.7; margin-left:2px;" onclick="kdRemove(' + id + ')">×</button>' +
         '<input type="hidden" name="recipient_crew_id" value="' + id + '">';
       chips.appendChild(s);
     });

@@ -342,13 +342,13 @@ function clearSig(which) {
 document.getElementById('worker-sig-canvas').addEventListener('pointerup', function() {
   if (workerPad.hasDrawn()) {
     var h = document.getElementById('worker-sig-hint');
-    h.classList.add('signed'); h.textContent = 'âœ“ Signed';
+    h.classList.add('signed'); h.textContent = '✓ Signed';
   }
 });
 document.getElementById('client-sig-canvas').addEventListener('pointerup', function() {
   if (clientPad.hasDrawn()) {
     var h = document.getElementById('client-sig-hint');
-    h.classList.add('signed'); h.textContent = 'âœ“ Signed';
+    h.classList.add('signed'); h.textContent = '✓ Signed';
   }
 });
 

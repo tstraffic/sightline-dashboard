@@ -60,19 +60,19 @@
 </style>
 
 <div class="tbd-wrap">
-  <a href="/w/safety/toolboxes" class="tbd-back">â† Safety / Toolboxes</a>
+  <a href="/w/safety/toolboxes" class="tbd-back">← Safety / Toolboxes</a>
   <div class="tbd-title"><%= toolbox.title %></div>
   <div class="tbd-meta"><%= fmtDate(toolbox.held_at) %><% if (toolbox.presenter) { %> &middot; Presented by <%= toolbox.presenter %><% } %></div>
 
   <% if (isAttended) { %>
-    <div class="tbd-banner green">âœ“ You attended this toolbox<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
+    <div class="tbd-banner green">✓ You attended this toolbox<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
   <% } else if (isAttending) { %>
-    <div class="tbd-banner blue">âœ“ You're on the list &mdash; see you there<% if (myAttendance.recorded_at) { %> (accepted <%= fmt(myAttendance.recorded_at) %>)<% } %>. The supervisor will mark you off when you arrive.</div>
+    <div class="tbd-banner blue">✓ You're on the list &mdash; see you there<% if (myAttendance.recorded_at) { %> (accepted <%= fmt(myAttendance.recorded_at) %>)<% } %>. The supervisor will mark you off when you arrive.</div>
   <% } else if (isCaughtUp) { %>
-    <div class="tbd-banner violet">â†» You marked this as caught up<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
+    <div class="tbd-banner violet">↻ You marked this as caught up<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
   <% } else if (isAbsent) { %>
     <div class="tbd-banner amber">
-      âœ— You said you can't attend<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.
+      ✗ You said you can't attend<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.
       <% if (myAttendance.absence_reason) { %><br><span style="opacity:0.85;">Your reason: <%= myAttendance.absence_reason %></span><% } %>
     </div>
   <% } else { %>

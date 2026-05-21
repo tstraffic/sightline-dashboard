@@ -34,8 +34,8 @@
 </style>
 
 <div class="qi-wrap">
-  <a href="/w/safety/quizzes" class="qi-back">â† Safety / Quizzes</a>
-  <div class="qi-h1"><% if (quiz.is_mandatory) { %><span style="color:#fca5a5; margin-right:6px;">â—</span><% } %><%= quiz.title %></div>
+  <a href="/w/safety/quizzes" class="qi-back">← Safety / Quizzes</a>
+  <div class="qi-h1"><% if (quiz.is_mandatory) { %><span style="color:#fca5a5; margin-right:6px;">●</span><% } %><%= quiz.title %></div>
   <div class="qi-meta">
     <span><%= questionCount %> question<%= questionCount === 1 ? '' : 's' %></span>
     <span>&middot; pass at <%= quiz.pass_mark %>%</span>
@@ -43,7 +43,7 @@
   </div>
 
   <% if (hasPassed) { %>
-    <div class="qi-banner green">âœ“ You passed this quiz with <%= lastScore %>%.</div>
+    <div class="qi-banner green">✓ You passed this quiz with <%= lastScore %>%.</div>
   <% } else if (latest && latest.status === 'submitted') { %>
     <div class="qi-banner rose">Last attempt: <%= lastScore %>% &mdash; didn't quite pass.<% if (quiz.retake_policy === 'unlimited' || (quiz.retake_policy === 'limited' && attemptCount < quiz.retake_limit)) { %> You can try again below.<% } %></div>
   <% } else if (isResume) { %>

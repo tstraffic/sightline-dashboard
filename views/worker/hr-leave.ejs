@@ -343,7 +343,7 @@
     </div>
   </div>
 
-  <!-- â”€â”€ Your leave &mdash; bucketed so the list doesn't snowball â”€â”€
+  <!-- ── Your leave &mdash; bucketed so the list doesn't snowball ──
        Pending          &rarr; action items (worker can still cancel)
        Upcoming         &rarr; approved leave whose end date is today or later
        Recent past      &rarr; approved leave that's already finished
@@ -427,7 +427,7 @@
         <% if (past.length > 5) { %>
           <details class="mt-1">
             <summary style="cursor:pointer;font-size:0.7rem;color:rgba(255,255,255,0.45);padding:6px 4px;list-style:none;">
-              Show <%= past.length - 5 %> older approved leave<%= past.length - 5 === 1 ? '' : 's' %> â€º
+              Show <%= past.length - 5 %> older approved leave<%= past.length - 5 === 1 ? '' : 's' %> ›
             </summary>
             <% past.slice(5).forEach(l => { %><%- leaveItem(l, typeof csrfToken !== 'undefined' ? csrfToken : '') %><% }) %>
           </details>
@@ -642,7 +642,7 @@
       var arr = Array.from(selectedDates).sort();
       wrap.innerHTML = arr.map(function (d) {
         var short = new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' });
-        return '<span class="lv-chip">' + short + '<button type="button" onclick="lvRemoveDate(\'' + d + '\')">Ã—</button></span>';
+        return '<span class="lv-chip">' + short + '<button type="button" onclick="lvRemoveDate(\'' + d + '\')">×</button></span>';
       }).join('');
     }
 

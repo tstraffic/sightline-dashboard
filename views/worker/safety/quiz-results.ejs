@@ -36,12 +36,12 @@
 </style>
 
 <div class="qr-wrap">
-  <a href="/w/safety/quizzes" class="qr-back">â† Safety / Quizzes</a>
+  <a href="/w/safety/quizzes" class="qr-back">← Safety / Quizzes</a>
   <div class="qr-title"><%= quiz.title %></div>
 
   <div class="qr-hero <%= passed ? 'pass' : 'fail' %>">
     <div class="qr-score-num"><%= score %>%</div>
-    <div class="qr-status"><%= passed ? 'âœ“ Passed' : 'Not yet &mdash; need ' + quiz.pass_mark + '%' %></div>
+    <div class="qr-status"><%= passed ? '✓ Passed' : 'Not yet &mdash; need ' + quiz.pass_mark + '%' %></div>
     <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 6px;">Submitted <%= fmt(attempt.submitted_at) %></p>
   </div>
 
@@ -63,12 +63,12 @@
   %>
     <div class="qr-q-card <%= isCorrect ? 'qr-q-correct' : 'qr-q-wrong' %>">
       <div class="qr-q-text"><%= i + 1 %>. <%= q.question_text %></div>
-      <div class="qr-q-yours"><strong><%= isCorrect ? 'âœ“' : 'âœ—' %> Your answer:</strong> <%= yourLabel %></div>
+      <div class="qr-q-yours"><strong><%= isCorrect ? '✓' : '✗' %> Your answer:</strong> <%= yourLabel %></div>
       <% if (!isCorrect) { %>
         <div class="qr-q-correctv"><strong>Correct:</strong> <%= correctLabel %></div>
       <% } %>
       <% if (q.explanation) { %>
-        <div class="qr-q-explain">ðŸ’¡ <%= q.explanation %></div>
+        <div class="qr-q-explain">💡 <%= q.explanation %></div>
       <% } %>
     </div>
   <% }) %>

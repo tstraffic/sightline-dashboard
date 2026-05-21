@@ -216,7 +216,7 @@
        doesn't look empty on wide screens. Padding-inline picks up the
        safe-area on devices with notches / Dynamic Island so content
        doesn't get cropped against the curved edges. -->
-  <main class="flex-1 overflow-auto w-full max-w-[520px] mx-auto" style="padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
+  <main class="flex-1 overflow-auto w-full max-w-[520px] mx-auto" style="padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 8px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
     <%- body %>
   </main>
 
@@ -262,7 +262,10 @@
       .wh-tab-bar a svg { transition: none; }
     }
   </style>
-  <nav class="wh-tabnav fixed bottom-0 left-0 right-0 z-50" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
+  <!-- padding-bottom carries the iOS home-indicator zone so the nav's
+       background fills all the way to the screen edge — without it, the
+       safe-area gap reads as a stripe of empty page below the tabs. -->
+  <nav class="wh-tabnav fixed bottom-0 left-0 right-0 z-50" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);">
     <div class="flex items-center justify-around h-16 px-0.5 max-w-[520px] mx-auto wh-tab-bar" id="wh-tab-bar">
       <span class="wh-tab-indicator" aria-hidden="true"></span>
       <% const cp = typeof currentPage !== 'undefined' ? currentPage : ''; %>
@@ -334,7 +337,7 @@
   <script src="/js/worker-tabbar.js?v=1"></script>
   <script src="/js/worker-offline-queue.js?v=1"></script>
   <script src="/js/worker-submit-success.js?v=1"></script>
-  <script src="/js/worker-offline-form.js?v=3"></script>
+  <script src="/js/worker-offline-form.js?v=4"></script>
   <%- typeof script !== 'undefined' ? script : '' %>
 </body>
 </html>

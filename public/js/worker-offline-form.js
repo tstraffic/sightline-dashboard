@@ -69,6 +69,23 @@
     document.head.appendChild(s);
   }
 
+  // Delete every cached response for `url` across all CacheStorage caches.
+  // Used after a successful POST so the post-redirect GET fetches fresh
+  // rather than getting the stale-while-revalidate hit from worker-sw.js.
+  function invalidateCache(url) {
+    if (typeof caches === 'undefined' || !caches || !caches.keys) {
+      return Promise.resolve();
+    }
+    return caches.keys().then(function (names) {
+      return Promise.all(names.map(function (name) {
+        return caches.open(name).then(function (cache) {
+          return cache.delete(url, { ignoreSearch: false, ignoreVary: true })
+            .catch(function () {});
+        });
+      }));
+    }).catch(function () {});
+  }
+
   function adopt(form) {
     if (form._wqAdopted) return;
     form._wqAdopted = true;
@@ -102,15 +119,24 @@
       }), TIMEOUT_MS).then(function (res) {
         if (res.ok || res.redirected || res.status === 302 || res.status === 303) {
           var dest = res.redirected ? res.url : successUrl;
-          // Full-screen success overlay (haptic fires inside show()),
-          // then navigate. Falls back to plain redirect if the overlay
-          // controller isn't loaded yet (e.g. layout-bare views).
-          if (window.WorkerSubmitSuccess) {
-            window.WorkerSubmitSuccess.show({ redirect: dest });
-          } else {
-            if (window.WorkerHaptics) window.WorkerHaptics.success();
-            window.location.assign(dest);
-          }
+          // The worker SW uses stale-while-revalidate, so a navigation to
+          // `dest` right after a write would re-render the pre-write page
+          // (e.g. SOP detail still showing "not acknowledged" after a
+          // successful sign). Drop the cached entry for dest first so the
+          // landing render reflects the new server state.
+          var bust = invalidateCache(dest);
+          var go = function () {
+            if (window.WorkerSubmitSuccess) {
+              window.WorkerSubmitSuccess.show({ redirect: dest });
+            } else {
+              if (window.WorkerHaptics) window.WorkerHaptics.success();
+              window.location.assign(dest);
+            }
+          };
+          // Don't block the user UI on cache cleanup. The bust resolves
+          // fast in practice (<50ms); race it with a short timeout.
+          var raced = Promise.race([bust, new Promise(function (r) { setTimeout(r, 250); })]);
+          raced.then(go);
           return;
         }
         // Server-side rejection — surface the response normally so the
