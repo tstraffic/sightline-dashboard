@@ -321,6 +321,152 @@ body, body.dark-glass {
   color: rgba(255,255,255,0.85);
 }
 
+/* =================================================================
+   COMPREHENSIVE BADGE / STATUS TINT COVERAGE — Dark mode
+   The codebase has 400+ pale coloured tints (bg-emerald-50, bg-red-50,
+   bg-amber-50, bg-blue-50, etc. — heavily used on status chips, callout
+   cards, alert banners). None were overridden in dark-glass, so they
+   keep their LIGHT Tailwind fills against the dark page — making any
+   text on top hard to read AND making the dashboard look fragmented.
+   Each tint here is replaced with a translucent dark-mode variant
+   roughly matching the brand semantic, plus the paired text-{colour}-
+   600/700 darkens up to text-{colour}-300 so legibility holds.
+   ================================================================= */
+.dark-glass .bg-emerald-50,
+.dark-glass .bg-green-50    { background-color: rgba(16,185,129,0.10) !important; }
+.dark-glass .bg-emerald-100,
+.dark-glass .bg-green-100   { background-color: rgba(16,185,129,0.16) !important; }
+.dark-glass .bg-emerald-200 { background-color: rgba(16,185,129,0.22) !important; }
+.dark-glass .text-emerald-700, .dark-glass .text-emerald-800, .dark-glass .text-emerald-900,
+.dark-glass .text-green-700, .dark-glass .text-green-800, .dark-glass .text-green-900 {
+  color: #6EE7B7 !important;
+}
+.dark-glass .text-emerald-600 { color: #34D399 !important; }
+.dark-glass .text-emerald-500 { color: #10B981 !important; }
+
+.dark-glass .bg-red-50    { background-color: rgba(239,68,68,0.10) !important; }
+.dark-glass .bg-red-100   { background-color: rgba(239,68,68,0.16) !important; }
+.dark-glass .bg-red-200   { background-color: rgba(239,68,68,0.22) !important; }
+.dark-glass .bg-rose-50   { background-color: rgba(244,63,94,0.10) !important; }
+.dark-glass .bg-rose-100  { background-color: rgba(244,63,94,0.16) !important; }
+.dark-glass .text-red-700, .dark-glass .text-red-800, .dark-glass .text-red-900,
+.dark-glass .text-rose-700, .dark-glass .text-rose-800 {
+  color: #FCA5A5 !important;
+}
+.dark-glass .text-red-600, .dark-glass .text-rose-600 { color: #F87171 !important; }
+.dark-glass .text-red-500, .dark-glass .text-rose-500 { color: #EF4444 !important; }
+
+.dark-glass .bg-amber-50    { background-color: rgba(251,191,36,0.12) !important; }
+.dark-glass .bg-amber-100   { background-color: rgba(251,191,36,0.18) !important; }
+.dark-glass .bg-yellow-50   { background-color: rgba(234,179,8,0.10) !important; }
+.dark-glass .bg-yellow-100  { background-color: rgba(234,179,8,0.18) !important; }
+.dark-glass .bg-orange-50   { background-color: rgba(249,115,22,0.10) !important; }
+.dark-glass .bg-orange-100  { background-color: rgba(249,115,22,0.18) !important; }
+.dark-glass .text-amber-700, .dark-glass .text-amber-800, .dark-glass .text-amber-900,
+.dark-glass .text-yellow-700, .dark-glass .text-yellow-800, .dark-glass .text-yellow-900,
+.dark-glass .text-orange-700, .dark-glass .text-orange-800, .dark-glass .text-orange-900 {
+  color: #FDE68A !important;
+}
+.dark-glass .text-amber-600, .dark-glass .text-yellow-600, .dark-glass .text-orange-600 {
+  color: #FBBF24 !important;
+}
+.dark-glass .text-amber-500, .dark-glass .text-yellow-500, .dark-glass .text-orange-500 {
+  color: #F59E0B !important;
+}
+
+.dark-glass .bg-blue-50    { background-color: rgba(59,130,246,0.10) !important; }
+.dark-glass .bg-blue-100   { background-color: rgba(59,130,246,0.16) !important; }
+.dark-glass .bg-sky-50     { background-color: rgba(14,165,233,0.10) !important; }
+.dark-glass .bg-sky-100    { background-color: rgba(14,165,233,0.16) !important; }
+.dark-glass .text-blue-700, .dark-glass .text-blue-800, .dark-glass .text-blue-900,
+.dark-glass .text-sky-700, .dark-glass .text-sky-800 {
+  color: #93C5FD !important;
+}
+.dark-glass .text-blue-600, .dark-glass .text-sky-600 { color: #60A5FA !important; }
+.dark-glass .text-blue-500, .dark-glass .text-sky-500 { color: #3B82F6 !important; }
+
+.dark-glass .bg-purple-50   { background-color: rgba(168,85,247,0.10) !important; }
+.dark-glass .bg-purple-100  { background-color: rgba(168,85,247,0.16) !important; }
+.dark-glass .text-purple-700, .dark-glass .text-purple-800, .dark-glass .text-purple-900 {
+  color: #D8B4FE !important;
+}
+.dark-glass .text-purple-600 { color: #C084FC !important; }
+.dark-glass .text-purple-500 { color: #A855F7 !important; }
+
+.dark-glass .bg-teal-50   { background-color: rgba(20,184,166,0.10) !important; }
+.dark-glass .bg-teal-100  { background-color: rgba(20,184,166,0.16) !important; }
+.dark-glass .text-teal-700, .dark-glass .text-teal-800 { color: #5EEAD4 !important; }
+.dark-glass .text-teal-600 { color: #2DD4BF !important; }
+
+/* Borders for the same tinted family (border-X-200 etc.) */
+.dark-glass .border-emerald-200, .dark-glass .border-green-200 { border-color: rgba(16,185,129,0.30) !important; }
+.dark-glass .border-emerald-300, .dark-glass .border-green-300 { border-color: rgba(16,185,129,0.42) !important; }
+.dark-glass .border-red-200, .dark-glass .border-rose-200 { border-color: rgba(239,68,68,0.30) !important; }
+.dark-glass .border-red-300, .dark-glass .border-rose-300 { border-color: rgba(239,68,68,0.42) !important; }
+.dark-glass .border-amber-200, .dark-glass .border-yellow-200, .dark-glass .border-orange-200 { border-color: rgba(251,191,36,0.30) !important; }
+.dark-glass .border-amber-300, .dark-glass .border-yellow-300, .dark-glass .border-orange-300 { border-color: rgba(251,191,36,0.42) !important; }
+.dark-glass .border-blue-200, .dark-glass .border-sky-200 { border-color: rgba(59,130,246,0.30) !important; }
+.dark-glass .border-blue-300, .dark-glass .border-sky-300 { border-color: rgba(59,130,246,0.42) !important; }
+.dark-glass .border-purple-200 { border-color: rgba(168,85,247,0.30) !important; }
+.dark-glass .border-purple-300 { border-color: rgba(168,85,247,0.42) !important; }
+
+/* =================================================================
+   COMPREHENSIVE BADGE / STATUS TINT COVERAGE — Light mode resets
+   The dark-mode tints above don't apply when data-theme="light" because
+   the new rules above are scoped to `.dark-glass .bg-X-50` not
+   `:root[data-theme="light"]`. But the older `.dark-glass select option`
+   pattern reminds us: anything I add to dark-glass without a light-mode
+   reset becomes a light-mode bug. Restore Tailwind-default fills here.
+   ================================================================= */
+:root[data-theme="light"] body.dark-glass .bg-emerald-50,
+:root[data-theme="light"] body.dark-glass .bg-green-50   { background-color: #ECFDF5 !important; }
+:root[data-theme="light"] body.dark-glass .bg-emerald-100,
+:root[data-theme="light"] body.dark-glass .bg-green-100  { background-color: #D1FAE5 !important; }
+:root[data-theme="light"] body.dark-glass .bg-emerald-200 { background-color: #A7F3D0 !important; }
+:root[data-theme="light"] body.dark-glass .text-emerald-700 { color: #047857 !important; }
+:root[data-theme="light"] body.dark-glass .text-emerald-800 { color: #065F46 !important; }
+:root[data-theme="light"] body.dark-glass .text-emerald-600 { color: #059669 !important; }
+
+:root[data-theme="light"] body.dark-glass .bg-red-50    { background-color: #FEF2F2 !important; }
+:root[data-theme="light"] body.dark-glass .bg-red-100   { background-color: #FEE2E2 !important; }
+:root[data-theme="light"] body.dark-glass .bg-rose-50   { background-color: #FFF1F2 !important; }
+:root[data-theme="light"] body.dark-glass .bg-rose-100  { background-color: #FFE4E6 !important; }
+:root[data-theme="light"] body.dark-glass .text-red-700, :root[data-theme="light"] body.dark-glass .text-rose-700 { color: #B91C1C !important; }
+:root[data-theme="light"] body.dark-glass .text-red-600, :root[data-theme="light"] body.dark-glass .text-rose-600 { color: #DC2626 !important; }
+:root[data-theme="light"] body.dark-glass .text-red-500, :root[data-theme="light"] body.dark-glass .text-rose-500 { color: #EF4444 !important; }
+
+:root[data-theme="light"] body.dark-glass .bg-amber-50    { background-color: #FFFBEB !important; }
+:root[data-theme="light"] body.dark-glass .bg-amber-100   { background-color: #FEF3C7 !important; }
+:root[data-theme="light"] body.dark-glass .bg-yellow-50   { background-color: #FEFCE8 !important; }
+:root[data-theme="light"] body.dark-glass .bg-orange-50   { background-color: #FFF7ED !important; }
+:root[data-theme="light"] body.dark-glass .bg-orange-100  { background-color: #FFEDD5 !important; }
+:root[data-theme="light"] body.dark-glass .text-amber-700, :root[data-theme="light"] body.dark-glass .text-yellow-700, :root[data-theme="light"] body.dark-glass .text-orange-700 { color: #B45309 !important; }
+:root[data-theme="light"] body.dark-glass .text-amber-800, :root[data-theme="light"] body.dark-glass .text-amber-900 { color: #92400E !important; }
+:root[data-theme="light"] body.dark-glass .text-amber-600, :root[data-theme="light"] body.dark-glass .text-yellow-600, :root[data-theme="light"] body.dark-glass .text-orange-600 { color: #D97706 !important; }
+
+:root[data-theme="light"] body.dark-glass .bg-blue-50    { background-color: #EFF6FF !important; }
+:root[data-theme="light"] body.dark-glass .bg-blue-100   { background-color: #DBEAFE !important; }
+:root[data-theme="light"] body.dark-glass .bg-sky-50     { background-color: #F0F9FF !important; }
+:root[data-theme="light"] body.dark-glass .text-blue-700, :root[data-theme="light"] body.dark-glass .text-sky-700 { color: #1D4ED8 !important; }
+:root[data-theme="light"] body.dark-glass .text-blue-600, :root[data-theme="light"] body.dark-glass .text-sky-600 { color: #2563EB !important; }
+
+:root[data-theme="light"] body.dark-glass .bg-purple-50   { background-color: #FAF5FF !important; }
+:root[data-theme="light"] body.dark-glass .bg-purple-100  { background-color: #F3E8FF !important; }
+:root[data-theme="light"] body.dark-glass .text-purple-700 { color: #6D28D9 !important; }
+:root[data-theme="light"] body.dark-glass .text-purple-600 { color: #7C3AED !important; }
+
+:root[data-theme="light"] body.dark-glass .bg-teal-50   { background-color: #F0FDFA !important; }
+:root[data-theme="light"] body.dark-glass .bg-teal-100  { background-color: #CCFBF1 !important; }
+:root[data-theme="light"] body.dark-glass .text-teal-700 { color: #0F766E !important; }
+:root[data-theme="light"] body.dark-glass .text-teal-600 { color: #0D9488 !important; }
+
+/* Borders — light mode restore */
+:root[data-theme="light"] body.dark-glass .border-emerald-200, :root[data-theme="light"] body.dark-glass .border-green-200 { border-color: #A7F3D0 !important; }
+:root[data-theme="light"] body.dark-glass .border-red-200, :root[data-theme="light"] body.dark-glass .border-rose-200 { border-color: #FECACA !important; }
+:root[data-theme="light"] body.dark-glass .border-amber-200, :root[data-theme="light"] body.dark-glass .border-yellow-200, :root[data-theme="light"] body.dark-glass .border-orange-200 { border-color: #FDE68A !important; }
+:root[data-theme="light"] body.dark-glass .border-blue-200, :root[data-theme="light"] body.dark-glass .border-sky-200 { border-color: #BFDBFE !important; }
+:root[data-theme="light"] body.dark-glass .border-purple-200 { border-color: #E9D5FF !important; }
+
 /* ===== Typography Refinements ===== */
 .line-clamp-2 {
   display: -webkit-box;
