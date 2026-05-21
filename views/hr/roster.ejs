@@ -59,12 +59,23 @@
   </div>
   <% } %>
 
-  <!-- Active / Deleted tabs -->
-  <div class="flex gap-2 border-b border-gray-200">
-    <a href="/hr/roster" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 <%= !locals.showDeleted ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
-      Active <span class="text-xs font-bold <%= !locals.showDeleted ? 'text-brand-600' : 'text-gray-400' %>"><%= stats.totalActiveAll %></span>
+  <!-- All / Active / Reserved / Deleted tabs -->
+  <%
+    var tabAll = !locals.showDeleted && !filters.status;
+    var tabActive = !locals.showDeleted && filters.status === 'active';
+    var tabReserved = !locals.showDeleted && filters.status === 'reserved';
+  %>
+  <div class="flex gap-2 border-b border-gray-200 overflow-x-auto">
+    <a href="/hr/roster" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= tabAll ? 'border-brand-600 text-brand-600' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      All <span class="text-xs font-bold <%= tabAll ? 'text-brand-600' : 'text-gray-400' %>"><%= stats.totalActiveAll %></span>
     </a>
-    <a href="/hr/roster?view=deleted" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 <%= locals.showDeleted ? 'border-gray-700 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+    <a href="/hr/roster?status=active" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= tabActive ? 'border-emerald-600 text-emerald-600' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      Active <span class="text-xs font-bold <%= tabActive ? 'text-emerald-600' : 'text-gray-400' %>"><%= stats.totalActive %></span>
+    </a>
+    <a href="/hr/roster?status=reserved" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= tabReserved ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      Reserved <span class="text-xs font-bold <%= tabReserved ? 'text-blue-600' : 'text-gray-400' %>"><%= stats.totalReserved %></span>
+    </a>
+    <a href="/hr/roster?view=deleted" class="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-semibold transition-all border-b-2 whitespace-nowrap <%= locals.showDeleted ? 'border-gray-700 text-gray-900' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
       Deleted <% if (stats.totalDeleted > 0) { %><span class="text-xs font-bold bg-gray-200 text-gray-700 px-1.5 py-0.5 rounded"><%= stats.totalDeleted %></span><% } %>
     </a>
@@ -304,9 +315,27 @@
               <td class="px-3 sm:px-4 py-3 text-gray-600 text-xs hidden md:table-cell"><%= emp.traffic_role_level || emp.role_title || '-' %></td>
               <td class="px-3 sm:px-4 py-3 text-gray-500 text-xs hidden md:table-cell capitalize"><%= emp.employment_type ? emp.employment_type.replace(/_/g, ' ') : '-' %></td>
               <td class="px-3 sm:px-4 py-3">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize <%= sBadges[emp.employment_status] || sBadges.inactive %>">
-                  <%= (emp.employment_status || 'unknown').replace(/_/g, ' ') %>
-                </span>
+                <% if (locals.showDeleted) { %>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize <%= sBadges[emp.employment_status] || sBadges.inactive %>">
+                    <%= (emp.employment_status || 'unknown').replace(/_/g, ' ') %>
+                  </span>
+                <% } else {
+                  var es = emp.employment_status || 'active';
+                  var esCls = sBadges[es] || sBadges.inactive;
+                %>
+                  <form method="POST" action="/hr/employees/<%= emp.id %>/employment-status" class="inline">
+                    <%- include('../partials/csrf') %>
+                    <select name="employment_status" data-inline-pill="employment_status" title="Employment status"
+                      class="text-[10px] font-bold uppercase tracking-wide rounded-full cursor-pointer <%= esCls %>"
+                      style="appearance:none;-webkit-appearance:none;-moz-appearance:none;background-image:url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 fill=%22none%22 stroke=%22currentColor%22 stroke-width=%222%22 viewBox=%220 0 24 24%22><path d=%22M6 9l6 6 6-6%22/></svg>');background-repeat:no-repeat;background-position:right 6px center;padding:2px 20px 2px 8px;border:0;">
+                      <option value="active"     <%= es === 'active' ? 'selected' : '' %>>Active</option>
+                      <option value="reserved"   <%= es === 'reserved' ? 'selected' : '' %>>Reserved</option>
+                      <option value="on_leave"   <%= es === 'on_leave' ? 'selected' : '' %>>On Leave</option>
+                      <option value="inactive"   <%= (es === 'inactive' || es === 'deactivated') ? 'selected' : '' %>>Deactivated</option>
+                      <option value="terminated" <%= (es === 'terminated' || es === 'offboarded') ? 'selected' : '' %>>Terminated</option>
+                    </select>
+                  </form>
+                <% } %>
               </td>
               <td class="px-3 sm:px-4 py-3 hidden lg:table-cell">
                 <% if (emp.readiness) { %>

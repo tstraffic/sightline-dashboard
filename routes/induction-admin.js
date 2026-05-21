@@ -441,7 +441,7 @@ router.post('/submissions/:id/status', (req, res) => {
           linked_crew_member_id, internal_notes,
           white_card_number, tc_licence_number, tc_licence_state, tc_licence_date_of_issue, drivers_licence_number,
           emergency_contact_name, emergency_contact_phone, emergency_contact_relationship)
-        VALUES (?, ?, ?, ?, ?, 'T&S Traffic Control', ?, 'active', ?, date('now'), ?, ?, ?, ?, ?, ?, ?, 'completed', 1, 1, ?, ?,
+        VALUES (?, ?, ?, ?, ?, 'T&S Traffic Control', ?, 'reserved', ?, date('now'), ?, ?, ?, ?, ?, ?, ?, 'completed', 1, 1, ?, ?,
           ?, ?, ?, ?, ?,
           ?, ?, ?)
       `).run(

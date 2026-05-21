@@ -218,6 +218,7 @@ router.get('/roster', requirePermission('hr_employees'), (req, res) => {
 
   // Stats (all exclude deleted except totalDeleted)
   const totalActive = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status = 'active' AND deleted_at IS NULL").get().c;
+  const totalReserved = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status = 'reserved' AND deleted_at IS NULL").get().c;
   const totalDeactivated = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status IN ('inactive', 'deactivated') AND deleted_at IS NULL").get().c;
   const totalOnLeave = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status = 'on_leave' AND deleted_at IS NULL").get().c;
   const totalTerminated = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status IN ('terminated', 'offboarded') AND deleted_at IS NULL").get().c;
@@ -231,7 +232,7 @@ router.get('/roster', requirePermission('hr_employees'), (req, res) => {
     title: 'Roster',
     currentPage: 'hr-roster',
     employees,
-    stats: { totalActive, totalDeactivated, totalOnLeave, totalTerminated, totalCash, totalTfn, totalAbn, totalActiveAll, totalDeleted, inductedCount, notInductedCount },
+    stats: { totalActive, totalReserved, totalDeactivated, totalOnLeave, totalTerminated, totalCash, totalTfn, totalAbn, totalActiveAll, totalDeleted, inductedCount, notInductedCount },
     filters: { employment_type, status, level, search, sort, order, payment_type, view, induction },
     showDeleted,
     sopVersion,
@@ -1737,6 +1738,28 @@ router.get('/compliance', requirePermission('hr_compliance_view'), (req, res) =>
     filterOptions: { companies },
     user: req.session.user
   });
+});
+
+// ============================================
+// INLINE EMPLOYMENT STATUS CHANGE (roster picker)
+// ============================================
+router.post('/employees/:id/employment-status', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const allowed = ['active', 'reserved', 'on_leave', 'inactive', 'terminated'];
+  const next = String(req.body.employment_status || '').trim();
+  if (!allowed.includes(next)) {
+    req.flash('error', 'Invalid status.');
+    return res.redirect('back' in req ? 'back' : '/hr/roster');
+  }
+  const emp = db.prepare('SELECT id FROM employees WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
+  if (!emp) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/roster'); }
+  // active flag: 1 for active/reserved/on_leave (can still access portal), 0 for inactive/terminated
+  const activeFlag = (next === 'inactive' || next === 'terminated') ? 0 : 1;
+  db.prepare('UPDATE employees SET employment_status = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(next, activeFlag, emp.id);
+  req.flash('success', `Status updated to ${next.replace(/_/g, ' ')}.`);
+  const ref = req.get('referer') || '/hr/roster';
+  res.redirect(ref);
 });
 
 // ============================================
