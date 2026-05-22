@@ -82,7 +82,7 @@
               <p class="text-xs text-gray-500 mt-0.5">
                 <%= s.fund_name || (s.use_default ? 'Company default fund' : 'Choice form attached') %> · USI <%= s.usi || '—' %> · Member <%= s.member_number || '—' %>
               </p>
-              <% if (s.choice_form_url) { %><a href="<%= s.choice_form_url %>" target="_blank" class="text-[11px] text-brand-600 underline">View Choice form PDF</a><% } %>
+              <% if (s.choice_form_url) { %><a href="<%= s.choice_form_url %>" data-lightbox data-lightbox-name="<%= s.full_name %> — Super Choice form" class="text-[11px] text-brand-600 underline">View Choice form PDF</a><% } %>
             </div>
             <div class="flex flex-wrap gap-2">
               <form method="POST" action="/hr/secure-queue/super/<%= s.id %>/sync" class="inline">
@@ -119,7 +119,7 @@
               <p class="text-xs text-gray-500 mt-0.5">
                 TFN •••••••<%= t.tfn_last3 %> · <%= t.residency_status %> · Threshold <%= t.claim_threshold ? 'Y' : 'N' %> · HELP <%= t.has_help_debt ? 'Y' : 'N' %> · STSL <%= t.has_stsl_debt ? 'Y' : 'N' %> · Medicare <%= t.medicare_variation %>
               </p>
-              <% if (t.pdf_url) { %><a href="<%= t.pdf_url %>" target="_blank" class="text-[11px] text-brand-600 underline">Signed PDF</a><% } %>
+              <% if (t.pdf_url) { %><a href="<%= t.pdf_url %>" data-lightbox data-lightbox-name="<%= t.full_name %> — TFN Declaration" class="text-[11px] text-brand-600 underline">Signed PDF</a><% } %>
             </div>
             <div class="flex flex-wrap gap-2">
               <button type="button" class="px-3 py-1.5 text-xs font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 rounded-lg" onclick="revealSensitive('tfn', <%= t.id %>, this)">Reveal for QBO</button>

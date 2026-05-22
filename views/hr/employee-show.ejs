@@ -556,7 +556,7 @@
                     <code class="bg-gray-100 px-1 py-0.5 rounded text-[10px]"><%= h.sop_version %></code>
                     <span class="flex-1"><%= new Date(h.signed_at + (h.signed_at.includes('T') ? '' : 'Z')).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', year:'numeric' }) %></span>
                     <% if (h.signature_url) { %>
-                      <a href="<%= h.signature_url %>" target="_blank" class="text-brand-600 hover:text-brand-700 font-medium">view</a>
+                      <a href="<%= h.signature_url %>" data-lightbox data-lightbox-name="SOP Signature <%= h.sop_version %>" data-lightbox-mime="image/*" class="text-brand-600 hover:text-brand-700 font-medium">view</a>
                     <% } %>
                   </li>
                 <% }) %>
@@ -626,15 +626,15 @@
               <!-- Document exists -->
               <% if (isImageFile(doc.original_name || doc.filename)) { %>
                 <div class="w-full h-28 bg-gray-100 rounded-lg mb-3 overflow-hidden flex items-center justify-center">
-                  <a href="/hr/documents/<%= doc.id %>/download" class="block w-full h-full">
+                  <a href="/hr/documents/<%= doc.id %>/download" data-lightbox data-lightbox-name="<%= kd.label %>" data-lightbox-mime="image/*" class="block w-full h-full cursor-zoom-in">
                     <img src="/hr/documents/<%= doc.id %>/download" alt="<%= kd.label %>" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\'flex items-center justify-center h-full text-gray-400 text-xs\'>Preview unavailable</div>'">
                   </a>
                 </div>
               <% } else { %>
-                <div class="w-full h-28 bg-gray-50 rounded-lg mb-3 flex flex-col items-center justify-center">
+                <a href="/hr/documents/<%= doc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= kd.label %>" class="block w-full h-28 bg-gray-50 rounded-lg mb-3 flex flex-col items-center justify-center cursor-zoom-in hover:bg-gray-100 transition">
                   <svg class="w-8 h-8 text-gray-300 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                  <span class="text-[10px] text-gray-400 font-medium">PDF / Document</span>
-                </div>
+                  <span class="text-[10px] text-gray-400 font-medium">Preview</span>
+                </a>
               <% } %>
 
               <div class="space-y-2">
@@ -709,6 +709,7 @@
                 </td>
                 <td class="px-4 py-3 text-right">
                   <div class="flex items-center justify-end gap-1">
+                    <a href="/hr/documents/<%= doc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= doc.document_name || doc.original_name %>" class="px-2 py-1 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition">View</a>
                     <a href="/hr/documents/<%= doc.id %>/download" class="px-2 py-1 text-xs text-gray-600 bg-gray-100 hover:bg-brand-50 hover:text-brand-700 rounded-lg transition">Download</a>
                     <% if (doc.verification_status === 'pending') { %>
                       <form method="POST" action="/hr/documents/<%= doc.id %>/verify" class="inline"><%- include('../partials/csrf') %><input type="hidden" name="action" value="verify"><button type="submit" class="px-2 py-1 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition">Verify</button></form>
@@ -826,7 +827,7 @@
               <div class="pt-2 mt-2 border-t border-gray-100">
                 <div class="flex items-center gap-2">
                   <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-                  <a href="/hr/documents/<%= linkedDoc.id %>/download" class="text-[10px] text-brand-600 hover:text-brand-700 font-medium truncate"><%= linkedDoc.document_name || linkedDoc.original_name %></a>
+                  <a href="/hr/documents/<%= linkedDoc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= linkedDoc.document_name || linkedDoc.original_name %>" class="text-[10px] text-brand-600 hover:text-brand-700 font-medium truncate"><%= linkedDoc.document_name || linkedDoc.original_name %></a>
                 </div>
               </div>
             <% } %>
@@ -1430,7 +1431,7 @@
                       <p class="text-xs text-gray-600 mt-1 whitespace-pre-line"><%= t.notes %></p>
                     <% } %>
                     <% if (t.certificate_url) { %>
-                      <a href="<%= t.certificate_url %>" target="_blank" rel="noopener" class="text-xs text-brand-600 hover:underline mt-1 inline-block">Certificate ↗</a>
+                      <a href="<%= t.certificate_url %>" data-lightbox data-lightbox-name="<%= t.training_name %> — Certificate" class="text-xs text-brand-600 hover:underline mt-1 inline-block">Certificate</a>
                     <% } %>
                   </div>
                   <div class="flex items-center gap-1 flex-shrink-0">

@@ -65,7 +65,7 @@
                 <td class="px-4 py-3 text-gray-500 capitalize"><%= a.signed_via %></td>
                 <td class="px-4 py-3">
                   <% if (a.signature_url) { %>
-                    <a href="<%= a.signature_url %>" target="_blank" class="text-brand-600 hover:text-brand-700 text-xs font-medium">View</a>
+                    <a href="<%= a.signature_url %>" data-lightbox data-lightbox-name="<%= a.full_name %> — SOP Signature <%= a.sop_version %>" data-lightbox-mime="image/*" class="text-brand-600 hover:text-brand-700 text-xs font-medium">View</a>
                   <% } %>
                 </td>
               </tr>
