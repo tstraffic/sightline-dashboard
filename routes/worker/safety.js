@@ -742,6 +742,84 @@ router.post('/safety/toolboxes/:id/accept', (req, res) => {
   return res.redirect('/w/safety/toolboxes/' + toolbox.id);
 });
 
+// POST /w/safety/toolboxes/:id/decline — worker can't attend.
+// Sets status='absent' with the optional reason. Allowed transition from
+// pending (no row) or attending — once a worker has actually signed off
+// (status='attended') they can't flip back without admin help.
+router.post('/safety/toolboxes/:id/decline', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
+  if (!toolbox || toolbox.status !== 'published') {
+    req.flash('error', 'Toolbox not available.');
+    return res.redirect('/w/safety/toolboxes');
+  }
+  const reason = (req.body.absence_reason || '').toString().trim().slice(0, 1000) || null;
+  try {
+    const existing = db.prepare(
+      'SELECT status FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?'
+    ).get(toolbox.id, worker.id);
+    if (existing && (existing.status === 'attended' || existing.status === 'caught_up')) {
+      req.flash('error', "You've already recorded attendance — ask the office if this needs to change.");
+    } else {
+      db.prepare(`
+        INSERT INTO toolbox_attendance
+          (toolbox_id, crew_member_id, status, absence_reason, recorded_by_id)
+        VALUES (?, ?, 'absent', ?, NULL)
+        ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+          status = 'absent', absence_reason = excluded.absence_reason,
+          recorded_at = CURRENT_TIMESTAMP, signed_off_at = NULL, signature_data = NULL
+      `).run(toolbox.id, worker.id, reason);
+      req.flash('success', 'Marked as not attending.');
+    }
+  } catch (e) {
+    console.error('[w/safety] toolbox decline error', e.message);
+    req.flash('error', 'Could not record.');
+  }
+  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+});
+
+// POST /w/safety/toolboxes/:id/sign-off — worker confirms they attended.
+// Requires a captured signature (data: URL from the canvas pad). Sets
+// status='attended', signed_off_at=now, signature_data=<png base64>.
+// This is the only path that produces a current-state 'attended' record
+// going forward (admin tick still exists for office-side overrides).
+router.post('/safety/toolboxes/:id/sign-off', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
+  if (!toolbox || toolbox.status !== 'published') {
+    req.flash('error', 'Toolbox not available.');
+    return res.redirect('/w/safety/toolboxes');
+  }
+  const sigRaw = (req.body.signature_data || '').toString();
+  // Cap at ~250 KB. PNG dataURLs from a 320×130 canvas with a couple of
+  // strokes are typically 10–25 KB; the cap keeps a malicious / overly
+  // dense payload from bloating the row.
+  if (!sigRaw.startsWith('data:image/') || sigRaw.length > 260000) {
+    req.flash('error', 'Please draw your signature before signing off.');
+    return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+  }
+  try {
+    db.prepare(`
+      INSERT INTO toolbox_attendance
+        (toolbox_id, crew_member_id, status, signature_data, signed_off_at, recorded_by_id, recorded_at)
+      VALUES (?, ?, 'attended', ?, CURRENT_TIMESTAMP, NULL, CURRENT_TIMESTAMP)
+      ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+        status = 'attended',
+        signature_data = excluded.signature_data,
+        signed_off_at = CURRENT_TIMESTAMP,
+        recorded_at = CURRENT_TIMESTAMP,
+        absence_reason = NULL
+    `).run(toolbox.id, worker.id, sigRaw);
+    req.flash('success', 'Signed off — attendance recorded.');
+  } catch (e) {
+    console.error('[w/safety] toolbox sign-off error', e.message);
+    req.flash('error', 'Could not record sign-off.');
+  }
+  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+});
+
 // POST /w/safety/toolboxes/:id/caught-up — worker self-claim. Idempotent via
 // UNIQUE(toolbox_id, crew_member_id); won't overwrite an existing 'attended'
 // record since INSERT OR IGNORE matches on the unique constraint.
