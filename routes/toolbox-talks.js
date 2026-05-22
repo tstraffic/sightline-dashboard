@@ -484,10 +484,81 @@ router.get('/:id/attendance', (req, res) => {
       WHERE allocation_date = ? AND status != 'cancelled'
     `).all(toolbox.held_at).map(r => r.crew_member_id);
   } catch (e) {}
+  // Crew NOT currently rendered (= eligible to manually add to the
+  // invite list). When the toolbox is open-to-all, this is empty
+  // because everyone's already on the page.
+  const renderedIds = new Set(rows.map(r => r.crew_id));
+  const selectableCrew = selectableCrewMembers().filter(cm => !renderedIds.has(cm.id));
+  const isOpenToAll = db.prepare('SELECT COUNT(*) AS c FROM toolbox_invitees WHERE toolbox_id = ?').get(toolbox.id).c === 0;
   res.render('toolbox-talks/attendance', {
     title: toolbox.title + ' — Attendance', currentPage: 'toolbox-talks',
-    toolbox, rows, allocatedIds,
+    toolbox, rows, allocatedIds, selectableCrew, isOpenToAll,
   });
+});
+
+// POST /toolbox-talks/:id/invitees/add — manually add a single worker
+// to a toolbox's invite list.
+//
+// Two behaviours depending on the current state of toolbox_invitees:
+//   1. Already scoped (non-empty invitees): just INSERT OR IGNORE the
+//      crew_id so they appear on the attendance page.
+//   2. Open to everyone (empty invitees): the worker is already
+//      implicitly invited, so adding is a no-op as far as DB state
+//      goes — but we return `was_already_invited: true` so the UI can
+//      explain why nothing changed and offer the "Remove others to
+//      scope" path.
+//
+// Returns JSON for the attendance page's AJAX add-row flow.
+router.post('/:id/invitees/add', (req, res) => {
+  try {
+    const db = getDb();
+    const toolboxId = parseInt(req.params.id, 10);
+    const crewId = parseInt(req.body.crew_member_id, 10);
+    if (!toolboxId || !crewId) return res.status(400).json({ ok: false, error: 'Bad ids' });
+    const tb = db.prepare('SELECT id, title FROM toolbox_talks WHERE id = ?').get(toolboxId);
+    if (!tb) return res.status(404).json({ ok: false, error: 'Toolbox not found' });
+    const crew = db.prepare(`
+      SELECT cm.id, cm.full_name, cm.employee_id
+      FROM crew_members cm
+      WHERE cm.id = ? AND cm.active = 1
+        AND (
+          NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+          OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL)
+        )
+    `).get(crewId);
+    if (!crew) return res.status(404).json({ ok: false, error: 'Worker not found or inactive' });
+
+    const currentCount = db.prepare('SELECT COUNT(*) AS c FROM toolbox_invitees WHERE toolbox_id = ?').get(toolboxId).c;
+    let wasAlreadyInvited = false;
+    if (currentCount === 0) {
+      // Open-to-all: the worker is already implicitly on the invite
+      // list. No DB mutation needed.
+      wasAlreadyInvited = true;
+    } else {
+      const existing = db.prepare('SELECT 1 FROM toolbox_invitees WHERE toolbox_id = ? AND crew_member_id = ?').get(toolboxId, crewId);
+      if (existing) {
+        wasAlreadyInvited = true;
+      } else {
+        db.prepare('INSERT INTO toolbox_invitees (toolbox_id, crew_member_id) VALUES (?, ?)')
+          .run(toolboxId, crewId);
+      }
+    }
+
+    try {
+      logActivity({
+        user: req.session.user, action: 'invitee_added', entityType: 'toolbox_talk',
+        entityId: tb.id, entityLabel: tb.title, details: 'crew_id=' + crewId, ip: req.ip,
+      });
+    } catch (e) {}
+    return res.json({
+      ok: true,
+      was_already_invited: wasAlreadyInvited,
+      crew: { id: crew.id, full_name: crew.full_name, employee_id: crew.employee_id || null },
+    });
+  } catch (err) {
+    console.error('[toolbox-talks invitee add]', err);
+    return res.status(500).json({ ok: false, error: err.message });
+  }
 });
 
 // POST /toolbox-talks/:id/invitees/:crewId/remove — drop a single
