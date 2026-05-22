@@ -699,12 +699,42 @@ router.get('/safety/toolboxes/:id', (req, res) => {
     SELECT * FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?
   `).get(toolbox.id, workerId);
   const photos = db.prepare(`SELECT id FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
+  // Documents are the post-attendance materials. Surface metadata to
+  // the view always (so we can show a count / "unlocks after sign-off"
+  // hint), but the actual download endpoint gates on attendance.
+  const documents = db.prepare(`SELECT id, file_original_name FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'doc' ORDER BY id ASC`).all(toolbox.id);
+  const hasSignedOff = !!(myAttendance && myAttendance.status === 'attended' && myAttendance.signed_off_at);
   const isPdfSlides = !!(toolbox.slides_original_name && /\.pdf$/i.test(toolbox.slides_original_name));
   res.render('worker/safety/toolbox-detail', {
     title: toolbox.title, currentPage: 'safety',
     subtab: 'toolboxes', toolbox, myAttendance, photos,
+    documents, hasSignedOff,
     isPdfSlides,
   });
+});
+
+// GET /w/safety/toolboxes/:id/documents/:docId — gated download of a
+// post-attendance material. Only served once the worker has signed off
+// (status='attended' AND signed_off_at IS NOT NULL); otherwise 403 so
+// the view's "unlocks after sign-off" hint matches the access policy.
+router.get('/safety/toolboxes/:id/documents/:docId', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const att = db.prepare(`
+    SELECT status, signed_off_at FROM toolbox_attendance
+    WHERE toolbox_id = ? AND crew_member_id = ?
+  `).get(req.params.id, worker.id);
+  if (!att || att.status !== 'attended' || !att.signed_off_at) {
+    return res.status(403).send('Sign off attendance to unlock materials.');
+  }
+  const doc = db.prepare(
+    `SELECT file_path, file_original_name FROM toolbox_attachments
+     WHERE id = ? AND toolbox_id = ? AND kind = 'doc'`
+  ).get(req.params.docId, req.params.id);
+  if (!doc || !doc.file_path) return res.status(404).send('not found');
+  const abs = path.join(__dirname, '..', '..', doc.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('missing');
+  return res.download(abs, doc.file_original_name || path.basename(abs));
 });
 
 // POST /w/safety/toolboxes/:id/accept — worker accepts the invite.

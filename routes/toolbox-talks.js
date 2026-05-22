@@ -86,11 +86,15 @@ const upload = multer({
     cb(null, ok);
   }
 });
-// Accept the create/edit form's three file fields in one go.
+// Accept the create/edit form's file fields in one go.
+// `documents` carries the post-attendance materials a worker can
+// download once they've signed off. Stored in toolbox_attachments with
+// kind='doc' alongside the existing kind='photo' rows.
 const formUploads = upload.fields([
   { name: 'slides', maxCount: 1 },
   { name: 'signon', maxCount: 1 },
   { name: 'photos', maxCount: 12 },
+  { name: 'documents', maxCount: 12 },
 ]);
 
 const STATUS_VALUES = ['draft', 'published', 'archived'];
@@ -156,7 +160,7 @@ router.get('/', (req, res) => {
 router.get('/new', (req, res) => {
   res.render('toolbox-talks/form', {
     title: 'New Toolbox Talk', currentPage: 'toolbox-talks',
-    toolbox: null, photos: [], isEdit: false,
+    toolbox: null, photos: [], documents: [], isEdit: false,
     selectableCrew: selectableCrewMembers(),
     inviteeIds: [],
   });
@@ -217,6 +221,17 @@ router.post('/', formUploads, (req, res) => {
         ins.run(r.lastInsertRowid, relFromRepo(f.path), f.originalname, userId);
       }
     }
+    // Documents — the post-attendance materials. Same table, kind='doc'.
+    const docFiles = (req.files && req.files.documents) || [];
+    if (docFiles.length) {
+      const ins = db.prepare(`
+        INSERT INTO toolbox_attachments (toolbox_id, file_path, file_original_name, kind, uploaded_by_id)
+        VALUES (?, ?, ?, 'doc', ?)
+      `);
+      for (const f of docFiles) {
+        ins.run(r.lastInsertRowid, relFromRepo(f.path), f.originalname, userId);
+      }
+    }
 
     try {
       logActivity({
@@ -249,6 +264,7 @@ router.get('/:id', (req, res) => {
   `).get(req.params.id);
   if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
   const photos = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
+  const documents = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'doc' ORDER BY id ASC`).all(toolbox.id);
   const summary = db.prepare(`
     SELECT
       /* Total = invitee count when scoped, otherwise active crew (excluding
@@ -304,7 +320,7 @@ router.get('/:id', (req, res) => {
 
   res.render('toolbox-talks/show', {
     title: toolbox.title, currentPage: 'toolbox-talks',
-    toolbox, photos, summary, absences, attendanceSession, attendanceUrl,
+    toolbox, photos, documents, summary, absences, attendanceSession, attendanceUrl,
     invitees,
     statusLabels: STATUS_LABELS,
   });
@@ -316,9 +332,10 @@ router.get('/:id/edit', (req, res) => {
   const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
   if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
   const photos = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
+  const documents = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'doc' ORDER BY id ASC`).all(toolbox.id);
   res.render('toolbox-talks/form', {
     title: 'Edit Toolbox Talk', currentPage: 'toolbox-talks',
-    toolbox, photos, isEdit: true,
+    toolbox, photos, documents, isEdit: true,
     selectableCrew: selectableCrewMembers(),
     inviteeIds: getToolboxInviteeIds(toolbox.id),
   });
@@ -374,6 +391,20 @@ router.post('/:id', formUploads, (req, res) => {
       `);
       const uid = req.session.user ? req.session.user.id : null;
       for (const f of photoFiles) {
+        ins.run(toolbox.id, relFromRepo(f.path), f.originalname, uid);
+      }
+    }
+    // Append new docs to whatever's already attached. Editing the
+    // toolbox doesn't replace documents — use the Remove button on
+    // each row to drop one.
+    const docFiles = (req.files && req.files.documents) || [];
+    if (docFiles.length) {
+      const ins = db.prepare(`
+        INSERT INTO toolbox_attachments (toolbox_id, file_path, file_original_name, kind, uploaded_by_id)
+        VALUES (?, ?, ?, 'doc', ?)
+      `);
+      const uid = req.session.user ? req.session.user.id : null;
+      for (const f of docFiles) {
         ins.run(toolbox.id, relFromRepo(f.path), f.originalname, uid);
       }
     }
@@ -800,6 +831,32 @@ router.post('/:id/photos/:photoId/delete', (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ?').run(req.params.photoId, req.params.id);
   req.flash('success', 'Photo removed.');
+  return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
+});
+
+// GET /toolbox-talks/:id/documents/:docId — auth-gated download of a
+// post-attendance material. Admin-only path; the worker-side equivalent
+// is under /w/safety/toolboxes/:id/documents/:docId and gates on
+// sign-off.
+router.get('/:id/documents/:docId', (req, res) => {
+  const db = getDb();
+  const doc = db.prepare(
+    `SELECT file_path, file_original_name FROM toolbox_attachments
+     WHERE id = ? AND toolbox_id = ? AND kind = 'doc'`
+  ).get(req.params.docId, req.params.id);
+  if (!doc || !doc.file_path) return res.status(404).send('not found');
+  const abs = path.join(__dirname, '..', doc.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('missing');
+  return res.download(abs, doc.file_original_name || path.basename(abs));
+});
+
+// POST /toolbox-talks/:id/documents/:docId/delete
+router.post('/:id/documents/:docId/delete', (req, res) => {
+  const db = getDb();
+  db.prepare(
+    `DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ? AND kind = 'doc'`
+  ).run(req.params.docId, req.params.id);
+  req.flash('success', 'Document removed.');
   return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
 });
 
