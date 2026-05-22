@@ -29,41 +29,14 @@
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
-  <script>
-    // iOS Safari + standalone PWAs sometimes report `100dvh` as the smaller
-    // visual viewport on the first paint (especially right after a cold
-    // launch or a reload), then re-measure after the first user scroll —
-    // which is what users were seeing as "the bottom tab nav floats with a
-    // big gap, then snaps to the right place once you scroll." Pinning the
-    // body height directly to window.innerHeight in JS bypasses the CSS
-    // unit's flaky initial value entirely. Runs as early as possible (the
-    // tag is in <head>) and re-measures on resize / orientation / visual-
-    // viewport changes so URL-bar transitions are still respected.
-    (function () {
-      function fix() {
-        var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
-        var s = h + 'px';
-        document.documentElement.style.setProperty('--wh-vh', s);
-        if (document.body) {
-          document.body.style.height = s;
-          document.body.style.minHeight = s;
-          document.body.style.maxHeight = s;
-        }
-      }
-      fix();
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', fix, { once: true });
-      }
-      window.addEventListener('resize', fix);
-      window.addEventListener('orientationchange', fix);
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', fix);
-      }
-      // Also re-fix after the page finishes loading — iOS sometimes
-      // reports a stale innerHeight for one frame around the load event.
-      window.addEventListener('load', fix);
-    })();
-  </script>
+  <!-- Previous iterations of this layout pinned body height via JS that
+       read visualViewport.height at parse time. iOS sometimes returns a
+       transient small value there during page load, and the resulting
+       max-height locked the body to that wrong size, leaving a big
+       white gap below the tab nav. Switched back to a fixed-position
+       nav anchored to the viewport bottom, with body free to size
+       itself to the content above it — no JS pinning, no
+       max-height. -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="T&S Crew">
@@ -139,11 +112,11 @@
     }
   </script>
   <link rel="stylesheet" href="/css/custom.css?v=atomis-6">
-  <link rel="stylesheet" href="/css/worker.css?v=atomis-13">
+  <link rel="stylesheet" href="/css/worker.css?v=atomis-14">
   <link rel="stylesheet" href="/css/worker-design.css?v=atomis-3">
   <link rel="stylesheet" href="/css/chat.css?v=atomis-1">
 </head>
-<body class="worker-portal font-sans antialiased flex flex-col" style="height: var(--wh-vh, 100dvh); min-height: var(--wh-vh, 100dvh); max-height: var(--wh-vh, 100dvh);">
+<body class="worker-portal font-sans antialiased flex flex-col" style="min-height: 100dvh;">
 
   <%- include('../partials/staging-badge') %>
 
@@ -255,7 +228,7 @@
        nav below is in flow with shrink-0, so the nav always hugs the
        actual visible bottom even when Safari's URL bar appears or the
        device's "Show tab bar" setting changes the viewport. -->
-  <main class="flex-1 overflow-auto w-full max-w-[520px] mx-auto" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); min-height: 0;">
+  <main class="flex-1 w-full max-w-[520px] mx-auto" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px));">
     <%- body %>
   </main>
 
@@ -307,7 +280,7 @@
        anchors to the larger layout viewport and floats above the actual
        screen edge. padding-bottom honours the iOS home-indicator safe
        area so the nav's background still reaches the screen edge. -->
-  <nav class="wh-tabnav shrink-0 w-full" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);">
+  <nav class="wh-tabnav fixed bottom-0 left-0 right-0 z-50" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);">
     <div class="flex items-end justify-around h-14 px-0.5 max-w-[520px] mx-auto wh-tab-bar" id="wh-tab-bar">
       <span class="wh-tab-indicator" aria-hidden="true"></span>
       <% const cp = typeof currentPage !== 'undefined' ? currentPage : ''; %>
