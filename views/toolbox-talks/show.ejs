@@ -184,4 +184,26 @@
       </div>
     </div>
   <% } %>
+
+  <% if (typeof documents !== 'undefined' && documents && documents.length) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Documents</p>
+          <p class="text-xs text-gray-500 mt-0.5">Workers can download these once they've signed off attendance.</p>
+        </div>
+        <a href="/toolbox-talks/<%= toolbox.id %>/edit#documents" class="text-xs font-semibold text-brand-700 hover:underline">Manage ›</a>
+      </div>
+      <ul class="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+        <% documents.forEach(d => { %>
+          <li class="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+            <a href="/toolbox-talks/<%= toolbox.id %>/documents/<%= d.id %>" class="flex-1 truncate text-brand-700 hover:underline">
+              📄 <%= d.file_original_name || ('Document #' + d.id) %>
+            </a>
+            <span class="text-[11px] text-gray-400 tabular-nums whitespace-nowrap"><%= new Date(d.uploaded_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' }) %></span>
+          </li>
+        <% }) %>
+      </ul>
+    </div>
+  <% } %>
 </div>

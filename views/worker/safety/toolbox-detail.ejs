@@ -91,6 +91,55 @@
   .tbd-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
   .tbd-photos img { width: 100%; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); }
 
+  /* Materials section — unlocked once the worker has signed off
+     attendance. List of downloadable docs the office attached
+     (training notes, slides, certificates, anything). When the worker
+     hasn't signed off yet, we still show that materials exist so they
+     know there's something waiting for them. */
+  .tbd-mats { margin-top: 16px; }
+  .tbd-mats h3 { font-size: 0.95rem; font-weight: 700; margin: 0 0 8px; color: #fff; display: flex; align-items: center; gap: 6px; }
+  .tbd-mats h3 .tbd-mats-badge {
+    font-size: 0.6rem; font-weight: 700; padding: 1px 7px; border-radius: 999px;
+    background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3);
+  }
+  .tbd-mats-locked {
+    background: rgba(245,158,11,0.10); border: 1px solid rgba(245,158,11,0.28);
+    border-radius: 10px; padding: 12px 14px; font-size: 0.82rem; color: #fcd34d;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .tbd-mats-locked svg { flex-shrink: 0; }
+  .tbd-mats-list {
+    display: flex; flex-direction: column;
+    background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 10px; overflow: hidden;
+  }
+  .tbd-mats-list a {
+    display: flex; align-items: center; gap: 10px;
+    padding: 12px 14px; color: #fff; text-decoration: none;
+    border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.85rem; font-weight: 500;
+  }
+  .tbd-mats-list a:first-child { border-top: 0; }
+  .tbd-mats-list a:active { background: rgba(255,255,255,0.05); }
+  .tbd-mats-list .tbd-mats-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tbd-mats-list .tbd-mats-icon { width: 30px; height: 30px; border-radius: 8px; background: rgba(16,185,129,0.15); color: #34D399; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .tbd-mats-list .tbd-mats-chev { color: rgba(255,255,255,0.4); flex-shrink: 0; }
+
+  :root[data-theme="light"] .tbd-mats h3              { color: #0F1115; }
+  :root[data-theme="light"] .tbd-mats h3 .tbd-mats-badge { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
+  :root[data-theme="light"] .tbd-mats-locked {
+    background: #FFFBEB; border-color: #FDE68A; color: #92400E;
+  }
+  :root[data-theme="light"] .tbd-mats-list {
+    background: #FFFFFF; border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04);
+  }
+  :root[data-theme="light"] .tbd-mats-list a {
+    color: #0F1115; border-top-color: #E5E7EB;
+  }
+  :root[data-theme="light"] .tbd-mats-list a:active { background: #F9FAFB; }
+  :root[data-theme="light"] .tbd-mats-list .tbd-mats-icon { background: #ECFDF5; color: #047857; }
+  :root[data-theme="light"] .tbd-mats-list .tbd-mats-chev { color: #9CA3AF; }
+
   /* Sign-off card sits in normal flow above the bottom tab nav so the
      signature pad isn't covered by the keyboard or tab bar. */
   .tbd-signoff-card {
@@ -190,6 +239,33 @@
         </a>
       <% }) %>
     </div>
+  <% } %>
+
+  <% if (typeof documents !== 'undefined' && documents && documents.length) { %>
+    <section class="tbd-mats">
+      <h3>
+        Materials
+        <span class="tbd-mats-badge"><%= documents.length %></span>
+      </h3>
+      <% if (hasSignedOff) { %>
+        <div class="tbd-mats-list">
+          <% documents.forEach(d => { %>
+            <a href="/w/safety/toolboxes/<%= toolbox.id %>/documents/<%= d.id %>" download="<%= d.file_original_name %>">
+              <span class="tbd-mats-icon">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              </span>
+              <span class="tbd-mats-name"><%= d.file_original_name || ('Document #' + d.id) %></span>
+              <svg class="tbd-mats-chev" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+            </a>
+          <% }) %>
+        </div>
+      <% } else { %>
+        <div class="tbd-mats-locked">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span>Sign off attendance to unlock <%= documents.length %> material<%= documents.length === 1 ? '' : 's' %> from this toolbox.</span>
+        </div>
+      <% } %>
+    </section>
   <% } %>
 
   <% if (canSignOff) { %>
