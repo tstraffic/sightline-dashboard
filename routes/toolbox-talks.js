@@ -82,10 +82,11 @@ const upload = multer({
   // 15MB per file — toolbox decks and sign-on scans can be chunky.
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    // Match the form's accept attribute on prep_documents / documents
-    // (xlsx / pptx / txt were silently dropped before — multer's filter
-    // returns cb(null, false) and the file vanishes with no row, no error).
-    const ok = /\.(pdf|docx?|xlsx?|pptx?|txt|jpg|jpeg|png|webp|heic)$/i.test(file.originalname);
+    // The HTML <input accept="..."> on prep / documents allows Office +
+    // text files in addition to PDFs and images. The regex needs to
+    // match. Office files were silently dropped before, leaving admins
+    // unable to save when they uploaded an .xlsx or .pptx.
+    const ok = /\.(pdf|docx?|xlsx?|pptx?|txt|jpg|jpeg|png|webp|heic|gif|bmp|tiff?)$/i.test(file.originalname);
     cb(null, ok);
   }
 });
@@ -96,6 +97,9 @@ const upload = multer({
 //                    attending. Visible to every invited worker
 //                    regardless of attendance state (kind='prep' rows).
 const formUploads = upload.fields([
+  // slides + signon are legacy fields, kept on existing rows but no
+  // longer surfaced in the create/edit form. Multer still accepts the
+  // fields so any direct API caller doesn't break.
   { name: 'slides', maxCount: 1 },
   { name: 'signon', maxCount: 1 },
   { name: 'photos', maxCount: 12 },
@@ -552,9 +556,20 @@ router.get('/:id/attendance', (req, res) => {
   const renderedIds = new Set(rows.map(r => r.crew_id));
   const selectableCrew = selectableCrewMembers().filter(cm => !renderedIds.has(cm.id));
   const isOpenToAll = db.prepare('SELECT COUNT(*) AS c FROM toolbox_invitees WHERE toolbox_id = ?').get(toolbox.id).c === 0;
+  // QR code points workers at the public attendance link so they can
+  // sign off via the phone at the meeting. Only present for published
+  // toolboxes — drafts/archives don't have a public session token.
+  let attendanceUrl = null;
+  if (toolbox.status === 'published') {
+    try {
+      const s = getOrCreateAttendanceSession(toolbox.id, req.session.user && req.session.user.id);
+      const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+      attendanceUrl = base + '/toolbox-attend/' + s.token;
+    } catch (e) { console.error('[toolbox attendance qr]', e.message); }
+  }
   res.render('toolbox-talks/attendance', {
     title: toolbox.title + ' — Attendance', currentPage: 'toolbox-talks',
-    toolbox, rows, allocatedIds, selectableCrew, isOpenToAll,
+    toolbox, rows, allocatedIds, selectableCrew, isOpenToAll, attendanceUrl,
   });
 });
 
