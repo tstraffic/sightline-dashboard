@@ -470,8 +470,12 @@ router.post('/safety/sop-register/:id/acknowledge', (req, res) => {
 
   const sigDataUrl = (req.body.signature_data || '').toString();
   if (!/^data:image\/(png|jpeg);base64,/.test(sigDataUrl)) {
-    req.flash('error', 'Please draw your signature before acknowledging.');
-    return res.redirect('/w/safety/sop-register/' + sop.id);
+    // 400 (not 302) so worker-offline-form.js doesn't mistake a
+    // validation failure for a successful submit. Any client that
+    // doesn't render a signature pad gets a hard error instead of
+    // a phantom "Acknowledged ✓" overlay over an unsigned SOP.
+    console.warn('[w/safety] SOP ack rejected: missing signature_data', { sop_id: sop.id, worker_id: worker.id });
+    return res.status(400).send('Signature required. Please go back, draw your signature, then submit again.');
   }
 
   // Persist signature PNG. Tolerate write failures (fall through to saving

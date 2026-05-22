@@ -224,9 +224,16 @@
         if (!hasInk) {
           hasInk = true;
           submitBtn.disabled = false;
+          // Snapshot on first stroke so the offline-form handler's
+          // FormData (captured at submit time) always sees a value even
+          // if listener-order races put the offline handler first.
+          dataInput.value = canvas.toDataURL('image/png');
         }
       }
-      function end() { drawing = false; }
+      function end() {
+        drawing = false;
+        if (hasInk) dataInput.value = canvas.toDataURL('image/png');
+      }
 
       canvas.addEventListener('mousedown', start);
       canvas.addEventListener('mousemove', move);
@@ -241,6 +248,7 @@
         hasInk = false;
         placeholder.style.display = '';
         submitBtn.disabled = true;
+        dataInput.value = '';
       });
 
       form.addEventListener('submit', function (e) {

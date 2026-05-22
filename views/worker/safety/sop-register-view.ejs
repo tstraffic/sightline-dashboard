@@ -21,10 +21,21 @@
   }
   .pv-back:active { background: rgba(255,255,255,0.12); }
   .pv-title { flex: 1; min-width: 0; font-size: 0.95rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .pv-pages { flex: 1; padding: 8px 8px <%= showAckBar ? 'calc(80px + env(safe-area-inset-bottom, 0px))' : '8px' %>; }
+  .pv-pages { flex: 1; padding: 8px 8px <%= showAckBar ? 'calc(220px + env(safe-area-inset-bottom, 0px))' : '8px' %>; }
   .pv-actionbar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px)); background: rgba(10,22,40,0.96); border-top: 1px solid rgba(255,255,255,0.08); z-index: 40; }
   .pv-ack-btn { width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0; background: linear-gradient(135deg, #059669, #10B981); color: #fff; box-shadow: 0 6px 20px rgba(5,150,105,0.35); }
+  .pv-ack-btn:disabled { opacity: 0.45; box-shadow: none; }
   .pv-ack-btn:active { transform: translateY(1px); }
+
+  /* Inline signature pad (matches the detail page so signed acks always
+     have a real signature on file — the previous "I have read and
+     understood" button submitted with no signature and the server
+     silently rejected it). */
+  .pv-sign-wrap { position: relative; background: #FFFFFF; background-image: repeating-linear-gradient(to bottom, rgba(15,23,42,0.04) 0, rgba(15,23,42,0.04) 23px, rgba(15,23,42,0.08) 23px, rgba(15,23,42,0.08) 24px); border: 1px solid rgba(255,255,255,0.18); border-radius: 12px; margin-bottom: 10px; overflow: hidden; }
+  .pv-sign-pad { display: block; width: 100%; height: 130px; touch-action: none; cursor: crosshair; }
+  .pv-sign-placeholder { position: absolute; left: 12px; top: 12px; font-size: 0.78rem; color: #94A3B8; pointer-events: none; }
+  .pv-sign-footer { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-top: 1px solid rgba(15,23,42,0.08); background: rgba(255,255,255,0.7); font-size: 0.72rem; color: #475569; }
+  .pv-sign-clear { background: transparent; border: 0; color: #2563EB; font-weight: 600; cursor: pointer; font-size: 0.78rem; }
 
   /* Light-mode overrides for the fullscreen viewer. */
   :root[data-theme="light"] body { background: #F7F8FA; }
@@ -33,6 +44,7 @@
   :root[data-theme="light"] .pv-back:active { background: #E5E7EB; }
   :root[data-theme="light"] .pv-title  { color: #0F1115; }
   :root[data-theme="light"] .pv-actionbar { background: rgba(255,255,255,0.98); border-top-color: #E5E7EB; }
+  :root[data-theme="light"] .pv-sign-wrap { border-color: #D1D5DB; }
 </style>
 
 <div class="pv-wrap">
@@ -55,11 +67,112 @@
 
   <% if (showAckBar) { %>
     <div class="pv-actionbar">
-      <form method="POST" action="/w/safety/sop-register/<%= sop.id %>/acknowledge" data-offline-form data-offline-scope="SOP acknowledgement" data-success-url="/w/safety/sop-register/<%= sop.id %>">
+      <form method="POST" action="/w/safety/sop-register/<%= sop.id %>/acknowledge" id="pv-ack-form"
+            data-offline-form data-offline-scope="SOP acknowledgement"
+            data-success-url="/w/safety/sop-register/<%= sop.id %>">
         <%- include('../../partials/csrf') %>
-        <button type="submit" class="pv-ack-btn">I have read and understood this SOP</button>
+        <div class="pv-sign-wrap">
+          <canvas id="pv-sign-pad" class="pv-sign-pad"></canvas>
+          <span id="pv-sign-placeholder" class="pv-sign-placeholder">Sign with your finger to acknowledge</span>
+          <div class="pv-sign-footer">
+            <span>Signature</span>
+            <button type="button" id="pv-sign-clear" class="pv-sign-clear">Clear</button>
+          </div>
+        </div>
+        <input type="hidden" name="signature_data" id="pv-sign-data">
+        <button type="submit" id="pv-ack-btn" class="pv-ack-btn" disabled>Sign &amp; acknowledge</button>
       </form>
     </div>
+
+    <script>
+      (function () {
+        var canvas = document.getElementById('pv-sign-pad');
+        if (!canvas) return;
+        var placeholder = document.getElementById('pv-sign-placeholder');
+        var clearBtn    = document.getElementById('pv-sign-clear');
+        var submitBtn   = document.getElementById('pv-ack-btn');
+        var dataInput   = document.getElementById('pv-sign-data');
+        var form        = document.getElementById('pv-ack-form');
+
+        var ctx = canvas.getContext('2d');
+        var drawing = false;
+        var last = null;
+        var hasInk = false;
+
+        function size() {
+          var dpr = window.devicePixelRatio || 1;
+          var rect = canvas.getBoundingClientRect();
+          if (rect.width === 0) return;
+          canvas.width  = rect.width * dpr;
+          canvas.height = rect.height * dpr;
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.scale(dpr, dpr);
+          ctx.lineWidth = 2.4;
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+          ctx.strokeStyle = '#0f172a';
+        }
+        size();
+        window.addEventListener('resize', size);
+
+        function xy(e) {
+          var r = canvas.getBoundingClientRect();
+          var t = e.touches ? e.touches[0] : e;
+          return { x: t.clientX - r.left, y: t.clientY - r.top };
+        }
+        function start(e) { e.preventDefault(); drawing = true; last = xy(e); placeholder.style.display = 'none'; }
+        function move(e) {
+          if (!drawing) return;
+          e.preventDefault();
+          var p = xy(e);
+          ctx.beginPath();
+          ctx.moveTo(last.x, last.y);
+          ctx.lineTo(p.x, p.y);
+          ctx.stroke();
+          last = p;
+          if (!hasInk) {
+            hasInk = true;
+            submitBtn.disabled = false;
+            // Snapshot on every stroke so the offline-form handler's
+            // FormData snapshot (taken at submit time) always sees the
+            // latest signature data even if the form's submit listener
+            // ordering changes.
+            dataInput.value = canvas.toDataURL('image/png');
+          }
+        }
+        function end() {
+          drawing = false;
+          if (hasInk) dataInput.value = canvas.toDataURL('image/png');
+        }
+
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', move);
+        canvas.addEventListener('mouseup', end);
+        canvas.addEventListener('mouseleave', end);
+        canvas.addEventListener('touchstart', start, { passive: false });
+        canvas.addEventListener('touchmove', move, { passive: false });
+        canvas.addEventListener('touchend', end);
+
+        clearBtn.addEventListener('click', function () {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          hasInk = false;
+          placeholder.style.display = '';
+          submitBtn.disabled = true;
+          dataInput.value = '';
+        });
+
+        form.addEventListener('submit', function (e) {
+          if (!hasInk) {
+            e.preventDefault();
+            alert('Please draw your signature before acknowledging.');
+            return;
+          }
+          dataInput.value = canvas.toDataURL('image/png');
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Submitting…';
+        });
+      })();
+    </script>
   <% } %>
 </div>
 
