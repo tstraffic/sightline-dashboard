@@ -87,14 +87,17 @@ const upload = multer({
   }
 });
 // Accept the create/edit form's file fields in one go.
-// `documents` carries the post-attendance materials a worker can
-// download once they've signed off. Stored in toolbox_attachments with
-// kind='doc' alongside the existing kind='photo' rows.
+//   documents      — post-attendance materials, gated on sign-off
+//                    (kind='doc' rows).
+//   prep_documents — pre-meeting materials workers should read before
+//                    attending. Visible to every invited worker
+//                    regardless of attendance state (kind='prep' rows).
 const formUploads = upload.fields([
   { name: 'slides', maxCount: 1 },
   { name: 'signon', maxCount: 1 },
   { name: 'photos', maxCount: 12 },
   { name: 'documents', maxCount: 12 },
+  { name: 'prep_documents', maxCount: 12 },
 ]);
 
 const STATUS_VALUES = ['draft', 'published', 'archived'];
@@ -160,7 +163,7 @@ router.get('/', (req, res) => {
 router.get('/new', (req, res) => {
   res.render('toolbox-talks/form', {
     title: 'New Toolbox Talk', currentPage: 'toolbox-talks',
-    toolbox: null, photos: [], documents: [], isEdit: false,
+    toolbox: null, photos: [], documents: [], prepDocuments: [], isEdit: false,
     selectableCrew: selectableCrewMembers(),
     inviteeIds: [],
   });
@@ -232,6 +235,18 @@ router.post('/', formUploads, (req, res) => {
         ins.run(r.lastInsertRowid, relFromRepo(f.path), f.originalname, userId);
       }
     }
+    // Prep documents — pre-meeting reading. kind='prep'. Visible to
+    // every invited worker regardless of attendance state.
+    const prepFiles = (req.files && req.files.prep_documents) || [];
+    if (prepFiles.length) {
+      const ins = db.prepare(`
+        INSERT INTO toolbox_attachments (toolbox_id, file_path, file_original_name, kind, uploaded_by_id)
+        VALUES (?, ?, ?, 'prep', ?)
+      `);
+      for (const f of prepFiles) {
+        ins.run(r.lastInsertRowid, relFromRepo(f.path), f.originalname, userId);
+      }
+    }
 
     try {
       logActivity({
@@ -265,6 +280,7 @@ router.get('/:id', (req, res) => {
   if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
   const photos = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
   const documents = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'doc' ORDER BY id ASC`).all(toolbox.id);
+  const prepDocuments = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'prep' ORDER BY id ASC`).all(toolbox.id);
   const summary = db.prepare(`
     SELECT
       /* Total = invitee count when scoped, otherwise active crew (excluding
@@ -320,7 +336,7 @@ router.get('/:id', (req, res) => {
 
   res.render('toolbox-talks/show', {
     title: toolbox.title, currentPage: 'toolbox-talks',
-    toolbox, photos, documents, summary, absences, attendanceSession, attendanceUrl,
+    toolbox, photos, documents, prepDocuments, summary, absences, attendanceSession, attendanceUrl,
     invitees,
     statusLabels: STATUS_LABELS,
   });
@@ -333,9 +349,10 @@ router.get('/:id/edit', (req, res) => {
   if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
   const photos = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
   const documents = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'doc' ORDER BY id ASC`).all(toolbox.id);
+  const prepDocuments = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'prep' ORDER BY id ASC`).all(toolbox.id);
   res.render('toolbox-talks/form', {
     title: 'Edit Toolbox Talk', currentPage: 'toolbox-talks',
-    toolbox, photos, documents, isEdit: true,
+    toolbox, photos, documents, prepDocuments, isEdit: true,
     selectableCrew: selectableCrewMembers(),
     inviteeIds: getToolboxInviteeIds(toolbox.id),
   });
@@ -405,6 +422,17 @@ router.post('/:id', formUploads, (req, res) => {
       `);
       const uid = req.session.user ? req.session.user.id : null;
       for (const f of docFiles) {
+        ins.run(toolbox.id, relFromRepo(f.path), f.originalname, uid);
+      }
+    }
+    const prepFiles = (req.files && req.files.prep_documents) || [];
+    if (prepFiles.length) {
+      const ins = db.prepare(`
+        INSERT INTO toolbox_attachments (toolbox_id, file_path, file_original_name, kind, uploaded_by_id)
+        VALUES (?, ?, ?, 'prep', ?)
+      `);
+      const uid = req.session.user ? req.session.user.id : null;
+      for (const f of prepFiles) {
         ins.run(toolbox.id, relFromRepo(f.path), f.originalname, uid);
       }
     }
@@ -857,6 +885,29 @@ router.post('/:id/documents/:docId/delete', (req, res) => {
     `DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ? AND kind = 'doc'`
   ).run(req.params.docId, req.params.id);
   req.flash('success', 'Document removed.');
+  return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
+});
+
+// GET /toolbox-talks/:id/prep/:prepId — admin download of a prep doc.
+router.get('/:id/prep/:prepId', (req, res) => {
+  const db = getDb();
+  const doc = db.prepare(
+    `SELECT file_path, file_original_name FROM toolbox_attachments
+     WHERE id = ? AND toolbox_id = ? AND kind = 'prep'`
+  ).get(req.params.prepId, req.params.id);
+  if (!doc || !doc.file_path) return res.status(404).send('not found');
+  const abs = path.join(__dirname, '..', doc.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('missing');
+  return res.download(abs, doc.file_original_name || path.basename(abs));
+});
+
+// POST /toolbox-talks/:id/prep/:prepId/delete
+router.post('/:id/prep/:prepId/delete', (req, res) => {
+  const db = getDb();
+  db.prepare(
+    `DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ? AND kind = 'prep'`
+  ).run(req.params.prepId, req.params.id);
+  req.flash('success', 'Prep document removed.');
   return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
 });
 
