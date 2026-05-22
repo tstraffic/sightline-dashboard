@@ -74,12 +74,13 @@
 /* ── Safe Area ── */
 .safe-area-top { padding-top: env(safe-area-inset-top, 0px); }
 .safe-area-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
-/* Bottom tab nav fills the safe-area zone via padding-bottom on the nav
-   element itself (layout.ejs), so its background reaches the screen edge
-   and the home-indicator stripe doesn't read as empty page. main's
-   padding-bottom matches: tab row (4rem) + the safe-area pad the nav
-   adds + a small breathing buffer. */
-main { padding-bottom: calc(4rem + env(safe-area-inset-bottom, 0px) + 0.5rem); }
+/* The bottom tab nav is an in-flow flex child of the worker body (sized
+   to 100dvh), so it always hugs the visible bottom. No padding-bottom
+   reservation on main is needed any more — the nav takes its own row
+   inside the flex column and content scrolls inside main's overflow-auto
+   above it. The nav's own padding-bottom: env(safe-area-inset-bottom)
+   pushes its background into the home-indicator zone so the stripe
+   reads as the nav rather than empty page. */
 
 /* ── Touch Targets ── */
 a, button { min-height: 44px; }
