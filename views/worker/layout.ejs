@@ -29,14 +29,23 @@
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
-  <!-- Previous iterations of this layout pinned body height via JS that
-       read visualViewport.height at parse time. iOS sometimes returns a
-       transient small value there during page load, and the resulting
-       max-height locked the body to that wrong size, leaving a big
-       white gap below the tab nav. Switched back to a fixed-position
-       nav anchored to the viewport bottom, with body free to size
-       itself to the content above it — no JS pinning, no
-       max-height. -->
+  <!-- Layout strategy: body is a flex column locked to 100dvh with
+       overflow hidden, so the visible viewport defines the bounds. The
+       header and bottom nav are in-flow shrink-0 flex children sitting
+       at top + bottom; main is flex-1 overflow-y-auto and owns the
+       scroll. That means:
+         - header stays pinned at the top automatically (it's outside
+           the scroller), no position:sticky needed,
+         - nav always hugs the bottom of the visible viewport on iOS,
+           including when Safari shows/hides its URL bar (dvh tracks
+           the visual viewport natively — no JS measurement),
+         - PTR / scroll handlers can read main.scrollTop directly
+           because main IS the scroll container.
+       A prior version pinned body height via JS reading
+       visualViewport.height at parse time; iOS returned a transient
+       small value during page load and the body locked to it,
+       leaving a white gap below the nav. Pure CSS dvh avoids that
+       trap. -->
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="T&S Crew">
@@ -116,7 +125,7 @@
   <link rel="stylesheet" href="/css/worker-design.css?v=atomis-3">
   <link rel="stylesheet" href="/css/chat.css?v=atomis-1">
 </head>
-<body class="worker-portal font-sans antialiased flex flex-col" style="min-height: 100dvh;">
+<body class="worker-portal font-sans antialiased flex flex-col" style="height: 100dvh; overflow: hidden;">
 
   <%- include('../partials/staging-badge') %>
 
@@ -223,12 +232,14 @@
   <!-- Main Content — centred mobile-width column on desktop so the portal
        doesn't look empty on wide screens. Padding-inline picks up the
        safe-area on devices with notches / Dynamic Island so content
-       doesn't get cropped against the curved edges. Scrolling is owned
-       by main (overflow-auto); the body is locked to 100dvh and the tab
-       nav below is in flow with shrink-0, so the nav always hugs the
-       actual visible bottom even when Safari's URL bar appears or the
-       device's "Show tab bar" setting changes the viewport. -->
-  <main class="flex-1 w-full max-w-[520px] mx-auto" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: 56px;">
+       doesn't get cropped against the curved edges. Main owns the scroll
+       (overflow-y-auto); body is locked to 100dvh with overflow hidden,
+       and header + nav are in-flow flex children. That means the header
+       stays pinned at the top by virtue of being outside the scroller,
+       and the nav always hugs the visible bottom even when Safari's
+       URL bar appears or the device's "Show tab bar" setting changes
+       the viewport — without any JS measurement. -->
+  <main class="flex-1 w-full max-w-[520px] mx-auto overflow-y-auto" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
     <%- body %>
   </main>
 
@@ -274,13 +285,14 @@
       .wh-tab-bar a svg { transition: none; }
     }
   </style>
-  <!-- In-flow flex child (not position: fixed). Lets the nav sit at the
-       true visible bottom of the dynamic viewport — including when the
-       iOS Safari URL bar shows/hides, where a fixed-positioned bar
-       anchors to the larger layout viewport and floats above the actual
-       screen edge. padding-bottom honours the iOS home-indicator safe
-       area so the nav's background still reaches the screen edge. -->
-  <nav class="wh-tabnav fixed bottom-0 left-0 right-0 z-50" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: 0;">
+  <!-- In-flow flex child (NOT position: fixed). Sits at the true visible
+       bottom of the dynamic viewport — including when iOS Safari's URL
+       bar shows/hides, where a fixed-positioned bar anchors to the
+       layout viewport and floats above the actual screen edge.
+       padding-bottom honours the iOS home-indicator safe area so the
+       nav's background still reaches the screen edge while the tap
+       targets sit above the indicator gesture zone. -->
+  <nav class="wh-tabnav shrink-0 z-50" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);">
     <div class="flex items-end justify-around h-14 px-0.5 max-w-[520px] mx-auto wh-tab-bar" id="wh-tab-bar">
       <span class="wh-tab-indicator" aria-hidden="true"></span>
       <% const cp = typeof currentPage !== 'undefined' ? currentPage : ''; %>
