@@ -104,11 +104,11 @@
     }
   </script>
   <link rel="stylesheet" href="/css/custom.css?v=atomis-6">
-  <link rel="stylesheet" href="/css/worker.css?v=atomis-10">
+  <link rel="stylesheet" href="/css/worker.css?v=atomis-11">
   <link rel="stylesheet" href="/css/worker-design.css?v=atomis-3">
   <link rel="stylesheet" href="/css/chat.css?v=atomis-1">
 </head>
-<body class="worker-portal h-full font-sans antialiased flex flex-col">
+<body class="worker-portal font-sans antialiased flex flex-col" style="height: 100dvh; min-height: 100dvh; max-height: 100dvh;">
 
   <%- include('../partials/staging-badge') %>
 
@@ -215,9 +215,12 @@
   <!-- Main Content — centred mobile-width column on desktop so the portal
        doesn't look empty on wide screens. Padding-inline picks up the
        safe-area on devices with notches / Dynamic Island so content
-       doesn't get cropped against the curved edges. The bottom padding
-       reserves space for the fixed tab nav (56px row + iOS safe-area). -->
-  <main class="flex-1 overflow-auto w-full max-w-[520px] mx-auto" style="padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
+       doesn't get cropped against the curved edges. Scrolling is owned
+       by main (overflow-auto); the body is locked to 100dvh and the tab
+       nav below is in flow with shrink-0, so the nav always hugs the
+       actual visible bottom even when Safari's URL bar appears or the
+       device's "Show tab bar" setting changes the viewport. -->
+  <main class="flex-1 overflow-auto w-full max-w-[520px] mx-auto" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); min-height: 0;">
     <%- body %>
   </main>
 
@@ -229,7 +232,7 @@
        fit at 360px+ with labels; we hide labels below that. -->
   <style>
     @media (max-width: 360px) {
-      nav.fixed.bottom-0 span.wh-tab-label { display: none; }
+      nav.wh-tabnav span.wh-tab-label { display: none; }
     }
     /* Tab bar polish: active-indicator pill that springs between tabs,
        icon scales up on the active tab. */
@@ -263,10 +266,13 @@
       .wh-tab-bar a svg { transition: none; }
     }
   </style>
-  <!-- padding-bottom carries the iOS home-indicator zone so the nav's
-       background fills all the way to the screen edge — without it, the
-       safe-area gap reads as a stripe of empty page below the tabs. -->
-  <nav class="wh-tabnav fixed bottom-0 left-0 right-0 z-50" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);">
+  <!-- In-flow flex child (not position: fixed). Lets the nav sit at the
+       true visible bottom of the dynamic viewport — including when the
+       iOS Safari URL bar shows/hides, where a fixed-positioned bar
+       anchors to the larger layout viewport and floats above the actual
+       screen edge. padding-bottom honours the iOS home-indicator safe
+       area so the nav's background still reaches the screen edge. -->
+  <nav class="wh-tabnav shrink-0 w-full" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);">
     <div class="flex items-end justify-around h-14 px-0.5 max-w-[520px] mx-auto wh-tab-bar" id="wh-tab-bar">
       <span class="wh-tab-indicator" aria-hidden="true"></span>
       <% const cp = typeof currentPage !== 'undefined' ? currentPage : ''; %>
