@@ -104,7 +104,7 @@
     }
   </script>
   <link rel="stylesheet" href="/css/custom.css?v=atomis-6">
-  <link rel="stylesheet" href="/css/worker.css?v=atomis-9">
+  <link rel="stylesheet" href="/css/worker.css?v=atomis-10">
   <link rel="stylesheet" href="/css/worker-design.css?v=atomis-3">
   <link rel="stylesheet" href="/css/chat.css?v=atomis-1">
 </head>
@@ -215,8 +215,9 @@
   <!-- Main Content — centred mobile-width column on desktop so the portal
        doesn't look empty on wide screens. Padding-inline picks up the
        safe-area on devices with notches / Dynamic Island so content
-       doesn't get cropped against the curved edges. -->
-  <main class="flex-1 overflow-auto w-full max-w-[520px] mx-auto" style="padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px) + 8px); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
+       doesn't get cropped against the curved edges. The bottom padding
+       reserves space for the fixed tab nav (56px row + iOS safe-area). -->
+  <main class="flex-1 overflow-auto w-full max-w-[520px] mx-auto" style="padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px)); padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px);">
     <%- body %>
   </main>
 
@@ -266,7 +267,7 @@
        background fills all the way to the screen edge — without it, the
        safe-area gap reads as a stripe of empty page below the tabs. -->
   <nav class="wh-tabnav fixed bottom-0 left-0 right-0 z-50" style="padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); padding-bottom: env(safe-area-inset-bottom, 0px);">
-    <div class="flex items-center justify-around h-16 px-0.5 max-w-[520px] mx-auto wh-tab-bar" id="wh-tab-bar">
+    <div class="flex items-end justify-around h-14 px-0.5 max-w-[520px] mx-auto wh-tab-bar" id="wh-tab-bar">
       <span class="wh-tab-indicator" aria-hidden="true"></span>
       <% const cp = typeof currentPage !== 'undefined' ? currentPage : ''; %>
       <% const moreActive = ['more','profile','hr','wallet','leave','timesheets','availability','dockets','customise','chat','clock'].includes(cp); %>

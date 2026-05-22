@@ -508,17 +508,27 @@ input[type="search"], input[type="text"].bg-white {
    ═══════════════════════════════════════════════════════════════════════ */
 .saf-tabs {
   display: flex; gap: 0;
+  flex-wrap: nowrap;
   border-bottom: 1px solid rgba(255,255,255,0.08);
   margin-bottom: 12px;
   overflow-x: auto;
+  overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
+  /* Lock horizontal swipes so iOS doesn't intercept them as a page
+     back-gesture or vertical scroll — without this the strip won't
+     respond to a sideways drag on iPhone. */
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
 }
+.saf-tabs::-webkit-scrollbar { display: none; }
 .saf-tab {
   padding: 10px 14px;
   font-size: 0.82rem;
   font-weight: 600;
   text-decoration: none;
   white-space: nowrap;
+  flex: 0 0 auto;
   border-bottom: 2px solid transparent;
   color: rgba(255,255,255,0.55);
   min-height: 0;
