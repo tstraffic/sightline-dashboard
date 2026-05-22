@@ -18,8 +18,19 @@
   const canAccept   = isMissed || isAbsent;
 %>
 <style>
-  .tbd-wrap { color: #fff; padding: 0 0 100px; }
-  .tbd-back { display: inline-flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.55); font-size: 0.8rem; text-decoration: none; margin: 4px 0 8px; }
+  .tbd-wrap { color: #fff; padding: 0 16px 100px; }
+  .tbd-back {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 999px;
+    color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.10);
+    text-decoration: none; margin: 8px 0 12px;
+  }
+  .tbd-back:active { background: rgba(255,255,255,0.14); }
+  :root[data-theme="light"] .tbd-back {
+    color: #0F1115; background: #F3F4F6; border-color: #E5E7EB;
+  }
+  :root[data-theme="light"] .tbd-back:active { background: #E5E7EB; }
   .tbd-title { font-size: 1.4rem; font-weight: 800; line-height: 1.2; margin: 4px 0 10px; }
   .tbd-meta { font-size: 0.75rem; color: rgba(255,255,255,0.55); margin-bottom: 14px; }
   .tbd-banner { border-radius: 12px; padding: 12px 14px; font-size: 0.82rem; margin-bottom: 14px; }
@@ -60,7 +71,9 @@
 </style>
 
 <div class="tbd-wrap">
-  <a href="/w/safety/toolboxes" class="tbd-back">← Safety / Toolboxes</a>
+  <a href="/w/safety/toolboxes" class="tbd-back" aria-label="Back to toolbox meetings">
+    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+  </a>
   <div class="tbd-title"><%= toolbox.title %></div>
   <div class="tbd-meta"><%= fmtDate(toolbox.held_at) %><% if (toolbox.presenter) { %> &middot; Presented by <%= toolbox.presenter %><% } %></div>
 

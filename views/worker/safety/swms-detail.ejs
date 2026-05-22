@@ -12,8 +12,17 @@
   const isLocked = !hasAccess;
 %>
 <style>
-  .sd-wrap { color: #fff; padding: 0 0 110px; }
-  .sd-back { display: inline-flex; align-items: center; gap: 6px; color: rgba(255,255,255,0.55); font-size: 0.8rem; text-decoration: none; margin: 4px 0 8px; }
+  /* Horizontal padding so the heading + banners don't jam against the
+     screen edge on phones. */
+  .sd-wrap { color: #fff; padding: 0 16px 110px; }
+  .sd-back {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 36px; height: 36px; border-radius: 999px;
+    color: rgba(255,255,255,0.85); background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.10);
+    text-decoration: none; margin: 8px 0 12px;
+  }
+  .sd-back:active { background: rgba(255,255,255,0.14); }
   .sd-title { font-size: 1.35rem; font-weight: 800; line-height: 1.2; margin-bottom: 8px; }
   .sd-meta { display: flex; gap: 10px; flex-wrap: wrap; font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-bottom: 14px; }
   .sd-banner {
@@ -111,7 +120,10 @@
      translucent-white surfaces, which disappear against the light page.
      Re-skin every surface in the same shape but on light tones. */
   :root[data-theme="light"] .sd-wrap   { color: #0F1115; }
-  :root[data-theme="light"] .sd-back   { color: #4B5563; }
+  :root[data-theme="light"] .sd-back   {
+    color: #0F1115; background: #F3F4F6; border-color: #E5E7EB;
+  }
+  :root[data-theme="light"] .sd-back:active { background: #E5E7EB; }
   :root[data-theme="light"] .sd-meta   { color: #6B7280; }
   :root[data-theme="light"] .sd-banner.amber { color: #92400E; background-image: linear-gradient(180deg, rgba(245,158,11,0.18) 0%, rgba(245,158,11,0.06) 100%); border-color: rgba(245,158,11,0.45); }
   :root[data-theme="light"] .sd-banner.green { color: #065F46; background-image: linear-gradient(180deg, rgba(16,185,129,0.18) 0%, rgba(16,185,129,0.06) 100%); border-color: rgba(16,185,129,0.45); }
@@ -148,7 +160,9 @@
 </style>
 
 <div class="sd-wrap">
-  <a href="/w/safety/swms" class="sd-back">← Safety / SWMS</a>
+  <a href="/w/safety/swms" class="sd-back" aria-label="Back to SWMS list">
+    <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+  </a>
   <div class="sd-title"><%= swms.title %></div>
   <div class="sd-meta">
     <span><%= swms.kind === 'template' ? 'Generic' : 'Job-linked' %></span>
