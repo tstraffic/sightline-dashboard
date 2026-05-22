@@ -154,9 +154,15 @@
                 <% } %>
               </div>
 
-              <% if (b.crew_blocks && b.crew_blocks.length) { %>
+              <% if (b.crew_blocks && b.crew_blocks.length) {
+                // Count empty worker slots in each block for the "N more
+                // TC slots · drop workers here" hint that the mockup shows.
+              %>
                 <div class="bk2-crews">
-                  <% b.crew_blocks.forEach(function (blk) { %>
+                  <% b.crew_blocks.forEach(function (blk) {
+                    var emptyWorkerCount = blk.worker_slots.filter(function (s) { return !s.filled; }).length;
+                    var hasVehicle = blk.vehicle_slot && blk.vehicle_slot.filled;
+                  %>
                     <div class="bk2-crew">
                       <div class="bk2-crew-head">
                         <span class="bk2-crew-label">Crew <%= blk.ordinal %></span>
@@ -168,36 +174,92 @@
                             <span class="bk2-slot-avatar"><%= initials(slot.name) %></span>
                             <span class="bk2-slot-role-tag"><%= roleAbbr(slot.role) %></span>
                             <span class="bk2-slot-name"><%= slot.name %></span>
-                            <% if (slot.employment_status === 'reserved') { %><span class="bk2-warn" style="background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE">RES</span><% } %>
-                            <% if (slot.bc_status === 'confirmed') { %><span style="color:#059669;font-weight:700" title="Confirmed">✓</span><% } %>
+                            <% if (slot.employment_status === 'reserved') { %><span class="bk2-warn bk2-warn--info">RES</span><% } %>
+                            <% (slot.warnings || []).forEach(function (w) {
+                              var label = w === 'tight_schedule' ? 'Tight'
+                                        : w === 'fatigued' ? 'Fatigued'
+                                        : w === 'cant_tow' ? 'Can’t tow'
+                                        : w === 'required_licence_missing' ? 'Needs licence'
+                                        : w === 'not_qualified' ? 'Not qualified'
+                                        : w === 'on_leave' ? 'On leave'
+                                        : w === 'match' ? 'Match'
+                                        : w;
+                              var cls = w === 'match' ? 'bk2-warn--match'
+                                      : (w === 'fatigued' || w === 'tight_schedule') ? ''
+                                      : 'bk2-warn--red';
+                            %>
+                              <span class="bk2-warn <%= cls %>" title="<%= label %>">
+                                <% if (w === 'match') { %>✓<% } else if (w === 'tight_schedule') { %>⏱<% } else if (w === 'fatigued') { %>z<sup>z</sup><% } else { %>⚠<% } %>
+                                <%= label %>
+                              </span>
+                            <% }); %>
+                            <% if (slot.bc_status === 'confirmed') { %><span style="color:#86EFAC;font-weight:700" title="Confirmed">✓</span><% } %>
                           </div>
-                        <% } else { %>
-                          <div class="bk2-slot bk2-slot--empty">empty <%= blk.role || 'TC' %> slot</div>
                         <% } %>
                       <% }); %>
-                      <% if (blk.vehicle_slot && blk.vehicle_slot.filled) { %>
+                      <% if (emptyWorkerCount > 0) { %>
+                        <div class="bk2-slot bk2-slot--empty">
+                          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:0.6"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3M6 11a4 4 0 11-4 4 4 4 0 014-4zM14 16a6 6 0 00-12 0v2h12v-2z"/></svg>
+                          <%= emptyWorkerCount === 1
+                            ? ((blk.role || 'TC') + ' slot · drop a worker here')
+                            : (emptyWorkerCount + ' more ' + (blk.role || 'TC') + ' slots · drop workers here') %>
+                        </div>
+                      <% } %>
+
+                      <% if (hasVehicle) { %>
                         <div class="bk2-veh-slot">
-                          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14M5 17a2 2 0 11-4 0 2 2 0 014 0zm14 0a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                          <span class="bk2-veh-tag"><%= (blk.vehicle_slot.role || 'ute').toUpperCase().slice(0,3) %></span>
                           <span class="bk2-veh-slot-name"><%= blk.vehicle_slot.name || blk.vehicle_slot.registration || '(unnamed)' %></span>
-                          <% if (blk.vehicle_slot.name && blk.vehicle_slot.registration) { %><span style="color:#B45309;font-family:ui-monospace,monospace;font-size:11px"><%= blk.vehicle_slot.registration %></span><% } %>
-                          <% if (blk.vehicle_slot.role) { %><span style="background:#FEF3C7;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;text-transform:uppercase;color:#92400E"><%= blk.vehicle_slot.role %></span><% } %>
+                          <% if (blk.vehicle_slot.name && blk.vehicle_slot.registration) { %><span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8"><%= blk.vehicle_slot.registration %></span><% } %>
                         </div>
                       <% } else { %>
-                        <div class="bk2-veh-slot bk2-veh-slot--empty">no vehicle assigned</div>
+                        <div class="bk2-veh-slot bk2-veh-slot--empty">
+                          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14"/></svg>
+                          UTE slot · drop a vehicle here
+                        </div>
+                      <% } %>
+                      <% if (blk.addons && blk.addons.length) { %>
+                        <div class="bk2-addons">
+                          <% blk.addons.forEach(function (a) {
+                            var pending = !hasVehicle;
+                            var tagText = (a.type || 'AD').toString().split(/[^a-z]/i).map(function(p){return p[0]||'';}).join('').substring(0,2).toUpperCase() || 'AD';
+                          %>
+                            <div class="bk2-addon <%= pending ? 'bk2-addon--pending' : '' %>">
+                              <span class="bk2-addon-tag"><%= tagText %></span>
+                              <span><%= a.type %><%= a.name ? ' · ' + a.name : '' %><%= pending ? ' · attaches when UTE is filled' : '' %></span>
+                            </div>
+                          <% }); %>
+                        </div>
                       <% } %>
                     </div>
                   <% }); %>
                 </div>
               <% } %>
 
-              <div class="bk2-card-footer" style="border-top:1px solid #F3F4F6;margin-top:6px;padding-top:6px;display:flex;gap:12px;font-size:11px;color:#6B7280">
-                <span>👥 <%= b.crew_confirmed %>/<%= b.crew_count %></span>
-                <span>🚙 <%= b.vehicle_count %></span>
-                <% if (b.counts && b.counts.docs) { %><span>📄 <%= b.counts.docs %></span><% } %>
-                <% if (b.counts && b.counts.notes) { %><span>📝 <%= b.counts.notes %></span><% } %>
-                <% if (b.counts && b.counts.dockets) { %><span>🧾 <%= b.counts.dockets %></span><% } %>
-                <span style="margin-left:auto;color:#2B7FFF;font-weight:600">Open →</span>
-              </div>
+            </div>
+            <div class="bk2-card-footer">
+              <span class="bk2-card-footer-item">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Docs<% if (b.counts && b.counts.docs) { %> <span class="bk2-tab-count"><%= b.counts.docs %></span><% } %>
+              </span>
+              <span class="bk2-card-footer-item">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                Notes<% if (b.counts && b.counts.notes) { %> <span class="bk2-tab-count"><%= b.counts.notes %></span><% } %>
+              </span>
+              <span class="bk2-card-footer-item">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6M9 8h6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                Dockets<% if (b.counts && b.counts.dockets) { %> <span class="bk2-tab-count"><%= b.counts.dockets %></span><% } %>
+              </span>
+              <span class="bk2-card-footer-item">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+                Tasks
+              </span>
+              <span class="bk2-card-footer-item">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Forms
+              </span>
+              <span style="flex:1"></span>
+              <span class="bk2-card-footer-item" style="color:#60A5FA">Open →</span>
             </div>
           </a>
         <% }); %>
@@ -254,6 +316,29 @@
   <section class="bk2-pane" data-view-pane="map">
     <div id="bk2-map" class="bk2-map"></div>
   </section>
+
+  <!-- ============================================================
+       STATUS LIFECYCLE — visible reference for the team
+       ============================================================ -->
+  <div class="bk2-lifecycle">
+    <span class="bk2-lc-label">Status lifecycle</span>
+    <%
+      var lifecycle = [
+        { key: 'client_booking',    label: 'Client booking' },
+        { key: 'unconfirmed',       label: 'Unconfirmed' },
+        { key: 'confirmed',         label: 'Confirmed' },
+        { key: 'locked',            label: 'Locked' },
+        { key: 'conflict',          label: 'Conflict' },
+        { key: 'green_to_go',       label: 'Green to go' },
+        { key: 'complete',          label: 'Complete' },
+        { key: 'finalised',         label: 'Finalised' },
+      ];
+    %>
+    <% lifecycle.forEach(function (s, i) { %>
+      <span class="bk2-lc-pill bk2-status--<%= s.key %>"><%= s.label %></span>
+      <% if (i < lifecycle.length - 1) { %><span class="bk2-lc-arrow">→</span><% } %>
+    <% }); %>
+  </div>
 
 </div>
 
@@ -322,35 +407,39 @@
         </select>
       </span></label>
 
-      <fieldset style="margin-top:14px;border:1px solid #E5E7EB;border-radius:10px;padding:12px">
-        <legend style="padding:0 6px;font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em">Crew composition</legend>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;font-size:13px">
-          <% [1,2,3,4,5].forEach(function (n) { %>
-            <span><%= n %>-man crew <span style="color:#9CA3AF;font-size:11px">· <%= n %> TCs + 1 ute</span></span>
+      <div class="bk2-qb-legend">Crew composition</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+        <% [1,2,3,4,5].forEach(function (n) {
+          var greenForFive = (n === 5);
+          var startsHot = (n === 2);  // 2-man crew defaults to 1
+        %>
+          <div class="bk2-comp-row <%= startsHot ? 'bk2-comp-on' : '' %> <%= greenForFive ? 'bk2-comp-row--green' : '' %>" data-comp-row data-default="<%= startsHot ? '1' : '0' %>">
+            <span><%= n %>-man crew</span>
             <span class="bk2-stepper" data-stepper-name="crew_size_<%= n %>">
               <button type="button" data-step="-1">−</button>
               <input type="number" name="crew_size_<%= n %>" value="<%= n === 2 ? 1 : 0 %>" min="0" max="20" readonly>
               <button type="button" data-step="+1">+</button>
             </span>
-          <% }); %>
-        </div>
-      </fieldset>
+          </div>
+        <% }); %>
+      </div>
+      <p style="font-size:11px;color:#94A3B8;margin:8px 4px 14px">Each crew comes with a UTE slot built in. Add-ons below attach to a crew's UTE.</p>
 
-      <fieldset style="margin-top:10px;border:1px solid #E5E7EB;border-radius:10px;padding:12px">
-        <legend style="padding:0 6px;font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em">Add-ons</legend>
-        <div style="display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;font-size:13px">
-          <% addons.forEach(function (a) { %>
+      <div class="bk2-qb-legend">Add-ons</div>
+      <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">
+        <% addons.forEach(function (a) { %>
+          <div class="bk2-comp-row" data-comp-row>
             <span><%= a.label %></span>
             <span class="bk2-stepper" data-stepper-name="addon_<%= a.key %>">
               <button type="button" data-step="-1">−</button>
               <input type="number" name="addon_<%= a.key %>" value="0" min="0" max="20" readonly>
               <button type="button" data-step="+1">+</button>
             </span>
-          <% }); %>
-        </div>
-      </fieldset>
+          </div>
+        <% }); %>
+      </div>
 
-      <p id="bk2-qb-summary" style="margin-top:12px;padding:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:12px;color:#065F46;line-height:1.5">1× 2-man crew · 1 ute.</p>
+      <p id="bk2-qb-summary" class="bk2-qb-summary">Saving as: <strong>1× 2-man crew · 1 ute.</strong></p>
     </form>
   </div>
 
@@ -449,41 +538,50 @@
   // ============================================================
   //  QUICK BOOK form — steppers, summary, address autocomplete
   // ============================================================
-  // Steppers
+  // Steppers — bumps + toggles the row's highlighted state when > 0
   $$('.bk2-stepper').forEach(function (s) {
     var input = s.querySelector('input');
+    var row = s.closest('[data-comp-row]');
+    function syncRow() {
+      if (!row) return;
+      var n = parseInt(input.value, 10) || 0;
+      row.classList.toggle('bk2-comp-on', n > 0);
+    }
+    syncRow();
     s.querySelectorAll('button').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var delta = parseInt(btn.dataset.step, 10);
         var v = Math.max(0, Math.min(20, parseInt(input.value, 10) + delta));
         input.value = v;
+        syncRow();
         refreshSummary();
       });
     });
   });
   function refreshSummary() {
     var crews = [];
+    var totalCrews = 0;
     [1,2,3,4,5].forEach(function (n) {
       var inp = $('input[name="crew_size_' + n + '"]');
       var q = inp ? parseInt(inp.value, 10) || 0 : 0;
-      if (q > 0) crews.push(q + '× ' + n + '-man crew');
+      if (q > 0) { crews.push(q + '× ' + n + '-man'); totalCrews += q; }
     });
     var addons = [];
     $$('input[name^="addon_"]').forEach(function (inp) {
       var q = parseInt(inp.value, 10) || 0;
       if (q > 0) {
-        var labelSpan = inp.closest('.bk2-stepper').previousElementSibling;
-        var label = labelSpan ? labelSpan.textContent.trim() : inp.name.replace('addon_', '');
+        var row = inp.closest('[data-comp-row]');
+        var label = row ? row.querySelector('span').textContent.trim() : inp.name.replace('addon_', '');
         addons.push(q + '× ' + label);
       }
     });
     var summary = $('#bk2-qb-summary');
     if (!summary) return;
-    var totalCrews = crews.reduce(function (a, c) { return a + parseInt(c, 10); }, 0);
-    if (!crews.length) crews.push('1× 2-man crew (default)');
-    var line = crews.join(' + ') + ' · ' + Math.max(1, totalCrews) + ' ute' + (totalCrews > 1 ? 's' : '');
+    var crewLine = crews.length ? crews.join(' + ') : '1× 2-man (default)';
+    var uteLine  = (totalCrews || 1) + ' ute' + ((totalCrews || 1) > 1 ? 's' : '');
+    var line = 'Saving as: <strong>' + crewLine + ' · ' + uteLine;
     if (addons.length) line += ', with ' + addons.join(', ');
-    summary.textContent = line + '.';
+    summary.innerHTML = line + '.</strong>';
   }
   refreshSummary();
 
