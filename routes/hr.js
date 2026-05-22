@@ -2024,4 +2024,57 @@ router.post('/employees/:id/toggle-online-training', requirePermission('hr_emplo
   res.redirect(`/hr/employees/${employee.id}`);
 });
 
+// =============================================
+// Management Contacts — Operations / Accounts / HR phone + email
+// surfaced on /w/contacts in the worker app. Editor lives under the HR
+// Dashboard's toolbar so admins know exactly where to change them.
+// Storage is system_config.management_contacts as JSON; defaults are
+// returned by services/management-contacts.js when the row is empty.
+// =============================================
+router.get('/management-contacts', requirePermission('hr_dashboard'), (req, res) => {
+  const { getContacts, DEFAULT_CONTACTS } = require('../services/management-contacts');
+  res.render('hr/management-contacts', {
+    title: 'Management Contacts', currentPage: 'hr',
+    contacts: getContacts(),
+    defaults: DEFAULT_CONTACTS,
+  });
+});
+
+router.post('/management-contacts', requirePermission('hr_dashboard'), (req, res) => {
+  const { setContacts } = require('../services/management-contacts');
+  // Form posts parallel arrays — key[i] / label[i] / email[i] / phone[i].
+  // Zip them into a contacts list and drop any row whose label was
+  // cleared (admin's way to delete a row).
+  const keys   = [].concat(req.body['key']   || []);
+  const labels = [].concat(req.body['label'] || []);
+  const emails = [].concat(req.body['email'] || []);
+  const phones = [].concat(req.body['phone'] || []);
+  const n = Math.max(keys.length, labels.length, emails.length, phones.length);
+  const incoming = [];
+  for (let i = 0; i < n; i++) {
+    incoming.push({
+      key:   (keys[i]   || '').toString(),
+      label: (labels[i] || '').toString(),
+      email: (emails[i] || '').toString(),
+      phone: (phones[i] || '').toString(),
+    });
+  }
+  try {
+    setContacts(incoming, req.session.user ? req.session.user.id : null);
+    try {
+      logActivity({
+        user: req.session.user, action: 'update', entityType: 'management_contacts',
+        entityId: 0, entityLabel: 'Management Contacts',
+        details: incoming.filter(c => c.label).length + ' contact(s)',
+        ip: req.ip,
+      });
+    } catch (e) {}
+    req.flash('success', 'Management contacts saved — workers see them on /w/contacts.');
+  } catch (e) {
+    console.error('[hr management-contacts save]', e);
+    req.flash('error', 'Could not save: ' + e.message);
+  }
+  return res.redirect('/hr/management-contacts');
+});
+
 module.exports = router;
