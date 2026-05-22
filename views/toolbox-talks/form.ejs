@@ -42,25 +42,24 @@
       <p class="text-xs text-gray-400 mt-1">Plain text. Line breaks preserved on the worker side.</p>
     </div>
 
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      <div>
-        <label for="slides" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Slides / supplementary doc</label>
-        <% if (isEdit && toolbox.slides_path) { %>
-          <p class="text-xs text-gray-600 mb-1">Currently: <a href="/toolbox-talks/<%= toolbox.id %>/slides" class="text-brand-600 hover:underline"><%= toolbox.slides_original_name %></a></p>
+    <%# Slides + sign-on sheet inputs were retired in favour of the
+        Prep documents (read before the meeting) and Documents
+        (post-attendance materials) sections further down the form —
+        both support multi-file upload and have clearer audience
+        semantics. Existing slides_path / signon_path data on legacy
+        toolboxes still serves through the original download routes;
+        admins just can't upload new ones here. %>
+    <% if (isEdit && (toolbox.slides_path || toolbox.signon_path)) { %>
+      <div class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-600 space-y-1">
+        <p class="font-semibold text-gray-700">Legacy files on this toolbox</p>
+        <% if (toolbox.slides_path) { %>
+          <p>Slides: <a href="/toolbox-talks/<%= toolbox.id %>/slides" class="text-brand-700 hover:underline"><%= toolbox.slides_original_name %></a> <span class="text-gray-400">— use the Prep documents section for new uploads.</span></p>
         <% } %>
-        <input type="file" id="slides" name="slides" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-          class="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
-      </div>
-      <div>
-        <label for="signon" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Sign-on sheet (admin only)</label>
-        <% if (isEdit && toolbox.signon_path) { %>
-          <p class="text-xs text-gray-600 mb-1">Currently: <a href="/toolbox-talks/<%= toolbox.id %>/signon" class="text-brand-600 hover:underline"><%= toolbox.signon_original_name %></a></p>
+        <% if (toolbox.signon_path) { %>
+          <p>Sign-on sheet: <a href="/toolbox-talks/<%= toolbox.id %>/signon" class="text-brand-700 hover:underline"><%= toolbox.signon_original_name %></a></p>
         <% } %>
-        <input type="file" id="signon" name="signon" accept=".pdf,.jpg,.jpeg,.png,.heic"
-          class="block w-full text-sm text-gray-700 file:mr-3 file:py-2 file:px-3 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
-        <p class="text-xs text-gray-400 mt-1">Scanned sign-on for audit. Not visible to workers.</p>
       </div>
-    </div>
+    <% } %>
 
     <%
       var _selectableCrew = (typeof selectableCrew !== 'undefined' && selectableCrew) || [];

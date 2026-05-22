@@ -43,6 +43,63 @@
     <span class="px-4 py-2 -mb-px border-b-2 border-brand-600 text-brand-700 text-sm font-semibold">Attendance</span>
   </div>
 
+  <!-- Sign-off QR — project this in the meeting room. Workers scan,
+       pick their name, sign with their finger, and the row flips to
+       Attended ✓ here (auto-loaded on next page render) and unlocks
+       the post-attendance Materials in the worker portal. -->
+  <% if (attendanceUrl) { %>
+    <div class="bg-gradient-to-br from-brand-50 to-emerald-50 border border-brand-200 rounded-xl shadow-sm p-5">
+      <div class="flex flex-col sm:flex-row items-start gap-4">
+        <div class="bg-white p-3 rounded-lg shadow-sm flex-shrink-0">
+          <div id="att-qr" style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 11px;">Loading QR…</div>
+        </div>
+        <div class="flex-1 min-w-0 space-y-2">
+          <p class="text-[10px] font-bold text-brand-700 uppercase tracking-widest">Sign-off QR · project in the meeting room</p>
+          <p class="text-sm text-gray-700">
+            Workers scan, pick their name, sign with their finger. Their row here flips to <strong>Attended ✓</strong> and post-attendance materials unlock on their phone.
+          </p>
+          <div class="flex items-center gap-2">
+            <input id="att-url" type="text" readonly value="<%= attendanceUrl %>" onclick="this.select()"
+              class="flex-1 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg text-gray-800 font-mono min-w-0">
+            <button type="button" id="att-url-copy" class="inline-flex items-center gap-1 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg flex-shrink-0">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              Copy
+            </button>
+            <a href="<%= attendanceUrl %>" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg flex-shrink-0">
+              Preview
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script>
+      (function () {
+        var box = document.getElementById('att-qr');
+        if (window.QRCode && box) {
+          box.innerHTML = '';
+          try {
+            new QRCode(box, {
+              text: <%- JSON.stringify(attendanceUrl) %>,
+              width: 180, height: 180,
+              colorDark: '#111827', colorLight: '#ffffff',
+              correctLevel: QRCode.CorrectLevel.M,
+            });
+          } catch (e) { box.textContent = 'QR render failed — share the URL below instead.'; }
+        } else if (box) {
+          box.textContent = 'QR library failed to load — share the URL below.';
+        }
+        var copyBtn = document.getElementById('att-url-copy');
+        if (copyBtn) copyBtn.addEventListener('click', function () {
+          var i = document.getElementById('att-url');
+          (navigator.clipboard ? navigator.clipboard.writeText(i.value) : Promise.reject())
+            .then(function () { var t = copyBtn.textContent; copyBtn.textContent = 'Copied!'; setTimeout(function () { copyBtn.textContent = t; }, 1500); })
+            .catch(function () { i.select(); document.execCommand('copy'); });
+        });
+      })();
+    </script>
+  <% } %>
+
   <!-- Status summary — live counts that match the worker portal's
        vocabulary. Updates client-side as the dropdowns are flipped so
        admins can see the running totals before they hit Save. -->
