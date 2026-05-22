@@ -67,6 +67,29 @@
   }
   .tb-reason b { color: #fff; font-weight: 600; }
   .saf-empty { text-align: center; padding: 32px 16px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
+
+  /* ---- Light mode ---- the dark defaults above render white-on-white
+     once a toolbox row has chips / details / "Your reason:" content
+     filled in. Re-skin each surface in light tones so the page is
+     actually readable. */
+  :root[data-theme="light"] .saf-wrap { color: #0F1115; }
+  :root[data-theme="light"] .saf-h1   { color: #0F1115; }
+  :root[data-theme="light"] .tb-card  {
+    background: #FFFFFF; border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04);
+  }
+  :root[data-theme="light"] .tb-card-title { color: #0F1115; }
+  :root[data-theme="light"] .tb-card-meta  { color: #6B7280; }
+  :root[data-theme="light"] .tb-snip       { color: #6B7280; }
+  :root[data-theme="light"] .tb-chip.att    { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
+  :root[data-theme="light"] .tb-chip.caught { background: #F5F3FF; color: #6D28D9; border-color: #DDD6FE; }
+  :root[data-theme="light"] .tb-chip.absent { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
+  :root[data-theme="light"] .tb-chip.pending{ background: #FFFBEB; color: #B45309; border-color: #FDE68A; }
+  :root[data-theme="light"] .tb-chip.miss   { background: #F3F4F6; color: #4B5563; border-color: #E5E7EB; }
+  :root[data-theme="light"] .tb-chip-detail { color: #6B7280; }
+  :root[data-theme="light"] .tb-reason   { background: #FEF2F2; border-color: #FECACA; color: #9F1239; }
+  :root[data-theme="light"] .tb-reason b { color: #7F1D1D; }
+  :root[data-theme="light"] .saf-empty   { color: #6B7280; }
 </style>
 
 <div class="saf-wrap">
