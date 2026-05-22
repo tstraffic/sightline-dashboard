@@ -128,9 +128,14 @@
   <section class="bk2-pane" data-view-pane="board" aria-current="true" id="bk2-pane-board">
     <% if (!bookings.length) { %>
       <div class="bk2-empty">
-        <div style="font-size:28px;margin-bottom:8px">📋</div>
-        <h3>No bookings for <%= dayLabel %></h3>
-        <p style="font-size:13px;margin-top:4px">Press <kbd>N</kbd> to create one — or pick another day from the navigator above.</p>
+        <div style="font-size:42px;margin-bottom:10px">📋</div>
+        <h3 style="font-size:18px;font-weight:700;color:#111827;margin-bottom:4px">No bookings yet for <%= dayLabel %></h3>
+        <p style="font-size:13px;color:#6B7280;margin-bottom:18px">Get started by creating your first booking for this day.</p>
+        <button type="button" id="bk2-empty-new" class="bk2-empty-cta">
+          <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          Create booking
+        </button>
+        <p style="font-size:11px;color:#9CA3AF;margin-top:14px">or press <kbd style="background:#fff;border:1px solid #D1D5DB;padding:1px 6px;border-radius:4px;font-family:ui-monospace,monospace;font-size:10px;color:#374151">N</kbd> · pick another day above</p>
       </div>
     <% } else { %>
       <div class="bk2-board" id="bk2-board-list">
@@ -596,10 +601,12 @@
     soState.bookingId = id;
     soState.activeTab = tab || 'details';
     soTabs.forEach(function (t) { t.style.display = ''; });
-    soTitle.textContent = 'Loading…';
-    soSub.textContent = '#' + id;
-    soStatusPill.textContent = '…';
+    soTitle.textContent = 'Booking #' + id;
+    soSub.textContent = 'Loading…';
+    soStatusPill.textContent = 'LOADING';
     soStatusPill.className = 'bk2-status-pill';
+    soStatusPill.style.background = '#F3F4F6';
+    soStatusPill.style.color = '#6B7280';
     soBody.innerHTML = '<p style="color:#6B7280;font-size:13px;text-align:center;padding:40px 0">Loading…</p>';
     soFullpage.href = '/bookings/' + id;
     soFullpage.style.display = '';
@@ -1072,6 +1079,8 @@
 
   // ---------- + New booking ----------
   $('#bk2-new-btn').addEventListener('click', openCreate);
+  var emptyNew = $('#bk2-empty-new');
+  if (emptyNew) emptyNew.addEventListener('click', openCreate);
 
   // ---------- Card selection + keyboard nav ----------
   var selectedIdx = -1;
@@ -1411,12 +1420,27 @@
   if (initialBooking === 'new') {
     openCreate();
   } else if (initialBooking && /^\d+$/.test(String(initialBooking))) {
-    openBooking(initialBooking, 'details');
+    // ONLY auto-open if the booking is in the rendered list for today.
+    // Cross-day or stale links no longer block the page — they silently
+    // strip from URL and stay closed. The user can still click any card
+    // on the page (or use Cmd+K to jump to another booking).
+    var rendered = (window.BK2_DATA.bookings || []).some(function (b) { return String(b.id) === String(initialBooking); });
+    if (rendered) {
+      openBooking(initialBooking, 'details');
+    } else {
+      console.info('[bookings] ?b=' + initialBooking + ' not on this day — clearing.');
+      pushUrl({ b: null });
+    }
   } else if (initialBooking) {
-    // Garbage value — strip it so reload doesn't keep trying.
     console.warn('[bookings] ignoring non-integer ?b= value:', initialBooking);
     pushUrl({ b: null });
   }
+
+  // bfcache safety: if the user comes back via Back/Forward to this page,
+  // force the slide-over closed so the stuck state can never persist.
+  window.addEventListener('pageshow', function (e) {
+    if (e.persisted && so.classList.contains('bk2-open')) closeSlideover();
+  });
 
   // ============================================================
   //  CALENDAR (Phase 5) — week timeline 6am–8pm.

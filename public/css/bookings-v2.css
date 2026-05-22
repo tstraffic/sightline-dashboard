@@ -206,20 +206,45 @@
   padding: 1px 6px; border-radius: 9999px;
 }
 
-/* Empty state */
+/* Empty state — now with a real CTA button */
 .bk2-empty {
-  background: #F9FAFB; border: 2px dashed #E5E7EB; border-radius: 14px;
-  padding: 48px 24px; text-align: center; color: #6B7280;
+  background: linear-gradient(180deg, #F9FAFB 0%, #fff 100%);
+  border: 2px dashed #D1D5DB; border-radius: 14px;
+  padding: 56px 24px; text-align: center; color: #6B7280;
 }
 .bk2-empty h3 { color: #111827; font-weight: 600; margin-bottom: 4px; }
 .bk2-empty kbd { background: #fff; border: 1px solid #D1D5DB; border-radius: 4px; padding: 1px 6px; font-family: ui-monospace,monospace; font-size: 11px; color: #374151; }
+.bk2-empty-cta {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 11px 22px; border-radius: 12px;
+  background: #059669; color: #fff; font-weight: 700; font-size: 14px;
+  border: 0; cursor: pointer; box-shadow: 0 2px 6px rgba(5,150,105,0.3);
+  transition: transform 0.05s, box-shadow 0.15s, background 0.15s;
+}
+.bk2-empty-cta:hover { background: #047857; box-shadow: 0 4px 12px rgba(5,150,105,0.4); transform: translateY(-1px); }
+.bk2-empty-cta:active { transform: translateY(0); }
+
+/* Sticky page header — keeps "+ New booking" reachable even with the
+   slide-over open (the header sits at z-index 55, slide-over at 50). */
+.bk2-header {
+  position: sticky; top: 0; z-index: 55;
+  background: rgba(255,255,255,0.96); backdrop-filter: blur(6px);
+  margin: -8px -4px 14px;
+  padding: 12px 4px 8px;
+  border-bottom: 1px solid #E5E7EB;
+}
 
 /* -------------------------- Universal slide-over -------------------------- */
 .bk2-backdrop {
-  position: fixed; inset: 0; background: rgba(15,17,21,0.45); backdrop-filter: blur(2px);
+  position: fixed; inset: 0; background: rgba(15,17,21,0.25);
   z-index: 40; opacity: 0; pointer-events: none; transition: opacity 0.18s;
 }
 .bk2-backdrop.bk2-open { opacity: 1; pointer-events: auto; }
+/* On desktop, dim the backdrop further so the board behind stays visible
+   and usable — the user can see they're not stuck. */
+@media (min-width: 1024px) {
+  .bk2-backdrop { background: rgba(15,17,21,0.15); }
+}
 
 .bk2-slideover {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 50;
@@ -236,10 +261,12 @@
 .bk2-slideover-title { font-size: 15px; font-weight: 700; color: #111827; line-height: 1.2; }
 .bk2-slideover-sub { font-size: 12px; color: #6B7280; margin-top: 1px; }
 .bk2-slideover-close {
-  appearance: none; background: transparent; border: 0; padding: 6px; border-radius: 8px;
-  color: #6B7280; cursor: pointer;
+  appearance: none; background: #F3F4F6; border: 0; padding: 8px; border-radius: 10px;
+  color: #374151; cursor: pointer; width: 36px; height: 36px;
+  display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0;
 }
-.bk2-slideover-close:hover { background: #F3F4F6; color: #111827; }
+.bk2-slideover-close:hover { background: #E5E7EB; color: #111827; }
+.bk2-slideover-close svg { width: 18px; height: 18px; }
 
 .bk2-slideover-tabs {
   border-bottom: 1px solid #E5E7EB; padding: 0 14px;
