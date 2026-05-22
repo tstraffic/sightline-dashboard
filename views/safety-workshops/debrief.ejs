@@ -1,0 +1,242 @@
+<% locals.currentPage = 'safety-workshops' %>
+<%
+  // Helpers — kept local to this view since none of them apply
+  // elsewhere. cellBand(code) → 'low'|'medium'|'high'|'extreme'.
+  // The matrix uses impact (1–5) × likelihood (A–E); cell code is
+  // "<impact><likelihood>" e.g. '4C' = 4-impact, C-likelihood.
+  function cellBand(code) {
+    if (!code || code.length < 2) return null;
+    const imp = parseInt(code[0], 10);
+    const lkChar = code[1].toUpperCase();
+    const lkIdx = ['E','D','C','B','A'].indexOf(lkChar);
+    if (!BANDS[imp] || lkIdx < 0) return null;
+    return BANDS[imp][lkIdx];
+  }
+  function bandColor(b) {
+    if (b === 'extreme') return '#DC2626';
+    if (b === 'high') return '#F97316';
+    if (b === 'medium') return '#EAB308';
+    if (b === 'low') return '#16A34A';
+    return '#9CA3AF';
+  }
+  function fmtTime(s) {
+    if (!s) return '';
+    return new Date(s).toLocaleString('en-AU', {
+      timeZone: 'Australia/Sydney',
+      day: 'numeric', month: 'short',
+      hour: 'numeric', minute: '2-digit',
+    });
+  }
+  // Index answers by the question's `short` field so renderers can
+  // look up "what did the team pick on Initial Risk?" without
+  // assuming the array index aligns. Falls back to positional
+  // lookup if shorts collide.
+  const ansByShort = {};
+  (answers || []).forEach(function (a, i) {
+    if (a && a.short && !(a.short in ansByShort)) ansByShort[a.short] = a;
+  });
+  const ansByIdx = answers || [];
+  function answerFor(q, idx) {
+    return (q.short && ansByShort[q.short]) || ansByIdx[idx] || null;
+  }
+  const totalPct = attempt.max_score ? Math.round((attempt.score / attempt.max_score) * 100) : 0;
+%>
+
+<div class="max-w-4xl mx-auto space-y-5">
+  <a href="/safety-workshops/sessions/<%= session.session_code %>" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    Back to session <%= session.session_code %>
+  </a>
+
+  <!-- Header: team / case / total -->
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div class="min-w-0">
+      <p class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Debrief · Session <%= session.session_code %></p>
+      <h1 class="text-2xl font-bold text-gray-900 mt-1"><%= attempt.player_name %></h1>
+      <p class="text-sm text-gray-600 mt-1">
+        Case <%= caseDef.letter %> · <%= caseDef.title %>
+        <% if (caseDef.where) { %><span class="text-gray-400"> · <%= caseDef.where %></span><% } %>
+      </p>
+      <p class="text-xs text-gray-400 mt-1">Submitted <%= fmtTime(attempt.completed_at) %></p>
+    </div>
+    <div class="text-right">
+      <p class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Total</p>
+      <p class="text-3xl font-bold tabular-nums <%= totalPct >= 80 ? 'text-emerald-700' : totalPct >= 50 ? 'text-amber-700' : 'text-rose-700' %>">
+        <%= attempt.score %><span class="text-gray-300 text-xl font-normal">/<%= attempt.max_score %></span>
+      </p>
+      <p class="text-xs text-gray-500 tabular-nums"><%= totalPct %>%</p>
+    </div>
+  </div>
+
+  <!-- Case brief -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase mb-2">The incident</p>
+    <p class="text-sm text-gray-800 leading-relaxed"><%= caseDef.brief %></p>
+  </div>
+
+  <!-- Per-question debrief -->
+  <% caseDef.questions.forEach(function (q, qi) {
+    const ans = answerFor(q, qi);
+    const picked = ans ? ans.picked : undefined;
+    const pts = ans ? ans.pts : 0;
+    const max = ans ? ans.max : 20;
+    const tone = pts >= max ? 'good' : pts > 0 ? 'part' : 'bad';
+    const toneRing = tone === 'good' ? 'border-emerald-400 bg-emerald-50'
+                    : tone === 'part' ? 'border-amber-400 bg-amber-50'
+                    : 'border-rose-400 bg-rose-50';
+    const toneText = tone === 'good' ? 'text-emerald-700'
+                    : tone === 'part' ? 'text-amber-700'
+                    : 'text-rose-700';
+    const clauseDetail = (CLAUSE_DETAIL && CLAUSE_DETAIL[qi]) || null;
+  %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-100 flex items-start gap-3">
+        <span class="w-8 h-8 rounded-md bg-gray-100 text-gray-700 text-sm font-bold flex items-center justify-center shrink-0 tabular-nums"><%= qi + 1 %></span>
+        <div class="flex-1 min-w-0">
+          <p class="text-[10px] font-bold tracking-widest text-brand-700 uppercase">
+            <%= q.short %><% if (q.advanced) { %> · <span class="text-amber-700">Advanced</span><% } %> · <%= q.kind === 'matrix' ? 'Risk matrix' : q.kind === 'multi' ? 'Multi-select' : 'Single answer' %>
+          </p>
+          <p class="text-sm font-semibold text-gray-900 mt-1"><%= q.prompt %></p>
+        </div>
+        <div class="text-right shrink-0">
+          <p class="text-lg font-bold tabular-nums <%= toneText %>"><%= pts %><span class="text-gray-300 text-sm font-normal">/<%= max %></span></p>
+        </div>
+      </div>
+
+      <div class="p-5 space-y-3">
+        <% if (q.kind === 'single') {
+          const pickedIdx = (typeof picked === 'number') ? picked : -1;
+        %>
+          <% q.options.forEach(function (opt, oi) {
+            const isCorrect = !!opt.c;
+            const isPicked = oi === pickedIdx;
+            const rowCls = isCorrect && isPicked ? 'border-emerald-500 bg-emerald-50'
+                          : isCorrect             ? 'border-emerald-300 bg-emerald-50/50 border-dashed'
+                          : isPicked              ? 'border-rose-400 bg-rose-50'
+                          : 'border-gray-200 bg-white';
+          %>
+            <div class="flex items-center gap-3 px-3 py-2.5 border <%= rowCls %> rounded-lg">
+              <span class="w-5 h-5 rounded-full border-2 <%= isCorrect ? 'border-emerald-500 bg-emerald-500 text-white' : isPicked ? 'border-rose-500 bg-rose-500 text-white' : 'border-gray-300' %> flex items-center justify-center text-[10px] font-bold shrink-0">
+                <%= isCorrect ? '✓' : isPicked ? '✗' : '' %>
+              </span>
+              <span class="text-sm <%= isPicked || isCorrect ? 'text-gray-900' : 'text-gray-600' %> flex-1"><%= opt.t %></span>
+              <% if (isPicked) { %>
+                <span class="text-[10px] font-bold uppercase tracking-widest <%= isCorrect ? 'text-emerald-700' : 'text-rose-700' %>">Their pick</span>
+              <% } else if (isCorrect) { %>
+                <span class="text-[10px] font-bold uppercase tracking-widest text-emerald-700">Correct</span>
+              <% } %>
+            </div>
+          <% }) %>
+
+        <% } else if (q.kind === 'multi') {
+          const pickedSet = Array.isArray(picked) ? picked : [];
+        %>
+          <% q.options.forEach(function (opt, oi) {
+            const isCorrect = !!opt.c;
+            const isPicked = pickedSet.indexOf(oi) !== -1;
+            const rowCls = isCorrect && isPicked ? 'border-emerald-500 bg-emerald-50'
+                          : isCorrect             ? 'border-emerald-300 bg-emerald-50/50 border-dashed'
+                          : isPicked              ? 'border-rose-400 bg-rose-50'
+                          : 'border-gray-200 bg-white';
+            const verdict = isCorrect && isPicked ? 'Right pick'
+                          : isCorrect             ? 'Missed correct'
+                          : isPicked              ? 'Wrong pick'
+                          : null;
+            const verdictTone = isCorrect && isPicked ? 'text-emerald-700'
+                              : isCorrect             ? 'text-emerald-700'
+                              : 'text-rose-700';
+          %>
+            <div class="flex items-center gap-3 px-3 py-2.5 border <%= rowCls %> rounded-lg">
+              <span class="w-5 h-5 rounded-md border-2 <%= isCorrect && isPicked ? 'border-emerald-500 bg-emerald-500 text-white' : isCorrect ? 'border-emerald-400 text-emerald-600' : isPicked ? 'border-rose-500 bg-rose-500 text-white' : 'border-gray-300' %> flex items-center justify-center text-[10px] font-bold shrink-0">
+                <%= isPicked ? '✓' : isCorrect ? '·' : '' %>
+              </span>
+              <span class="text-sm <%= isPicked || isCorrect ? 'text-gray-900' : 'text-gray-600' %> flex-1"><%= opt.t %></span>
+              <% if (verdict) { %>
+                <span class="text-[10px] font-bold uppercase tracking-widest <%= verdictTone %>"><%= verdict %></span>
+              <% } %>
+            </div>
+          <% }) %>
+
+        <% } else if (q.kind === 'matrix') {
+          // Risk matrix — render 5x5 grid (impact rows × likelihood cols).
+          // The team's picked cell + the accept cells are both highlighted,
+          // and band-band distance shows up via the colour underneath.
+          const pickedCell = typeof picked === 'string' ? picked.toUpperCase() : null;
+          const acceptSet = Array.isArray(q.accept) ? q.accept.map(function(s){return String(s).toUpperCase();}) : [];
+        %>
+          <div class="overflow-x-auto">
+            <table class="border-separate border-spacing-1 text-[11px]" style="min-width: 360px;">
+              <thead>
+                <tr>
+                  <th class="text-right pr-1 text-gray-400 font-semibold uppercase tracking-widest">Impact</th>
+                  <% LIKE.forEach(function (l) { %>
+                    <th class="text-center text-gray-500 font-semibold uppercase tracking-widest"><%= l.c %><br><span class="text-[9px] font-normal text-gray-400"><%= l.label %></span></th>
+                  <% }) %>
+                </tr>
+              </thead>
+              <tbody>
+                <% IMPACTS.forEach(function (imp) { %>
+                  <tr>
+                    <td class="text-right pr-1.5 text-[10px] text-gray-500 font-semibold uppercase tracking-widest whitespace-nowrap"><%= imp.n %> · <%= imp.label %></td>
+                    <% LIKE.forEach(function (lk) {
+                      const code = imp.n + lk.c;
+                      const band = cellBand(code);
+                      const isPick = code === pickedCell;
+                      const isAccept = acceptSet.indexOf(code) !== -1;
+                      const bg = bandColor(band);
+                      const ringCls = isPick && isAccept ? 'ring-4 ring-emerald-600'
+                                    : isPick             ? 'ring-4 ring-rose-600'
+                                    : isAccept           ? 'ring-2 ring-emerald-500 ring-offset-1 ring-offset-white'
+                                    : '';
+                    %>
+                      <td>
+                        <div class="w-12 h-12 rounded-md flex flex-col items-center justify-center text-white font-bold <%= ringCls %>" style="background: <%= bg %>; text-shadow: 0 1px 2px rgba(0,0,0,0.35)">
+                          <span class="text-[10px] leading-none"><%= code %></span>
+                          <% if (isPick) { %><span class="text-[8px] mt-0.5 leading-none uppercase">Pick</span><% } %>
+                          <% if (isAccept && !isPick) { %><span class="text-[8px] mt-0.5 leading-none uppercase">Right</span><% } %>
+                        </div>
+                      </td>
+                    <% }) %>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+          <p class="text-xs text-gray-500">
+            Team picked <strong><%= pickedCell || '—' %></strong>
+            (<span class="capitalize"><%= cellBand(pickedCell) || 'no band' %></span>).
+            Correct: <strong><%= acceptSet.join(', ') || '—' %></strong>
+            (<span class="capitalize"><%= cellBand(acceptSet[0]) || '' %></span>).
+          </p>
+        <% } %>
+
+        <!-- Feedback + SWMS clause source -->
+        <div class="rounded-lg border <%= toneRing %> p-3.5 mt-3">
+          <p class="text-xs font-semibold <%= toneText %> uppercase tracking-widest mb-1">
+            <%= tone === 'good' ? 'On the money' : tone === 'part' ? 'Partial credit' : 'Worth re-reading' %>
+          </p>
+          <p class="text-sm text-gray-800"><%= q.fb %></p>
+        </div>
+        <% if (q.src) { %>
+          <p class="text-[11px] text-gray-500 mt-2">
+            <span class="font-semibold text-brand-700 uppercase tracking-widest text-[10px]"><%= q.src %></span>
+          </p>
+        <% } %>
+        <% if (clauseDetail) { %>
+          <details class="mt-2">
+            <summary class="text-xs text-gray-600 cursor-pointer hover:text-brand-700">Show the SWMS clause text</summary>
+            <div class="mt-2 p-3 bg-gray-50 border-l-4 border-brand-500 rounded text-sm text-gray-800 leading-relaxed whitespace-pre-line"><%= clauseDetail %></div>
+          </details>
+        <% } %>
+      </div>
+    </div>
+  <% }) %>
+
+  <div class="flex items-center justify-between gap-3 pt-2">
+    <a href="/safety-workshops/sessions/<%= session.session_code %>" class="text-sm text-gray-500 hover:text-gray-700">← Back to session</a>
+    <button type="button" onclick="window.print()" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg inline-flex items-center gap-1.5">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+      Print this debrief
+    </button>
+  </div>
+</div>
