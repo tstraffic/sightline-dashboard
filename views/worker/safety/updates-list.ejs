@@ -7,12 +7,17 @@
     if (isToday) return d.toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit' });
     return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' });
   }
-  const CHIP_STYLE = {
-    general:       'background: rgba(16,185,129,0.18); color: #93C5FD; border: 1px solid rgba(16,185,129,0.3);',
-    alert:         'background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3);',
-    reminder:      'background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3);',
-    toolbox:       'background: rgba(139,92,246,0.18); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3);',
-    policy_change: 'background: rgba(99,102,241,0.18); color: #c7d2fe; border: 1px solid rgba(99,102,241,0.3);',
+  // Chip category → CSS class. Inline-styled chips used to bake the
+  // dark-mode colours (#93C5FD / #fda4af / etc.) directly onto the
+  // element, which made them invisible in light mode because inline
+  // styles aren't reachable via a :root[data-theme="light"] rule.
+  // Class-based now so both modes can be themed in the <style> block.
+  const CHIP_CLASS = {
+    general:       'upd-chip-general',
+    alert:         'upd-chip-alert',
+    reminder:      'upd-chip-reminder',
+    toolbox:       'upd-chip-toolbox',
+    policy_change: 'upd-chip-policy',
   };
 %>
 <style>
@@ -28,11 +33,39 @@
   .upd-snippet { font-size: 0.78rem; color: rgba(255,255,255,0.55); margin-top: 4px; line-height: 1.4;
     display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .upd-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
-  .upd-chip { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .upd-chip { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; }
+  .upd-chip-general  { background: rgba(16,185,129,0.18); color: #93C5FD; border-color: rgba(16,185,129,0.3); }
+  .upd-chip-alert    { background: rgba(244,63,94,0.18);  color: #fda4af; border-color: rgba(244,63,94,0.3); }
+  .upd-chip-reminder { background: rgba(245,158,11,0.18); color: #fcd34d; border-color: rgba(245,158,11,0.3); }
+  .upd-chip-toolbox  { background: rgba(139,92,246,0.18); color: #c4b5fd; border-color: rgba(139,92,246,0.3); }
+  .upd-chip-policy   { background: rgba(99,102,241,0.18); color: #c7d2fe; border-color: rgba(99,102,241,0.3); }
   .upd-date { font-size: 0.7rem; color: rgba(255,255,255,0.45); margin-left: auto; }
   .upd-dot { position: absolute; top: 14px; right: 14px; width: 8px; height: 8px; border-radius: 999px; background: #10B981; box-shadow: 0 0 8px rgba(16,185,129,0.6); }
   .upd-pin { display: inline-block; margin-right: 4px; }
   .saf-empty { text-align: center; padding: 32px 16px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
+
+  /* ── Light mode ── the dark defaults above render every line of an
+     update row as nearly-invisible white-on-white. Pin every surface
+     and text token to readable light-theme equivalents. The body of
+     this file used to inline-style chips per category, which couldn't
+     be reached from CSS — chips are class-based now (upd-chip-<kind>)
+     so each colour can be re-themed here too. */
+  :root[data-theme="light"] .saf-wrap { color: #0F1115; }
+  :root[data-theme="light"] .saf-h1   { color: #0F1115; }
+  :root[data-theme="light"] .upd-card {
+    background: #FFFFFF; border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04);
+  }
+  :root[data-theme="light"] .upd-card.unread { border-left-color: #047857; }
+  :root[data-theme="light"] .upd-title   { color: #0F1115; }
+  :root[data-theme="light"] .upd-snippet { color: #4B5563; }
+  :root[data-theme="light"] .upd-date    { color: #6B7280; }
+  :root[data-theme="light"] .upd-chip-general  { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
+  :root[data-theme="light"] .upd-chip-alert    { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
+  :root[data-theme="light"] .upd-chip-reminder { background: #FFFBEB; color: #B45309; border-color: #FDE68A; }
+  :root[data-theme="light"] .upd-chip-toolbox  { background: #F5F3FF; color: #6D28D9; border-color: #DDD6FE; }
+  :root[data-theme="light"] .upd-chip-policy   { background: #EEF2FF; color: #4338CA; border-color: #C7D2FE; }
+  :root[data-theme="light"] .saf-empty { color: #6B7280; }
 </style>
 
 <div class="saf-wrap">
@@ -48,7 +81,7 @@
         <div class="upd-title"><% if (r.pinned) { %><span class="upd-pin">📌</span><% } %><%= r.title %></div>
         <% if (r.body) { %><div class="upd-snippet"><%= r.body %></div><% } %>
         <div class="upd-meta">
-          <span class="upd-chip" style="<%= CHIP_STYLE[r.category] || CHIP_STYLE.general %>"><%= categoryLabels[r.category] %></span>
+          <span class="upd-chip <%= CHIP_CLASS[r.category] || CHIP_CLASS.general %>"><%= categoryLabels[r.category] %></span>
           <span class="upd-date"><%= fmt(r.published_at) %></span>
         </div>
       </a>
