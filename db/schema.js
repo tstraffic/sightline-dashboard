@@ -10318,6 +10318,46 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 224: Workshop group mode.
+  //
+  // Adds a 'group' mode to workshop sessions so the office can split a
+  // crowd into pre-assigned teams (one team per case) instead of every
+  // participant playing alone. Two structural moves:
+  //   1. workshop_sessions.mode    — 'individual' (existing behaviour,
+  //      default) or 'group' (new flow).
+  //   2. workshop_assignments      — add members_csv (comma-separated
+  //      names that make up the team) and claimed_by_name (the first
+  //      participant who tapped this group on the join screen).
+  //
+  // In group mode the admin creates one workshop_assignments row per
+  // group at session-creation time (player_name='Group 1', case_letter
+  // randomly pre-assigned, members_csv = the team roster). When a
+  // participant scans the QR, they see the list of groups + members,
+  // tap theirs, and the row's claimed_by_name flips from NULL to the
+  // tapper's name.
+  // =============================================
+  if (!isMigrationApplied.get(224)) {
+    console.log('Running migration 224: workshop group mode columns');
+    try {
+      const sCols = db.prepare('PRAGMA table_info(workshop_sessions)').all().map(c => c.name);
+      if (!sCols.includes('mode')) {
+        db.exec("ALTER TABLE workshop_sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'individual'");
+      }
+      const aCols = db.prepare('PRAGMA table_info(workshop_assignments)').all().map(c => c.name);
+      if (!aCols.includes('members_csv')) {
+        db.exec('ALTER TABLE workshop_assignments ADD COLUMN members_csv TEXT');
+      }
+      if (!aCols.includes('claimed_by_name')) {
+        db.exec('ALTER TABLE workshop_assignments ADD COLUMN claimed_by_name TEXT');
+      }
+      recordMigration.run(224, 'workshop group mode columns');
+      console.log('Migration 224 applied: workshop sessions can now run in group mode');
+    } catch (e) {
+      console.error('Migration 224 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

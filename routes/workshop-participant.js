@@ -32,13 +32,36 @@ const WORKSHOPS = {
 function getSession(db, code) {
   return db
     .prepare(
-      `SELECT s.id AS session_id, s.workshop_id, s.session_code, s.status,
+      `SELECT s.id AS session_id, s.workshop_id, s.session_code, s.status, s.mode,
               w.slug AS workshop_slug, w.title AS workshop_title
        FROM workshop_sessions s
        JOIN workshop_definitions w ON w.id = s.workshop_id
        WHERE s.session_code = ?`
     )
     .get(code);
+}
+
+// Group rows for a session (group mode only). Returns array shaped for
+// the participant picker: { name, case_letter, members, claimed }.
+function listGroups(db, sessionId) {
+  return db
+    .prepare(
+      `SELECT player_name AS name, case_letter, members_csv, claimed_by_name
+       FROM workshop_assignments
+       WHERE session_id = ?
+       ORDER BY id ASC`
+    )
+    .all(sessionId)
+    .map((r) => ({
+      name: r.name,
+      case_letter: r.case_letter,
+      members: (r.members_csv || '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean),
+      claimed: !!r.claimed_by_name,
+      claimed_by: r.claimed_by_name || null,
+    }));
 }
 
 // Tiny standalone error page so participants on phones don't see the
@@ -79,7 +102,9 @@ router.get('/:code', (req, res) => {
       code: session.session_code,
       workshop_slug: session.workshop_slug,
       workshop_title: session.workshop_title,
+      mode: session.mode || 'individual',
     },
+    groups: session.mode === 'group' ? listGroups(db, session.session_id) : [],
     workshop: {
       slug: module.slug,
       title: module.title,
@@ -90,6 +115,50 @@ router.get('/:code', (req, res) => {
       CLAUSE_DETAIL: module.CLAUSE_DETAIL,
     },
   });
+});
+
+// =====================================================================
+// POST /wq/:code/join-group — claim a pre-created team
+// =====================================================================
+// Group mode only. Body: { group_name, claimer_name? }. Returns the
+// group's pre-assigned case letter so the client can roll straight into
+// the brief screen with that case. If the group is already claimed by
+// someone else, we let the join succeed anyway — the office crew sit at
+// one phone per team and multiple scans from the same team's members are
+// fine. Display-wise the facilitator dashboard still shows the first
+// claimer's name.
+router.post('/:code/join-group', (req, res) => {
+  const code = String(req.params.code || '').toUpperCase();
+  const db = getDb();
+  const session = getSession(db, code);
+  if (!session) return res.status(404).json({ error: 'session_not_found' });
+  if (session.status !== 'open') return res.status(409).json({ error: 'session_closed' });
+  if (session.mode !== 'group') return res.status(400).json({ error: 'not_group_mode' });
+
+  const groupName = String((req.body && req.body.group_name) || '').trim();
+  const claimer = String((req.body && req.body.claimer_name) || '').trim().slice(0, 60);
+  if (!groupName) return res.status(400).json({ error: 'group_required' });
+
+  const row = db
+    .prepare(
+      `SELECT id, case_letter, claimed_by_name
+       FROM workshop_assignments
+       WHERE session_id = ? AND player_name = ?`
+    )
+    .get(session.session_id, groupName);
+  if (!row) return res.status(404).json({ error: 'group_not_found' });
+
+  // First scan claims the team. We always record a claim (even without a
+  // typed name) so the facilitator dashboard's claimed/total counter
+  // ticks up as teams start. If the participant gave a name we display
+  // it; otherwise we use the group name as a placeholder. Subsequent
+  // scans don't overwrite so the first claimer stays visible.
+  if (!row.claimed_by_name) {
+    db.prepare(
+      'UPDATE workshop_assignments SET claimed_by_name = ?, claimed_at = CURRENT_TIMESTAMP WHERE id = ?'
+    ).run(claimer || groupName, row.id);
+  }
+  return res.json({ caseId: row.case_letter, group_name: groupName });
 });
 
 // =====================================================================

@@ -206,6 +206,8 @@
 <%# guard against any in-question text containing a `</script>` sequence. %>
 <script id="ws-data" type="application/json"><%- JSON.stringify({
   sessionCode: session.code,
+  sessionMode: session.mode || 'individual',
+  groups: typeof groups !== 'undefined' ? groups : [],
   workshopTitle: workshop.title,
   CASES: workshop.cases,
   IMPACTS: workshop.IMPACTS,
@@ -238,6 +240,8 @@ var LIKE = WS.LIKE;
 var BANDS = WS.BANDS;
 var CLAUSE_DETAIL = WS.CLAUSE_DETAIL;
 var SESSION_CODE = WS.sessionCode;
+var SESSION_MODE = WS.sessionMode || 'individual';
+var GROUPS = Array.isArray(WS.groups) ? WS.groups : [];
 
 var S = {
   screen: "start",
@@ -316,6 +320,13 @@ function apiSubmit(payload) {
 function apiLeaderboard() {
   return fetch("/wq/" + encodeURIComponent(SESSION_CODE) + "/leaderboard")
     .then(function (r) { return r.json(); });
+}
+function apiJoinGroup(groupName, claimerName) {
+  return fetch("/wq/" + encodeURIComponent(SESSION_CODE) + "/join-group", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ group_name: groupName, claimer_name: claimerName || "" })
+  }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); });
 }
 
 // =====================================================================
@@ -401,6 +412,7 @@ function tryResume() {
 }
 
 function screenStart() {
+  if (SESSION_MODE === "group") return screenStartGroup();
   var c = el("div", "stack fadein");
   c.appendChild(el("div", "kicker", "Office Crew Exercise"));
   c.appendChild(el("h1", "", escapeHtml(WS.workshopTitle).replace(" ", "<br>")));
@@ -435,6 +447,90 @@ function screenStart() {
     });
   });
   c.appendChild(go);
+  c.appendChild(el("p", "note", "Workshop tool · T&S Traffic Control · Session " + SESSION_CODE));
+  app.appendChild(c);
+}
+
+// Group mode: pick your team from a list of pre-made groups. Each card
+// shows the team's case + roster so the player can recognise their team
+// even if they joined the room late. Tapping a card claims it (the team
+// the player is in) and rolls straight into the brief screen with the
+// case the facilitator pre-assigned at session-create time.
+function screenStartGroup() {
+  var c = el("div", "stack fadein");
+  c.appendChild(el("div", "kicker", "Office Crew Exercise · Teams"));
+  c.appendChild(el("h1", "", escapeHtml(WS.workshopTitle).replace(" ", "<br>")));
+  c.appendChild(el("p", "lead", "Find your team in the list below — your name should be in the roster. Tap the card to start your team's case."));
+
+  if (S.startErr) c.appendChild(el("p", "err", escapeHtml(S.startErr)));
+
+  if (!GROUPS.length) {
+    c.appendChild(el("p", "lead", "No teams have been set up for this session yet. Ask the facilitator."));
+    app.appendChild(c);
+    return;
+  }
+
+  var list = el("div", "stack");
+  GROUPS.forEach(function (g) {
+    var card = el("button");
+    card.type = "button";
+    card.style.cssText = [
+      "background:var(--panel)",
+      "border:1.5px solid var(--line)",
+      "border-radius:12px",
+      "padding:14px",
+      "text-align:left",
+      "cursor:pointer",
+      "color:var(--text)",
+      "font-family:inherit",
+      "transition:border-color .12s, background .12s"
+    ].join(";");
+    card.addEventListener("mousedown", function () { card.style.background = "var(--panel2)"; });
+    card.addEventListener("mouseup",   function () { card.style.background = "var(--panel)"; });
+
+    var head = el("div");
+    head.style.cssText = "display:flex;align-items:center;gap:10px;margin-bottom:8px";
+    var caseBadge = el("span", "", g.case_letter);
+    caseBadge.style.cssText = "width:28px;height:28px;border-radius:6px;background:var(--orange);color:#15110c;font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:14px;display:inline-flex;align-items:center;justify-content:center";
+    var name = el("span", "", escapeHtml(g.name));
+    name.style.cssText = "font-family:'Barlow Condensed',sans-serif;font-weight:800;font-size:20px;text-transform:uppercase;letter-spacing:.4px";
+    head.appendChild(caseBadge);
+    head.appendChild(name);
+    if (g.claimed) {
+      var tag = el("span", "", "Claimed");
+      tag.style.cssText = "margin-left:auto;font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ok)";
+      head.appendChild(tag);
+    }
+    card.appendChild(head);
+
+    var roster = el("div");
+    roster.style.cssText = "color:var(--dim);font-size:14px;line-height:1.55";
+    roster.innerHTML = (g.members || []).map(function (m) {
+      return escapeHtml(m);
+    }).join(" · ");
+    card.appendChild(roster);
+
+    card.addEventListener("click", function () {
+      S.name = g.name;
+      S.startErr = "";
+      S.screen = "claiming"; render();
+      apiJoinGroup(g.name, "").then(function (r) {
+        if (!r.ok) {
+          S.startErr = r.body && r.body.error === "session_closed"
+            ? "This session has been closed by the facilitator."
+            : "Couldn't join — please try again.";
+          S.screen = "start"; render();
+          return;
+        }
+        startCase(r.body.caseId);
+      }).catch(function () {
+        S.startErr = "Network error — check your signal and try again.";
+        S.screen = "start"; render();
+      });
+    });
+    list.appendChild(card);
+  });
+  c.appendChild(list);
   c.appendChild(el("p", "note", "Workshop tool · T&S Traffic Control · Session " + SESSION_CODE));
   app.appendChild(c);
 }

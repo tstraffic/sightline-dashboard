@@ -82,7 +82,10 @@ const upload = multer({
   // 15MB per file — toolbox decks and sign-on scans can be chunky.
   limits: { fileSize: 15 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const ok = /\.(pdf|docx?|jpg|jpeg|png|webp|heic)$/i.test(file.originalname);
+    // Match the form's accept attribute on prep_documents / documents
+    // (xlsx / pptx / txt were silently dropped before — multer's filter
+    // returns cb(null, false) and the file vanishes with no row, no error).
+    const ok = /\.(pdf|docx?|xlsx?|pptx?|txt|jpg|jpeg|png|webp|heic)$/i.test(file.originalname);
     cb(null, ok);
   }
 });
