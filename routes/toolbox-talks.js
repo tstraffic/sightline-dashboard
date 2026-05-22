@@ -538,37 +538,157 @@ router.post('/:id/invitees/:crewId/remove', (req, res) => {
   }
 });
 
-// POST /toolbox-talks/:id/attendance — bulk replace attendance.
-// Accepts an array `attended_crew_ids[]` (checkboxes); each marks attendance
-// as recorded by the current admin user. Workers' self-marked "caught_up"
-// rows are preserved unless explicitly checked here.
+// POST /toolbox-talks/:id/attendance — apply a per-row status mapping
+// submitted by an admin/HR user from the attendance page.
+//
+// Body shape:
+//   manageable_crew_ids[] = [<id>, <id>, ...]    // every row rendered
+//   status[<crewId>]      = ''|'attending'|'attended'|'absent'|'caught_up'
+//                            ('' or 'pending' clears the row entirely)
+//   absence_reason[<crewId>] = '<free text>'    // required for 'absent'
+//
+// Semantics per status value:
+//   ''/'pending'  — DELETE the row (back to no record)
+//   'attending'   — admin-set RSVP-yes; clears any prior sign-off so the
+//                   worker can re-sign later
+//   'attended'    — admin marks the worker off. signed_off_at = NOW so it
+//                   counts as a real "attended" state in the new model.
+//                   If the worker had previously signed off with their own
+//                   signature, that signature_data is preserved (we don't
+//                   clobber the worker's audit trail when the admin just
+//                   confirms what's already there).
+//   'absent'      — admin records "not attending" with required reason
+//   'caught_up'   — admin attributes self-claim on behalf of the worker
+//
+// Scope: only crew_member_ids present in `manageable_crew_ids[]` are
+// touched, so a stale form submission can't accidentally wipe rows for
+// workers who've since been added/removed from the invite list.
 router.post('/:id/attendance', (req, res) => {
   const db = getDb();
   const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
   if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
-  const ids = []
-    .concat(req.body.attended_crew_ids || [])
+  const userId = req.session.user ? req.session.user.id : null;
+  const manageable = []
+    .concat(req.body.manageable_crew_ids || [])
     .map(n => parseInt(n, 10))
     .filter(n => n > 0);
-  const userId = req.session.user ? req.session.user.id : null;
+  const statusBody = (req.body.status && typeof req.body.status === 'object') ? req.body.status : {};
+  const reasonBody = (req.body.absence_reason && typeof req.body.absence_reason === 'object') ? req.body.absence_reason : {};
+  const VALID = new Set(['', 'pending', 'attending', 'attended', 'absent', 'caught_up']);
+
+  // Validate reasons up-front so we don't half-apply.
+  const missingReason = [];
+  for (const cid of manageable) {
+    const s = (statusBody[cid] || '').toString();
+    if (s === 'absent') {
+      const r = (reasonBody[cid] || '').toString().trim();
+      if (!r) missingReason.push(cid);
+    }
+    if (!VALID.has(s)) {
+      req.flash('error', 'Invalid status submitted.');
+      return res.redirect('/toolbox-talks/' + toolbox.id + '/attendance');
+    }
+  }
+  if (missingReason.length) {
+    req.flash('error', "Add a reason for each worker marked 'Not attending' before saving.");
+    return res.redirect('/toolbox-talks/' + toolbox.id + '/attendance');
+  }
+
+  const counts = { attended: 0, attending: 0, absent: 0, caught_up: 0, pending: 0 };
+
+  const upsertAttending = db.prepare(`
+    INSERT INTO toolbox_attendance
+      (toolbox_id, crew_member_id, status, recorded_by_id, recorded_at, signed_off_at, signature_data, absence_reason)
+    VALUES (?, ?, 'attending', ?, CURRENT_TIMESTAMP, NULL, NULL, NULL)
+    ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+      status = 'attending',
+      recorded_by_id = excluded.recorded_by_id,
+      recorded_at = CURRENT_TIMESTAMP,
+      signed_off_at = NULL,
+      signature_data = NULL,
+      absence_reason = NULL
+  `);
+  // Attended: set signed_off_at = NOW so it counts as a real "attended"
+  // state. Preserve any existing worker signature_data — admin confirming
+  // a worker who already signed shouldn't wipe their signature. If the
+  // row is new, signature_data stays NULL (admin attribution only).
+  const upsertAttended = db.prepare(`
+    INSERT INTO toolbox_attendance
+      (toolbox_id, crew_member_id, status, recorded_by_id, recorded_at, signed_off_at, signature_data, absence_reason)
+    VALUES (?, ?, 'attended', ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, NULL)
+    ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+      status = 'attended',
+      recorded_by_id = excluded.recorded_by_id,
+      recorded_at = CURRENT_TIMESTAMP,
+      signed_off_at = COALESCE(toolbox_attendance.signed_off_at, CURRENT_TIMESTAMP),
+      absence_reason = NULL
+  `);
+  const upsertAbsent = db.prepare(`
+    INSERT INTO toolbox_attendance
+      (toolbox_id, crew_member_id, status, recorded_by_id, recorded_at, signed_off_at, signature_data, absence_reason)
+    VALUES (?, ?, 'absent', ?, CURRENT_TIMESTAMP, NULL, NULL, ?)
+    ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+      status = 'absent',
+      recorded_by_id = excluded.recorded_by_id,
+      recorded_at = CURRENT_TIMESTAMP,
+      signed_off_at = NULL,
+      signature_data = NULL,
+      absence_reason = excluded.absence_reason
+  `);
+  const upsertCaughtUp = db.prepare(`
+    INSERT INTO toolbox_attendance
+      (toolbox_id, crew_member_id, status, recorded_by_id, recorded_at, signed_off_at, signature_data, absence_reason)
+    VALUES (?, ?, 'caught_up', ?, CURRENT_TIMESTAMP, NULL, NULL, NULL)
+    ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+      status = 'caught_up',
+      recorded_by_id = excluded.recorded_by_id,
+      recorded_at = CURRENT_TIMESTAMP,
+      signed_off_at = NULL,
+      signature_data = NULL,
+      absence_reason = NULL
+  `);
+  const del = db.prepare(`DELETE FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?`);
+
   const tx = db.transaction(() => {
-    // Wipe office-recorded attendance for this toolbox, then re-insert from
-    // the form. We deliberately leave 'caught_up' rows alone so the worker's
-    // self-claim doesn't get overwritten by an admin who only ticked off
-    // attendees.
-    db.prepare(`DELETE FROM toolbox_attendance WHERE toolbox_id = ? AND status = 'attended'`).run(toolbox.id);
-    if (ids.length) {
-      const ins = db.prepare(`
-        INSERT OR REPLACE INTO toolbox_attendance
-          (toolbox_id, crew_member_id, status, recorded_by_id, recorded_at)
-        VALUES (?, ?, 'attended', ?, CURRENT_TIMESTAMP)
-      `);
-      for (const cid of ids) ins.run(toolbox.id, cid, userId);
+    for (const cid of manageable) {
+      const s = (statusBody[cid] || '').toString();
+      if (s === '' || s === 'pending') {
+        del.run(toolbox.id, cid);
+        counts.pending++;
+      } else if (s === 'attending') {
+        upsertAttending.run(toolbox.id, cid, userId);
+        counts.attending++;
+      } else if (s === 'attended') {
+        upsertAttended.run(toolbox.id, cid, userId);
+        counts.attended++;
+      } else if (s === 'absent') {
+        const reason = (reasonBody[cid] || '').toString().trim().slice(0, 500);
+        upsertAbsent.run(toolbox.id, cid, userId, reason);
+        counts.absent++;
+      } else if (s === 'caught_up') {
+        upsertCaughtUp.run(toolbox.id, cid, userId);
+        counts.caught_up++;
+      }
     }
   });
   tx();
-  try { logActivity({ user: req.session.user, action: 'attendance_updated', entityType: 'toolbox_talk', entityId: toolbox.id, entityLabel: toolbox.title, details: ids.length + ' attendees', ip: req.ip }); } catch (e) {}
-  req.flash('success', 'Attendance saved (' + ids.length + ' attendees).');
+
+  try {
+    logActivity({
+      user: req.session.user, action: 'attendance_updated', entityType: 'toolbox_talk',
+      entityId: toolbox.id, entityLabel: toolbox.title,
+      details: `attended=${counts.attended} attending=${counts.attending} absent=${counts.absent} caught_up=${counts.caught_up} pending=${counts.pending}`,
+      ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash('success',
+    'Attendance saved — ' +
+    counts.attended + ' attended · ' +
+    counts.attending + ' attending · ' +
+    counts.absent + ' not attending · ' +
+    counts.caught_up + ' caught up · ' +
+    counts.pending + ' pending.'
+  );
   return res.redirect('/toolbox-talks/' + toolbox.id + '/attendance');
 });
 
