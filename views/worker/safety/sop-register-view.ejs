@@ -25,6 +25,14 @@
   .pv-actionbar { position: fixed; left: 0; right: 0; bottom: 0; padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px)); background: rgba(10,22,40,0.96); border-top: 1px solid rgba(255,255,255,0.08); z-index: 40; }
   .pv-ack-btn { width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0; background: linear-gradient(135deg, #059669, #10B981); color: #fff; box-shadow: 0 6px 20px rgba(5,150,105,0.35); }
   .pv-ack-btn:active { transform: translateY(1px); }
+
+  /* Light-mode overrides for the fullscreen viewer. */
+  :root[data-theme="light"] body { background: #F7F8FA; }
+  :root[data-theme="light"] .pv-topbar { background: rgba(255,255,255,0.96); border-bottom-color: #E5E7EB; }
+  :root[data-theme="light"] .pv-back   { color: #0F1115; background: #F3F4F6; border-color: #E5E7EB; }
+  :root[data-theme="light"] .pv-back:active { background: #E5E7EB; }
+  :root[data-theme="light"] .pv-title  { color: #0F1115; }
+  :root[data-theme="light"] .pv-actionbar { background: rgba(255,255,255,0.98); border-top-color: #E5E7EB; }
 </style>
 
 <div class="pv-wrap">

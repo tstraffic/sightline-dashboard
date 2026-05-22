@@ -229,7 +229,7 @@
         <div style="min-width: 0;">
           <% if (kudosSummary.topValue) { %>
             <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Most recognised for</p>
-            <span style="display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= kudosSummary.topValue.colour %>22; color: <%= kudosSummary.topValue.colour %>;">â˜… <%= kudosSummary.topValue.name %></span>
+            <span style="display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= kudosSummary.topValue.colour %>22; color: <%= kudosSummary.topValue.colour %>;">★ <%= kudosSummary.topValue.name %></span>
           <% } else if (kudosSummary.received === 0) { %>
             <p style="font-size: 0.82rem; color: rgba(255,255,255,0.6);">No kudos yet &mdash; send one to a teammate and start the love.</p>
           <% } else { %>
@@ -328,7 +328,7 @@
               <% if (c.relationship) { %><p class="pf-contact-rel"><%= c.relationship %></p><% } %>
             </div>
             <% if (c.is_primary) { %>
-              <span class="pf-contact-primary">â˜… Primary</span>
+              <span class="pf-contact-primary">★ Primary</span>
             <% } %>
           </div>
           <div class="pf-contact-body">

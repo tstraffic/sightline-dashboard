@@ -15,7 +15,7 @@
     <p class="mg-hero-label">Shift board</p>
     <h1 class="mg-hero-title"><%= shown.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long', day: 'numeric', month: 'long' }) %></h1>
     <div style="display: flex; gap: 6px; margin-top: 10px;">
-      <a href="?date=<%= iso(prev) %>" class="mg-btn-ghost">â† Prev</a>
+      <a href="?date=<%= iso(prev) %>" class="mg-btn-ghost">← Prev</a>
       <a href="?date=<%= iso(today) %>" class="mg-btn-ghost">Today</a>
       <a href="?date=<%= iso(next) %>" class="mg-btn-ghost">Next &rarr;</a>
     </div>
@@ -47,7 +47,7 @@
         <% } %>
       </div>
       <% if (job.weather && job.weather.rain_chance >= 40) { %>
-        <div style="margin: 0; padding: 8px 14px; background: rgba(245,158,11,0.1); border-top: 1px solid rgba(245,158,11,0.2); color: #FBBF24; font-size: 0.7rem; font-weight: 600;">âš ï¸ Wet weather PPE recommended &mdash; <%= job.weather.rain_chance %>% chance of rain</div>
+        <div style="margin: 0; padding: 8px 14px; background: rgba(245,158,11,0.1); border-top: 1px solid rgba(245,158,11,0.2); color: #FBBF24; font-size: 0.7rem; font-weight: 600;">⚠️ Wet weather PPE recommended &mdash; <%= job.weather.rain_chance %>% chance of rain</div>
       <% } %>
       <div class="mg-list" style="padding: 10px;">
         <% job.members.forEach(function (m) { %>

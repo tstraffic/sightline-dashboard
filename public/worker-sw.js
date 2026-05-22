@@ -2,7 +2,7 @@
 // v8: switch HTML fetch from network-first to stale-while-revalidate so
 // cached pages return instantly on tap and refresh in the background. Bump
 // CACHE_NAME so existing installs flush the old network-first cache.
-const CACHE_NAME = 'atomis-worker-v5';
+const CACHE_NAME = 'atomis-worker-v6';
 const VENDOR_CACHE = 'atomis-worker-vendor-v1';
 
 // All client-side renderer assets (pdfjs, docx-preview, jszip). All are
