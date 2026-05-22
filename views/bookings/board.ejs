@@ -743,44 +743,76 @@
     var d = soState.data;
     if (!d) return;
     if (tab === 'details') {
+      var statusOptions = ['client_booking','unconfirmed','confirmed','locked','conflict','green_to_go','in_progress','complete','finalised','on_hold','cancelled','late_cancellation'];
       soBody.innerHTML =
-        row('Status', '<span class="bk2-status-pill bk2-status--' + esc(d.status) + '">' + esc(statusLabel(d.status)) + '</span>') +
+        row('Status',
+          '<select id="bk2-edit-status" class="bk2-status-pill bk2-status--' + esc(d.status) + '" style="border:0;padding:3px 9px;border-radius:9999px;font-weight:700;cursor:pointer;font-size:10px;letter-spacing:0.04em;text-transform:uppercase">' +
+          statusOptions.map(function (s) { return '<option value="' + s + '"' + (s === d.status ? ' selected' : '') + '>' + statusLabel(s) + '</option>'; }).join('') +
+          '</select>'
+        ) +
         row('When', esc(fmtTime(d.start_datetime)) + ' → ' + esc(fmtTime(d.end_datetime))) +
+        editableRow('Title',       'title',           d.title || '') +
+        editableRow('Site',        'site_address',    (d.site_address || '')) +
+        editableRow('Suburb',      'suburb',          d.suburb || '') +
+        editableRow('State',       'state',           d.state || '') +
+        editableRow('Postcode',    'postcode',        d.postcode || '') +
+        editableRow('Order #',     'order_number',    d.order_number || '') +
+        editableRow('Billing code','billing_code',    d.billing_code || '') +
+        editableRow('Description', 'description',     d.description || '', true) +
         row('Client', d.client ? esc(d.client.company_name) : '—') +
         row('Project', d.job ? esc(d.job.job_name || d.job.job_number || '') : '—') +
-        row('Site', esc((d.site_address || '') + (d.suburb ? ', ' + d.suburb : '') + (d.state ? ' ' + d.state : ''))) +
         row('Depot', esc(d.depot || '—')) +
         row('Requester', esc(d.requester_name || '—')) +
         row('Planner', esc(d.planner_name || '—')) +
-        row('Order #', esc(d.order_number || '—')) +
         row('Tags', d.tags_list && d.tags_list.length ? d.tags_list.map(function (t) { return '<span class="bk2-warn" style="background:#F3F4F6;color:#374151;border-color:#E5E7EB">' + esc(t) + '</span>'; }).join(' ') : '—') +
+        '<p id="bk2-edit-saved" style="font-size:11px;color:#059669;margin-top:8px;display:none">✓ Saved</p>' +
         '<div style="margin-top:16px;display:flex;gap:6px;flex-wrap:wrap">' +
-          '<a href="/bookings/' + d.id + '/edit" style="background:#2B7FFF;color:#fff;padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none">Open full editor</a>' +
+          '<a href="/bookings/' + d.id + '/edit" style="background:#F3F4F6;color:#374151;padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none">Full editor →</a>' +
+          '<a href="/bookings/' + d.id + '" style="background:#F3F4F6;color:#374151;padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none">Open page</a>' +
         '</div>';
+      wireDetailEdits(d);
     } else if (tab === 'crews') {
       var crewList = (d.crew || []).map(function (c) {
-        return '<div style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:8px">' +
+        var pillCls = c.status === 'confirmed' ? 'background:#ECFDF5;color:#065F46;border-color:#86EFAC' : 'background:#FEF3C7;color:#92400E;border-color:#FDE68A';
+        return '<div data-crew-id="' + esc(c.crew_member_id) + '" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:8px">' +
           '<span class="bk2-slot-avatar">' + esc((c.full_name || '').split(' ').map(function (n) { return n[0]; }).join('').substring(0, 2)) + '</span>' +
-          '<span style="flex:1"><strong>' + esc(c.full_name) + '</strong>' +
-          (c.crew_role ? ' <span style="color:#9CA3AF;font-size:11px">· ' + esc(c.crew_role) + '</span>' : '') +
+          '<span style="flex:1;min-width:0"><strong style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.full_name) + '</strong>' +
+          (c.crew_role ? '<span style="color:#9CA3AF;font-size:11px">' + esc(c.crew_role) + '</span>' : '') +
           '</span>' +
-          (c.status === 'confirmed' ? '<span style="color:#059669;font-weight:700">✓ Confirmed</span>' : '<span style="color:#D97706;font-weight:600;font-size:11px">Unconfirmed</span>') +
+          (c.status === 'confirmed'
+            ? '<span style="font-size:10px;font-weight:700;color:#059669">✓ CONFIRMED</span>'
+            : '<button type="button" data-crew-confirm="' + esc(c.crew_member_id) + '" style="background:#F59E0B;color:#fff;border:0;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:0.04em">CONFIRM</button>'
+          ) +
+          '<button type="button" data-crew-remove="' + esc(c.crew_member_id) + '" title="Remove" style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:2px;font-size:18px;line-height:1">×</button>' +
           '</div>';
-      }).join('') || '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:24px 0">No crew assigned yet.</p>';
+      }).join('') || '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:24px 0">No crew yet — drag people in from the Resource Panel.</p>';
+
       var vehList = (d.allVehicles || []).map(function (v) {
-        var vname = v.vehicle_name || v.name || v.registration || '(unnamed)';
+        var vname = v.vehicle_name || v.name || v.registration || '(empty placeholder)';
         var vrego = (v.registration && (v.vehicle_name || v.name)) ? v.registration : '';
-        return '<div style="padding:8px 10px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:8px">' +
+        return '<div data-vehicle-id="' + v.id + '" style="padding:8px 10px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:8px">' +
           '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14"/></svg>' +
-          '<strong>' + esc(vname) + '</strong>' +
+          '<strong style="flex:1">' + esc(vname) + '</strong>' +
           (vrego ? '<span style="color:#B45309;font-family:ui-monospace,monospace;font-size:11px">' + esc(vrego) + '</span>' : '') +
           (v.vehicle_role ? '<span style="background:#FEF3C7;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;color:#92400E;text-transform:uppercase">' + esc(v.vehicle_role) + '</span>' : '') +
+          '<button type="button" data-vehicle-remove="' + v.id + '" title="Remove" style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:2px;font-size:18px;line-height:1">×</button>' +
           '</div>';
-      }).join('') || '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:12px 0">No vehicles.</p>';
+      }).join('') || '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:12px 0">No vehicles — drag a ute in from the Resource Panel.</p>';
+
+      var eqList = (d.equipment || []).map(function (eq) {
+        return '<div data-eq-id="' + eq.id + '" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:4px;display:flex;align-items:center;gap:8px;font-size:12px">' +
+          '<strong style="flex:1">' + esc(eq.equipment_name) + '</strong>' +
+          (eq.equipment_type ? '<span style="color:#9CA3AF;font-size:10px">' + esc(eq.equipment_type) + '</span>' : '') +
+          (eq.quantity > 1 ? '<span style="background:#F3F4F6;padding:1px 5px;border-radius:4px;font-size:10px">×' + eq.quantity + '</span>' : '') +
+          '<button type="button" data-eq-remove="' + eq.id + '" title="Remove" style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:2px;font-size:16px;line-height:1">×</button>' +
+          '</div>';
+      }).join('') || '<p style="color:#9CA3AF;font-size:12px;text-align:center;padding:8px 0">No add-ons.</p>';
+
       soBody.innerHTML =
-        '<p style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px">Crew</p>' + crewList +
-        '<p style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin:14px 0 8px">Vehicles</p>' + vehList +
-        '<p style="margin-top:14px;text-align:center"><a href="/bookings/' + d.id + '" style="color:#2B7FFF;font-size:12px;font-weight:600;text-decoration:none">Manage crew on the booking page →</a></p>';
+        '<p style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;display:flex;justify-content:space-between"><span>Crew (' + (d.crew || []).length + ')</span><span style="color:#9CA3AF;font-weight:500;text-transform:none;letter-spacing:0">drag from Resource Panel to add</span></p>' + crewList +
+        '<p style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin:14px 0 8px">Vehicles (' + (d.allVehicles || []).length + ')</p>' + vehList +
+        '<p style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin:14px 0 8px">Add-ons / Equipment (' + (d.equipment || []).length + ')</p>' + eqList;
+      wireCrewsTab(d);
     } else if (tab === 'docs') {
       var list = (d.documents || []).map(function (doc) {
         return '<a href="/bookings/' + d.id + '/documents/' + doc.id + '/download" style="display:block;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:6px;text-decoration:none;color:#111827">📄 ' + esc(doc.title || doc.original_name) + '</a>';
@@ -805,6 +837,134 @@
 
   function row(lbl, val) {
     return '<div class="bk2-row"><span class="lbl">' + lbl + '</span><span class="val">' + val + '</span></div>';
+  }
+  function editableRow(lbl, field, val, multiline) {
+    var input = multiline
+      ? '<textarea data-edit-field="' + field + '" rows="2" style="width:100%;background:transparent;border:1px dashed transparent;border-radius:4px;padding:3px 6px;font-size:13px;color:#111827;resize:vertical">' + esc(val) + '</textarea>'
+      : '<input data-edit-field="' + field + '" value="' + esc(val) + '" style="width:100%;background:transparent;border:1px dashed transparent;border-radius:4px;padding:3px 6px;font-size:13px;color:#111827">';
+    return '<div class="bk2-row"><span class="lbl">' + lbl + '</span><span class="val">' + input + '</span></div>';
+  }
+  function wireCrewsTab(d) {
+    function post(url) {
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
+        credentials: 'same-origin',
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, json: j }; }); });
+    }
+    soBody.querySelectorAll('[data-crew-confirm]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        post('/bookings/' + d.id + '/crew/' + b.dataset.crewConfirm + '/confirm').then(function (res) {
+          if (!res.ok) return toast('Confirm failed', false);
+          toast('Confirmed');
+          refreshAfter(d);
+        });
+      });
+    });
+    soBody.querySelectorAll('[data-crew-remove]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Remove this crew member from the booking?')) return;
+        post('/bookings/' + d.id + '/crew/' + b.dataset.crewRemove + '/remove').then(function (res) {
+          if (!res.ok) return toast('Remove failed', false);
+          toast('Removed');
+          refreshAfter(d);
+        });
+      });
+    });
+    soBody.querySelectorAll('[data-vehicle-remove]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Remove this vehicle?')) return;
+        post('/bookings/' + d.id + '/vehicles/' + b.dataset.vehicleRemove + '/remove').then(function (res) {
+          if (!res.ok) return toast('Remove failed', false);
+          toast('Removed');
+          refreshAfter(d);
+        });
+      });
+    });
+    soBody.querySelectorAll('[data-eq-remove]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (!confirm('Remove this equipment?')) return;
+        post('/bookings/' + d.id + '/equipment/' + b.dataset.eqRemove + '/remove').then(function (res) {
+          if (!res.ok) return toast('Remove failed', false);
+          toast('Removed');
+          refreshAfter(d);
+        });
+      });
+    });
+  }
+  function refreshAfter(d) {
+    // Re-fetch slide-over data + the matching card
+    fetch('/bookings/' + d.id, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (fresh) { soState.data = fresh; renderTab(soState.activeTab); });
+    var card = document.querySelector('.bk2-card[data-booking-id="' + d.id + '"]');
+    if (card) refreshCard(card, d.id);
+  }
+
+  function wireDetailEdits(d) {
+    // Hover hint that inputs are editable
+    soBody.querySelectorAll('[data-edit-field]').forEach(function (el) {
+      el.addEventListener('focus', function () { el.style.borderColor = '#93c5fd'; });
+      el.addEventListener('blur',  function () {
+        el.style.borderColor = 'transparent';
+        var field = el.dataset.editField;
+        var newVal = el.value;
+        if (newVal === (d[field] || '')) return;
+        // Patch via the existing POST /:id which accepts the full booking body.
+        // We send just the changed field — server merges into the row.
+        var body = new URLSearchParams();
+        body.append(field, newVal);
+        // Send start_date / start_time / end_date / end_time / title to satisfy
+        // the POST /:id validators
+        if (d.start_datetime) {
+          body.append('start_date', d.start_datetime.substring(0,10));
+          body.append('start_time', d.start_datetime.substring(11,16));
+        }
+        if (d.end_datetime) {
+          body.append('end_date', d.end_datetime.substring(0,10));
+          body.append('end_time', d.end_datetime.substring(11,16));
+        }
+        if (field !== 'title') body.append('title', d.title || '');
+        fetch('/bookings/' + d.id, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
+          credentials: 'same-origin',
+          body: body.toString(),
+        }).then(function (r) {
+          if (r.ok) {
+            d[field] = newVal;
+            var saved = $('#bk2-edit-saved'); if (saved) { saved.style.display = 'block'; setTimeout(function () { saved.style.display = 'none'; }, 1600); }
+            // Refresh the matching card
+            var card = document.querySelector('.bk2-card[data-booking-id="' + d.id + '"]');
+            if (card) refreshCard(card, d.id);
+          } else { toast('Save failed', false); }
+        }).catch(function () { toast('Save failed', false); });
+      });
+    });
+    // Status select inline change
+    var statusSel = $('#bk2-edit-status');
+    if (statusSel) {
+      statusSel.addEventListener('change', function () {
+        var next = statusSel.value;
+        var body = new URLSearchParams({ status: next }).toString();
+        fetch('/bookings/' + d.id + '/status', {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
+          credentials: 'same-origin',
+          body: body,
+        }).then(function (r) { return r.json(); }).then(function (j) {
+          if (j && j.ok) {
+            d.status = next;
+            statusSel.className = 'bk2-status-pill bk2-status--' + next;
+            soStatusPill.textContent = statusLabel(next);
+            soStatusPill.className = 'bk2-status-pill bk2-status--' + next;
+            var card = document.querySelector('.bk2-card[data-booking-id="' + d.id + '"]');
+            if (card) refreshCard(card, d.id);
+            toast('Status: ' + statusLabel(next));
+          } else { toast('Status change failed', false); }
+        }).catch(function () { toast('Status change failed', false); });
+      });
+    }
   }
 
   // ---------- Toast ----------
