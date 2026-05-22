@@ -305,6 +305,34 @@
 </div>
 
 <!-- ============================================================
+     RESOURCE PANEL  —  People / Vehicles / Equipment with drag-drop
+     ============================================================ -->
+<button type="button" class="bk2-resource-toggle-btn" id="bk2-resource-toggle" title="Show / hide the resource panel (R)">
+  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+  <span>Resources</span>
+</button>
+<aside class="bk2-resource-panel" id="bk2-resource-panel">
+  <header class="bk2-resource-panel-head">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+      <h3 style="font-size:13px;font-weight:700;color:#111827;margin:0">Resources</h3>
+      <button type="button" id="bk2-resource-close" style="appearance:none;background:transparent;border:0;color:#6B7280;cursor:pointer;padding:2px">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="bk2-resource-tabs" role="tablist">
+      <button class="bk2-resource-tab" data-rtab="people"    aria-selected="true">People</button>
+      <button class="bk2-resource-tab" data-rtab="vehicles">Vehicles</button>
+      <button class="bk2-resource-tab" data-rtab="equipment">Equipment</button>
+    </div>
+    <input type="text" class="bk2-resource-search" id="bk2-resource-search" placeholder="Search…" style="margin-top:6px">
+    <div class="bk2-resource-filters" id="bk2-resource-filters"></div>
+  </header>
+  <div class="bk2-resource-body" id="bk2-resource-body">
+    <p style="color:#9CA3AF;font-size:12px;text-align:center;padding:24px 0">Loading…</p>
+  </div>
+</aside>
+
+<!-- ============================================================
      UNIVERSAL SLIDE-OVER  —  view + create modes
      ============================================================ -->
 <div class="bk2-backdrop" id="bk2-backdrop"></div>
@@ -859,6 +887,237 @@
       if (arr2[selectedIdx]) { e.preventDefault(); location.href = '/bookings/' + arr2[selectedIdx].dataset.bookingId + '/edit'; }
       return;
     }
+  });
+
+  // ============================================================
+  //  RESOURCE PANEL (Phase 3)
+  //  Loads people / vehicles / equipment, draggable onto card slots.
+  // ============================================================
+  var rPanel = $('#bk2-resource-panel');
+  var rToggle = $('#bk2-resource-toggle');
+  var rClose = $('#bk2-resource-close');
+  var rBody = $('#bk2-resource-body');
+  var rSearch = $('#bk2-resource-search');
+  var rFilters = $('#bk2-resource-filters');
+  var resourceState = { open: false, tab: 'people', data: null, q: '', activeFilters: new Set() };
+
+  function openResources() {
+    resourceState.open = true;
+    rPanel.classList.add('bk2-open');
+    if (!resourceState.data) fetchResources();
+  }
+  function closeResources() {
+    resourceState.open = false;
+    rPanel.classList.remove('bk2-open');
+  }
+  rToggle && rToggle.addEventListener('click', function () { resourceState.open ? closeResources() : openResources(); });
+  rClose && rClose.addEventListener('click', closeResources);
+
+  function fetchResources() {
+    rBody.innerHTML = '<p style="color:#9CA3AF;font-size:12px;text-align:center;padding:24px 0">Loading…</p>';
+    fetch('/bookings/api/resources?date=' + encodeURIComponent(window.BK2_DATA.dateStr), { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(function (data) { resourceState.data = data; renderResources(); })
+      .catch(function () { rBody.innerHTML = '<p style="color:#DC2626;font-size:12px;text-align:center;padding:24px 0">Failed to load resources.</p>'; });
+  }
+
+  $$('.bk2-resource-tab').forEach(function (t) {
+    t.addEventListener('click', function () {
+      resourceState.tab = t.dataset.rtab;
+      resourceState.activeFilters.clear();
+      $$('.bk2-resource-tab').forEach(function (x) { x.setAttribute('aria-selected', x === t ? 'true' : 'false'); });
+      renderResources();
+    });
+  });
+  rSearch && rSearch.addEventListener('input', function () { resourceState.q = rSearch.value.toLowerCase().trim(); renderResources(); });
+
+  var PEOPLE_FILTERS = [
+    { key: 'unassigned',  label: 'Unassigned' },
+    { key: 'reserved',    label: 'Reserved' },
+    { key: 'tls',         label: 'TLs only' },
+    { key: 'first_aid',   label: 'First aid' },
+    { key: 'tow',         label: 'Can tow' },
+  ];
+  var VEHICLE_FILTERS = [
+    { key: 'ute',         label: 'Utes' },
+    { key: 'truck',       label: 'Trucks' },
+    { key: 'vms',         label: 'VMS' },
+  ];
+  var EQUIPMENT_FILTERS = [
+    { key: 'sign',        label: 'Signs' },
+    { key: 'lighting',    label: 'Lighting' },
+    { key: 'arrow_board', label: 'Arrow boards' },
+    { key: 'vms',         label: 'VMS' },
+  ];
+
+  function renderResources() {
+    if (!resourceState.data) return;
+    // Build filter chips for the current tab
+    var filters = resourceState.tab === 'people' ? PEOPLE_FILTERS : resourceState.tab === 'vehicles' ? VEHICLE_FILTERS : EQUIPMENT_FILTERS;
+    rFilters.innerHTML = filters.map(function (f) {
+      return '<button type="button" class="bk2-resource-filter" data-fk="' + f.key + '" aria-pressed="' + (resourceState.activeFilters.has(f.key) ? 'true' : 'false') + '">' + esc(f.label) + '</button>';
+    }).join('');
+    rFilters.querySelectorAll('.bk2-resource-filter').forEach(function (b) {
+      b.addEventListener('click', function () {
+        if (resourceState.activeFilters.has(b.dataset.fk)) resourceState.activeFilters.delete(b.dataset.fk);
+        else resourceState.activeFilters.add(b.dataset.fk);
+        renderResources();
+      });
+    });
+
+    var items = [];
+    if (resourceState.tab === 'people') {
+      items = (resourceState.data.people || []).filter(filterPerson).map(function (p) {
+        var warns = (p.warnings || []).filter(function (w) { return w !== 'on_leave'; });
+        return resourceItem(p.id, 'person', p.full_name, (p.tcp_level ? 'L' + p.tcp_level + ' · ' : '') + (p.role || '').replace(/_/g, ' ') + (warns.length ? ' · ⚠' : ''));
+      });
+    } else if (resourceState.tab === 'vehicles') {
+      items = (resourceState.data.vehicles || []).filter(filterVehicle).map(function (v) {
+        return resourceItem(v.id, 'vehicle', v.name, (v.licence_plate || v.asset_number || v.category || '').toUpperCase());
+      });
+    } else {
+      items = (resourceState.data.equipment || []).filter(filterEquipment).map(function (e) {
+        return resourceItem(e.id, 'equipment', e.name, (e.category || '').replace(/_/g, ' '));
+      });
+    }
+    rBody.innerHTML = items.length ? items.join('') : '<p style="color:#9CA3AF;font-size:12px;text-align:center;padding:24px 0">No matches.</p>';
+    rBody.querySelectorAll('.bk2-resource-item').forEach(wireResourceDrag);
+  }
+  function resourceItem(id, type, name, meta) {
+    return '<div class="bk2-resource-item" draggable="true" data-rtype="' + type + '" data-rid="' + id + '" data-rname="' + esc(name) + '">' +
+      '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#9CA3AF;flex-shrink:0">' +
+      (type === 'person' ? '<path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>'
+        : type === 'vehicle' ? '<path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14M5 17a2 2 0 11-4 0 2 2 0 014 0zm14 0a2 2 0 11-4 0 2 2 0 014 0z"/>'
+        : '<path stroke-linecap="round" stroke-linejoin="round" d="M5 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H7a2 2 0 01-2-2V8z"/>') +
+      '</svg>' +
+      '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(name) + '</div>' +
+      '<div class="bk2-resource-item-meta">' + esc(meta) + '</div></div></div>';
+  }
+  function filterPerson(p) {
+    var q = resourceState.q;
+    if (q && !(p.full_name + ' ' + (p.role || '') + ' ' + (p.employee_id || '')).toLowerCase().includes(q)) return false;
+    if (resourceState.activeFilters.has('unassigned') && p.assigned_today) return false;
+    if (resourceState.activeFilters.has('reserved') && p.employment_status !== 'reserved') return false;
+    if (resourceState.activeFilters.has('tls') && !((p.portal_role || p.role || '').includes('team') || (p.portal_role || p.role || '').includes('lead'))) return false;
+    if (resourceState.activeFilters.has('first_aid') && !p.first_aid) return false;
+    return true;
+  }
+  function filterVehicle(v) {
+    var q = resourceState.q;
+    if (q && !((v.name + ' ' + (v.licence_plate || '') + ' ' + (v.asset_number || '')).toLowerCase().includes(q))) return false;
+    var n = (v.name || '').toLowerCase();
+    if (resourceState.activeFilters.has('ute') && !n.includes('ute')) return false;
+    if (resourceState.activeFilters.has('truck') && !n.includes('truck') && !n.includes('pod')) return false;
+    if (resourceState.activeFilters.has('vms') && !n.includes('vms') && v.category !== 'vms') return false;
+    return true;
+  }
+  function filterEquipment(e) {
+    var q = resourceState.q;
+    if (q && !((e.name + ' ' + (e.category || '')).toLowerCase().includes(q))) return false;
+    var any = resourceState.activeFilters.size > 0;
+    if (any && !resourceState.activeFilters.has(e.category)) return false;
+    return true;
+  }
+
+  // ---------- Drag from panel onto card slots ----------
+  var currentDrag = null;
+  function wireResourceDrag(el) {
+    el.addEventListener('dragstart', function (e) {
+      currentDrag = { type: el.dataset.rtype, id: el.dataset.rid, name: el.dataset.rname };
+      el.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('text/plain', JSON.stringify(currentDrag));
+    });
+    el.addEventListener('dragend', function () { el.classList.remove('dragging'); currentDrag = null; clearAllDropHints(); });
+  }
+  function clearAllDropHints() {
+    $$('.bk2-drop-ok').forEach(function (el) { el.classList.remove('bk2-drop-ok'); });
+    $$('.bk2-drop-bad').forEach(function (el) { el.classList.remove('bk2-drop-bad'); });
+  }
+  // Mark every card's slots as drop targets.
+  function isCompatible(slot) {
+    if (!currentDrag) return false;
+    if (slot.classList.contains('bk2-slot--empty')) return currentDrag.type === 'person';
+    if (slot.classList.contains('bk2-veh-slot--empty')) return currentDrag.type === 'vehicle';
+    if (slot.classList.contains('bk2-crew')) return currentDrag.type === 'equipment';
+    return false;
+  }
+  document.addEventListener('dragover', function (e) {
+    var slot = e.target.closest('.bk2-slot--empty, .bk2-veh-slot--empty, .bk2-crew');
+    if (!slot || !currentDrag) return;
+    e.preventDefault();
+    if (isCompatible(slot)) { slot.classList.add('bk2-drop-ok'); slot.classList.remove('bk2-drop-bad'); }
+    else { slot.classList.add('bk2-drop-bad'); }
+  });
+  document.addEventListener('dragleave', function (e) {
+    var slot = e.target.closest('.bk2-slot--empty, .bk2-veh-slot--empty, .bk2-crew');
+    if (slot) { slot.classList.remove('bk2-drop-ok'); slot.classList.remove('bk2-drop-bad'); }
+  });
+  document.addEventListener('drop', function (e) {
+    var slot = e.target.closest('.bk2-slot--empty, .bk2-veh-slot--empty, .bk2-crew');
+    if (!slot || !currentDrag || !isCompatible(slot)) { clearAllDropHints(); return; }
+    e.preventDefault();
+    var card = slot.closest('.bk2-card');
+    if (!card) return;
+    var bookingId = card.dataset.bookingId;
+    var drag = currentDrag;
+    clearAllDropHints();
+    handleResourceDrop(bookingId, slot, drag).then(function () { refreshCard(card, bookingId); });
+  });
+
+  function handleResourceDrop(bookingId, slot, drag) {
+    var body, url;
+    if (drag.type === 'person') {
+      body = new URLSearchParams({ crew_member_id: drag.id, role_on_site: '' }).toString();
+      url = '/bookings/' + bookingId + '/crew';
+    } else if (drag.type === 'vehicle') {
+      body = new URLSearchParams({ equipment_id: drag.id, vehicle_role: 'ute', upgrade_placeholder: '1' }).toString();
+      url = '/bookings/' + bookingId + '/vehicles';
+    } else if (drag.type === 'equipment') {
+      body = new URLSearchParams({ equipment_id: drag.id }).toString();
+      url = '/bookings/' + bookingId + '/equipment';
+    }
+    return fetch(url, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
+      credentials: 'same-origin',
+      body: body,
+    })
+      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, json: j }; }); })
+      .then(function (res) {
+        if (!res.ok) { toast(res.json.error || 'Drop failed', false); return; }
+        toast('Added ' + drag.name);
+      })
+      .catch(function (err) { toast(err.message, false); });
+  }
+
+  // Re-render one card after a drop without reloading the page.
+  function refreshCard(card, bookingId) {
+    // Pull a fresh copy of just this booking from the board endpoint.
+    var u = new URL(location.href);
+    u.searchParams.set('partial', '1');
+    fetch(u.toString(), { headers: { 'Accept': 'text/html' } })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var parser = new DOMParser();
+        var doc = parser.parseFromString(html, 'text/html');
+        var fresh = doc.querySelector('.bk2-card[data-booking-id="' + bookingId + '"]');
+        if (fresh) {
+          card.replaceWith(fresh);
+        } else {
+          // Fall back to refetching just the JSON detail and patching slots.
+          // (Card might have moved status — re-render the whole board.)
+          location.reload();
+        }
+      })
+      .catch(function () { location.reload(); });
+  }
+
+  // 'R' opens the resource panel
+  document.addEventListener('keydown', function (e) {
+    var inField = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+    if (inField || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key === 'r' || e.key === 'R') { e.preventDefault(); resourceState.open ? closeResources() : openResources(); }
   });
 
   // ---------- popstate (back/forward) ----------

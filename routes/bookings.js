@@ -815,6 +815,77 @@ router.get('/resources', (req, res) => {
   }
 });
 
+// GET /api/resources — Resource Panel feed for the new board. Returns
+// people, vehicles, equipment in one call so the panel doesn't need to
+// re-request when the user flips tabs. Each item carries enough meta
+// for inline filtering (licence, tcp_level, availability).
+router.get('/api/resources', (req, res) => {
+  try {
+    const db = getDb();
+    const date = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+    const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+
+    // Bookings on this date and the crew already on them.
+    const assignedIds = db.prepare(`SELECT DISTINCT bc.crew_member_id FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id WHERE DATE(b.start_datetime) = ? AND b.status NOT IN ('cancelled','complete','late_cancellation')`).all(date).map(r => r.crew_member_id);
+
+    // PEOPLE — all active crew members + the employee join for status.
+    const people = db.prepare(`
+      SELECT cm.id, cm.full_name, cm.role, cm.portal_role, cm.phone, cm.employee_id,
+        cm.tc_ticket_expiry, cm.white_card_expiry, cm.licence_expiry, cm.licence_type,
+        cm.tcp_level, cm.first_aid, cm.company, cm.employment_type,
+        COALESCE(e.employment_status, 'active') AS employment_status,
+        e.address, e.suburb, e.state, e.postcode,
+        e.blocked_from_allocation
+      FROM crew_members cm
+      LEFT JOIN employees e ON e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL
+      WHERE cm.active = 1
+        AND COALESCE(e.employment_status, 'active') IN ('active', 'reserved', 'on_leave')
+      ORDER BY cm.full_name
+    `).all().map(p => {
+      const warnings = [];
+      if (p.blocked_from_allocation) warnings.push('blocked');
+      if (p.licence_expiry && p.licence_expiry < today) warnings.push('licence_expired');
+      if (p.tc_ticket_expiry && p.tc_ticket_expiry < today) warnings.push('tc_expired');
+      if (p.white_card_expiry && p.white_card_expiry < today) warnings.push('whitecard_expired');
+      if (p.employment_status === 'on_leave') warnings.push('on_leave');
+      const assignedToday = assignedIds.includes(p.id);
+      return { ...p, warnings, assigned_today: assignedToday };
+    });
+
+    // VEHICLES — equipment rows in the vehicle/ute family.
+    let vehicles = [];
+    try {
+      vehicles = db.prepare(`
+        SELECT id, name, category, asset_number, licence_plate, current_condition
+        FROM equipment
+        WHERE active = 1 AND (
+          category = 'vehicle'
+          OR LOWER(name) LIKE '%ute%' OR LOWER(name) LIKE '%truck%' OR LOWER(name) LIKE '%vms%'
+        )
+        ORDER BY name
+      `).all();
+    } catch (e) {}
+
+    // EQUIPMENT — non-vehicle assets.
+    let equipment = [];
+    try {
+      equipment = db.prepare(`
+        SELECT id, name, category, asset_number, current_condition
+        FROM equipment
+        WHERE active = 1
+          AND category NOT IN ('vehicle')
+          AND LOWER(name) NOT LIKE '%ute%' AND LOWER(name) NOT LIKE '%truck%'
+        ORDER BY category, name
+      `).all();
+    } catch (e) {}
+
+    res.json({ date, people, vehicles, equipment });
+  } catch (err) {
+    console.error('[api/resources]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /bookings/map — Operations map view. MUST be declared above the
 // `/:id` route below or Express matches `/map` against `:id = "map"`,
 // fails the booking lookup, and flashes "Booking not found".
@@ -1306,22 +1377,61 @@ router.post('/:id/vehicles/:vehicleId/driver', (req, res) => {
 
 router.post('/:id/vehicles', (req, res) => {
   const db = getDb();
-  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) { req.flash('error', 'Not found.'); return res.redirect('/bookings'); }
-  const { vehicle_name, registration } = req.body;
-  if (!vehicle_name && !registration) { req.flash('error', 'Name or rego required.'); return res.redirect('/bookings/' + req.params.id); }
-  // crew_member_id only persists when the worker is on this booking.
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) {
+    if (isJson) return res.status(404).json({ error: 'Booking not found' });
+    req.flash('error', 'Not found.'); return res.redirect('/bookings');
+  }
+  // Resource Panel drag: equipment_id from the equipment register
+  let vehicle_name = req.body.vehicle_name || '';
+  let registration = req.body.registration || '';
+  const equipment_id = parseInt(req.body.equipment_id, 10);
+  if (equipment_id) {
+    try {
+      const eq = db.prepare("SELECT name, licence_plate FROM equipment WHERE id = ?").get(equipment_id);
+      if (eq) { if (!vehicle_name) vehicle_name = eq.name; if (!registration && eq.licence_plate) registration = eq.licence_plate; }
+    } catch (e) {}
+  }
+  if (!vehicle_name && !registration) {
+    if (isJson) return res.status(400).json({ error: 'Name or rego required' });
+    req.flash('error', 'Name or rego required.'); return res.redirect('/bookings/' + req.params.id);
+  }
+  // If there's an empty placeholder (no name & no rego, vehicle_role=ute),
+  // upgrade it rather than appending another row — keeps the ute count
+  // matching the requirement.
+  let upgraded = false;
+  if (req.body.upgrade_placeholder !== '0') {
+    const placeholder = db.prepare("SELECT id FROM booking_vehicles WHERE booking_id = ? AND (vehicle_name IS NULL OR vehicle_name = '') AND (registration IS NULL OR registration = '') ORDER BY id LIMIT 1").get(req.params.id);
+    if (placeholder) {
+      db.prepare("UPDATE booking_vehicles SET vehicle_name = ?, registration = ?, vehicle_role = COALESCE(NULLIF(?, ''), vehicle_role) WHERE id = ?")
+        .run(vehicle_name, registration, req.body.vehicle_role || '', placeholder.id);
+      upgraded = placeholder.id;
+    }
+  }
   let driverId = null;
   if (req.body.crew_member_id) {
     const ok = db.prepare("SELECT 1 FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, req.body.crew_member_id);
     if (ok) driverId = req.body.crew_member_id;
   }
-  db.prepare(`
-    INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, vehicle_role, crew_member_id)
-    VALUES (?, ?, ?, ?, ?)
-  `).run(req.params.id, vehicle_name || '', registration || '', req.body.vehicle_role || '', driverId);
-  req.flash('success', 'Vehicle added.'); res.redirect('/bookings/' + req.params.id);
+  let newId = upgraded;
+  if (!upgraded) {
+    const r = db.prepare(`
+      INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, vehicle_role, crew_member_id)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(req.params.id, vehicle_name, registration, req.body.vehicle_role || '', driverId);
+    newId = r.lastInsertRowid;
+  }
+  if (isJson) return res.json({ ok: true, id: newId, upgraded: !!upgraded });
+  req.flash('success', upgraded ? 'Vehicle assigned.' : 'Vehicle added.');
+  res.redirect('/bookings/' + req.params.id);
 });
-router.post('/:id/vehicles/:vehicleId/remove', (req, res) => { getDb().prepare("DELETE FROM booking_vehicles WHERE id=? AND booking_id=?").run(req.params.vehicleId, req.params.id); req.flash('success', 'Removed.'); res.redirect('/bookings/' + req.params.id); });
+router.post('/:id/vehicles/:vehicleId/remove', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  db.prepare("DELETE FROM booking_vehicles WHERE id=? AND booking_id=?").run(req.params.vehicleId, req.params.id);
+  if (isJson) return res.json({ ok: true });
+  req.flash('success', 'Removed.'); res.redirect('/bookings/' + req.params.id);
+});
 
 // ===========================================================================
 // DOCKETS
@@ -1525,23 +1635,31 @@ router.post('/:id/requirements/:reqId/delete', (req, res) => {
 // ===========================================================================
 router.post('/:id/equipment', (req, res) => {
   const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const b = req.body;
+  let newId = null;
   if (b.equipment_id) {
     const eq = db.prepare("SELECT * FROM equipment WHERE id = ?").get(b.equipment_id);
     if (eq) {
-      db.prepare("INSERT INTO booking_equipment (booking_id, equipment_id, equipment_name, equipment_type, quantity) VALUES (?, ?, ?, ?, ?)")
+      const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_id, equipment_name, equipment_type, quantity) VALUES (?, ?, ?, ?, ?)")
         .run(req.params.id, eq.id, eq.name || eq.asset_name || '', eq.category || '', parseInt(b.quantity) || 1);
+      newId = r.lastInsertRowid;
     }
   } else if (b.equipment_name) {
-    db.prepare("INSERT INTO booking_equipment (booking_id, equipment_name, equipment_type, quantity) VALUES (?, ?, ?, ?)")
+    const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_name, equipment_type, quantity) VALUES (?, ?, ?, ?)")
       .run(req.params.id, b.equipment_name, b.equipment_type || '', parseInt(b.quantity) || 1);
+    newId = r.lastInsertRowid;
   }
+  if (isJson) return res.json({ ok: true, id: newId });
   req.flash('success', 'Equipment added.');
   res.redirect('/bookings/' + req.params.id);
 });
 
 router.post('/:id/equipment/:eqId/remove', (req, res) => {
-  getDb().prepare("DELETE FROM booking_equipment WHERE id=? AND booking_id=?").run(req.params.eqId, req.params.id);
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  db.prepare("DELETE FROM booking_equipment WHERE id=? AND booking_id=?").run(req.params.eqId, req.params.id);
+  if (isJson) return res.json({ ok: true });
   req.flash('success', 'Equipment removed.');
   res.redirect('/bookings/' + req.params.id);
 });
