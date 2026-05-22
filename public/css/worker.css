@@ -91,17 +91,18 @@ nav a { -webkit-tap-highlight-color: transparent; user-select: none; min-height:
 
 /* ── Scrolling ── */
 html {
-  /* Set explicit dark background so iOS PWA standalone mode doesn't show
-     UA-default white in the safe-area-bottom zone under the home
-     indicator. Matches Atomis Base. Flipped per-theme. */
-  background: #0F1115;
+  /* Match the bottom tab nav's background so the iOS home-indicator zone
+     blends seamlessly with the nav — without this, the safe-area band
+     under the nav reads as an empty stripe of page color. Body keeps its
+     own page background so content surfaces still sit on the
+     correct tone above the nav. */
+  background: #14171D;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
 }
-:root[data-theme="light"] html,
-:root[data-theme="light"] body.worker-portal { background: #F7F8FA !important; }
-body.worker-portal { color: rgba(255,255,255,0.92); }
-:root[data-theme="light"] body.worker-portal { color: #0F1115 !important; }
+body.worker-portal { background: #0F1115; color: rgba(255,255,255,0.92); }
+:root[data-theme="light"] { background: #FFFFFF !important; }
+:root[data-theme="light"] body.worker-portal { background: #F7F8FA !important; color: #0F1115 !important; }
 
 /* Prevent horizontal overflow on mobile. Any view that accidentally
    includes a wider element should clip rather than introduce a scroll
