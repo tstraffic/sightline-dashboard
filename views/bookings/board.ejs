@@ -370,7 +370,9 @@
       </div>
       <p class="bk2-slideover-sub" id="bk2-so-sub"></p>
     </div>
-    <button type="button" class="bk2-slideover-close" id="bk2-so-close" aria-label="Close (Esc)">
+    <button type="button" class="bk2-slideover-close" id="bk2-so-close" aria-label="Close (Esc)"
+            onclick="(function(){var so=document.getElementById('bk2-slideover'),bd=document.getElementById('bk2-backdrop');so&&so.classList.remove('bk2-open');bd&&bd.classList.remove('bk2-open');var u=new URL(location.href);u.searchParams.delete('b');history.replaceState({},'',u.toString());})()"
+            style="position:relative;z-index:9999;pointer-events:auto">
       <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   </header>
@@ -1064,17 +1066,22 @@
     setTimeout(function () { t.classList.remove('bk2-show'); setTimeout(function () { t.remove(); }, 250); }, 2200);
   }
 
-  // ---------- Card clicks ----------
+  // ---------- Card clicks — full-page navigate, not slide-over ----------
+  // The view-mode slide-over caused stuck "Loading…" states. Cards now
+  // go straight to /bookings/:id which is bulletproof. The slide-over
+  // stays only for Quick Book (create) since that doesn't fetch and
+  // can't get stuck.
   document.addEventListener('click', function (e) {
     var card = e.target.closest('.bk2-card');
     if (card) {
-      var tabBtn = e.target.closest('[data-open-tab]');
       var id = card.dataset.bookingId;
-      openBooking(id, tabBtn ? tabBtn.dataset.openTab : 'details');
+      var tabBtn = e.target.closest('[data-open-tab]');
+      var hash = tabBtn ? '#' + tabBtn.dataset.openTab : '';
+      location.href = '/bookings/' + id + hash;
       return;
     }
     var row = e.target.closest('.bk2-list tbody tr[data-booking-id]');
-    if (row) openBooking(row.dataset.bookingId, 'details');
+    if (row) { location.href = '/bookings/' + row.dataset.bookingId; }
   });
 
   // ---------- + New booking ----------
@@ -1127,7 +1134,7 @@
     if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); selectCard(selectedIdx - 1); return; }
     if (e.key === 'Enter' && selectedIdx >= 0) {
       var arr = cards();
-      if (arr[selectedIdx]) { e.preventDefault(); openBooking(arr[selectedIdx].dataset.bookingId, 'details'); }
+      if (arr[selectedIdx]) { e.preventDefault(); location.href = '/bookings/' + arr[selectedIdx].dataset.bookingId; }
       return;
     }
     if ((e.key === 'e' || e.key === 'E') && selectedIdx >= 0) {
@@ -1369,18 +1376,19 @@
   });
 
   // ---------- popstate (back/forward) ----------
+  // Slide-over only handles Quick Book create now. View pages live at
+  // /bookings/:id (full page), so Back/Forward there is the browser's
+  // normal navigation — nothing for us to wire here beyond toggling
+  // create mode on/off.
   window.addEventListener('popstate', function () {
     var u = new URL(location.href);
     var b = u.searchParams.get('b');
     var v = u.searchParams.get('view') || 'board';
     if (v !== getCurrentView()) setView(v);
-    if (b && b !== 'new') {
-      if (soState.bookingId !== b) openBooking(b);
-    } else if (b === 'new') {
+    if (b === 'new') {
       if (soState.mode !== 'create') openCreate();
     } else if (so.classList.contains('bk2-open')) {
-      so.classList.remove('bk2-open'); backdrop.classList.remove('bk2-open');
-      soState.mode = 'closed';
+      closeSlideover();
     }
   });
   function getCurrentView() {
@@ -1406,7 +1414,7 @@
     pins.forEach(function (p) {
       var m = L.marker([p.lat, p.lng]).addTo(map);
       m.bindPopup('<strong>#' + p.num + '</strong><br>' + (p.title || p.addr || ''));
-      m.on('click', function () { openBooking(p.id, 'details'); });
+      m.on('click', function () { location.href = '/bookings/' + p.id; });
     });
     if (pins.length > 1) map.fitBounds(pins.map(function (p) { return [p.lat, p.lng]; }), { padding: [40, 40] });
     mapInited = true;
@@ -1416,30 +1424,20 @@
   var initialUrl = new URL(location.href);
   var initialView = initialUrl.searchParams.get('view') || 'board';
   if (initialView !== 'board') setView(initialView);
+  // Only ?b=new auto-opens the slide-over (Quick Book). View deep-links
+  // navigate to the full booking page so the slide-over can never strand
+  // the user. Any stale ?b=<id> gets silently stripped on load.
   var initialBooking = window.BK2_DATA.openBookingId || initialUrl.searchParams.get('b');
   if (initialBooking === 'new') {
     openCreate();
-  } else if (initialBooking && /^\d+$/.test(String(initialBooking))) {
-    // ONLY auto-open if the booking is in the rendered list for today.
-    // Cross-day or stale links no longer block the page — they silently
-    // strip from URL and stay closed. The user can still click any card
-    // on the page (or use Cmd+K to jump to another booking).
-    var rendered = (window.BK2_DATA.bookings || []).some(function (b) { return String(b.id) === String(initialBooking); });
-    if (rendered) {
-      openBooking(initialBooking, 'details');
-    } else {
-      console.info('[bookings] ?b=' + initialBooking + ' not on this day — clearing.');
-      pushUrl({ b: null });
-    }
   } else if (initialBooking) {
-    console.warn('[bookings] ignoring non-integer ?b= value:', initialBooking);
     pushUrl({ b: null });
   }
-
-  // bfcache safety: if the user comes back via Back/Forward to this page,
-  // force the slide-over closed so the stuck state can never persist.
-  window.addEventListener('pageshow', function (e) {
-    if (e.persisted && so.classList.contains('bk2-open')) closeSlideover();
+  // Defensive: if anything left a stuck slide-over class around (bfcache,
+  // historical state, whatever), close it on every page load.
+  if (so.classList.contains('bk2-open')) closeSlideover();
+  window.addEventListener('pageshow', function () {
+    if (so.classList.contains('bk2-open') && soState.mode !== 'create') closeSlideover();
   });
 
   // ============================================================
@@ -1499,7 +1497,7 @@
       block.innerHTML = '<strong>' + esc(it.title || ('#' + it.booking_number)) + '</strong>' +
         '<span style="opacity:0.85">' + new Date(it.start_datetime).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase() + '</span>';
       block.dataset.bookingId = it.id;
-      block.addEventListener('click', function () { openBooking(it.id, 'details'); });
+      block.addEventListener('click', function () { location.href = '/bookings/' + it.id; });
       firstCell.appendChild(block);
     });
   }
@@ -1551,7 +1549,7 @@
       { id: 'cmd:today',    label: 'Jump to today',      meta: 'Today',        ic: '⏰', do: function () { paletteClose(); location.href = '/bookings'; } },
     ];
     var bookings = (window.BK2_DATA.bookings || []).map(function (b) {
-      return { id: 'bk:' + b.id, label: '#' + b.num + ' · ' + (b.title || b.addr || 'Untitled'), meta: 'Booking', ic: '🧾', do: function () { paletteClose(); openBooking(b.id, 'details'); } };
+      return { id: 'bk:' + b.id, label: '#' + b.num + ' · ' + (b.title || b.addr || 'Untitled'), meta: 'Booking', ic: '🧾', do: function () { paletteClose(); location.href = '/bookings/' + b.id; } };
     });
     var all = commands.concat(bookings);
     palItems = q ? all.filter(function (it) { return it.label.toLowerCase().includes(q); }) : all;
