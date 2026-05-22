@@ -1,6 +1,13 @@
 <% locals.currentPage = 'bookings' %>
 <%
-  // ---- helpers ----
+  // ============================================================
+  //  Bookings — day Board (rebuilt clean).
+  //  Views: Board (default) / List / Calendar / Map — client-side
+  //  tab toggle, all panes rendered server-side.
+  //  Cards link to /bookings/:id (no view-mode slide-over — the slide
+  //  over only handles Quick Book CREATE, so there's nothing that can
+  //  get stuck in a Loading state on page load).
+  // ============================================================
   function fmtTime(iso) {
     if (!iso) return '';
     return new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Australia/Sydney' }).toLowerCase().replace(' ', '');
@@ -18,86 +25,66 @@
     if (/hoist/i.test(r)) return 'HO';
     return 'TC';
   }
-  var WARNING_LABELS = {
-    tight_schedule: 'Tight schedule',
-    fatigued: 'Fatigued',
-    required_licence_missing: 'Needs licence',
-    not_qualified: 'Not qualified',
-    cant_tow: 'Can’t tow',
-    on_leave: 'On leave',
-  };
 %>
 
 <div class="bk2-page">
 
   <!-- ============================================================
-       HEADER  —  title, view tabs, day nav, depot, filter chips, +New
+       HEADER  —  title · view tabs · day nav · + New booking
        ============================================================ -->
-  <div class="bk2-header">
+  <header class="bk2-header">
     <div class="bk2-header-left">
       <h1 class="bk2-title">Bookings</h1>
     </div>
+
     <div class="bk2-header-right">
-      <!-- View switcher (client-side toggle) -->
-      <div class="bk2-views" role="tablist" aria-label="View switcher">
-        <button class="bk2-view-tab" data-view-tab="board" aria-selected="true" role="tab">
-          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-          Board
-        </button>
-        <button class="bk2-view-tab" data-view-tab="list" role="tab">
-          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18M3 18h18M3 6h18"/></svg>
-          List
-        </button>
-        <button class="bk2-view-tab" data-view-tab="calendar" role="tab">
-          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3M16 7V3M3 11h18M5 5h14a2 2 0 012 2v12a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2z"/></svg>
-          Calendar
-        </button>
-        <button class="bk2-view-tab" data-view-tab="map" role="tab">
-          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 9m0 8V9m0 0L9 7"/></svg>
-          Map
-        </button>
+      <!-- View switcher (client-side tab toggle) -->
+      <div class="bk2-views" role="tablist" aria-label="View">
+        <button type="button" class="bk2-view-tab" data-view-tab="board"    aria-selected="true" role="tab">Board</button>
+        <button type="button" class="bk2-view-tab" data-view-tab="list"     role="tab">List</button>
+        <button type="button" class="bk2-view-tab" data-view-tab="calendar" role="tab">Calendar</button>
+        <button type="button" class="bk2-view-tab" data-view-tab="map"      role="tab">Map</button>
       </div>
 
       <!-- Day navigator -->
       <div class="bk2-daynav">
-        <a href="/bookings/board?date=<%= prevDate %>" title="Previous day" aria-label="Previous day">
+        <a href="/bookings?date=<%= prevDate %>" title="Previous day" aria-label="Previous day">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
         </a>
-        <form method="GET" action="/bookings/board" style="display:inline-flex">
+        <form method="GET" action="/bookings" style="display:inline-flex">
           <input type="date" name="date" value="<%= dateStr %>" onchange="this.form.submit()">
         </form>
-        <a href="/bookings/board?date=<%= nextDate %>" title="Next day" aria-label="Next day">
+        <a href="/bookings?date=<%= nextDate %>" title="Next day" aria-label="Next day">
           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </a>
         <% if (!isToday) { %>
-          <a class="bk2-daynav-today" href="/bookings/board">Today</a>
+          <a class="bk2-daynav-today" href="/bookings">Today</a>
         <% } %>
       </div>
 
-      <!-- New booking -->
       <button type="button" class="bk2-newbtn" id="bk2-new-btn" title="Create a booking (N)">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
         New booking
         <kbd>N</kbd>
       </button>
     </div>
-  </div>
+  </header>
 
-  <!-- Active filter chips -->
+  <!-- Filter chips bar -->
   <div class="bk2-chips">
     <% if (filters.depot) { %>
-      <span class="bk2-chip">Depot: <%= filters.depot %><a href="?date=<%= dateStr %><%= filters.status ? '&status='+filters.status : '' %><%= filters.q ? '&q='+encodeURIComponent(filters.q) : '' %>"><button type="button" aria-label="Clear depot">×</button></a></span>
+      <span class="bk2-chip">Depot: <%= filters.depot %><a href="?date=<%= dateStr %>" aria-label="Clear depot"><button type="button">×</button></a></span>
     <% } %>
     <% if (filters.status) { %>
-      <span class="bk2-chip">Status: <%= statusLabel(filters.status) %><a href="?date=<%= dateStr %><%= filters.depot ? '&depot='+filters.depot : '' %><%= filters.q ? '&q='+encodeURIComponent(filters.q) : '' %>"><button type="button" aria-label="Clear status">×</button></a></span>
+      <span class="bk2-chip">Status: <%= statusLabel(filters.status) %><a href="?date=<%= dateStr %>" aria-label="Clear status"><button type="button">×</button></a></span>
     <% } %>
     <% if (filters.q) { %>
-      <span class="bk2-chip">Search: "<%= filters.q %>"<a href="?date=<%= dateStr %><%= filters.depot ? '&depot='+filters.depot : '' %><%= filters.status ? '&status='+filters.status : '' %>"><button type="button" aria-label="Clear search">×</button></a></span>
+      <span class="bk2-chip">Search: "<%= filters.q %>"<a href="?date=<%= dateStr %>" aria-label="Clear search"><button type="button">×</button></a></span>
     <% } %>
     <details class="bk2-chip bk2-chip-add" style="position:relative">
       <summary style="list-style:none;cursor:pointer">+ Add filter</summary>
       <div style="position:absolute;top:100%;left:0;margin-top:6px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:30;min-width:240px">
-        <form method="GET" action="/bookings/board" style="display:flex;flex-direction:column;gap:8px">
+        <form method="GET" action="/bookings" style="display:flex;flex-direction:column;gap:8px">
           <input type="hidden" name="date" value="<%= dateStr %>">
           <label style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase">Depot
             <select name="depot" style="width:100%;padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;margin-top:3px">
@@ -123,9 +110,9 @@
   <p class="bk2-daylabel"><strong><%= dayLabel %></strong> · <%= bookings.length %> booking<%= bookings.length === 1 ? '' : 's' %></p>
 
   <!-- ============================================================
-       BOARD PANE  —  single column of wide dream cards
+       BOARD PANE — wide cards sorted by start time
        ============================================================ -->
-  <section class="bk2-pane" data-view-pane="board" aria-current="true" id="bk2-pane-board">
+  <section class="bk2-pane" data-view-pane="board" aria-current="true">
     <% if (!bookings.length) { %>
       <div class="bk2-empty">
         <div style="font-size:42px;margin-bottom:10px">📋</div>
@@ -138,10 +125,9 @@
         <p style="font-size:11px;color:#9CA3AF;margin-top:14px">or press <kbd style="background:#fff;border:1px solid #D1D5DB;padding:1px 6px;border-radius:4px;font-family:ui-monospace,monospace;font-size:10px;color:#374151">N</kbd> · pick another day above</p>
       </div>
     <% } else { %>
-      <div class="bk2-board" id="bk2-board-list">
-        <% bookings.forEach(function (b, idx) { %>
-          <article class="bk2-card bk2-status-tone-<%= b.status %>" data-booking-id="<%= b.id %>" data-card-idx="<%= idx %>" tabindex="0">
-            <!-- Status banner -->
+      <div class="bk2-board">
+        <% bookings.forEach(function (b) { %>
+          <a class="bk2-card bk2-status-tone-<%= b.status %>" href="/bookings/<%= b.id %>" data-booking-id="<%= b.id %>" style="text-decoration:none;color:inherit">
             <header class="bk2-card-banner bk2-status--<%= b.status %>">
               <span style="display:inline-flex;align-items:center;gap:8px">
                 <span><%= statusLabel(b.status) %></span>
@@ -152,39 +138,22 @@
                 #<%= b.booking_number || b.id %> · <%= fmtTime(b.start_datetime) %> → <%= fmtTime(b.end_datetime) %>
               </span>
             </header>
-
-            <!-- Body -->
             <div class="bk2-card-body">
               <div class="bk2-card-h3">
                 <span><%= b.title || b.site_address || 'Untitled booking' %></span>
               </div>
-
               <div class="bk2-meta-list">
                 <% if (b.client_name || b.job_name) { %>
-                  <div>
-                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5m14 0h2m-2 0h-5m-9 0H3m2 0h5"/></svg>
-                    <span><%= b.client_name || '' %><%= b.client_name && b.job_name ? ' · ' : '' %><%= b.job_name || '' %></span>
-                  </div>
+                  <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5"/></svg><span><%= b.client_name || '' %><%= b.client_name && b.job_name ? ' · ' : '' %><%= b.job_name || '' %></span></div>
                 <% } %>
                 <% if (b.site_address) { %>
-                  <div>
-                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-                    <span><%= b.site_address %><%= b.suburb ? ', ' + b.suburb : '' %><%= b.state ? ' ' + b.state : '' %></span>
-                  </div>
+                  <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span><%= b.site_address %><%= b.suburb ? ', ' + b.suburb : '' %><%= b.state ? ' ' + b.state : '' %></span></div>
                 <% } %>
                 <% if (b.requester_name || b.depot) { %>
-                  <div>
-                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                    <span>
-                      <% if (b.requester_name) { %>Requester: <%= b.requester_name %><% } %>
-                      <% if (b.requester_name && b.depot) { %> · <% } %>
-                      <% if (b.depot) { %>Depot: <%= b.depot %><% } %>
-                    </span>
-                  </div>
+                  <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg><span><% if (b.requester_name) { %>Requester: <%= b.requester_name %><% } %><% if (b.requester_name && b.depot) { %> · <% } %><% if (b.depot) { %>Depot: <%= b.depot %><% } %></span></div>
                 <% } %>
               </div>
 
-              <!-- Crew blocks -->
               <% if (b.crew_blocks && b.crew_blocks.length) { %>
                 <div class="bk2-crews">
                   <% b.crew_blocks.forEach(function (blk) { %>
@@ -199,18 +168,11 @@
                             <span class="bk2-slot-avatar"><%= initials(slot.name) %></span>
                             <span class="bk2-slot-role-tag"><%= roleAbbr(slot.role) %></span>
                             <span class="bk2-slot-name"><%= slot.name %></span>
-                            <% if (slot.employment_status === 'reserved') { %>
-                              <span class="bk2-warn" style="background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE">RES</span>
-                            <% } %>
-                            <% (slot.warnings || []).forEach(function (w) { %>
-                              <span class="bk2-warn <%= w === 'on_leave' || w === 'required_licence_missing' ? 'bk2-warn--red' : '' %>" title="<%= WARNING_LABELS[w] || w %>">⚠ <%= WARNING_LABELS[w] || w %></span>
-                            <% }); %>
-                            <% if (slot.bc_status === 'confirmed') { %>
-                              <span style="color:#059669;font-weight:700" title="Confirmed">✓</span>
-                            <% } %>
+                            <% if (slot.employment_status === 'reserved') { %><span class="bk2-warn" style="background:#DBEAFE;color:#1E40AF;border-color:#BFDBFE">RES</span><% } %>
+                            <% if (slot.bc_status === 'confirmed') { %><span style="color:#059669;font-weight:700" title="Confirmed">✓</span><% } %>
                           </div>
                         <% } else { %>
-                          <div class="bk2-slot bk2-slot--empty">drop a <%= blk.role || 'TC' %> here</div>
+                          <div class="bk2-slot bk2-slot--empty">empty <%= blk.role || 'TC' %> slot</div>
                         <% } %>
                       <% }); %>
                       <% if (blk.vehicle_slot && blk.vehicle_slot.filled) { %>
@@ -221,72 +183,40 @@
                           <% if (blk.vehicle_slot.role) { %><span style="background:#FEF3C7;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;text-transform:uppercase;color:#92400E"><%= blk.vehicle_slot.role %></span><% } %>
                         </div>
                       <% } else { %>
-                        <div class="bk2-veh-slot bk2-veh-slot--empty">drop a UTE here</div>
-                      <% } %>
-                      <% if (blk.addons && blk.addons.length) { %>
-                        <div class="bk2-addons">
-                          <% blk.addons.forEach(function (a) { %>
-                            <span class="bk2-addon"><span class="bk2-addon-arrow">↳</span> <%= a.type %> · <%= a.name %></span>
-                          <% }); %>
-                        </div>
-                      <% } %>
-                      <% if (blk.extra_vehicles && blk.extra_vehicles.length) { %>
-                        <div class="bk2-addons">
-                          <% blk.extra_vehicles.forEach(function (v) { %>
-                            <span class="bk2-addon"><span class="bk2-addon-arrow">+</span> <%= v.name || v.registration %></span>
-                          <% }); %>
-                        </div>
+                        <div class="bk2-veh-slot bk2-veh-slot--empty">no vehicle assigned</div>
                       <% } %>
                     </div>
                   <% }); %>
                 </div>
               <% } %>
-            </div>
 
-            <!-- Footer tabs -->
-            <footer class="bk2-card-footer">
-              <button type="button" data-open-tab="details">Details</button>
-              <button type="button" data-open-tab="crews">Crews <% if (b.crew_count) { %><span class="bk2-tab-count"><%= b.crew_confirmed %>/<%= b.crew_count %></span><% } %></button>
-              <button type="button" data-open-tab="docs">Docs <% if (b.counts.docs) { %><span class="bk2-tab-count"><%= b.counts.docs %></span><% } %></button>
-              <button type="button" data-open-tab="notes">Notes <% if (b.counts.notes) { %><span class="bk2-tab-count"><%= b.counts.notes %></span><% } %></button>
-              <button type="button" data-open-tab="dockets">Dockets <% if (b.counts.dockets) { %><span class="bk2-tab-count"><%= b.counts.dockets %></span><% } %></button>
-            </footer>
-          </article>
+              <div class="bk2-card-footer" style="border-top:1px solid #F3F4F6;margin-top:6px;padding-top:6px;display:flex;gap:12px;font-size:11px;color:#6B7280">
+                <span>👥 <%= b.crew_confirmed %>/<%= b.crew_count %></span>
+                <span>🚙 <%= b.vehicle_count %></span>
+                <% if (b.counts && b.counts.docs) { %><span>📄 <%= b.counts.docs %></span><% } %>
+                <% if (b.counts && b.counts.notes) { %><span>📝 <%= b.counts.notes %></span><% } %>
+                <% if (b.counts && b.counts.dockets) { %><span>🧾 <%= b.counts.dockets %></span><% } %>
+                <span style="margin-left:auto;color:#2B7FFF;font-weight:600">Open →</span>
+              </div>
+            </div>
+          </a>
         <% }); %>
       </div>
     <% } %>
   </section>
 
   <!-- ============================================================
-       LIST PANE  —  dense table with bulk select + bulk status
+       LIST PANE — dense table
        ============================================================ -->
-  <section class="bk2-pane" data-view-pane="list" id="bk2-pane-list">
+  <section class="bk2-pane" data-view-pane="list">
     <% if (!bookings.length) { %>
       <div class="bk2-empty"><h3>No bookings for <%= dayLabel %></h3></div>
     <% } else { %>
-      <div id="bk2-bulk-bar" style="display:none;align-items:center;gap:10px;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px 14px;border-radius:10px;margin-bottom:10px">
-        <span id="bk2-bulk-count" style="font-size:12px;font-weight:700;color:#1E40AF">0 selected</span>
-        <span style="color:#9CA3AF">·</span>
-        <span style="font-size:11px;color:#6B7280">Set status:</span>
-        <select id="bk2-bulk-status" style="padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px">
-          <option value="">— pick —</option>
-          <% statuses.forEach(function (s) { %><option value="<%= s %>"><%= statusLabel(s) %></option><% }); %>
-        </select>
-        <button type="button" id="bk2-bulk-apply" disabled style="background:#2B7FFF;color:#fff;border:0;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Apply</button>
-        <span style="flex:1"></span>
-        <button type="button" id="bk2-bulk-clear" style="background:transparent;border:0;color:#6B7280;font-size:12px;cursor:pointer">Clear selection</button>
-      </div>
       <table class="bk2-list">
-        <thead>
-          <tr>
-            <th style="width:32px"><input type="checkbox" id="bk2-list-all"></th>
-            <th>Time</th><th>#</th><th>Status</th><th>Site / Client</th><th>Depot</th><th>Crew</th><th>Vehicles</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Time</th><th>#</th><th>Status</th><th>Site / Client</th><th>Depot</th><th>Crew</th><th>Vehicles</th></tr></thead>
         <tbody>
           <% bookings.forEach(function (b) { %>
-            <tr data-booking-id="<%= b.id %>" tabindex="0">
-              <td><input type="checkbox" class="bk2-list-chk" data-id="<%= b.id %>" onclick="event.stopPropagation()"></td>
+            <tr onclick="location.href='/bookings/<%= b.id %>'" style="cursor:pointer">
               <td style="font-family:ui-monospace,monospace;font-size:11px;color:#374151"><%= fmtTime(b.start_datetime) %>–<%= fmtTime(b.end_datetime) %></td>
               <td style="font-family:ui-monospace,monospace;font-size:11px;color:#9CA3AF">#<%= b.booking_number || b.id %></td>
               <td><span class="bk2-status-pill bk2-status--<%= b.status %>"><%= statusLabel(b.status) %></span></td>
@@ -305,9 +235,9 @@
   </section>
 
   <!-- ============================================================
-       CALENDAR PANE  —  week timeline (8am–8pm)
+       CALENDAR PANE — week timeline
        ============================================================ -->
-  <section class="bk2-pane" data-view-pane="calendar" id="bk2-pane-calendar">
+  <section class="bk2-pane" data-view-pane="calendar">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
       <div style="display:flex;gap:6px">
         <button type="button" id="bk2-cal-prev" class="bk2-newbtn" style="background:#F3F4F6;color:#374151;font-weight:500">← Prev week</button>
@@ -315,427 +245,239 @@
       </div>
       <p id="bk2-cal-range" style="color:#6B7280;font-size:13px;font-weight:600">Loading…</p>
     </div>
-    <div id="bk2-cal-grid">
-      <p style="color:#9CA3AF;font-size:13px;text-align:center;padding:48px 0">Loading…</p>
-    </div>
+    <div id="bk2-cal-grid"><p style="color:#9CA3AF;font-size:13px;text-align:center;padding:48px 0">Calendar loads when opened.</p></div>
   </section>
 
   <!-- ============================================================
-       MAP PANE  —  Leaflet inline (same data, just plotted)
+       MAP PANE — Leaflet inline
        ============================================================ -->
-  <section class="bk2-pane" data-view-pane="map" id="bk2-pane-map">
+  <section class="bk2-pane" data-view-pane="map">
     <div id="bk2-map" class="bk2-map"></div>
   </section>
 
 </div>
 
 <!-- ============================================================
-     RESOURCE PANEL  —  People / Vehicles / Equipment with drag-drop
-     ============================================================ -->
-<button type="button" class="bk2-resource-toggle-btn" id="bk2-resource-toggle" title="Show / hide the resource panel (R)">
-  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-  <span>Resources</span>
-</button>
-<aside class="bk2-resource-panel" id="bk2-resource-panel">
-  <header class="bk2-resource-panel-head">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-      <h3 style="font-size:13px;font-weight:700;color:#111827;margin:0">Resources</h3>
-      <button type="button" id="bk2-resource-close" style="appearance:none;background:transparent;border:0;color:#6B7280;cursor:pointer;padding:2px">
-        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-      </button>
-    </div>
-    <div class="bk2-resource-tabs" role="tablist">
-      <button class="bk2-resource-tab" data-rtab="people"    aria-selected="true">People</button>
-      <button class="bk2-resource-tab" data-rtab="vehicles">Vehicles</button>
-      <button class="bk2-resource-tab" data-rtab="equipment">Equipment</button>
-    </div>
-    <input type="text" class="bk2-resource-search" id="bk2-resource-search" placeholder="Search…" style="margin-top:6px">
-    <div class="bk2-resource-filters" id="bk2-resource-filters"></div>
-  </header>
-  <div class="bk2-resource-body" id="bk2-resource-body">
-    <p style="color:#9CA3AF;font-size:12px;text-align:center;padding:24px 0">Loading…</p>
-  </div>
-</aside>
-
-<!-- ============================================================
-     UNIVERSAL SLIDE-OVER  —  view + create modes
+     QUICK BOOK SLIDE-OVER  —  CREATE ONLY (the only mode that
+     uses a slide-over; view always goes to /bookings/:id full page).
      ============================================================ -->
 <div class="bk2-backdrop" id="bk2-backdrop"></div>
 <aside class="bk2-slideover" id="bk2-slideover" role="dialog" aria-modal="true" aria-labelledby="bk2-so-title">
   <header class="bk2-slideover-head">
     <div style="min-width:0">
-      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span class="bk2-status-pill" id="bk2-so-status-pill" style="background:#E5E7EB;color:#374151">…</span>
-        <h2 class="bk2-slideover-title" id="bk2-so-title">Loading…</h2>
-      </div>
-      <p class="bk2-slideover-sub" id="bk2-so-sub"></p>
+      <h2 class="bk2-slideover-title" id="bk2-so-title">New booking</h2>
+      <p class="bk2-slideover-sub">Quick Book — 6 fields. Save creates a draft.</p>
     </div>
-    <button type="button" class="bk2-slideover-close" id="bk2-so-close" aria-label="Close (Esc)"
-            onclick="(function(){var so=document.getElementById('bk2-slideover'),bd=document.getElementById('bk2-backdrop');so&&so.classList.remove('bk2-open');bd&&bd.classList.remove('bk2-open');var u=new URL(location.href);u.searchParams.delete('b');history.replaceState({},'',u.toString());})()"
-            style="position:relative;z-index:9999;pointer-events:auto">
+    <button type="button" class="bk2-slideover-close"
+            onclick="document.getElementById('bk2-slideover').classList.remove('bk2-open');document.getElementById('bk2-backdrop').classList.remove('bk2-open');"
+            aria-label="Close">
       <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   </header>
 
-  <nav class="bk2-slideover-tabs" id="bk2-so-tabs" role="tablist">
-    <button class="bk2-slideover-tab" data-so-tab="details" role="tab" aria-selected="true">Details</button>
-    <button class="bk2-slideover-tab" data-so-tab="crews" role="tab">Crews</button>
-    <button class="bk2-slideover-tab" data-so-tab="docs" role="tab">Docs</button>
-    <button class="bk2-slideover-tab" data-so-tab="notes" role="tab">Notes</button>
-    <button class="bk2-slideover-tab" data-so-tab="dockets" role="tab">Dockets</button>
-    <button class="bk2-slideover-tab" data-so-tab="tasks" role="tab">Tasks</button>
-    <button class="bk2-slideover-tab" data-so-tab="forms" role="tab">Forms</button>
-  </nav>
+  <div class="bk2-slideover-body">
+    <form id="bk2-qb-form" method="POST" action="/bookings/quick">
+      <%- include('../partials/csrf') %>
 
-  <div class="bk2-slideover-body" id="bk2-so-body">
-    <p style="color:#6B7280;font-size:13px;text-align:center;padding:40px 0">Loading…</p>
+      <label class="bk2-row"><span class="lbl">Client *</span><span class="val">
+        <input list="bk2-clients" name="client_name" autocomplete="off" placeholder="Start typing…" required
+          style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
+      </span></label>
+
+      <label class="bk2-row"><span class="lbl">Site / project *</span><span class="val">
+        <input list="bk2-jobs" name="site_label" placeholder="Job name or site label" required
+          style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
+      </span></label>
+
+      <label class="bk2-row"><span class="lbl">Site address *</span><span class="val">
+        <span style="position:relative;display:block">
+          <input type="text" name="site_address" id="bk2-addr-input" placeholder="Start typing the address…" autocomplete="off" required
+            style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
+          <div id="bk2-addr-suggest" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #E5E7EB;border-radius:8px;margin-top:4px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:60;max-height:240px;overflow:auto;display:none"></div>
+        </span>
+        <input type="hidden" name="suburb"    id="bk2-addr-suburb">
+        <input type="hidden" name="state"     id="bk2-addr-state">
+        <input type="hidden" name="postcode"  id="bk2-addr-postcode">
+        <input type="hidden" name="latitude"  id="bk2-addr-lat">
+        <input type="hidden" name="longitude" id="bk2-addr-lng">
+      </span></label>
+
+      <label class="bk2-row"><span class="lbl">Date *</span><span class="val">
+        <input type="date" name="start_date" value="<%= dateStr %>" required
+          style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
+      </span></label>
+
+      <label class="bk2-row"><span class="lbl">Time *</span><span class="val">
+        <span style="display:flex;align-items:center;gap:6px">
+          <input type="time" name="start_time" value="06:00" required style="flex:1;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
+          <span style="color:#9CA3AF">→</span>
+          <input type="time" name="end_time" value="14:30" style="flex:1;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
+        </span>
+      </span></label>
+
+      <label class="bk2-row"><span class="lbl">Depot *</span><span class="val">
+        <select name="depot" required style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
+          <option value="">— pick —</option>
+          <% depots.forEach(function (d) { %><option value="<%= d %>"><%= d %></option><% }); %>
+        </select>
+      </span></label>
+
+      <fieldset style="margin-top:14px;border:1px solid #E5E7EB;border-radius:10px;padding:12px">
+        <legend style="padding:0 6px;font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em">Crew composition</legend>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;font-size:13px">
+          <% [1,2,3,4,5].forEach(function (n) { %>
+            <span><%= n %>-man crew <span style="color:#9CA3AF;font-size:11px">· <%= n %> TCs + 1 ute</span></span>
+            <span class="bk2-stepper" data-stepper-name="crew_size_<%= n %>">
+              <button type="button" data-step="-1">−</button>
+              <input type="number" name="crew_size_<%= n %>" value="<%= n === 2 ? 1 : 0 %>" min="0" max="20" readonly>
+              <button type="button" data-step="+1">+</button>
+            </span>
+          <% }); %>
+        </div>
+      </fieldset>
+
+      <fieldset style="margin-top:10px;border:1px solid #E5E7EB;border-radius:10px;padding:12px">
+        <legend style="padding:0 6px;font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em">Add-ons</legend>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;font-size:13px">
+          <% addons.forEach(function (a) { %>
+            <span><%= a.label %></span>
+            <span class="bk2-stepper" data-stepper-name="addon_<%= a.key %>">
+              <button type="button" data-step="-1">−</button>
+              <input type="number" name="addon_<%= a.key %>" value="0" min="0" max="20" readonly>
+              <button type="button" data-step="+1">+</button>
+            </span>
+          <% }); %>
+        </div>
+      </fieldset>
+
+      <p id="bk2-qb-summary" style="margin-top:12px;padding:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:12px;color:#065F46;line-height:1.5">1× 2-man crew · 1 ute.</p>
+    </form>
   </div>
 
-  <footer class="bk2-slideover-foot" id="bk2-so-foot">
-    <a href="#" id="bk2-so-fullpage" style="font-size:12px;font-weight:600;color:#6B7280;text-decoration:none">Open full page →</a>
-    <span style="font-size:11px;color:#9CA3AF">Press <kbd style="background:#fff;border:1px solid #D1D5DB;padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace">Esc</kbd> to close</span>
+  <footer class="bk2-slideover-foot">
+    <a href="/bookings/new" style="font-size:12px;font-weight:600;color:#6B7280;text-decoration:none">Full setup →</a>
+    <button type="submit" form="bk2-qb-form" style="background:#059669;color:#fff;border:0;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
+      Save <kbd style="background:rgba(255,255,255,0.2);padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:10px;margin-left:4px">⌘↵</kbd>
+    </button>
   </footer>
 </aside>
 
-<!-- ============================================================
-     COMMAND PALETTE (Cmd+K / Ctrl+K)
-     ============================================================ -->
-<div class="bk2-palette-backdrop" id="bk2-palette-backdrop"></div>
-<div class="bk2-palette" id="bk2-palette" role="dialog" aria-label="Command palette">
-  <input type="text" class="bk2-palette-input" id="bk2-palette-input" placeholder="Jump to booking by #, client, site, or run a command…" autocomplete="off">
-  <div class="bk2-palette-list" id="bk2-palette-list"></div>
-</div>
-
-<!-- ============================================================
-     QUICK BOOK FORM TEMPLATE  —  rendered into the slide-over body
-     when openCreate() runs.
-     ============================================================ -->
-<template id="bk2-quickbook-template">
-  <form id="bk2-quickbook-form" method="POST" action="/bookings/quick">
-    <%- include('../partials/csrf') %>
-    <p style="font-size:12px;color:#6B7280;margin-bottom:14px">Press <kbd style="background:#F3F4F6;padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:10px">⌘↵</kbd> to save.</p>
-
-    <label class="bk2-row"><span class="lbl">Client *</span><span class="val">
-      <input list="bk2-clients" name="client_name" autocomplete="off" placeholder="Start typing…" required
-        style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
-    </span></label>
-
-    <label class="bk2-row"><span class="lbl">Site / project *</span><span class="val">
-      <input list="bk2-jobs" name="site_label" placeholder="Job name or site label" required
-        style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
-    </span></label>
-
-    <label class="bk2-row"><span class="lbl">Site address *</span><span class="val">
-      <span style="position:relative;display:block">
-        <input type="text" name="site_address" id="bk2-addr-input" placeholder="Start typing the address…" autocomplete="off" required
-          style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
-        <div id="bk2-addr-suggest" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #E5E7EB;border-radius:8px;margin-top:4px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:60;max-height:240px;overflow:auto;display:none"></div>
-      </span>
-      <input type="hidden" name="suburb"   id="bk2-addr-suburb">
-      <input type="hidden" name="state"    id="bk2-addr-state">
-      <input type="hidden" name="postcode" id="bk2-addr-postcode">
-      <input type="hidden" name="latitude" id="bk2-addr-lat">
-      <input type="hidden" name="longitude" id="bk2-addr-lng">
-      <p id="bk2-addr-hint" style="font-size:10px;color:#9CA3AF;margin-top:4px">Autocomplete via OpenStreetMap (AU-biased).</p>
-    </span></label>
-
-    <label class="bk2-row"><span class="lbl">Date *</span><span class="val">
-      <input type="date" name="start_date" value="<%= dateStr %>" required
-        style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
-    </span></label>
-
-    <label class="bk2-row"><span class="lbl">Time *</span><span class="val">
-      <span style="display:flex;align-items:center;gap:6px">
-        <input type="time" name="start_time" value="06:00" required style="flex:1;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
-        <span style="color:#9CA3AF">→</span>
-        <input type="time" name="end_time" value="14:30" style="flex:1;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
-      </span>
-    </span></label>
-
-    <label class="bk2-row"><span class="lbl">Depot *</span><span class="val">
-      <select name="depot" required style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
-        <option value="">— pick —</option>
-        <% depots.forEach(function (d) { %><option value="<%= d %>"><%= d %></option><% }); %>
-      </select>
-    </span></label>
-
-    <!-- Crew composition stepper -->
-    <fieldset style="margin-top:14px;border:1px solid #E5E7EB;border-radius:10px;padding:12px">
-      <legend style="padding:0 6px;font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em">Crew composition</legend>
-      <div id="bk2-crew-stepper" style="display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;font-size:13px">
-        <% [1,2,3,4,5].forEach(function (n) { %>
-          <span><%= n %>-man crew <span style="color:#9CA3AF;font-size:11px">· <%= n %> TCs + 1 ute</span></span>
-          <span class="bk2-stepper" data-stepper-name="crew_size_<%= n %>">
-            <button type="button" data-step="-1">−</button>
-            <input type="number" name="crew_size_<%= n %>" value="<%= n === 2 ? 1 : 0 %>" min="0" max="20" readonly>
-            <button type="button" data-step="+1">+</button>
-          </span>
-        <% }); %>
-      </div>
-    </fieldset>
-
-    <!-- Add-ons stepper -->
-    <fieldset style="margin-top:10px;border:1px solid #E5E7EB;border-radius:10px;padding:12px">
-      <legend style="padding:0 6px;font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em">Add-ons</legend>
-      <div style="display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;font-size:13px">
-        <% addons.forEach(function (a) { %>
-          <span><%= a.label %></span>
-          <span class="bk2-stepper" data-stepper-name="addon_<%= a.key %>">
-            <button type="button" data-step="-1">−</button>
-            <input type="number" name="addon_<%= a.key %>" value="0" min="0" max="20" readonly>
-            <button type="button" data-step="+1">+</button>
-          </span>
-        <% }); %>
-      </div>
-    </fieldset>
-
-    <p id="bk2-qb-summary" style="margin-top:12px;padding:10px;background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;font-size:12px;color:#065F46;line-height:1.5">1× 2-man crew · 1 ute</p>
-
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid #E5E7EB">
-      <a href="/bookings/new" style="font-size:12px;font-weight:600;color:#6B7280;text-decoration:none">Full setup →</a>
-      <button type="submit" style="background:#059669;color:#fff;border:0;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">
-        Save <kbd style="background:rgba(255,255,255,0.2);padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace;font-size:10px;margin-left:4px">⌘↵</kbd>
-      </button>
-    </div>
-  </form>
-
-  <datalist id="bk2-clients">
-    <% clients.forEach(function (c) { %><option value="<%= c.company_name %>"><% }); %>
-  </datalist>
-  <datalist id="bk2-jobs">
-    <% jobs.forEach(function (j) { %><option value="<%= j.job_name %><%= j.site_address ? ' — ' + j.site_address : '' %>"><% }); %>
-  </datalist>
-</template>
+<datalist id="bk2-clients">
+  <% clients.forEach(function (c) { %><option value="<%= c.company_name %>"><% }); %>
+</datalist>
+<datalist id="bk2-jobs">
+  <% jobs.forEach(function (j) { %><option value="<%= j.job_name %><%= j.site_address ? ' — ' + j.site_address : '' %>"><% }); %>
+</datalist>
 
 <!-- Inline data for client-side use -->
 <script>
   window.BK2_DATA = {
     bookings: <%- JSON.stringify(bookings.map(function (b) { return { id: b.id, lat: b.latitude, lng: b.longitude, title: b.title, status: b.status, num: b.booking_number, addr: b.site_address }; })) %>,
     dateStr: '<%= dateStr %>',
-    openBookingId: '<%= openBookingId %>',
   };
 </script>
 
-<!-- Leaflet for the map pane (only loaded if available) -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" defer></script>
 
 <script>
 (function () {
-  // ============================================================
-  //  Bookings v2 — universal slide-over + view switcher + shortcuts
-  //  Single page, no full reloads. URL state via History API.
-  // ============================================================
-  var $ = function (sel, root) { return (root || document).querySelector(sel); };
-  var $$ = function (sel, root) { return Array.from((root || document).querySelectorAll(sel)); };
+  'use strict';
+  var $  = function (s, r) { return (r || document).querySelector(s); };
+  var $$ = function (s, r) { return Array.from((r || document).querySelectorAll(s)); };
   var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
-  // ---------- View switcher ----------
-  var VIEWS = ['board', 'list', 'calendar', 'map'];
+  // ============================================================
+  //  FORCE CLOSED state on every page load. Belt + braces.
+  // ============================================================
+  var so = $('#bk2-slideover');
+  var backdrop = $('#bk2-backdrop');
+  function closeQB() {
+    so.classList.remove('bk2-open');
+    backdrop.classList.remove('bk2-open');
+  }
+  function openQB() {
+    so.classList.add('bk2-open');
+    backdrop.classList.add('bk2-open');
+    setTimeout(function () { var first = so.querySelector('input[name="client_name"]'); if (first) first.focus(); }, 80);
+  }
+  // Ensure it starts closed no matter what.
+  closeQB();
+  backdrop.addEventListener('click', closeQB);
+  window.addEventListener('pageshow', closeQB);
+
+  // ============================================================
+  //  VIEW SWITCHER — client-side tab toggle
+  // ============================================================
   function setView(v) {
-    if (!VIEWS.includes(v)) v = 'board';
+    if (!['board','list','calendar','map'].includes(v)) v = 'board';
     $$('.bk2-view-tab').forEach(function (t) { t.setAttribute('aria-selected', t.dataset.viewTab === v ? 'true' : 'false'); });
     $$('.bk2-pane').forEach(function (p) { p.setAttribute('aria-current', p.dataset.viewPane === v ? 'true' : 'false'); });
     var u = new URL(location.href);
     if (v === 'board') u.searchParams.delete('view'); else u.searchParams.set('view', v);
-    history.replaceState(history.state, '', u.toString());
-    if (v === 'map') initMap();
-    if (v === 'calendar' && typeof loadCalendar === 'function') loadCalendar();
+    history.replaceState({}, '', u.toString());
+    if (v === 'map')      initMap();
+    if (v === 'calendar') loadCalendar();
   }
-  $$('.bk2-view-tab').forEach(function (t) {
-    t.addEventListener('click', function () { setView(t.dataset.viewTab); });
+  $$('.bk2-view-tab').forEach(function (t) { t.addEventListener('click', function () { setView(t.dataset.viewTab); }); });
+
+  // Initial view from URL
+  var u0 = new URL(location.href);
+  var v0 = u0.searchParams.get('view') || 'board';
+  if (v0 !== 'board') setView(v0);
+
+  // ============================================================
+  //  + NEW BOOKING — opens Quick Book
+  // ============================================================
+  $('#bk2-new-btn').addEventListener('click', openQB);
+  var emptyNew = $('#bk2-empty-new');
+  if (emptyNew) emptyNew.addEventListener('click', openQB);
+
+  // Keyboard: N opens Quick Book, Esc closes it
+  document.addEventListener('keydown', function (e) {
+    var inField = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+    if (e.key === 'Escape' && so.classList.contains('bk2-open')) { e.preventDefault(); closeQB(); return; }
+    if (inField || e.metaKey || e.ctrlKey || e.altKey) {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && so.classList.contains('bk2-open')) {
+        e.preventDefault(); var f = $('#bk2-qb-form'); if (f) f.requestSubmit();
+      }
+      return;
+    }
+    if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openQB(); }
   });
 
-  // ---------- Slide-over ----------
-  var so = $('#bk2-slideover');
-  var backdrop = $('#bk2-backdrop');
-  var soBody = $('#bk2-so-body');
-  var soTitle = $('#bk2-so-title');
-  var soSub = $('#bk2-so-sub');
-  var soStatusPill = $('#bk2-so-status-pill');
-  var soClose = $('#bk2-so-close');
-  var soFullpage = $('#bk2-so-fullpage');
-  var soTabs = $$('.bk2-slideover-tab');
-  var soState = { mode: 'closed', bookingId: null, activeTab: 'details', data: null };
-
-  function fmtTime(iso) {
-    if (!iso) return '';
-    return new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Australia/Sydney' }).toLowerCase().replace(' ', '');
-  }
-  function statusLabel(s) { return (s || 'unconfirmed').replace(/_/g, ' '); }
-  function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
-
-  function pushUrl(params) {
-    var u = new URL(location.href);
-    Object.keys(params).forEach(function (k) {
-      if (params[k] == null) u.searchParams.delete(k);
-      else u.searchParams.set(k, params[k]);
-    });
-    history.pushState({ bk2: true, b: params.b || null }, '', u.toString());
-  }
-
-  function openSlideover() {
-    so.classList.add('bk2-open');
-    backdrop.classList.add('bk2-open');
-  }
-  function closeSlideover() {
-    so.classList.remove('bk2-open');
-    backdrop.classList.remove('bk2-open');
-    soState.mode = 'closed';
-    soState.bookingId = null;
-    var u = new URL(location.href);
-    u.searchParams.delete('b');
-    history.pushState({ bk2: true, b: null }, '', u.toString());
-  }
-
-  function setActiveTab(tab) {
-    soTabs.forEach(function (t) { t.setAttribute('aria-selected', t.dataset.soTab === tab ? 'true' : 'false'); });
-    soState.activeTab = tab;
-    if (soState.mode === 'view' && soState.data) renderTab(tab);
-  }
-  soTabs.forEach(function (t) { t.addEventListener('click', function () { setActiveTab(t.dataset.soTab); }); });
-  soClose.addEventListener('click', closeSlideover);
-  backdrop.addEventListener('click', closeSlideover);
-
-  // ---------- Open booking (view mode) ----------
-  function openBooking(id, tab) {
-    soState.mode = 'view';
-    soState.bookingId = id;
-    soState.activeTab = tab || 'details';
-    soTabs.forEach(function (t) { t.style.display = ''; });
-    soTitle.textContent = 'Booking #' + id;
-    soSub.textContent = 'Loading…';
-    soStatusPill.textContent = 'LOADING';
-    soStatusPill.className = 'bk2-status-pill';
-    soStatusPill.style.background = '#F3F4F6';
-    soStatusPill.style.color = '#6B7280';
-    soBody.innerHTML = '<p style="color:#6B7280;font-size:13px;text-align:center;padding:40px 0">Loading…</p>';
-    soFullpage.href = '/bookings/' + id;
-    soFullpage.style.display = '';
-    pushUrl({ b: id });
-    openSlideover();
-
-    // 8s timeout via AbortController so we never sit on "Loading…" forever.
-    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
-    var timedOut = false;
-    var timer = setTimeout(function () { timedOut = true; if (ctrl) try { ctrl.abort(); } catch (e) {} }, 8000);
-
-    fetch('/bookings/' + id, {
-      headers: { 'Accept': 'application/json' },
-      credentials: 'same-origin',
-      signal: ctrl ? ctrl.signal : undefined,
-    })
-      .then(function (r) {
-        clearTimeout(timer);
-        if (r.status === 404) {
-          var err = new Error('Booking not found');
-          err.code = 404;
-          throw err;
-        }
-        if (!r.ok) {
-          var err2 = new Error('HTTP ' + r.status);
-          err2.code = r.status;
-          throw err2;
-        }
-        return r.json();
-      })
-      .then(function (data) {
-        soState.data = data;
-        soTitle.textContent = data.title || data.site_address || ('Booking #' + (data.booking_number || id));
-        soSub.textContent = '#' + (data.booking_number || id) + ' · ' + fmtTime(data.start_datetime) + ' → ' + fmtTime(data.end_datetime);
-        soStatusPill.textContent = statusLabel(data.status);
-        soStatusPill.className = 'bk2-status-pill bk2-status--' + (data.status || 'unconfirmed');
-        try {
-          setActiveTab(soState.activeTab);
-        } catch (renderErr) {
-          console.error('[bookings] renderTab failed:', renderErr);
-          soBody.innerHTML = '<div style="padding:24px;text-align:center"><p style="color:#DC2626;font-size:13px;margin-bottom:10px">Rendering failed: ' + esc(renderErr.message) + '</p><a href="/bookings/' + id + '" style="color:#2B7FFF;font-weight:600;font-size:12px">Open full page →</a></div>';
-        }
-      })
-      .catch(function (err) {
-        console.error('[bookings] openBooking fetch failed:', err);
-        clearTimeout(timer);
-        soTitle.textContent = err.code === 404 ? 'Booking not found' : 'Couldn’t load booking';
-        soSub.textContent = '';
-        soStatusPill.textContent = err.code === 404 ? 'GONE' : 'ERROR';
-        soStatusPill.className = 'bk2-status-pill';
-        soStatusPill.style.background = '#FEE2E2'; soStatusPill.style.color = '#991B1B';
-        if (timedOut) {
-          soBody.innerHTML = '<div style="padding:32px;text-align:center"><p style="color:#DC2626;font-size:14px;font-weight:600;margin-bottom:6px">Took too long to load</p><p style="color:#6B7280;font-size:12px;margin-bottom:14px">Network is slow or the server didn\'t respond in 8 seconds.</p><button type="button" id="bk2-so-retry" style="background:#2B7FFF;color:#fff;border:0;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Retry</button></div>';
-          var rb = document.getElementById('bk2-so-retry');
-          if (rb) rb.addEventListener('click', function () { openBooking(id, tab); });
-        } else if (err.code === 404) {
-          // Self-heal: clear ?b= so a reload doesn't re-trigger this dead link.
-          pushUrl({ b: null });
-          soBody.innerHTML = '<div style="padding:32px;text-align:center"><p style="color:#DC2626;font-size:14px;font-weight:600;margin-bottom:6px">This booking no longer exists</p><p style="color:#6B7280;font-size:12px;margin-bottom:14px">It may have been deleted, or the link is from another day.</p><button type="button" id="bk2-so-close-x" style="background:#2B7FFF;color:#fff;border:0;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Close</button></div>';
-          var cb = document.getElementById('bk2-so-close-x');
-          if (cb) cb.addEventListener('click', closeSlideover);
-        } else {
-          soBody.innerHTML = '<div style="padding:32px;text-align:center"><p style="color:#DC2626;font-size:14px;font-weight:600;margin-bottom:6px">Failed to load</p><p style="color:#6B7280;font-size:12px;margin-bottom:14px">' + esc(err.message) + '</p><button type="button" id="bk2-so-retry2" style="background:#2B7FFF;color:#fff;border:0;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Retry</button></div>';
-          var rb2 = document.getElementById('bk2-so-retry2');
-          if (rb2) rb2.addEventListener('click', function () { openBooking(id, tab); });
-        }
-      });
-  }
-
-  // ---------- Open create (Quick Book) ----------
-  function openCreate() {
-    soState.mode = 'create';
-    soState.bookingId = null;
-    soState.data = null;
-    soTitle.textContent = 'New booking';
-    soSub.textContent = 'Quick Book';
-    soStatusPill.textContent = 'NEW';
-    soStatusPill.className = 'bk2-status-pill';
-    soStatusPill.style.background = '#EDE9FE';
-    soStatusPill.style.color = '#6D28D9';
-    soFullpage.style.display = 'none';
-    soTabs.forEach(function (t) { t.style.display = 'none'; });
-    var tpl = $('#bk2-quickbook-template');
-    soBody.innerHTML = '';
-    soBody.appendChild(tpl.content.cloneNode(true));
-    var form = $('#bk2-quickbook-form');
-    form.addEventListener('submit', handleQuickSubmit);
-    wireSteppers(form);
-    wireAddressAutocomplete(form);
-    refreshSummary(form);
-    pushUrl({ b: 'new' });
-    openSlideover();
-    setTimeout(function () { var first = soBody.querySelector('input[name="client_name"]'); first && first.focus(); }, 80);
-  }
-
-  // ---------- Steppers + live summary ----------
-  function wireSteppers(form) {
-    form.querySelectorAll('.bk2-stepper').forEach(function (s) {
-      var input = s.querySelector('input');
-      s.querySelectorAll('button').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          var delta = parseInt(btn.dataset.step, 10);
-          var v = Math.max(0, Math.min(20, parseInt(input.value, 10) + delta));
-          input.value = v;
-          refreshSummary(form);
-        });
+  // ============================================================
+  //  QUICK BOOK form — steppers, summary, address autocomplete
+  // ============================================================
+  // Steppers
+  $$('.bk2-stepper').forEach(function (s) {
+    var input = s.querySelector('input');
+    s.querySelectorAll('button').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var delta = parseInt(btn.dataset.step, 10);
+        var v = Math.max(0, Math.min(20, parseInt(input.value, 10) + delta));
+        input.value = v;
+        refreshSummary();
       });
     });
-  }
-  function refreshSummary(form) {
+  });
+  function refreshSummary() {
     var crews = [];
     [1,2,3,4,5].forEach(function (n) {
-      var q = parseInt((form.querySelector('input[name="crew_size_' + n + '"]') || {}).value, 10) || 0;
+      var inp = $('input[name="crew_size_' + n + '"]');
+      var q = inp ? parseInt(inp.value, 10) || 0 : 0;
       if (q > 0) crews.push(q + '× ' + n + '-man crew');
     });
     var addons = [];
-    form.querySelectorAll('input[name^="addon_"]').forEach(function (inp) {
+    $$('input[name^="addon_"]').forEach(function (inp) {
       var q = parseInt(inp.value, 10) || 0;
       if (q > 0) {
-        var label = inp.closest('.bk2-stepper').previousElementSibling || inp.closest('div').previousElementSibling;
-        // The label is the previous sibling cell in the grid — use data-stepper-name fallback.
-        var key = inp.name.replace('addon_', '').replace(/_/g, ' ');
-        var labelText = label && label.textContent ? label.textContent.trim() : key;
-        addons.push(q + '× ' + labelText);
+        var labelSpan = inp.closest('.bk2-stepper').previousElementSibling;
+        var label = labelSpan ? labelSpan.textContent.trim() : inp.name.replace('addon_', '');
+        addons.push(q + '× ' + label);
       }
     });
-    var summary = $('#bk2-qb-summary', form);
+    var summary = $('#bk2-qb-summary');
     if (!summary) return;
     var totalCrews = crews.reduce(function (a, c) { return a + parseInt(c, 10); }, 0);
     if (!crews.length) crews.push('1× 2-man crew (default)');
@@ -743,26 +485,16 @@
     if (addons.length) line += ', with ' + addons.join(', ');
     summary.textContent = line + '.';
   }
+  refreshSummary();
 
-  // ---------- Address autocomplete (Nominatim / OSM) ----------
-  function wireAddressAutocomplete(form) {
-    var input = $('#bk2-addr-input', form);
-    var box = $('#bk2-addr-suggest', form);
-    var hint = $('#bk2-addr-hint', form);
+  // Address autocomplete via /bookings/api/places (Nominatim)
+  (function () {
+    var input = $('#bk2-addr-input');
+    var box   = $('#bk2-addr-suggest');
     if (!input || !box) return;
     var timer = null;
-    var picked = false;
-    function clearMeta() {
-      form.querySelector('#bk2-addr-suburb').value = '';
-      form.querySelector('#bk2-addr-state').value = '';
-      form.querySelector('#bk2-addr-postcode').value = '';
-      form.querySelector('#bk2-addr-lat').value = '';
-      form.querySelector('#bk2-addr-lng').value = '';
-    }
     function hide() { box.style.display = 'none'; box.innerHTML = ''; }
     input.addEventListener('input', function () {
-      picked = false;
-      clearMeta();
       var q = input.value.trim();
       if (q.length < 3) { hide(); return; }
       clearTimeout(timer);
@@ -773,26 +505,19 @@
             var list = data.results || [];
             if (!list.length) { hide(); return; }
             box.innerHTML = list.map(function (r, i) {
-              return '<div class="bk2-place-row" data-i="' + i + '" style="padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #F3F4F6">' +
-                '<div style="font-weight:600;color:#111827">' + esc(r.site_address || r.label.split(',')[0]) + '</div>' +
-                '<div style="color:#9CA3AF;font-size:11px">' + esc((r.suburb || '') + (r.state ? ' ' + r.state : '') + (r.postcode ? ' ' + r.postcode : '')) + '</div>' +
-                '</div>';
+              return '<div data-i="' + i + '" style="padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #F3F4F6"><div style="font-weight:600;color:#111827">' + (r.site_address || r.label.split(',')[0]) + '</div><div style="color:#9CA3AF;font-size:11px">' + (r.suburb || '') + (r.state ? ' ' + r.state : '') + (r.postcode ? ' ' + r.postcode : '') + '</div></div>';
             }).join('');
             box.style.display = 'block';
-            box.dataset.json = JSON.stringify(list);
-            box.querySelectorAll('.bk2-place-row').forEach(function (row) {
+            box.querySelectorAll('[data-i]').forEach(function (row) {
               row.addEventListener('click', function () {
-                var idx = parseInt(row.dataset.i, 10);
-                var r = list[idx];
+                var r = list[parseInt(row.dataset.i, 10)];
                 input.value = r.site_address || r.label.split(',')[0];
-                form.querySelector('#bk2-addr-suburb').value = r.suburb || '';
-                form.querySelector('#bk2-addr-state').value = r.state || '';
-                form.querySelector('#bk2-addr-postcode').value = r.postcode || '';
-                form.querySelector('#bk2-addr-lat').value = r.lat || '';
-                form.querySelector('#bk2-addr-lng').value = r.lng || '';
+                $('#bk2-addr-suburb').value   = r.suburb || '';
+                $('#bk2-addr-state').value    = r.state || '';
+                $('#bk2-addr-postcode').value = r.postcode || '';
+                $('#bk2-addr-lat').value      = r.lat || '';
+                $('#bk2-addr-lng').value      = r.lng || '';
                 hide();
-                picked = true;
-                if (hint && r.lat && r.lng) hint.textContent = 'Pinned at ' + r.lat.toFixed(4) + ', ' + r.lng.toFixed(4) + ' (' + (r.suburb || r.state || 'AU') + ').';
               });
             });
           })
@@ -800,658 +525,40 @@
       }, 250);
     });
     document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== input) hide(); });
-  }
-
-  function handleQuickSubmit(e) {
-    e.preventDefault();
-    var form = e.target;
-    var fd = new FormData(form);
-    var body = new URLSearchParams();
-    fd.forEach(function (v, k) { body.append(k, v); });
-    fetch('/bookings/quick', {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
-      credentials: 'same-origin',
-      body: body.toString(),
-    })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, json: j }; }); })
-      .then(function (res) {
-        if (!res.ok) { toast(res.json.error || 'Save failed', false); return; }
-        toast('Created ' + (res.json.booking_number || ('#' + res.json.id)));
-        // Reload board so the new card shows up, with the new booking open.
-        var u = new URL(location.href);
-        u.searchParams.set('b', res.json.id);
-        location.href = u.toString();
-      })
-      .catch(function (err) { toast(err.message, false); });
-  }
-
-  // ---------- Render slide-over tab content ----------
-  function renderTab(tab) {
-    var d = soState.data;
-    if (!d) return;
-    if (tab === 'details') {
-      var statusOptions = ['client_booking','unconfirmed','confirmed','locked','conflict','green_to_go','in_progress','complete','finalised','on_hold','cancelled','late_cancellation'];
-      soBody.innerHTML =
-        row('Status',
-          '<select id="bk2-edit-status" class="bk2-status-pill bk2-status--' + esc(d.status) + '" style="border:0;padding:3px 9px;border-radius:9999px;font-weight:700;cursor:pointer;font-size:10px;letter-spacing:0.04em;text-transform:uppercase">' +
-          statusOptions.map(function (s) { return '<option value="' + s + '"' + (s === d.status ? ' selected' : '') + '>' + statusLabel(s) + '</option>'; }).join('') +
-          '</select>'
-        ) +
-        row('When', esc(fmtTime(d.start_datetime)) + ' → ' + esc(fmtTime(d.end_datetime))) +
-        editableRow('Title',       'title',           d.title || '') +
-        editableRow('Site',        'site_address',    (d.site_address || '')) +
-        editableRow('Suburb',      'suburb',          d.suburb || '') +
-        editableRow('State',       'state',           d.state || '') +
-        editableRow('Postcode',    'postcode',        d.postcode || '') +
-        editableRow('Order #',     'order_number',    d.order_number || '') +
-        editableRow('Billing code','billing_code',    d.billing_code || '') +
-        editableRow('Description', 'description',     d.description || '', true) +
-        row('Client', d.client ? esc(d.client.company_name) : '—') +
-        row('Project', d.job ? esc(d.job.job_name || d.job.job_number || '') : '—') +
-        row('Depot', esc(d.depot || '—')) +
-        row('Requester', esc(d.requester_name || '—')) +
-        row('Planner', esc(d.planner_name || '—')) +
-        row('Tags', d.tags_list && d.tags_list.length ? d.tags_list.map(function (t) { return '<span class="bk2-warn" style="background:#F3F4F6;color:#374151;border-color:#E5E7EB">' + esc(t) + '</span>'; }).join(' ') : '—') +
-        '<p id="bk2-edit-saved" style="font-size:11px;color:#059669;margin-top:8px;display:none">✓ Saved</p>' +
-        '<div style="margin-top:16px;display:flex;gap:6px;flex-wrap:wrap">' +
-          '<a href="/bookings/' + d.id + '/edit" style="background:#F3F4F6;color:#374151;padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none">Full editor →</a>' +
-          '<a href="/bookings/' + d.id + '" style="background:#F3F4F6;color:#374151;padding:7px 13px;border-radius:8px;font-size:12px;font-weight:600;text-decoration:none">Open page</a>' +
-        '</div>';
-      wireDetailEdits(d);
-    } else if (tab === 'crews') {
-      var crewList = (d.crew || []).map(function (c) {
-        var pillCls = c.status === 'confirmed' ? 'background:#ECFDF5;color:#065F46;border-color:#86EFAC' : 'background:#FEF3C7;color:#92400E;border-color:#FDE68A';
-        return '<div data-crew-id="' + esc(c.crew_member_id) + '" style="padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:8px">' +
-          '<span class="bk2-slot-avatar">' + esc((c.full_name || '').split(' ').map(function (n) { return n[0]; }).join('').substring(0, 2)) + '</span>' +
-          '<span style="flex:1;min-width:0"><strong style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(c.full_name) + '</strong>' +
-          (c.crew_role ? '<span style="color:#9CA3AF;font-size:11px">' + esc(c.crew_role) + '</span>' : '') +
-          '</span>' +
-          (c.status === 'confirmed'
-            ? '<span style="font-size:10px;font-weight:700;color:#059669">✓ CONFIRMED</span>'
-            : '<button type="button" data-crew-confirm="' + esc(c.crew_member_id) + '" style="background:#F59E0B;color:#fff;border:0;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:0.04em">CONFIRM</button>'
-          ) +
-          '<button type="button" data-crew-remove="' + esc(c.crew_member_id) + '" title="Remove" style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:2px;font-size:18px;line-height:1">×</button>' +
-          '</div>';
-      }).join('') || '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:24px 0">No crew yet — drag people in from the Resource Panel.</p>';
-
-      var vehList = (d.allVehicles || []).map(function (v) {
-        var vname = v.vehicle_name || v.name || v.registration || '(empty placeholder)';
-        var vrego = (v.registration && (v.vehicle_name || v.name)) ? v.registration : '';
-        return '<div data-vehicle-id="' + v.id + '" style="padding:8px 10px;border:1px solid #FDE68A;background:#FFFBEB;border-radius:8px;margin-bottom:6px;display:flex;align-items:center;gap:8px">' +
-          '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14"/></svg>' +
-          '<strong style="flex:1">' + esc(vname) + '</strong>' +
-          (vrego ? '<span style="color:#B45309;font-family:ui-monospace,monospace;font-size:11px">' + esc(vrego) + '</span>' : '') +
-          (v.vehicle_role ? '<span style="background:#FEF3C7;padding:1px 5px;border-radius:4px;font-size:9px;font-weight:700;color:#92400E;text-transform:uppercase">' + esc(v.vehicle_role) + '</span>' : '') +
-          '<button type="button" data-vehicle-remove="' + v.id + '" title="Remove" style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:2px;font-size:18px;line-height:1">×</button>' +
-          '</div>';
-      }).join('') || '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:12px 0">No vehicles — drag a ute in from the Resource Panel.</p>';
-
-      var eqList = (d.equipment || []).map(function (eq) {
-        return '<div data-eq-id="' + eq.id + '" style="padding:6px 10px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:4px;display:flex;align-items:center;gap:8px;font-size:12px">' +
-          '<strong style="flex:1">' + esc(eq.equipment_name) + '</strong>' +
-          (eq.equipment_type ? '<span style="color:#9CA3AF;font-size:10px">' + esc(eq.equipment_type) + '</span>' : '') +
-          (eq.quantity > 1 ? '<span style="background:#F3F4F6;padding:1px 5px;border-radius:4px;font-size:10px">×' + eq.quantity + '</span>' : '') +
-          '<button type="button" data-eq-remove="' + eq.id + '" title="Remove" style="background:transparent;border:0;color:#9CA3AF;cursor:pointer;padding:2px;font-size:16px;line-height:1">×</button>' +
-          '</div>';
-      }).join('') || '<p style="color:#9CA3AF;font-size:12px;text-align:center;padding:8px 0">No add-ons.</p>';
-
-      soBody.innerHTML =
-        '<p style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;display:flex;justify-content:space-between"><span>Crew (' + (d.crew || []).length + ')</span><span style="color:#9CA3AF;font-weight:500;text-transform:none;letter-spacing:0">drag from Resource Panel to add</span></p>' + crewList +
-        '<p style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin:14px 0 8px">Vehicles (' + (d.allVehicles || []).length + ')</p>' + vehList +
-        '<p style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.05em;margin:14px 0 8px">Add-ons / Equipment (' + (d.equipment || []).length + ')</p>' + eqList;
-      wireCrewsTab(d);
-    } else if (tab === 'docs') {
-      var list = (d.documents || []).map(function (doc) {
-        return '<a href="/bookings/' + d.id + '/documents/' + doc.id + '/download" style="display:block;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:6px;text-decoration:none;color:#111827">📄 ' + esc(doc.title || doc.original_name) + '</a>';
-      }).join('') || '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:24px 0">No documents.</p>';
-      soBody.innerHTML = list + '<p style="margin-top:14px;text-align:center"><a href="/bookings/' + d.id + '" style="color:#2B7FFF;font-size:12px;font-weight:600;text-decoration:none">Upload from booking page →</a></p>';
-    } else if (tab === 'notes') {
-      var notes = (d.allNotes || []).map(function (n) {
-        return '<div style="padding:10px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:6px"><p style="font-size:13px;color:#111827;margin:0 0 4px">' + esc(n.content) + '</p><p style="font-size:11px;color:#9CA3AF;margin:0">' + esc(n.author_name || '—') + '</p></div>';
-      }).join('') || '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:24px 0">No notes.</p>';
-      soBody.innerHTML = notes + '<p style="margin-top:14px;text-align:center"><a href="/bookings/' + d.id + '" style="color:#2B7FFF;font-size:12px;font-weight:600;text-decoration:none">Add a note on the booking page →</a></p>';
-    } else if (tab === 'dockets') {
-      var dks = (d.dockets || []).map(function (dk) {
-        return '<a href="/bookings/' + d.id + '/dockets/' + dk.id + '" style="display:block;padding:8px 10px;border:1px solid #E5E7EB;border-radius:8px;margin-bottom:6px;text-decoration:none;color:#111827">🧾 ' + esc(dk.docket_number) + ' <span style="color:#9CA3AF;font-size:11px">· ' + esc(dk.status) + '</span></a>';
-      }).join('') || '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:24px 0">No dockets.</p>';
-      soBody.innerHTML = dks;
-    } else if (tab === 'tasks') {
-      soBody.innerHTML = '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:24px 0">Tasks land in Phase 4 — use the booking page for now.</p><p style="margin-top:14px;text-align:center"><a href="/bookings/' + d.id + '" style="color:#2B7FFF;font-size:12px;font-weight:600;text-decoration:none">Open booking page →</a></p>';
-    } else if (tab === 'forms') {
-      soBody.innerHTML = '<p style="color:#9CA3AF;font-size:13px;text-align:center;padding:24px 0">Forms (Job Pack) land in Phase 4.</p><p style="margin-top:14px;text-align:center"><a href="/bookings/' + d.id + '" style="color:#2B7FFF;font-size:12px;font-weight:600;text-decoration:none">Open booking page →</a></p>';
-    }
-  }
-
-  function row(lbl, val) {
-    return '<div class="bk2-row"><span class="lbl">' + lbl + '</span><span class="val">' + val + '</span></div>';
-  }
-  function editableRow(lbl, field, val, multiline) {
-    var input = multiline
-      ? '<textarea data-edit-field="' + field + '" rows="2" style="width:100%;background:transparent;border:1px dashed transparent;border-radius:4px;padding:3px 6px;font-size:13px;color:#111827;resize:vertical">' + esc(val) + '</textarea>'
-      : '<input data-edit-field="' + field + '" value="' + esc(val) + '" style="width:100%;background:transparent;border:1px dashed transparent;border-radius:4px;padding:3px 6px;font-size:13px;color:#111827">';
-    return '<div class="bk2-row"><span class="lbl">' + lbl + '</span><span class="val">' + input + '</span></div>';
-  }
-  function wireCrewsTab(d) {
-    function post(url) {
-      return fetch(url, {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
-        credentials: 'same-origin',
-      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, json: j }; }); });
-    }
-    soBody.querySelectorAll('[data-crew-confirm]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        post('/bookings/' + d.id + '/crew/' + b.dataset.crewConfirm + '/confirm').then(function (res) {
-          if (!res.ok) return toast('Confirm failed', false);
-          toast('Confirmed');
-          refreshAfter(d);
-        });
-      });
-    });
-    soBody.querySelectorAll('[data-crew-remove]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (!confirm('Remove this crew member from the booking?')) return;
-        post('/bookings/' + d.id + '/crew/' + b.dataset.crewRemove + '/remove').then(function (res) {
-          if (!res.ok) return toast('Remove failed', false);
-          toast('Removed');
-          refreshAfter(d);
-        });
-      });
-    });
-    soBody.querySelectorAll('[data-vehicle-remove]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (!confirm('Remove this vehicle?')) return;
-        post('/bookings/' + d.id + '/vehicles/' + b.dataset.vehicleRemove + '/remove').then(function (res) {
-          if (!res.ok) return toast('Remove failed', false);
-          toast('Removed');
-          refreshAfter(d);
-        });
-      });
-    });
-    soBody.querySelectorAll('[data-eq-remove]').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (!confirm('Remove this equipment?')) return;
-        post('/bookings/' + d.id + '/equipment/' + b.dataset.eqRemove + '/remove').then(function (res) {
-          if (!res.ok) return toast('Remove failed', false);
-          toast('Removed');
-          refreshAfter(d);
-        });
-      });
-    });
-  }
-  function refreshAfter(d) {
-    fetch('/bookings/' + d.id, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-      .then(function (r) { return r.json(); })
-      .then(function (fresh) { soState.data = fresh; try { renderTab(soState.activeTab); } catch (e) { console.error('[bookings] renderTab in refreshAfter:', e); } })
-      .catch(function (e) { console.error('[bookings] refreshAfter fetch failed:', e); });
-    var card = document.querySelector('.bk2-card[data-booking-id="' + d.id + '"]');
-    if (card) refreshCard(card, d.id);
-  }
-
-  function wireDetailEdits(d) {
-    // Hover hint that inputs are editable
-    soBody.querySelectorAll('[data-edit-field]').forEach(function (el) {
-      el.addEventListener('focus', function () { el.style.borderColor = '#93c5fd'; });
-      el.addEventListener('blur',  function () {
-        el.style.borderColor = 'transparent';
-        var field = el.dataset.editField;
-        var newVal = el.value;
-        if (newVal === (d[field] || '')) return;
-        // Patch via the existing POST /:id which accepts the full booking body.
-        // We send just the changed field — server merges into the row.
-        var body = new URLSearchParams();
-        body.append(field, newVal);
-        // Send start_date / start_time / end_date / end_time / title to satisfy
-        // the POST /:id validators
-        if (d.start_datetime) {
-          body.append('start_date', d.start_datetime.substring(0,10));
-          body.append('start_time', d.start_datetime.substring(11,16));
-        }
-        if (d.end_datetime) {
-          body.append('end_date', d.end_datetime.substring(0,10));
-          body.append('end_time', d.end_datetime.substring(11,16));
-        }
-        if (field !== 'title') body.append('title', d.title || '');
-        fetch('/bookings/' + d.id, {
-          method: 'POST',
-          headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
-          credentials: 'same-origin',
-          body: body.toString(),
-        }).then(function (r) {
-          if (r.ok) {
-            d[field] = newVal;
-            var saved = $('#bk2-edit-saved'); if (saved) { saved.style.display = 'block'; setTimeout(function () { saved.style.display = 'none'; }, 1600); }
-            // Refresh the matching card
-            var card = document.querySelector('.bk2-card[data-booking-id="' + d.id + '"]');
-            if (card) refreshCard(card, d.id);
-          } else { toast('Save failed', false); }
-        }).catch(function () { toast('Save failed', false); });
-      });
-    });
-    // Status select inline change
-    var statusSel = $('#bk2-edit-status');
-    if (statusSel) {
-      statusSel.addEventListener('change', function () {
-        var next = statusSel.value;
-        var body = new URLSearchParams({ status: next }).toString();
-        fetch('/bookings/' + d.id + '/status', {
-          method: 'POST',
-          headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
-          credentials: 'same-origin',
-          body: body,
-        }).then(function (r) { return r.json(); }).then(function (j) {
-          if (j && j.ok) {
-            d.status = next;
-            statusSel.className = 'bk2-status-pill bk2-status--' + next;
-            soStatusPill.textContent = statusLabel(next);
-            soStatusPill.className = 'bk2-status-pill bk2-status--' + next;
-            var card = document.querySelector('.bk2-card[data-booking-id="' + d.id + '"]');
-            if (card) refreshCard(card, d.id);
-            toast('Status: ' + statusLabel(next));
-          } else { toast('Status change failed', false); }
-        }).catch(function () { toast('Status change failed', false); });
-      });
-    }
-  }
-
-  // ---------- Toast ----------
-  function toast(msg, ok) {
-    var t = document.createElement('div');
-    t.className = 'bk2-toast';
-    t.textContent = msg;
-    if (ok === false) t.style.background = '#DC2626';
-    document.body.appendChild(t);
-    requestAnimationFrame(function () { t.classList.add('bk2-show'); });
-    setTimeout(function () { t.classList.remove('bk2-show'); setTimeout(function () { t.remove(); }, 250); }, 2200);
-  }
-
-  // ---------- Card clicks — full-page navigate, not slide-over ----------
-  // The view-mode slide-over caused stuck "Loading…" states. Cards now
-  // go straight to /bookings/:id which is bulletproof. The slide-over
-  // stays only for Quick Book (create) since that doesn't fetch and
-  // can't get stuck.
-  document.addEventListener('click', function (e) {
-    var card = e.target.closest('.bk2-card');
-    if (card) {
-      var id = card.dataset.bookingId;
-      var tabBtn = e.target.closest('[data-open-tab]');
-      var hash = tabBtn ? '#' + tabBtn.dataset.openTab : '';
-      location.href = '/bookings/' + id + hash;
-      return;
-    }
-    var row = e.target.closest('.bk2-list tbody tr[data-booking-id]');
-    if (row) { location.href = '/bookings/' + row.dataset.bookingId; }
-  });
-
-  // ---------- + New booking ----------
-  $('#bk2-new-btn').addEventListener('click', openCreate);
-  var emptyNew = $('#bk2-empty-new');
-  if (emptyNew) emptyNew.addEventListener('click', openCreate);
-
-  // ---------- Card selection + keyboard nav ----------
-  var selectedIdx = -1;
-  function cards() { return $$('#bk2-board-list .bk2-card'); }
-  function selectCard(i) {
-    var arr = cards();
-    if (!arr.length) return;
-    if (i < 0) i = 0;
-    if (i >= arr.length) i = arr.length - 1;
-    arr.forEach(function (c, k) { c.dataset.selected = (k === i ? 'true' : 'false'); });
-    arr[i].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-    selectedIdx = i;
-  }
-
-  // ---------- Keyboard shortcuts ----------
-  document.addEventListener('keydown', function (e) {
-    var inField = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
-    // Save inside slide-over
-    if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-      if (so.classList.contains('bk2-open') && soState.mode === 'create') {
-        e.preventDefault();
-        var f = $('#bk2-quickbook-form'); f && f.requestSubmit();
-      }
-      return;
-    }
-    // Esc closes slide-over
-    if (e.key === 'Escape' && so.classList.contains('bk2-open')) {
-      e.preventDefault(); closeSlideover(); return;
-    }
-    if (inField) return;
-    if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openCreate(); return; }
-    if (e.key === '/') {
-      e.preventDefault();
-      // Open the filter dropdown's search field
-      var filterPanel = document.querySelector('.bk2-chip-add');
-      if (filterPanel) {
-        filterPanel.open = true;
-        var s = filterPanel.querySelector('input[name="q"]');
-        s && s.focus();
-      }
-      return;
-    }
-    if (e.key === 'j' || e.key === 'ArrowDown') { e.preventDefault(); selectCard(selectedIdx + 1); return; }
-    if (e.key === 'k' || e.key === 'ArrowUp') { e.preventDefault(); selectCard(selectedIdx - 1); return; }
-    if (e.key === 'Enter' && selectedIdx >= 0) {
-      var arr = cards();
-      if (arr[selectedIdx]) { e.preventDefault(); location.href = '/bookings/' + arr[selectedIdx].dataset.bookingId; }
-      return;
-    }
-    if ((e.key === 'e' || e.key === 'E') && selectedIdx >= 0) {
-      var arr2 = cards();
-      if (arr2[selectedIdx]) { e.preventDefault(); location.href = '/bookings/' + arr2[selectedIdx].dataset.bookingId + '/edit'; }
-      return;
-    }
-  });
+  })();
 
   // ============================================================
-  //  RESOURCE PANEL (Phase 3)
-  //  Loads people / vehicles / equipment, draggable onto card slots.
+  //  MAP (Leaflet)
   // ============================================================
-  var rPanel = $('#bk2-resource-panel');
-  var rToggle = $('#bk2-resource-toggle');
-  var rClose = $('#bk2-resource-close');
-  var rBody = $('#bk2-resource-body');
-  var rSearch = $('#bk2-resource-search');
-  var rFilters = $('#bk2-resource-filters');
-  var resourceState = { open: false, tab: 'people', data: null, q: '', activeFilters: new Set() };
-
-  function openResources() {
-    resourceState.open = true;
-    rPanel.classList.add('bk2-open');
-    if (!resourceState.data) fetchResources();
-  }
-  function closeResources() {
-    resourceState.open = false;
-    rPanel.classList.remove('bk2-open');
-  }
-  rToggle && rToggle.addEventListener('click', function () { resourceState.open ? closeResources() : openResources(); });
-  rClose && rClose.addEventListener('click', closeResources);
-
-  function fetchResources() {
-    rBody.innerHTML = '<p style="color:#9CA3AF;font-size:12px;text-align:center;padding:24px 0">Loading…</p>';
-    fetch('/bookings/api/resources?date=' + encodeURIComponent(window.BK2_DATA.dateStr), { headers: { 'Accept': 'application/json' } })
-      .then(function (r) { return r.json(); })
-      .then(function (data) { resourceState.data = data; renderResources(); })
-      .catch(function () { rBody.innerHTML = '<p style="color:#DC2626;font-size:12px;text-align:center;padding:24px 0">Failed to load resources.</p>'; });
-  }
-
-  $$('.bk2-resource-tab').forEach(function (t) {
-    t.addEventListener('click', function () {
-      resourceState.tab = t.dataset.rtab;
-      resourceState.activeFilters.clear();
-      $$('.bk2-resource-tab').forEach(function (x) { x.setAttribute('aria-selected', x === t ? 'true' : 'false'); });
-      renderResources();
-    });
-  });
-  rSearch && rSearch.addEventListener('input', function () { resourceState.q = rSearch.value.toLowerCase().trim(); renderResources(); });
-
-  var PEOPLE_FILTERS = [
-    { key: 'unassigned',  label: 'Unassigned' },
-    { key: 'reserved',    label: 'Reserved' },
-    { key: 'tls',         label: 'TLs only' },
-    { key: 'first_aid',   label: 'First aid' },
-    { key: 'tow',         label: 'Can tow' },
-  ];
-  var VEHICLE_FILTERS = [
-    { key: 'ute',         label: 'Utes' },
-    { key: 'truck',       label: 'Trucks' },
-    { key: 'vms',         label: 'VMS' },
-  ];
-  var EQUIPMENT_FILTERS = [
-    { key: 'sign',        label: 'Signs' },
-    { key: 'lighting',    label: 'Lighting' },
-    { key: 'arrow_board', label: 'Arrow boards' },
-    { key: 'vms',         label: 'VMS' },
-  ];
-
-  function renderResources() {
-    if (!resourceState.data) return;
-    // Build filter chips for the current tab
-    var filters = resourceState.tab === 'people' ? PEOPLE_FILTERS : resourceState.tab === 'vehicles' ? VEHICLE_FILTERS : EQUIPMENT_FILTERS;
-    rFilters.innerHTML = filters.map(function (f) {
-      return '<button type="button" class="bk2-resource-filter" data-fk="' + f.key + '" aria-pressed="' + (resourceState.activeFilters.has(f.key) ? 'true' : 'false') + '">' + esc(f.label) + '</button>';
-    }).join('');
-    rFilters.querySelectorAll('.bk2-resource-filter').forEach(function (b) {
-      b.addEventListener('click', function () {
-        if (resourceState.activeFilters.has(b.dataset.fk)) resourceState.activeFilters.delete(b.dataset.fk);
-        else resourceState.activeFilters.add(b.dataset.fk);
-        renderResources();
-      });
-    });
-
-    var items = [];
-    if (resourceState.tab === 'people') {
-      items = (resourceState.data.people || []).filter(filterPerson).map(function (p) {
-        var warns = (p.warnings || []).filter(function (w) { return w !== 'on_leave'; });
-        return resourceItem(p.id, 'person', p.full_name, (p.tcp_level ? 'L' + p.tcp_level + ' · ' : '') + (p.role || '').replace(/_/g, ' ') + (warns.length ? ' · ⚠' : ''));
-      });
-    } else if (resourceState.tab === 'vehicles') {
-      items = (resourceState.data.vehicles || []).filter(filterVehicle).map(function (v) {
-        return resourceItem(v.id, 'vehicle', v.name, (v.licence_plate || v.asset_number || v.category || '').toUpperCase());
-      });
-    } else {
-      items = (resourceState.data.equipment || []).filter(filterEquipment).map(function (e) {
-        return resourceItem(e.id, 'equipment', e.name, (e.category || '').replace(/_/g, ' '));
-      });
-    }
-    rBody.innerHTML = items.length ? items.join('') : '<p style="color:#9CA3AF;font-size:12px;text-align:center;padding:24px 0">No matches.</p>';
-    rBody.querySelectorAll('.bk2-resource-item').forEach(wireResourceDrag);
-  }
-  function resourceItem(id, type, name, meta) {
-    return '<div class="bk2-resource-item" draggable="true" data-rtype="' + type + '" data-rid="' + id + '" data-rname="' + esc(name) + '">' +
-      '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:#9CA3AF;flex-shrink:0">' +
-      (type === 'person' ? '<path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>'
-        : type === 'vehicle' ? '<path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14M5 17a2 2 0 11-4 0 2 2 0 014 0zm14 0a2 2 0 11-4 0 2 2 0 014 0z"/>'
-        : '<path stroke-linecap="round" stroke-linejoin="round" d="M5 8a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2H7a2 2 0 01-2-2V8z"/>') +
-      '</svg>' +
-      '<div style="flex:1;min-width:0"><div style="font-weight:600;color:#111827;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + esc(name) + '</div>' +
-      '<div class="bk2-resource-item-meta">' + esc(meta) + '</div></div></div>';
-  }
-  function filterPerson(p) {
-    var q = resourceState.q;
-    if (q && !(p.full_name + ' ' + (p.role || '') + ' ' + (p.employee_id || '')).toLowerCase().includes(q)) return false;
-    if (resourceState.activeFilters.has('unassigned') && p.assigned_today) return false;
-    if (resourceState.activeFilters.has('reserved') && p.employment_status !== 'reserved') return false;
-    if (resourceState.activeFilters.has('tls') && !((p.portal_role || p.role || '').includes('team') || (p.portal_role || p.role || '').includes('lead'))) return false;
-    if (resourceState.activeFilters.has('first_aid') && !p.first_aid) return false;
-    return true;
-  }
-  function filterVehicle(v) {
-    var q = resourceState.q;
-    if (q && !((v.name + ' ' + (v.licence_plate || '') + ' ' + (v.asset_number || '')).toLowerCase().includes(q))) return false;
-    var n = (v.name || '').toLowerCase();
-    if (resourceState.activeFilters.has('ute') && !n.includes('ute')) return false;
-    if (resourceState.activeFilters.has('truck') && !n.includes('truck') && !n.includes('pod')) return false;
-    if (resourceState.activeFilters.has('vms') && !n.includes('vms') && v.category !== 'vms') return false;
-    return true;
-  }
-  function filterEquipment(e) {
-    var q = resourceState.q;
-    if (q && !((e.name + ' ' + (e.category || '')).toLowerCase().includes(q))) return false;
-    var any = resourceState.activeFilters.size > 0;
-    if (any && !resourceState.activeFilters.has(e.category)) return false;
-    return true;
-  }
-
-  // ---------- Drag from panel onto card slots ----------
-  var currentDrag = null;
-  function wireResourceDrag(el) {
-    el.addEventListener('dragstart', function (e) {
-      currentDrag = { type: el.dataset.rtype, id: el.dataset.rid, name: el.dataset.rname };
-      el.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'copy';
-      e.dataTransfer.setData('text/plain', JSON.stringify(currentDrag));
-    });
-    el.addEventListener('dragend', function () { el.classList.remove('dragging'); currentDrag = null; clearAllDropHints(); });
-  }
-  function clearAllDropHints() {
-    $$('.bk2-drop-ok').forEach(function (el) { el.classList.remove('bk2-drop-ok'); });
-    $$('.bk2-drop-bad').forEach(function (el) { el.classList.remove('bk2-drop-bad'); });
-  }
-  // Mark every card's slots as drop targets.
-  function isCompatible(slot) {
-    if (!currentDrag) return false;
-    if (slot.classList.contains('bk2-slot--empty')) return currentDrag.type === 'person';
-    if (slot.classList.contains('bk2-veh-slot--empty')) return currentDrag.type === 'vehicle';
-    if (slot.classList.contains('bk2-crew')) return currentDrag.type === 'equipment';
-    return false;
-  }
-  document.addEventListener('dragover', function (e) {
-    var slot = e.target.closest('.bk2-slot--empty, .bk2-veh-slot--empty, .bk2-crew');
-    if (!slot || !currentDrag) return;
-    e.preventDefault();
-    if (isCompatible(slot)) { slot.classList.add('bk2-drop-ok'); slot.classList.remove('bk2-drop-bad'); }
-    else { slot.classList.add('bk2-drop-bad'); }
-  });
-  document.addEventListener('dragleave', function (e) {
-    var slot = e.target.closest('.bk2-slot--empty, .bk2-veh-slot--empty, .bk2-crew');
-    if (slot) { slot.classList.remove('bk2-drop-ok'); slot.classList.remove('bk2-drop-bad'); }
-  });
-  document.addEventListener('drop', function (e) {
-    var slot = e.target.closest('.bk2-slot--empty, .bk2-veh-slot--empty, .bk2-crew');
-    if (!slot || !currentDrag || !isCompatible(slot)) { clearAllDropHints(); return; }
-    e.preventDefault();
-    var card = slot.closest('.bk2-card');
-    if (!card) return;
-    var bookingId = card.dataset.bookingId;
-    var drag = currentDrag;
-    clearAllDropHints();
-    handleResourceDrop(bookingId, slot, drag).then(function () { refreshCard(card, bookingId); });
-  });
-
-  function handleResourceDrop(bookingId, slot, drag) {
-    var body, url;
-    if (drag.type === 'person') {
-      body = new URLSearchParams({ crew_member_id: drag.id, role_on_site: '' }).toString();
-      url = '/bookings/' + bookingId + '/crew';
-    } else if (drag.type === 'vehicle') {
-      body = new URLSearchParams({ equipment_id: drag.id, vehicle_role: 'ute', upgrade_placeholder: '1' }).toString();
-      url = '/bookings/' + bookingId + '/vehicles';
-    } else if (drag.type === 'equipment') {
-      body = new URLSearchParams({ equipment_id: drag.id }).toString();
-      url = '/bookings/' + bookingId + '/equipment';
-    }
-    return fetch(url, {
-      method: 'POST',
-      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
-      credentials: 'same-origin',
-      body: body,
-    })
-      .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, json: j }; }); })
-      .then(function (res) {
-        if (!res.ok) { toast(res.json.error || 'Drop failed', false); return; }
-        toast('Added ' + drag.name);
-      })
-      .catch(function (err) { toast(err.message, false); });
-  }
-
-  // Re-render one card after a drop without reloading the page.
-  function refreshCard(card, bookingId) {
-    // Pull a fresh copy of just this booking from the board endpoint.
-    var u = new URL(location.href);
-    u.searchParams.set('partial', '1');
-    fetch(u.toString(), { headers: { 'Accept': 'text/html' } })
-      .then(function (r) { return r.text(); })
-      .then(function (html) {
-        var parser = new DOMParser();
-        var doc = parser.parseFromString(html, 'text/html');
-        var fresh = doc.querySelector('.bk2-card[data-booking-id="' + bookingId + '"]');
-        if (fresh) {
-          card.replaceWith(fresh);
-        } else {
-          // Fall back to refetching just the JSON detail and patching slots.
-          // (Card might have moved status — re-render the whole board.)
-          location.reload();
-        }
-      })
-      .catch(function () { location.reload(); });
-  }
-
-  // 'R' opens the resource panel
-  document.addEventListener('keydown', function (e) {
-    var inField = e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
-    if (inField || e.metaKey || e.ctrlKey || e.altKey) return;
-    if (e.key === 'r' || e.key === 'R') { e.preventDefault(); resourceState.open ? closeResources() : openResources(); }
-  });
-
-  // ---------- popstate (back/forward) ----------
-  // Slide-over only handles Quick Book create now. View pages live at
-  // /bookings/:id (full page), so Back/Forward there is the browser's
-  // normal navigation — nothing for us to wire here beyond toggling
-  // create mode on/off.
-  window.addEventListener('popstate', function () {
-    var u = new URL(location.href);
-    var b = u.searchParams.get('b');
-    var v = u.searchParams.get('view') || 'board';
-    if (v !== getCurrentView()) setView(v);
-    if (b === 'new') {
-      if (soState.mode !== 'create') openCreate();
-    } else if (so.classList.contains('bk2-open')) {
-      closeSlideover();
-    }
-  });
-  function getCurrentView() {
-    var sel = document.querySelector('.bk2-view-tab[aria-selected="true"]');
-    return sel ? sel.dataset.viewTab : 'board';
-  }
-
-  // ---------- Map init (lazy, when map tab is shown) ----------
   var mapInited = false;
   function initMap() {
-    if (mapInited || typeof L === 'undefined') {
-      if (mapInited) return;
-      // Wait for Leaflet to load
-      setTimeout(initMap, 300);
-      return;
-    }
-    var el = $('#bk2-map');
-    if (!el) return;
+    if (mapInited) return;
+    if (typeof L === 'undefined') { setTimeout(initMap, 300); return; }
+    var el = $('#bk2-map'); if (!el) return;
     var pins = (window.BK2_DATA.bookings || []).filter(function (b) { return b.lat && b.lng; });
     var center = pins.length ? [pins[0].lat, pins[0].lng] : [-33.8688, 151.2093];
     var map = L.map('bk2-map').setView(center, pins.length ? 11 : 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap', maxZoom: 19 }).addTo(map);
     pins.forEach(function (p) {
       var m = L.marker([p.lat, p.lng]).addTo(map);
-      m.bindPopup('<strong>#' + p.num + '</strong><br>' + (p.title || p.addr || ''));
-      m.on('click', function () { location.href = '/bookings/' + p.id; });
+      m.bindPopup('<strong>#' + p.num + '</strong><br>' + (p.title || p.addr || '') + '<br><a href="/bookings/' + p.id + '" style="color:#2B7FFF">Open booking →</a>');
     });
     if (pins.length > 1) map.fitBounds(pins.map(function (p) { return [p.lat, p.lng]; }), { padding: [40, 40] });
     mapInited = true;
   }
 
-  // ---------- Initial state from URL ----------
-  var initialUrl = new URL(location.href);
-  var initialView = initialUrl.searchParams.get('view') || 'board';
-  if (initialView !== 'board') setView(initialView);
-  // Only ?b=new auto-opens the slide-over (Quick Book). View deep-links
-  // navigate to the full booking page so the slide-over can never strand
-  // the user. Any stale ?b=<id> gets silently stripped on load.
-  var initialBooking = window.BK2_DATA.openBookingId || initialUrl.searchParams.get('b');
-  if (initialBooking === 'new') {
-    openCreate();
-  } else if (initialBooking) {
-    pushUrl({ b: null });
-  }
-  // Defensive: if anything left a stuck slide-over class around (bfcache,
-  // historical state, whatever), close it on every page load.
-  if (so.classList.contains('bk2-open')) closeSlideover();
-  window.addEventListener('pageshow', function () {
-    if (so.classList.contains('bk2-open') && soState.mode !== 'create') closeSlideover();
-  });
-
   // ============================================================
-  //  CALENDAR (Phase 5) — week timeline 6am–8pm.
+  //  CALENDAR (week timeline)
   // ============================================================
-  var calLoadedFor = null;
+  var calLoaded = false;
   function loadCalendar() {
+    if (calLoaded) return;
     var date = window.BK2_DATA.dateStr;
-    if (calLoadedFor === date) return;
-    calLoadedFor = date;
     fetch('/bookings/api/week?date=' + encodeURIComponent(date), { headers: { 'Accept': 'application/json' } })
       .then(function (r) { return r.json(); })
       .then(renderCalendar)
       .catch(function () { $('#bk2-cal-grid').innerHTML = '<p style="color:#DC2626;text-align:center;padding:24px 0">Failed to load week.</p>'; });
+    calLoaded = true;
   }
   function renderCalendar(week) {
     var grid = $('#bk2-cal-grid');
@@ -1461,12 +568,11 @@
     range.textContent = monday.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) + ' – ' + sunday.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
 
     var hours = []; for (var h = 6; h <= 20; h++) hours.push(h);
-    var dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    var html = '<div class="bk2-cal">';
-    html += '<div class="bk2-cal-head"></div>';
+    var dayLabels = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    var html = '<div class="bk2-cal"><div class="bk2-cal-head"></div>';
     for (var i = 0; i < 7; i++) {
-      var dayDate = new Date(monday); dayDate.setDate(monday.getDate() + i);
-      html += '<div class="bk2-cal-head">' + dayLabels[i] + '<br><span style="font-weight:500;color:#374151">' + dayDate.getDate() + '/' + (dayDate.getMonth() + 1) + '</span></div>';
+      var dd = new Date(monday); dd.setDate(monday.getDate() + i);
+      html += '<div class="bk2-cal-head">' + dayLabels[i] + '<br><span style="font-weight:500;color:#374151">' + dd.getDate() + '/' + (dd.getMonth() + 1) + '</span></div>';
     }
     for (var hi = 0; hi < hours.length; hi++) {
       var hr = hours[hi];
@@ -1478,7 +584,6 @@
     html += '</div>';
     grid.innerHTML = html;
 
-    // Place blocks
     var pxPerMin = 32 / 60;
     var startMin = 6 * 60;
     (week.items || []).forEach(function (it) {
@@ -1486,149 +591,23 @@
       if (!firstCell) return;
       var topPx = Math.max(0, (it.start_min - startMin)) * pxPerMin;
       var heightPx = Math.max(20, (it.end_min - it.start_min) * pxPerMin - 2);
-      // Position within the column: find the column wrapper. Each
-      // bk2-cal-cell is a grid cell; we'll absolute-position the block
-      // relative to the first cell of that day-column.
-      var block = document.createElement('div');
+      var block = document.createElement('a');
+      block.href = '/bookings/' + it.id;
       block.className = 'bk2-cal-block bk2-status-tone-' + it.status;
-      block.style.cssText = 'top:' + topPx + 'px;height:' + heightPx + 'px;border-left-color:var(--bk2-tone);';
-      block.style.background = 'color-mix(in srgb, var(--bk2-tone) 18%, white)';
-      block.style.color = 'color-mix(in srgb, var(--bk2-tone) 70%, black)';
-      block.innerHTML = '<strong>' + esc(it.title || ('#' + it.booking_number)) + '</strong>' +
-        '<span style="opacity:0.85">' + new Date(it.start_datetime).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase() + '</span>';
-      block.dataset.bookingId = it.id;
-      block.addEventListener('click', function () { location.href = '/bookings/' + it.id; });
+      block.style.cssText = 'top:' + topPx + 'px;height:' + heightPx + 'px;border-left-color:var(--bk2-tone);text-decoration:none;color:inherit';
+      block.innerHTML = '<strong>' + (it.title || ('#' + it.booking_number)) + '</strong><span style="opacity:0.85">' + new Date(it.start_datetime).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase() + '</span>';
       firstCell.appendChild(block);
     });
   }
   $('#bk2-cal-prev') && $('#bk2-cal-prev').addEventListener('click', function () { shiftWeek(-7); });
   $('#bk2-cal-next') && $('#bk2-cal-next').addEventListener('click', function () { shiftWeek(7); });
-  function shiftWeek(deltaDays) {
-    var d = new Date(window.BK2_DATA.dateStr + 'T00:00:00'); d.setDate(d.getDate() + deltaDays);
-    var u = new URL(location.href); u.searchParams.set('date', d.toISOString().substring(0, 10)); u.searchParams.set('view', 'calendar');
+  function shiftWeek(d) {
+    var dt = new Date(window.BK2_DATA.dateStr + 'T00:00:00'); dt.setDate(dt.getDate() + d);
+    var u = new URL(location.href); u.searchParams.set('date', dt.toISOString().substring(0,10)); u.searchParams.set('view', 'calendar');
     location.href = u.toString();
   }
 
-  // If we landed on ?view=calendar, load it now (the setView call in
-  // the initial-state block already ran but at that point loadCalendar
-  // wasn't defined; the typeof guard inside setView handles future
-  // clicks, this triggers the first load).
-  if (getCurrentView() === 'calendar') loadCalendar();
-
-  // ============================================================
-  //  COMMAND PALETTE (Cmd+K)
-  // ============================================================
-  var palette     = $('#bk2-palette');
-  var palBackdrop = $('#bk2-palette-backdrop');
-  var palInput    = $('#bk2-palette-input');
-  var palList     = $('#bk2-palette-list');
-  var palItems    = [];
-  var palActive   = 0;
-  function paletteOpen() {
-    palBackdrop.classList.add('bk2-open');
-    palette.classList.add('bk2-open');
-    palInput.value = '';
-    refreshPalette('');
-    setTimeout(function () { palInput.focus(); }, 30);
-  }
-  function paletteClose() {
-    palBackdrop.classList.remove('bk2-open');
-    palette.classList.remove('bk2-open');
-  }
-  palBackdrop.addEventListener('click', paletteClose);
-  function refreshPalette(q) {
-    q = (q || '').toLowerCase();
-    // Static commands
-    var commands = [
-      { id: 'cmd:new',      label: 'New booking',        meta: 'Quick Book',  ic: '+', do: function () { paletteClose(); openCreate(); } },
-      { id: 'cmd:resource', label: 'Toggle Resource Panel', meta: 'R',         ic: '👥', do: function () { paletteClose(); resourceState.open ? closeResources() : openResources(); } },
-      { id: 'cmd:board',    label: 'Switch to Board',    meta: 'View',         ic: '☰', do: function () { paletteClose(); setView('board'); } },
-      { id: 'cmd:list',     label: 'Switch to List',     meta: 'View',         ic: '☰', do: function () { paletteClose(); setView('list'); } },
-      { id: 'cmd:cal',      label: 'Switch to Calendar', meta: 'View',         ic: '🗓', do: function () { paletteClose(); setView('calendar'); } },
-      { id: 'cmd:map',      label: 'Switch to Map',      meta: 'View',         ic: '📍', do: function () { paletteClose(); setView('map'); } },
-      { id: 'cmd:today',    label: 'Jump to today',      meta: 'Today',        ic: '⏰', do: function () { paletteClose(); location.href = '/bookings'; } },
-    ];
-    var bookings = (window.BK2_DATA.bookings || []).map(function (b) {
-      return { id: 'bk:' + b.id, label: '#' + b.num + ' · ' + (b.title || b.addr || 'Untitled'), meta: 'Booking', ic: '🧾', do: function () { paletteClose(); location.href = '/bookings/' + b.id; } };
-    });
-    var all = commands.concat(bookings);
-    palItems = q ? all.filter(function (it) { return it.label.toLowerCase().includes(q); }) : all;
-    palActive = 0;
-    palList.innerHTML = palItems.slice(0, 20).map(function (it, i) {
-      return '<div class="bk2-palette-row" data-i="' + i + '" data-active="' + (i === 0 ? 'true' : 'false') + '">' +
-        '<span class="ic">' + it.ic + '</span><span>' + esc(it.label) + '</span><span class="meta">' + esc(it.meta) + '</span>' +
-        '</div>';
-    }).join('');
-    palList.querySelectorAll('.bk2-palette-row').forEach(function (row) {
-      row.addEventListener('click', function () { var it = palItems[parseInt(row.dataset.i, 10)]; if (it) it.do(); });
-    });
-  }
-  palInput.addEventListener('input', function () { refreshPalette(palInput.value); });
-  palInput.addEventListener('keydown', function (e) {
-    if (e.key === 'ArrowDown') { e.preventDefault(); palActive = Math.min(palItems.length - 1, palActive + 1); updateActive(); }
-    else if (e.key === 'ArrowUp') { e.preventDefault(); palActive = Math.max(0, palActive - 1); updateActive(); }
-    else if (e.key === 'Enter') { e.preventDefault(); var it = palItems[palActive]; if (it) it.do(); }
-    else if (e.key === 'Escape') { e.preventDefault(); paletteClose(); }
-  });
-  function updateActive() {
-    palList.querySelectorAll('.bk2-palette-row').forEach(function (r, i) { r.dataset.active = (i === palActive ? 'true' : 'false'); if (i === palActive) r.scrollIntoView({ block: 'nearest' }); });
-  }
-  document.addEventListener('keydown', function (e) {
-    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); paletteOpen(); }
-  });
-
-  // ============================================================
-  //  LIST: bulk select + bulk status
-  // ============================================================
-  var listAll = $('#bk2-list-all');
-  var bulkBar = $('#bk2-bulk-bar');
-  var bulkCount = $('#bk2-bulk-count');
-  var bulkStatus = $('#bk2-bulk-status');
-  var bulkApply = $('#bk2-bulk-apply');
-  var bulkClear = $('#bk2-bulk-clear');
-  function listCheckboxes() { return $$('.bk2-list-chk'); }
-  function checkedListIds() { return listCheckboxes().filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.id; }); }
-  function refreshBulkBar() {
-    var ids = checkedListIds();
-    if (!ids.length) { bulkBar.style.display = 'none'; return; }
-    bulkBar.style.display = 'flex';
-    bulkCount.textContent = ids.length + ' selected';
-    if (listAll) {
-      var all = listCheckboxes();
-      listAll.indeterminate = ids.length > 0 && ids.length < all.length;
-      listAll.checked = ids.length === all.length;
-    }
-    bulkApply.disabled = !bulkStatus.value;
-  }
-  if (listAll) listAll.addEventListener('change', function () {
-    listCheckboxes().forEach(function (c) { c.checked = listAll.checked; });
-    refreshBulkBar();
-  });
-  document.addEventListener('change', function (e) {
-    if (e.target && e.target.classList && e.target.classList.contains('bk2-list-chk')) refreshBulkBar();
-    if (e.target === bulkStatus) refreshBulkBar();
-  });
-  if (bulkClear) bulkClear.addEventListener('click', function () {
-    listCheckboxes().forEach(function (c) { c.checked = false; });
-    refreshBulkBar();
-  });
-  if (bulkApply) bulkApply.addEventListener('click', function () {
-    var ids = checkedListIds();
-    var status = bulkStatus.value;
-    if (!ids.length || !status) return;
-    if (!confirm('Set status of ' + ids.length + ' booking' + (ids.length === 1 ? '' : 's') + ' to ' + status.replace(/_/g, ' ') + '?')) return;
-    var promises = ids.map(function (id) {
-      return fetch('/bookings/' + id + '/status', {
-        method: 'POST',
-        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
-        credentials: 'same-origin',
-        body: new URLSearchParams({ status: status }).toString(),
-      });
-    });
-    Promise.all(promises).then(function () { toast('Updated ' + ids.length); setTimeout(function () { location.reload(); }, 600); });
-  });
-
-  // Select first card by default
-  selectCard(0);
+  if (v0 === 'map')      initMap();
+  if (v0 === 'calendar') loadCalendar();
 })();
 </script>
