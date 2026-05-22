@@ -323,6 +323,126 @@ router.get('/sessions/:code/live', (req, res) => {
 });
 
 // =====================================================================
+// POST /safety-workshops/sessions/:code/add-participant — manual add
+// =====================================================================
+// Facilitator-side fallback for adding someone to a session the public
+// QR flow didn't capture — workers without phones, late arrivals, or
+// someone whose phone won't scan. Body:
+//   name         — display name (required, 2–60 chars)
+//   case_letter  — A/B/C/… (required, must be valid for this workshop)
+//   score        — optional integer. If provided, also writes a
+//                  workshop_attempts row so the new participant lands on
+//                  the leaderboard immediately. Max defaults to the
+//                  largest max_score already recorded this session, or
+//                  100 if no attempts have been submitted yet.
+//   max_score    — optional override for the max if the admin wants to
+//                  override the inherited default.
+router.post('/sessions/:code/add-participant', (req, res) => {
+  const db = getDb();
+  const session = db
+    .prepare(
+      `SELECT s.*, w.slug AS workshop_slug, w.title AS workshop_title
+       FROM workshop_sessions s
+       JOIN workshop_definitions w ON w.id = s.workshop_id
+       WHERE s.session_code = ?`
+    )
+    .get(req.params.code);
+  if (!session) {
+    req.flash('error', 'Session not found.');
+    return res.redirect('/safety-workshops');
+  }
+  if (session.status !== 'open') {
+    req.flash('error', "Can't add — session is closed. Reopen it first.");
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  const module = WORKSHOPS[session.workshop_slug];
+  if (!module) {
+    req.flash('error', 'Workshop content module missing.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  const validCases = module.CASES.map((c) => c.letter);
+
+  const name = String((req.body && req.body.name) || '').trim();
+  const caseLetter = String((req.body && req.body.case_letter) || '').toUpperCase().trim();
+  const rawScore = (req.body && req.body.score != null) ? String(req.body.score).trim() : '';
+  const rawMax   = (req.body && req.body.max_score != null) ? String(req.body.max_score).trim() : '';
+
+  if (name.length < 2 || name.length > 60) {
+    req.flash('error', 'Name is required (2–60 characters).');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  if (!validCases.includes(caseLetter)) {
+    req.flash('error', 'Pick a valid case.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  // Same case-insensitive name dedupe as the public start endpoint.
+  const existing = db
+    .prepare(
+      `SELECT case_letter FROM workshop_assignments
+       WHERE session_id = ? AND LOWER(player_name) = LOWER(?)`
+    )
+    .get(session.id, name);
+  if (existing) {
+    req.flash('error', name + ' is already on the board (Case ' + existing.case_letter + ').');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+
+  // Inherit max_score from an existing attempt so the leaderboard's
+  // /160 (or whatever) stays consistent across all rows. Admin can
+  // override via the max_score form field.
+  let maxScore = parseInt(rawMax, 10);
+  if (!Number.isFinite(maxScore) || maxScore <= 0) {
+    const fromAttempt = db
+      .prepare('SELECT MAX(max_score) AS m FROM workshop_attempts WHERE session_id = ?')
+      .get(session.id);
+    maxScore = (fromAttempt && fromAttempt.m) || 100;
+  }
+  let score = null;
+  if (rawScore !== '') {
+    score = parseInt(rawScore, 10);
+    if (!Number.isFinite(score) || score < 0 || score > maxScore) {
+      req.flash('error', 'Score must be between 0 and ' + maxScore + '.');
+      return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    }
+  }
+
+  const tx = db.transaction(() => {
+    db.prepare(
+      `INSERT INTO workshop_assignments (session_id, player_name, case_letter, user_id)
+       VALUES (?, ?, ?, ?)`
+    ).run(session.id, name, caseLetter, req.session.user ? req.session.user.id : null);
+    if (score != null) {
+      db.prepare(
+        `INSERT INTO workshop_attempts
+           (session_id, workshop_id, case_letter, player_name, score, max_score,
+            answers_json, started_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      ).run(session.id, session.workshop_id, caseLetter, name, score, maxScore);
+    }
+  });
+  try {
+    tx();
+  } catch (e) {
+    console.error('[safety-workshops add-participant]', e);
+    req.flash('error', 'Could not add: ' + e.message);
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  try {
+    logActivity({
+      user: req.session.user,
+      action: 'add_participant',
+      entityType: 'workshop_session',
+      entityId: session.id,
+      entityLabel: session.session_code,
+      details: name + ' → Case ' + caseLetter + (score != null ? ' (' + score + '/' + maxScore + ')' : ''),
+      ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash('success', 'Added ' + name + ' to Case ' + caseLetter + (score != null ? ' with score ' + score + '/' + maxScore + '.' : '.'));
+  return res.redirect('/safety-workshops/sessions/' + session.session_code);
+});
+
+// =====================================================================
 // POST /safety-workshops/sessions/:code/close — close session
 // =====================================================================
 // Locks submissions but preserves all scores + assignments. Use this

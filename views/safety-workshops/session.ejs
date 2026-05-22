@@ -95,6 +95,53 @@
           <% }) %>
         </ul>
       </div>
+
+      <!-- Manual add — for workers without phones, late arrivals, or
+           anyone whose phone wouldn't scan the QR. Score is optional;
+           if blank the player just appears under Case assignments
+           (no leaderboard row until they submit). -->
+      <% if (session.status === 'open') { %>
+        <details class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <summary class="px-4 py-3 cursor-pointer select-none flex items-center justify-between gap-2 hover:bg-gray-50">
+            <span class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Add participant manually</span>
+            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <form method="POST" action="/safety-workshops/sessions/<%= session.session_code %>/add-participant" class="p-4 space-y-3 border-t border-gray-100">
+            <%- include('../partials/csrf') %>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Name</label>
+              <input type="text" name="name" required minlength="2" maxlength="60" placeholder="e.g. Taj Rahman"
+                class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Case</label>
+                <select name="case_letter" required class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+                  <option value="">Pick…</option>
+                  <% cases.forEach(c => { %>
+                    <option value="<%= c.letter %>">Case <%= c.letter %> · <%= c.title %></option>
+                  <% }) %>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Score <span class="text-gray-400 font-normal">(optional)</span></label>
+                <input type="number" name="score" min="0" step="1" placeholder="e.g. 145"
+                  class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+                <% if (attempts && attempts.length) { %>
+                  <p class="text-[10px] text-gray-400 mt-0.5">Max: <%= attempts[0].max_score %></p>
+                <% } %>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-500">Leave score blank if they haven't completed the case yet — they'll show up under <em>Case assignments</em> only. Fill in a score to place them on the leaderboard immediately.</p>
+            <div class="flex items-center justify-end">
+              <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Add to session
+              </button>
+            </div>
+          </form>
+        </details>
+      <% } %>
     </div>
 
     <!-- RIGHT: leaderboard -->
