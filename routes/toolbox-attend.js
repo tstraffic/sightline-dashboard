@@ -184,4 +184,84 @@ router.post('/:token/submit', (req, res) => {
                '&status=' + status);
 });
 
+// POST /toolbox-attend/:token/sign-off — record an actual sign-off via
+// the public QR link. Workers at the meeting scan the QR projected by
+// the facilitator, pick their name, sign with their finger, and submit.
+// Distinct from /submit (RSVP) — this writes status='attended' with
+// signed_off_at + signature_data, which flips the post-attendance
+// Materials gate to unlocked for that worker.
+router.post('/:token/sign-off', (req, res) => {
+  const session = loadSession(req.params.token);
+  if (!session) {
+    return res.status(404).render('toolbox-attend/error', {
+      layout: false, message: 'This attendance link is invalid.',
+    });
+  }
+  if (session.closed_at) {
+    return res.status(410).render('toolbox-attend/error', {
+      layout: false, message: 'This attendance session has been closed by the office.',
+    });
+  }
+
+  const crewId = parseInt(req.body.crew_member_id, 10);
+  const sigRaw = (req.body.signature_data || '').toString();
+  if (!crewId) {
+    return res.status(400).render('toolbox-attend/error', {
+      layout: false, message: 'Please pick your name before signing off.',
+    });
+  }
+  if (!sigRaw.startsWith('data:image/') || sigRaw.length > 260000) {
+    return res.status(400).render('toolbox-attend/error', {
+      layout: false, message: 'Please draw your signature before submitting.',
+    });
+  }
+
+  const db = getDb();
+  const crew = db.prepare(`
+    SELECT cm.id, cm.full_name
+    FROM crew_members cm
+    WHERE cm.id = ? AND cm.active = 1
+      AND (
+        NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+        OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL)
+      )
+  `).get(crewId);
+  if (!crew) {
+    return res.status(400).render('toolbox-attend/error', {
+      layout: false, message: 'Worker not found. Please refresh and try again.',
+    });
+  }
+  // Invitee scope check — same as the RSVP submit.
+  const inviteeRows = db.prepare(
+    'SELECT 1 FROM toolbox_invitees WHERE toolbox_id = ?'
+  ).all(session.toolbox_id);
+  if (inviteeRows.length > 0) {
+    const isInvited = db.prepare(
+      'SELECT 1 FROM toolbox_invitees WHERE toolbox_id = ? AND crew_member_id = ?'
+    ).get(session.toolbox_id, crew.id);
+    if (!isInvited) {
+      return res.status(403).render('toolbox-attend/error', {
+        layout: false, message: 'You were not invited to this toolbox meeting. Please check with your supervisor.',
+      });
+    }
+  }
+
+  db.prepare(`
+    INSERT INTO toolbox_attendance
+      (toolbox_id, crew_member_id, status, signature_data, signed_off_at, recorded_by_id, recorded_at)
+    VALUES (?, ?, 'attended', ?, datetime('now'), NULL, datetime('now'))
+    ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+      status = 'attended',
+      signature_data = excluded.signature_data,
+      signed_off_at = datetime('now'),
+      recorded_at = datetime('now'),
+      absence_reason = NULL
+  `).run(session.toolbox_id, crew.id, sigRaw);
+
+  res.redirect('/toolbox-attend/' + encodeURIComponent(req.params.token) +
+               '?submitted=1&signoff=1' +
+               '&name=' + encodeURIComponent(crew.full_name) +
+               '&status=attended');
+});
+
 module.exports = router;
