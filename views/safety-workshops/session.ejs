@@ -83,13 +83,23 @@
             <span id="assignedCount" class="text-xs font-semibold text-gray-500 tabular-nums"><%= assignments.filter(a => a.claimed_by_name).length %>/<%= assignments.length %> claimed</span>
           </div>
           <ul id="assignList" class="divide-y divide-gray-100">
-            <% assignments.forEach(a => { %>
+            <% assignments.forEach(a => {
+              // claimed_by_name falls back to the group name when the
+              // participant tapped without giving theirs — show the
+              // generic Claimed pill in that case, otherwise show who
+              // picked it up so the office can see who's running each team.
+              const claimer = a.claimed_by_name && a.claimed_by_name !== a.player_name ? a.claimed_by_name : null;
+            %>
               <li class="px-4 py-3">
                 <div class="flex items-center gap-2 mb-1">
                   <span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0"><%= a.case_letter %></span>
                   <span class="text-sm font-bold text-gray-900"><%= a.player_name %></span>
                   <% if (a.claimed_by_name) { %>
-                    <span class="ml-auto text-[10px] font-semibold text-emerald-700 uppercase tracking-widest">Claimed</span>
+                    <span class="ml-auto text-right text-[11px] leading-tight">
+                      <span class="block font-semibold text-emerald-700">
+                        <%= claimer ? 'Picked by ' + claimer : 'Claimed' %>
+                      </span>
+                    </span>
                   <% } else { %>
                     <span class="ml-auto text-[10px] text-gray-400 uppercase tracking-widest">Open</span>
                   <% } %>
@@ -252,13 +262,21 @@
       var claimed = assignments.filter(function (a) { return a.claimed_by_name; }).length;
       countEl.textContent = claimed + '/' + assignments.length + ' claimed';
       var html = assignments.map(function (a) {
+        var claimer = a.claimed_by_name && a.claimed_by_name !== a.player_name ? a.claimed_by_name : null;
+        var claimHtml;
+        if (a.claimed_by_name) {
+          claimHtml = '<span class="ml-auto text-right text-[11px] leading-tight">' +
+            '<span class="block font-semibold text-emerald-700">' +
+              (claimer ? 'Picked by ' + escapeHtml(claimer) : 'Claimed') +
+            '</span></span>';
+        } else {
+          claimHtml = '<span class="ml-auto text-[10px] text-gray-400 uppercase tracking-widest">Open</span>';
+        }
         return '<li class="px-4 py-3">' +
           '<div class="flex items-center gap-2 mb-1">' +
             '<span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">' + a.case_letter + '</span>' +
             '<span class="text-sm font-bold text-gray-900">' + escapeHtml(a.player_name) + '</span>' +
-            (a.claimed_by_name
-              ? '<span class="ml-auto text-[10px] font-semibold text-emerald-700 uppercase tracking-widest">Claimed</span>'
-              : '<span class="ml-auto text-[10px] text-gray-400 uppercase tracking-widest">Open</span>') +
+            claimHtml +
           '</div>' +
           '<p class="text-xs text-gray-500 break-words">' + escapeHtml(a.members_csv || '—') + '</p>' +
         '</li>';

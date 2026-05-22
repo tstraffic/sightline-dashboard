@@ -77,10 +77,13 @@ const uploadStorage = multer.diskStorage({
     cb(null, stamp + path.extname(file.originalname));
   }
 });
+// 50MB per file — SWMS v3 PDFs run 20MB+; the previous 15MB cap was
+// silently truncating uploads with no user-visible error, so Saadat
+// kept hitting "saved but the prep doc isn't there".
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024;
 const upload = multer({
   storage: uploadStorage,
-  // 15MB per file — toolbox decks and sign-on scans can be chunky.
-  limits: { fileSize: 15 * 1024 * 1024 },
+  limits: { fileSize: MAX_UPLOAD_BYTES },
   fileFilter: (req, file, cb) => {
     // The HTML <input accept="..."> on prep / documents allows Office +
     // text files in addition to PDFs and images. The regex needs to
@@ -96,7 +99,7 @@ const upload = multer({
 //   prep_documents — pre-meeting materials workers should read before
 //                    attending. Visible to every invited worker
 //                    regardless of attendance state (kind='prep' rows).
-const formUploads = upload.fields([
+const rawFormUploads = upload.fields([
   // slides + signon are legacy fields, kept on existing rows but no
   // longer surfaced in the create/edit form. Multer still accepts the
   // fields so any direct API caller doesn't break.
@@ -106,6 +109,28 @@ const formUploads = upload.fields([
   { name: 'documents', maxCount: 12 },
   { name: 'prep_documents', maxCount: 12 },
 ]);
+
+// Wrap multer so size-limit / file-count errors surface to the user as
+// a flash + redirect instead of being swallowed (file silently dropped,
+// row not inserted, admin sees "saved" with no doc). MulterError has a
+// `code` we can map to a human message.
+function formUploads(req, res, next) {
+  rawFormUploads(req, res, function (err) {
+    if (!err) return next();
+    let msg = 'Upload failed: ' + (err.message || 'unknown');
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      const mb = Math.round(MAX_UPLOAD_BYTES / 1024 / 1024);
+      msg = 'File too large — each upload must be under ' + mb + 'MB. Trim the PDF or split it.';
+    } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+      msg = 'Unexpected file field: ' + (err.field || '');
+    }
+    req.flash('error', msg);
+    const backTo = req.params.id
+      ? '/toolbox-talks/' + req.params.id + '/edit'
+      : '/toolbox-talks/new';
+    return res.redirect(backTo);
+  });
+}
 
 const STATUS_VALUES = ['draft', 'published', 'archived'];
 const STATUS_LABELS = { draft: 'Draft', published: 'Published', archived: 'Archived' };
