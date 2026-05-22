@@ -4,6 +4,33 @@
     const d = new Date(s);
     return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
+  function fmtStamp(s) {
+    if (!s) return '';
+    return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  // "Has the toolbox been held yet?" Compared in plain UTC ms which is
+  // fine for the day-grain decision we need here — held_at is stored
+  // as a Sydney-local datetime but we only need past/future for the
+  // status chip. Stays consistent with how the detail page treats it.
+  const nowMs = Date.now();
+  function chipFor(row) {
+    const heldMs = row.held_at ? new Date(row.held_at).getTime() : null;
+    const isPast = heldMs !== null && heldMs <= nowMs;
+    const s = row.my_status;
+    if (s === 'attended')  return { cls: 'att',     label: 'Attended',      detail: row.my_recorded_at ? 'Marked attended ' + fmtStamp(row.my_recorded_at) : '' };
+    if (s === 'caught_up') return { cls: 'caught',  label: 'Caught up',     detail: row.my_recorded_at ? 'Caught up ' + fmtStamp(row.my_recorded_at)       : '' };
+    if (s === 'absent')    return { cls: 'absent',  label: 'Not attending', detail: row.my_recorded_at ? 'You declined ' + fmtStamp(row.my_recorded_at)    : '' };
+    if (s === 'attending') {
+      // Worker said they'd be there. If the toolbox has already happened
+      // and they were never marked off, surface that as "Did not attend"
+      // so it isn't visually identical to a confirmed future attendance.
+      if (isPast) return { cls: 'absent', label: 'Did not attend', detail: row.my_recorded_at ? 'You confirmed ' + fmtStamp(row.my_recorded_at) + ' but were not marked off' : '' };
+      return { cls: 'att', label: 'Attending', detail: row.my_recorded_at ? 'You confirmed to attend on ' + fmtStamp(row.my_recorded_at) : '' };
+    }
+    // No record at all.
+    if (isPast) return { cls: 'absent', label: 'Did not attend', detail: '' };
+    return { cls: 'pending', label: 'Pending', detail: '' };
+  }
 %>
 <style>
   .saf-wrap { padding: 0; color: #fff; }
@@ -21,10 +48,12 @@
     display: inline-block; font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 999px;
     margin-top: 6px;
   }
-  .tb-chip.att   { background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); }
-  .tb-chip.caught{ background: rgba(139,92,246,0.18); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3); }
-  .tb-chip.absent{ background: rgba(244,63,94,0.18);  color: #fca5a5; border: 1px solid rgba(244,63,94,0.3); }
-  .tb-chip.miss  { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.10); }
+  .tb-chip.att    { background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3); }
+  .tb-chip.caught { background: rgba(139,92,246,0.18); color: #c4b5fd; border: 1px solid rgba(139,92,246,0.3); }
+  .tb-chip.absent { background: rgba(244,63,94,0.18);  color: #fca5a5; border: 1px solid rgba(244,63,94,0.3); }
+  .tb-chip.pending{ background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3); }
+  .tb-chip.miss   { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.10); }
+  .tb-chip-detail { display: block; font-size: 0.68rem; color: rgba(255,255,255,0.55); margin-top: 4px; line-height: 1.35; }
   .tb-reason {
     margin-top: 8px; padding: 8px 10px; border-radius: 8px;
     background: rgba(244,63,94,0.10); border: 1px solid rgba(244,63,94,0.22);
@@ -42,19 +71,15 @@
     <div class="saf-empty">No toolbox meetings posted yet.</div>
   <% } else { %>
     <% rows.forEach(r => {
-      const status = r.my_status;
-      let chipClass = 'miss';
-      let chipLabel = 'No response';
-      if (status === 'attended')  { chipClass = 'att';    chipLabel = 'Attended'; }
-      else if (status === 'caught_up') { chipClass = 'caught'; chipLabel = 'Caught up'; }
-      else if (status === 'absent')    { chipClass = 'absent'; chipLabel = 'Couldn\'t attend'; }
+      const chip = chipFor(r);
     %>
       <a href="/w/safety/toolboxes/<%= r.id %>" class="tb-card">
         <div class="tb-card-title"><%= r.title %></div>
         <div class="tb-card-meta"><%= fmt(r.held_at) %><% if (r.presenter) { %> · <%= r.presenter %><% } %></div>
         <% if (r.key_points) { %><div class="tb-snip"><%= r.key_points %></div><% } %>
-        <span class="tb-chip <%= chipClass %>"><%= chipLabel %></span>
-        <% if (status === 'absent' && r.my_absence_reason) { %>
+        <span class="tb-chip <%= chip.cls %>"<% if (chip.detail) { %> title="<%= chip.detail %>"<% } %>><%= chip.label %></span>
+        <% if (chip.detail) { %><span class="tb-chip-detail"><%= chip.detail %></span><% } %>
+        <% if (r.my_status === 'absent' && r.my_absence_reason) { %>
           <div class="tb-reason"><b>Your reason:</b> <%= r.my_absence_reason %></div>
         <% } %>
       </a>
