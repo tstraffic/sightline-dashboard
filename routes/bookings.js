@@ -815,6 +815,46 @@ router.get('/resources', (req, res) => {
   }
 });
 
+// GET /api/week — Calendar feed: every booking in a 7-day window
+// starting on Monday of the given date. Returns a flat list with
+// day index (0–6) and minute offsets, so the front-end can lay them
+// out as time blocks per day column.
+router.get('/api/week', (req, res) => {
+  try {
+    const db = getDb();
+    const anchor = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+    const d = new Date(anchor + 'T00:00:00');
+    const day = d.getDay();
+    const offsetToMonday = (day === 0 ? -6 : 1 - day);
+    const monday = new Date(d); monday.setDate(d.getDate() + offsetToMonday);
+    const sunday = new Date(monday); sunday.setDate(monday.getDate() + 6);
+    const fromStr = monday.toISOString().substring(0, 10);
+    const toStr   = sunday.toISOString().substring(0, 10);
+    const rows = db.prepare(`
+      SELECT id, booking_number, title, status, start_datetime, end_datetime,
+             depot, site_address, suburb,
+             (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = bookings.id) AS crew_count
+      FROM bookings
+      WHERE DATE(start_datetime) BETWEEN ? AND ?
+        AND deleted_at IS NULL
+        AND status NOT IN ('cancelled','late_cancellation')
+      ORDER BY start_datetime
+    `).all(fromStr, toStr);
+    const items = rows.map(r => {
+      const start = new Date(r.start_datetime);
+      const end   = new Date(r.end_datetime);
+      const dayDate = new Date(r.start_datetime.substring(0, 10) + 'T00:00:00');
+      const di = Math.max(0, Math.min(6, Math.round((dayDate - monday) / 86400000)));
+      const startMin = start.getHours() * 60 + start.getMinutes();
+      const endMin   = end.getHours() * 60 + end.getMinutes();
+      return { ...r, day_index: di, start_min: startMin, end_min: Math.max(startMin + 30, endMin) };
+    });
+    res.json({ monday: fromStr, sunday: toStr, items });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // GET /api/resources — Resource Panel feed for the new board. Returns
 // people, vehicles, equipment in one call so the panel doesn't need to
 // re-request when the user flips tabs. Each item carries enough meta

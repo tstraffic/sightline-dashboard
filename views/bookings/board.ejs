@@ -253,21 +253,35 @@
   </section>
 
   <!-- ============================================================
-       LIST PANE  —  dense table, same data
+       LIST PANE  —  dense table with bulk select + bulk status
        ============================================================ -->
   <section class="bk2-pane" data-view-pane="list" id="bk2-pane-list">
     <% if (!bookings.length) { %>
       <div class="bk2-empty"><h3>No bookings for <%= dayLabel %></h3></div>
     <% } else { %>
+      <div id="bk2-bulk-bar" style="display:none;align-items:center;gap:10px;background:#EFF6FF;border:1px solid #BFDBFE;padding:8px 14px;border-radius:10px;margin-bottom:10px">
+        <span id="bk2-bulk-count" style="font-size:12px;font-weight:700;color:#1E40AF">0 selected</span>
+        <span style="color:#9CA3AF">·</span>
+        <span style="font-size:11px;color:#6B7280">Set status:</span>
+        <select id="bk2-bulk-status" style="padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px">
+          <option value="">— pick —</option>
+          <% statuses.forEach(function (s) { %><option value="<%= s %>"><%= statusLabel(s) %></option><% }); %>
+        </select>
+        <button type="button" id="bk2-bulk-apply" disabled style="background:#2B7FFF;color:#fff;border:0;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Apply</button>
+        <span style="flex:1"></span>
+        <button type="button" id="bk2-bulk-clear" style="background:transparent;border:0;color:#6B7280;font-size:12px;cursor:pointer">Clear selection</button>
+      </div>
       <table class="bk2-list">
         <thead>
           <tr>
+            <th style="width:32px"><input type="checkbox" id="bk2-list-all"></th>
             <th>Time</th><th>#</th><th>Status</th><th>Site / Client</th><th>Depot</th><th>Crew</th><th>Vehicles</th>
           </tr>
         </thead>
         <tbody>
           <% bookings.forEach(function (b) { %>
             <tr data-booking-id="<%= b.id %>" tabindex="0">
+              <td><input type="checkbox" class="bk2-list-chk" data-id="<%= b.id %>" onclick="event.stopPropagation()"></td>
               <td style="font-family:ui-monospace,monospace;font-size:11px;color:#374151"><%= fmtTime(b.start_datetime) %>–<%= fmtTime(b.end_datetime) %></td>
               <td style="font-family:ui-monospace,monospace;font-size:11px;color:#9CA3AF">#<%= b.booking_number || b.id %></td>
               <td><span class="bk2-status-pill bk2-status--<%= b.status %>"><%= statusLabel(b.status) %></span></td>
@@ -286,12 +300,18 @@
   </section>
 
   <!-- ============================================================
-       CALENDAR PANE  —  Phase 5 placeholder
+       CALENDAR PANE  —  week timeline (8am–8pm)
        ============================================================ -->
   <section class="bk2-pane" data-view-pane="calendar" id="bk2-pane-calendar">
-    <div class="bk2-empty">
-      <h3>Calendar lands in Phase 5</h3>
-      <p style="font-size:13px;margin-top:4px">Week timeline with drag-to-reschedule, edge-drag to resize, red conflict highlights.</p>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="display:flex;gap:6px">
+        <button type="button" id="bk2-cal-prev" class="bk2-newbtn" style="background:#F3F4F6;color:#374151;font-weight:500">← Prev week</button>
+        <button type="button" id="bk2-cal-next" class="bk2-newbtn" style="background:#F3F4F6;color:#374151;font-weight:500">Next week →</button>
+      </div>
+      <p id="bk2-cal-range" style="color:#6B7280;font-size:13px;font-weight:600">Loading…</p>
+    </div>
+    <div id="bk2-cal-grid">
+      <p style="color:#9CA3AF;font-size:13px;text-align:center;padding:48px 0">Loading…</p>
     </div>
   </section>
 
@@ -369,6 +389,15 @@
     <span style="font-size:11px;color:#9CA3AF">Press <kbd style="background:#fff;border:1px solid #D1D5DB;padding:1px 5px;border-radius:4px;font-family:ui-monospace,monospace">Esc</kbd> to close</span>
   </footer>
 </aside>
+
+<!-- ============================================================
+     COMMAND PALETTE (Cmd+K / Ctrl+K)
+     ============================================================ -->
+<div class="bk2-palette-backdrop" id="bk2-palette-backdrop"></div>
+<div class="bk2-palette" id="bk2-palette" role="dialog" aria-label="Command palette">
+  <input type="text" class="bk2-palette-input" id="bk2-palette-input" placeholder="Jump to booking by #, client, site, or run a command…" autocomplete="off">
+  <div class="bk2-palette-list" id="bk2-palette-list"></div>
+</div>
 
 <!-- ============================================================
      QUICK BOOK FORM TEMPLATE  —  rendered into the slide-over body
@@ -504,6 +533,7 @@
     if (v === 'board') u.searchParams.delete('view'); else u.searchParams.set('view', v);
     history.replaceState(history.state, '', u.toString());
     if (v === 'map') initMap();
+    if (v === 'calendar' && typeof loadCalendar === 'function') loadCalendar();
   }
   $$('.bk2-view-tab').forEach(function (t) {
     t.addEventListener('click', function () { setView(t.dataset.viewTab); });
@@ -1331,6 +1361,194 @@
   var initialBooking = window.BK2_DATA.openBookingId || initialUrl.searchParams.get('b');
   if (initialBooking === 'new') openCreate();
   else if (initialBooking) openBooking(initialBooking, 'details');
+
+  // ============================================================
+  //  CALENDAR (Phase 5) — week timeline 6am–8pm.
+  // ============================================================
+  var calLoadedFor = null;
+  function loadCalendar() {
+    var date = window.BK2_DATA.dateStr;
+    if (calLoadedFor === date) return;
+    calLoadedFor = date;
+    fetch('/bookings/api/week?date=' + encodeURIComponent(date), { headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.json(); })
+      .then(renderCalendar)
+      .catch(function () { $('#bk2-cal-grid').innerHTML = '<p style="color:#DC2626;text-align:center;padding:24px 0">Failed to load week.</p>'; });
+  }
+  function renderCalendar(week) {
+    var grid = $('#bk2-cal-grid');
+    var range = $('#bk2-cal-range');
+    var monday = new Date(week.monday + 'T00:00:00');
+    var sunday = new Date(week.sunday + 'T00:00:00');
+    range.textContent = monday.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) + ' – ' + sunday.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+
+    var hours = []; for (var h = 6; h <= 20; h++) hours.push(h);
+    var dayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    var html = '<div class="bk2-cal">';
+    html += '<div class="bk2-cal-head"></div>';
+    for (var i = 0; i < 7; i++) {
+      var dayDate = new Date(monday); dayDate.setDate(monday.getDate() + i);
+      html += '<div class="bk2-cal-head">' + dayLabels[i] + '<br><span style="font-weight:500;color:#374151">' + dayDate.getDate() + '/' + (dayDate.getMonth() + 1) + '</span></div>';
+    }
+    for (var hi = 0; hi < hours.length; hi++) {
+      var hr = hours[hi];
+      html += '<div class="bk2-cal-hour">' + (hr <= 12 ? hr : hr - 12) + (hr < 12 ? 'a' : 'p') + '</div>';
+      for (var di = 0; di < 7; di++) {
+        html += '<div class="bk2-cal-cell" data-day="' + di + '" data-hour="' + hr + '"></div>';
+      }
+    }
+    html += '</div>';
+    grid.innerHTML = html;
+
+    // Place blocks
+    var pxPerMin = 32 / 60;
+    var startMin = 6 * 60;
+    (week.items || []).forEach(function (it) {
+      var firstCell = grid.querySelector('.bk2-cal-cell[data-day="' + it.day_index + '"][data-hour="6"]');
+      if (!firstCell) return;
+      var topPx = Math.max(0, (it.start_min - startMin)) * pxPerMin;
+      var heightPx = Math.max(20, (it.end_min - it.start_min) * pxPerMin - 2);
+      // Position within the column: find the column wrapper. Each
+      // bk2-cal-cell is a grid cell; we'll absolute-position the block
+      // relative to the first cell of that day-column.
+      var block = document.createElement('div');
+      block.className = 'bk2-cal-block bk2-status-tone-' + it.status;
+      block.style.cssText = 'top:' + topPx + 'px;height:' + heightPx + 'px;border-left-color:var(--bk2-tone);';
+      block.style.background = 'color-mix(in srgb, var(--bk2-tone) 18%, white)';
+      block.style.color = 'color-mix(in srgb, var(--bk2-tone) 70%, black)';
+      block.innerHTML = '<strong>' + esc(it.title || ('#' + it.booking_number)) + '</strong>' +
+        '<span style="opacity:0.85">' + new Date(it.start_datetime).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase() + '</span>';
+      block.dataset.bookingId = it.id;
+      block.addEventListener('click', function () { openBooking(it.id, 'details'); });
+      firstCell.appendChild(block);
+    });
+  }
+  $('#bk2-cal-prev') && $('#bk2-cal-prev').addEventListener('click', function () { shiftWeek(-7); });
+  $('#bk2-cal-next') && $('#bk2-cal-next').addEventListener('click', function () { shiftWeek(7); });
+  function shiftWeek(deltaDays) {
+    var d = new Date(window.BK2_DATA.dateStr + 'T00:00:00'); d.setDate(d.getDate() + deltaDays);
+    var u = new URL(location.href); u.searchParams.set('date', d.toISOString().substring(0, 10)); u.searchParams.set('view', 'calendar');
+    location.href = u.toString();
+  }
+
+  // If we landed on ?view=calendar, load it now (the setView call in
+  // the initial-state block already ran but at that point loadCalendar
+  // wasn't defined; the typeof guard inside setView handles future
+  // clicks, this triggers the first load).
+  if (getCurrentView() === 'calendar') loadCalendar();
+
+  // ============================================================
+  //  COMMAND PALETTE (Cmd+K)
+  // ============================================================
+  var palette     = $('#bk2-palette');
+  var palBackdrop = $('#bk2-palette-backdrop');
+  var palInput    = $('#bk2-palette-input');
+  var palList     = $('#bk2-palette-list');
+  var palItems    = [];
+  var palActive   = 0;
+  function paletteOpen() {
+    palBackdrop.classList.add('bk2-open');
+    palette.classList.add('bk2-open');
+    palInput.value = '';
+    refreshPalette('');
+    setTimeout(function () { palInput.focus(); }, 30);
+  }
+  function paletteClose() {
+    palBackdrop.classList.remove('bk2-open');
+    palette.classList.remove('bk2-open');
+  }
+  palBackdrop.addEventListener('click', paletteClose);
+  function refreshPalette(q) {
+    q = (q || '').toLowerCase();
+    // Static commands
+    var commands = [
+      { id: 'cmd:new',      label: 'New booking',        meta: 'Quick Book',  ic: '+', do: function () { paletteClose(); openCreate(); } },
+      { id: 'cmd:resource', label: 'Toggle Resource Panel', meta: 'R',         ic: '👥', do: function () { paletteClose(); resourceState.open ? closeResources() : openResources(); } },
+      { id: 'cmd:board',    label: 'Switch to Board',    meta: 'View',         ic: '☰', do: function () { paletteClose(); setView('board'); } },
+      { id: 'cmd:list',     label: 'Switch to List',     meta: 'View',         ic: '☰', do: function () { paletteClose(); setView('list'); } },
+      { id: 'cmd:cal',      label: 'Switch to Calendar', meta: 'View',         ic: '🗓', do: function () { paletteClose(); setView('calendar'); } },
+      { id: 'cmd:map',      label: 'Switch to Map',      meta: 'View',         ic: '📍', do: function () { paletteClose(); setView('map'); } },
+      { id: 'cmd:today',    label: 'Jump to today',      meta: 'Today',        ic: '⏰', do: function () { paletteClose(); location.href = '/bookings'; } },
+    ];
+    var bookings = (window.BK2_DATA.bookings || []).map(function (b) {
+      return { id: 'bk:' + b.id, label: '#' + b.num + ' · ' + (b.title || b.addr || 'Untitled'), meta: 'Booking', ic: '🧾', do: function () { paletteClose(); openBooking(b.id, 'details'); } };
+    });
+    var all = commands.concat(bookings);
+    palItems = q ? all.filter(function (it) { return it.label.toLowerCase().includes(q); }) : all;
+    palActive = 0;
+    palList.innerHTML = palItems.slice(0, 20).map(function (it, i) {
+      return '<div class="bk2-palette-row" data-i="' + i + '" data-active="' + (i === 0 ? 'true' : 'false') + '">' +
+        '<span class="ic">' + it.ic + '</span><span>' + esc(it.label) + '</span><span class="meta">' + esc(it.meta) + '</span>' +
+        '</div>';
+    }).join('');
+    palList.querySelectorAll('.bk2-palette-row').forEach(function (row) {
+      row.addEventListener('click', function () { var it = palItems[parseInt(row.dataset.i, 10)]; if (it) it.do(); });
+    });
+  }
+  palInput.addEventListener('input', function () { refreshPalette(palInput.value); });
+  palInput.addEventListener('keydown', function (e) {
+    if (e.key === 'ArrowDown') { e.preventDefault(); palActive = Math.min(palItems.length - 1, palActive + 1); updateActive(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); palActive = Math.max(0, palActive - 1); updateActive(); }
+    else if (e.key === 'Enter') { e.preventDefault(); var it = palItems[palActive]; if (it) it.do(); }
+    else if (e.key === 'Escape') { e.preventDefault(); paletteClose(); }
+  });
+  function updateActive() {
+    palList.querySelectorAll('.bk2-palette-row').forEach(function (r, i) { r.dataset.active = (i === palActive ? 'true' : 'false'); if (i === palActive) r.scrollIntoView({ block: 'nearest' }); });
+  }
+  document.addEventListener('keydown', function (e) {
+    if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); paletteOpen(); }
+  });
+
+  // ============================================================
+  //  LIST: bulk select + bulk status
+  // ============================================================
+  var listAll = $('#bk2-list-all');
+  var bulkBar = $('#bk2-bulk-bar');
+  var bulkCount = $('#bk2-bulk-count');
+  var bulkStatus = $('#bk2-bulk-status');
+  var bulkApply = $('#bk2-bulk-apply');
+  var bulkClear = $('#bk2-bulk-clear');
+  function listCheckboxes() { return $$('.bk2-list-chk'); }
+  function checkedListIds() { return listCheckboxes().filter(function (c) { return c.checked; }).map(function (c) { return c.dataset.id; }); }
+  function refreshBulkBar() {
+    var ids = checkedListIds();
+    if (!ids.length) { bulkBar.style.display = 'none'; return; }
+    bulkBar.style.display = 'flex';
+    bulkCount.textContent = ids.length + ' selected';
+    if (listAll) {
+      var all = listCheckboxes();
+      listAll.indeterminate = ids.length > 0 && ids.length < all.length;
+      listAll.checked = ids.length === all.length;
+    }
+    bulkApply.disabled = !bulkStatus.value;
+  }
+  if (listAll) listAll.addEventListener('change', function () {
+    listCheckboxes().forEach(function (c) { c.checked = listAll.checked; });
+    refreshBulkBar();
+  });
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('bk2-list-chk')) refreshBulkBar();
+    if (e.target === bulkStatus) refreshBulkBar();
+  });
+  if (bulkClear) bulkClear.addEventListener('click', function () {
+    listCheckboxes().forEach(function (c) { c.checked = false; });
+    refreshBulkBar();
+  });
+  if (bulkApply) bulkApply.addEventListener('click', function () {
+    var ids = checkedListIds();
+    var status = bulkStatus.value;
+    if (!ids.length || !status) return;
+    if (!confirm('Set status of ' + ids.length + ' booking' + (ids.length === 1 ? '' : 's') + ' to ' + status.replace(/_/g, ' ') + '?')) return;
+    var promises = ids.map(function (id) {
+      return fetch('/bookings/' + id + '/status', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
+        credentials: 'same-origin',
+        body: new URLSearchParams({ status: status }).toString(),
+      });
+    });
+    Promise.all(promises).then(function () { toast('Updated ' + ids.length); setTimeout(function () { location.reload(); }, 600); });
+  });
 
   // Select first card by default
   selectCard(0);
