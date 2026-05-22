@@ -49,6 +49,17 @@ if ('serviceWorker' in navigator) {
       .catch(function(error) {
         console.log('SW registration failed:', error);
       });
+
+    // When the SW activates a new version it posts SW_UPDATED. Reload so
+    // the in-memory JS bundle matches the new HTML — otherwise the tab
+    // keeps running the prior bundle until the user manually refreshes,
+    // which was the root cause of the "ack doesn't show after signing"
+    // report (old worker-offline-form.js w/o cache invalidation).
+    navigator.serviceWorker.addEventListener('message', function (e) {
+      if (e.data && e.data.type === 'SW_UPDATED') {
+        try { window.location.reload(); } catch (err) {}
+      }
+    });
   });
 }
 
