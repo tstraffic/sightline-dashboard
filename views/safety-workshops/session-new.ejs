@@ -96,7 +96,7 @@
           </div>
         </div>
         <p class="text-xs text-gray-500 mb-2">
-          <span id="selectedCount">0</span> selected. You can always add or remove people before generating teams.
+          <span id="selectedCount">0</span> selected <span id="visibleHint" class="text-gray-400"></span>. You can always add or remove people before generating teams.
         </p>
         <div id="crewList" class="max-h-72 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50 divide-y divide-gray-100">
           <% if (!crew || crew.length === 0) { %>
@@ -165,10 +165,31 @@
   });
 
   // ── Source toggle ──
+  // Switching back to manual reveals every active-crew row again so the
+  // facilitator can hand-pick across the whole org. Toolbox source keeps
+  // the list scoped to the attendee filter set in toolboxScope.
   var toolboxPicker = document.getElementById('toolboxPicker');
+  var toolboxScope = null; // lowercase names limiting which rows are visible
+  function applyScope() {
+    document.querySelectorAll('#crewList .crew-row').forEach(function (row) {
+      var n = (row.getAttribute('data-name') || '').toLowerCase();
+      var visible = !toolboxScope || toolboxScope.indexOf(n) !== -1;
+      row.style.display = visible ? '' : 'none';
+    });
+    var visibleN = document.querySelectorAll('#crewList .crew-row:not([style*="display: none"])').length;
+    var visibleEl = document.getElementById('visibleHint');
+    if (visibleEl) visibleEl.textContent = toolboxScope
+      ? '(showing ' + visibleN + ' from the toolbox)'
+      : '';
+  }
   document.querySelectorAll('input[name="srcRadio"]').forEach(function (r) {
     r.addEventListener('change', function () {
       toolboxPicker.classList.toggle('hidden', r.value !== 'toolbox');
+      if (r.value === 'manual') {
+        toolboxScope = null;
+        document.getElementById('toolboxLoadMsg').classList.add('hidden');
+        applyScope();
+      }
     });
   });
 
@@ -177,7 +198,12 @@
   var toolboxLoadMsg = document.getElementById('toolboxLoadMsg');
   toolboxSelect.addEventListener('change', function () {
     var id = toolboxSelect.value;
-    if (!id) return;
+    if (!id) {
+      toolboxScope = null;
+      applyScope();
+      toolboxLoadMsg.classList.add('hidden');
+      return;
+    }
     toolboxLoadMsg.classList.remove('hidden');
     toolboxLoadMsg.textContent = 'Loading attendees…';
     fetch('/safety-workshops/toolbox-attendees/' + encodeURIComponent(id))
@@ -186,6 +212,7 @@
         var names = (j.attendees || []).map(function (a) {
           return (a.full_name || '').toLowerCase();
         });
+        toolboxScope = names;
         var hits = 0;
         document.querySelectorAll('#crewList .crew-cb').forEach(function (cb) {
           var n = (cb.getAttribute('data-name') || '').toLowerCase();
@@ -193,8 +220,13 @@
           cb.checked = match;
           if (match) hits++;
         });
+        applyScope();
         updateCount();
-        toolboxLoadMsg.textContent = 'Pre-selected ' + hits + ' attendees. Adjust below as needed.';
+        if (!names.length) {
+          toolboxLoadMsg.textContent = 'No attendees marked Attending / Attended on this talk yet — switch to Manual pick, or pick a different talk.';
+        } else {
+          toolboxLoadMsg.textContent = 'Pre-selected ' + hits + ' attendees from this toolbox. Untick anyone who isn\'t in the room.';
+        }
       })
       .catch(function () {
         toolboxLoadMsg.textContent = 'Could not load attendees — try again.';
