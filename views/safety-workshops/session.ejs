@@ -207,12 +207,26 @@
                 const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
                 const pct = a.max_score ? Math.round((a.score / a.max_score) * 100) : 0;
                 const tone = pct >= 80 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-gray-500';
+                const debriefHref = a.id ? ('/safety-workshops/sessions/' + session.session_code + '/debrief/' + a.id) : null;
               %>
-                <li class="px-4 py-2.5 flex items-center gap-3">
-                  <span class="w-7 text-center text-sm font-bold text-gray-700"><%= medal %></span>
-                  <span class="font-semibold text-gray-900 flex-1 min-w-0 truncate"><%= a.player_name %></span>
-                  <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Case <%= a.case_letter %></span>
-                  <span class="font-mono font-bold tabular-nums <%= tone %>"><%= a.score %><span class="text-gray-400 font-normal">/<%= a.max_score %></span></span>
+                <li>
+                  <% if (debriefHref) { %>
+                    <a href="<%= debriefHref %>" class="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition group">
+                  <% } else { %>
+                    <div class="px-4 py-2.5 flex items-center gap-3">
+                  <% } %>
+                    <span class="w-7 text-center text-sm font-bold text-gray-700"><%= medal %></span>
+                    <span class="font-semibold text-gray-900 flex-1 min-w-0 truncate"><%= a.player_name %></span>
+                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Case <%= a.case_letter %></span>
+                    <span class="font-mono font-bold tabular-nums <%= tone %>"><%= a.score %><span class="text-gray-400 font-normal">/<%= a.max_score %></span></span>
+                    <% if (debriefHref) { %>
+                      <span class="text-[10px] font-bold text-brand-700 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition">Debrief →</span>
+                    <% } %>
+                  <% if (debriefHref) { %>
+                    </a>
+                  <% } else { %>
+                    </div>
+                  <% } %>
                 </li>
               <% }) %>
             </ol>
@@ -310,12 +324,17 @@
       var medal = i < 3 ? medals[i] : (i + 1) + '.';
       var pct = a.max_score ? Math.round((a.score / a.max_score) * 100) : 0;
       var tone = pct >= 80 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-gray-500';
-      return '<li class="px-4 py-2.5 flex items-center gap-3">' +
+      var debriefHref = a.id ? '/safety-workshops/sessions/' + encodeURIComponent(sessionCode) + '/debrief/' + a.id : null;
+      var open  = debriefHref ? '<a href="' + debriefHref + '" class="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition group">' : '<div class="px-4 py-2.5 flex items-center gap-3">';
+      var close = debriefHref ? '</a>' : '</div>';
+      var trailing = debriefHref ? '<span class="text-[10px] font-bold text-brand-700 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition">Debrief →</span>' : '';
+      return '<li>' + open +
         '<span class="w-7 text-center text-sm font-bold text-gray-700">' + medal + '</span>' +
         '<span class="font-semibold text-gray-900 flex-1 min-w-0 truncate">' + escapeHtml(a.player_name) + '</span>' +
         '<span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Case ' + a.case_letter + '</span>' +
         '<span class="font-mono font-bold tabular-nums ' + tone + '">' + a.score + '<span class="text-gray-400 font-normal">/' + a.max_score + '</span></span>' +
-        '</li>';
+        trailing +
+        close + '</li>';
     }).join('') + '</ol>';
     box.innerHTML = html;
   }

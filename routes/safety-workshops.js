@@ -446,18 +446,28 @@ router.get('/sessions/:code', (req, res) => {
   // In group mode we collapse multiple attempts per group down to the
   // single best score so the leaderboard has one row per team. Individual
   // mode keeps every attempt as its own row (existing behaviour).
+  // Leaderboard rows carry the attempt id so the facilitator can click
+  // through to the debrief view. In group mode multiple devices in a
+  // team can submit; we surface the best-scoring attempt per team so
+  // the debrief shows the team's strongest run.
   const attempts = (session.mode === 'group')
     ? db.prepare(
-        `SELECT player_name, case_letter, MAX(score) AS score,
-                MAX(max_score) AS max_score,
-                MAX(completed_at) AS completed_at
-         FROM workshop_attempts
-         WHERE session_id = ? AND completed_at IS NOT NULL
-         GROUP BY player_name, case_letter
-         ORDER BY score DESC, completed_at ASC`
+        `SELECT a.id, a.player_name, a.case_letter, a.score, a.max_score, a.completed_at
+         FROM workshop_attempts a
+         WHERE a.session_id = ?
+           AND a.completed_at IS NOT NULL
+           AND a.id = (
+             SELECT a2.id FROM workshop_attempts a2
+             WHERE a2.session_id = a.session_id
+               AND a2.player_name = a.player_name
+               AND a2.completed_at IS NOT NULL
+             ORDER BY a2.score DESC, a2.completed_at ASC
+             LIMIT 1
+           )
+         ORDER BY a.score DESC, a.completed_at ASC`
       ).all(session.id)
     : db.prepare(
-        `SELECT player_name, case_letter, score, max_score, completed_at
+        `SELECT id, player_name, case_letter, score, max_score, completed_at
          FROM workshop_attempts
          WHERE session_id = ? AND completed_at IS NOT NULL
          ORDER BY score DESC, completed_at ASC`
@@ -497,16 +507,22 @@ router.get('/sessions/:code/live', (req, res) => {
     .all(session.id);
   const attempts = (session.mode === 'group')
     ? db.prepare(
-        `SELECT player_name, case_letter, MAX(score) AS score,
-                MAX(max_score) AS max_score,
-                MAX(completed_at) AS completed_at
-         FROM workshop_attempts
-         WHERE session_id = ? AND completed_at IS NOT NULL
-         GROUP BY player_name, case_letter
-         ORDER BY score DESC, completed_at ASC`
+        `SELECT a.id, a.player_name, a.case_letter, a.score, a.max_score, a.completed_at
+         FROM workshop_attempts a
+         WHERE a.session_id = ?
+           AND a.completed_at IS NOT NULL
+           AND a.id = (
+             SELECT a2.id FROM workshop_attempts a2
+             WHERE a2.session_id = a.session_id
+               AND a2.player_name = a.player_name
+               AND a2.completed_at IS NOT NULL
+             ORDER BY a2.score DESC, a2.completed_at ASC
+             LIMIT 1
+           )
+         ORDER BY a.score DESC, a.completed_at ASC`
       ).all(session.id)
     : db.prepare(
-        `SELECT player_name, case_letter, score, max_score, completed_at
+        `SELECT id, player_name, case_letter, score, max_score, completed_at
          FROM workshop_attempts
          WHERE session_id = ? AND completed_at IS NOT NULL
          ORDER BY score DESC, completed_at ASC`
@@ -807,6 +823,70 @@ router.get('/attempts/all', (req, res) => {
     title: 'Workshop attempts',
     currentPage: 'safety-workshops',
     rows,
+  });
+});
+
+// =====================================================================
+// GET /safety-workshops/sessions/:code/debrief/:attemptId — debrief view
+// =====================================================================
+// Facilitator-facing post-quiz walkthrough. Loads the case from the
+// workshop content module and merges it with the attempt's stored
+// answers_json (per-question { short, pts, max, picked }) so each
+// question can be rendered alongside the team's pick and the correct
+// answer. Used after scores are in to debrief teams from the
+// leaderboard — click a row, walk the team through what they got
+// right / wrong with the SWMS clause reference.
+router.get('/sessions/:code/debrief/:attemptId', (req, res) => {
+  const db = getDb();
+  const session = db
+    .prepare(
+      `SELECT s.*, w.slug AS workshop_slug, w.title AS workshop_title
+       FROM workshop_sessions s
+       JOIN workshop_definitions w ON w.id = s.workshop_id
+       WHERE s.session_code = ?`
+    )
+    .get(req.params.code);
+  if (!session) {
+    req.flash('error', 'Session not found.');
+    return res.redirect('/safety-workshops');
+  }
+  const attempt = db
+    .prepare(
+      `SELECT * FROM workshop_attempts
+       WHERE id = ? AND session_id = ?`
+    )
+    .get(parseInt(req.params.attemptId, 10), session.id);
+  if (!attempt) {
+    req.flash('error', 'Attempt not found in this session.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  const module = WORKSHOPS[session.workshop_slug];
+  if (!module) {
+    req.flash('error', 'Workshop content module missing — debrief needs it.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  const caseDef = module.CASES.find((c) => c.letter === attempt.case_letter);
+  if (!caseDef) {
+    req.flash('error', 'Case ' + attempt.case_letter + ' not in this workshop.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+
+  // Parse stored answers. Older / truncated rows might have null —
+  // render them as "no answer recorded" instead of crashing.
+  let answers = [];
+  try { answers = JSON.parse(attempt.answers_json || '[]') || []; } catch (e) {}
+
+  res.render('safety-workshops/debrief', {
+    title: 'Debrief · ' + attempt.player_name + ' · Case ' + attempt.case_letter,
+    currentPage: 'safety-workshops',
+    session,
+    attempt,
+    caseDef,
+    answers,
+    IMPACTS: module.IMPACTS,
+    LIKE: module.LIKE,
+    BANDS: module.BANDS,
+    CLAUSE_DETAIL: (module.CLAUSE_DETAIL && module.CLAUSE_DETAIL[caseDef.letter]) || [],
   });
 });
 
