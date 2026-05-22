@@ -426,6 +426,18 @@ router.post('/home/preferences', (req, res) => {
 });
 
 // GET /w/home/customise — Customise Home settings page
+// GET /w/contacts — read-only directory of T&S office contacts the
+// crew can call/email when something goes wrong on a shift. Backed by
+// system_config.management_contacts (edited from /hr/management-contacts).
+router.get('/contacts', (req, res) => {
+  const { getContacts } = require('../../services/management-contacts');
+  res.render('worker/contacts', {
+    title: 'Contacts',
+    currentPage: 'more',
+    contacts: getContacts(),
+  });
+});
+
 router.get('/home/customise', (req, res) => {
   const db = getDb();
   const prefs = loadPreferences(db, req.session.worker);
