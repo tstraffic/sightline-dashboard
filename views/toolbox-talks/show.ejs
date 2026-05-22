@@ -185,6 +185,28 @@
     </div>
   <% } %>
 
+  <% if (typeof prepDocuments !== 'undefined' && prepDocuments && prepDocuments.length) { %>
+    <div class="bg-white border border-amber-200 rounded-xl shadow-sm p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <p class="text-[10px] font-bold text-amber-700 uppercase tracking-widest">Prep documents</p>
+          <p class="text-xs text-gray-500 mt-0.5">Workers can review these <strong>before</strong> the meeting — visible to every invited crew member regardless of sign-off.</p>
+        </div>
+        <a href="/toolbox-talks/<%= toolbox.id %>/edit#prep_documents" class="text-xs font-semibold text-amber-700 hover:underline">Manage ›</a>
+      </div>
+      <ul class="divide-y divide-gray-100 border border-gray-200 rounded-lg overflow-hidden">
+        <% prepDocuments.forEach(d => { %>
+          <li class="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+            <a href="/toolbox-talks/<%= toolbox.id %>/prep/<%= d.id %>" class="flex-1 truncate text-amber-700 hover:underline">
+              📋 <%= d.file_original_name || ('Prep doc #' + d.id) %>
+            </a>
+            <span class="text-[11px] text-gray-400 tabular-nums whitespace-nowrap"><%= new Date(d.uploaded_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' }) %></span>
+          </li>
+        <% }) %>
+      </ul>
+    </div>
+  <% } %>
+
   <% if (typeof documents !== 'undefined' && documents && documents.length) { %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
       <div class="flex items-center justify-between mb-3">

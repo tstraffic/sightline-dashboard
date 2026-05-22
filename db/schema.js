@@ -10280,6 +10280,44 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 223: allow 'prep' kind on toolbox_attachments.
+  //
+  // The existing CHECK constraint pins kind ∈ ('photo','doc'). Adds a
+  // third value, 'prep', for pre-meeting documents workers can review
+  // before attending — distinct from the post-attendance 'doc' rows
+  // (added in PR #423) which only unlock after sign-off. SQLite can't
+  // ALTER a CHECK constraint in place, so rebuild the table.
+  // =============================================
+  if (!isMigrationApplied.get(223)) {
+    console.log('Running migration 223: toolbox_attachments allow kind=prep');
+    try {
+      db.exec(`
+        CREATE TABLE toolbox_attachments__new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          file_path TEXT NOT NULL,
+          file_original_name TEXT DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'photo'
+            CHECK(kind IN ('photo','doc','prep')),
+          uploaded_by_id INTEGER REFERENCES users(id),
+          uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO toolbox_attachments__new
+          (id, toolbox_id, file_path, file_original_name, kind, uploaded_by_id, uploaded_at)
+        SELECT id, toolbox_id, file_path, file_original_name, kind, uploaded_by_id, uploaded_at
+        FROM toolbox_attachments;
+        DROP TABLE toolbox_attachments;
+        ALTER TABLE toolbox_attachments__new RENAME TO toolbox_attachments;
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_attach_tb ON toolbox_attachments(toolbox_id)');
+      recordMigration.run(223, "toolbox_attachments CHECK extended to allow 'prep'");
+      console.log("Migration 223 applied: toolbox_attachments.kind now accepts 'prep'");
+    } catch (e) {
+      console.error('Migration 223 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

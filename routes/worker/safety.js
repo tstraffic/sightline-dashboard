@@ -703,14 +703,46 @@ router.get('/safety/toolboxes/:id', (req, res) => {
   // the view always (so we can show a count / "unlocks after sign-off"
   // hint), but the actual download endpoint gates on attendance.
   const documents = db.prepare(`SELECT id, file_original_name FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'doc' ORDER BY id ASC`).all(toolbox.id);
+  // Prep documents — pre-meeting reading. Visible to every invited
+  // worker; no sign-off gate. Separate query so the view can render
+  // them in their own section above the post-attendance Materials.
+  const prepDocuments = db.prepare(`SELECT id, file_original_name FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'prep' ORDER BY id ASC`).all(toolbox.id);
   const hasSignedOff = !!(myAttendance && myAttendance.status === 'attended' && myAttendance.signed_off_at);
   const isPdfSlides = !!(toolbox.slides_original_name && /\.pdf$/i.test(toolbox.slides_original_name));
   res.render('worker/safety/toolbox-detail', {
     title: toolbox.title, currentPage: 'safety',
     subtab: 'toolboxes', toolbox, myAttendance, photos,
-    documents, hasSignedOff,
+    documents, prepDocuments, hasSignedOff,
     isPdfSlides,
   });
+});
+
+// GET /w/safety/toolboxes/:id/prep/:prepId — un-gated download of a
+// pre-meeting prep document. Invited workers can grab these any time
+// to read before attending. We still verify the worker is invited (or
+// the toolbox is open to all) so prep docs don't leak across crews.
+router.get('/safety/toolboxes/:id/prep/:prepId', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const toolboxId = parseInt(req.params.id, 10);
+  // Same invitee-scope check as the GET /w/safety/toolboxes/:id page.
+  const invited = db.prepare(`
+    SELECT 1 FROM toolbox_talks t
+    WHERE t.id = ? AND t.status = 'published'
+      AND (
+        NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = t.id)
+        OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = t.id AND i.crew_member_id = ?)
+      )
+  `).get(toolboxId, worker.id);
+  if (!invited) return res.status(403).send('Not available.');
+  const doc = db.prepare(
+    `SELECT file_path, file_original_name FROM toolbox_attachments
+     WHERE id = ? AND toolbox_id = ? AND kind = 'prep'`
+  ).get(req.params.prepId, toolboxId);
+  if (!doc || !doc.file_path) return res.status(404).send('not found');
+  const abs = path.join(__dirname, '..', '..', doc.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('missing');
+  return res.download(abs, doc.file_original_name || path.basename(abs));
 });
 
 // GET /w/safety/toolboxes/:id/documents/:docId — gated download of a

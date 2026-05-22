@@ -262,6 +262,39 @@
     </div>
   <% } %>
 
+  <% if (typeof prepDocuments !== 'undefined' && prepDocuments && prepDocuments.length) { %>
+    <!-- Prep documents — read BEFORE the meeting. Visible to every
+         invited worker; no sign-off gate. Distinct visual treatment
+         (amber accent) from the post-attendance "Materials" section
+         below so workers don't confuse the two. -->
+    <section class="tbd-mats tbd-prep">
+      <h3>
+        Prep documents
+        <span class="tbd-mats-badge tbd-prep-badge"><%= prepDocuments.length %></span>
+      </h3>
+      <p class="tbd-prep-hint">Read these before the meeting.</p>
+      <div class="tbd-mats-list">
+        <% prepDocuments.forEach(d => { %>
+          <a href="/w/safety/toolboxes/<%= toolbox.id %>/prep/<%= d.id %>" download="<%= d.file_original_name %>">
+            <span class="tbd-mats-icon tbd-prep-icon">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 9l2 2 4-4"/></svg>
+            </span>
+            <span class="tbd-mats-name"><%= d.file_original_name || ('Prep doc #' + d.id) %></span>
+            <svg class="tbd-mats-chev" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+          </a>
+        <% }) %>
+      </div>
+    </section>
+    <style>
+      .tbd-prep .tbd-prep-badge { background: rgba(245,158,11,0.18); color: #fcd34d; border-color: rgba(245,158,11,0.3); }
+      .tbd-prep-hint { font-size: 0.75rem; color: rgba(255,255,255,0.55); margin: -2px 0 8px; }
+      .tbd-prep-icon { background: rgba(245,158,11,0.18) !important; color: #FCD34D !important; }
+      :root[data-theme="light"] .tbd-prep .tbd-prep-badge { background: #FFFBEB !important; color: #B45309 !important; border-color: #FDE68A !important; }
+      :root[data-theme="light"] .tbd-prep-hint { color: #6B7280; }
+      :root[data-theme="light"] .tbd-prep-icon { background: #FFFBEB !important; color: #B45309 !important; }
+    </style>
+  <% } %>
+
   <% if (typeof documents !== 'undefined' && documents && documents.length) { %>
     <section class="tbd-mats">
       <h3>
