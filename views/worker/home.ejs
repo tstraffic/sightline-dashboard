@@ -518,6 +518,62 @@
   :root[data-theme="light"] .wh-card-dismiss { color: #9CA3AF; background: #F3F4F6; }
   :root[data-theme="light"] .wh-card-dismiss:hover { color: #111827; background: #E5E7EB; }
   :root[data-theme="light"] .wh-card-ic.blue { background: #EFF6FF; color: #2563EB; }
+
+  /* Hero pane + stat tiles — the dark charcoal #1A1D24 was being painted
+     over the light page surface, which made the whole top of the home
+     screen feel like a different theme. Flip the surface to white-on-
+     page so it reads as part of the light theme, drop the dark gradients
+     on the stat tiles, and re-colour every text token. The four
+     coloured icon chips (clock / check / calendar / leave) keep their
+     hues but get desaturated backgrounds that read on white. */
+  :root[data-theme="light"] .wh-hero {
+    background: #FFFFFF !important;
+    border-color: #E5E7EB !important;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04);
+  }
+  :root[data-theme="light"] .wh-hero-sub   { color: #6B7280 !important; }
+  :root[data-theme="light"] .wh-hero-greet { color: #0F1115 !important; }
+  /* Context-line colours per kind — slightly darker than the dark-mode
+     pale variants so they hit AA contrast on white. */
+  :root[data-theme="light"] .wh-hero-ctx              { color: #047857; }
+  :root[data-theme="light"] .wh-hero-ctx.shift        { color: #92400E; }
+  :root[data-theme="light"] .wh-hero-ctx.compliance   { color: #9F1239; }
+  :root[data-theme="light"] .wh-hero-ctx.leave        { color: #5B21B6; }
+  :root[data-theme="light"] .wh-hero-ctx.payslip     { color: #047857; }
+  :root[data-theme="light"] .wh-hero-ctx.birthday,
+  :root[data-theme="light"] .wh-hero-ctx.anniversary  { color: #9D174D; }
+
+  :root[data-theme="light"] .wh-stat {
+    background-color: #F9FAFB !important;
+    background-image: none !important;
+    border-color: #E5E7EB !important;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04) !important;
+  }
+  :root[data-theme="light"] .wh-stat-label { color: #6B7280 !important; }
+  :root[data-theme="light"] .wh-stat-value { color: #0F1115 !important; }
+  :root[data-theme="light"] .wh-stat-unit  { color: #9CA3AF !important; }
+  :root[data-theme="light"] .wh-stat-sub   { color: #6B7280 !important; }
+  :root[data-theme="light"] .wh-stat.hrs   .wh-stat-ico { background: #EFF6FF; color: #2563EB; }
+  :root[data-theme="light"] .wh-stat.days  .wh-stat-ico { background: #ECFDF5; color: #047857; }
+  :root[data-theme="light"] .wh-stat.up    .wh-stat-ico { background: #FFFBEB; color: #B45309; }
+  :root[data-theme="light"] .wh-stat.leave .wh-stat-ico { background: #F5F3FF; color: #6D28D9; }
+
+  /* The 4 home stat tiles render via the shared .wd-stat-tile partial.
+     The global .wd-stat-tile light override (above, ~L495) paints them
+     white — which is correct on the page background but invisible when
+     they're nested inside the now-white hero card. Re-skin only the
+     in-hero copy to a light grey so they read as four discrete tiles
+     against the hero. !important matches the override they're
+     overriding. */
+  :root[data-theme="light"] .wh-hero .wd-stat-tile {
+    background-color: #F3F4F6 !important;
+    border-color: #E5E7EB !important;
+    box-shadow: 0 1px 1px rgba(15,17,21,0.03) !important;
+  }
+  :root[data-theme="light"] .wh-hero .wd-stat-tile-label { color: #4B5563 !important; }
+  :root[data-theme="light"] .wh-hero .wd-stat-tile-value { color: #0F1115 !important; }
+  :root[data-theme="light"] .wh-hero .wd-stat-tile-unit  { color: #6B7280 !important; }
+  :root[data-theme="light"] .wh-hero .wd-stat-tile-sub   { color: #4B5563 !important; }
 </style>
 
 <div class="wh-wrap">
