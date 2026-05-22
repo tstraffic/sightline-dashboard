@@ -245,7 +245,15 @@ router.get('/home', async (req, res) => {
   try {
     const nextConfirmed = upcomingShifts.find(s => s.status === 'confirmed');
     const shiftForWeather = todaysShifts[0] || nextConfirmed || upcomingShifts[0];
-    const depotQ = (process.env.DEPOT_SUBURB || 'Villawood NSW').trim();
+    // Depot weather: skip the geocoder for the default depot and use the
+    // exact coords of 9 Epic Pl, Villawood NSW 2163. The geocoder
+    // sometimes resolves "Villawood NSW" to the broader suburb centroid
+    // (or worse, drifts to a same-named locality), and the office wants
+    // the reading to reflect the actual yard. Both can be overridden per
+    // deployment via env vars.
+    const depotLat = parseFloat(process.env.DEPOT_LAT || '-33.879');
+    const depotLng = parseFloat(process.env.DEPOT_LNG || '150.965');
+    const depotCity = (process.env.DEPOT_CITY || 'Villawood').trim();
 
     async function tryFetch(q) {
       if (!q) return null;
@@ -266,8 +274,12 @@ router.get('/home', async (req, res) => {
       }
     }
     if (!weather) {
-      weather = await tryFetch(depotQ);
-      if (weather) weatherSource = 'depot';
+      const w = await getWeather(depotLat, depotLng);
+      if (w) {
+        w.city = depotCity;
+        weather = w;
+        weatherSource = 'depot';
+      }
     }
     if (weather) weather.source = weatherSource;
   } catch (e) { console.warn('[home] weather fetch failed:', e.message); }
@@ -446,6 +458,70 @@ router.get('/home/customise', (req, res) => {
     prefs,
     flash_success: req.flash('success'),
   });
+});
+
+// GET /w/weather.json — live weather for the worker's depot or next site.
+// Polled by views/worker/partials/weather-card.ejs every few minutes so
+// the temp / conditions stay current without a full page reload.
+// Same fetch order as the home render: today's shift → next confirmed
+// upcoming → next upcoming → depot. Cached server-side (15min) inside
+// getWeather() so polling doesn't hammer Open-Meteo.
+router.get('/weather.json', async (req, res) => {
+  try {
+    const db = getDb();
+    const worker = req.session.worker;
+    if (!worker) return res.status(401).json({ error: 'unauthorised' });
+    const today = localIso(new Date());
+
+    const todays = db.prepare(`
+      SELECT ca.allocation_date, b.suburb, b.site_address
+      FROM crew_allocations ca
+      LEFT JOIN bookings b ON b.id = ca.booking_id
+      WHERE ca.crew_member_id = ?
+        AND ca.allocation_date = ?
+        AND ca.status NOT IN ('cancelled','declined')
+      ORDER BY ca.allocation_date LIMIT 1
+    `).get(worker.crew_member_id, today);
+    const upcoming = db.prepare(`
+      SELECT ca.status, b.suburb, b.site_address
+      FROM crew_allocations ca
+      LEFT JOIN bookings b ON b.id = ca.booking_id
+      WHERE ca.crew_member_id = ?
+        AND ca.allocation_date > ?
+        AND ca.status NOT IN ('cancelled','declined')
+      ORDER BY ca.allocation_date LIMIT 5
+    `).all(worker.crew_member_id, today);
+
+    const nextConfirmed = upcoming.find(s => s.status === 'confirmed');
+    const shiftForWeather = todays || nextConfirmed || upcoming[0];
+    const depotLat = parseFloat(process.env.DEPOT_LAT || '-33.879');
+    const depotLng = parseFloat(process.env.DEPOT_LNG || '150.965');
+    const depotCity = (process.env.DEPOT_CITY || 'Villawood').trim();
+
+    let weather = null;
+    let source = null;
+    if (shiftForWeather) {
+      const q = [shiftForWeather.suburb, shiftForWeather.site_address].filter(Boolean).join(', ');
+      if (q) {
+        const geo = await geocodeAddress(q);
+        if (geo) {
+          weather = await getWeather(geo.lat, geo.lng);
+          if (weather) { weather.city = geo.city || ''; source = 'shift'; }
+        }
+      }
+    }
+    if (!weather) {
+      weather = await getWeather(depotLat, depotLng);
+      if (weather) { weather.city = depotCity; source = 'depot'; }
+    }
+    if (!weather) return res.json({ ok: false });
+    weather.source = source;
+    weather.fetched_at = Date.now();
+    res.json({ ok: true, weather });
+  } catch (e) {
+    console.warn('[worker/weather.json] failed:', e.message);
+    res.json({ ok: false });
+  }
 });
 
 module.exports = router;
