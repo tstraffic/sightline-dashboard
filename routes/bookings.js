@@ -170,23 +170,28 @@ function loadBookingDetail(db, bookingId) {
   let equipmentList = [];
   try { equipmentList = db.prepare("SELECT be.*, e.name as asset_name, e.category as eq_category FROM booking_equipment be LEFT JOIN equipment e ON e.id = be.equipment_id WHERE be.booking_id = ? ORDER BY be.created_at").all(bookingId); } catch(e) {}
 
-  // Compute requirement fulfillment
+  // Compute requirement fulfilment. Defensive: a single bad row (null
+  // resource_type, weird quantity) must NOT crash the whole response —
+  // that's how the slide-over was getting stuck on "Loading…".
   const totalCrewAssigned = crew.length;
-  requirements.forEach(r => {
-    const resType = r.resource_type.toLowerCase().replace(/_/g, ' ');
-    // For TC Crew requirements, count all assigned crew members
-    if (resType.includes('tc crew') || resType.includes('traffic controller') || resType.includes('hoist') || resType.includes('ip')) {
-      r.quantity_assigned = totalCrewAssigned;
-    } else {
-      // For equipment/vehicle requirements, try to match by type
-      const assigned = crew.filter(c => {
-        const role = (c.role_on_site || c.crew_role || '').toLowerCase().replace(/_/g, ' ');
-        return role.includes(resType);
-      }).length;
-      r.quantity_assigned = assigned;
-    }
-    r.status = r.quantity_assigned >= r.quantity_required ? 'fulfilled' : r.quantity_assigned > 0 ? 'partial' : 'unfulfilled';
-  });
+  try {
+    requirements.forEach(r => {
+      const resType = String(r.resource_type || '').toLowerCase().replace(/_/g, ' ');
+      if (!resType) { r.quantity_assigned = 0; r.status = 'unfulfilled'; return; }
+      if (resType.includes('tc crew') || resType.includes('traffic controller') || resType.includes('hoist') || resType.includes('ip')) {
+        r.quantity_assigned = totalCrewAssigned;
+      } else {
+        const assigned = crew.filter(c => {
+          const role = String(c.role_on_site || c.crew_role || '').toLowerCase().replace(/_/g, ' ');
+          return role && role.includes(resType);
+        }).length;
+        r.quantity_assigned = assigned;
+      }
+      r.status = r.quantity_assigned >= r.quantity_required ? 'fulfilled' : r.quantity_assigned > 0 ? 'partial' : 'unfulfilled';
+    });
+  } catch (e) {
+    console.error('[loadBookingDetail] requirement-fulfilment failed:', e.message);
+  }
 
   return { ...row, supervisor_name: supervisorName, internal_notes: row.notes || '', crew, notes, vehicles, dockets, documents, activity, requirements, equipment: equipmentList, job: jobInfo, client: clientInfo };
 }
@@ -967,8 +972,23 @@ router.get('/map', (req, res) => {
 
 // GET /:id — Detail (JSON or show page)
 router.get('/:id', (req, res) => {
-  const db = getDb(); const booking = loadBookingDetail(db, req.params.id);
-  if (!booking) { if (req.headers.accept && req.headers.accept.includes('application/json')) return res.status(404).json({ error: 'Booking not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  const wantsJson = req.headers.accept && req.headers.accept.includes('application/json');
+  // Bail early on garbage ids — anything non-integer goes 404 cleanly
+  // instead of crashing a downstream query.
+  if (!/^\d+$/.test(String(req.params.id))) {
+    if (wantsJson) return res.status(404).json({ error: 'Booking not found' });
+    req.flash('error', 'Booking not found.'); return res.redirect('/bookings');
+  }
+  let db, booking;
+  try {
+    db = getDb();
+    booking = loadBookingDetail(db, req.params.id);
+  } catch (err) {
+    console.error('[GET /bookings/:id] loadBookingDetail threw:', err.message, err.stack);
+    if (wantsJson) return res.status(500).json({ error: 'Server error: ' + err.message });
+    req.flash('error', 'Failed to load booking: ' + err.message); return res.redirect('/bookings');
+  }
+  if (!booking) { if (wantsJson) return res.status(404).json({ error: 'Booking not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
   // Resolve requester/planner names (used by both JSON and HTML paths)
   let requesterName = '', plannerName = '';
   if (booking.requester_id) { const r = db.prepare("SELECT full_name FROM crew_members WHERE id = ?").get(booking.requester_id); if (r) requesterName = r.full_name; }
@@ -984,19 +1004,24 @@ router.get('/:id', (req, res) => {
   let tagsList = [];
   try { tagsList = JSON.parse(booking.booking_tags || '[]'); } catch (e) {}
 
-  if (req.headers.accept && req.headers.accept.includes('application/json')) {
-    const t = transformBooking(db, booking);
-    return res.json({ ...t, booking_number: booking.booking_number, description: booking.description, requirements_text: booking.requirements_text, order_number: booking.order_number, billing_code: booking.billing_code, client_contact: booking.client_contact, is_emergency: booking.is_emergency, is_callout: booking.is_callout, billable: booking.billable, invoiced: booking.invoiced, site_address: booking.site_address, suburb: booking.suburb, state: booking.state, postcode: booking.postcode, crew: booking.crew, allNotes: booking.notes, allVehicles: booking.vehicles, dockets: booking.dockets, documents: booking.documents, activity: booking.activity, requirements: booking.requirements, equipment: booking.equipment, job: booking.job, client: booking.client,
-      requester_name: requesterName, planner_name: plannerName, requester_id: booking.requester_id, planner_id: booking.planner_id,
-      site_contact_names: siteContactNames, site_contact_ids: siteContactIds, tags_list: tagsList,
-      location_context: booking.location_context || '', worksite_location: booking.worksite_location || '', works_direction: booking.works_direction || '',
-      chainage_from: booking.chainage_from || '', chainage_to: booking.chainage_to || '', has_mobile_works: booking.has_mobile_works || 0,
-      location_notes: booking.location_notes || '', marker_is_accurate: booking.marker_is_accurate || 0,
-      depot_meeting_time: booking.depot_meeting_time || '', straight_to_site_time: booking.straight_to_site_time || '',
-      booking_type: booking.booking_type || 'regular', is_booking_pool: booking.is_booking_pool || 0,
-      title: booking.title || '', job_id: booking.job_id, client_id: booking.client_id, supervisor_id: booking.supervisor_id,
-      internal_notes: booking.internal_notes || '', start_datetime: booking.start_datetime, end_datetime: booking.end_datetime
-    });
+  if (wantsJson) {
+    try {
+      const t = transformBooking(db, booking);
+      return res.json({ ...t, booking_number: booking.booking_number, description: booking.description, requirements_text: booking.requirements_text, order_number: booking.order_number, billing_code: booking.billing_code, client_contact: booking.client_contact, is_emergency: booking.is_emergency, is_callout: booking.is_callout, billable: booking.billable, invoiced: booking.invoiced, site_address: booking.site_address, suburb: booking.suburb, state: booking.state, postcode: booking.postcode, crew: booking.crew, allNotes: booking.notes, allVehicles: booking.vehicles, dockets: booking.dockets, documents: booking.documents, activity: booking.activity, requirements: booking.requirements, equipment: booking.equipment, job: booking.job, client: booking.client,
+        requester_name: requesterName, planner_name: plannerName, requester_id: booking.requester_id, planner_id: booking.planner_id,
+        site_contact_names: siteContactNames, site_contact_ids: siteContactIds, tags_list: tagsList,
+        location_context: booking.location_context || '', worksite_location: booking.worksite_location || '', works_direction: booking.works_direction || '',
+        chainage_from: booking.chainage_from || '', chainage_to: booking.chainage_to || '', has_mobile_works: booking.has_mobile_works || 0,
+        location_notes: booking.location_notes || '', marker_is_accurate: booking.marker_is_accurate || 0,
+        depot_meeting_time: booking.depot_meeting_time || '', straight_to_site_time: booking.straight_to_site_time || '',
+        booking_type: booking.booking_type || 'regular', is_booking_pool: booking.is_booking_pool || 0,
+        title: booking.title || '', job_id: booking.job_id, client_id: booking.client_id, supervisor_id: booking.supervisor_id,
+        internal_notes: booking.internal_notes || '', start_datetime: booking.start_datetime, end_datetime: booking.end_datetime
+      });
+    } catch (err) {
+      console.error('[GET /bookings/:id JSON] failed:', err.message, err.stack);
+      return res.status(500).json({ error: 'Failed to assemble response: ' + err.message });
+    }
   }
 
   // Available crew for the picker — joined to employees so the UI can

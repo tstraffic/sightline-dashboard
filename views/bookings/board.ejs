@@ -605,18 +605,67 @@
     soFullpage.style.display = '';
     pushUrl({ b: id });
     openSlideover();
-    fetch('/bookings/' + id, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-      .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+
+    // 8s timeout via AbortController so we never sit on "Loading…" forever.
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timedOut = false;
+    var timer = setTimeout(function () { timedOut = true; if (ctrl) try { ctrl.abort(); } catch (e) {} }, 8000);
+
+    fetch('/bookings/' + id, {
+      headers: { 'Accept': 'application/json' },
+      credentials: 'same-origin',
+      signal: ctrl ? ctrl.signal : undefined,
+    })
+      .then(function (r) {
+        clearTimeout(timer);
+        if (r.status === 404) {
+          var err = new Error('Booking not found');
+          err.code = 404;
+          throw err;
+        }
+        if (!r.ok) {
+          var err2 = new Error('HTTP ' + r.status);
+          err2.code = r.status;
+          throw err2;
+        }
+        return r.json();
+      })
       .then(function (data) {
         soState.data = data;
         soTitle.textContent = data.title || data.site_address || ('Booking #' + (data.booking_number || id));
         soSub.textContent = '#' + (data.booking_number || id) + ' · ' + fmtTime(data.start_datetime) + ' → ' + fmtTime(data.end_datetime);
         soStatusPill.textContent = statusLabel(data.status);
         soStatusPill.className = 'bk2-status-pill bk2-status--' + (data.status || 'unconfirmed');
-        setActiveTab(soState.activeTab);
+        try {
+          setActiveTab(soState.activeTab);
+        } catch (renderErr) {
+          console.error('[bookings] renderTab failed:', renderErr);
+          soBody.innerHTML = '<div style="padding:24px;text-align:center"><p style="color:#DC2626;font-size:13px;margin-bottom:10px">Rendering failed: ' + esc(renderErr.message) + '</p><a href="/bookings/' + id + '" style="color:#2B7FFF;font-weight:600;font-size:12px">Open full page →</a></div>';
+        }
       })
       .catch(function (err) {
-        soBody.innerHTML = '<p style="color:#DC2626;font-size:13px;text-align:center;padding:40px 0">Failed to load: ' + esc(err.message) + '</p>';
+        console.error('[bookings] openBooking fetch failed:', err);
+        clearTimeout(timer);
+        soTitle.textContent = err.code === 404 ? 'Booking not found' : 'Couldn’t load booking';
+        soSub.textContent = '';
+        soStatusPill.textContent = err.code === 404 ? 'GONE' : 'ERROR';
+        soStatusPill.className = 'bk2-status-pill';
+        soStatusPill.style.background = '#FEE2E2'; soStatusPill.style.color = '#991B1B';
+        if (timedOut) {
+          soBody.innerHTML = '<div style="padding:32px;text-align:center"><p style="color:#DC2626;font-size:14px;font-weight:600;margin-bottom:6px">Took too long to load</p><p style="color:#6B7280;font-size:12px;margin-bottom:14px">Network is slow or the server didn\'t respond in 8 seconds.</p><button type="button" id="bk2-so-retry" style="background:#2B7FFF;color:#fff;border:0;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Retry</button></div>';
+          var rb = document.getElementById('bk2-so-retry');
+          if (rb) rb.addEventListener('click', function () { openBooking(id, tab); });
+        } else if (err.code === 404) {
+          // Self-heal: clear ?b= so a reload doesn't re-trigger this dead link.
+          pushUrl({ b: null });
+          soBody.innerHTML = '<div style="padding:32px;text-align:center"><p style="color:#DC2626;font-size:14px;font-weight:600;margin-bottom:6px">This booking no longer exists</p><p style="color:#6B7280;font-size:12px;margin-bottom:14px">It may have been deleted, or the link is from another day.</p><button type="button" id="bk2-so-close-x" style="background:#2B7FFF;color:#fff;border:0;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Close</button></div>';
+          var cb = document.getElementById('bk2-so-close-x');
+          if (cb) cb.addEventListener('click', closeSlideover);
+        } else {
+          soBody.innerHTML = '<div style="padding:32px;text-align:center"><p style="color:#DC2626;font-size:14px;font-weight:600;margin-bottom:6px">Failed to load</p><p style="color:#6B7280;font-size:12px;margin-bottom:14px">' + esc(err.message) + '</p><button type="button" id="bk2-so-retry2" style="background:#2B7FFF;color:#fff;border:0;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer">Retry</button></div>';
+          var rb2 = document.getElementById('bk2-so-retry2');
+          if (rb2) rb2.addEventListener('click', function () { openBooking(id, tab); });
+        }
       });
   }
 
@@ -923,10 +972,10 @@
     });
   }
   function refreshAfter(d) {
-    // Re-fetch slide-over data + the matching card
     fetch('/bookings/' + d.id, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
-      .then(function (fresh) { soState.data = fresh; renderTab(soState.activeTab); });
+      .then(function (fresh) { soState.data = fresh; try { renderTab(soState.activeTab); } catch (e) { console.error('[bookings] renderTab in refreshAfter:', e); } })
+      .catch(function (e) { console.error('[bookings] refreshAfter fetch failed:', e); });
     var card = document.querySelector('.bk2-card[data-booking-id="' + d.id + '"]');
     if (card) refreshCard(card, d.id);
   }
@@ -1359,8 +1408,15 @@
   var initialView = initialUrl.searchParams.get('view') || 'board';
   if (initialView !== 'board') setView(initialView);
   var initialBooking = window.BK2_DATA.openBookingId || initialUrl.searchParams.get('b');
-  if (initialBooking === 'new') openCreate();
-  else if (initialBooking) openBooking(initialBooking, 'details');
+  if (initialBooking === 'new') {
+    openCreate();
+  } else if (initialBooking && /^\d+$/.test(String(initialBooking))) {
+    openBooking(initialBooking, 'details');
+  } else if (initialBooking) {
+    // Garbage value — strip it so reload doesn't keep trying.
+    console.warn('[bookings] ignoring non-integer ?b= value:', initialBooking);
+    pushUrl({ b: null });
+  }
 
   // ============================================================
   //  CALENDAR (Phase 5) — week timeline 6am–8pm.
