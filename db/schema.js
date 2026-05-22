@@ -10231,6 +10231,55 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 222: Worker-driven attendance sign-off on toolbox meetings.
+  //
+  // Reworks the status flow so it reflects the real lifecycle the team
+  // wants to capture:
+  //   - Pending      (no row yet — invite link sent, no response)
+  //   - Attending    (worker RSVP'd yes via the invite link or worker app)
+  //   - Attended     (worker signed off post-meeting; signed_off_at +
+  //                   signature_data populated)
+  //   - Absent       (status='attending' AND held_at in the past with no
+  //                   signed_off_at — i.e. said they'd come, didn't sign)
+  //                   — pure display state, not stored
+  //   - Not attending (status='absent' — worker declined the invite)
+  //   - Caught up    (status='caught_up' — self-claim after the fact)
+  //
+  // Two structural moves:
+  //   1. Add signed_off_at + signature_data columns so 'attended' can be
+  //      gated on a real worker sign-off rather than admin tick alone.
+  //   2. One-time backfill: every existing status='attended' row is
+  //      downgraded to 'attending'. Reason: the legacy public RSVP picker
+  //      and admin bulk-tick both wrote 'attended' without any sign-off,
+  //      so the historical rows don't represent what the new model means
+  //      by Attended. Recorded_at is preserved as the original RSVP /
+  //      tick time so audit history isn't lost.
+  // =============================================
+  if (!isMigrationApplied.get(222)) {
+    console.log('Running migration 222: toolbox sign-off columns + status backfill');
+    try {
+      const cols = db.prepare('PRAGMA table_info(toolbox_attendance)').all().map(c => c.name);
+      if (!cols.includes('signed_off_at')) {
+        db.exec('ALTER TABLE toolbox_attendance ADD COLUMN signed_off_at DATETIME');
+      }
+      if (!cols.includes('signature_data')) {
+        db.exec('ALTER TABLE toolbox_attendance ADD COLUMN signature_data TEXT');
+      }
+      // Backfill: every legacy 'attended' row → 'attending'. The new flow
+      // requires a worker signature to reach 'attended', so historical
+      // ticks are surfaced as "Attending" until/unless the worker signs
+      // off in the portal.
+      const downgraded = db.prepare(
+        "UPDATE toolbox_attendance SET status = 'attending' WHERE status = 'attended'"
+      ).run();
+      recordMigration.run(222, 'toolbox_attendance sign-off cols + legacy attended → attending');
+      console.log(`Migration 222 applied: ${downgraded.changes} legacy 'attended' rows downgraded to 'attending'`);
+    } catch (e) {
+      console.error('Migration 222 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

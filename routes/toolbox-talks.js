@@ -460,7 +460,8 @@ router.get('/:id/attendance', (req, res) => {
   // crew, excluding only workers whose ONLY HR profile is soft-deleted.
   const rows = db.prepare(`
     SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
-           a.status AS attendance_status, a.recorded_at, a.recorded_by_id
+           a.status AS attendance_status, a.recorded_at, a.recorded_by_id,
+           a.signed_off_at, a.absence_reason
     FROM crew_members cm
     LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
     WHERE cm.active = 1

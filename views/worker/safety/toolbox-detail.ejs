@@ -12,10 +12,20 @@
   const isAttending = status === 'attending';
   const isCaughtUp  = status === 'caught_up';
   const isAbsent    = status === 'absent';
-  const isMissed    = !status;
-  // Show the Accept button when worker has no response yet OR previously
-  // marked absent &mdash; they should still be able to flip to "attending".
-  const canAccept   = isMissed || isAbsent;
+  const isPending   = !status;
+
+  // Meeting timing decides which CTAs are surfaced.
+  // - Future (held_at > now): RSVP only — accept / decline.
+  // - On/past (held_at <= now): worker can sign off ("I attended") or
+  //   admit they didn't show. The "Absent" label is derived in the list
+  //   view from status='attending' + past + no signed_off_at; we don't
+  //   store it as its own value.
+  const heldMs   = toolbox.held_at ? new Date(toolbox.held_at).getTime() : null;
+  const isPast   = heldMs !== null && heldMs <= Date.now();
+  const canSignOff = (isPending || isAttending) && isPast;
+  const canDecline = (isPending || isAttending) && !isAttended && !isCaughtUp;
+  const canAccept  = (isPending || isAbsent) && !isPast;
+  const canCatchUp = isPending && isPast;
 %>
 <style>
   .tbd-wrap { color: #fff; padding: 0 16px 100px; }
@@ -37,13 +47,35 @@
   .tbd-banner.green { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #6ee7b7; }
   .tbd-banner.violet{ background: rgba(139,92,246,0.15); border: 1px solid rgba(139,92,246,0.3); color: #c4b5fd; }
   .tbd-banner.amber { background: rgba(245,158,11,0.15); border: 1px solid rgba(245,158,11,0.3); color: #fcd34d; }
-  .tbd-banner.blue  { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #93C5FD; }
+  .tbd-banner.blue  { background: rgba(43,127,255,0.15); border: 1px solid rgba(43,127,255,0.3); color: #93C5FD; }
+  .tbd-banner.rose  { background: rgba(244,63,94,0.16);  border: 1px solid rgba(244,63,94,0.30);  color: #fda4af; }
+  .tbd-banner-sig { margin-top: 10px; background: #fff; border-radius: 8px; padding: 6px; max-width: 220px; }
+  .tbd-banner-sig img { display: block; max-height: 70px; width: 100%; object-fit: contain; }
   .tbd-accept-btn {
     width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0;
     background: linear-gradient(135deg, #10B981, #60A5FA); color: #fff;
     box-shadow: 0 6px 20px rgba(16,185,129,0.35); margin-bottom: 8px;
   }
   .tbd-accept-btn:active { transform: translateY(1px); }
+  .tbd-decline-btn {
+    width: 100%; padding: 12px; border-radius: 12px; font-size: 0.9rem; font-weight: 700; border: 1px solid rgba(244,63,94,0.35);
+    background: rgba(244,63,94,0.12); color: #fda4af; margin-bottom: 8px;
+  }
+  .tbd-decline-btn:active { transform: translateY(1px); }
+  :root[data-theme="light"] .tbd-decline-btn { background: #FFF1F2; color: #9F1239; border-color: #FECDD3; }
+  .tbd-caught-btn {
+    width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0;
+    background: linear-gradient(135deg, #8b5cf6, #a78bfa); color: #fff;
+    box-shadow: 0 6px 20px rgba(139,92,246,0.35); margin-bottom: 8px;
+  }
+  .tbd-caught-btn:active { transform: translateY(1px); }
+  .tbd-signoff-btn {
+    width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0;
+    background: linear-gradient(135deg, #059669, #10B981); color: #fff;
+    box-shadow: 0 6px 20px rgba(5,150,105,0.35); margin-bottom: 8px;
+  }
+  .tbd-signoff-btn:disabled { opacity: 0.45; box-shadow: none; }
+  .tbd-signoff-btn:active:not(:disabled) { transform: translateY(1px); }
   .tbd-body {
     background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;
     padding: 14px 16px; font-size: 0.9rem; line-height: 1.55; white-space: pre-line; color: rgba(255,255,255,0.88);
@@ -58,16 +90,40 @@
   .tbd-pdf-wrap { margin-top: 12px; }
   .tbd-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 12px; }
   .tbd-photos img { width: 100%; height: 90px; object-fit: cover; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); }
+
+  /* Sign-off card sits in normal flow above the bottom tab nav so the
+     signature pad isn't covered by the keyboard or tab bar. */
+  .tbd-signoff-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.10);
+    border-radius: 12px; padding: 14px; margin: 14px 0 100px;
+  }
+  .tbd-signoff-card h3 { font-size: 0.95rem; font-weight: 700; margin: 0; color: #fff; }
+  .tbd-signoff-card p.hint { font-size: 0.78rem; color: rgba(255,255,255,0.6); margin: 4px 0 12px; line-height: 1.4; }
+  .tbd-sign-wrap {
+    position: relative; border-radius: 10px; overflow: hidden;
+    background-color: #FFFFFF;
+    background-image: repeating-linear-gradient(to bottom, rgba(15,23,42,0.04) 0, rgba(15,23,42,0.04) 23px, rgba(15,23,42,0.08) 23px, rgba(15,23,42,0.08) 24px);
+    border: 1px solid rgba(255,255,255,0.18);
+  }
+  .tbd-sign-pad { display: block; width: 100%; height: 140px; touch-action: none; cursor: crosshair; }
+  .tbd-sign-placeholder { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 0.78rem; color: #94A3B8; pointer-events: none; }
+  .tbd-sign-footer { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: rgba(0,0,0,0.18); border-top: 1px solid rgba(255,255,255,0.06); }
+  .tbd-sign-footer span { font-size: 0.62rem; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+  .tbd-sign-clear { background: none; border: 0; color: rgba(255,255,255,0.65); font-size: 0.75rem; font-weight: 600; cursor: pointer; padding: 4px 8px; }
+  .tbd-sign-clear:active { color: #fff; }
+  :root[data-theme="light"] .tbd-signoff-card { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .tbd-signoff-card h3 { color: #0F1115; }
+  :root[data-theme="light"] .tbd-signoff-card p.hint { color: #6B7280; }
+  :root[data-theme="light"] .tbd-sign-wrap { border-color: #D1D5DB; }
+  :root[data-theme="light"] .tbd-sign-footer { background: #F3F4F6; border-top-color: #E5E7EB; }
+  :root[data-theme="light"] .tbd-sign-footer span { color: #6B7280; }
+  :root[data-theme="light"] .tbd-sign-clear { color: #6B7280; }
+
   .tbd-actionbar {
     position: fixed; left: 0; right: 0; bottom: 64px; padding: 12px 12px calc(12px + env(safe-area-inset-bottom, 0px));
     background: rgba(10,22,40,0.96); border-top: 1px solid rgba(255,255,255,0.08); z-index: 40;
   }
-  .tbd-caught-btn {
-    width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; border: 0;
-    background: linear-gradient(135deg, #8b5cf6, #a78bfa); color: #fff;
-    box-shadow: 0 6px 20px rgba(139,92,246,0.35);
-  }
-  .tbd-caught-btn:active { transform: translateY(1px); }
+  :root[data-theme="light"] .tbd-actionbar { background: rgba(255,255,255,0.98); border-top-color: #E5E7EB; }
 </style>
 
 <div class="tbd-wrap">
@@ -78,18 +134,35 @@
   <div class="tbd-meta"><%= fmtDate(toolbox.held_at) %><% if (toolbox.presenter) { %> &middot; Presented by <%= toolbox.presenter %><% } %></div>
 
   <% if (isAttended) { %>
-    <div class="tbd-banner green">✓ You attended this toolbox<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
+    <div class="tbd-banner green">
+      ✓ Attended<% if (myAttendance.signed_off_at) { %> &mdash; signed off <%= fmt(myAttendance.signed_off_at) %><% } else if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.
+      <% if (myAttendance.signature_data) { %>
+        <div class="tbd-banner-sig"><img src="<%= myAttendance.signature_data %>" alt="Your signature"></div>
+      <% } %>
+    </div>
+  <% } else if (isAttending && isPast) { %>
+    <!-- Said they'd attend, meeting has happened, no sign-off yet —
+         surfaced as "Absent" per the new vocabulary. Worker can still
+         sign off if they were actually there. -->
+    <div class="tbd-banner rose">
+      Absent &mdash; you said you'd attend on <%= fmt(myAttendance.recorded_at) %> but haven't signed off yet.
+      <% if (canSignOff) { %> If you did attend, sign below to confirm.<% } %>
+    </div>
   <% } else if (isAttending) { %>
-    <div class="tbd-banner blue">✓ You're on the list &mdash; see you there<% if (myAttendance.recorded_at) { %> (accepted <%= fmt(myAttendance.recorded_at) %>)<% } %>. The supervisor will mark you off when you arrive.</div>
+    <div class="tbd-banner blue">
+      Attending &mdash; you're on the list<% if (myAttendance.recorded_at) { %> (accepted <%= fmt(myAttendance.recorded_at) %>)<% } %>. Sign off after the meeting to record your attendance.
+    </div>
   <% } else if (isCaughtUp) { %>
     <div class="tbd-banner violet">↻ You marked this as caught up<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.</div>
   <% } else if (isAbsent) { %>
     <div class="tbd-banner amber">
-      ✗ You said you can't attend<% if (myAttendance.recorded_at) { %> on <%= fmt(myAttendance.recorded_at) %><% } %>.
+      Not attending<% if (myAttendance.recorded_at) { %> (recorded <%= fmt(myAttendance.recorded_at) %>)<% } %>.
       <% if (myAttendance.absence_reason) { %><br><span style="opacity:0.85;">Your reason: <%= myAttendance.absence_reason %></span><% } %>
     </div>
+  <% } else if (isPast) { %>
+    <div class="tbd-banner rose">Pending &mdash; this meeting has already happened. If you were there, sign below; otherwise mark caught up.</div>
   <% } else { %>
-    <div class="tbd-banner amber">You haven't responded to this toolbox yet. Tap below to accept the invite.</div>
+    <div class="tbd-banner amber">Pending &mdash; let us know if you'll attend.</div>
   <% } %>
 
   <% if (toolbox.key_points) { %>
@@ -118,9 +191,29 @@
       <% }) %>
     </div>
   <% } %>
+
+  <% if (canSignOff) { %>
+    <div class="tbd-signoff-card">
+      <h3>Sign off — I attended</h3>
+      <p class="hint">Sign with your finger to confirm you were at this toolbox. The signature + timestamp are recorded against your name.</p>
+      <form method="POST" action="/w/safety/toolboxes/<%= toolbox.id %>/sign-off" id="tbd-signoff-form" data-offline-form data-offline-scope="Toolbox sign-off" data-success-url="/w/safety/toolboxes/<%= toolbox.id %>">
+        <%- include('../../partials/csrf') %>
+        <div class="tbd-sign-wrap">
+          <canvas id="tbd-sign-pad" class="tbd-sign-pad"></canvas>
+          <span id="tbd-sign-placeholder" class="tbd-sign-placeholder">Sign here</span>
+          <div class="tbd-sign-footer">
+            <span>Signature</span>
+            <button type="button" id="tbd-sign-clear" class="tbd-sign-clear">Clear</button>
+          </div>
+        </div>
+        <input type="hidden" name="signature_data" id="tbd-sign-data">
+        <button type="submit" id="tbd-sign-submit" class="tbd-signoff-btn" disabled style="margin-top: 12px;">Sign &amp; record attendance</button>
+      </form>
+    </div>
+  <% } %>
 </div>
 
-<% if (canAccept || isMissed) { %>
+<% if ((canAccept || canDecline || canCatchUp) && !canSignOff) { %>
   <div class="tbd-actionbar">
     <% if (canAccept) { %>
       <form method="POST" action="/w/safety/toolboxes/<%= toolbox.id %>/accept" data-offline-form data-offline-scope="Toolbox accept" data-success-url="/w/safety/toolboxes/<%= toolbox.id %>">
@@ -128,13 +221,92 @@
         <button type="submit" class="tbd-accept-btn">Accept &mdash; I'll be there</button>
       </form>
     <% } %>
-    <% if (isMissed) { %>
+    <% if (canDecline) { %>
+      <form method="POST" action="/w/safety/toolboxes/<%= toolbox.id %>/decline" data-offline-form data-offline-scope="Toolbox decline" data-success-url="/w/safety/toolboxes/<%= toolbox.id %>">
+        <%- include('../../partials/csrf') %>
+        <button type="submit" class="tbd-decline-btn">I can't attend</button>
+      </form>
+    <% } %>
+    <% if (canCatchUp) { %>
       <form method="POST" action="/w/safety/toolboxes/<%= toolbox.id %>/caught-up" data-offline-form data-offline-scope="Toolbox caught up" data-success-url="/w/safety/toolboxes/<%= toolbox.id %>">
         <%- include('../../partials/csrf') %>
-        <button type="submit" class="tbd-caught-btn">I've read this &mdash; mark caught up</button>
+        <button type="submit" class="tbd-caught-btn">I wasn't there &mdash; mark caught up</button>
       </form>
     <% } %>
   </div>
+<% } %>
+
+<% if (canSignOff) { %>
+<script>
+  (function () {
+    var canvas = document.getElementById('tbd-sign-pad');
+    if (!canvas) return;
+    var placeholder = document.getElementById('tbd-sign-placeholder');
+    var clearBtn    = document.getElementById('tbd-sign-clear');
+    var submitBtn   = document.getElementById('tbd-sign-submit');
+    var dataInput   = document.getElementById('tbd-sign-data');
+    var form        = document.getElementById('tbd-signoff-form');
+
+    var ctx = canvas.getContext('2d');
+    var drawing = false;
+    var last = null;
+    var hasInk = false;
+
+    function size() {
+      var dpr = window.devicePixelRatio || 1;
+      var rect = canvas.getBoundingClientRect();
+      if (rect.width === 0) return;
+      canvas.width  = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+      ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.strokeStyle = '#0f172a';
+    }
+    size();
+    window.addEventListener('resize', size);
+
+    function xy(e) {
+      var r = canvas.getBoundingClientRect();
+      var t = e.touches ? e.touches[0] : e;
+      return { x: t.clientX - r.left, y: t.clientY - r.top };
+    }
+    function start(e) { e.preventDefault(); drawing = true; last = xy(e); placeholder.style.display = 'none'; }
+    function move(e) {
+      if (!drawing) return;
+      e.preventDefault();
+      var p = xy(e);
+      ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+      last = p;
+      if (!hasInk) {
+        hasInk = true;
+        submitBtn.disabled = false;
+        dataInput.value = canvas.toDataURL('image/png');
+      }
+    }
+    function end() {
+      drawing = false;
+      if (hasInk) dataInput.value = canvas.toDataURL('image/png');
+    }
+    canvas.addEventListener('mousedown', start);
+    canvas.addEventListener('mousemove', move);
+    canvas.addEventListener('mouseup', end);
+    canvas.addEventListener('mouseleave', end);
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end);
+
+    clearBtn.addEventListener('click', function () {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      hasInk = false; placeholder.style.display = ''; submitBtn.disabled = true; dataInput.value = '';
+    });
+    form.addEventListener('submit', function (e) {
+      if (!hasInk) { e.preventDefault(); alert('Please draw your signature before signing off.'); return; }
+      dataInput.value = canvas.toDataURL('image/png');
+      submitBtn.disabled = true; submitBtn.textContent = 'Submitting…';
+    });
+  })();
+</script>
 <% } %>
 
 <% if (toolbox.slides_path && isPdfSlides) { %>

@@ -5,13 +5,17 @@
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   const allocatedSet = new Set(allocatedIds);
+  // Meeting timing — used to derive the "Absent" label for workers who
+  // RSVP'd attending but never signed off after a past meeting.
+  const heldMs = toolbox.held_at ? new Date(toolbox.held_at + 'T00:00:00').getTime() : null;
+  const isPastMeeting = heldMs !== null && heldMs <= Date.now();
 %>
 
 <div class="max-w-5xl mx-auto space-y-5">
   <div>
     <a href="/toolbox-talks/<%= toolbox.id %>" class="text-sm text-brand-600 hover:underline">← <%= toolbox.title %></a>
     <h1 class="text-2xl font-bold text-gray-900 mt-1">Attendance</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Tick everyone who was there. "Caught up" rows are self-claimed by workers and aren't overwritten by this form.</p>
+    <p class="text-sm text-gray-500 mt-0.5">Workers sign off their own attendance from the portal — those rows show as <strong>Attended</strong> with a signature timestamp. Tick boxes below only to mark someone off on their behalf. "Caught up" rows are self-claimed and aren't overwritten by this form.</p>
   </div>
 
   <!-- Tabs -->
@@ -52,6 +56,10 @@
           const isAttending = r.attendance_status === 'attending';
           const isCaughtUp  = r.attendance_status === 'caught_up';
           const isAbsent    = r.attendance_status === 'absent';
+          const isPending   = !r.attendance_status;
+          // "Absent" label is derived for attending+past-meeting+no-signoff
+          // so it matches what the worker sees in their own portal.
+          const isDerivedAbsent = isAttending && isPastMeeting && !r.signed_off_at;
         %>
           <tr class="tb-att-row hover:bg-gray-50/50" data-allocated="<%= isAllocated ? '1' : '0' %>" data-crew-id="<%= r.crew_id %>">
             <td class="px-3 py-2">
@@ -68,18 +76,22 @@
             <td class="px-2 py-2 text-xs text-gray-500"><%= r.employee_id || '—' %></td>
             <td class="px-2 py-2">
               <% if (isAttended) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200">Attended</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200" title="<%= r.signed_off_at ? 'Worker signed off ' + fmt(r.signed_off_at) : 'Marked by office' %>">Attended<% if (r.signed_off_at) { %> ✓<% } %></span>
+              <% } else if (isDerivedAbsent) { %>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-rose-50 text-rose-700 ring-rose-200" title="Said they'd attend but never signed off">Absent</span>
               <% } else if (isAttending) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200">Attending</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-blue-50 text-blue-700 ring-blue-200">Attending</span>
               <% } else if (isCaughtUp) { %>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-violet-50 text-violet-700 ring-violet-200">Caught up</span>
               <% } else if (isAbsent) { %>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200" title="<%= r.absence_reason || 'Worker declined the invite' %>">Not attending</span>
+              <% } else if (isPending && isPastMeeting) { %>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-rose-50 text-rose-700 ring-rose-200">Absent</span>
               <% } else { %>
-                <span class="text-xs text-gray-400">—</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-gray-100 text-gray-600 ring-gray-200">Pending</span>
               <% } %>
             </td>
-            <td class="px-2 py-2 text-xs text-gray-500 tabular-nums"><%= fmt(r.recorded_at) %></td>
+            <td class="px-2 py-2 text-xs text-gray-500 tabular-nums"><%= fmt(r.signed_off_at || r.recorded_at) %></td>
             <td class="px-2 py-2 text-right">
               <button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>" title="Remove from invite list">Remove</button>
             </td>

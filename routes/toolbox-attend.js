@@ -99,9 +99,16 @@ router.get('/:token', (req, res) => {
   });
 });
 
-// POST /toolbox-attend/:token/submit — record attendance.
-// Body: crew_member_id (required), status ('attended' | 'absent'),
+// POST /toolbox-attend/:token/submit — record attendance RSVP.
+// Body: crew_member_id (required), status ('attending' | 'absent'),
 //       absence_reason (required when status='absent').
+//
+// This link captures the RSVP only — sign-off ("I attended") happens
+// later via the worker portal after the meeting, which is what flips the
+// row to 'attended' with a signature. Clicking "I will attend" here
+// historically set status='attended' directly, which short-circuited
+// sign-off and made workers display as Attended on day 1; that's now
+// correctly 'attending'.
 router.post('/:token/submit', (req, res) => {
   const session = loadSession(req.params.token);
   if (!session) {
@@ -116,12 +123,12 @@ router.post('/:token/submit', (req, res) => {
   }
 
   const crewId = parseInt(req.body.crew_member_id, 10);
-  const status = ['attended', 'absent'].includes(req.body.status) ? req.body.status : null;
+  const status = ['attending', 'absent'].includes(req.body.status) ? req.body.status : null;
   const absenceReason = (req.body.absence_reason || '').toString().trim().slice(0, 1000);
 
   if (!crewId || !status) {
     return res.status(400).render('toolbox-attend/error', {
-      layout: false, message: 'Please pick your name and select Attended or Absent before submitting.',
+      layout: false, message: "Please pick your name and select whether you'll attend before submitting.",
     });
   }
   if (status === 'absent' && !absenceReason) {

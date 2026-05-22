@@ -47,9 +47,11 @@
     .name { flex: 1; font-weight: 600; font-size: 15px; }
     .emp { font-size: 12px; color: rgba(255,255,255,0.45); font-variant-numeric: tabular-nums; }
     .status-tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
-    .status-attended { background: rgba(16,185,129,0.20); color: #34D399; }
-    .status-absent { background: rgba(244,63,94,0.20); color: #FCA5A5; }
-    .status-caught { background: rgba(245,158,11,0.20); color: #FCD34D; }
+    .status-attended  { background: rgba(16,185,129,0.20); color: #34D399; }
+    .status-attending { background: rgba(43,127,255,0.20); color: #93C5FD; }
+    .status-absent    { background: rgba(244,63,94,0.20); color: #FCA5A5; }
+    .status-caught    { background: rgba(245,158,11,0.20); color: #FCD34D; }
+    .status-pending   { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.65); }
     input[type="text"], textarea {
       width: 100%; padding: 11px 13px; background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;
@@ -93,8 +95,8 @@
     <% if (submitted) { %>
       <div class="ok-card">
         <h2>Thanks, <%= submittedAs %>!</h2>
-        <% if (submittedStatus === 'attended') { %>
-          <p>You're confirmed to attend. See you there.</p>
+        <% if (submittedStatus === 'attending') { %>
+          <p>You're on the list — see you there. Once the meeting wraps you'll be asked to sign off in the worker app.</p>
         <% } else if (submittedStatus === 'absent') { %>
           <p>Noted — your reason has been sent to the office.</p>
         <% } %>
@@ -126,9 +128,11 @@
                 <span class="name"><%= a.full_name %></span>
                 <% if (a.employee_id) { %><span class="emp"><%= a.employee_id %></span><% } %>
                 <% if (a.currentStatus === 'attended') { %>
-                  <span class="status-tag status-attended">Will attend</span>
+                  <span class="status-tag status-attended">Attended</span>
+                <% } else if (a.currentStatus === 'attending') { %>
+                  <span class="status-tag status-attending">Attending</span>
                 <% } else if (a.currentStatus === 'absent') { %>
-                  <span class="status-tag status-absent">Absent</span>
+                  <span class="status-tag status-absent">Not attending</span>
                 <% } else if (a.currentStatus === 'caught_up') { %>
                   <span class="status-tag status-caught">Caught up</span>
                 <% } %>
@@ -141,7 +145,7 @@
           <p class="eyebrow" style="margin-bottom:6px;">Your status</p>
           <div class="seg" id="status-seg">
             <label class="attended">
-              <input type="radio" name="status" value="attended" onchange="onStatus(this)">
+              <input type="radio" name="status" value="attending" onchange="onStatus(this)">
               <span>I will attend</span>
             </label>
             <label class="absent">
@@ -182,7 +186,7 @@
     function updateSubmit() {
       var btn = document.getElementById('submit-btn');
       var reason = (document.getElementById('absence-reason') || {}).value || '';
-      var ok = !!pickedCrew && !!pickedStatus && (pickedStatus === 'attended' || reason.trim().length > 0);
+      var ok = !!pickedCrew && !!pickedStatus && (pickedStatus === 'attending' || reason.trim().length > 0);
       btn.disabled = !ok;
     }
     function filterRows(q) {
