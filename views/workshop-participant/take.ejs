@@ -324,12 +324,80 @@ function apiLeaderboard() {
 
 function render() {
   app.innerHTML = "";
-  if (S.screen === "start")    return screenStart();
-  if (S.screen === "claiming") return screenClaiming();
-  if (S.screen === "brief")    return screenBrief();
-  if (S.screen === "quiz")     return screenQuiz();
-  if (S.screen === "score")    return screenScore();
-  if (S.screen === "board")    return screenBoard();
+  if (S.screen === "start")    { screenStart();    persistState(); return; }
+  if (S.screen === "claiming") { screenClaiming(); persistState(); return; }
+  if (S.screen === "brief")    { screenBrief();    persistState(); return; }
+  if (S.screen === "quiz")     { screenQuiz();     persistState(); return; }
+  if (S.screen === "score")    { screenScore();    persistState(); return; }
+  if (S.screen === "board")    { clearState();     screenBoard();  return; }
+}
+
+// ---- State persistence across page refreshes ----
+// Reason: if a worker accidentally refreshes mid-quiz (e.g. just before
+// submitting to the leaderboard), they lose all their answers and the
+// sticky case assignment means they can't re-enter their score under
+// the same name. Snapshotting S to localStorage on every render lets
+// the page resume exactly where they left off after a reload.
+//
+// Scoped per session_code + lowercase name so two workers sharing a
+// device don't clobber each other. Cleared on successful submit
+// (S.screen === "board") so the next worker on the same device gets a
+// clean start screen.
+var STATE_KEY_PREFIX = "wq:state:" + SESSION_CODE + ":";
+function stateKeyFor(name) {
+  return STATE_KEY_PREFIX + String(name || "").trim().toLowerCase();
+}
+function persistState() {
+  try {
+    if (!S.name || S.screen === "start" || S.screen === "claiming") return;
+    var payload = {
+      v: 1,
+      name: S.name, caseId: S.caseId, screen: S.screen,
+      qi: S.qi, order: S.order, results: S.results,
+      picked: S.picked, answered: S.answered, briefOpen: S.briefOpen,
+      savedAt: Date.now(),
+    };
+    localStorage.setItem(stateKeyFor(S.name), JSON.stringify(payload));
+  } catch (e) {}
+}
+function clearState() {
+  try {
+    if (S.name) localStorage.removeItem(stateKeyFor(S.name));
+  } catch (e) {}
+}
+function tryResume() {
+  try {
+    // Find ANY in-flight state for this session — there's usually only
+    // one (single worker per device), but if multiple keys exist we
+    // pick the most recently saved. Skip rows that already submitted
+    // (screen === "board").
+    var bestKey = null, bestPayload = null;
+    for (var i = 0; i < localStorage.length; i++) {
+      var k = localStorage.key(i);
+      if (!k || k.indexOf(STATE_KEY_PREFIX) !== 0) continue;
+      try {
+        var p = JSON.parse(localStorage.getItem(k));
+        if (!p || p.screen === "board" || !p.caseId) continue;
+        // 12-hour TTL — stale games (left running for days) shouldn't
+        // hijack a fresh visit.
+        if (!p.savedAt || (Date.now() - p.savedAt) > 12 * 60 * 60 * 1000) {
+          localStorage.removeItem(k); continue;
+        }
+        if (!bestPayload || p.savedAt > bestPayload.savedAt) { bestKey = k; bestPayload = p; }
+      } catch (e) {}
+    }
+    if (!bestPayload) return false;
+    S.name = bestPayload.name || "";
+    S.caseId = bestPayload.caseId;
+    S.screen = bestPayload.screen;
+    S.qi = bestPayload.qi || 0;
+    S.order = bestPayload.order || [];
+    S.results = bestPayload.results || [];
+    S.picked = bestPayload.picked;
+    S.answered = !!bestPayload.answered;
+    S.briefOpen = !!bestPayload.briefOpen;
+    return true;
+  } catch (e) { return false; }
 }
 
 function screenStart() {
@@ -750,7 +818,8 @@ function screenBoard() {
   }, 6000);
 }
 
-// boot
+// boot — try to resume a saved in-flight game first (refresh recovery).
+tryResume();
 render();
 </script>
 </body>

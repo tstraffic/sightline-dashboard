@@ -29,7 +29,14 @@
       </a>
       <a href="/w/dockets" class="flex items-center gap-3 p-4 active:bg-gray-50 transition">
         <div class="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
-          <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+          <%# Swapped from the thin Heroicons "pencil" outline (stroke-width 2)
+              to a chunkier clipboard-with-check that reads on both
+              light and dark backgrounds. The previous icon was too
+              thin to be visible against bg-blue-50 in light mode and
+              against the translucent overlay in dark. %>
+          <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+          </svg>
         </div>
         <div class="flex-1"><p class="text-sm font-medium text-gray-900">Dockets</p><p class="text-xs text-gray-600">Sign off work dockets</p></div>
         <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>

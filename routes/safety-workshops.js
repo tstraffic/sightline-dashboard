@@ -366,6 +366,12 @@ router.post('/sessions/:code/add-participant', (req, res) => {
   const caseLetter = String((req.body && req.body.case_letter) || '').toUpperCase().trim();
   const rawScore = (req.body && req.body.score != null) ? String(req.body.score).trim() : '';
   const rawMax   = (req.body && req.body.max_score != null) ? String(req.body.max_score).trim() : '';
+  // When the admin ticks "Override existing entry" on the form the
+  // existing assignment/attempt is replaced rather than blocking the
+  // submit. Use case: a worker accidentally refreshed mid-quiz and lost
+  // their answers, but the case assignment is still claimed so the
+  // public flow won't take a fresh entry under the same name.
+  const override = !!(req.body && (req.body.override === '1' || req.body.override === 'on' || req.body.override === true));
 
   if (name.length < 2 || name.length > 60) {
     req.flash('error', 'Name is required (2–60 characters).');
@@ -378,12 +384,12 @@ router.post('/sessions/:code/add-participant', (req, res) => {
   // Same case-insensitive name dedupe as the public start endpoint.
   const existing = db
     .prepare(
-      `SELECT case_letter FROM workshop_assignments
+      `SELECT id, case_letter FROM workshop_assignments
        WHERE session_id = ? AND LOWER(player_name) = LOWER(?)`
     )
     .get(session.id, name);
-  if (existing) {
-    req.flash('error', name + ' is already on the board (Case ' + existing.case_letter + ').');
+  if (existing && !override) {
+    req.flash('error', name + ' is already on the board (Case ' + existing.case_letter + '). Tick "Override existing entry" to replace.');
     return res.redirect('/safety-workshops/sessions/' + session.session_code);
   }
 
@@ -406,11 +412,27 @@ router.post('/sessions/:code/add-participant', (req, res) => {
     }
   }
 
+  const userId = req.session.user ? req.session.user.id : null;
   const tx = db.transaction(() => {
-    db.prepare(
-      `INSERT INTO workshop_assignments (session_id, player_name, case_letter, user_id)
-       VALUES (?, ?, ?, ?)`
-    ).run(session.id, name, caseLetter, req.session.user ? req.session.user.id : null);
+    if (existing) {
+      // Override path — re-point the assignment to the new case (if
+      // the admin picked a different one) and replace any prior attempt
+      // for this name. Clears the player's old answers_json since the
+      // override is authoritative.
+      db.prepare(
+        `UPDATE workshop_assignments
+         SET case_letter = ?, user_id = COALESCE(?, user_id)
+         WHERE id = ?`
+      ).run(caseLetter, userId, existing.id);
+      db.prepare(
+        `DELETE FROM workshop_attempts WHERE session_id = ? AND LOWER(player_name) = LOWER(?)`
+      ).run(session.id, name);
+    } else {
+      db.prepare(
+        `INSERT INTO workshop_assignments (session_id, player_name, case_letter, user_id)
+         VALUES (?, ?, ?, ?)`
+      ).run(session.id, name, caseLetter, userId);
+    }
     if (score != null) {
       db.prepare(
         `INSERT INTO workshop_attempts
@@ -430,15 +452,19 @@ router.post('/sessions/:code/add-participant', (req, res) => {
   try {
     logActivity({
       user: req.session.user,
-      action: 'add_participant',
+      action: existing ? 'override_participant' : 'add_participant',
       entityType: 'workshop_session',
       entityId: session.id,
       entityLabel: session.session_code,
-      details: name + ' → Case ' + caseLetter + (score != null ? ' (' + score + '/' + maxScore + ')' : ''),
+      details: name + ' → Case ' + caseLetter + (score != null ? ' (' + score + '/' + maxScore + ')' : '') + (existing ? ' [override]' : ''),
       ip: req.ip,
     });
   } catch (e) {}
-  req.flash('success', 'Added ' + name + ' to Case ' + caseLetter + (score != null ? ' with score ' + score + '/' + maxScore + '.' : '.'));
+  req.flash('success',
+    (existing ? 'Overrode ' : 'Added ') + name +
+    ' → Case ' + caseLetter +
+    (score != null ? ' with score ' + score + '/' + maxScore + '.' : '.')
+  );
   return res.redirect('/safety-workshops/sessions/' + session.session_code);
 });
 
