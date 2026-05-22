@@ -353,9 +353,7 @@
       <h2 class="bk2-slideover-title" id="bk2-so-title">New booking</h2>
       <p class="bk2-slideover-sub">Quick Book — 6 fields. Save creates a draft.</p>
     </div>
-    <button type="button" class="bk2-slideover-close"
-            onclick="document.getElementById('bk2-slideover').classList.remove('bk2-open');document.getElementById('bk2-backdrop').classList.remove('bk2-open');"
-            aria-label="Close">
+    <button type="button" class="bk2-slideover-close" id="bk2-so-close" aria-label="Close">
       <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   </header>
@@ -369,8 +367,8 @@
           style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
       </span></label>
 
-      <label class="bk2-row"><span class="lbl">Site / project *</span><span class="val">
-        <input list="bk2-jobs" name="site_label" placeholder="Job name or site label" required
+      <label class="bk2-row"><span class="lbl">Site / project</span><span class="val">
+        <input list="bk2-jobs" name="site_label" placeholder="Optional — job name or site label"
           style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
       </span></label>
 
@@ -477,23 +475,45 @@
   var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
 
   // ============================================================
-  //  FORCE CLOSED state on every page load. Belt + braces.
+  //  Quick Book slide-over open/close.
+  //
+  //  History: this used to use inline onclick="" handlers for the X
+  //  button, which silently fell off whenever a content-security
+  //  policy update touched the page — the panel would open but no
+  //  click ever ran the close logic. Centralising on real listeners
+  //  fixed that, and gives us one place to also reset the form so
+  //  reopening Quick Book never reuses a previous draft.
   // ============================================================
   var so = $('#bk2-slideover');
   var backdrop = $('#bk2-backdrop');
+  var qbForm = $('#bk2-qb-form');
   function closeQB() {
+    if (!so) return;
     so.classList.remove('bk2-open');
-    backdrop.classList.remove('bk2-open');
+    if (backdrop) backdrop.classList.remove('bk2-open');
   }
   function openQB() {
+    if (!so) return;
+    // Reset any stale field values so Quick Book starts blank every
+    // time — the form is a draft, not a saved entity.
+    if (qbForm) qbForm.reset();
     so.classList.add('bk2-open');
-    backdrop.classList.add('bk2-open');
+    if (backdrop) backdrop.classList.add('bk2-open');
     setTimeout(function () { var first = so.querySelector('input[name="client_name"]'); if (first) first.focus(); }, 80);
   }
-  // Ensure it starts closed no matter what.
+  // Ensure it starts closed no matter what — protects against bfcache
+  // restoring the page with the open class still applied.
   closeQB();
-  backdrop.addEventListener('click', closeQB);
+  if (backdrop) backdrop.addEventListener('click', closeQB);
   window.addEventListener('pageshow', closeQB);
+  // Wire X button (replaced its inline onclick) and let any element
+  // with [data-bk2-close] act as a close affordance.
+  var closeBtn = $('#bk2-so-close');
+  if (closeBtn) closeBtn.addEventListener('click', closeQB);
+  $$('[data-bk2-close]').forEach(function (el) { el.addEventListener('click', closeQB); });
+  // Hide the panel immediately on submit so users don't see it lingering
+  // through the round-trip + redirect. Native form submit still proceeds.
+  if (qbForm) qbForm.addEventListener('submit', function () { closeQB(); });
 
   // ============================================================
   //  VIEW SWITCHER — client-side tab toggle

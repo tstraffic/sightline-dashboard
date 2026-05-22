@@ -1289,8 +1289,8 @@ setInterval(function() {
           <h4 class="modal-section-title">CLIENT INFORMATION</h4>
           <div class="modal-field-grid">
             <div class="modal-field">
-              <label>Client <span class="text-red-500">*</span></label>
-              <select name="client_id" required class="modal-input">
+              <label>Client</label>
+              <select name="client_id" class="modal-input">
                 <option value="">-- Select --</option>
                 <% formClients.forEach(c => { %><option value="<%= c.id %>"><%= c.company_name %></option><% }); %>
               </select>
@@ -1861,9 +1861,12 @@ setInterval(function() {
         document.getElementById('bookings-search')?.focus();
         break;
       case 'escape':
-        // Close whatever is open: form panel → modal → resource drawer
-        const formPanel = document.getElementById('booking-form-panel');
-        if (formPanel && formPanel.classList.contains('open')) {
+        // Close whatever is open: form panel → detail modal → resource drawer.
+        // The form panel's element id is `booking-form-modal` (not -panel as
+        // this branch used to look up — that lookup always returned null and
+        // Esc silently fell through to the detail-modal check).
+        const formModal = document.getElementById('booking-form-modal');
+        if (formModal && formModal.classList.contains('open')) {
           closeBookingForm();
         } else if (document.getElementById('booking-modal-backdrop')?.style.display !== 'none'
                   && document.getElementById('booking-modal-backdrop')?.style.display !== '') {
@@ -2479,18 +2482,32 @@ function openBookingForm(skipReset) {
   if (!skipReset) resetBookingForm();
   const backdrop = document.getElementById('booking-form-backdrop');
   const modal = document.getElementById('booking-form-modal');
+  if (!backdrop || !modal) return;
+  // Cancel any pending close timer so a quick reopen during the
+  // close transition doesn't end up hiding the freshly-opened panel.
+  if (backdrop._closeTimer) { clearTimeout(backdrop._closeTimer); backdrop._closeTimer = null; }
   backdrop.style.display = 'flex';
   document.body.style.overflow = 'hidden';
-  setTimeout(() => { backdrop.classList.add('open'); modal.classList.add('open'); }, 10);
+  // rAF instead of setTimeout(10) so the transition fires reliably on
+  // the next paint regardless of main-thread jitter.
+  requestAnimationFrame(() => { backdrop.classList.add('open'); modal.classList.add('open'); });
 }
 
 function closeBookingForm() {
   const backdrop = document.getElementById('booking-form-backdrop');
   const modal = document.getElementById('booking-form-modal');
-  if (!backdrop || backdrop.style.display === 'none') return;
+  if (!backdrop || !modal) return;
+  // Always run — the previous early-return guard ("if display is 'none' bail")
+  // could short-circuit when a stale inline style was wiped by another script,
+  // leaving the panel visible with no way to close it via X.
   backdrop.classList.remove('open');
   modal.classList.remove('open');
-  setTimeout(() => { backdrop.style.display = 'none'; document.body.style.overflow = ''; }, 250);
+  if (backdrop._closeTimer) clearTimeout(backdrop._closeTimer);
+  backdrop._closeTimer = setTimeout(() => {
+    backdrop.style.display = 'none';
+    document.body.style.overflow = '';
+    backdrop._closeTimer = null;
+  }, 250);
 }
 
 function openBookingFormEdit(id) {

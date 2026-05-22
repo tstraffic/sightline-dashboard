@@ -783,8 +783,11 @@ router.post('/quick', (req, res) => {
   if (!lat || !lng) setImmediate(() => { geocodeBookingIfNeeded(newId).catch(() => {}); });
 
   if (isJson) return res.json({ ok: true, id: newId, booking_number: bookingNumber });
-  req.flash('success', `Booking ${bookingNumber} created.`);
-  res.redirect('/bookings?b=' + newId);
+  req.flash('success', `Booking ${bookingNumber} created — finish assigning crew and vehicles below.`);
+  // Land the planner on the full booking detail page so they can keep
+  // working on the booking they just created, instead of back on the
+  // day board with the new row buried in the list.
+  res.redirect('/bookings/' + newId);
 });
 
 // GET /resources — Available crew (JSON) with qualification data
