@@ -29,6 +29,41 @@
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+  <script>
+    // iOS Safari + standalone PWAs sometimes report `100dvh` as the smaller
+    // visual viewport on the first paint (especially right after a cold
+    // launch or a reload), then re-measure after the first user scroll —
+    // which is what users were seeing as "the bottom tab nav floats with a
+    // big gap, then snaps to the right place once you scroll." Pinning the
+    // body height directly to window.innerHeight in JS bypasses the CSS
+    // unit's flaky initial value entirely. Runs as early as possible (the
+    // tag is in <head>) and re-measures on resize / orientation / visual-
+    // viewport changes so URL-bar transitions are still respected.
+    (function () {
+      function fix() {
+        var h = (window.visualViewport && window.visualViewport.height) || window.innerHeight;
+        var s = h + 'px';
+        document.documentElement.style.setProperty('--wh-vh', s);
+        if (document.body) {
+          document.body.style.height = s;
+          document.body.style.minHeight = s;
+          document.body.style.maxHeight = s;
+        }
+      }
+      fix();
+      if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', fix, { once: true });
+      }
+      window.addEventListener('resize', fix);
+      window.addEventListener('orientationchange', fix);
+      if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', fix);
+      }
+      // Also re-fix after the page finishes loading — iOS sometimes
+      // reports a stale innerHeight for one frame around the load event.
+      window.addEventListener('load', fix);
+    })();
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="T&S Crew">
@@ -104,11 +139,11 @@
     }
   </script>
   <link rel="stylesheet" href="/css/custom.css?v=atomis-6">
-  <link rel="stylesheet" href="/css/worker.css?v=atomis-11">
+  <link rel="stylesheet" href="/css/worker.css?v=atomis-12">
   <link rel="stylesheet" href="/css/worker-design.css?v=atomis-3">
   <link rel="stylesheet" href="/css/chat.css?v=atomis-1">
 </head>
-<body class="worker-portal font-sans antialiased flex flex-col" style="height: 100dvh; min-height: 100dvh; max-height: 100dvh;">
+<body class="worker-portal font-sans antialiased flex flex-col" style="height: var(--wh-vh, 100dvh); min-height: var(--wh-vh, 100dvh); max-height: var(--wh-vh, 100dvh);">
 
   <%- include('../partials/staging-badge') %>
 
