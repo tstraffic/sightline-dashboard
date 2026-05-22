@@ -115,9 +115,9 @@
       <% } %>
     </div>
   <% } else if (priorOnly) { %>
-    <div class="sd-banner amber" data-attention="amber">⚠ This SOP has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Please review and re-sign below.</div>
+    <div class="sd-banner amber" data-attention="amber">⚠ This SOP has been updated since you last acknowledged it (<%= fmt(lastAnyAck.signed_at) %>). Tap <strong>Open full screen</strong> below to review and re-sign.</div>
   <% } else { %>
-    <div class="sd-banner rose" data-attention="rose">You have not acknowledged this SOP yet. Read it through, sign at the bottom, then tap acknowledge.</div>
+    <div class="sd-banner rose" data-attention="rose">You have not acknowledged this SOP yet. Tap <strong>Open full screen</strong> below to read it and sign.</div>
   <% } %>
 
   <% if (sop.description) { %>
@@ -125,10 +125,13 @@
   <% } %>
 
   <% if (sop.file_path) { %>
-    <!-- Open-fullscreen above the inline viewer (matches SWMS layout) -->
+    <!-- Open-fullscreen above the inline viewer. This is the only place
+         workers can sign — the fullscreen viewer owns the signature pad.
+         When unsigned, surface "to sign" in the label so it's the clear
+         next action; when already signed, just "Open full screen". -->
     <a href="/w/safety/sop-register/<%= sop.id %>/view" class="sd-fullscreen">
       <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 8V4m0 0h4M4 4l5 5m11-5v4m0-4h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5v-4m0 4h-4m4 0l-5-5"/></svg>
-      Open full screen
+      <%= isCurrent ? 'Open full screen' : 'Open full screen to sign' %>
     </a>
     <div class="pdf-viewer"
          data-pdf-src="/w/safety/sop-register/<%= sop.id %>/file"
@@ -137,133 +140,7 @@
     <p style="color: rgba(255,255,255,0.5); font-size: 0.85rem;">No document attached.</p>
   <% } %>
 
-  <% if (!isCurrent) { %>
-    <!-- Signature pad &mdash; required before the action bar's Acknowledge
-         button enables. Stays in the normal flow so the user can see
-         the canvas while signing (no overlap with the fixed bottom). -->
-    <div class="sd-sign-card">
-      <h3>Sign to acknowledge</h3>
-      <p class="hint">By signing you confirm that you've read and understood this SOP and will follow it on site.</p>
-      <div class="sd-sign-pad-wrap">
-        <canvas id="sd-sign-pad" class="sd-sign-pad"></canvas>
-        <span id="sd-sign-placeholder" class="sd-sign-placeholder">Sign with your finger</span>
-        <div class="sd-sign-footer">
-          <span>Signature</span>
-          <button type="button" id="sd-sign-clear" class="sd-sign-clear">Clear</button>
-        </div>
-      </div>
-    </div>
-  <% } %>
 </div>
-
-<% if (!isCurrent) { %>
-  <div class="sd-actionbar">
-    <form method="POST" action="/w/safety/sop-register/<%= sop.id %>/acknowledge" id="sd-ack-form"
-          data-offline-form data-offline-scope="SOP acknowledgement"
-          data-success-url="/w/safety/sop-register/<%= sop.id %>">
-      <%- include('../../partials/csrf') %>
-      <input type="hidden" name="signature_data" id="sd-sign-data">
-      <button type="submit" id="sd-ack-btn" class="sd-ack-btn" disabled>Sign &amp; acknowledge</button>
-    </form>
-  </div>
-
-  <script>
-    // Signature pad — minimal, works with touch + mouse. Enables the
-    // Acknowledge button as soon as the worker draws something so empty
-    // submissions can't go through.
-    (function () {
-      var canvas = document.getElementById('sd-sign-pad');
-      if (!canvas) return;
-      var placeholder = document.getElementById('sd-sign-placeholder');
-      var clearBtn    = document.getElementById('sd-sign-clear');
-      var submitBtn   = document.getElementById('sd-ack-btn');
-      var dataInput   = document.getElementById('sd-sign-data');
-      var form        = document.getElementById('sd-ack-form');
-
-      var ctx = canvas.getContext('2d');
-      var drawing = false;
-      var last = null;
-      var hasInk = false;
-
-      function size() {
-        var dpr = window.devicePixelRatio || 1;
-        var rect = canvas.getBoundingClientRect();
-        if (rect.width === 0) return;
-        canvas.width  = rect.width * dpr;
-        canvas.height = rect.height * dpr;
-        ctx.setTransform(1, 0, 0, 1, 0, 0);
-        ctx.scale(dpr, dpr);
-        ctx.lineWidth = 2.4;
-        ctx.lineCap = 'round';
-        ctx.lineJoin = 'round';
-        ctx.strokeStyle = '#0f172a';
-      }
-      size();
-      window.addEventListener('resize', size);
-
-      function xy(e) {
-        var r = canvas.getBoundingClientRect();
-        var t = e.touches ? e.touches[0] : e;
-        return { x: t.clientX - r.left, y: t.clientY - r.top };
-      }
-      function start(e) {
-        e.preventDefault();
-        drawing = true;
-        last = xy(e);
-        placeholder.style.display = 'none';
-      }
-      function move(e) {
-        if (!drawing) return;
-        e.preventDefault();
-        var p = xy(e);
-        ctx.beginPath();
-        ctx.moveTo(last.x, last.y);
-        ctx.lineTo(p.x, p.y);
-        ctx.stroke();
-        last = p;
-        if (!hasInk) {
-          hasInk = true;
-          submitBtn.disabled = false;
-          // Snapshot on first stroke so the offline-form handler's
-          // FormData (captured at submit time) always sees a value even
-          // if listener-order races put the offline handler first.
-          dataInput.value = canvas.toDataURL('image/png');
-        }
-      }
-      function end() {
-        drawing = false;
-        if (hasInk) dataInput.value = canvas.toDataURL('image/png');
-      }
-
-      canvas.addEventListener('mousedown', start);
-      canvas.addEventListener('mousemove', move);
-      canvas.addEventListener('mouseup', end);
-      canvas.addEventListener('mouseleave', end);
-      canvas.addEventListener('touchstart', start, { passive: false });
-      canvas.addEventListener('touchmove', move, { passive: false });
-      canvas.addEventListener('touchend', end);
-
-      clearBtn.addEventListener('click', function () {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        hasInk = false;
-        placeholder.style.display = '';
-        submitBtn.disabled = true;
-        dataInput.value = '';
-      });
-
-      form.addEventListener('submit', function (e) {
-        if (!hasInk) {
-          e.preventDefault();
-          alert('Please draw your signature before acknowledging.');
-          return;
-        }
-        dataInput.value = canvas.toDataURL('image/png');
-        submitBtn.disabled = true;
-        submitBtn.textContent = 'Submitting…';
-      });
-    })();
-  </script>
-<% } %>
 
 <% if (sop.file_path) { %>
 <script src="/js/worker-pdf-viewer.js?v=6"></script>
