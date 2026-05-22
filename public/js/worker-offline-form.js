@@ -106,6 +106,29 @@
 
       var fd = new FormData(form);
 
+      // The server's global body parser is express.urlencoded() + express.json()
+      // — multipart is only handled per-route by multer. If we POST FormData
+      // here, fetch sends multipart/form-data and the server sees req.body = {}
+      // (silently dropping signature_data, CSRF, everything). Convert to
+      // URLSearchParams so the request is application/x-www-form-urlencoded,
+      // matching what a native form submit would send. Forms that actually
+      // upload files keep FormData so multer can parse them.
+      var hasFile = form.querySelector('input[type="file"]');
+      var body;
+      var headers;
+      if (hasFile) {
+        body = fd;
+        headers = undefined;
+      } else {
+        var params = new URLSearchParams();
+        fd.forEach(function (value, key) {
+          // Skip File entries entirely (shouldn't happen here, but defensive).
+          if (typeof value === 'string') params.append(key, value);
+        });
+        body = params;
+        headers = { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' };
+      }
+
       // Disable the submit button briefly so we don't double-fire.
       var submitter = ev.submitter || form.querySelector('button[type="submit"], input[type="submit"]');
       var prevDisabled = false;
@@ -113,7 +136,8 @@
 
       withTimeout(fetch(url, {
         method: method,
-        body: fd,
+        body: body,
+        headers: headers,
         credentials: 'same-origin',
         redirect: 'follow',
       }), TIMEOUT_MS).then(function (res) {
