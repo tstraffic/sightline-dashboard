@@ -173,6 +173,27 @@
     background: rgba(10,22,40,0.96); border-top: 1px solid rgba(255,255,255,0.08); z-index: 40;
   }
   :root[data-theme="light"] .tbd-actionbar { background: rgba(255,255,255,0.98); border-top-color: #E5E7EB; }
+
+  /* ---- Light mode (page-level chrome) ----
+     Every surface above hard-codes a dark-mode look — white text,
+     translucent-white surfaces, pale banner text colours that
+     dissolve into the light page bg. Map each to an AA-readable
+     light-theme equivalent. */
+  :root[data-theme="light"] .tbd-wrap  { color: #0F1115; }
+  :root[data-theme="light"] .tbd-title { color: #0F1115; }
+  :root[data-theme="light"] .tbd-meta  { color: #6B7280; }
+  :root[data-theme="light"] .tbd-body  {
+    background: #FFFFFF; border-color: #E5E7EB; color: #111827;
+  }
+  :root[data-theme="light"] .tbd-banner.green  { background: #ECFDF5; border-color: #A7F3D0; color: #065F46; }
+  :root[data-theme="light"] .tbd-banner.violet { background: #F5F3FF; border-color: #DDD6FE; color: #4C1D95; }
+  :root[data-theme="light"] .tbd-banner.amber  { background: #FFFBEB; border-color: #FDE68A; color: #92400E; }
+  :root[data-theme="light"] .tbd-banner.blue   { background: #EFF6FF; border-color: #BFDBFE; color: #1E3A8A; }
+  :root[data-theme="light"] .tbd-banner.rose   { background: #FEF2F2; border-color: #FECACA; color: #9F1239; }
+  :root[data-theme="light"] .tbd-slides {
+    background: #EFF6FF; border-color: #BFDBFE; color: #1D4ED8;
+  }
+  :root[data-theme="light"] .tbd-photos img { border-color: #E5E7EB; }
 </style>
 
 <div class="tbd-wrap">
