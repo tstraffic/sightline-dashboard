@@ -74,33 +74,66 @@
         <p class="text-xs text-gray-500 mt-3">Project this screen in the workshop room. Office staff scan with their phone.</p>
       </div>
 
-      <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-          <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Case assignments</p>
-          <span id="assignedCount" class="text-xs font-semibold text-gray-500 tabular-nums"><%= assignments.length %> joined</span>
+      <% if (session.mode === 'group') { %>
+        <%# Group mode: assignments are pre-created teams (one per case).
+            Show each team's roster + claim status. %>
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Teams</p>
+            <span id="assignedCount" class="text-xs font-semibold text-gray-500 tabular-nums"><%= assignments.filter(a => a.claimed_by_name).length %>/<%= assignments.length %> claimed</span>
+          </div>
+          <ul id="assignList" class="divide-y divide-gray-100">
+            <% assignments.forEach(a => { %>
+              <li class="px-4 py-3">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0"><%= a.case_letter %></span>
+                  <span class="text-sm font-bold text-gray-900"><%= a.player_name %></span>
+                  <% if (a.claimed_by_name) { %>
+                    <span class="ml-auto text-[10px] font-semibold text-emerald-700 uppercase tracking-widest">Claimed</span>
+                  <% } else { %>
+                    <span class="ml-auto text-[10px] text-gray-400 uppercase tracking-widest">Open</span>
+                  <% } %>
+                </div>
+                <p class="text-xs text-gray-500 break-words"><%= a.members_csv || '—' %></p>
+              </li>
+            <% }) %>
+          </ul>
         </div>
-        <ul id="assignList" class="divide-y divide-gray-100">
-          <% cases.forEach(c => {
-            const who = assignments.find(a => a.case_letter === c.letter);
-          %>
-            <li class="px-4 py-2.5 flex items-center gap-3">
-              <span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0"><%= c.letter %></span>
-              <span class="text-xs text-gray-600 flex-1 min-w-0 truncate"><%= c.title %></span>
-              <% if (who) { %>
-                <span class="text-xs font-semibold text-emerald-700 truncate"><%= who.player_name %></span>
-              <% } else { %>
-                <span class="text-[10px] text-gray-400 uppercase tracking-widest">Free</span>
-              <% } %>
-            </li>
-          <% }) %>
-        </ul>
-      </div>
+      <% } else { %>
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Case assignments</p>
+            <span id="assignedCount" class="text-xs font-semibold text-gray-500 tabular-nums"><%= assignments.length %> joined</span>
+          </div>
+          <ul id="assignList" class="divide-y divide-gray-100">
+            <% cases.forEach(c => {
+              const who = assignments.find(a => a.case_letter === c.letter);
+            %>
+              <li class="px-4 py-2.5 flex items-center gap-3">
+                <span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0"><%= c.letter %></span>
+                <span class="text-xs text-gray-600 flex-1 min-w-0 truncate"><%= c.title %></span>
+                <% if (who) { %>
+                  <span class="text-xs font-semibold text-emerald-700 truncate"><%= who.player_name %></span>
+                <% } else { %>
+                  <span class="text-[10px] text-gray-400 uppercase tracking-widest">Free</span>
+                <% } %>
+              </li>
+            <% }) %>
+          </ul>
+        </div>
+      <% } %>
+      <% if (session.mode === 'group') { %>
+        <p class="text-[11px] text-gray-500 px-1">
+          Restart keeps the teams — only the scoreboard and claim status get cleared.
+        </p>
+      <% } %>
 
       <!-- Manual add — for workers without phones, late arrivals, or
            anyone whose phone wouldn't scan the QR. Score is optional;
            if blank the player just appears under Case assignments
-           (no leaderboard row until they submit). -->
-      <% if (session.status === 'open') { %>
+           (no leaderboard row until they submit).
+           Group mode skips this: teams are fixed at session creation. -->
+      <% if (session.status === 'open' && session.mode !== 'group') { %>
         <details class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
           <summary class="px-4 py-3 cursor-pointer select-none flex items-center justify-between gap-2 hover:bg-gray-50">
             <span class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Add participant manually</span>
@@ -185,6 +218,7 @@
   var participantUrl = <%- JSON.stringify(participantUrl) %>;
   var sessionCode = <%- JSON.stringify(session.session_code) %>;
   var sessionStatus = <%- JSON.stringify(session.status) %>;
+  var sessionMode = <%- JSON.stringify(session.mode || 'individual') %>;
   var caseTitles = <%- JSON.stringify(cases) %>;
 
   // ── Render QR code (qrcodejs from CDN) ──
@@ -211,8 +245,28 @@
     });
   }
   function renderAssignments(assignments) {
-    document.getElementById('assignedCount').textContent =
-      assignments.length + ' joined';
+    var countEl = document.getElementById('assignedCount');
+    var listEl = document.getElementById('assignList');
+    if (!countEl || !listEl) return;
+    if (sessionMode === 'group') {
+      var claimed = assignments.filter(function (a) { return a.claimed_by_name; }).length;
+      countEl.textContent = claimed + '/' + assignments.length + ' claimed';
+      var html = assignments.map(function (a) {
+        return '<li class="px-4 py-3">' +
+          '<div class="flex items-center gap-2 mb-1">' +
+            '<span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">' + a.case_letter + '</span>' +
+            '<span class="text-sm font-bold text-gray-900">' + escapeHtml(a.player_name) + '</span>' +
+            (a.claimed_by_name
+              ? '<span class="ml-auto text-[10px] font-semibold text-emerald-700 uppercase tracking-widest">Claimed</span>'
+              : '<span class="ml-auto text-[10px] text-gray-400 uppercase tracking-widest">Open</span>') +
+          '</div>' +
+          '<p class="text-xs text-gray-500 break-words">' + escapeHtml(a.members_csv || '—') + '</p>' +
+        '</li>';
+      }).join('');
+      listEl.innerHTML = html;
+      return;
+    }
+    countEl.textContent = assignments.length + ' joined';
     var byCase = {};
     assignments.forEach(function (a) { byCase[a.case_letter] = a; });
     var html = caseTitles.map(function (c) {
@@ -225,7 +279,7 @@
           : '<span class="text-[10px] text-gray-400 uppercase tracking-widest">Free</span>') +
         '</li>';
     }).join('');
-    document.getElementById('assignList').innerHTML = html;
+    listEl.innerHTML = html;
   }
   function renderLeaderboard(attempts) {
     var box = document.getElementById('leaderboard');

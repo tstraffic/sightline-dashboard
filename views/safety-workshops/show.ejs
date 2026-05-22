@@ -29,13 +29,10 @@
         <p class="text-sm text-gray-600 mt-2 max-w-2xl"><%= workshop.description %></p>
       <% } %>
     </div>
-    <form method="POST" action="/safety-workshops/<%= workshop.slug %>/sessions">
-      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-      <button type="submit" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 shadow-sm">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m6-6H6"/></svg>
-        Start a new session
-      </button>
-    </form>
+    <a href="/safety-workshops/<%= workshop.slug %>/sessions/new" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 shadow-sm">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m6-6H6"/></svg>
+      Start a new session
+    </a>
   </div>
 
   <!-- Cases overview -->

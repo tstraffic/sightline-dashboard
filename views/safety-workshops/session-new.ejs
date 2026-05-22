@@ -1,0 +1,300 @@
+<% locals.currentPage = 'safety-workshops' %>
+<%
+  // Cases array is { letter, title } per case. The number of cases caps
+  // the number of teams we can generate in group mode (one team per case).
+  const caseCount = (cases || []).length;
+%>
+
+<div class="max-w-4xl mx-auto space-y-5">
+  <a href="/safety-workshops/<%= workshop.slug %>" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    Back to <%= workshop.title %>
+  </a>
+
+  <div>
+    <p class="text-[10px] font-bold tracking-widest text-gray-400 uppercase">Start new session</p>
+    <h1 class="text-2xl font-bold text-gray-900 mt-1"><%= workshop.title %></h1>
+  </div>
+
+  <form id="newSessionForm" method="POST" action="/safety-workshops/<%= workshop.slug %>/sessions" class="space-y-5">
+    <%- include('../partials/csrf') %>
+    <input type="hidden" name="mode" id="modeInput" value="individual">
+    <input type="hidden" name="groups_json" id="groupsJsonInput" value="">
+
+    <!-- Mode picker -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase mb-3">How is this session run?</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <label class="mode-card cursor-pointer border-2 rounded-lg p-4 transition" data-mode="individual">
+          <div class="flex items-start gap-3">
+            <input type="radio" name="modeRadio" value="individual" checked class="mt-1 text-brand-600">
+            <div>
+              <p class="text-sm font-bold text-gray-900">Individual</p>
+              <p class="text-xs text-gray-500 mt-1">Everyone scans, types their name, gets a random case. Leaderboard ranks each person.</p>
+            </div>
+          </div>
+        </label>
+        <label class="mode-card cursor-pointer border-2 rounded-lg p-4 transition" data-mode="group">
+          <div class="flex items-start gap-3">
+            <input type="radio" name="modeRadio" value="group" class="mt-1 text-brand-600">
+            <div>
+              <p class="text-sm font-bold text-gray-900">Group</p>
+              <p class="text-xs text-gray-500 mt-1">Pre-split the room into <%= caseCount %> teams (one per case). Each team picks their card on the join screen.</p>
+            </div>
+          </div>
+        </label>
+      </div>
+    </div>
+
+    <!-- Group config (hidden in individual mode) -->
+    <div id="groupConfig" class="hidden space-y-5">
+      <!-- Source picker -->
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase mb-3">Where are the attendees coming from?</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <label class="src-card cursor-pointer border-2 rounded-lg p-3 transition" data-src="toolbox">
+            <div class="flex items-start gap-2">
+              <input type="radio" name="srcRadio" value="toolbox" class="mt-1 text-brand-600">
+              <div>
+                <p class="text-sm font-semibold text-gray-900">From a toolbox talk</p>
+                <p class="text-xs text-gray-500">Loads everyone marked Attending or Attended on the talk you pick.</p>
+              </div>
+            </div>
+          </label>
+          <label class="src-card cursor-pointer border-2 rounded-lg p-3 transition" data-src="manual">
+            <div class="flex items-start gap-2">
+              <input type="radio" name="srcRadio" value="manual" checked class="mt-1 text-brand-600">
+              <div>
+                <p class="text-sm font-semibold text-gray-900">Manual pick</p>
+                <p class="text-xs text-gray-500">Tick the active crew you want to include from scratch.</p>
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <!-- Toolbox dropdown -->
+        <div id="toolboxPicker" class="mt-4 hidden">
+          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Toolbox talk</label>
+          <select id="toolboxSelect" class="w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+            <option value="">— Pick a toolbox —</option>
+            <% (toolboxes || []).forEach(t => { %>
+              <option value="<%= t.id %>"><%= t.title %> (<%= t.held_at || '' %>)</option>
+            <% }) %>
+          </select>
+          <p id="toolboxLoadMsg" class="text-xs text-gray-500 mt-1 hidden"></p>
+        </div>
+      </div>
+
+      <!-- Attendee picker -->
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-2">
+          <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Attendees</p>
+          <div class="flex items-center gap-2 text-xs">
+            <input type="text" id="crewFilter" placeholder="Filter by name..." class="px-2 py-1 border border-gray-300 rounded-md text-xs">
+            <button type="button" id="selectAllBtn" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-xs font-semibold">Select all</button>
+            <button type="button" id="clearAllBtn" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-xs font-semibold">Clear</button>
+          </div>
+        </div>
+        <p class="text-xs text-gray-500 mb-2">
+          <span id="selectedCount">0</span> selected. You can always add or remove people before generating teams.
+        </p>
+        <div id="crewList" class="max-h-72 overflow-y-auto border border-gray-200 rounded-lg bg-gray-50 divide-y divide-gray-100">
+          <% if (!crew || crew.length === 0) { %>
+            <p class="p-4 text-sm text-gray-500 text-center">No active workers found.</p>
+          <% } else { %>
+            <% crew.forEach(function (c) { %>
+              <label class="crew-row flex items-center gap-3 px-3 py-2 hover:bg-white cursor-pointer" data-name="<%= (c.full_name || '').toLowerCase() %>">
+                <input type="checkbox" class="crew-cb w-4 h-4 text-brand-600 rounded"
+                       value="<%= c.id %>"
+                       data-name="<%= c.full_name %>">
+                <span class="text-sm font-medium text-gray-800 flex-1"><%= c.full_name %></span>
+                <% if (c.employee_id) { %><span class="text-xs text-gray-400 font-mono"><%= c.employee_id %></span><% } %>
+              </label>
+            <% }); %>
+          <% } %>
+        </div>
+      </div>
+
+      <!-- Group preview -->
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
+          <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Teams (<%= caseCount %> groups, one per case)</p>
+          <button type="button" id="generateBtn" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded inline-flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            Shuffle / regenerate
+          </button>
+        </div>
+        <div id="groupsPreview" class="text-sm text-gray-500 italic">
+          Pick attendees above, then tap <strong>Shuffle / regenerate</strong> to preview the teams.
+        </div>
+      </div>
+    </div>
+
+    <div class="flex items-center justify-between gap-3">
+      <a href="/safety-workshops/<%= workshop.slug %>" class="text-sm text-gray-500 hover:text-gray-700">Cancel</a>
+      <button type="submit" id="submitBtn" class="px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg inline-flex items-center gap-1.5 shadow-sm">
+        Create session
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+      </button>
+    </div>
+  </form>
+</div>
+
+<style>
+  .mode-card { border-color: #E5E7EB; background: #FFFFFF; }
+  .mode-card:has(input:checked) { border-color: #2563EB; background: #EFF6FF; }
+  .src-card { border-color: #E5E7EB; background: #FFFFFF; }
+  .src-card:has(input:checked) { border-color: #2563EB; background: #EFF6FF; }
+</style>
+
+<script>
+(function () {
+  var CASES = <%- JSON.stringify((cases || []).map(function(c){return c.letter;})) %>;
+  var CASE_TITLES = <%- JSON.stringify(cases || []) %>;
+  var modeInput = document.getElementById('modeInput');
+  var groupConfig = document.getElementById('groupConfig');
+  var groupsJsonInput = document.getElementById('groupsJsonInput');
+
+  // ── Mode toggle ──
+  document.querySelectorAll('input[name="modeRadio"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      modeInput.value = r.value;
+      groupConfig.classList.toggle('hidden', r.value !== 'group');
+      if (r.value !== 'group') groupsJsonInput.value = '';
+    });
+  });
+
+  // ── Source toggle ──
+  var toolboxPicker = document.getElementById('toolboxPicker');
+  document.querySelectorAll('input[name="srcRadio"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      toolboxPicker.classList.toggle('hidden', r.value !== 'toolbox');
+    });
+  });
+
+  // ── Toolbox attendee loader ──
+  var toolboxSelect = document.getElementById('toolboxSelect');
+  var toolboxLoadMsg = document.getElementById('toolboxLoadMsg');
+  toolboxSelect.addEventListener('change', function () {
+    var id = toolboxSelect.value;
+    if (!id) return;
+    toolboxLoadMsg.classList.remove('hidden');
+    toolboxLoadMsg.textContent = 'Loading attendees…';
+    fetch('/safety-workshops/toolbox-attendees/' + encodeURIComponent(id))
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(function (j) {
+        var names = (j.attendees || []).map(function (a) {
+          return (a.full_name || '').toLowerCase();
+        });
+        var hits = 0;
+        document.querySelectorAll('#crewList .crew-cb').forEach(function (cb) {
+          var n = (cb.getAttribute('data-name') || '').toLowerCase();
+          var match = names.indexOf(n) !== -1;
+          cb.checked = match;
+          if (match) hits++;
+        });
+        updateCount();
+        toolboxLoadMsg.textContent = 'Pre-selected ' + hits + ' attendees. Adjust below as needed.';
+      })
+      .catch(function () {
+        toolboxLoadMsg.textContent = 'Could not load attendees — try again.';
+      });
+  });
+
+  // ── Filter + select-all ──
+  document.getElementById('crewFilter').addEventListener('input', function (e) {
+    var q = (e.target.value || '').toLowerCase().trim();
+    document.querySelectorAll('#crewList .crew-row').forEach(function (row) {
+      var n = row.getAttribute('data-name') || '';
+      row.style.display = (!q || n.indexOf(q) !== -1) ? '' : 'none';
+    });
+  });
+  function setAll(checked) {
+    document.querySelectorAll('#crewList .crew-row').forEach(function (row) {
+      if (row.style.display === 'none') return;
+      var cb = row.querySelector('input.crew-cb');
+      if (cb) cb.checked = checked;
+    });
+    updateCount();
+  }
+  document.getElementById('selectAllBtn').addEventListener('click', function () { setAll(true); });
+  document.getElementById('clearAllBtn').addEventListener('click', function () { setAll(false); });
+  document.querySelectorAll('#crewList .crew-cb').forEach(function (cb) {
+    cb.addEventListener('change', updateCount);
+  });
+  function updateCount() {
+    var n = document.querySelectorAll('#crewList .crew-cb:checked').length;
+    document.getElementById('selectedCount').textContent = n;
+  }
+
+  // ── Shuffle into groups ──
+  function selectedNames() {
+    return Array.prototype.slice.call(document.querySelectorAll('#crewList .crew-cb:checked'))
+      .map(function (cb) { return cb.getAttribute('data-name') || ''; })
+      .filter(function (n) { return n; });
+  }
+  function shuffle(arr) {
+    var a = arr.slice();
+    for (var i = a.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = a[i]; a[i] = a[j]; a[j] = t;
+    }
+    return a;
+  }
+  function generate() {
+    var names = selectedNames();
+    var preview = document.getElementById('groupsPreview');
+    if (names.length < CASES.length) {
+      preview.innerHTML = '<p class="text-amber-700">Need at least ' + CASES.length + ' attendees (one per case). Selected: ' + names.length + '.</p>';
+      groupsJsonInput.value = '';
+      return;
+    }
+    var shuffledPeople = shuffle(names);
+    var shuffledCases = shuffle(CASES);
+    var groups = [];
+    for (var i = 0; i < CASES.length; i++) {
+      groups.push({ name: 'Group ' + (i + 1), case_letter: shuffledCases[i], members: [] });
+    }
+    shuffledPeople.forEach(function (n, i) {
+      groups[i % CASES.length].members.push(n);
+    });
+    groupsJsonInput.value = JSON.stringify(groups);
+
+    // Render preview
+    var caseTitleMap = {};
+    CASE_TITLES.forEach(function (c) { caseTitleMap[c.letter] = c.title; });
+    var html = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3">';
+    groups.forEach(function (g) {
+      html += '<div class="border border-gray-200 rounded-lg p-3 bg-gray-50">';
+      html += '<div class="flex items-center gap-2 mb-1.5">';
+      html += '<span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">' + g.case_letter + '</span>';
+      html += '<span class="text-sm font-bold text-gray-900">' + escapeHtml(g.name) + '</span>';
+      html += '<span class="text-[10px] uppercase tracking-widest text-gray-400 ml-auto">' + g.members.length + ' players</span>';
+      html += '</div>';
+      html += '<p class="text-[11px] text-gray-500 mb-2 truncate">Case ' + g.case_letter + ' · ' + escapeHtml(caseTitleMap[g.case_letter] || '') + '</p>';
+      html += '<ul class="space-y-1">';
+      g.members.forEach(function (m) {
+        html += '<li class="text-sm text-gray-700">' + escapeHtml(m) + '</li>';
+      });
+      html += '</ul></div>';
+    });
+    html += '</div>';
+    html += '<p class="text-xs text-gray-500 mt-3">Shuffle again to regenerate. Cases are randomly assigned each shuffle.</p>';
+    preview.innerHTML = html;
+  }
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, function (m) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m];
+    });
+  }
+  document.getElementById('generateBtn').addEventListener('click', generate);
+
+  // ── Submit guard ──
+  document.getElementById('newSessionForm').addEventListener('submit', function (e) {
+    if (modeInput.value === 'group' && !groupsJsonInput.value) {
+      e.preventDefault();
+      alert('Generate teams first — tap Shuffle / regenerate after picking attendees.');
+    }
+  });
+})();
+</script>
