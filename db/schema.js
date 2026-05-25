@@ -10657,6 +10657,31 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 232: voc_assessments.marking_complete
+  //   Powers the "Quick Cert Generator" — when a VOC session has 30+
+  //   workers queueing for their certificate, the assessor types name +
+  //   date, hands them a printable cert immediately, and comes back to
+  //   the assessment later to enter theory/practical responses. Rows
+  //   with marking_complete=0 surface in a "Pending Marking" queue on
+  //   the VOC index.
+  //   Default = 1 so historical full assessments aren't flagged.
+  // =============================================
+  if (!isMigrationApplied.get(232)) {
+    console.log('Running migration 232: voc_assessments.marking_complete');
+    try {
+      const cols = db.prepare("PRAGMA table_info(voc_assessments)").all().map(c => c.name);
+      if (!cols.includes('marking_complete')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN marking_complete INTEGER NOT NULL DEFAULT 1");
+      }
+      db.exec('CREATE INDEX IF NOT EXISTS idx_voc_marking ON voc_assessments(marking_complete, status);');
+      recordMigration.run(232, 'voc_assessments.marking_complete');
+      console.log('Migration 232 applied: voc_assessments.marking_complete ready');
+    } catch (e) {
+      console.error('Migration 232 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
