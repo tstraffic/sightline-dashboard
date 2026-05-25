@@ -1700,20 +1700,41 @@
           <form method="POST" action="/hr/employees/<%= employee.id %>/reviews" id="empReviewForm" class="space-y-3">
             <%- include('../partials/csrf') %>
 
-            <!-- Kind toggle — JS hides/shows the review-only fieldsets. -->
+            <!-- Kind toggle — JS hides/shows the review-only fieldsets and
+                 paints the chosen card. Real fill + ring is applied via
+                 the [data-kind-card][data-active] CSS below; using a real
+                 attribute (not peer-checked) sidesteps Tailwind JIT
+                 ordering on CDN builds. -->
             <div>
               <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Kind</p>
               <div class="flex gap-1.5">
-                <label class="flex-1">
-                  <input type="radio" name="kind" value="note" checked class="peer sr-only" onclick="toggleReviewKind('note')">
-                  <span class="block text-center text-xs font-semibold py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 cursor-pointer peer-checked:bg-brand-50 peer-checked:text-brand-700 peer-checked:border-brand-300 transition">Quick note</span>
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="kind" value="note" checked class="sr-only" onclick="toggleReviewKind('note')">
+                  <span data-kind-card="note" data-active="1" class="relative flex items-center justify-center gap-1.5 py-2.5 rounded-lg border-2 text-xs font-bold transition">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    Quick note
+                  </span>
                 </label>
-                <label class="flex-1">
-                  <input type="radio" name="kind" value="review" class="peer sr-only" onclick="toggleReviewKind('review')">
-                  <span class="block text-center text-xs font-semibold py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 cursor-pointer peer-checked:bg-emerald-50 peer-checked:text-emerald-700 peer-checked:border-emerald-300 transition">Performance review</span>
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="kind" value="review" class="sr-only" onclick="toggleReviewKind('review')">
+                  <span data-kind-card="review" class="relative flex items-center justify-center gap-1.5 py-2.5 rounded-lg border-2 text-xs font-bold transition">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    Performance review
+                  </span>
                 </label>
               </div>
             </div>
+            <style>
+              /* Default (un-selected) card */
+              [data-kind-card] { border-color: #E5E7EB; background: #F9FAFB; color: #6B7280; }
+              /* Selected — quick note */
+              [data-kind-card="note"][data-active]   { border-color: #2563EB; background: #EFF6FF; color: #1D4ED8;
+                box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+              /* Selected — performance review */
+              [data-kind-card="review"][data-active] { border-color: #059669; background: #ECFDF5; color: #047857;
+                box-shadow: 0 0 0 3px rgba(5,150,105,0.18); }
+              [data-kind-card]:hover { border-color: #D1D5DB; }
+            </style>
 
             <div>
               <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Title</label>
@@ -1780,6 +1801,13 @@
     </div>
   </div>
 
+<!-- Flatpickr — small, dependency-free date picker. Gives us a real
+     calendar with month-year nav, today-highlight, and AU date format
+     instead of relying on the browser-default native picker (which
+     varies wildly across Safari / Firefox / Chrome on each OS). -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/themes/airbnb.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
 <script>
 // ── Reviews tab: kind toggle + dynamic sections / peer comments ──
 function toggleReviewKind(kind) {
@@ -1788,6 +1816,43 @@ function toggleReviewKind(kind) {
   });
   var lbl = document.getElementById('empReviewSummaryLabel');
   if (lbl) lbl.textContent = kind === 'review' ? 'Summary' : 'Note';
+  // Repaint the kind cards so the chosen one carries the [data-active]
+  // attribute the CSS hooks into. We toggle the attribute instead of
+  // relying on Tailwind's :peer-checked because the CDN build often
+  // doesn't see arbitrary peer-checked: utilities at JIT time.
+  document.querySelectorAll('[data-kind-card]').forEach(function (card) {
+    if (card.getAttribute('data-kind-card') === kind) card.setAttribute('data-active', '1');
+    else card.removeAttribute('data-active');
+  });
+}
+
+// Initialise the flatpickr calendar on the review_date field as soon
+// as the library is available. Falls back to the native date input if
+// the CDN load fails — the input keeps name="review_date" so the form
+// still submits something the server can parse.
+(function initReviewDatePicker() {
+  function tryInit() {
+    if (typeof flatpickr === 'undefined') { setTimeout(tryInit, 80); return; }
+    var input = document.querySelector('input[name="review_date"]');
+    if (!input) return;
+    // Switch the input to type=text so flatpickr can fully take over
+    // (native pickers fight back on iOS otherwise).
+    input.setAttribute('type', 'text');
+    input.setAttribute('placeholder', 'Pick a date');
+    flatpickr(input, {
+      dateFormat: 'Y-m-d',       // server-friendly value (the real input)
+      altInput: true,            // visible friendly input alongside the hidden Y-m-d one
+      altFormat: 'D j M Y',      // e.g. "Mon 25 May 2026"
+      // Reuse the same Tailwind look as the other form fields so the
+      // picker doesn't visually drift from sibling inputs.
+      altInputClass: 'mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white',
+      maxDate: 'today',          // review dates are always in the past
+      allowInput: true,
+      locale: { firstDayOfWeek: 1 }, // Mon-start matches AU calendars
+    });
+  }
+  tryInit();
+})();
 }
 function addReviewSection(heading, content) {
   var wrap = document.getElementById('empReviewSections'); if (!wrap) return;
