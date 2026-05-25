@@ -139,6 +139,9 @@
           <% if (employee.employee_code) { %><span class="text-xs font-mono text-gray-400"><%= employee.employee_code %></span><% } %>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium <%= statusBadge[employee.employment_status] || statusBadge.inactive %>"><%= (employee.employment_status || 'unknown').replace(/_/g, ' ') %></span>
           <% if (employee.payment_type) { %><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600"><%= employee.payment_type.toUpperCase() %></span><% } %>
+          <% if (employee.tier) {
+            const TIER_LABELS = { 1: 'Trainee TC', 2: 'Traffic Controller', 3: 'Advanced TC / TMA', 4: 'Team Leader', 5: 'Senior Team Leader', 6: 'Site Supervisor' };
+          %><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-50 text-brand-700 ring-1 ring-brand-200" title="FY26 Wage Panel">Tier <%= employee.tier %> · <%= TIER_LABELS[employee.tier] || '' %></span><% } %>
           <% if (readiness) { %><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium <%= readinessBadge[readiness.status] || 'bg-gray-100 text-gray-500' %>"><%= readinessLabel[readiness.status] || readiness.status %></span><% } %>
         </div>
       </div>
@@ -279,14 +282,33 @@
         <!-- Pay Rates (Admin / Finance only) -->
         <% if (typeof showRates !== 'undefined' && showRates) { %>
         <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
-          <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Pay Rates</h2>
-          <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
-            <% const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_ot:'Night OT',rate_night_dt:'Night DT',rate_travel:'Travel',rate_meal:'Meal',rate_weekend:'Weekend'}; %>
-            <% Object.entries(rateLabels).forEach(([key, label]) => { %>
+          <div class="flex items-start justify-between mb-3 gap-2">
             <div>
-              <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"><%= label %></p>
-              <p class="text-lg font-bold text-gray-900 mt-0.5">$<%= (employee[key] || 0).toFixed(2) %></p>
+              <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Pay Rates</h2>
+              <% if (employee.tier) {
+                const TIER_LABELS = { 1: 'Trainee TC', 2: 'Traffic Controller', 3: 'Advanced TC / TMA', 4: 'Team Leader', 5: 'Senior Team Leader', 6: 'Site Supervisor' };
+                const TIER_AWARDS = { 1: 'CW1(a)', 2: 'CW1(c)', 3: 'CW2 / CW3', 4: 'CW3 + LH', 5: 'CW4 + LH', 6: 'CW5 + LH' };
+              %>
+                <p class="text-xs text-gray-500 mt-1">
+                  Tier <%= employee.tier %> · <span class="font-medium text-gray-700"><%= TIER_LABELS[employee.tier] %></span>
+                  <span class="font-mono text-[10px] text-gray-400 ml-1"><%= TIER_AWARDS[employee.tier] %></span>
+                  · <%= (employee.payment_type || '').toUpperCase() || 'Unclassified' %>
+                </p>
+              <% } else { %>
+                <p class="text-xs text-amber-600 mt-1">No tier assigned — rates entered manually. Assign a tier on <a href="/payroll/rates" class="underline">Worker Rates</a>.</p>
+              <% } %>
             </div>
+            <a href="/payroll/wage-tiers" class="text-[10px] text-brand-600 hover:underline whitespace-nowrap">View panel →</a>
+          </div>
+          <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
+            <% const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_ot:'Night OT',rate_night_dt:'Night DT',rate_weekend:'Weekend',rate_public_holiday:'PH',rate_fares_daily:'Travel',rate_meal:'Meal'}; %>
+            <% Object.entries(rateLabels).forEach(([key, label]) => { %>
+              <% if (employee[key]) { %>
+                <div>
+                  <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"><%= label %></p>
+                  <p class="text-lg font-bold text-gray-900 mt-0.5">$<%= (employee[key] || 0).toFixed(2) %></p>
+                </div>
+              <% } %>
             <% }); %>
           </div>
         </div>

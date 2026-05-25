@@ -10391,6 +10391,240 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 226: FY26 Internal Wage Panel
+  //   T&S operates a six-tier framework (Trainee TC → Site Supervisor)
+  //   that supersedes the granular CW/ECW classifications for the day-to-
+  //   day office workflow. Each tier has three rate cards (Cash, ABN,
+  //   TFN/Award) with different shift breakdowns:
+  //
+  //     ABN  — Day / Sat / (Night|Sun|PH)               + $18 travel
+  //     Cash — (Day|Sat) / (Night|Sun|PH)               + $15 travel
+  //     TFN  — base + Sat≤2h / Sat>2h / Sun / PH /
+  //              Night<5 / Night Perm / Night 5+        (award fares used)
+  //
+  //   Plus a global allowance table (fares, meal, first aid, leading
+  //   hand %, km rates, industry allowance) that's editable from the
+  //   admin without code changes.
+  // =============================================
+  if (!isMigrationApplied.get(226)) {
+    console.log('Running migration 226: FY26 Internal Wage Panel (tier presets + allowances)');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS wage_tier_presets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tier INTEGER NOT NULL CHECK(tier BETWEEN 1 AND 6),
+          payment_type TEXT NOT NULL CHECK(payment_type IN ('cash','abn','tfn')),
+          role_label TEXT NOT NULL DEFAULT '',
+          award_mapping TEXT NOT NULL DEFAULT '',
+          qualifications TEXT NOT NULL DEFAULT '',
+          rate_day REAL NOT NULL DEFAULT 0,
+          rate_sat_short REAL NOT NULL DEFAULT 0,
+          rate_sat_long REAL NOT NULL DEFAULT 0,
+          rate_sun REAL NOT NULL DEFAULT 0,
+          rate_public_holiday REAL NOT NULL DEFAULT 0,
+          rate_night REAL NOT NULL DEFAULT 0,
+          rate_night_perm REAL NOT NULL DEFAULT 0,
+          rate_night_5plus REAL NOT NULL DEFAULT 0,
+          travel_allowance REAL NOT NULL DEFAULT 0,
+          effective_from DATE NOT NULL DEFAULT '2026-07-01',
+          effective_to DATE,
+          active INTEGER NOT NULL DEFAULT 1,
+          notes TEXT NOT NULL DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(tier, payment_type, effective_from)
+        );
+        CREATE INDEX IF NOT EXISTS idx_wtp_tier_payment ON wage_tier_presets(tier, payment_type);
+        CREATE INDEX IF NOT EXISTS idx_wtp_active ON wage_tier_presets(active, effective_from);
+
+        CREATE TABLE IF NOT EXISTS award_allowances (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT NOT NULL UNIQUE,
+          label TEXT NOT NULL,
+          amount REAL NOT NULL DEFAULT 0,
+          unit TEXT NOT NULL,
+          notes TEXT NOT NULL DEFAULT '',
+          effective_from DATE NOT NULL DEFAULT '2026-07-01',
+          active INTEGER NOT NULL DEFAULT 1,
+          display_order INTEGER NOT NULL DEFAULT 0,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_award_allow_active ON award_allowances(active, display_order);
+      `);
+
+      // Seed tier presets — FY26 (effective 2026-07-01), straight from the
+      // Internal Wage Panel v1.0 PDF. UNIQUE constraint on (tier, payment_type,
+      // effective_from) makes this idempotent across reruns.
+      const FY = '2026-07-01';
+      const TIER_META = {
+        1: { role: 'Trainee TC',         award: 'CW1(a)',          quals: 'RIIWHS205 only, first 90 days' },
+        2: { role: 'Traffic Controller', award: 'CW1(c)',          quals: 'RIIWHS205 + 90+ days experience' },
+        3: { role: 'Advanced TC / TMA',  award: 'CW2 / CW3',       quals: 'RIIWHS302 + MR/HR licence' },
+        4: { role: 'Team Leader',        award: 'CW3 + Leading Hand', quals: 'Small crew leadership' },
+        5: { role: 'Senior Team Leader', award: 'CW4 + Leading Hand', quals: 'Multi-crew leadership' },
+        6: { role: 'Site Supervisor',    award: 'CW5 + Leading Hand', quals: 'Full project oversight' },
+      };
+
+      const ABN_RATES = {
+        1: [31, 33, 40, 18],
+        2: [33, 36, 41, 18],
+        3: [35, 38, 43, 18],
+        4: [38, 40, 45, 18],
+        5: [40, 42, 47, 18],
+        6: [43, 45, 50, 18],
+      };
+      const CASH_RATES = {
+        1: [30, 37, 15],
+        2: [31, 38, 15],
+        3: [33, 40, 15],
+        4: [35, 42, 15],
+        5: [37, 44, 15],
+        6: [40, 47, 15],
+      };
+      const TFN_RATES = {
+        1: [33.94, 47.51, 61.09, 61.09, 74.66, 47.51, 42.08, 38.01],
+        2: [35.00, 49.00, 63.00, 63.00, 77.00, 49.00, 43.40, 39.20],
+        3: [36.26, 50.77, 65.27, 65.27, 79.78, 50.77, 44.97, 40.61],
+        4: [37.26, 52.17, 67.07, 67.07, 81.98, 52.17, 46.21, 41.73],
+        5: [38.36, 53.71, 69.05, 69.05, 84.40, 53.71, 47.57, 42.97],
+        6: [39.48, 55.27, 71.06, 71.06, 86.85, 55.27, 48.95, 44.21],
+      };
+
+      const insertPreset = db.prepare(`
+        INSERT OR IGNORE INTO wage_tier_presets
+          (tier, payment_type, role_label, award_mapping, qualifications,
+           rate_day, rate_sat_short, rate_sat_long, rate_sun, rate_public_holiday,
+           rate_night, rate_night_perm, rate_night_5plus, travel_allowance,
+           effective_from, active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `);
+
+      let seeded = 0;
+      for (let t = 1; t <= 6; t++) {
+        const meta = TIER_META[t];
+        const [aDay, aSat, aNight, aTravel] = ABN_RATES[t];
+        insertPreset.run(t, 'abn', meta.role, meta.award, meta.quals,
+          aDay, aSat, aSat, aNight, aNight, aNight, 0, 0, aTravel, FY);
+        seeded++;
+        const [cDay, cNight, cTravel] = CASH_RATES[t];
+        insertPreset.run(t, 'cash', meta.role, meta.award, meta.quals,
+          cDay, cDay, cDay, cNight, cNight, cNight, 0, 0, cTravel, FY);
+        seeded++;
+        const [tBase, tSatShort, tSatLong, tSun, tPH, tNight, tNightPerm, tNight5] = TFN_RATES[t];
+        insertPreset.run(t, 'tfn', meta.role, meta.award, meta.quals,
+          tBase, tSatShort, tSatLong, tSun, tPH, tNight, tNightPerm, tNight5, 0, FY);
+        seeded++;
+      }
+      if (seeded) console.log(`Migration 226: seeded ${seeded} wage_tier_presets rows (FY26)`);
+
+      const insertAllow = db.prepare(`
+        INSERT OR IGNORE INTO award_allowances
+          (code, label, amount, unit, notes, effective_from, active, display_order)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+      `);
+      const ALLOWANCES = [
+        ['fares_daily',          'Fares and travel',          21.94, 'per_day',  'All-purpose, paid for each day worked.',                              10],
+        ['meal',                 'Meal — while travelling',   19.00, 'per_meal', 'Where the worker is required to travel for the job and/or 9.5hrs+ shift.', 20],
+        ['first_aid_basic',      'First aid — basic',          3.85, 'per_day',  'Min qualifications, where nominated to provide first aid.',           30],
+        ['first_aid_higher',     'First aid — higher',         6.09, 'per_day',  'Higher than minimum first aid qualifications.',                       40],
+        ['leading_hand_1',       'Leading hand — 1 person',    2.4,  'percent',  'Of highest-class rate supervised, or own rate (whichever higher).',   50],
+        ['leading_hand_2_5',     'Leading hand — 2 to 5',      5.3,  'percent',  'Same basis. Applies to all hours worked.',                            60],
+        ['leading_hand_6_10',    'Leading hand — 6 to 10',     6.7,  'percent',  'Same basis. Applies to all hours worked.',                            70],
+        ['leading_hand_10_plus', 'Leading hand — 10+',         9.0,  'percent',  'Same basis. Applies to all hours worked.',                            80],
+        ['distant_work_km',      'Distant work — own vehicle', 0.59, 'per_km',   'Plus travel time at ordinary rate, half-hour minimum per return.',    90],
+        ['site_to_site_km',      'Site-to-site — own vehicle', 0.98, 'per_km',   'Plus paid travel time between sites.',                                100],
+        ['industry_allowance',   'Industry allowance',         1.69, 'per_hour', 'Already included in the casual TFN rates above.',                     110],
+      ];
+      let allowSeeded = 0;
+      for (const [code, label, amount, unit, notes, order] of ALLOWANCES) {
+        const r = insertAllow.run(code, label, amount, unit, notes, FY, order);
+        if (r.changes) allowSeeded++;
+      }
+      if (allowSeeded) console.log(`Migration 226: seeded ${allowSeeded} award_allowances rows`);
+
+      recordMigration.run(226, 'FY26 Internal Wage Panel: 6-tier × 3-payment presets + global allowances');
+      console.log('Migration 226 applied');
+    } catch (e) {
+      console.error('Migration 226 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 227: Wire wage tiers into employees + induction submissions
+  //   - employees.tier (1-6, nullable): which row of the FY26 panel the
+  //     worker sits on. Drives the rate stamp from wage_tier_presets and
+  //     shows as the headline badge on their profile.
+  //   - induction_submissions.tier: captured at Approve time so we can
+  //     audit which tier the worker was hired at.
+  // =============================================
+  if (!isMigrationApplied.get(227)) {
+    try {
+      const empCols = db.prepare("PRAGMA table_info(employees)").all().map(c => c.name);
+      if (!empCols.includes('tier')) {
+        db.exec("ALTER TABLE employees ADD COLUMN tier INTEGER");
+      }
+      const subCols = db.prepare("PRAGMA table_info(induction_submissions)").all().map(c => c.name);
+      if (!subCols.includes('tier')) {
+        db.exec("ALTER TABLE induction_submissions ADD COLUMN tier INTEGER");
+      }
+      recordMigration.run(227, 'employees.tier + induction_submissions.tier');
+      console.log('Migration 227 applied: tier columns');
+    } catch (e) {
+      console.error('Migration 227 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 228: Pay-run engine TFN-fidelity columns
+  //   - employees.rate_weekend_short: hourly rate for the first 2 hours
+  //     of a Saturday shift (1.5× under BCG). The pay-run engine peels
+  //     these hours off into a new weekend_short bucket. Anything past
+  //     2 hours (or any shift starting 12pm+) stays in `weekend` at the
+  //     2× rate.
+  //   - employees.night_pattern: drives which TFN night rate gets
+  //     stamped onto the worker — occasional (Night<5, default),
+  //     permanent (Night Perm 1.3×), or continuous_5plus (Night 5+
+  //     1.15×). Per the FY26 panel's operational rules.
+  // =============================================
+  if (!isMigrationApplied.get(228)) {
+    try {
+      const empCols = db.prepare("PRAGMA table_info(employees)").all().map(c => c.name);
+      if (!empCols.includes('rate_weekend_short')) {
+        db.exec("ALTER TABLE employees ADD COLUMN rate_weekend_short REAL DEFAULT 0");
+      }
+      if (!empCols.includes('night_pattern')) {
+        db.exec("ALTER TABLE employees ADD COLUMN night_pattern TEXT DEFAULT 'occasional'");
+      }
+      recordMigration.run(228, 'employees.rate_weekend_short + night_pattern for TFN PDF fidelity');
+      console.log('Migration 228 applied');
+    } catch (e) {
+      console.error('Migration 228 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 229: TFN Night 5+ auto-detection
+  //   - employees.rate_night_5plus: the Night 5+ rate (1.15×) for TFN
+  //     workers on `occasional` night pattern. Stamped from the wage
+  //     panel alongside rate_night so the pay-run engine can auto-
+  //     elevate shifts that fall inside a 5+ consecutive Mon–Fri run.
+  //   For `permanent` and `continuous_5plus` patterns this stays 0 —
+  //   the night pattern itself already selected the right rate_night.
+  // =============================================
+  if (!isMigrationApplied.get(229)) {
+    try {
+      const empCols = db.prepare("PRAGMA table_info(employees)").all().map(c => c.name);
+      if (!empCols.includes('rate_night_5plus')) {
+        db.exec("ALTER TABLE employees ADD COLUMN rate_night_5plus REAL DEFAULT 0");
+      }
+      recordMigration.run(229, 'employees.rate_night_5plus for Night 5+ auto-detection');
+      console.log('Migration 229 applied');
+    } catch (e) {
+      console.error('Migration 229 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

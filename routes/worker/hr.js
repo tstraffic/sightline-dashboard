@@ -28,10 +28,54 @@ router.get('/hr', (req, res) => {
   // Get crew member details
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(worker.id);
 
+  // Resolve the worker's wage-panel tier metadata so the "Your rate"
+  // card can show role + award mapping. We only ever expose THIS
+  // worker's row — never the panel matrix (per the panel's "Workers
+  // are not to be shown this document" confidentiality rule).
+  let tierMeta = null;
+  if (employee && employee.tier) {
+    const { tierMeta: getTierMeta } = require('../../lib/wageTiers');
+    tierMeta = getTierMeta(employee.tier);
+  }
+
+  // Night 5+ active-period detection. Scans the worker's last 14 days
+  // of allocations for a run of 5+ consecutive Mon–Fri night shifts.
+  // Only meaningful when the worker has a non-zero rate_night_5plus
+  // (i.e. they're TFN/occasional and the engine would actually
+  // promote those shifts). The callout on /w/hr lights up so the
+  // worker sees the lower 5+ rate is being applied automatically
+  // and can confirm with payroll.
+  let nightRunActive = null;
+  if (employee && parseFloat(employee.rate_night_5plus) > 0) {
+    const today = sydneyToday();
+    const start = new Date(today + 'T00:00:00');
+    start.setDate(start.getDate() - 14);
+    const startIso = start.toISOString().slice(0, 10);
+    const allocs = db.prepare(`
+      SELECT allocation_date, shift_type FROM crew_allocations
+      WHERE crew_member_id = ?
+        AND allocation_date BETWEEN ? AND ?
+        AND status != 'cancelled'
+      ORDER BY allocation_date ASC
+    `).all(worker.id, startIso, today);
+    const shifts = allocs.map(a => ({
+      date: a.allocation_date,
+      // shift_type values: 'day' | 'night' | 'afternoon' (treat afternoon as day)
+      night: String(a.shift_type || '').toLowerCase() === 'night',
+    }));
+    const { findNightRuns } = require('../../lib/payroll');
+    const runs = findNightRuns(shifts);
+    if (runs.length) {
+      nightRunActive = runs[runs.length - 1]; // most recent run
+    }
+  }
+
   res.render('worker/hr', {
     title: 'HR & My Info',
     currentPage: 'more',
     employee,
+    tierMeta,
+    nightRunActive,
     member,
     certs,
     expiringSoon,
