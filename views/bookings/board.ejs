@@ -345,9 +345,14 @@
 <!-- ============================================================
      QUICK BOOK SLIDE-OVER  —  CREATE ONLY (the only mode that
      uses a slide-over; view always goes to /bookings/:id full page).
+     Inline styles below force the closed state regardless of CSS
+     load order or stale `bk2-open` classes — only adding the
+     `bk2-open` class via JS can show it.
      ============================================================ -->
-<div class="bk2-backdrop" id="bk2-backdrop"></div>
-<aside class="bk2-slideover" id="bk2-slideover" role="dialog" aria-modal="true" aria-labelledby="bk2-so-title">
+<div class="bk2-backdrop" id="bk2-backdrop" style="opacity:0;pointer-events:none"></div>
+<aside class="bk2-slideover" id="bk2-slideover" role="dialog" aria-modal="true" aria-labelledby="bk2-so-title"
+       style="transform:translateX(100%)"
+       aria-hidden="true">
   <header class="bk2-slideover-head">
     <div style="min-width:0">
       <h2 class="bk2-slideover-title" id="bk2-so-title">New booking</h2>
@@ -477,40 +482,75 @@
   // ============================================================
   //  Quick Book slide-over open/close.
   //
-  //  History: this used to use inline onclick="" handlers for the X
-  //  button, which silently fell off whenever a content-security
-  //  policy update touched the page — the panel would open but no
-  //  click ever ran the close logic. Centralising on real listeners
-  //  fixed that, and gives us one place to also reset the form so
-  //  reopening Quick Book never reuses a previous draft.
+  //  Bug we keep tripping over: the panel renders open on page load
+  //  even though no JS adds `bk2-open` to it. Cause: the aside is
+  //  position:fixed with transform:translateX(100%) in CSS, but if
+  //  bookings-v2.css fails to load (CDN hiccup, stale SW cache) the
+  //  declaration is missing and the element falls into its default
+  //  `transform: none` position — fully visible.
+  //
+  //  Defence in depth:
+  //  - The aside ships with an inline transform:translateX(100%) so
+  //    the closed state is encoded in markup, not just a stylesheet.
+  //  - openQB clears the inline style so the CSS transition can take
+  //    over for the open animation.
+  //  - The X / backdrop / Esc all close through a document-level
+  //    delegated handler so even if a later script error interrupts
+  //    the wireup, the close path still fires.
   // ============================================================
   var so = $('#bk2-slideover');
   var backdrop = $('#bk2-backdrop');
   var qbForm = $('#bk2-qb-form');
+
   function closeQB() {
     if (!so) return;
     so.classList.remove('bk2-open');
     if (backdrop) backdrop.classList.remove('bk2-open');
+    // Re-apply the inline-style guard so future bfcache / SW restores
+    // can't render this open by accident.
+    so.style.transform = 'translateX(100%)';
+    so.setAttribute('aria-hidden', 'true');
+    if (backdrop) { backdrop.style.opacity = '0'; backdrop.style.pointerEvents = 'none'; }
   }
   function openQB() {
     if (!so) return;
-    // Reset any stale field values so Quick Book starts blank every
-    // time — the form is a draft, not a saved entity.
     if (qbForm) qbForm.reset();
+    // Clear the inline guard so the CSS `bk2-open` transform wins.
+    so.style.transform = '';
+    so.setAttribute('aria-hidden', 'false');
     so.classList.add('bk2-open');
-    if (backdrop) backdrop.classList.add('bk2-open');
+    if (backdrop) {
+      backdrop.style.opacity = '';
+      backdrop.style.pointerEvents = '';
+      backdrop.classList.add('bk2-open');
+    }
     setTimeout(function () { var first = so.querySelector('input[name="client_name"]'); if (first) first.focus(); }, 80);
   }
-  // Ensure it starts closed no matter what — protects against bfcache
-  // restoring the page with the open class still applied.
+
+  // Force-closed on every entry point: initial run, pageshow (covers
+  // BFCache), load (covers CSS-still-loading races), and the
+  // visibility change you get when returning to the tab.
   closeQB();
-  if (backdrop) backdrop.addEventListener('click', closeQB);
   window.addEventListener('pageshow', closeQB);
-  // Wire X button (replaced its inline onclick) and let any element
-  // with [data-bk2-close] act as a close affordance.
-  var closeBtn = $('#bk2-so-close');
-  if (closeBtn) closeBtn.addEventListener('click', closeQB);
-  $$('[data-bk2-close]').forEach(function (el) { el.addEventListener('click', closeQB); });
+  window.addEventListener('load', closeQB);
+
+  // Document-level delegation for the close affordances. Survives any
+  // later script error that might break the direct-listener wireup,
+  // and means dynamic [data-bk2-close] elements work without extra
+  // bookkeeping.
+  document.addEventListener('click', function (e) {
+    if (!e.target || !e.target.closest) return;
+    if (e.target.closest('#bk2-so-close') ||
+        e.target.closest('[data-bk2-close]') ||
+        e.target === backdrop) {
+      e.preventDefault();
+      closeQB();
+    }
+  });
+  // Keep the backdrop's own listener too (older browsers without
+  // closest support fall back here gracefully).
+  if (backdrop) backdrop.addEventListener('click', closeQB);
+
   // Hide the panel immediately on submit so users don't see it lingering
   // through the round-trip + redirect. Native form submit still proceeds.
   if (qbForm) qbForm.addEventListener('submit', function () { closeQB(); });
