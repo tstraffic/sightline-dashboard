@@ -5,6 +5,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { convertSeekApplicantToCrew } = require('../lib/seekApplicantConverter');
+const { sydneyToday } = require('../lib/sydney');
 
 // Status / dropdown vocab — kept in code (not DB) so the UI never gets out of
 // sync with the tracker's expected values.
@@ -92,6 +93,12 @@ router.get('/', (req, res) => {
     return { ...w, count, band };
   });
 
+  // Mirror the calendar's reminder pump so the user gets 72h/24h/today
+  // notifications + backfill for existing recruits even when they spend
+  // most of their time on the recruitment list rather than the calendar.
+  try { pumpInductionReminders(db, req.session.user, sydneyToday()); }
+  catch (e) { /* notifications table may not exist on stale deploy */ }
+
   res.render('induction/admin/recruitment', {
     title: 'Recruitment',
     currentPage: 'induction',
@@ -150,7 +157,9 @@ router.get('/calendar', (req, res) => {
 
   // Build the 6x7 grid of day cells.
   const cells = [];
-  const todayIso = iso(new Date());
+  // Today in Sydney — induction_date is a local-DATE column, so day
+  // boundaries should follow operations time, not the server's UTC.
+  const todayIso = sydneyToday();
   const cursor = new Date(gridStart);
   for (let i = 0; i < 42; i++) {
     const dIso = iso(cursor);
@@ -176,13 +185,13 @@ router.get('/calendar', (req, res) => {
     ORDER BY induction_date ASC, applicant_name ASC
   `).all(todayIso, iso(inFourteen));
 
-  // Page-load reminder pump — idempotently insert "today" notifications
-  // for the current user so they get a nudge whenever they hit the
-  // calendar on an induction day. Keyed on the link field so each
-  // (applicant, date) gets at most one notification per user.
-  try {
-    seedInductionReminders(db, req.session.user, byDate[todayIso] || [], todayIso);
-  } catch (e) { /* notifications table may not exist on stale deploy */ }
+  // Page-load reminder pump — idempotently emits 72h / 24h / today
+  // notifications for the user, plus a backfill "scheduled" entry for
+  // any upcoming induction they haven't been notified about yet (so
+  // recruits already on the books before the calendar shipped still
+  // appear in their bell).
+  try { pumpInductionReminders(db, req.session.user, todayIso); }
+  catch (e) { /* notifications table may not exist on stale deploy */ }
 
   // Prev / next month for the nav arrows.
   const prevDate = new Date(Date.UTC(year, month - 2, 1));
@@ -200,27 +209,93 @@ router.get('/calendar', (req, res) => {
   });
 });
 
-// Drop in an "Induction today" notification for every applicant with
-// induction_date = today, but only once per applicant per user. Run at
-// most when the calendar is opened (no cron yet).
-function seedInductionReminders(db, user, todays, todayIso) {
-  if (!user || !todays.length) return;
+// Reminder pump for induction notifications. Runs on every visit to
+// the recruitment list and calendar pages and inserts the
+// notifications below, idempotently per (user, applicant, type):
+//
+//   induction_scheduled — backfill once for any upcoming induction
+//   induction_72h       — fires when the induction is 3+ days away
+//                         and the deadline is within sight (1-3 days)
+//   induction_24h       — fires the day before the induction
+//   induction_today     — fires the day of the induction
+//
+// Idempotency is enforced by the row's `link` field, which we build
+// to include the applicant id and the reminder kind. The notifications
+// table has no native unique key for our purposes, so we look up the
+// existing row before inserting.
+//
+// No cron yet — same-day / next-day reminders depend on the user
+// opening a recruitment page that day, which is the typical workflow.
+// When a job runner lands later this same function can move to a
+// scheduled tick.
+function pumpInductionReminders(db, user, todayIso) {
+  if (!user) return;
+  // Date helpers in plain UTC — induction_date is a DATE-only column,
+  // so day-grain math is correct.
+  function addDays(iso, n) {
+    const d = new Date(iso + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() + n);
+    return d.toISOString().slice(0, 10);
+  }
+  const today      = todayIso;
+  const oneDayOut  = addDays(today, 1);
+  const threeOut   = addDays(today, 3);
+  const horizon    = addDays(today, 30);
+
+  // Every upcoming induction within the next 30 days. Past dates are
+  // skipped — no point pinging the user about something that already
+  // happened.
+  const upcoming = db.prepare(`
+    SELECT id, applicant_name, phone, induction_date
+    FROM seek_applicants
+    WHERE induction_date IS NOT NULL
+      AND induction_date BETWEEN ? AND ?
+  `).all(today, horizon);
+  if (!upcoming.length) return;
+
+  const exists = db.prepare(
+    'SELECT 1 FROM notifications WHERE user_id = ? AND type = ? AND link = ? LIMIT 1'
+  );
   const insert = db.prepare(`
     INSERT INTO notifications (user_id, type, title, message, link)
-    VALUES (?, 'induction_today', ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?)
   `);
-  const exists = db.prepare(`
-    SELECT 1 FROM notifications WHERE user_id = ? AND link = ? AND type = 'induction_today' LIMIT 1
-  `);
-  for (const a of todays) {
-    const link = `/induction/admin/recruitment/calendar?year=${todayIso.slice(0,4)}&month=${parseInt(todayIso.slice(5,7),10)}&id=${a.id}`;
-    if (exists.get(user.id, link)) continue;
+
+  function calLink(dIso, applicantId) {
+    return `/induction/admin/recruitment/calendar?year=${dIso.slice(0,4)}&month=${parseInt(dIso.slice(5,7),10)}&id=${applicantId}`;
+  }
+  function niceDate(dIso) {
+    return new Date(dIso + 'T00:00:00Z').toLocaleDateString('en-AU', {
+      weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC'
+    });
+  }
+  function maybeInsert(type, title, applicant, link) {
+    if (exists.get(user.id, type, link)) return;
     insert.run(
-      user.id,
-      'Induction today',
-      `${a.applicant_name}${a.phone ? ' · ' + a.phone : ''}`,
+      user.id, type, title,
+      `${applicant.applicant_name}${applicant.phone ? ' · ' + applicant.phone : ''} — ${niceDate(applicant.induction_date)}`,
       link
     );
+  }
+
+  for (const a of upcoming) {
+    const link = calLink(a.induction_date, a.id);
+    // Backfill once-per-applicant "scheduled" notification so existing
+    // recruits that pre-date the calendar tab still appear in the bell.
+    maybeInsert('induction_scheduled', 'Induction scheduled', a, link);
+
+    // 72-hour-out: induction lands within the next 3 days (1..3 inclusive).
+    if (a.induction_date >= oneDayOut && a.induction_date <= threeOut) {
+      maybeInsert('induction_72h', 'Induction in 3 days', a, link);
+    }
+    // 24-hour-out: induction is exactly tomorrow.
+    if (a.induction_date === oneDayOut) {
+      maybeInsert('induction_24h', 'Induction tomorrow', a, link);
+    }
+    // Day-of.
+    if (a.induction_date === today) {
+      maybeInsert('induction_today', 'Induction today', a, link);
+    }
   }
 }
 
