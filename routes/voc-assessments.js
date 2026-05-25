@@ -260,11 +260,37 @@ router.get('/quick', (req, res) => {
     FROM voc_templates WHERE active = 1 ORDER BY sort_order
   `).all();
   // Active crew names → <datalist> for typeahead so common cases reuse
-  // the existing crew_member row instead of spawning duplicates.
-  const workers = db.prepare(`
+  // the existing crew_member row instead of spawning duplicates. Mark
+  // each row with `is_duplicate_name` so the client-side JS can show
+  // the EMP-id when there's ambiguity (and skip the auto-pick when a
+  // name maps to more than one active row).
+  const workersRaw = db.prepare(`
     SELECT id, full_name, employee_id FROM crew_members
     WHERE active = 1 ORDER BY full_name
   `).all();
+  const nameCounts = {};
+  for (const w of workersRaw) {
+    const k = (w.full_name || '').toLowerCase();
+    nameCounts[k] = (nameCounts[k] || 0) + 1;
+  }
+  const workers = workersRaw.map(w => ({
+    ...w,
+    is_duplicate_name: nameCounts[(w.full_name || '').toLowerCase()] > 1,
+  }));
+  // Surface name collisions so HR can clean them up. Same case-folding
+  // as the find-or-create logic. Limited to the first 8 to keep the
+  // banner short — anything beyond that is a roster-wide cleanup job.
+  const dupeRows = db.prepare(`
+    SELECT LOWER(full_name) AS k, full_name, COUNT(*) AS n,
+           GROUP_CONCAT(employee_id, ', ') AS emp_ids
+    FROM crew_members
+    WHERE active = 1 AND full_name IS NOT NULL AND TRIM(full_name) != ''
+    GROUP BY LOWER(full_name)
+    HAVING n > 1
+    ORDER BY n DESC, full_name
+    LIMIT 8
+  `).all();
+
   // Carry the "last submitted" stats through the redirect chain so the
   // assessor sees a running tally as they rapid-fire through the queue.
   const sessionCount = req.session.quickVocCount || 0;
@@ -273,6 +299,7 @@ router.get('/quick', (req, res) => {
     title: 'Quick VOC Certificate',
     templates,
     workers,
+    duplicateNames: dupeRows,
     sessionCount,
     lastQuick,
     today: new Date().toISOString().slice(0, 10),
@@ -296,20 +323,41 @@ router.post('/quick', async (req, res) => {
     return res.redirect('/voc-assessments/quick');
   }
 
-  // Find-or-create the crew_member. Exact (case-insensitive) full_name
-  // match on active crew wins; otherwise spin up a sparse row that HR
-  // can finish onboarding later. Auto-created rows get a placeholder
-  // employee_id ('VOC-PENDING-<ts>') so they're easy to find + clean
-  // up if they shouldn't have been created.
+  // Find-or-create the crew_member. Resolution order:
+  //   1. Explicit crew_member_id from the form (populated by JS when the
+  //      user picks a datalist option — eliminates the multi-match
+  //      ambiguity when two active crew members share a name).
+  //   2. Case-insensitive full_name match. If multiple match, prefer the
+  //      one with a real employee_id over a 'VOC-PENDING-*' placeholder
+  //      or blank, then most-recently-created as a final tiebreak.
+  //   3. Auto-create a sparse row with placeholder 'VOC-PENDING-<ts>'.
   let crewId = parseInt(b.crew_member_id, 10);
+  if (crewId) {
+    // Validate the picked ID actually exists + is active, otherwise
+    // fall back to name resolution.
+    const picked = db.prepare('SELECT id FROM crew_members WHERE id = ? AND active = 1').get(crewId);
+    if (!picked) crewId = 0;
+  }
   if (!crewId) {
-    const existing = db.prepare(`
-      SELECT id FROM crew_members
+    const matches = db.prepare(`
+      SELECT id, employee_id, created_at FROM crew_members
       WHERE active = 1 AND LOWER(full_name) = LOWER(?)
-      LIMIT 1
-    `).get(typedName);
-    if (existing) {
-      crewId = existing.id;
+    `).all(typedName);
+    if (matches.length) {
+      // Sort: real EMP IDs first, then VOC-PENDING-* placeholders, then
+      // blanks. Within each bucket, newest crew row wins (a freshly-
+      // hired duplicate is probably more "current" than a stale one).
+      const score = m => {
+        const eid = m.employee_id || '';
+        if (!eid) return 2;
+        if (/^VOC-PENDING-/.test(eid)) return 1;
+        return 0;
+      };
+      matches.sort((a, b) => {
+        const s = score(a) - score(b);
+        return s !== 0 ? s : (b.created_at || '').localeCompare(a.created_at || '');
+      });
+      crewId = matches[0].id;
     } else {
       const placeholderEmpId = 'VOC-PENDING-' + Date.now().toString(36).toUpperCase();
       const ins = db.prepare(`
