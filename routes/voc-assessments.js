@@ -185,7 +185,7 @@ router.get('/', (req, res) => {
   if (crew_member_id) { where += ' AND a.crew_member_id = ?'; params.push(crew_member_id); }
   const rows = db.prepare(`
     SELECT a.id, a.voc_number, a.status, a.outcome, a.valid_until,
-      a.assessment_date, a.certificate_status,
+      a.assessment_date, a.certificate_status, a.marking_complete,
       t.name AS template_name,
       cm.full_name AS worker_name, cm.employee_id AS worker_emp_id,
       assessor.full_name AS assessor_name
@@ -197,15 +197,192 @@ router.get('/', (req, res) => {
     ORDER BY a.created_at DESC
     LIMIT 500
   `).all(...params);
+
+  // Pending Marking queue — quick-cert rows that still need their
+  // theory/practical responses entered. Always loaded so the
+  // assessor can see the backlog from the top of the index regardless
+  // of which filters are active in the main list.
+  const pendingMarking = db.prepare(`
+    SELECT a.id, a.voc_number, a.assessment_date, a.valid_until,
+      a.certificate_id, t.name AS template_name,
+      cm.full_name AS worker_name, cm.employee_id AS worker_emp_id,
+      assessor.full_name AS assessor_name
+    FROM voc_assessments a
+    JOIN voc_templates t ON t.id = a.template_id
+    JOIN crew_members cm ON cm.id = a.crew_member_id
+    LEFT JOIN users assessor ON assessor.id = a.assessor_user_id
+    WHERE a.marking_complete = 0
+    ORDER BY a.created_at DESC
+    LIMIT 200
+  `).all();
+
   const templates = db.prepare('SELECT id, name FROM voc_templates ORDER BY sort_order').all();
   res.render('voc-assessments/index', {
     title: 'Verifications of Competency',
     assessments: rows,
+    pendingMarking,
     templates,
     filters: { status: status || '', outcome: outcome || '', template_id: template_id || '', crew_member_id: crew_member_id || '' },
     user: req.session.user,
     currentPage: 'voc-assessments',
   });
+});
+
+// ────────────────────────────────────────────────
+// QUICK CERT GENERATOR
+// Built for live VOC sessions where 30+ people queue for certificates.
+// Bypasses the full assessor flow: the assessor types name + date +
+// signatures, hits Save, walks away with a printable cert. Theory +
+// practical responses are filled in later from the Pending Marking
+// queue. status='submitted', outcome='competent', marking_complete=0.
+// ────────────────────────────────────────────────
+router.get('/quick', (req, res) => {
+  const db = getDb();
+  const templates = db.prepare(`
+    SELECT id, name, item_key, default_validity_months
+    FROM voc_templates WHERE active = 1 ORDER BY sort_order
+  `).all();
+  // Active crew names → <datalist> for typeahead so common cases reuse
+  // the existing crew_member row instead of spawning duplicates.
+  const workers = db.prepare(`
+    SELECT id, full_name, employee_id FROM crew_members
+    WHERE active = 1 ORDER BY full_name
+  `).all();
+  // Carry the "last submitted" stats through the redirect chain so the
+  // assessor sees a running tally as they rapid-fire through the queue.
+  const sessionCount = req.session.quickVocCount || 0;
+  const lastQuick = req.session.lastQuickVoc || null;
+  res.render('voc-assessments/quick', {
+    title: 'Quick VOC Certificate',
+    templates,
+    workers,
+    sessionCount,
+    lastQuick,
+    today: new Date().toISOString().slice(0, 10),
+    user: req.session.user,
+    currentPage: 'voc-assessments',
+  });
+});
+
+router.post('/quick', async (req, res) => {
+  const db = getDb();
+  const b = req.body || {};
+  const templateId = parseInt(b.template_id, 10);
+  const typedName = String(b.worker_name || '').trim();
+  if (!templateId || !typedName) {
+    req.flash('error', 'Pick an equipment template and type a worker name.');
+    return res.redirect('/voc-assessments/quick');
+  }
+  const tpl = db.prepare('SELECT id, default_validity_months FROM voc_templates WHERE id = ? AND active = 1').get(templateId);
+  if (!tpl) {
+    req.flash('error', 'That equipment template is no longer active.');
+    return res.redirect('/voc-assessments/quick');
+  }
+
+  // Find-or-create the crew_member. Exact (case-insensitive) full_name
+  // match on active crew wins; otherwise spin up a sparse row that HR
+  // can finish onboarding later. Auto-created rows get a placeholder
+  // employee_id ('VOC-PENDING-<ts>') so they're easy to find + clean
+  // up if they shouldn't have been created.
+  let crewId = parseInt(b.crew_member_id, 10);
+  if (!crewId) {
+    const existing = db.prepare(`
+      SELECT id FROM crew_members
+      WHERE active = 1 AND LOWER(full_name) = LOWER(?)
+      LIMIT 1
+    `).get(typedName);
+    if (existing) {
+      crewId = existing.id;
+    } else {
+      const placeholderEmpId = 'VOC-PENDING-' + Date.now().toString(36).toUpperCase();
+      const ins = db.prepare(`
+        INSERT INTO crew_members (full_name, employee_id, active)
+        VALUES (?, ?, 1)
+      `).run(typedName, placeholderEmpId);
+      crewId = ins.lastInsertRowid;
+    }
+  }
+
+  const today = (b.assessment_date || new Date().toISOString().slice(0, 10));
+  const validityMonths = parseInt(b.validity_months, 10) || tpl.default_validity_months || 24;
+  const validFrom = today;
+  const validUntil = addMonths(validFrom, validityMonths);
+  const assessorSigned = String(b.assessor_signed_name || '').trim();
+  const workerSigned = String(b.worker_signed_name || '').trim() || typedName;
+
+  const vocNumber = nextVocNumber(db);
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO voc_assessments
+        (voc_number, template_id, crew_member_id, assessor_user_id,
+         assessment_type, assessment_date, location_site,
+         status, outcome,
+         worker_signed_name, worker_signed_date,
+         assessor_signed_name, assessor_signed_date,
+         valid_from, valid_until,
+         marking_complete,
+         created_by_id)
+      VALUES (?, ?, ?, ?, 'initial', ?, ?, 'submitted', 'competent',
+              ?, ?, ?, ?, ?, ?, 0, ?)
+    `).run(
+      vocNumber, templateId, crewId, req.session.user.id,
+      today, b.location_site || '',
+      workerSigned, today,
+      assessorSigned, today,
+      validFrom, validUntil,
+      req.session.user.id
+    );
+    const newId = result.lastInsertRowid;
+
+    // Generate the certificate PDF immediately — that's the whole point
+    // of the quick path. The full record is hydrated via the same
+    // template join the regular submit flow uses so the cert looks
+    // identical to one produced through the full assessment.
+    const fresh = getAssessmentWithTemplate(db, newId);
+    const certId = deriveCertId(fresh);
+    try {
+      ensureCertDir();
+      const pdfBuf = await renderVocCertificatePdf(fresh, certId, verifyUrlFor(certId));
+      const filename = `voc-${fresh.id}-${Date.now()}.pdf`;
+      fs.writeFileSync(path.join(CERT_DIR, filename), pdfBuf);
+      const relPath = 'voc-certificates/' + filename;
+      db.prepare(`
+        UPDATE voc_assessments
+        SET certificate_id = ?, certificate_status = 'active',
+            pdf_path = ?, pdf_generated_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(certId, relPath, fresh.id);
+    } catch (e) {
+      console.error('[voc-quick] PDF generation failed:', e);
+      db.prepare(`
+        UPDATE voc_assessments SET certificate_id = ?, certificate_status = 'active'
+        WHERE id = ? AND certificate_id IS NULL
+      `).run(certId, fresh.id);
+    }
+
+    // Stash redirect breadcrumbs so the form re-renders with a running
+    // count and a download link for the cert that was just issued.
+    req.session.quickVocCount = (req.session.quickVocCount || 0) + 1;
+    req.session.lastQuickVoc = {
+      id: newId,
+      certId,
+      vocNumber,
+      workerName: typedName,
+      templateId,
+      assessor: assessorSigned,
+      assessmentDate: today,
+      validityMonths,
+    };
+
+    req.flash('success', `Cert issued for ${typedName} (${certId}). Theory + practical pending marking.`);
+    res.redirect('/voc-assessments/quick');
+  } catch (err) {
+    console.error('[voc-quick] create error:', err);
+    req.flash('error', 'Failed to create quick cert: ' + err.message);
+    res.redirect('/voc-assessments/quick');
+  }
 });
 
 // ────────────────────────────────────────────────
@@ -324,6 +501,20 @@ router.post('/:id', (req, res) => {
   const b = req.body;
   const responses = buildResponses(b, existing);
 
+  // A quick-cert row flips to marking_complete=1 once the assessor
+  // enters at least one real response on either side. "Real response"
+  // means a non-empty theory answer OR a non-empty practical result —
+  // template counts alone don't qualify (those are baseline, not
+  // marking work). Records that started marking_complete=1 stay 1.
+  const anyTheoryAnswered = responses.theory_responses.some(r =>
+    String(r.response || '').trim() !== '' || r.correct
+  );
+  const anyPracticalMarked = responses.practical_responses.some(r =>
+    String(r.result || '').trim() !== ''
+  );
+  const markingComplete = existing.marking_complete ? 1
+    : ((anyTheoryAnswered || anyPracticalMarked) ? 1 : 0);
+
   try {
     db.prepare(`
       UPDATE voc_assessments SET
@@ -340,6 +531,7 @@ router.post('/:id', (req, res) => {
         manager_signed_name = ?, manager_signed_position = ?, manager_signed_date = ?,
         records_filed_yes = ?, records_filed_by = ?, records_filed_date = ?,
         copy_to_worker_yes = ?, matrix_entered_by = ?,
+        marking_complete = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
@@ -359,9 +551,16 @@ router.post('/:id', (req, res) => {
       b.manager_signed_name || '', b.manager_signed_position || '', b.manager_signed_date || null,
       b.records_filed_yes === 'on' ? 1 : 0, b.records_filed_by || '', b.records_filed_date || null,
       b.copy_to_worker_yes === 'on' ? 1 : 0, b.matrix_entered_by || '',
+      markingComplete,
       existing.id
     );
-    req.flash('success', 'Saved.');
+    // Show a clear flash when a quick-cert just transitioned to fully
+    // marked so the assessor knows the backlog shrank.
+    if (!existing.marking_complete && markingComplete) {
+      req.flash('success', 'Marking complete — VOC removed from pending queue.');
+    } else {
+      req.flash('success', 'Saved.');
+    }
   } catch (err) {
     console.error('[voc-assessments] update error:', err);
     req.flash('error', 'Failed to save: ' + err.message);
