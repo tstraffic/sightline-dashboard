@@ -33,22 +33,51 @@
 
   <% if (typeof duplicateNames !== 'undefined' && duplicateNames && duplicateNames.length) { %>
     <!-- Duplicate-name banner. Surfaced when two or more ACTIVE crew  -->
-    <!-- rows share a name. The dropdown handles this safely (shows    -->
-    <!-- EMP-id in brackets + captures the picked ID via hidden field) -->
-    <!-- but HR still wants to know so they can merge / deactivate.    -->
+    <!-- rows share a name. Each row is rendered individually so the   -->
+    <!-- user can deactivate the wrong one in-place. Stranded rows     -->
+    <!-- (no linked HR employee) are explicitly tagged because they    -->
+    <!-- can't be cleaned up from /hr/roster — only from here.         -->
     <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-5">
       <div class="flex items-start gap-2">
         <svg class="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <div class="text-xs text-amber-900 leading-relaxed">
+        <div class="text-xs text-amber-900 leading-relaxed flex-1 min-w-0">
           <p class="font-semibold">Duplicate crew names detected</p>
           <p class="mt-0.5 text-amber-800">
-            These names appear on more than one active crew row. The dropdown shows their EMP-ids in brackets so you can pick the right one, but HR should still merge / deactivate the stale ones.
+            Each name below appears on more than one active crew row. The dropdown handles this safely (EMP-id in brackets), but you should still deactivate the stale ones. <strong>Open</strong> the profile first if you're not sure which is the keeper.
           </p>
-          <ul class="mt-1.5 space-y-0.5">
+          <div class="mt-2 space-y-2">
             <% duplicateNames.forEach(function(d) { %>
-              <li><span class="font-semibold"><%= d.full_name %></span> <span class="text-amber-700">— <%= d.n %> rows · <%= d.emp_ids %></span></li>
+              <div class="bg-white/60 border border-amber-200 rounded-md p-2">
+                <p class="font-semibold text-amber-900 mb-1"><%= d.full_name %> <span class="text-amber-700 font-normal">· <%= d.n %> rows</span></p>
+                <ul class="space-y-1">
+                  <% d.rows.forEach(function(r, i) {
+                       const isPlaceholder = r.employee_id && /^VOC-PENDING-/.test(r.employee_id);
+                       const isBlank = !r.employee_id;
+                       const isStranded = !r.hr_employee_id;
+                  %>
+                    <li class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span class="font-mono text-amber-900"><%= r.employee_id || ('#crew_' + r.id) %></span>
+                      <% if (isPlaceholder) { %>
+                        <span class="px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[9px] font-bold tracking-wider">PLACEHOLDER</span>
+                      <% } else if (isBlank) { %>
+                        <span class="px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 text-[9px] font-bold tracking-wider">NO EMP-ID</span>
+                      <% } %>
+                      <% if (isStranded) { %>
+                        <span class="px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[9px] font-bold tracking-wider" title="No linked HR employee — can't be cleaned up from /hr/roster, only from here.">STRANDED</span>
+                      <% } %>
+                      <span class="text-amber-700">added <%= r.created_at ? r.created_at.slice(0, 10) : '?' %></span>
+                      <span class="flex-1"></span>
+                      <a href="/crew/<%= r.id %>" class="px-2 py-0.5 bg-white hover:bg-amber-50 border border-amber-300 text-amber-800 rounded text-[10px] font-semibold">Open</a>
+                      <form method="POST" action="/crew/<%= r.id %>/deactivate" class="inline" data-confirm="Deactivate <%= d.full_name %> (<%= r.employee_id || '#' + r.id %>)? It will drop out of the VOC dropdown and other operational lists.">
+                        <%- include('../partials/csrf') %>
+                        <button type="submit" class="px-2 py-0.5 bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 rounded text-[10px] font-semibold">Deactivate</button>
+                      </form>
+                    </li>
+                  <% }) %>
+                </ul>
+              </div>
             <% }) %>
-          </ul>
+          </div>
         </div>
       </div>
     </div>

@@ -194,6 +194,50 @@ router.post('/', (req, res) => {
   }
 });
 
+// POST /:id/deactivate — Single-row deactivate, redirects back to
+// Referer so it can be called inline from the "Duplicate crew names
+// detected" banner on /voc-assessments/quick (or anywhere else that
+// surfaces a stranded crew row). Flips active=0 + also unsets the
+// linked HR employee row if any (mirror of /hr/roster/delete) so the
+// directions stay consistent. Logged for audit because this is the
+// path most often used to clean up duplicates / placeholders.
+router.post('/:id/deactivate', (req, res) => {
+  const db = getDb();
+  const id = parseInt(req.params.id, 10);
+  if (!id) { req.flash('error', 'No crew member specified.'); return res.redirect('back'); }
+  const m = db.prepare('SELECT id, full_name, employee_id, active FROM crew_members WHERE id = ?').get(id);
+  if (!m) { req.flash('error', 'Crew member not found.'); return res.redirect('back'); }
+  if (!m.active) {
+    req.flash('success', `${m.full_name} is already deactivated.`);
+    return res.redirect(req.get('referer') || '/crew');
+  }
+  try {
+    db.prepare('UPDATE crew_members SET active = 0 WHERE id = ?').run(id);
+    // Mirror the cascade direction used by /hr/roster/delete — if this
+    // crew row had a linked HR employee, soft-delete it too so the HR
+    // view doesn't show a "live" employee whose operational row is
+    // gone.
+    const emp = db.prepare('SELECT id FROM employees WHERE linked_crew_member_id = ? AND active = 1').get(id);
+    if (emp) {
+      db.prepare(`UPDATE employees SET active = 0, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(emp.id);
+    }
+    logActivity({
+      user: req.session.user,
+      action: 'update',
+      entityType: 'crew_member',
+      entityId: id,
+      entityLabel: m.full_name + (m.employee_id ? ' (' + m.employee_id + ')' : ''),
+      details: 'Deactivated (single-row, e.g. duplicate cleanup)',
+      ip: req.ip,
+    });
+    req.flash('success', `${m.full_name} deactivated.` + (emp ? ' Linked HR employee row also removed.' : ''));
+  } catch (err) {
+    console.error('[crew] single-row deactivate error:', err);
+    req.flash('error', 'Failed to deactivate: ' + err.message);
+  }
+  res.redirect(req.get('referer') || '/crew');
+});
+
 // POST /bulk — Bulk actions on crew members
 router.post('/bulk', (req, res) => {
   const db = getDb();
