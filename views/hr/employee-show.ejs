@@ -210,6 +210,8 @@
       <% var tbCount = (typeof toolboxMeetings !== 'undefined' && toolboxMeetings) ? toolboxMeetings.length : 0; %>
       <% var tbAttendedCount = (typeof toolboxMeetings !== 'undefined' && toolboxMeetings) ? toolboxMeetings.filter(function (m) { return m.my_status === 'attended' || m.my_status === 'caught_up'; }).length : 0; %>
       <button onclick="switchEmpTab('toolbox-meetings')" data-tab="toolbox-meetings" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Toolbox Meetings <% if (tbCount > 0) { %><span class="ml-1 bg-gray-100 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= tbAttendedCount %>/<%= tbCount %></span><% } %></button>
+      <% var _revs = (typeof reviews !== 'undefined' && reviews) ? reviews : []; %>
+      <button onclick="switchEmpTab('reviews')" data-tab="reviews" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Reviews <% if (_revs.length > 0) { %><span class="ml-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= _revs.length %></span><% } %></button>
     </nav>
   </div>
 
@@ -1606,6 +1608,220 @@
       </div>
     <% } %>
   </div>
+
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TAB: Reviews                                -->
+  <!-- Notes + full performance reviews. Visibility = 'worker' shares -->
+  <!-- the entry to the worker portal; 'internal' keeps it HR-only.  -->
+  <!-- ═══════════════════════════════════════════ -->
+  <div id="tab-reviews" class="emp-tab-content" style="display:none;">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+      <!-- Left: existing reviews -->
+      <div class="lg:col-span-2 space-y-4">
+        <% if (!_revs.length) { %>
+          <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-8 text-center">
+            <svg class="w-10 h-10 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <h3 class="text-gray-900 font-semibold text-base mb-1">No reviews or notes yet</h3>
+            <p class="text-gray-500 text-sm">Add your first one using the form on the right. Quick notes stay internal; full reviews can be shared with the worker.</p>
+          </div>
+        <% } else { %>
+          <% _revs.forEach(function (r) {
+            var kindLabel = r.kind === 'review' ? 'Performance review' : 'Note';
+            var kindCls   = r.kind === 'review' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' : 'bg-blue-50 text-blue-700 ring-blue-600/20';
+            var visLabel  = r.visibility === 'worker' ? 'Shared with worker' : 'Internal only';
+            var visCls    = r.visibility === 'worker' ? 'bg-violet-50 text-violet-700 ring-violet-600/20' : 'bg-gray-100 text-gray-600 ring-gray-300';
+          %>
+            <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 <%= kindCls %>"><%= kindLabel %></span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 <%= visCls %>"><%= visLabel %></span>
+                  </div>
+                  <h3 class="text-base font-bold text-gray-900"><%= r.title %></h3>
+                  <p class="text-xs text-gray-500 mt-1">
+                    <% if (r.review_date) { %>
+                      <span class="font-medium text-gray-700"><%= new Date(r.review_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) %></span>
+                    <% } %>
+                    <% if (r.review_date && r.held_by) { %><span class="text-gray-300">·</span><% } %>
+                    <% if (r.held_by) { %>Held by <span class="text-gray-700 font-medium"><%= r.held_by %></span><% } %>
+                    <% if (r.created_by_name) { %><span class="text-gray-300">·</span> Added by <span class="text-gray-700"><%= r.created_by_name %></span><% } %>
+                    <% if (r.created_at) { %><span class="text-gray-300">·</span> <%= new Date(r.created_at + (String(r.created_at).includes('T') ? '' : 'T00:00:00Z')).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) %><% } %>
+                  </p>
+                </div>
+                <form method="POST" action="/hr/reviews/<%= r.id %>/delete" onsubmit="return confirm('Delete this <%= r.kind === 'review' ? 'review' : 'note' %>?')">
+                  <%- include('../partials/csrf') %>
+                  <button type="submit" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition" title="Delete">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </form>
+              </div>
+
+              <% if (r.summary) { %>
+                <p class="text-sm text-gray-700 mt-3 leading-relaxed whitespace-pre-line"><%= r.summary %></p>
+              <% } %>
+
+              <% if (r.sections && r.sections.length) { %>
+                <div class="mt-4 space-y-3">
+                  <% r.sections.forEach(function (sec) { if (sec.heading || sec.content) { %>
+                    <div class="border-l-2 border-emerald-200 pl-3">
+                      <% if (sec.heading) { %><p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1"><%= sec.heading %></p><% } %>
+                      <% if (sec.content) { %><p class="text-sm text-gray-800 whitespace-pre-line"><%= sec.content %></p><% } %>
+                    </div>
+                  <% } }); %>
+                </div>
+              <% } %>
+
+              <% if (r.peer_comments && r.peer_comments.length) { %>
+                <div class="mt-4 pt-3 border-t border-gray-100">
+                  <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Feedback from others</p>
+                  <div class="space-y-2">
+                    <% r.peer_comments.forEach(function (p) { if (p.from || p.comment) { %>
+                      <div class="bg-violet-50/60 border border-violet-100 rounded-lg p-3">
+                        <% if (p.from) { %><p class="text-xs font-semibold text-violet-900 mb-0.5"><%= p.from %></p><% } %>
+                        <% if (p.comment) { %><p class="text-sm text-gray-700 whitespace-pre-line"><%= p.comment %></p><% } %>
+                      </div>
+                    <% } }); %>
+                  </div>
+                </div>
+              <% } %>
+            </div>
+          <% }); %>
+        <% } %>
+      </div>
+
+      <!-- Right: add-review form (sticky so it stays visible while scrolling history) -->
+      <div class="lg:col-span-1">
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 lg:sticky lg:top-4">
+          <h2 class="text-sm font-bold text-gray-800 mb-1">Add review or note</h2>
+          <p class="text-xs text-gray-500 mb-4">Notes stay internal by default. Switch to <em>Performance review</em> to attach reviewer, sections, and peer comments.</p>
+
+          <form method="POST" action="/hr/employees/<%= employee.id %>/reviews" id="empReviewForm" class="space-y-3">
+            <%- include('../partials/csrf') %>
+
+            <!-- Kind toggle — JS hides/shows the review-only fieldsets. -->
+            <div>
+              <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Kind</p>
+              <div class="flex gap-1.5">
+                <label class="flex-1">
+                  <input type="radio" name="kind" value="note" checked class="peer sr-only" onclick="toggleReviewKind('note')">
+                  <span class="block text-center text-xs font-semibold py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 cursor-pointer peer-checked:bg-brand-50 peer-checked:text-brand-700 peer-checked:border-brand-300 transition">Quick note</span>
+                </label>
+                <label class="flex-1">
+                  <input type="radio" name="kind" value="review" class="peer sr-only" onclick="toggleReviewKind('review')">
+                  <span class="block text-center text-xs font-semibold py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-600 cursor-pointer peer-checked:bg-emerald-50 peer-checked:text-emerald-700 peer-checked:border-emerald-300 transition">Performance review</span>
+                </label>
+              </div>
+            </div>
+
+            <div>
+              <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Title</label>
+              <input name="title" type="text" required placeholder="e.g. Q2 review, On-site coaching" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+            </div>
+
+            <div>
+              <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest" id="empReviewSummaryLabel">Note</label>
+              <textarea name="summary" rows="4" placeholder="What did you observe / discuss?" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"></textarea>
+            </div>
+
+            <!-- Review-only block -->
+            <div class="emp-review-only space-y-3" style="display:none">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Date</label>
+                  <input name="review_date" type="date" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                </div>
+                <div>
+                  <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Held by</label>
+                  <input name="held_by" type="text" placeholder="e.g. Jane, Manager" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Sections covered</label>
+                  <button type="button" onclick="addReviewSection()" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">+ Add section</button>
+                </div>
+                <div id="empReviewSections" class="space-y-2"></div>
+                <p class="text-[10px] text-gray-400 mt-1">Sections appear as headings in the review (e.g. "Strengths", "Areas to improve").</p>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Comments from others</label>
+                  <button type="button" onclick="addPeerComment()" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">+ Add comment</button>
+                </div>
+                <div id="empReviewPeers" class="space-y-2"></div>
+                <p class="text-[10px] text-gray-400 mt-1">Peer / supervisor feedback shown as quoted blocks.</p>
+              </div>
+            </div>
+
+            <!-- Visibility -->
+            <div class="pt-2 border-t border-gray-100">
+              <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Visibility</p>
+              <div class="space-y-1.5">
+                <label class="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" name="visibility" value="internal" checked class="mt-0.5">
+                  <span class="text-xs text-gray-700"><span class="font-semibold text-gray-900">Internal only</span> — HR / managers can see it; the worker cannot.</span>
+                </label>
+                <label class="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" name="visibility" value="worker" class="mt-0.5">
+                  <span class="text-xs text-gray-700"><span class="font-semibold text-gray-900">Share privately to worker</span> — appears in their worker-portal <em>My Reviews</em> tab.</span>
+                </label>
+              </div>
+            </div>
+
+            <button type="submit" class="w-full mt-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">Save</button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<script>
+// ── Reviews tab: kind toggle + dynamic sections / peer comments ──
+function toggleReviewKind(kind) {
+  document.querySelectorAll('.emp-review-only').forEach(function (el) {
+    el.style.display = (kind === 'review') ? '' : 'none';
+  });
+  var lbl = document.getElementById('empReviewSummaryLabel');
+  if (lbl) lbl.textContent = kind === 'review' ? 'Summary' : 'Note';
+}
+function addReviewSection(heading, content) {
+  var wrap = document.getElementById('empReviewSections'); if (!wrap) return;
+  var row = document.createElement('div');
+  row.className = 'border border-gray-200 rounded-lg p-2 bg-gray-50';
+  row.innerHTML =
+    '<div class="flex gap-1 items-start">' +
+      '<input name="section_heading" type="text" placeholder="Heading (e.g. Strengths)" class="flex-1 rounded border border-gray-300 px-2 py-1 text-xs" />' +
+      '<button type="button" onclick="this.closest(\'div.border\').remove()" class="text-red-500 hover:bg-red-50 rounded p-1">' +
+        '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '<textarea name="section_content" rows="2" placeholder="What was covered" class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"></textarea>';
+  wrap.appendChild(row);
+  if (heading) row.querySelector('[name=section_heading]').value = heading;
+  if (content) row.querySelector('[name=section_content]').value = content;
+}
+function addPeerComment(from, comment) {
+  var wrap = document.getElementById('empReviewPeers'); if (!wrap) return;
+  var row = document.createElement('div');
+  row.className = 'border border-gray-200 rounded-lg p-2 bg-violet-50/40';
+  row.innerHTML =
+    '<div class="flex gap-1 items-start">' +
+      '<input name="peer_from" type="text" placeholder="From (e.g. Mark — Site supervisor)" class="flex-1 rounded border border-gray-300 px-2 py-1 text-xs" />' +
+      '<button type="button" onclick="this.closest(\'div.border\').remove()" class="text-red-500 hover:bg-red-50 rounded p-1">' +
+        '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '<textarea name="peer_comment" rows="2" placeholder="What they said" class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"></textarea>';
+  wrap.appendChild(row);
+  if (from)    row.querySelector('[name=peer_from]').value = from;
+  if (comment) row.querySelector('[name=peer_comment]').value = comment;
+}
+</script>
 
 <script>
 // ── Tab switching (global so onclick works) ──

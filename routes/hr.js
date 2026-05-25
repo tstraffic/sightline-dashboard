@@ -708,6 +708,25 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     `).all(employee.linked_crew_member_id || -1, employee.linked_crew_member_id || -1);
   } catch (e) { /* table may not exist on stale DB */ }
 
+  // Employee reviews — quick notes + full performance reviews. JSON
+  // payload columns (sections, peer comments) are parsed here so the
+  // view doesn't have to. Author name resolved once per row.
+  let reviews = [];
+  try {
+    const rows = db.prepare(`
+      SELECT r.*, u.full_name AS created_by_name
+      FROM employee_reviews r
+      LEFT JOIN users u ON u.id = r.created_by_id
+      WHERE r.employee_id = ?
+      ORDER BY COALESCE(r.review_date, substr(r.created_at, 1, 10)) DESC, r.id DESC
+    `).all(employee.id);
+    reviews = rows.map(r => ({
+      ...r,
+      sections:      safeParseJson(r.sections_json, []),
+      peer_comments: safeParseJson(r.peer_comments_json, []),
+    }));
+  } catch (e) { /* table will exist after migration 225 runs */ }
+
   res.render('hr/employee-show', {
     title: employee.full_name,
     currentPage: 'hr-employees',
@@ -727,12 +746,92 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     sopHistory,
     trainingPasses,
     toolboxMeetings,
+    reviews,
     inductionMarkedBy: inductionMarkedBy ? inductionMarkedBy.full_name : null,
     settingsOptions,
     canViewSensitive: canViewSensitiveHR(req.session.user),
     showRates: canViewRates(req.session.user),
     user: req.session.user
   });
+});
+
+// Tiny helper for the reviews JSON columns. Local rather than imported
+// because schema.js + lib/* already have their own JSON utilities and I
+// don't want to thread another import through this file.
+function safeParseJson(s, fallback) {
+  if (!s) return fallback;
+  try { var v = JSON.parse(s); return Array.isArray(v) || (v && typeof v === 'object') ? v : fallback; }
+  catch (e) { return fallback; }
+}
+
+// ============================================
+// EMPLOYEE REVIEWS — create / delete
+// ============================================
+// POST /hr/employees/:id/reviews — add a note or a full performance
+// review. Visibility = 'internal' keeps it HR-only; 'worker' surfaces
+// it in the worker portal's My Reviews tab.
+router.post('/employees/:id/reviews', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(req.params.id);
+  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+
+  const b = req.body || {};
+  const kind = b.kind === 'review' ? 'review' : 'note';
+  const visibility = b.visibility === 'worker' ? 'worker' : 'internal';
+  const title = (b.title || '').trim() || (kind === 'review' ? 'Performance review' : 'Note');
+  const summary = (b.summary || '').trim();
+  const reviewDate = (b.review_date || '').trim() || null;
+  const heldBy = (b.held_by || '').trim();
+
+  // Sections + peer comments arrive as parallel arrays from the form
+  // (one row per section/comment). Drop blank rows so the JSON payload
+  // doesn't bloat with empty pairs.
+  const secHeadings = [].concat(b.section_heading || []);
+  const secContents = [].concat(b.section_content || []);
+  const sections = [];
+  for (let i = 0; i < Math.max(secHeadings.length, secContents.length); i++) {
+    const h = (secHeadings[i] || '').trim();
+    const c = (secContents[i] || '').trim();
+    if (h || c) sections.push({ heading: h, content: c });
+  }
+  const peerFrom = [].concat(b.peer_from || []);
+  const peerText = [].concat(b.peer_comment || []);
+  const peerComments = [];
+  for (let i = 0; i < Math.max(peerFrom.length, peerText.length); i++) {
+    const from = (peerFrom[i] || '').trim();
+    const text = (peerText[i] || '').trim();
+    if (from || text) peerComments.push({ from, comment: text });
+  }
+
+  try {
+    db.prepare(`
+      INSERT INTO employee_reviews
+        (employee_id, kind, title, summary, review_date, held_by, visibility,
+         sections_json, peer_comments_json, created_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      employee.id, kind, title, summary, reviewDate, heldBy, visibility,
+      JSON.stringify(sections), JSON.stringify(peerComments),
+      req.session.user.id
+    );
+    req.flash('success', visibility === 'worker'
+      ? `${kind === 'review' ? 'Review' : 'Note'} saved and shared to the worker's portal.`
+      : `${kind === 'review' ? 'Review' : 'Note'} saved (internal only).`);
+  } catch (e) {
+    console.error('[hr] add review failed:', e.message);
+    req.flash('error', 'Could not save review.');
+  }
+  res.redirect(`/hr/employees/${employee.id}#reviews`);
+});
+
+// POST /hr/reviews/:id/delete — remove a review/note.
+router.post('/reviews/:id/delete', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const row = db.prepare('SELECT id, employee_id FROM employee_reviews WHERE id = ?').get(req.params.id);
+  if (!row) { req.flash('error', 'Review not found.'); return res.redirect('back'); }
+  db.prepare('DELETE FROM employee_reviews WHERE id = ?').run(row.id);
+  req.flash('success', 'Review removed.');
+  res.redirect(`/hr/employees/${row.employee_id}#reviews`);
 });
 
 // ============================================

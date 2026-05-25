@@ -609,4 +609,40 @@ router.get('/hr/pay-runs/:lineId', (req, res) => {
   });
 });
 
+// GET /w/reviews — worker-visible performance reviews + notes shared
+// from the HR side. Internal-only rows (visibility = 'internal') stay
+// hidden. Empty list is fine — the view renders an empty state.
+router.get('/reviews', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const employee = db.prepare('SELECT id FROM employees WHERE linked_crew_member_id = ?').get(worker.id);
+
+  let reviews = [];
+  if (employee) {
+    try {
+      const rows = db.prepare(`
+        SELECT r.id, r.kind, r.title, r.summary, r.review_date, r.held_by,
+               r.sections_json, r.peer_comments_json, r.created_at,
+               u.full_name AS created_by_name
+        FROM employee_reviews r
+        LEFT JOIN users u ON u.id = r.created_by_id
+        WHERE r.employee_id = ? AND r.visibility = 'worker'
+        ORDER BY COALESCE(r.review_date, substr(r.created_at, 1, 10)) DESC, r.id DESC
+      `).all(employee.id);
+      reviews = rows.map(r => {
+        let sections = [], peer = [];
+        try { sections = JSON.parse(r.sections_json) || []; } catch (e) {}
+        try { peer     = JSON.parse(r.peer_comments_json) || []; } catch (e) {}
+        return Object.assign({}, r, { sections: sections, peer_comments: peer });
+      });
+    } catch (e) { /* employee_reviews table missing — migration not yet run */ }
+  }
+
+  res.render('worker/reviews', {
+    title: 'My Reviews', currentPage: 'more',
+    reviews,
+    flash_success: req.flash('success'), flash_error: req.flash('error'),
+  });
+});
+
 module.exports = router;

@@ -10358,6 +10358,39 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 225: employee_reviews — notes + full performance reviews
+  // attached to an employee, with optional worker-portal visibility.
+  // =============================================
+  if (!isMigrationApplied.get(225)) {
+    console.log('Running migration 225: employee_reviews');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS employee_reviews (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL DEFAULT 'note' CHECK (kind IN ('note','review')),
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL DEFAULT '',
+          review_date TEXT,
+          held_by TEXT NOT NULL DEFAULT '',
+          visibility TEXT NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal','worker')),
+          sections_json TEXT NOT NULL DEFAULT '[]',
+          peer_comments_json TEXT NOT NULL DEFAULT '[]',
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_employee_reviews_employee ON employee_reviews(employee_id);');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_employee_reviews_visibility ON employee_reviews(visibility);');
+      recordMigration.run(225, 'employee_reviews');
+      console.log('Migration 225 applied: employee_reviews table ready');
+    } catch (e) {
+      console.error('Migration 225 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
