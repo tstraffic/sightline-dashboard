@@ -277,12 +277,12 @@ router.get('/quick', (req, res) => {
     ...w,
     is_duplicate_name: nameCounts[(w.full_name || '').toLowerCase()] > 1,
   }));
-  // Surface name collisions so HR can clean them up. Same case-folding
-  // as the find-or-create logic. Limited to the first 8 to keep the
-  // banner short — anything beyond that is a roster-wide cleanup job.
-  const dupeRows = db.prepare(`
-    SELECT LOWER(full_name) AS k, full_name, COUNT(*) AS n,
-           GROUP_CONCAT(employee_id, ', ') AS emp_ids
+  // Surface name collisions so HR can clean them up. We render each
+  // duplicate row individually (id + employee_id + has-HR-link flag)
+  // so the user can deactivate the right one in-place. Limited to 8
+  // collision groups — anything beyond that is a roster-wide job.
+  const dupeGroups = db.prepare(`
+    SELECT LOWER(full_name) AS k, full_name, COUNT(*) AS n
     FROM crew_members
     WHERE active = 1 AND full_name IS NOT NULL AND TRIM(full_name) != ''
     GROUP BY LOWER(full_name)
@@ -290,6 +290,20 @@ router.get('/quick', (req, res) => {
     ORDER BY n DESC, full_name
     LIMIT 8
   `).all();
+  const duplicateNames = dupeGroups.map(g => {
+    const rows = db.prepare(`
+      SELECT cm.id, cm.full_name, cm.employee_id, cm.created_at,
+        (SELECT id FROM employees WHERE linked_crew_member_id = cm.id AND active = 1 LIMIT 1) AS hr_employee_id
+      FROM crew_members cm
+      WHERE cm.active = 1 AND LOWER(cm.full_name) = ?
+      ORDER BY
+        CASE WHEN cm.employee_id IS NULL OR cm.employee_id = '' THEN 2
+             WHEN cm.employee_id LIKE 'VOC-PENDING-%' THEN 1
+             ELSE 0 END,
+        cm.created_at DESC
+    `).all(g.k);
+    return { full_name: g.full_name, n: g.n, rows };
+  });
 
   // Carry the "last submitted" stats through the redirect chain so the
   // assessor sees a running tally as they rapid-fire through the queue.
@@ -299,7 +313,7 @@ router.get('/quick', (req, res) => {
     title: 'Quick VOC Certificate',
     templates,
     workers,
-    duplicateNames: dupeRows,
+    duplicateNames,
     sessionCount,
     lastQuick,
     today: new Date().toISOString().slice(0, 10),
