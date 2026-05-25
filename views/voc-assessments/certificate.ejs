@@ -74,7 +74,7 @@
   .detail .lbl { font-family: Arial, sans-serif; font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; color: #888; margin-bottom: 3px; }
   .detail .val { font-family: 'Georgia', serif; font-size: 12pt; color: #1f3864; font-weight: 600; }
 
-  .signoff { width: 88%; margin: 4mm auto 0; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20mm; align-items: end; }
+  .signoff { width: 70%; margin: 4mm auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 30mm; align-items: end; }
   .sig { text-align: center; }
   .sig-line { border-bottom: 1.5px solid #1f3864; height: 14mm; margin-bottom: 4px; }
   .sig-name { font-family: Arial, sans-serif; font-size: 9.5pt; color: #1f3864; font-weight: 600; min-height: 1.2em; }
@@ -166,16 +166,15 @@
       </div>
     </div>
 
+    <!-- Sign-off — two columns only. Manager/Supervisor was removed     -->
+    <!-- because the trainer running the VOC session signs as assessor   -->
+    <!-- and the worker signs to acknowledge; a separate manager line    -->
+    <!-- was rarely populated and just left a blank in the middle.       -->
     <div class="signoff">
       <div class="sig">
         <div class="sig-line"></div>
         <div class="sig-name"><%= a.assessor_signed_name || a.assessor_name || '' %></div>
         <div class="sig-role">Assessor</div>
-      </div>
-      <div class="sig">
-        <div class="sig-line"></div>
-        <div class="sig-name"><%= a.manager_signed_name || '' %></div>
-        <div class="sig-role">Manager / Supervisor</div>
       </div>
       <div class="sig">
         <div class="sig-line"></div>
