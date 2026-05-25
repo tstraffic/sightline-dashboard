@@ -181,6 +181,9 @@
                 <% if (!a.marking_complete) { %>
                   <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[9px] font-bold tracking-wider" title="Theory + practical not yet entered">PENDING</span>
                 <% } %>
+                <% if (a.outcome === 'competent' && a.certificate_status !== 'revoked' && a.worker_acknowledgement_status === 'pending') { %>
+                  <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[9px] font-bold tracking-wider" title="Worker hasn't signed yet — push notification fired on issue">AWAITING SIG</span>
+                <% } %>
               </td>
               <td class="px-3 py-2.5">
                 <div class="font-medium text-gray-900"><%= a.worker_name %></div>

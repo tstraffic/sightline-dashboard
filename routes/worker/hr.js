@@ -122,15 +122,29 @@ router.get('/hr/certs', (req, res) => {
   // only surfaces completed verifications. Both Competent and NYC
   // outcomes appear so the worker can see why they're not certified
   // on a given item.
+  //
+  // worker_acknowledgement_status drives the new "needs signing"
+  // workflow — when an office trainer issued a cert without the
+  // worker present, the row comes through with status='pending' and
+  // surfaces in a dedicated panel at the top of the wallet.
   const vocs = db.prepare(`
     SELECT a.id, a.voc_number, a.outcome, a.valid_from, a.valid_until,
       a.certificate_status, a.certificate_id, a.pdf_path, a.assessment_date,
+      a.worker_acknowledgement_status, a.worker_acknowledged_at,
       t.name AS equipment_name
     FROM voc_assessments a
     JOIN voc_templates t ON t.id = a.template_id
     WHERE a.crew_member_id = ? AND a.status = 'submitted'
     ORDER BY a.assessment_date DESC, a.id DESC
   `).all(worker.id);
+
+  // Split out the rows that need the worker's signature so the view
+  // can hoist them above the regular wallet entries with a clear CTA.
+  const pendingSigVocs = vocs.filter(v =>
+    v.outcome === 'competent' &&
+    v.certificate_status !== 'revoked' &&
+    v.worker_acknowledgement_status === 'pending'
+  );
 
   res.render('worker/hr-certs', {
     title: 'My Wallet',
@@ -139,6 +153,7 @@ router.get('/hr/certs', (req, res) => {
     documents,
     member,
     vocs,
+    pendingSigVocs,
   });
 });
 
@@ -189,6 +204,106 @@ router.get('/hr/vocs/:id/pdf', async (req, res) => {
     console.error('[w-hr-vocs] PDF render failed:', e);
     return res.status(500).send('Failed to render certificate.');
   }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// GET/POST /w/hr/vocs/:id/sign — Worker signs to acknowledge their
+// VOC certificate. Reached via the push notification fired when the
+// office issued the cert without an in-person signature, or via the
+// "Awaiting your signature" panel on /w/hr/certs.
+//
+// On POST the signature PNG is decoded + written, the assessment row
+// flipped to worker_acknowledgement_status='signed', and the cert PDF
+// regenerated so both worker AND admin downloads pick up the new
+// signature on next fetch.
+// ─────────────────────────────────────────────────────────────────
+const VOC_SIG_DIR = certPath.join(__dirname, '..', '..', 'data', 'uploads', 'voc-signatures');
+const VOC_SIG_DATA_URL_RE = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/;
+const VOC_MAX_SIG_BYTES = 256 * 1024;
+
+function loadWorkerVoc(db, vocId, crewMemberId) {
+  return db.prepare(`
+    SELECT a.*, t.name AS equipment_name, t.default_validity_months,
+      cm.full_name AS worker_name, cm.employee_id AS worker_emp_id
+    FROM voc_assessments a
+    JOIN voc_templates t ON t.id = a.template_id
+    JOIN crew_members cm ON cm.id = a.crew_member_id
+    WHERE a.id = ? AND a.crew_member_id = ?
+      AND a.status = 'submitted' AND a.outcome = 'competent'
+      AND COALESCE(a.certificate_status, 'active') = 'active'
+  `).get(vocId, crewMemberId);
+}
+
+router.get('/hr/vocs/:id/sign', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const a = loadWorkerVoc(db, req.params.id, worker.id);
+  if (!a) return res.status(404).send('VOC not found.');
+  // Already signed → show a confirmation page instead of the pad so
+  // the worker doesn't accidentally re-sign and overwrite.
+  res.render('worker/voc-sign', {
+    title: 'Sign your VOC',
+    currentPage: 'more',
+    a,
+    alreadySigned: a.worker_acknowledgement_status === 'signed',
+  });
+});
+
+router.post('/hr/vocs/:id/sign', async (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const a = loadWorkerVoc(db, req.params.id, worker.id);
+  if (!a) return res.status(404).send('VOC not found.');
+
+  const dataUrl = (req.body && req.body.signature_data) || '';
+  const m = String(dataUrl).match(VOC_SIG_DATA_URL_RE);
+  if (!m) {
+    req.flash('error', 'Please draw your signature first.');
+    return res.redirect('/w/hr/vocs/' + a.id + '/sign');
+  }
+  const approxBytes = Math.floor(m[1].length * 3 / 4);
+  if (approxBytes > VOC_MAX_SIG_BYTES) {
+    req.flash('error', 'Signature too large — try a simpler stroke.');
+    return res.redirect('/w/hr/vocs/' + a.id + '/sign');
+  }
+
+  // Write the PNG and stamp the row.
+  try {
+    certFs.mkdirSync(VOC_SIG_DIR, { recursive: true });
+    const filename = `voc-${a.id}-worker-${Date.now()}.png`;
+    certFs.writeFileSync(certPath.join(VOC_SIG_DIR, filename), Buffer.from(m[1], 'base64'));
+    const relPath = 'voc-signatures/' + filename;
+    db.prepare(`
+      UPDATE voc_assessments
+      SET worker_signature_path = ?,
+          worker_acknowledgement_status = 'signed',
+          worker_acknowledged_at = CURRENT_TIMESTAMP,
+          worker_signed_name = COALESCE(NULLIF(worker_signed_name, ''), ?),
+          worker_signed_date = COALESCE(worker_signed_date, DATE('now')),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(relPath, a.worker_name, a.id);
+  } catch (e) {
+    console.error('[w-hr-vocs-sign] write failed:', e);
+    req.flash('error', 'Could not save your signature — please try again.');
+    return res.redirect('/w/hr/vocs/' + a.id + '/sign');
+  }
+
+  // Regenerate the cert PDF so the embedded signature reflects what
+  // was just drawn. Both worker downloads AND admin downloads pull
+  // the updated file. We import lazily here to avoid a circular
+  // require with routes/voc-assessments at startup.
+  try {
+    const vocRoutes = require('../voc-assessments');
+    if (vocRoutes && typeof vocRoutes.regenerateCertPdf === 'function') {
+      await vocRoutes.regenerateCertPdf(db, a.id, a.certificate_id);
+    }
+  } catch (e) {
+    console.error('[w-hr-vocs-sign] PDF regen failed (non-fatal):', e.message);
+  }
+
+  req.flash('success', 'Thanks — your signature is on file. The cert PDF has been updated.');
+  res.redirect('/w/hr/certs');
 });
 
 // GET /w/hr/documents/:id — Stream a worker's own uploaded document.
