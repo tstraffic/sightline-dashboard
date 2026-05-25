@@ -1877,6 +1877,63 @@ router.post('/wage-tiers', requirePermission('payroll'), (req, res) => {
   }
 });
 
+// POST /payroll/rates/bulk-tier — bulk-assign a tier to every worker in a
+// given payment_type bucket who currently has no tier set. Per the FY26
+// panel's operational rule: "Default all new workers to Tier 2 unless
+// documented otherwise" — so calling without a tier param defaults to 2.
+router.post('/rates/bulk-tier', requirePermission('payroll'), (req, res) => {
+  try {
+    const db = getDb();
+    const tier = parseInt(req.body.tier, 10) || 2;
+    const pt = String(req.body.payment_type || '').toLowerCase();
+    if (tier < 1 || tier > 6) {
+      req.flash('error', 'Tier must be between 1 and 6.');
+      return res.redirect('/payroll/rates');
+    }
+    if (!['cash', 'abn', 'tfn'].includes(pt)) {
+      req.flash('error', 'Pick a payment type (Cash / ABN / TFN) for the bulk assign.');
+      return res.redirect('/payroll/rates');
+    }
+    // Find every active employee on this payment type with no tier set.
+    // tier IS NULL covers both NULL and unset rows.
+    const targets = db.prepare(`
+      SELECT id, full_name FROM employees
+      WHERE active = 1 AND payment_type = ? AND tier IS NULL
+        AND COALESCE(deleted_at, '') = ''
+    `).all(pt);
+    if (targets.length === 0) {
+      req.flash('success', `No unassigned ${pt.toUpperCase()} workers to stamp — every active worker on this section already has a tier.`);
+      return res.redirect('/payroll/rates');
+    }
+    const { stampEmployeeRates } = require('../lib/wageTiers');
+    let stamped = 0;
+    const failures = [];
+    for (const t of targets) {
+      const r = stampEmployeeRates(db, t.id, tier, pt, { nightPattern: 'occasional' });
+      if (r.ok) stamped++;
+      else failures.push(t.full_name);
+    }
+    try {
+      logActivity({
+        user: req.session.user, action: 'update', entityType: 'employee',
+        entityLabel: 'rates',
+        details: `Bulk-stamped ${stamped} ${pt.toUpperCase()} workers to Tier ${tier} from the FY26 panel`,
+        ip: req.ip,
+      });
+    } catch (e) { /* audit shouldn't block save */ }
+    if (failures.length) {
+      req.flash('error', `Stamped ${stamped} workers; ${failures.length} failed: ${failures.slice(0, 3).join(', ')}${failures.length > 3 ? '…' : ''}`);
+    } else {
+      req.flash('success', `Defaulted ${stamped} ${pt.toUpperCase()} worker${stamped === 1 ? '' : 's'} to Tier ${tier}. Rates stamped from the wage panel.`);
+    }
+    return res.redirect('/payroll/rates');
+  } catch (e) {
+    console.error('[payroll/rates/bulk-tier]', e);
+    req.flash('error', `Bulk tier failed: ${e.message}`);
+    return res.redirect('/payroll/rates');
+  }
+});
+
 // GET /payroll/wage-tiers/preset.json — feeds the live preview in the
 // Approve modal + the Worker Rates tier dropdown. Returns the preset
 // row plus the resolved employee-shape rates so the modal can show

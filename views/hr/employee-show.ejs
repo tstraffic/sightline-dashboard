@@ -295,13 +295,65 @@
                   · <%= (employee.payment_type || '').toUpperCase() || 'Unclassified' %>
                 </p>
               <% } else { %>
-                <p class="text-xs text-amber-600 mt-1">No tier assigned — rates entered manually. Assign a tier on <a href="/payroll/rates" class="underline">Worker Rates</a>.</p>
+                <p class="text-xs text-amber-600 mt-1">No tier assigned — pick one below to stamp rates from the wage panel.</p>
               <% } %>
             </div>
-            <a href="/payroll/wage-tiers" class="text-[10px] text-brand-600 hover:underline whitespace-nowrap">View panel →</a>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <% if (employee.tier) { %>
+                <button type="button" onclick="document.getElementById('tierAssignForm').classList.toggle('hidden')" class="text-[10px] text-brand-600 hover:underline whitespace-nowrap">Change tier</button>
+              <% } %>
+              <a href="/payroll/wage-tiers" class="text-[10px] text-brand-600 hover:underline whitespace-nowrap">View panel →</a>
+            </div>
           </div>
+
+          <!--
+            Inline tier picker. On submit, /hr/employees/:id/assign-tier
+            calls stampEmployeeRates which writes tier + payment_type +
+            night_pattern + all rate_* columns from the matching wage_tier_presets
+            row, so the change propagates to /payroll/rates, the worker
+            portal's "Your rate" card, and the next pay run automatically.
+          -->
+          <form method="POST" action="/hr/employees/<%= employee.id %>/assign-tier"
+                id="tierAssignForm"
+                class="<%= employee.tier ? 'hidden' : '' %> mb-4 p-3 bg-brand-50/50 border border-brand-100 rounded-lg">
+            <%- include('../partials/csrf') %>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+              <label class="block">
+                <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Tier</span>
+                <select name="tier" required class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                  <option value="">— Pick tier —</option>
+                  <% [1,2,3,4,5,6].forEach(t => {
+                    const TIER_OPTS = { 1: 'Trainee TC', 2: 'Traffic Controller', 3: 'Advanced TC / TMA', 4: 'Team Leader', 5: 'Senior Team Leader', 6: 'Site Supervisor' };
+                  %>
+                    <option value="<%= t %>" <%= employee.tier == t ? 'selected' : (t === 2 && !employee.tier ? 'selected' : '') %>>Tier <%= t %> · <%= TIER_OPTS[t] %></option>
+                  <% }) %>
+                </select>
+              </label>
+              <label class="block">
+                <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Payment type</span>
+                <select name="payment_type" required class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                  <option value="cash" <%= employee.payment_type === 'cash' ? 'selected' : '' %>>Cash</option>
+                  <option value="abn"  <%= employee.payment_type === 'abn'  ? 'selected' : '' %>>ABN</option>
+                  <option value="tfn"  <%= employee.payment_type === 'tfn'  ? 'selected' : '' %>>TFN / Award</option>
+                </select>
+              </label>
+              <label class="block">
+                <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Night roster <span class="text-gray-300 normal-case">(TFN)</span></span>
+                <select name="night_pattern" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                  <option value="occasional"        <%= (!employee.night_pattern || employee.night_pattern === 'occasional')      ? 'selected' : '' %>>Night &lt;5 (default)</option>
+                  <option value="permanent"         <%= employee.night_pattern === 'permanent'          ? 'selected' : '' %>>Night Perm.</option>
+                  <option value="continuous_5plus"  <%= employee.night_pattern === 'continuous_5plus'   ? 'selected' : '' %>>Night 5+</option>
+                </select>
+              </label>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-[10px] text-gray-500">Saving stamps the rates from the FY26 panel onto this worker. Changes immediately reflect on Worker Rates, the next pay run, and the worker's portal.</p>
+              <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg whitespace-nowrap">Save tier</button>
+            </div>
+          </form>
+
           <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
-            <% const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_ot:'Night OT',rate_night_dt:'Night DT',rate_weekend:'Weekend',rate_public_holiday:'PH',rate_fares_daily:'Travel',rate_meal:'Meal'}; %>
+            <% const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_5plus:'Night 5+',rate_weekend_short:'Sat ≤2h',rate_weekend:'Sat / Wknd',rate_public_holiday:'PH',rate_fares_daily:'Travel',rate_meal:'Meal'}; %>
             <% Object.entries(rateLabels).forEach(([key, label]) => { %>
               <% if (employee[key]) { %>
                 <div>
