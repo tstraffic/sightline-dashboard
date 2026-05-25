@@ -40,6 +40,40 @@ function ensureCertDir() {
   try { fs.mkdirSync(CERT_DIR, { recursive: true }); } catch (e) { /* ignore */ }
 }
 
+// Signatures captured by signature_pad in the browser arrive as
+// `data:image/png;base64,iVBORw0K...`. We decode, validate, and write
+// one PNG per (voc_id, role) pair. The stored path is relative to
+// data/uploads/ so the PDF renderer + worker download routes can
+// resolve it without knowing the project root.
+const SIG_DIR = path.join(__dirname, '..', 'data', 'uploads', 'voc-signatures');
+function ensureSigDir() {
+  try { fs.mkdirSync(SIG_DIR, { recursive: true }); } catch (e) { /* ignore */ }
+}
+const SIG_DATA_URL_RE = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/;
+const MAX_SIG_BYTES = 256 * 1024; // 256 KB is plenty for a 600x150 signature
+function saveSignatureDataUrl(vocId, role, dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return null;
+  const m = dataUrl.match(SIG_DATA_URL_RE);
+  if (!m) return null;
+  // base64 → bytes ratio is 3/4 (minus padding). Reject early so we
+  // don't waste time decoding monsters.
+  const approxBytes = Math.floor(m[1].length * 3 / 4);
+  if (approxBytes > MAX_SIG_BYTES) {
+    console.warn('[voc-sig] signature data too large:', approxBytes, 'bytes for voc', vocId, role);
+    return null;
+  }
+  try {
+    ensureSigDir();
+    const buf = Buffer.from(m[1], 'base64');
+    const filename = `voc-${vocId}-${role}-${Date.now()}.png`;
+    fs.writeFileSync(path.join(SIG_DIR, filename), buf);
+    return 'voc-signatures/' + filename;
+  } catch (e) {
+    console.error('[voc-sig] write failed for voc', vocId, role, ':', e.message);
+    return null;
+  }
+}
+
 // Certificate ID: TSC-{year}-{6-char hex}-{voc_seq}, deterministic per voc.id.
 // Once persisted on voc_assessments.certificate_id, never recomputed.
 function deriveCertId(assessment) {
@@ -414,6 +448,22 @@ router.post('/quick', async (req, res) => {
     );
     const newId = result.lastInsertRowid;
 
+    // Drawn signatures (base64 PNG from signature_pad on the form).
+    // Saved BEFORE the PDF render so the renderer can embed them.
+    // Each is independently optional — leaving either blank falls back
+    // to the typed name rendered in cursive.
+    const assessorSigPath = saveSignatureDataUrl(newId, 'assessor', b.assessor_signature_data);
+    const workerSigPath = saveSignatureDataUrl(newId, 'worker', b.worker_signature_data);
+    if (assessorSigPath || workerSigPath) {
+      db.prepare(`
+        UPDATE voc_assessments
+        SET assessor_signature_path = COALESCE(?, assessor_signature_path),
+            worker_signature_path   = COALESCE(?, worker_signature_path),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(assessorSigPath, workerSigPath, newId);
+    }
+
     // Generate the certificate PDF immediately — that's the whole point
     // of the quick path. The full record is hydrated via the same
     // template join the regular submit flow uses so the cert looks
@@ -639,6 +689,20 @@ router.post('/:id', (req, res) => {
       markingComplete,
       existing.id
     );
+    // Save any drawn signatures on this save (independent of submit).
+    // Empty pads send '' so we don't blow away existing saved sigs.
+    const assessorSigPathDraft = saveSignatureDataUrl(existing.id, 'assessor', b.assessor_signature_data);
+    const workerSigPathDraft = saveSignatureDataUrl(existing.id, 'worker', b.worker_signature_data);
+    if (assessorSigPathDraft || workerSigPathDraft) {
+      db.prepare(`
+        UPDATE voc_assessments
+        SET assessor_signature_path = COALESCE(?, assessor_signature_path),
+            worker_signature_path   = COALESCE(?, worker_signature_path),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(assessorSigPathDraft, workerSigPathDraft, existing.id);
+    }
+
     // Show a clear flash when a quick-cert just transitioned to fully
     // marked so the assessor knows the backlog shrank.
     if (!existing.marking_complete && markingComplete) {
@@ -725,6 +789,22 @@ router.post('/:id/submit', async (req, res) => {
       existing.id
     );
 
+    // Drawn signatures on the full assessment form — same shape as the
+    // Quick flow. Sent only when the assessor or worker actually drew
+    // something (the JS submits '' for an empty pad), so we don't blow
+    // away an existing saved signature on every save.
+    const assessorSigPathFull = saveSignatureDataUrl(existing.id, 'assessor', b.assessor_signature_data);
+    const workerSigPathFull = saveSignatureDataUrl(existing.id, 'worker', b.worker_signature_data);
+    if (assessorSigPathFull || workerSigPathFull) {
+      db.prepare(`
+        UPDATE voc_assessments
+        SET assessor_signature_path = COALESCE(?, assessor_signature_path),
+            worker_signature_path   = COALESCE(?, worker_signature_path),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(assessorSigPathFull, workerSigPathFull, existing.id);
+    }
+
     // On Competent: assign a certificate id (idempotent — only if missing)
     // and regenerate the PDF. A revoked cert that's re-submitted as
     // competent flips back to 'active'.
@@ -806,6 +886,23 @@ router.get('/:id/certificate', async (req, res) => {
   } catch (e) {
     console.error('[voc-assessments] QR generation failed:', e);
   }
+
+  // Inline drawn signatures as data URLs so the HTML preview embeds
+  // them without needing a separate static route. Best-effort — if a
+  // file is missing (e.g. lost after a Railway redeploy that didn't
+  // mount the volume) the view falls back to the cursive typed name.
+  function readSigDataUrl(relPath) {
+    if (!relPath) return null;
+    try {
+      const full = path.join(__dirname, '..', 'data', 'uploads', relPath);
+      if (!fs.existsSync(full)) return null;
+      const buf = fs.readFileSync(full);
+      return 'data:image/png;base64,' + buf.toString('base64');
+    } catch (e) { return null; }
+  }
+  a.assessor_signature_data_url = readSigDataUrl(a.assessor_signature_path);
+  a.worker_signature_data_url = readSigDataUrl(a.worker_signature_path);
+
   res.render('voc-assessments/certificate', {
     a, certId, qrDataUrl, verifyUrl,
     isRevoked: a.certificate_status === 'revoked',
