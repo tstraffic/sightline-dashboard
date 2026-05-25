@@ -157,8 +157,16 @@ document.addEventListener('submit', function(e) {
   // Skip filter/search forms (GET) and inline status selects
   if (form.method && form.method.toUpperCase() === 'GET') return;
   if (form.classList.contains('no-spinner')) return;
+  // If an inline onsubmit (e.g. confirm dialog cancel) already cancelled the
+  // submit, do NOT show the spinner — otherwise the button stays in
+  // "Saving…" state forever because no navigation happens.
+  if (e.defaultPrevented) return;
   if (form.classList.contains('form-submitting')) { e.preventDefault(); return; }
   form.classList.add('form-submitting');
+  // Safety net: if for any reason the page doesn't navigate within 15s
+  // (e.g. an XHR-style handler quietly took over), drop the class so the
+  // button isn't stuck spinning.
+  setTimeout(function () { form.classList.remove('form-submitting'); }, 15000);
 });
 
 // ===== Tab navigation (for job detail page) =====

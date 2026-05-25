@@ -336,7 +336,12 @@
   // ========== Submit Spinner ==========
   document.addEventListener('DOMContentLoaded', function() {
     document.querySelectorAll('form').forEach(form => {
-      form.addEventListener('submit', function() {
+      form.addEventListener('submit', function(e) {
+        // If an inline onsubmit (e.g. confirm dialog cancel) already
+        // cancelled the submit, do NOT swap the button to "Saving…" —
+        // otherwise the button stays stuck because the page never
+        // navigates. Same guard as the app.js spinner.
+        if (e.defaultPrevented) return;
         const btn = form.querySelector('button[type="submit"]:not([data-no-spinner])');
         if (!btn || btn.disabled) return;
         btn.disabled = true;

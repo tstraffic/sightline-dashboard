@@ -1688,6 +1688,32 @@
   <!-- Notes + full performance reviews. Visibility = 'worker' shares -->
   <!-- the entry to the worker portal; 'internal' keeps it HR-only.  -->
   <!-- ═══════════════════════════════════════════ -->
+  <%
+    // SQLite emits "YYYY-MM-DD HH:MM:SS" (UTC, no 'T'/'Z'). Native Date
+    // parses that as Invalid on Safari and some older Chromes — convert
+    // it to ISO before constructing. Date-only strings get a midnight
+    // local-time suffix (we don't want timezone math shifting the day).
+    function fmtReviewStamp(s) {
+      if (!s) return '';
+      var str = String(s);
+      var iso = str.includes('T') ? str
+              : str.includes(' ') ? (str.replace(' ', 'T') + 'Z')
+              : (str + 'T00:00:00');
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleString('en-AU', {
+        timeZone: 'Australia/Sydney',
+        day: 'numeric', month: 'short', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', hour12: true
+      });
+    }
+    function fmtReviewDateOnly(s) {
+      if (!s) return '';
+      var d = new Date(String(s) + 'T00:00:00');
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+  %>
   <div id="tab-reviews" class="emp-tab-content" style="display:none;">
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
@@ -1716,12 +1742,12 @@
                   <h3 class="text-base font-bold text-gray-900"><%= r.title %></h3>
                   <p class="text-xs text-gray-500 mt-1">
                     <% if (r.review_date) { %>
-                      <span class="font-medium text-gray-700"><%= new Date(r.review_date + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }) %></span>
+                      <span class="font-medium text-gray-700"><%= fmtReviewDateOnly(r.review_date) %></span>
                     <% } %>
                     <% if (r.review_date && r.held_by) { %><span class="text-gray-300">·</span><% } %>
                     <% if (r.held_by) { %>Held by <span class="text-gray-700 font-medium"><%= r.held_by %></span><% } %>
                     <% if (r.created_by_name) { %><span class="text-gray-300">·</span> Added by <span class="text-gray-700"><%= r.created_by_name %></span><% } %>
-                    <% if (r.created_at) { %><span class="text-gray-300">·</span> <%= new Date(r.created_at + (String(r.created_at).includes('T') ? '' : 'T00:00:00Z')).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) %><% } %>
+                    <% if (r.created_at) { %><span class="text-gray-300">·</span> <span title="<%= r.created_at %> UTC"><%= fmtReviewStamp(r.created_at) %></span><% } %>
                   </p>
                 </div>
                 <form method="POST" action="/hr/reviews/<%= r.id %>/delete" onsubmit="return confirm('Delete this <%= r.kind === 'review' ? 'review' : 'note' %>?')">
@@ -1760,6 +1786,55 @@
                   </div>
                 </div>
               <% } %>
+
+              <!-- HR-internal discussion thread. Anyone with hr_employees -->
+              <!-- can post. Worker never sees these. @username tags the   -->
+              <!-- user and fires a notification (in-app + push).          -->
+              <div class="mt-4 pt-3 border-t border-gray-100">
+                <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">
+                  Internal comments
+                  <% if (r.comments && r.comments.length) { %>
+                    <span class="text-gray-400 font-semibold">· <%= r.comments.length %></span>
+                  <% } %>
+                </p>
+
+                <% if (r.comments && r.comments.length) { %>
+                  <div class="space-y-2 mb-3">
+                    <% r.comments.forEach(function (c) { %>
+                      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 group">
+                        <div class="flex items-start justify-between gap-2 mb-1">
+                          <div class="min-w-0 flex-1">
+                            <span class="text-xs font-semibold text-gray-900"><%= c.created_by_name || 'Someone' %></span>
+                            <span class="text-[11px] text-gray-400 ml-1.5" title="<%= c.created_at %> UTC"><%= fmtReviewStamp(c.created_at) %></span>
+                          </div>
+                          <% if (user && (user.id === c.created_by_id || ['admin','management'].includes(user.role))) { %>
+                            <form method="POST" action="/hr/reviews/comments/<%= c.id %>/delete" class="opacity-0 group-hover:opacity-100 transition" data-confirm="Delete this comment?">
+                              <%- include('../partials/csrf') %>
+                              <button type="submit" class="text-[11px] text-red-500 hover:text-red-700 font-medium">Delete</button>
+                            </form>
+                          <% } %>
+                        </div>
+                        <p class="text-sm text-gray-800 whitespace-pre-line"><%- (c.body_html || '') %></p>
+                      </div>
+                    <% }); %>
+                  </div>
+                <% } %>
+
+                <form method="POST" action="/hr/reviews/<%= r.id %>/comments" class="flex gap-2 items-start">
+                  <%- include('../partials/csrf') %>
+                  <div class="flex-1">
+                    <textarea name="body" rows="2" required placeholder="Add a comment… @mention to notify a teammate"
+                      class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm resize-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                      list="hr-mention-users-<%= r.id %>"></textarea>
+                    <datalist id="hr-mention-users-<%= r.id %>">
+                      <% (typeof mentionUsers !== 'undefined' ? mentionUsers : []).forEach(function (u) { %>
+                        <option value="@<%= u.username %>"><%= u.full_name %></option>
+                      <% }); %>
+                    </datalist>
+                  </div>
+                  <button type="submit" class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg whitespace-nowrap">Comment</button>
+                </form>
+              </div>
             </div>
           <% }); %>
         <% } %>
@@ -1927,7 +2002,7 @@ function toggleReviewKind(kind) {
   }
   tryInit();
 })();
-}
+
 function addReviewSection(heading, content) {
   var wrap = document.getElementById('empReviewSections'); if (!wrap) return;
   var row = document.createElement('div');
