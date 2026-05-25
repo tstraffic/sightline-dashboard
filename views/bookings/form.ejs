@@ -73,21 +73,15 @@
 </div>
 
 <% if (isEdit) { %>
-  <!-- POST-CREATE NAV STRIP — Traffio-style. After a booking exists,
-       these jump straight to the corresponding section on the view
-       page (which is the source of truth for crews, dockets, notes,
-       documents, history etc). Hidden on new-booking flow because
-       most of these have nothing to show until the booking exists. -->
-  <nav class="bk-section-overnav mb-3" aria-label="Booking sections">
-    <a href="/bookings/<%= booking.id %>"            class="bk-onav-tab is-active"><span>Edit</span></a>
-    <a href="/bookings/<%= booking.id %>#crews"      class="bk-onav-tab"><span>Resources</span></a>
-    <a href="/bookings/<%= booking.id %>#tasks"      class="bk-onav-tab"><span>Tasks</span></a>
-    <a href="/bookings/<%= booking.id %>#dockets"    class="bk-onav-tab"><span>Dockets</span></a>
-    <a href="/bookings/<%= booking.id %>#notes"      class="bk-onav-tab"><span>Notes</span></a>
-    <a href="/bookings/<%= booking.id %>#documents"  class="bk-onav-tab"><span>Documents</span></a>
-    <a href="/bookings/<%= booking.id %>#forms"      class="bk-onav-tab"><span>Forms</span></a>
-    <a href="/bookings/<%= booking.id %>#history"    class="bk-onav-tab"><span>History</span></a>
-  </nav>
+  <!-- Single "Back to overview" link in edit mode. The previous
+       version had a full Resources / Tasks / Dockets / Notes etc.
+       strip here, but every tab navigated AWAY from edit to the
+       view page, which made the strip feel like "section tabs that
+       eject you". Cleaner to keep edit strictly about editing the
+       form and surface section nav only on the view page. -->
+  <div class="mb-3">
+    <a href="/bookings/<%= booking.id %>" class="bk-onav-tab"><span>← Back to overview</span></a>
+  </div>
 <% } %>
 
 <!-- SECTION TAB STRIP — toggles between the form's sections so only
