@@ -78,6 +78,13 @@
         <a href="/crew?filter=blocked&search=<%= encodeURIComponent(search || '') %>&role=<%= encodeURIComponent(roleFilter || '') %>" class="px-3 py-2 text-xs font-medium border-l border-gray-300 <%= filter === 'blocked' ? 'bg-red-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100' %>">Blocked</a>
         <a href="/crew?filter=fatigued&search=<%= encodeURIComponent(search || '') %>&role=<%= encodeURIComponent(roleFilter || '') %>" class="px-3 py-2 text-xs font-medium border-l border-gray-300 <%= filter === 'fatigued' ? 'bg-orange-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100' %>">Fatigued</a>
         <a href="/crew?filter=expiring&search=<%= encodeURIComponent(search || '') %>&role=<%= encodeURIComponent(roleFilter || '') %>" class="px-3 py-2 text-xs font-medium border-l border-gray-300 <%= filter === 'expiring' ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100' %>">Expiring</a>
+        <a href="/crew?filter=pending_onboarding&search=<%= encodeURIComponent(search || '') %>&role=<%= encodeURIComponent(roleFilter || '') %>"
+           class="px-3 py-2 text-xs font-medium border-l border-gray-300 inline-flex items-center gap-1 <%= filter === 'pending_onboarding' ? 'bg-violet-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-100' %>">
+          Pending Onboarding
+          <% if (stats && stats.pendingOnboardingCount > 0) { %>
+            <span class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[9px] font-bold <%= filter === 'pending_onboarding' ? 'bg-white/25 text-white' : 'bg-violet-100 text-violet-800' %>"><%= stats.pendingOnboardingCount %></span>
+          <% } %>
+        </a>
       </div>
 
       <!-- Role Filter -->
@@ -142,6 +149,12 @@
             <!-- Name + mobile subtitle -->
             <td class="px-3 sm:px-4 py-2">
               <a href="/crew/<%= c.id %>" class="text-brand-600 hover:text-brand-700 font-medium"><%= c.full_name %></a>
+              <% if (c.pendingOnboarding) { %>
+                <span title="<%= c.vocQuickCreated ? 'Auto-created from a Quick VOC — finish onboarding to give them portal access.' : 'No worker portal PIN set yet.' %>"
+                      class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[9px] font-bold tracking-wider align-middle">
+                  <%= c.vocQuickCreated ? 'VOC-NEW' : 'NO PIN' %>
+                </span>
+              <% } %>
               <div class="sm:hidden text-[10px] text-gray-400 mt-0.5"><%= c.employee_id || '' %><% if (c.role) { %> &middot; <%= roleLabels[c.role] || c.role %><% } %></div>
             </td>
 
