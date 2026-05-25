@@ -10,6 +10,8 @@ const { logActivity } = require('../middleware/audit');
 const { createInvitation, TOKEN_EXPIRY_HOURS } = require('../services/invitations');
 const { sendEmail } = require('../services/email');
 const { workerInviteEmail, sopSignLinkEmail, pinResetEmail } = require('../services/emailTemplates');
+const { createNotification } = require('../middleware/create-notification');
+const { sendPushToUser } = require('../services/pushNotification');
 const crypto = require('crypto');
 const { currentVersion: currentSopVersion } = require('../lib/sop');
 const { REQUIRED_MODULES } = require('../lib/induction');
@@ -724,8 +726,40 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
       ...r,
       sections:      safeParseJson(r.sections_json, []),
       peer_comments: safeParseJson(r.peer_comments_json, []),
+      comments:      [],
     }));
+
+    // Load HR-internal comments in one round-trip and bucket by review.
+    // The comments table is created by migration 230 — wrap the read in
+    // its own try so a stale DB still renders the rest of the tab.
+    if (reviews.length) {
+      try {
+        const reviewIds = reviews.map(r => r.id);
+        const placeholders = reviewIds.map(() => '?').join(',');
+        const commentRows = db.prepare(`
+          SELECT c.*, u.full_name AS created_by_name
+          FROM employee_review_comments c
+          LEFT JOIN users u ON u.id = c.created_by_id
+          WHERE c.review_id IN (${placeholders})
+          ORDER BY c.created_at ASC, c.id ASC
+        `).all(...reviewIds);
+        const byReview = new Map(reviews.map(r => [r.id, r]));
+        for (const c of commentRows) {
+          c.body_html = renderCommentHtml(c.body);
+          const r = byReview.get(c.review_id);
+          if (r) r.comments.push(c);
+        }
+      } catch (e) { /* migration 230 not yet applied */ }
+    }
   } catch (e) { /* table will exist after migration 225 runs */ }
+
+  // Users available for @mention autocomplete in the comment box.
+  let mentionUsers = [];
+  try {
+    mentionUsers = db.prepare(
+      `SELECT id, username, full_name FROM users WHERE active = 1 ORDER BY full_name`
+    ).all();
+  } catch (e) { /* no users yet */ }
 
   res.render('hr/employee-show', {
     title: employee.full_name,
@@ -747,6 +781,7 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     trainingPasses,
     toolboxMeetings,
     reviews,
+    mentionUsers,
     inductionMarkedBy: inductionMarkedBy ? inductionMarkedBy.full_name : null,
     settingsOptions,
     canViewSensitive: canViewSensitiveHR(req.session.user),
@@ -762,6 +797,36 @@ function safeParseJson(s, fallback) {
   if (!s) return fallback;
   try { var v = JSON.parse(s); return Array.isArray(v) || (v && typeof v === 'object') ? v : fallback; }
   catch (e) { return fallback; }
+}
+
+// HTML-escape (NOT a full sanitiser — we never trust comment bodies).
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Match @username tokens (letters / digits / dot / underscore / hyphen).
+// Has to start after whitespace or string start so emails (foo@bar) don't
+// false-positive. Username comes back as capture group 1.
+const MENTION_RE = /(^|\s)@([A-Za-z0-9._-]{2,40})/g;
+
+// Render a comment body to safe HTML with @mentions wrapped in a chip.
+// Pure presentation — the canonical mention list is stored separately on
+// the comment row, so this can change format without losing notifications.
+function renderCommentHtml(body) {
+  const safe = escapeHtml(body || '');
+  return safe.replace(MENTION_RE, (m, lead, name) =>
+    `${lead}<span class="inline-block bg-brand-50 text-brand-700 rounded px-1 font-semibold">@${name}</span>`
+  );
+}
+
+// Extract distinct usernames from a comment body. Lowercased so the
+// downstream user lookup is case-insensitive.
+function extractMentions(body) {
+  const out = new Set();
+  String(body || '').replace(MENTION_RE, (_, _lead, name) => { out.add(name.toLowerCase()); return ''; });
+  return [...out];
 }
 
 // ============================================
@@ -831,6 +896,107 @@ router.post('/reviews/:id/delete', requirePermission('hr_employees'), (req, res)
   if (!row) { req.flash('error', 'Review not found.'); return res.redirect('back'); }
   db.prepare('DELETE FROM employee_reviews WHERE id = ?').run(row.id);
   req.flash('success', 'Review removed.');
+  res.redirect(`/hr/employees/${row.employee_id}#reviews`);
+});
+
+// POST /hr/reviews/:reviewId/comments — add a comment to a note/review.
+// HR-internal: comments are never surfaced to the worker portal, even
+// when the parent review is shared. `@username` tokens fan out to in-app
+// + push notifications for each matched, active user (skipping the
+// author themselves so we don't ping people for their own comment).
+router.post('/reviews/:reviewId/comments', requirePermission('hr_employees'), async (req, res) => {
+  const db = getDb();
+  const review = db.prepare(`
+    SELECT r.id, r.employee_id, r.title, e.full_name AS employee_name
+    FROM employee_reviews r
+    JOIN employees e ON e.id = r.employee_id
+    WHERE r.id = ?
+  `).get(req.params.reviewId);
+  if (!review) { req.flash('error', 'Review not found.'); return res.redirect('back'); }
+
+  const body = (req.body && req.body.body || '').trim();
+  if (!body) {
+    req.flash('error', 'Comment cannot be empty.');
+    return res.redirect(`/hr/employees/${review.employee_id}#reviews`);
+  }
+
+  const mentionedNames = extractMentions(body);
+  let mentionedUsers = [];
+  if (mentionedNames.length) {
+    const placeholders = mentionedNames.map(() => '?').join(',');
+    mentionedUsers = db.prepare(
+      `SELECT id, username, full_name FROM users
+       WHERE active = 1 AND LOWER(username) IN (${placeholders})`
+    ).all(...mentionedNames);
+  }
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO employee_review_comments (review_id, body, mentioned_user_ids, created_by_id)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      review.id,
+      body,
+      JSON.stringify(mentionedUsers.map(u => u.id)),
+      req.session.user.id
+    );
+
+    // Notify each tagged user (skipping the author). Best-effort: push
+    // failures are logged inside sendPushToUser, in-app notification is
+    // wrapped in its own try inside createNotification.
+    const authorId = req.session.user.id;
+    const authorName = req.session.user.full_name || req.session.user.username || 'Someone';
+    const link = `/hr/employees/${review.employee_id}#reviews`;
+    const snippet = body.length > 140 ? body.slice(0, 137) + '…' : body;
+    for (const u of mentionedUsers) {
+      if (u.id === authorId) continue;
+      createNotification({
+        userId: u.id,
+        type: 'general',
+        title: `${authorName} mentioned you on ${review.employee_name}`,
+        message: snippet,
+        link
+      });
+      sendPushToUser(u.id, {
+        title: `${authorName} mentioned you`,
+        body: snippet,
+        url: link,
+        icon: '/icon-192.png'
+      }).catch(err => console.error('[hr review comment] push failed:', err.message));
+    }
+
+    req.flash('success', mentionedUsers.length
+      ? `Comment added and ${mentionedUsers.length} teammate(s) notified.`
+      : 'Comment added.');
+  } catch (e) {
+    console.error('[hr] add review comment failed:', e.message);
+    req.flash('error', 'Could not save comment.');
+  }
+  res.redirect(`/hr/employees/${review.employee_id}#reviews`);
+});
+
+// POST /hr/reviews/comments/:id/delete — remove a comment. Limited to
+// the original author and admin/management roles.
+router.post('/reviews/comments/:id/delete', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT c.id, c.created_by_id, r.employee_id
+    FROM employee_review_comments c
+    JOIN employee_reviews r ON r.id = c.review_id
+    WHERE c.id = ?
+  `).get(req.params.id);
+  if (!row) { req.flash('error', 'Comment not found.'); return res.redirect('back'); }
+
+  const u = req.session.user;
+  const isOwner = u && u.id === row.created_by_id;
+  const isPrivileged = u && ['admin', 'management'].includes((u.role || '').toLowerCase());
+  if (!isOwner && !isPrivileged) {
+    req.flash('error', "You can only delete your own comments.");
+    return res.redirect(`/hr/employees/${row.employee_id}#reviews`);
+  }
+
+  db.prepare('DELETE FROM employee_review_comments WHERE id = ?').run(row.id);
+  req.flash('success', 'Comment removed.');
   res.redirect(`/hr/employees/${row.employee_id}#reviews`);
 });
 

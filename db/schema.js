@@ -10359,11 +10359,16 @@ function runMigrations(db) {
   }
 
   // =============================================
-  // Migration 225: employee_reviews — notes + full performance reviews
+  // Migration 231: employee_reviews — notes + full performance reviews
   // attached to an employee, with optional worker-portal visibility.
+  // NOTE: originally gated on version 225, but version 225 was already
+  // claimed by the FY26 Wage Panel migration on existing databases, so
+  // this block silently skipped on every fresh deploy. Renumbered to
+  // 231 — CREATE TABLE IF NOT EXISTS keeps it idempotent on DBs where
+  // the table happened to be created under an earlier history.
   // =============================================
-  if (!isMigrationApplied.get(225)) {
-    console.log('Running migration 225: employee_reviews');
+  if (!isMigrationApplied.get(231)) {
+    console.log('Running migration 231: employee_reviews');
     try {
       db.exec(`
         CREATE TABLE IF NOT EXISTS employee_reviews (
@@ -10384,10 +10389,10 @@ function runMigrations(db) {
       `);
       db.exec('CREATE INDEX IF NOT EXISTS idx_employee_reviews_employee ON employee_reviews(employee_id);');
       db.exec('CREATE INDEX IF NOT EXISTS idx_employee_reviews_visibility ON employee_reviews(visibility);');
-      recordMigration.run(225, 'employee_reviews');
-      console.log('Migration 225 applied: employee_reviews table ready');
+      recordMigration.run(231, 'employee_reviews');
+      console.log('Migration 231 applied: employee_reviews table ready');
     } catch (e) {
-      console.error('Migration 225 error:', e.message);
+      console.error('Migration 231 error:', e.message);
     }
   }
 
@@ -10622,6 +10627,33 @@ function runMigrations(db) {
       console.log('Migration 229 applied');
     } catch (e) {
       console.error('Migration 229 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 230: employee_review_comments — HR-internal discussion
+  // thread under each note / performance review. Always internal: the
+  // worker never sees comments even when the parent review is shared.
+  // @username mentions in `body` fan out to in-app + push notifications.
+  // =============================================
+  if (!isMigrationApplied.get(230)) {
+    console.log('Running migration 230: employee_review_comments');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS employee_review_comments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          review_id INTEGER NOT NULL REFERENCES employee_reviews(id) ON DELETE CASCADE,
+          body TEXT NOT NULL,
+          mentioned_user_ids TEXT,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_review_comments_review ON employee_review_comments(review_id);');
+      recordMigration.run(230, 'employee_review_comments');
+      console.log('Migration 230 applied: employee_review_comments table ready');
+    } catch (e) {
+      console.error('Migration 230 error:', e.message);
     }
   }
 
