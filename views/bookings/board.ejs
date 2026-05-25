@@ -345,21 +345,26 @@
 <!-- ============================================================
      QUICK BOOK SLIDE-OVER  —  CREATE ONLY (the only mode that
      uses a slide-over; view always goes to /bookings/:id full page).
-     Inline styles below force the closed state regardless of CSS
-     load order or stale `bk2-open` classes — only adding the
-     `bk2-open` class via JS can show it.
+     Hard-disabled via display:none + hidden attribute. The previous
+     transform-only approach left the element in the layout, so any
+     CSS load failure or selector shadowing brought it back on-
+     screen. Now nothing renders until openQB() explicitly sets
+     display:flex.
      ============================================================ -->
-<div class="bk2-backdrop" id="bk2-backdrop" style="opacity:0;pointer-events:none"></div>
+<div class="bk2-backdrop" id="bk2-backdrop" hidden style="display:none"></div>
 <aside class="bk2-slideover" id="bk2-slideover" role="dialog" aria-modal="true" aria-labelledby="bk2-so-title"
-       style="transform:translateX(100%)"
+       hidden style="display:none"
        aria-hidden="true">
   <header class="bk2-slideover-head">
     <div style="min-width:0">
       <h2 class="bk2-slideover-title" id="bk2-so-title">New booking</h2>
       <p class="bk2-slideover-sub">Quick Book — 6 fields. Save creates a draft.</p>
     </div>
-    <button type="button" class="bk2-slideover-close" id="bk2-so-close" aria-label="Close">
-      <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    <button type="button" class="bk2-slideover-close" id="bk2-so-close" aria-label="Close" data-bk2-close>
+      <!-- pointer-events:none on the SVG so the click always lands on
+           the button itself, never on the inner SVG path (which broke
+           the delegated [data-bk2-close] match on older Safari). -->
+      <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="pointer-events:none"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   </header>
 
@@ -502,37 +507,59 @@
   var backdrop = $('#bk2-backdrop');
   var qbForm = $('#bk2-qb-form');
 
+  // Nuclear close: the panel is display:none in markup, so it CAN'T
+  // render unless openQB() explicitly flips it. No reliance on CSS
+  // transforms surviving load order, stale stylesheets, or specificity
+  // games.
+  var soCloseTimer = null;
   function closeQB() {
     if (!so) return;
     so.classList.remove('bk2-open');
     if (backdrop) backdrop.classList.remove('bk2-open');
-    // Re-apply the inline-style guard so future bfcache / SW restores
-    // can't render this open by accident.
-    so.style.transform = 'translateX(100%)';
     so.setAttribute('aria-hidden', 'true');
-    if (backdrop) { backdrop.style.opacity = '0'; backdrop.style.pointerEvents = 'none'; }
+    // Let the slide-out transition play, then truly hide.
+    if (soCloseTimer) clearTimeout(soCloseTimer);
+    soCloseTimer = setTimeout(function () {
+      so.style.display = 'none';
+      so.hidden = true;
+      if (backdrop) { backdrop.style.display = 'none'; backdrop.hidden = true; }
+      soCloseTimer = null;
+    }, 240);
   }
   function openQB() {
     if (!so) return;
+    if (soCloseTimer) { clearTimeout(soCloseTimer); soCloseTimer = null; }
     if (qbForm) qbForm.reset();
-    // Clear the inline guard so the CSS `bk2-open` transform wins.
-    so.style.transform = '';
+    so.hidden = false;
+    so.style.display = 'flex';
     so.setAttribute('aria-hidden', 'false');
+    if (backdrop) { backdrop.hidden = false; backdrop.style.display = 'block'; }
+    // Force a reflow so the bk2-open class change triggers a transition
+    // from the just-flipped display state.
+    void so.offsetWidth;
     so.classList.add('bk2-open');
-    if (backdrop) {
-      backdrop.style.opacity = '';
-      backdrop.style.pointerEvents = '';
-      backdrop.classList.add('bk2-open');
-    }
+    if (backdrop) backdrop.classList.add('bk2-open');
     setTimeout(function () { var first = so.querySelector('input[name="client_name"]'); if (first) first.focus(); }, 80);
   }
 
-  // Force-closed on every entry point: initial run, pageshow (covers
-  // BFCache), load (covers CSS-still-loading races), and the
-  // visibility change you get when returning to the tab.
-  closeQB();
-  window.addEventListener('pageshow', closeQB);
-  window.addEventListener('load', closeQB);
+  // Force-closed at every lifecycle moment we can hook into so a
+  // stuck-open render from any path (bfcache, SW restore, dev hot
+  // reload) is overridden.
+  function hardClose() {
+    if (!so) return;
+    so.classList.remove('bk2-open');
+    so.style.display = 'none';
+    so.hidden = true;
+    so.setAttribute('aria-hidden', 'true');
+    if (backdrop) {
+      backdrop.classList.remove('bk2-open');
+      backdrop.style.display = 'none';
+      backdrop.hidden = true;
+    }
+  }
+  hardClose();
+  window.addEventListener('pageshow', hardClose);
+  window.addEventListener('load', hardClose);
 
   // Document-level delegation for the close affordances. Survives any
   // later script error that might break the direct-listener wireup,

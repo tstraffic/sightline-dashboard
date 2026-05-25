@@ -1,5 +1,5 @@
 // Atomis Admin Service Worker — Network-first with offline fallback
-const CACHE_NAME = 'atomis-admin-v3-bookings-rebuild';
+const CACHE_NAME = 'atomis-admin-v4-quickbook-hardclose';
 const OFFLINE_URL = '/offline.html';
 
 // Assets to pre-cache
