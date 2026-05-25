@@ -401,6 +401,8 @@
   const SECTION_BUCKETS = {
     cash:         ['day_normal', 'night_normal'],
     tfn:          BUCKET_KEYS,
+    // ABN sits between cash and TFN — single Sat rate (no ≤2h split),
+    // no DT, no PH penalty. Order matches the PDF columns.
     abn:          ['day_normal', 'day_ot', 'night_normal', 'night_ot', 'weekend'],
     '':           BUCKET_KEYS, // unclassified shows all
   };

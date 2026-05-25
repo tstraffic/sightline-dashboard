@@ -28,7 +28,7 @@
   // Upcoming shifts are the single most important thing on this page —
   // lift them to right after Today's shift so workers see what's next
   // without scrolling. Compliance + actions slot in below.
-  const defaultOrder = ['hero','birthdays','manager','today','upcoming','weather','compliance','safety','actions','week','jobpack','timeline','cards','streaks','activity'];
+  const defaultOrder = ['hero','birthdays','manager','today','upcoming','weather','compliance','rate','safety','actions','week','jobpack','timeline','cards','streaks','activity'];
   // Weather was previously buried near the bottom and a few users hid it
   // via Customise Home before realising it covered their next site.
   // Force it back into view: lift in the default order AND scrub it out
@@ -751,6 +751,70 @@
       <% }) %>
     </div>
   <% } %>
+<% } %>
+
+<%
+  // "Your rate" teaser — compact card linking to /w/hr where the full
+  // breakdown lives. Renders when the worker has either an assigned
+  // tier OR an active Night 5+ run (so unconfigured workers don't see
+  // an empty card, but workers in the middle of a 5+ run see the
+  // callout even if their tier hasn't been set yet).
+%>
+<% if (section === 'rate' && !hidden.includes('rate') && (typeof employee !== 'undefined' && employee) && (employee.tier || (typeof nightRunActive !== 'undefined' && nightRunActive))) {
+  const pt = (employee.payment_type || '').toLowerCase();
+  const PT_LABEL = { cash: 'Cash', abn: 'ABN', tfn: 'TFN / Award' };
+  // Pick the most relevant headline rate per payment type.
+  const headlineRate = parseFloat(employee.rate_day) || 0;
+  const fmtRD = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+%>
+  <a href="/w/hr" class="wh-rate-card" style="
+    display: block; text-decoration: none; margin-top: 12px;
+    padding: 14px 16px; border-radius: 16px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    transition: background 120ms ease;
+  ">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="width: 38px; height: 38px; border-radius: 12px;
+                  background: linear-gradient(135deg, #2B7FFF, #1D6AE5);
+                  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+                  box-shadow: 0 4px 10px rgba(43,127,255,0.35);">
+        <svg style="width: 18px; height: 18px; color: white;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <p style="font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin: 0;">Your rate</p>
+        <% if (employee.tier && typeof tierMeta !== 'undefined' && tierMeta) { %>
+          <p style="font-size: 0.95rem; font-weight: 700; color: white; margin: 2px 0 0;">Tier <%= employee.tier %> · <%= tierMeta.role_label %></p>
+          <p style="font-size: 0.72rem; color: rgba(255,255,255,0.55); margin: 2px 0 0;">
+            <% if (pt) { %><%= PT_LABEL[pt] || pt.toUpperCase() %><% } %>
+            <% if (headlineRate > 0) { %> · $<%= headlineRate.toFixed(2) %>/hr base<% } %>
+          </p>
+        <% } else { %>
+          <p style="font-size: 0.95rem; font-weight: 700; color: white; margin: 2px 0 0;">Tap to see your pay rates</p>
+          <p style="font-size: 0.72rem; color: rgba(255,255,255,0.55); margin: 2px 0 0;">No tier assigned yet — speak to your supervisor.</p>
+        <% } %>
+      </div>
+      <svg style="width: 16px; height: 16px; color: rgba(255,255,255,0.4); flex-shrink: 0;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+      </svg>
+    </div>
+
+    <% if (typeof nightRunActive !== 'undefined' && nightRunActive) { %>
+      <div style="margin-top: 10px; padding: 8px 10px; border-radius: 10px;
+                  background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3);
+                  display: flex; align-items: flex-start; gap: 8px;">
+        <svg style="width: 14px; height: 14px; color: #FBBF24; flex-shrink: 0; margin-top: 1px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+        <p style="font-size: 0.72rem; color: #FBBF24; margin: 0; line-height: 1.35;">
+          <strong style="font-weight: 700;">Night 5+ active</strong> ·
+          <%= nightRunActive.length %> nights in a row (<%= fmtRD(nightRunActive.start_date) %>–<%= fmtRD(nightRunActive.end_date) %>) being paid at the lower 5+ rate.
+        </p>
+      </div>
+    <% } %>
+  </a>
 <% } %>
 
 <% if (section === 'manager' && typeof isManager !== 'undefined' && isManager) { %>

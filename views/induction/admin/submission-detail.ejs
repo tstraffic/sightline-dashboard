@@ -529,93 +529,117 @@
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"></textarea>
       </div>
 
-      <!-- Pay rates — saved to the new employee record. Set per their payment_type. -->
+      <!--
+        Tier + payment type — drives the rate stamp on the new employee.
+        The full FY26 panel lives at /payroll/wage-tiers; here the
+        approver picks one of the six tiers and the matching preset is
+        stamped onto the new employee's rate_* columns automatically.
+      -->
       <%
-        const pt = (s.payment_type || '').toLowerCase();
-        const showAll = pt === 'tfn';
-        const showAbnExtra = pt === 'abn';
+        const submittedPt = (s.payment_type || '').toLowerCase();
       %>
-      <div class="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200">
-        <div class="flex items-center justify-between mb-2">
-          <p class="text-xs font-bold text-gray-700 uppercase tracking-widest">Pay rates (<%= pt ? pt.toUpperCase() : 'Unclassified' %>)</p>
-          <% if (pt === 'tfn') { %>
-            <select name="award_classification_id" class="text-xs px-2 py-1 border border-gray-300 rounded bg-white" data-rate-prefill="1">
-              <option value="">— Award class (auto-fill) —</option>
-              <% (typeof awardClassifications !== 'undefined' ? awardClassifications : []).forEach(c => { %>
-                <option value="<%= c.id %>"><%= c.classification %></option>
-              <% }) %>
-            </select>
-          <% } %>
+      <div class="mb-4 p-3 rounded-lg bg-gray-50 border border-gray-200 space-y-3">
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-xs font-bold text-gray-700 uppercase tracking-widest">Engagement</p>
+          <a href="/payroll/wage-tiers" target="_blank" class="text-[10px] text-brand-600 hover:underline">View wage panel →</a>
         </div>
-        <p class="text-[10px] text-gray-500 mb-2">These flow to the worker's Worker Rates entry and pull into pay runs at import time. Override per pay run anytime.</p>
         <div class="grid grid-cols-2 gap-2">
-          <label class="text-[10px] text-gray-600">Day rate
-            <input type="number" step="0.01" min="0" name="rate_day" data-rate-key="rate_day"
-              class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
+          <label class="text-[10px] text-gray-600 block">Payment type
+            <select name="payment_type" id="approvePaymentType" required
+              class="w-full px-2 py-1.5 mt-1 border border-gray-300 rounded text-sm bg-white">
+              <option value="cash" <%= submittedPt === 'cash' ? 'selected' : '' %>>Cash</option>
+              <option value="abn"  <%= submittedPt === 'abn'  ? 'selected' : '' %>>ABN</option>
+              <option value="tfn"  <%= submittedPt === 'tfn'  ? 'selected' : '' %>>TFN / Award</option>
+            </select>
           </label>
-          <label class="text-[10px] text-gray-600">Night rate
-            <input type="number" step="0.01" min="0" name="rate_night" data-rate-key="rate_night"
-              class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
+          <label class="text-[10px] text-gray-600 block">Tier (1–6)
+            <select name="tier" id="approveTier" required
+              class="w-full px-2 py-1.5 mt-1 border border-gray-300 rounded text-sm bg-white">
+              <option value="">— Select tier —</option>
+              <option value="1">Tier 1 · Trainee TC</option>
+              <option value="2" selected>Tier 2 · Traffic Controller</option>
+              <option value="3">Tier 3 · Advanced TC / TMA</option>
+              <option value="4">Tier 4 · Team Leader</option>
+              <option value="5">Tier 5 · Senior Team Leader</option>
+              <option value="6">Tier 6 · Site Supervisor</option>
+            </select>
           </label>
-          <% if (showAll || showAbnExtra) { %>
-            <label class="text-[10px] text-gray-600">Day OT
-              <input type="number" step="0.01" min="0" name="rate_ot" data-rate-key="rate_ot"
-                class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
-            </label>
-            <label class="text-[10px] text-gray-600">Night OT
-              <input type="number" step="0.01" min="0" name="rate_night_ot" data-rate-key="rate_night_ot"
-                class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
-            </label>
-            <label class="text-[10px] text-gray-600">Weekend
-              <input type="number" step="0.01" min="0" name="rate_weekend" data-rate-key="rate_weekend"
-                class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
-            </label>
-          <% } %>
-          <% if (showAll) { %>
-            <label class="text-[10px] text-gray-600">Day DT
-              <input type="number" step="0.01" min="0" name="rate_dt" data-rate-key="rate_dt"
-                class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
-            </label>
-            <label class="text-[10px] text-gray-600">Night DT
-              <input type="number" step="0.01" min="0" name="rate_night_dt" data-rate-key="rate_night_dt"
-                class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
-            </label>
-            <label class="text-[10px] text-gray-600">Public holiday
-              <input type="number" step="0.01" min="0" name="rate_public_holiday" data-rate-key="rate_public_holiday"
-                class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
-            </label>
-          <% } %>
-          <label class="text-[10px] text-gray-600">Meal allowance ($/shift)
-            <input type="number" step="0.01" min="0" name="rate_meal" data-rate-key="rate_meal"
-              class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
-          </label>
-          <label class="text-[10px] text-gray-600">Travel allowance ($/day)
-            <input type="number" step="0.01" min="0" name="rate_fares_daily" data-rate-key="rate_fares_daily"
-              class="rate-cell w-full px-2 py-1 border border-gray-300 rounded text-sm tabular-nums" placeholder="0.00">
+          <label id="approveNightPatternLabel" class="text-[10px] text-gray-600 block col-span-2">
+            Night roster (TFN only)
+            <select name="night_pattern" id="approveNightPattern"
+              class="w-full px-2 py-1.5 mt-1 border border-gray-300 rounded text-sm bg-white">
+              <option value="occasional" selected>Night &lt;5 (default — occasional / &lt;5 in a row)</option>
+              <option value="permanent">Night Perm. (permanent night roster)</option>
+              <option value="continuous_5plus">Night 5+ (rostered continuous 5+ in a row)</option>
+            </select>
           </label>
         </div>
+        <div id="approvePreview" class="rounded-md bg-white border border-gray-200 p-2.5 text-[11px] text-gray-600 space-y-1 hidden">
+          <div class="flex items-center justify-between">
+            <span class="font-semibold text-gray-700" id="approvePreviewRole">—</span>
+            <span class="text-gray-400 font-mono" id="approvePreviewAward">—</span>
+          </div>
+          <div id="approvePreviewRates" class="text-gray-500 tabular-nums">—</div>
+          <div id="approvePreviewQuals" class="text-[10px] text-gray-400">—</div>
+        </div>
+        <p class="text-[10px] text-gray-500">
+          Tier 2 is the default for new workers per the panel's operational rules. Rates will be stamped from the FY26 panel onto the new employee; edit per pay run anytime.
+        </p>
       </div>
 
       <script>
-        // When the award_classification_id select changes, fetch the
-        // classification's rates and prefill the inputs.
         (function () {
-          const sel = document.querySelector('select[data-rate-prefill]');
-          if (!sel) return;
-          sel.addEventListener('change', async (e) => {
-            const id = e.target.value;
-            if (!id) return;
+          const ptSel = document.getElementById('approvePaymentType');
+          const tierSel = document.getElementById('approveTier');
+          const npSel = document.getElementById('approveNightPattern');
+          const npLabel = document.getElementById('approveNightPatternLabel');
+          const box = document.getElementById('approvePreview');
+          const roleEl = document.getElementById('approvePreviewRole');
+          const awardEl = document.getElementById('approvePreviewAward');
+          const ratesEl = document.getElementById('approvePreviewRates');
+          const qualsEl = document.getElementById('approvePreviewQuals');
+          if (!ptSel || !tierSel) return;
+          function syncNpVisibility() {
+            // The night pattern picker only matters for TFN — Cash/ABN
+            // have a single night rate. Hide rather than disable so the
+            // form still submits a sane default value.
+            if (!npLabel) return;
+            if (ptSel.value === 'tfn') npLabel.classList.remove('hidden');
+            else npLabel.classList.add('hidden');
+          }
+          async function refresh() {
+            syncNpVisibility();
+            const tier = tierSel.value;
+            const pt = ptSel.value;
+            const np = (npSel && npSel.value) || 'occasional';
+            if (!tier || !pt) { box.classList.add('hidden'); return; }
             try {
-              const r = await fetch('/payroll/award-classifications/' + id + '.json', { headers: { 'Accept': 'application/json' } });
-              if (!r.ok) return;
+              const r = await fetch('/payroll/wage-tiers/preset.json?tier=' + encodeURIComponent(tier) + '&payment_type=' + encodeURIComponent(pt) + '&night_pattern=' + encodeURIComponent(np), { headers: { Accept: 'application/json' } });
+              if (!r.ok) { box.classList.add('hidden'); return; }
               const data = await r.json();
-              if (!data || !data.rates) return;
-              Object.entries(data.rates).forEach(([k, v]) => {
-                const inp = document.querySelector('input[data-rate-key="' + k + '"]');
-                if (inp && v != null) inp.value = (parseFloat(v) || 0).toFixed(2);
-              });
-            } catch (err) { console.error(err); }
-          });
+              const p = data.preset || {};
+              const rates = data.rates || {};
+              const fmt = v => '$' + (parseFloat(v) || 0).toFixed(2);
+              roleEl.textContent = p.role_label || (data.meta && data.meta.role_label) || '—';
+              awardEl.textContent = p.award_mapping || (data.meta && data.meta.award_mapping) || '';
+              qualsEl.textContent = p.qualifications || (data.meta && data.meta.qualifications) || '';
+              const parts = [];
+              parts.push('Day ' + fmt(rates.rate_day));
+              if (rates.rate_night)  parts.push('Night ' + fmt(rates.rate_night));
+              if (rates.rate_night_5plus) parts.push('Night 5+ ' + fmt(rates.rate_night_5plus));
+              if (rates.rate_weekend) parts.push('Sat ' + fmt(rates.rate_weekend));
+              if (rates.rate_public_holiday) parts.push('PH ' + fmt(rates.rate_public_holiday));
+              if (rates.rate_fares_daily) parts.push('Travel ' + fmt(rates.rate_fares_daily));
+              ratesEl.textContent = parts.join(' · ');
+              box.classList.remove('hidden');
+            } catch (e) {
+              box.classList.add('hidden');
+            }
+          }
+          ptSel.addEventListener('change', refresh);
+          tierSel.addEventListener('change', refresh);
+          if (npSel) npSel.addEventListener('change', refresh);
+          refresh();
         })();
       </script>
 

@@ -382,11 +382,46 @@ router.get('/home', async (req, res) => {
     enrichTodaysShifts(db, todaysShifts, { workerId: worker.id, today, now: new Date() });
   } catch (e) { console.error('[home] briefing enrich failed:', e.message); }
 
+  // Resolve wage-panel context for the dash "Your rate" teaser card.
+  // tierMeta gives role + qualifications; nightRunActive lights up
+  // the Night-5+ callout when the engine has detected a 5+ Mon–Fri
+  // night run in the worker's last 14 days of allocations.
+  let tierMeta = null;
+  let nightRunActive = null;
+  if (employee) {
+    if (employee.tier) {
+      const { tierMeta: getTierMeta } = require('../../lib/wageTiers');
+      tierMeta = getTierMeta(employee.tier);
+    }
+    if (parseFloat(employee.rate_night_5plus) > 0) {
+      try {
+        const start = new Date(today + 'T00:00:00');
+        start.setDate(start.getDate() - 14);
+        const startIso = start.toISOString().slice(0, 10);
+        const allocs = db.prepare(`
+          SELECT allocation_date, shift_type FROM crew_allocations
+          WHERE crew_member_id = ?
+            AND allocation_date BETWEEN ? AND ?
+            AND status != 'cancelled'
+          ORDER BY allocation_date ASC
+        `).all(worker.id, startIso, today);
+        const shifts = allocs.map(a => ({
+          date: a.allocation_date,
+          night: String(a.shift_type || '').toLowerCase() === 'night',
+        }));
+        const { findNightRuns } = require('../../lib/payroll');
+        const runs = findNightRuns(shifts);
+        if (runs.length) nightRunActive = runs[runs.length - 1];
+      } catch (e) { /* detector is purely informational — never block the dash */ }
+    }
+  }
+
   res.render('worker/home', {
     title: 'Home', currentPage: 'home',
     greeting, firstName, subtext,
     todaysShifts, upcomingShifts, weekDays, stats, onShift,
     recentClocks, compliance, member, employee, today,
+    tierMeta, nightRunActive,
     cards, streaks, prefs, timeline, weather, jobPackNudge,
     safetyCounts,
     myBirthdayRow, otherBirthdays, myBirthdayMessages,

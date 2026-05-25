@@ -1564,9 +1564,10 @@ router.get('/rates', requirePermission('payroll'), (req, res) => {
     const db = getDb();
     const empCols = new Set(db.prepare("PRAGMA table_info(employees)").all().map(c => c.name));
     const WANT = ['id', 'employee_code', 'full_name', 'payment_type',
+      'tier', 'night_pattern',
       'rate_day', 'rate_ot', 'rate_dt',
-      'rate_night', 'rate_night_ot', 'rate_night_dt',
-      'rate_weekend', 'rate_public_holiday',
+      'rate_night', 'rate_night_ot', 'rate_night_dt', 'rate_night_5plus',
+      'rate_weekend', 'rate_weekend_short', 'rate_public_holiday',
       'rate_meal', 'rate_fares_daily',
       'payroll_bsb', 'payroll_account',
       'award_classification_id'];
@@ -1637,6 +1638,8 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
     const empCols = new Set(db.prepare("PRAGMA table_info(employees)").all().map(c => c.name));
     const FIELDS = [
       { col: 'payment_type',            kind: 'pt'    },
+      { col: 'tier',                    kind: 'tier'  },
+      { col: 'night_pattern',           kind: 'np'    },
       { col: 'award_classification_id', kind: 'cid'   },
       { col: 'rate_day',                kind: 'num'   },
       { col: 'rate_ot',                 kind: 'num'   },
@@ -1644,7 +1647,9 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
       { col: 'rate_night',              kind: 'num'   },
       { col: 'rate_night_ot',           kind: 'num'   },
       { col: 'rate_night_dt',           kind: 'num'   },
+      { col: 'rate_night_5plus',        kind: 'num'   },
       { col: 'rate_weekend',            kind: 'num'   },
+      { col: 'rate_weekend_short',      kind: 'num'   },
       { col: 'rate_public_holiday',     kind: 'num'   },
       { col: 'rate_meal',               kind: 'num'   },
       { col: 'rate_fares_daily',        kind: 'num'   },
@@ -1688,6 +1693,14 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
             const cid = parseInt(r.award_classification_id, 10);
             return Number.isFinite(cid) && validClassIds.has(cid) ? cid : null;
           }
+          if (f.kind === 'tier') {
+            const t = parseInt(r.tier, 10);
+            return Number.isFinite(t) && t >= 1 && t <= 6 ? t : null;
+          }
+          if (f.kind === 'np') {
+            const np = String(r.night_pattern || 'occasional').toLowerCase();
+            return ['occasional', 'permanent', 'continuous_5plus'].includes(np) ? np : 'occasional';
+          }
           if (f.kind === 'num') return toNum(r[f.col]);
           if (f.kind === 'str') return String(r[f.col] || '').trim();
           return null;
@@ -1722,6 +1735,173 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
     console.error('[payroll/rates] Unhandled error:', err);
     req.flash('error', 'Save failed: ' + (err && err.message ? err.message : 'unknown error') + '. Check the server log.');
     return res.redirect('/payroll/rates');
+  }
+});
+
+// ============================================================================
+// /payroll/wage-tiers — FY26 Internal Wage Panel.
+//
+//   The six-tier framework (Trainee TC → Site Supervisor) is the canonical
+//   source for what a worker on a given payment type gets paid. Each (tier ×
+//   payment_type) row in wage_tier_presets stores the full PDF rate card.
+//   The Allowances tab holds the global allowance table (fares, meal, first
+//   aid, leading hand %, km rates, industry).
+//
+//   Phase 1: this admin page lets management edit the panel directly. Phase
+//   2 will wire tier selection into the Approve modal + employee profile
+//   and have the pay-run engine read from these presets.
+// ============================================================================
+router.get('/wage-tiers', requirePermission('payroll'), (req, res) => {
+  try {
+    const db = getDb();
+    const presets = db.prepare(`
+      SELECT * FROM wage_tier_presets
+      WHERE active = 1
+      ORDER BY payment_type, tier ASC
+    `).all();
+    const allowances = db.prepare(`
+      SELECT * FROM award_allowances
+      WHERE active = 1
+      ORDER BY display_order ASC, id ASC
+    `).all();
+
+    // Group presets by payment_type for clean tab rendering
+    const byType = { cash: [], abn: [], tfn: [] };
+    for (const p of presets) {
+      if (byType[p.payment_type]) byType[p.payment_type].push(p);
+    }
+
+    res.render('payroll-runs/wage-tiers', {
+      title: 'Wage Tiers',
+      currentPage: 'pay-runs',
+      byType,
+      allowances,
+    });
+  } catch (err) {
+    console.error('[payroll/wage-tiers GET]', err);
+    req.flash('error', 'Could not load Wage Tiers: ' + (err && err.message || 'unknown error'));
+    return res.redirect('/payroll/runs');
+  }
+});
+
+// POST /payroll/wage-tiers — bulk update tier rates + allowances.
+//
+//   Body shape:
+//     presets[<id>][rate_day]            = number
+//     presets[<id>][rate_sat_short]      = number
+//     ... etc (per the tab's visible columns)
+//     allowances[<id>][amount]           = number
+//
+//   Schema-aware-ish: only writes columns we know exist on wage_tier_presets.
+//   Per-row try/catch so one bad row doesn't tank the whole save.
+router.post('/wage-tiers', requirePermission('payroll'), (req, res) => {
+  try {
+    const db = getDb();
+    const presetData = req.body && req.body.presets;
+    const allowanceData = req.body && req.body.allowances;
+
+    const PRESET_COLS = [
+      'rate_day', 'rate_sat_short', 'rate_sat_long',
+      'rate_sun', 'rate_public_holiday',
+      'rate_night', 'rate_night_perm', 'rate_night_5plus',
+      'travel_allowance',
+    ];
+    const setClause = PRESET_COLS.map(c => `${c} = ?`).join(', ') + ', updated_at = CURRENT_TIMESTAMP';
+    const updatePreset = db.prepare(`UPDATE wage_tier_presets SET ${setClause} WHERE id = ?`);
+    const updateAllowance = db.prepare(`UPDATE award_allowances SET amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
+
+    let presetSaved = 0, allowanceSaved = 0;
+    const failures = [];
+
+    // IDs are namespaced with `p_` / `a_` prefixes to dodge qs's array-
+    // compaction behaviour on numeric bracket keys (the same trap the
+    // /payroll/rates route works around with `emp_`). Without the prefix
+    // qs reindexes presets[1..18] into a 0-based array and the POST
+    // handler ends up writing each row's data to the *previous* DB id.
+    if (presetData && typeof presetData === 'object') {
+      for (const key of Object.keys(presetData)) {
+        const presetId = parseInt(String(key).replace(/^p_/, ''), 10);
+        if (!presetId) continue;
+        const r = presetData[key];
+        if (!r || typeof r !== 'object') continue;
+        try {
+          const values = PRESET_COLS.map(c => {
+            const n = parseFloat(r[c]);
+            return Number.isFinite(n) && n >= 0 ? n : 0;
+          });
+          updatePreset.run(...values, presetId);
+          presetSaved++;
+        } catch (e) {
+          console.error(`[payroll/wage-tiers] preset ${presetId} failed:`, e.message);
+          failures.push(`preset #${presetId}`);
+        }
+      }
+    }
+
+    if (allowanceData && typeof allowanceData === 'object') {
+      for (const key of Object.keys(allowanceData)) {
+        const allowId = parseInt(String(key).replace(/^a_/, ''), 10);
+        if (!allowId) continue;
+        const r = allowanceData[key];
+        if (!r || typeof r !== 'object') continue;
+        try {
+          const n = parseFloat(r.amount);
+          updateAllowance.run(Number.isFinite(n) && n >= 0 ? n : 0, allowId);
+          allowanceSaved++;
+        } catch (e) {
+          console.error(`[payroll/wage-tiers] allowance ${allowId} failed:`, e.message);
+          failures.push(`allowance #${allowId}`);
+        }
+      }
+    }
+
+    try {
+      logActivity({
+        user: req.session.user, action: 'update', entityType: 'wage_tier_presets',
+        entityLabel: 'wage panel',
+        details: `Updated ${presetSaved} tier preset(s) and ${allowanceSaved} allowance(s)${failures.length ? ` (failed: ${failures.join(', ')})` : ''}`,
+        ip: req.ip,
+      });
+    } catch (e) { /* audit shouldn't block save */ }
+
+    if (failures.length === 0) {
+      req.flash('success', `Saved ${presetSaved} tier preset${presetSaved === 1 ? '' : 's'} and ${allowanceSaved} allowance${allowanceSaved === 1 ? '' : 's'}.`);
+    } else {
+      req.flash('error', `Saved ${presetSaved + allowanceSaved} row(s), ${failures.length} failed: ${failures.slice(0, 3).join(', ')}${failures.length > 3 ? '…' : ''}.`);
+    }
+    return res.redirect('/payroll/wage-tiers');
+  } catch (err) {
+    console.error('[payroll/wage-tiers POST]', err);
+    req.flash('error', 'Save failed: ' + (err && err.message || 'unknown error'));
+    return res.redirect('/payroll/wage-tiers');
+  }
+});
+
+// GET /payroll/wage-tiers/preset.json — feeds the live preview in the
+// Approve modal + the Worker Rates tier dropdown. Returns the preset
+// row plus the resolved employee-shape rates so the modal can show
+// "Day $X · Night $X · Travel $X" without recomputing client-side.
+router.get('/wage-tiers/preset.json', requirePermission('payroll'), (req, res) => {
+  try {
+    const db = getDb();
+    const { getPreset, getAllowance, mapPresetToEmployeeRates, tierMeta, NIGHT_PATTERNS } = require('../lib/wageTiers');
+    const tier = parseInt(req.query.tier, 10);
+    const paymentType = String(req.query.payment_type || '').toLowerCase();
+    const nightPattern = NIGHT_PATTERNS.includes(String(req.query.night_pattern || '').toLowerCase())
+      ? String(req.query.night_pattern).toLowerCase()
+      : 'occasional';
+    const preset = getPreset(db, tier, paymentType);
+    if (!preset) return res.status(404).json({ error: 'No preset for (tier, payment_type).' });
+    const fares = getAllowance(db, 'fares_daily');
+    const meal  = getAllowance(db, 'meal');
+    const rates = mapPresetToEmployeeRates(preset, paymentType, {
+      fares: fares ? fares.amount : 0,
+      meal:  meal  ? meal.amount  : 0,
+    }, { nightPattern });
+    res.json({ preset, rates, meta: tierMeta(tier), nightPattern });
+  } catch (e) {
+    console.error('[payroll/wage-tiers/preset.json]', e);
+    res.status(500).json({ error: e.message });
   }
 });
 
