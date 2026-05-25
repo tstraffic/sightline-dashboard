@@ -67,15 +67,28 @@ router.get('/', (req, res) => {
     return nearest;
   }
 
-  // Compute compliance status for each + enrich with extra data
+  // Compute compliance status for each + enrich with extra data.
+  // A crew member is "pending onboarding" if they have no PIN set (so
+  // they can't log into the worker portal yet) OR if their employee_id
+  // still carries the VOC-PENDING-* placeholder we drop in when the
+  // Quick Cert flow auto-creates a row for an unknown name. HR uses
+  // this to find rows that need finishing.
   const crewWithStatus = crew.map(m => {
     const nearestExpiry = getNearestExpiry(m);
+    const pendingOnboarding = m.active && (
+      !m.pin_hash ||
+      (m.employee_id && /^VOC-PENDING-/.test(m.employee_id))
+    );
     return {
       ...m,
       compliance: getComplianceStatusBatch(m, fatigueMap, today),
       activeJobs: allocCountMap[m.id] || 0,
       lastWorked: lastWorkedMap[m.id] || null,
       nearestExpiry,
+      pendingOnboarding,
+      // Specific quick-cert flag — useful for a tighter sub-filter and
+      // for showing a distinct chip in the view.
+      vocQuickCreated: !!(m.employee_id && /^VOC-PENDING-/.test(m.employee_id)),
     };
   });
 
@@ -94,6 +107,8 @@ router.get('/', (req, res) => {
     filtered = filtered.filter(c => c.compliance.fatigueBlocked);
   } else if (filter === 'expiring') {
     filtered = filtered.filter(c => c.active && c.nearestExpiry && c.nearestExpiry.date <= expiryThreshold);
+  } else if (filter === 'pending_onboarding') {
+    filtered = filtered.filter(c => c.pendingOnboarding);
   }
 
   // Apply role filter
@@ -131,6 +146,7 @@ router.get('/', (req, res) => {
   const complianceIssues = crewWithStatus.filter(c => c.active && (!c.compliance.allTicketsValid || !c.compliance.licenceValid || !c.compliance.inductionComplete)).length;
   const fatigueBlocked = crewWithStatus.filter(c => c.compliance.fatigueBlocked).length;
   const expiringSoon = crewWithStatus.filter(c => c.active && c.nearestExpiry && c.nearestExpiry.date <= expiryThreshold).length;
+  const pendingOnboardingCount = crewWithStatus.filter(c => c.pendingOnboarding).length;
 
   res.render('crew/index', {
     title: 'Workforce',
@@ -139,7 +155,7 @@ router.get('/', (req, res) => {
     filter,
     roleFilter,
     search: req.query.search || '',
-    stats: { totalActive, allocatable, complianceIssues, fatigueBlocked, expiringSoon },
+    stats: { totalActive, allocatable, complianceIssues, fatigueBlocked, expiringSoon, pendingOnboardingCount },
     today,
     sort,
     order,

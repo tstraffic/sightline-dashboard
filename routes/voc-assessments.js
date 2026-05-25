@@ -17,6 +17,23 @@ const QRCode = require('qrcode');
 const { getDb } = require('../db/database');
 const { normaliseRole } = require('../middleware/auth');
 const { renderVocCertificatePdf } = require('../lib/pdf/vocCertificatePdf');
+const { sendPushToCrew } = require('../services/pushNotification');
+
+// Fire a push to the crew member when a VOC certificate is issued for
+// them. Category 'voc_issued' is honoured by sendPushToCrew so workers
+// who muted it from /w/profile/notifications get nothing. Best-effort:
+// errors are logged but never block the HTTP response.
+function notifyWorkerOfVocIssued(crewMemberId, equipmentName, certId, validUntil) {
+  if (!crewMemberId || !certId) return;
+  const bodyTail = validUntil ? ` Valid until ${validUntil}.` : '';
+  sendPushToCrew(crewMemberId, {
+    title: 'New VOC issued: ' + (equipmentName || 'Equipment'),
+    body: 'Your certificate is ready to download in My Wallet.' + bodyTail,
+    url: '/w/hr/certs',
+    type: 'voc_issued',
+    category: 'voc_issued',
+  }).catch(err => console.error('[voc-issued push] crew', crewMemberId, ':', err.message));
+}
 
 const CERT_DIR = path.join(__dirname, '..', 'data', 'uploads', 'voc-certificates');
 function ensureCertDir() {
@@ -362,6 +379,12 @@ router.post('/quick', async (req, res) => {
       `).run(certId, fresh.id);
     }
 
+    // Push the worker a "your VOC is ready" notification. No-op for
+    // VOC-PENDING-* auto-created rows since they don't have a worker
+    // PIN / push subscription yet — sendPushToCrew returns
+    // {reason: 'no-subscriptions'} which is fine.
+    notifyWorkerOfVocIssued(crewId, fresh.template_name, certId, validUntil);
+
     // Stash redirect breadcrumbs so the form re-renders with a running
     // count and a download link for the cert that was just issued.
     req.session.quickVocCount = (req.session.quickVocCount || 0) + 1;
@@ -646,6 +669,7 @@ router.post('/:id/submit', async (req, res) => {
     if (outcome === 'competent') {
       const fresh = getAssessmentWithTemplate(db, existing.id);
       const certId = fresh.certificate_id || deriveCertId(fresh);
+      const isFirstIssue = !fresh.certificate_id;
       try {
         ensureCertDir();
         const pdfBuf = await renderVocCertificatePdf(fresh, certId, verifyUrlFor(certId));
@@ -669,6 +693,14 @@ router.post('/:id/submit', async (req, res) => {
           UPDATE voc_assessments SET certificate_id = ?, certificate_status = 'active'
           WHERE id = ? AND certificate_id IS NULL
         `).run(certId, fresh.id);
+      }
+      // Only push on the FIRST issue — re-saves of an already-competent
+      // assessment (e.g. fixing a typo in assessor comments) shouldn't
+      // re-notify. Also suppresses re-pushes for previously-revoked
+      // certs that are being reinstated — admins do that explicitly via
+      // /unrevoke, not the submit flow.
+      if (isFirstIssue) {
+        notifyWorkerOfVocIssued(fresh.crew_member_id, fresh.template_name, certId, validUntil);
       }
     }
 
