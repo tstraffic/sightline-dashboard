@@ -109,6 +109,121 @@ router.get('/', (req, res) => {
   });
 });
 
+// GET /induction/admin/recruitment/calendar — full-month induction calendar. Pulls
+// every applicant whose induction_date sits in a windowed range around
+// the chosen month so the leading/trailing week padding cells still
+// surface their bookings (the grid renders Mon-Sun rows that overflow
+// either side of the actual month).
+router.get('/calendar', (req, res) => {
+  const db = getDb();
+  const now = new Date();
+  const year  = parseInt(req.query.year,  10) || now.getFullYear();
+  const month = parseInt(req.query.month, 10) || (now.getMonth() + 1);
+
+  // Calendar grid: anchor to the Monday on/before the 1st of the month
+  // and run forward 6 weeks (42 cells) so the layout is always a clean
+  // rectangle. Some months span 5 visible weeks; we keep 6 for stable
+  // height — empty trailing cells get a muted style.
+  const first = new Date(Date.UTC(year, month - 1, 1));
+  const startDow = first.getUTCDay();           // 0 = Sun
+  const offsetToMon = startDow === 0 ? -6 : 1 - startDow;
+  const gridStart = new Date(first); gridStart.setUTCDate(gridStart.getUTCDate() + offsetToMon);
+  const gridEnd   = new Date(gridStart); gridEnd.setUTCDate(gridEnd.getUTCDate() + 41);
+  const gridStartIso = iso(gridStart);
+  const gridEndIso   = iso(gridEnd);
+
+  const applicants = db.prepare(`
+    SELECT id, applicant_name, phone, email, status, notes, induction_date,
+           called, interested, induction_booked
+    FROM seek_applicants
+    WHERE induction_date IS NOT NULL
+      AND induction_date BETWEEN ? AND ?
+    ORDER BY induction_date ASC, applicant_name ASC
+  `).all(gridStartIso, gridEndIso);
+
+  // Bucket applicants by date so the view doesn't have to filter the
+  // full list per cell (cheap, but pre-grouping keeps the EJS clean).
+  const byDate = {};
+  applicants.forEach(a => {
+    (byDate[a.induction_date] = byDate[a.induction_date] || []).push(a);
+  });
+
+  // Build the 6x7 grid of day cells.
+  const cells = [];
+  const todayIso = iso(new Date());
+  const cursor = new Date(gridStart);
+  for (let i = 0; i < 42; i++) {
+    const dIso = iso(cursor);
+    cells.push({
+      iso: dIso,
+      day: cursor.getUTCDate(),
+      inMonth: cursor.getUTCMonth() === (month - 1),
+      isToday: dIso === todayIso,
+      weekday: cursor.getUTCDay(),  // 0=Sun … 6=Sat
+      applicants: byDate[dIso] || [],
+    });
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
+  }
+
+  // Upcoming-this-week sidebar — next 14 days starting today, only
+  // dates that actually have inductions.
+  const inFourteen = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 14));
+  const upcoming = db.prepare(`
+    SELECT id, applicant_name, phone, email, induction_date, status
+    FROM seek_applicants
+    WHERE induction_date IS NOT NULL
+      AND induction_date BETWEEN ? AND ?
+    ORDER BY induction_date ASC, applicant_name ASC
+  `).all(todayIso, iso(inFourteen));
+
+  // Page-load reminder pump — idempotently insert "today" notifications
+  // for the current user so they get a nudge whenever they hit the
+  // calendar on an induction day. Keyed on the link field so each
+  // (applicant, date) gets at most one notification per user.
+  try {
+    seedInductionReminders(db, req.session.user, byDate[todayIso] || [], todayIso);
+  } catch (e) { /* notifications table may not exist on stale deploy */ }
+
+  // Prev / next month for the nav arrows.
+  const prevDate = new Date(Date.UTC(year, month - 2, 1));
+  const nextDate = new Date(Date.UTC(year, month, 1));
+
+  res.render('induction/admin/calendar', {
+    title: 'Induction calendar',
+    currentPage: 'induction',
+    year, month,
+    monthLabel: new Date(Date.UTC(year, month - 1, 1)).toLocaleDateString('en-AU', { month: 'long', year: 'numeric', timeZone: 'UTC' }),
+    cells, upcoming,
+    prevYear: prevDate.getUTCFullYear(), prevMonth: prevDate.getUTCMonth() + 1,
+    nextYear: nextDate.getUTCFullYear(), nextMonth: nextDate.getUTCMonth() + 1,
+    todayIso,
+  });
+});
+
+// Drop in an "Induction today" notification for every applicant with
+// induction_date = today, but only once per applicant per user. Run at
+// most when the calendar is opened (no cron yet).
+function seedInductionReminders(db, user, todays, todayIso) {
+  if (!user || !todays.length) return;
+  const insert = db.prepare(`
+    INSERT INTO notifications (user_id, type, title, message, link)
+    VALUES (?, 'induction_today', ?, ?, ?)
+  `);
+  const exists = db.prepare(`
+    SELECT 1 FROM notifications WHERE user_id = ? AND link = ? AND type = 'induction_today' LIMIT 1
+  `);
+  for (const a of todays) {
+    const link = `/induction/admin/recruitment/calendar?year=${todayIso.slice(0,4)}&month=${parseInt(todayIso.slice(5,7),10)}&id=${a.id}`;
+    if (exists.get(user.id, link)) continue;
+    insert.run(
+      user.id,
+      'Induction today',
+      `${a.applicant_name}${a.phone ? ' · ' + a.phone : ''}`,
+      link
+    );
+  }
+}
+
 // POST /induction/admin/recruitment — create a new applicant.
 router.post('/', (req, res) => {
   const db = getDb();
@@ -153,6 +268,16 @@ router.post('/:id', (req, res) => {
     }
   }
   const allowDate = ['date_applied', 'date_called', 'induction_date'];
+  // Detect a change to induction_date so we can surface a notification.
+  // Done before the UPDATE so we can compare incoming vs current value.
+  let inductionDateChange = null;
+  if (typeof req.body.induction_date !== 'undefined') {
+    const incoming = req.body.induction_date || null;
+    const current = db.prepare('SELECT induction_date, applicant_name FROM seek_applicants WHERE id = ?').get(row.id);
+    if (current && incoming && incoming !== current.induction_date) {
+      inductionDateChange = { newDate: incoming, name: current.applicant_name };
+    }
+  }
   for (const k of allowDate) {
     if (typeof req.body[k] !== 'undefined') {
       sets.push(`${k} = ?`);
@@ -176,6 +301,28 @@ router.post('/:id', (req, res) => {
   sets.push("updated_at = CURRENT_TIMESTAMP");
   params.push(row.id);
   db.prepare(`UPDATE seek_applicants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
+
+  // Drop an in-app notification for the user who set the induction date
+  // so it appears in their bell + on the calendar. Wrapped in try/catch
+  // because the notifications table may be missing on a stale deploy.
+  if (inductionDateChange && req.session && req.session.user) {
+    try {
+      const isoDate = inductionDateChange.newDate;
+      const niceDate = new Date(isoDate + 'T00:00:00Z').toLocaleDateString('en-AU', {
+        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+      });
+      const link = `/induction/admin/recruitment/calendar?year=${isoDate.slice(0,4)}&month=${parseInt(isoDate.slice(5,7),10)}&id=${row.id}`;
+      db.prepare(`
+        INSERT INTO notifications (user_id, type, title, message, link)
+        VALUES (?, 'induction_scheduled', ?, ?, ?)
+      `).run(
+        req.session.user.id,
+        'Induction scheduled',
+        `${inductionDateChange.name} — ${niceDate}`,
+        link
+      );
+    } catch (e) { /* table missing — non-fatal */ }
+  }
 
   // Auto-convert to crew_member on transition to "Hired" (idempotent — skips
   // if already linked). Without this, Hired applicants never appear on the

@@ -1,0 +1,298 @@
+<% locals.currentPage = 'induction' %>
+<%
+  function statusColor(s) {
+    const k = (s || '').toLowerCase();
+    if (k === 'hired')              return { bg: '#ECFDF5', txt: '#047857', ring: '#A7F3D0' };
+    if (k === 'inducted')           return { bg: '#EFF6FF', txt: '#1D4ED8', ring: '#BFDBFE' };
+    if (k === 'induction scheduled')return { bg: '#FFFBEB', txt: '#B45309', ring: '#FDE68A' };
+    if (k === 'no show')            return { bg: '#FEF2F2', txt: '#B91C1C', ring: '#FECACA' };
+    if (k === 'not suitable')       return { bg: '#FAF5FF', txt: '#6B21A8', ring: '#E9D5FF' };
+    if (k === 'withdrew')           return { bg: '#F5F5F4', txt: '#57534E', ring: '#E7E5E4' };
+    if (k === 'contacted')          return { bg: '#F0FDFA', txt: '#0F766E', ring: '#99F6E4' };
+    return { bg: '#F3F4F6', txt: '#374151', ring: '#E5E7EB' };
+  }
+  function fmtFullDate(iso) {
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-AU', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
+    });
+  }
+%>
+
+<style>
+  /* ── Calendar grid ──
+     6 rows × 7 cols. Each cell is a square-ish flex column with weekday/
+     number header at top and stacked pills below. Pills are rendered as
+     buttons so clicking opens the day's full details panel below. */
+  .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); border-left: 1px solid #E5E7EB; border-top: 1px solid #E5E7EB; background: #FFFFFF; border-radius: 0.75rem; overflow: hidden; }
+  .cal-weekday { padding: 8px 10px; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; letter-spacing: 0.05em; border-right: 1px solid #E5E7EB; border-bottom: 1px solid #E5E7EB; background: #F9FAFB; }
+  .cal-cell { position: relative; min-height: 112px; padding: 6px; border-right: 1px solid #E5E7EB; border-bottom: 1px solid #E5E7EB; display: flex; flex-direction: column; gap: 4px; background: #FFFFFF; cursor: pointer; transition: background 0.12s; }
+  .cal-cell:hover { background: #FAFAFA; }
+  .cal-cell.is-other-month { background: #F9FAFB; color: #9CA3AF; }
+  .cal-cell.is-today .cal-cell-num { background: #059669; color: #fff; border-radius: 999px; width: 26px; height: 26px; display: inline-flex; align-items: center; justify-content: center; box-shadow: 0 1px 2px rgba(5,150,105,0.4); }
+  .cal-cell-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; }
+  .cal-cell-num { font-size: 12px; font-weight: 700; color: #111827; line-height: 1; }
+  .cal-cell.is-other-month .cal-cell-num { color: #9CA3AF; font-weight: 500; }
+  .cal-cell-count { font-size: 10px; font-weight: 700; color: #047857; background: #ECFDF5; padding: 2px 6px; border-radius: 999px; border: 1px solid #A7F3D0; }
+  .cal-pill { display: block; width: 100%; text-align: left; font-size: 11px; font-weight: 600; padding: 3px 6px; border-radius: 6px; border: 1px solid; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+  .cal-pill:hover { filter: brightness(0.96); }
+  .cal-pill-more { font-size: 10px; font-weight: 600; color: #6B7280; padding: 0 4px; }
+
+  /* Active selection highlight on the picked day. */
+  .cal-cell.is-active { background: #ECFDF5; box-shadow: inset 0 0 0 2px #10B981; }
+
+  /* Day detail panel (renders below the grid when a date is clicked). */
+  .day-panel-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; box-shadow: 0 1px 2px rgba(15,17,21,0.04); }
+  .day-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; padding: 14px 16px; border-top: 1px solid #F3F4F6; }
+  .day-row:first-of-type { border-top: 0; }
+
+  /* Upcoming sidebar */
+  .upcoming-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; box-shadow: 0 1px 2px rgba(15,17,21,0.04); }
+  .upcoming-row { padding: 10px 14px; border-top: 1px solid #F3F4F6; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .upcoming-row:first-of-type { border-top: 0; }
+</style>
+
+<!-- Tab strip — adds Calendar alongside Inductions / Recruitment -->
+<%- include('_registry-tabs', { tabActive: 'calendar' }) %>
+
+<!-- Header: month label + nav arrows + jump-to-today -->
+<div class="flex items-center justify-between flex-wrap gap-3 mb-4">
+  <div class="flex items-center gap-2">
+    <h1 class="text-xl font-bold text-gray-900"><%= monthLabel %></h1>
+    <span class="text-xs text-gray-400">·</span>
+    <span class="text-xs text-gray-500">Inductions calendar</span>
+  </div>
+  <div class="flex items-center gap-1.5">
+    <a href="/induction/admin/recruitment/calendar?year=<%= prevYear %>&month=<%= prevMonth %>"
+       class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+       aria-label="Previous month" title="Previous month">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    </a>
+    <a href="/induction/admin/recruitment/calendar"
+       class="inline-flex items-center justify-center px-3 h-9 rounded-lg border border-gray-200 text-xs font-semibold text-gray-700 hover:bg-gray-50 transition">
+      Today
+    </a>
+    <a href="/induction/admin/recruitment/calendar?year=<%= nextYear %>&month=<%= nextMonth %>"
+       class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition"
+       aria-label="Next month" title="Next month">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    </a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
+  <!-- Calendar grid (3/4 width) -->
+  <div class="lg:col-span-3">
+    <div class="cal-grid">
+      <% ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function (d) { %>
+        <div class="cal-weekday"><%= d %></div>
+      <% }); %>
+
+      <% cells.forEach(function (c) { %>
+        <div class="cal-cell <%= c.inMonth ? '' : 'is-other-month' %> <%= c.isToday ? 'is-today' : '' %>"
+             data-day-cell="<%= c.iso %>"
+             role="button" tabindex="0">
+          <div class="cal-cell-head">
+            <span class="cal-cell-num"><%= c.day %></span>
+            <% if (c.applicants.length) { %>
+              <span class="cal-cell-count"><%= c.applicants.length %></span>
+            <% } %>
+          </div>
+          <% c.applicants.slice(0, 3).forEach(function (a) {
+            var col = statusColor(a.status);
+          %>
+            <span class="cal-pill" style="background:<%= col.bg %>;color:<%= col.txt %>;border-color:<%= col.ring %>"
+                  title="<%= a.applicant_name %><%= a.phone ? ' · ' + a.phone : '' %>"><%= a.applicant_name %></span>
+          <% }); %>
+          <% if (c.applicants.length > 3) { %>
+            <span class="cal-pill-more">+ <%= c.applicants.length - 3 %> more</span>
+          <% } %>
+        </div>
+      <% }); %>
+    </div>
+
+    <!-- Day detail panel — populated by JS when a cell is clicked. -->
+    <div id="dayPanel" class="mt-5 day-panel-card hidden">
+      <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+        <div>
+          <h2 class="text-sm font-bold text-gray-900" id="dayPanelTitle">—</h2>
+          <p class="text-xs text-gray-500 mt-0.5" id="dayPanelSub"></p>
+        </div>
+        <button type="button" id="dayPanelClose" class="inline-flex items-center justify-center w-8 h-8 rounded text-gray-400 hover:bg-gray-100 transition" aria-label="Close">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="dayPanelBody"></div>
+    </div>
+  </div>
+
+  <!-- Sidebar — upcoming next 14 days -->
+  <aside class="space-y-4">
+    <div class="upcoming-card">
+      <div class="px-4 py-3 border-b border-gray-200">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Coming up</h2>
+        <p class="text-[11px] text-gray-500 mt-0.5">Next 14 days</p>
+      </div>
+      <% if (!upcoming.length) { %>
+        <div class="px-4 py-6 text-center text-xs text-gray-500">No inductions scheduled in the next fortnight.</div>
+      <% } else { %>
+        <% upcoming.forEach(function (a) {
+          var d = new Date(a.induction_date + 'T00:00:00Z');
+          var isToday = a.induction_date === todayIso;
+          var col = statusColor(a.status);
+        %>
+          <div class="upcoming-row">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-gray-900 truncate"><%= a.applicant_name %></p>
+              <p class="text-[11px] text-gray-500 mt-0.5">
+                <span class="<%= isToday ? 'text-emerald-700 font-bold' : 'text-gray-700 font-medium' %>">
+                  <%= isToday ? 'TODAY · ' + d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' })
+                              : d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' }) %>
+                </span>
+                <% if (a.phone) { %><span class="text-gray-300">·</span> <%= a.phone %><% } %>
+              </p>
+            </div>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap"
+                  style="background:<%= col.bg %>;color:<%= col.txt %>;border:1px solid <%= col.ring %>"><%= a.status || 'New' %></span>
+          </div>
+        <% }); %>
+      <% } %>
+    </div>
+
+    <div class="bg-blue-50 border border-blue-100 rounded-xl p-3 text-[11px] text-blue-900 leading-relaxed">
+      <p class="font-semibold mb-1">How notifications work</p>
+      <p>Setting an induction date on a recruit drops a notification in your bell. When the induction day arrives, opening this page tops you up with a "today" reminder per person.</p>
+    </div>
+  </aside>
+</div>
+
+<!-- Inline data for the day-panel script. Server-rendered as JSON. -->
+<script>
+  window.CAL_DATA = {
+    cells: <%- JSON.stringify(cells.map(function (c) {
+      return { iso: c.iso, applicants: c.applicants };
+    })) %>,
+  };
+</script>
+
+<script>
+(function () {
+  'use strict';
+  var panel = document.getElementById('dayPanel');
+  var titleEl = document.getElementById('dayPanelTitle');
+  var subEl   = document.getElementById('dayPanelSub');
+  var bodyEl  = document.getElementById('dayPanelBody');
+
+  function statusBadge(s) {
+    var k = (s || '').toLowerCase();
+    var map = {
+      'hired':               ['#ECFDF5','#047857','#A7F3D0'],
+      'inducted':            ['#EFF6FF','#1D4ED8','#BFDBFE'],
+      'induction scheduled': ['#FFFBEB','#B45309','#FDE68A'],
+      'no show':             ['#FEF2F2','#B91C1C','#FECACA'],
+      'not suitable':        ['#FAF5FF','#6B21A8','#E9D5FF'],
+      'withdrew':            ['#F5F5F4','#57534E','#E7E5E4'],
+      'contacted':           ['#F0FDFA','#0F766E','#99F6E4'],
+    };
+    var c = map[k] || ['#F3F4F6','#374151','#E5E7EB'];
+    return '<span style="background:' + c[0] + ';color:' + c[1] + ';border:1px solid ' + c[2] +
+           ';padding:2px 8px;border-radius:999px;font-size:10px;font-weight:600">' + (s || 'New') + '</span>';
+  }
+
+  function fmtDate(iso) {
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-AU', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', '\'':'&#39;' }[c];
+    });
+  }
+
+  function renderDay(iso) {
+    var cell = (window.CAL_DATA.cells || []).find(function (c) { return c.iso === iso; });
+    var list = (cell && cell.applicants) || [];
+    titleEl.textContent = fmtDate(iso);
+    subEl.textContent   = list.length + ' induction' + (list.length === 1 ? '' : 's') + ' scheduled';
+    if (!list.length) {
+      bodyEl.innerHTML = '<div class="px-4 py-6 text-center text-sm text-gray-500">No inductions on this day.</div>';
+    } else {
+      bodyEl.innerHTML = list.map(function (a) {
+        var phoneHtml = a.phone
+          ? '<a href="tel:' + encodeURIComponent(a.phone) + '" class="text-brand-700 hover:underline">' + escapeHtml(a.phone) + '</a>' +
+            ' <button type="button" data-copy-text="' + escapeHtml(a.phone) + '" class="ml-1 inline-flex items-center justify-center w-5 h-5 rounded text-gray-400 hover:text-brand-700 hover:bg-brand-50 transition" title="Copy phone">' +
+            '<svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>' +
+            '</button>'
+          : '<span class="text-gray-400">No phone</span>';
+        var emailHtml = a.email ? '<a href="mailto:' + escapeHtml(a.email) + '" class="text-brand-700 hover:underline">' + escapeHtml(a.email) + '</a>' : '<span class="text-gray-400">—</span>';
+        var notesHtml = a.notes ? '<p class="text-xs text-gray-600 mt-2 whitespace-pre-line">' + escapeHtml(a.notes) + '</p>' : '';
+        return (
+          '<div class="day-row">' +
+            '<div class="min-w-0">' +
+              '<div class="flex items-center gap-2 flex-wrap">' +
+                '<p class="text-sm font-bold text-gray-900">' + escapeHtml(a.applicant_name) + '</p>' +
+                statusBadge(a.status) +
+              '</div>' +
+              '<div class="mt-1.5 grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-xs">' +
+                '<div><span class="text-gray-400 font-medium">Phone:</span> ' + phoneHtml + '</div>' +
+                '<div><span class="text-gray-400 font-medium">Email:</span> ' + emailHtml + '</div>' +
+              '</div>' +
+              notesHtml +
+            '</div>' +
+            '<div class="flex items-start">' +
+              '<a href="/induction/admin/recruitment" class="text-[11px] font-semibold text-brand-700 hover:underline whitespace-nowrap">Open in recruitment →</a>' +
+            '</div>' +
+          '</div>'
+        );
+      }).join('');
+    }
+    panel.classList.remove('hidden');
+
+    document.querySelectorAll('[data-day-cell]').forEach(function (el) {
+      el.classList.toggle('is-active', el.getAttribute('data-day-cell') === iso);
+    });
+
+    // Scroll the panel into view on small screens so the click feels
+    // responsive even when the grid is tall.
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  document.querySelectorAll('[data-day-cell]').forEach(function (cell) {
+    cell.addEventListener('click', function (e) {
+      var iso = cell.getAttribute('data-day-cell');
+      if (!iso) return;
+      // Don't hijack clicks on the pills' nested elements — they all
+      // currently delegate to the cell anyway.
+      renderDay(iso);
+    });
+    cell.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        renderDay(cell.getAttribute('data-day-cell'));
+      }
+    });
+  });
+
+  document.getElementById('dayPanelClose').addEventListener('click', function () {
+    panel.classList.add('hidden');
+    document.querySelectorAll('[data-day-cell]').forEach(function (el) { el.classList.remove('is-active'); });
+  });
+
+  // Auto-open the picked day if URL has ?d=YYYY-MM-DD or ?id=N
+  var qp = new URL(location.href).searchParams;
+  var openDate = qp.get('d');
+  if (openDate) renderDay(openDate);
+  // ?id=N from notification links — find the date containing that applicant.
+  var openId = qp.get('id');
+  if (openId && !openDate) {
+    for (var i = 0; i < window.CAL_DATA.cells.length; i++) {
+      var found = (window.CAL_DATA.cells[i].applicants || []).find(function (a) { return String(a.id) === String(openId); });
+      if (found) { renderDay(window.CAL_DATA.cells[i].iso); break; }
+    }
+  }
+})();
+</script>
+
+<!-- Click-to-copy for phones inside the day panel. -->
+<script src="/js/copy-btn.js?v=1"></script>
