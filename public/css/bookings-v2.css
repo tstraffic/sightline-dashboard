@@ -141,7 +141,22 @@
 :root[data-theme="light"] .bk2-daylabel strong { color: #111827; }
 
 /* ------------------------------- Dream card ------------------------------- */
-.bk2-board { display: flex; flex-direction: column; gap: 14px; }
+/* Multi-column board: cards flow into a responsive grid that picks
+   as many columns as fit (~360px min per card). On a 1440px window
+   that's 3 columns; on a tablet, 2; on a phone, 1. Cards keep their
+   natural height — wider crews / more meta rows just make that card
+   taller, the rest of the row stays at the height of its row's
+   tallest card thanks to align-items:start.
+   This replaces the previous single-column flex stack so scrolling
+   through a busy day shows many bookings at once instead of forcing
+   the planner through a long single chain. */
+.bk2-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.bk2-board .bk2-card { width: 100%; }
 
 .bk2-card {
   background: #0F172A;
