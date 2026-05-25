@@ -211,8 +211,8 @@
         <p class="text-sm text-gray-900 font-medium"><%= s.white_card_number || '—' %></p>
         <% if (s.white_card_photo) { %>
           <div class="mt-2">
-            <img src="/induction/admin/uploads/<%= s.id %>/<%= s.white_card_photo %>" alt="White Card" class="w-full h-24 object-cover rounded border border-gray-200 cursor-pointer" onclick="window.open(this.src, '_blank')">
-            <a href="/induction/admin/uploads/<%= s.id %>/<%= s.white_card_photo %>" target="_blank" class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium mt-1">
+            <img src="/induction/admin/uploads/<%= s.id %>/<%= s.white_card_photo %>" alt="White Card" class="w-full h-24 object-cover rounded border border-gray-200 cursor-zoom-in" data-doc-viewer>
+            <a href="/induction/admin/uploads/<%= s.id %>/<%= s.white_card_photo %>" data-doc-viewer class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium mt-1">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
               View Full Size
             </a>
@@ -231,8 +231,8 @@
         <% } %>
         <% if (s.tc_licence_photo) { %>
           <div class="mt-2">
-            <img src="/induction/admin/uploads/<%= s.id %>/<%= s.tc_licence_photo %>" alt="TC Licence" class="w-full h-24 object-cover rounded border border-gray-200 cursor-pointer" onclick="window.open(this.src, '_blank')">
-            <a href="/induction/admin/uploads/<%= s.id %>/<%= s.tc_licence_photo %>" target="_blank" class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium mt-1">
+            <img src="/induction/admin/uploads/<%= s.id %>/<%= s.tc_licence_photo %>" alt="TC Licence" class="w-full h-24 object-cover rounded border border-gray-200 cursor-zoom-in" data-doc-viewer>
+            <a href="/induction/admin/uploads/<%= s.id %>/<%= s.tc_licence_photo %>" data-doc-viewer class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium mt-1">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
               View Full Size
             </a>
@@ -248,8 +248,8 @@
         <p class="text-sm text-gray-900 font-medium"><%= s.drivers_licence_number || '—' %></p>
         <% if (s.drivers_licence_photo) { %>
           <div class="mt-2">
-            <img src="/induction/admin/uploads/<%= s.id %>/<%= s.drivers_licence_photo %>" alt="Driver's Licence" class="w-full h-24 object-cover rounded border border-gray-200 cursor-pointer" onclick="window.open(this.src, '_blank')">
-            <a href="/induction/admin/uploads/<%= s.id %>/<%= s.drivers_licence_photo %>" target="_blank" class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium mt-1">
+            <img src="/induction/admin/uploads/<%= s.id %>/<%= s.drivers_licence_photo %>" alt="Driver's Licence" class="w-full h-24 object-cover rounded border border-gray-200 cursor-zoom-in" data-doc-viewer>
+            <a href="/induction/admin/uploads/<%= s.id %>/<%= s.drivers_licence_photo %>" data-doc-viewer class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium mt-1">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
               View Full Size
             </a>
@@ -260,8 +260,8 @@
         <% if (s.drivers_licence_back_photo) { %>
           <div class="mt-2">
             <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Back of Licence</p>
-            <img src="/induction/admin/uploads/<%= s.id %>/<%= s.drivers_licence_back_photo %>" alt="Driver's Licence Back" class="w-full h-24 object-cover rounded border border-gray-200 cursor-pointer" onclick="window.open(this.src, '_blank')">
-            <a href="/induction/admin/uploads/<%= s.id %>/<%= s.drivers_licence_back_photo %>" target="_blank" class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium mt-1">
+            <img src="/induction/admin/uploads/<%= s.id %>/<%= s.drivers_licence_back_photo %>" alt="Driver's Licence Back" class="w-full h-24 object-cover rounded border border-gray-200 cursor-zoom-in" data-doc-viewer>
+            <a href="/induction/admin/uploads/<%= s.id %>/<%= s.drivers_licence_back_photo %>" data-doc-viewer class="inline-flex items-center gap-1 text-xs text-brand-600 hover:text-brand-700 font-medium mt-1">
               <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
               View Full Size
             </a>
@@ -445,7 +445,7 @@
       <div class="rounded-lg border border-gray-200 bg-gray-50 overflow-hidden">
         <div class="px-3 py-2 bg-white border-b border-gray-200 flex items-center justify-between">
           <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Signature</span>
-          <a href="<%= s.signature_url %>" target="_blank" class="text-xs font-medium text-brand-600 hover:text-brand-700">Open image ↗</a>
+          <a href="<%= s.signature_url %>" data-doc-viewer data-doc-name="Signature" class="text-xs font-medium text-brand-600 hover:text-brand-700">Open image</a>
         </div>
         <div class="p-4 flex items-center justify-center" style="background-image: repeating-linear-gradient(to bottom, transparent 0, transparent 23px, rgba(0,0,0,0.04) 23px, rgba(0,0,0,0.04) 24px); min-height: 140px;">
           <img src="<%= s.signature_url %>" alt="Signature of <%= s.consent_full_name || s.full_name %>" class="max-h-[120px] max-w-full object-contain mix-blend-multiply" />
@@ -646,3 +646,7 @@
     btn.textContent = isMasked ? 'Hide' : 'Show';
   }
 </script>
+<!-- In-app document viewer (modal w/ X / Esc / backdrop close).
+     Anchors / images marked [data-doc-viewer] open inline instead of
+     popping a new tab. -->
+<script src="/js/doc-viewer.js?v=1"></script>
