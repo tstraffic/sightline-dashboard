@@ -31,6 +31,29 @@
     </div>
   </div>
 
+  <% if (typeof duplicateNames !== 'undefined' && duplicateNames && duplicateNames.length) { %>
+    <!-- Duplicate-name banner. Surfaced when two or more ACTIVE crew  -->
+    <!-- rows share a name. The dropdown handles this safely (shows    -->
+    <!-- EMP-id in brackets + captures the picked ID via hidden field) -->
+    <!-- but HR still wants to know so they can merge / deactivate.    -->
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-5">
+      <div class="flex items-start gap-2">
+        <svg class="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="text-xs text-amber-900 leading-relaxed">
+          <p class="font-semibold">Duplicate crew names detected</p>
+          <p class="mt-0.5 text-amber-800">
+            These names appear on more than one active crew row. The dropdown shows their EMP-ids in brackets so you can pick the right one, but HR should still merge / deactivate the stale ones.
+          </p>
+          <ul class="mt-1.5 space-y-0.5">
+            <% duplicateNames.forEach(function(d) { %>
+              <li><span class="font-semibold"><%= d.full_name %></span> <span class="text-amber-700">— <%= d.n %> rows · <%= d.emp_ids %></span></li>
+            <% }) %>
+          </ul>
+        </div>
+      </div>
+    </div>
+  <% } %>
+
   <% if (lastQuick) { %>
     <!-- Last-issued strip — quick link to print the cert that was just generated -->
     <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-5 flex flex-wrap items-center justify-between gap-2">
@@ -70,18 +93,34 @@
       </select>
     </div>
 
-    <!-- Worker name — free text with autocomplete from active crew -->
+    <!-- Worker name — free text with autocomplete from active crew. -->
+    <!-- When a name maps to multiple active crew rows (e.g. two       -->
+    <!-- people named "Saadat Ahmed") the datalist option value        -->
+    <!-- carries the EMP-id in brackets so the user can pick the right -->
+    <!-- one, and the hidden crew_member_id below captures the picked  -->
+    <!-- ID so the server never has to guess.                          -->
     <div>
       <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Worker name</label>
-      <input type="text" name="worker_name" required autofocus autocomplete="off"
+      <input type="text" name="worker_name" id="quickVocWorkerName" required autofocus autocomplete="off"
         list="quick-voc-crew" placeholder="Type a name (autocompletes existing crew)"
         class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <input type="hidden" name="crew_member_id" id="quickVocCrewId" value="">
       <datalist id="quick-voc-crew">
-        <% workers.forEach(function(w){ %>
-          <option value="<%= w.full_name %>"><%= w.employee_id || '' %></option>
+        <% workers.forEach(function(w){
+             // Duplicate names get the EMP-id folded into the value so
+             // the picker is unambiguous. Unique names stay clean
+             // (typeable for brand-new hires).
+             var displayValue = w.is_duplicate_name
+               ? (w.full_name + ' [' + (w.employee_id || ('#' + w.id)) + ']')
+               : w.full_name;
+        %>
+          <option value="<%= displayValue %>" data-crew-id="<%= w.id %>" data-crew-name="<%= w.full_name %>"><%= w.employee_id || '' %></option>
         <% }) %>
       </datalist>
-      <p class="mt-1 text-[11px] text-gray-500">If the name isn't in the roster yet a placeholder crew record is created — HR can finish onboarding later.</p>
+      <p class="mt-1 text-[11px] text-gray-500">
+        If the name isn't in the roster yet a placeholder crew record is created — HR can finish onboarding later.
+        <span class="text-amber-700">Workers sharing a name show their EMP-id in brackets so you can pick the right one.</span>
+      </p>
     </div>
 
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -139,3 +178,47 @@
     <kbd class="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px] font-mono">Enter</kbd> to submit — the next form keeps your equipment / date / signature so you can rapid-fire through a queue.
   </p>
 </div>
+
+<script>
+// Wire the worker-name datalist so picking a row passes the exact
+// crew_member_id to the server (kills the "two Saadat Ahmeds, which
+// one did you mean?" ambiguity). On submit we also strip the
+// "[EMP-xxx]" suffix that the view added to duplicate-name options so
+// the server sees a clean name string.
+(function () {
+  var nameInput = document.getElementById('quickVocWorkerName');
+  var crewIdInput = document.getElementById('quickVocCrewId');
+  var datalist = document.getElementById('quick-voc-crew');
+  var form = document.getElementById('quickVocForm');
+  if (!nameInput || !crewIdInput || !datalist || !form) return;
+
+  // Build a lookup: option.value → { id, plainName }
+  var byValue = {};
+  Array.prototype.forEach.call(datalist.querySelectorAll('option'), function (opt) {
+    byValue[opt.value] = {
+      id: opt.getAttribute('data-crew-id') || '',
+      name: opt.getAttribute('data-crew-name') || opt.value,
+    };
+  });
+
+  function resolvePick() {
+    var v = nameInput.value;
+    var hit = byValue[v];
+    crewIdInput.value = hit ? hit.id : '';
+  }
+  // Fires when the user clicks a datalist option AND on every keystroke.
+  nameInput.addEventListener('input', resolvePick);
+  nameInput.addEventListener('change', resolvePick);
+
+  form.addEventListener('submit', function () {
+    // Strip "[EMP-xxx]" suffix on submit so the typed-name field
+    // carries just the human name (server reuses it for signatures /
+    // flash messages).
+    var v = nameInput.value;
+    var hit = byValue[v];
+    if (hit && hit.name && hit.name !== v) {
+      nameInput.value = hit.name;
+    }
+  });
+})();
+</script>
