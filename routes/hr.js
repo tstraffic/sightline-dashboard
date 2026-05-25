@@ -1148,6 +1148,53 @@ function loadEmployeeWithCrew(req, res, opts = {}) {
   return { employee, crewMember };
 }
 
+// POST /employees/:id/assign-tier — Set the worker's wage-panel tier + roster
+// pattern directly from the profile page. Stamps rates from the matching
+// preset and persists tier + payment_type + night_pattern atomically.
+router.post('/employees/:id/assign-tier', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const empId = parseInt(req.params.id, 10);
+  const employee = db.prepare('SELECT id, full_name, payment_type FROM employees WHERE id = ? AND deleted_at IS NULL').get(empId);
+  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+
+  const tier = parseInt(req.body.tier, 10);
+  // Payment type can be overridden in the same submit — fall back to the
+  // worker's existing one so admins setting only the tier don't wipe it.
+  const pt = String(req.body.payment_type || employee.payment_type || '').toLowerCase();
+  const nightPattern = String(req.body.night_pattern || 'occasional').toLowerCase();
+
+  if (!tier || tier < 1 || tier > 6) {
+    req.flash('error', 'Pick a tier between 1 and 6.');
+    return res.redirect(`/hr/employees/${empId}`);
+  }
+  if (!['cash', 'abn', 'tfn'].includes(pt)) {
+    req.flash('error', 'Pick a payment type (Cash / ABN / TFN) before assigning a tier.');
+    return res.redirect(`/hr/employees/${empId}`);
+  }
+
+  try {
+    const { stampEmployeeRates } = require('../lib/wageTiers');
+    const result = stampEmployeeRates(db, empId, tier, pt, { nightPattern });
+    if (!result.ok) {
+      req.flash('error', `Tier stamp failed: ${result.error}`);
+      return res.redirect(`/hr/employees/${empId}`);
+    }
+    try {
+      logActivity({
+        user: req.session.user, action: 'update', entityType: 'employee',
+        entityId: empId, entityLabel: employee.full_name,
+        details: `Set wage tier to ${tier} (${pt.toUpperCase()}, ${nightPattern}) — rates stamped from FY26 panel`,
+        ip: req.ip,
+      });
+    } catch (e) { /* audit shouldn't block save */ }
+    req.flash('success', `${employee.full_name} set to Tier ${tier} (${pt.toUpperCase()}). Rates stamped from the wage panel.`);
+  } catch (e) {
+    console.error('[/hr/employees/:id/assign-tier]', e);
+    req.flash('error', `Could not assign tier: ${e.message}`);
+  }
+  return res.redirect(`/hr/employees/${empId}`);
+});
+
 // POST /employees/:id/enable-portal — Auto-create crew member + link + activate
 router.post('/employees/:id/enable-portal', requirePermission('hr_employees'), (req, res) => {
   const data = loadEmployeeWithCrew(req, res, { autoCreate: true });

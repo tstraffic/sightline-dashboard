@@ -80,7 +80,36 @@
       <%- include('../partials/csrf') %>
       <% TABS.forEach((tab, i) => { %>
         <div id="tab-<%= tab.key %>" class="tab-pane <%= i === 0 ? '' : 'hidden' %>">
-          <% const cols = COLS[tab.key]; const list = groups[tab.key]; %>
+          <%
+            const cols = COLS[tab.key]; const list = groups[tab.key];
+            // Count workers in this tab without a tier — drives the
+            // "Default unassigned to Tier 2" banner. Skips Unclassified
+            // (no payment type means we don't know which preset to use).
+            const unassignedInTab = (tab.key === 'cash' || tab.key === 'abn' || tab.key === 'tfn')
+              ? list.filter(e => !e.tier).length
+              : 0;
+          %>
+          <% if (unassignedInTab > 0) { %>
+            <%
+              // Standalone <button> rather than a nested <form>: this tab
+              // sits inside the parent "save all rates" form, and HTML
+              // doesn't allow nested forms. The bulk POST is built and
+              // submitted via JS below — same CSRF token as the parent
+              // form, posted to /payroll/rates/bulk-tier.
+            %>
+            <div class="bg-brand-50 border-b border-brand-100 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+              <p class="text-xs text-brand-900">
+                <strong><%= unassignedInTab %></strong> <%= tab.label %> worker<%= unassignedInTab === 1 ? '' : 's' %> have no tier yet.
+                <span class="text-brand-700/70">Per the panel's rule, the default is Tier 2 (Traffic Controller).</span>
+              </p>
+              <button type="button"
+                      data-bulk-tier="<%= tab.key %>"
+                      data-bulk-count="<%= unassignedInTab %>"
+                      class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg whitespace-nowrap">
+                Default <%= unassignedInTab %> to Tier 2
+              </button>
+            </div>
+          <% } %>
           <% if (list.length === 0) { %>
             <div class="p-10 text-center text-sm text-gray-500">
               <% if (tab.key === 'unclassified') { %>
@@ -310,6 +339,29 @@
       const row = e.target.closest('tr');
       const tierSel = row && row.querySelector('select[data-tier-for]');
       if (tierSel && tierSel.value) applyTierPreset(empId, row);
+    });
+  });
+
+  // Bulk "Default unassigned to Tier 2" — build an ad-hoc form outside
+  // the parent rates form and submit it. Submitting via fetch and then
+  // redirecting keeps the CSRF flow simple (re-uses the parent form's
+  // token).
+  document.querySelectorAll('button[data-bulk-tier]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pt = btn.dataset.bulkTier;
+      const count = btn.dataset.bulkCount;
+      if (!confirm('Stamp ' + count + ' unassigned ' + pt.toUpperCase() + ' worker(s) at Tier 2 using the FY26 wage panel?\nRates will be set to the Tier 2 (Traffic Controller) preset. You can adjust individuals afterwards.')) return;
+      const csrf = document.querySelector('form[action="/payroll/rates"] input[name="_csrf"]')?.value;
+      const f = document.createElement('form');
+      f.method = 'POST';
+      f.action = '/payroll/rates/bulk-tier';
+      f.style.display = 'none';
+      const add = (n, v) => { const i = document.createElement('input'); i.name = n; i.value = v; f.appendChild(i); };
+      if (csrf) add('_csrf', csrf);
+      add('payment_type', pt);
+      add('tier', '2');
+      document.body.appendChild(f);
+      f.submit();
     });
   });
 
