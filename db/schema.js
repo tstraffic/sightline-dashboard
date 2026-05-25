@@ -10682,6 +10682,31 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 233: voc_assessments signature paths
+  //   Stores the PNG paths captured by the in-browser signature pad
+  //   (signature_pad.js) on the Quick VOC form and the regular
+  //   assessment form. When set, the PDF + HTML cert embed the
+  //   actual drawn signature above the line. When unset, the cert
+  //   falls back to the typed name rendered in cursive.
+  // =============================================
+  if (!isMigrationApplied.get(233)) {
+    console.log('Running migration 233: voc_assessments signature paths');
+    try {
+      const cols = db.prepare("PRAGMA table_info(voc_assessments)").all().map(c => c.name);
+      if (!cols.includes('assessor_signature_path')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN assessor_signature_path TEXT DEFAULT ''");
+      }
+      if (!cols.includes('worker_signature_path')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN worker_signature_path TEXT DEFAULT ''");
+      }
+      recordMigration.run(233, 'voc_assessments signature paths');
+      console.log('Migration 233 applied: signature path columns ready');
+    } catch (e) {
+      console.error('Migration 233 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

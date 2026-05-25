@@ -175,17 +175,37 @@
         class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
     </div>
 
-    <!-- Signatures -->
+    <!-- Signatures — touch / stylus pad on top of the typed name.    -->
+    <!-- The typed name is still required (used for the cert when no  -->
+    <!-- signature was drawn — rendered in cursive as a fallback). If -->
+    <!-- the user draws on the canvas, that takes precedence and is   -->
+    <!-- embedded as a PNG on the cert.                               -->
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
       <div>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assessor signed name</label>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assessor signature</label>
+        <div class="mt-1 border border-gray-300 rounded-lg overflow-hidden bg-white">
+          <canvas id="quickVocAssessorSig" class="block w-full touch-none cursor-crosshair" style="height:120px;"></canvas>
+          <div class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 border-t border-gray-200 text-[11px] text-gray-500">
+            <span class="quick-voc-sig-hint" data-pad="quickVocAssessorSig">Draw with finger / stylus, or leave blank to use the typed name in cursive</span>
+            <button type="button" data-clear="quickVocAssessorSig" class="px-2 py-0.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-[10px] font-semibold text-gray-700">Clear</button>
+          </div>
+        </div>
+        <input type="hidden" name="assessor_signature_data" id="quickVocAssessorSigData" value="">
         <input type="text" name="assessor_signed_name" value="<%= sticky.assessor || (user && user.full_name) || '' %>" required
-          placeholder="Type your name as signature"
+          placeholder="Typed name (also used as fallback if not drawn)"
           class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
       </div>
       <div>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Worker signed name</label>
-        <input type="text" name="worker_signed_name" placeholder="Same as worker name if blank"
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Worker signature</label>
+        <div class="mt-1 border border-gray-300 rounded-lg overflow-hidden bg-white">
+          <canvas id="quickVocWorkerSig" class="block w-full touch-none cursor-crosshair" style="height:120px;"></canvas>
+          <div class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 border-t border-gray-200 text-[11px] text-gray-500">
+            <span class="quick-voc-sig-hint" data-pad="quickVocWorkerSig">Hand the device to the worker — they sign here</span>
+            <button type="button" data-clear="quickVocWorkerSig" class="px-2 py-0.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-[10px] font-semibold text-gray-700">Clear</button>
+          </div>
+        </div>
+        <input type="hidden" name="worker_signature_data" id="quickVocWorkerSigData" value="">
+        <input type="text" name="worker_signed_name" placeholder="Typed name (defaults to worker name if blank)"
           class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
       </div>
     </div>
@@ -245,6 +265,87 @@
     if (hit && hit.name && hit.name !== v) {
       nameInput.value = hit.name;
     }
+  });
+})();
+</script>
+
+<!-- signature_pad — 5KB, MIT, mature. Loaded from jsdelivr. If the CDN -->
+<!-- ever fails the form still submits, just without a drawn signature  -->
+<!-- (typed name still works as fallback).                              -->
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script>
+// Bind a signature_pad instance to each canvas, hook up the Clear
+// buttons, and dump the canvas as a base64 PNG into the hidden
+// `<id>Data` field on form submit. Empty pads send '' so the server
+// can fall back to the typed cursive name.
+(function () {
+  if (typeof SignaturePad === 'undefined') return; // CDN load failed, skip
+  var form = document.getElementById('quickVocForm');
+  if (!form) return;
+
+  function bindPad(canvasId, hiddenId, hintEl) {
+    var canvas = document.getElementById(canvasId);
+    var hidden = document.getElementById(hiddenId);
+    if (!canvas || !hidden) return null;
+    // Size the canvas pixel buffer to its CSS box (HiDPI-aware) so
+    // signature lines don't render fuzzy. Re-run on resize.
+    function sizeCanvas() {
+      // Resizing wipes the canvas, so only do it when the box size
+      // actually changes. SignaturePad has no opinion on this — it
+      // tracks strokes in CSS-pixel coordinates internally.
+      var ratio = Math.max(window.devicePixelRatio || 1, 1);
+      var newW = (canvas.offsetWidth  || 0) * ratio;
+      var newH = (canvas.offsetHeight || 0) * ratio;
+      if (newW === canvas.width && newH === canvas.height) return;
+      canvas.width  = newW;
+      canvas.height = newH;
+      canvas.getContext('2d').scale(ratio, ratio);
+    }
+    sizeCanvas();
+    window.addEventListener('resize', sizeCanvas);
+    // Some browsers (and preview harnesses) finish layout AFTER body-end
+    // scripts run — sizeCanvas above might see offsetWidth=0. A
+    // ResizeObserver wakes us up the moment the box actually has a
+    // measurable size so the pad is ready to draw.
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(sizeCanvas).observe(canvas);
+    }
+    var pad = new SignaturePad(canvas, {
+      backgroundColor: 'rgba(255,255,255,0)', // transparent so the PDF embed blends
+      penColor: '#1f3864',                    // navy — matches cert ink
+      minWidth: 0.8,
+      maxWidth: 2.4,
+    });
+    // Hide the hint as soon as the user starts drawing — easy at-a-glance
+    // "is this pad signed?" feedback.
+    pad.addEventListener('beginStroke', function () { if (hintEl) hintEl.style.visibility = 'hidden'; });
+    return { pad: pad, hidden: hidden, hintEl: hintEl };
+  }
+
+  var pads = {};
+  document.querySelectorAll('.quick-voc-sig-hint').forEach(function (hint) {
+    var canvasId = hint.getAttribute('data-pad');
+    var hiddenId = canvasId + 'Data';
+    var p = bindPad(canvasId, hiddenId, hint);
+    if (p) pads[canvasId] = p;
+  });
+
+  // Clear-button wiring — also restores the hint text.
+  document.querySelectorAll('[data-clear]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var p = pads[btn.getAttribute('data-clear')];
+      if (!p) return;
+      p.pad.clear();
+      if (p.hintEl) p.hintEl.style.visibility = '';
+    });
+  });
+
+  // On submit: serialise each pad to a base64 PNG (or '' if empty).
+  form.addEventListener('submit', function () {
+    Object.keys(pads).forEach(function (key) {
+      var p = pads[key];
+      p.hidden.value = p.pad.isEmpty() ? '' : p.pad.toDataURL('image/png');
+    });
   });
 })();
 </script>
