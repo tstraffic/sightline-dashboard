@@ -329,6 +329,18 @@ router.post('/roster/delete', requirePermission('hr_employees'), (req, res) => {
       const userPlaceholders = userIds.map(() => '?').join(',');
       db.prepare(`UPDATE users SET active = 0 WHERE id IN (${userPlaceholders})`).run(...userIds);
     }
+    // Cascade to crew_members so operational lookups (VOC dropdown,
+    // workforce roster, allocation pickers) immediately reflect the
+    // deactivation. Without this the employee disappears from /hr/roster
+    // but stays active=1 in crew_members — which is how the "duplicate
+    // Saadat Ahmed" still showed in the Quick VOC dropdown after HR
+    // thought they'd deactivated it.
+    const linkedCrew = db.prepare(`SELECT linked_crew_member_id FROM employees WHERE id IN (${placeholders}) AND linked_crew_member_id IS NOT NULL`).all(...ids);
+    const crewIds = linkedCrew.map(r => r.linked_crew_member_id).filter(Boolean);
+    if (crewIds.length > 0) {
+      const crewPlaceholders = crewIds.map(() => '?').join(',');
+      db.prepare(`UPDATE crew_members SET active = 0 WHERE id IN (${crewPlaceholders})`).run(...crewIds);
+    }
     // Soft-delete employees — preserve all related records for restore
     db.prepare(`UPDATE employees SET deleted_at = CURRENT_TIMESTAMP, active = 0, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(...ids);
     req.flash('success', `${ids.length} employee(s) moved to Deleted.`);
@@ -358,6 +370,14 @@ router.post('/roster/restore', requirePermission('hr_employees'), (req, res) => 
     if (userIds.length > 0) {
       const userPlaceholders = userIds.map(() => '?').join(',');
       db.prepare(`UPDATE users SET active = 1 WHERE id IN (${userPlaceholders})`).run(...userIds);
+    }
+    // Cascade reactivation to crew_members so the operational side
+    // matches HR. Mirror of the cascade in /hr/roster/delete above.
+    const linkedCrew = db.prepare(`SELECT linked_crew_member_id FROM employees WHERE id IN (${placeholders}) AND linked_crew_member_id IS NOT NULL`).all(...ids);
+    const crewIds = linkedCrew.map(r => r.linked_crew_member_id).filter(Boolean);
+    if (crewIds.length > 0) {
+      const crewPlaceholders = crewIds.map(() => '?').join(',');
+      db.prepare(`UPDATE crew_members SET active = 1 WHERE id IN (${crewPlaceholders})`).run(...crewIds);
     }
     // Restore employees — clear deleted_at, reactivate, set status back to active
     db.prepare(`UPDATE employees SET deleted_at = NULL, active = 1, employment_status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(...ids);
@@ -542,6 +562,21 @@ router.post('/employees/delete', requirePermission('hr_employees'), (req, res) =
 
   // Null out manager_id self-references so other employees aren't blocked
   try { db.prepare(`UPDATE employees SET manager_id = NULL WHERE manager_id IN (${placeholders})`).run(...ids); } catch (e) { /* ignore */ }
+
+  // Cascade to crew_members — hard-deleting the HR employee row would
+  // orphan the operational crew_members row otherwise (no FK link left
+  // to find it later). Mark inactive so operational pickers stop
+  // surfacing it. We don't hard-delete crew_members because it's
+  // referenced by timesheets / allocations / VOC assessments that
+  // we want to keep for audit.
+  try {
+    const linkedCrew = db.prepare(`SELECT linked_crew_member_id FROM employees WHERE id IN (${placeholders}) AND linked_crew_member_id IS NOT NULL`).all(...ids);
+    const crewIds = linkedCrew.map(r => r.linked_crew_member_id).filter(Boolean);
+    if (crewIds.length > 0) {
+      const crewPlaceholders = crewIds.map(() => '?').join(',');
+      db.prepare(`UPDATE crew_members SET active = 0 WHERE id IN (${crewPlaceholders})`).run(...crewIds);
+    }
+  } catch (e) { /* ignore */ }
 
   // Delete uploaded HR folders
   for (const id of ids) {
