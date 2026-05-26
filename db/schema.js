@@ -10863,6 +10863,30 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 237: link Equipment rows back to the Fleet register.
+  //   Some physical vehicles are duplicated in both `equipment` (historical
+  //   home) and `vehicles` (new Fleet register). This FK lets the office
+  //   walk through equipment-vehicle rows on the Reconcile screen, point
+  //   each one at its canonical Fleet row, and deactivate the equipment
+  //   row in one click. Pickers that filter by active=1 then stop showing
+  //   the duplicate without losing the audit trail.
+  // =============================================
+  if (!isMigrationApplied.get(237)) {
+    console.log('Running migration 237: equipment.fleet_vehicle_id');
+    try {
+      const cols = db.prepare("PRAGMA table_info(equipment)").all().map(c => c.name);
+      if (!cols.includes('fleet_vehicle_id')) {
+        db.exec("ALTER TABLE equipment ADD COLUMN fleet_vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE SET NULL");
+      }
+      db.exec("CREATE INDEX IF NOT EXISTS idx_equipment_fleet ON equipment(fleet_vehicle_id);");
+      recordMigration.run(237, 'equipment.fleet_vehicle_id');
+      console.log('Migration 237 applied: equipment → vehicles FK ready');
+    } catch (e) {
+      console.error('Migration 237 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

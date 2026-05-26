@@ -115,6 +115,166 @@ router.get('/', (req, res) => {
   });
 });
 
+// ── RECONCILE EQUIPMENT ↔ FLEET ──────────────────────────────────────
+// One-time admin tool: walk through every equipment row that looks like
+// a registered vehicle, link it to its Fleet counterpart, and deactivate
+// the equipment row so it stops appearing in vehicle pickers. The
+// `fleet_vehicle_id` column on equipment (migration 237) keeps the audit
+// trail intact — pickers just hide rows where it's set.
+router.get('/reconcile', (req, res) => {
+  const db = getDb();
+  const showResolved = req.query.show === 'all';
+
+  // Vehicle-shaped equipment rows: anything with a licence plate, the
+  // vehicle category, or a name that smells like a road vehicle.
+  const filter = `
+    (
+      e.category = 'vehicle'
+      OR (e.licence_plate IS NOT NULL AND e.licence_plate != '')
+      OR LOWER(e.name) LIKE '%ute%'
+      OR LOWER(e.name) LIKE '%truck%'
+      OR LOWER(e.name) LIKE '%hilux%'
+      OR LOWER(e.name) LIKE '%d-max%'
+      OR LOWER(e.name) LIKE '%dmax%'
+    )
+  `;
+  const activeClause = showResolved
+    ? '' // show everything including already-linked + already-deactivated
+    : 'AND (e.fleet_vehicle_id IS NULL AND e.active = 1)';
+
+  let rows = [];
+  try {
+    rows = db.prepare(`
+      SELECT e.id, e.asset_number, e.name, e.category, e.licence_plate, e.active,
+             e.fleet_vehicle_id, v.asset_id AS fleet_asset_id, v.rego AS fleet_rego
+      FROM equipment e
+      LEFT JOIN vehicles v ON v.id = e.fleet_vehicle_id
+      WHERE ${filter} ${activeClause}
+      ORDER BY (e.fleet_vehicle_id IS NOT NULL) ASC, e.asset_number, e.name
+    `).all();
+  } catch (e) { /* migration may not have applied yet on a legacy DB */ }
+
+  // All active Fleet vehicles for the dropdown
+  const fleet = db.prepare(`
+    SELECT id, asset_id, rego, status,
+      COALESCE(NULLIF(TRIM(make || ' ' || model), ''), asset_id) AS label
+    FROM vehicles
+    ORDER BY asset_id
+  `).all();
+
+  // Suggest a match by exact rego (case + space tolerant). Confidence:
+  //   'exact'  → rego strings match after normalisation
+  //   'asset'  → equipment.asset_number matches a fleet asset_id
+  //   null     → no auto-suggestion
+  const norm = s => String(s || '').toUpperCase().replace(/\s+/g, '');
+  const byRego  = new Map(fleet.filter(f => f.rego).map(f => [norm(f.rego), f]));
+  const byAsset = new Map(fleet.map(f => [norm(f.asset_id), f]));
+
+  const items = rows.map(r => {
+    let suggestion = null, confidence = null;
+    if (r.licence_plate) {
+      const m = byRego.get(norm(r.licence_plate));
+      if (m) { suggestion = m; confidence = 'exact'; }
+    }
+    if (!suggestion && r.asset_number) {
+      const m = byAsset.get(norm(r.asset_number));
+      if (m) { suggestion = m; confidence = 'asset'; }
+    }
+    return { ...r, suggestion, confidence };
+  });
+
+  // Reconciliation progress stats
+  let stats = { total: 0, linked: 0, pending: 0 };
+  try {
+    stats = db.prepare(`
+      SELECT
+        COUNT(*) AS total,
+        SUM(CASE WHEN fleet_vehicle_id IS NOT NULL THEN 1 ELSE 0 END) AS linked,
+        SUM(CASE WHEN fleet_vehicle_id IS NULL AND active = 1 THEN 1 ELSE 0 END) AS pending
+      FROM equipment e
+      WHERE ${filter}
+    `).get();
+  } catch (e) {}
+
+  res.render('fleet/reconcile', {
+    title: 'Reconcile Equipment ↔ Fleet',
+    currentPage: 'fleet',
+    items,
+    fleet,
+    stats,
+    showResolved,
+  });
+});
+
+// Link an equipment row to a Fleet vehicle. Also deactivates the
+// equipment row (default) so duplicates vanish from pickers — pass
+// keep_active=1 to keep it visible (rare; for cases where the equipment
+// row genuinely represents something distinct from the fleet vehicle).
+router.post('/reconcile/:equipmentId/link', (req, res) => {
+  const db = getDb();
+  const eqId = parseInt(req.params.equipmentId, 10);
+  const fleetId = parseInt(req.body.fleet_vehicle_id, 10);
+  if (!eqId || !fleetId) {
+    req.flash('error', 'Pick a Fleet vehicle first.');
+    return res.redirect('/fleet/reconcile');
+  }
+  const eq = db.prepare('SELECT id, asset_number, name FROM equipment WHERE id = ?').get(eqId);
+  const fv = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(fleetId);
+  if (!eq || !fv) {
+    req.flash('error', 'Equipment or Fleet vehicle not found.');
+    return res.redirect('/fleet/reconcile');
+  }
+  const keepActive = req.body.keep_active === '1';
+  db.prepare(`
+    UPDATE equipment SET fleet_vehicle_id = ?, active = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(fv.id, keepActive ? 1 : 0, eq.id);
+  logActivity({
+    user: req.session.user, action: 'update', entityType: 'equipment',
+    entityId: eq.id,
+    entityLabel: `${eq.asset_number || eq.name} → Fleet/${fv.asset_id}${keepActive ? ' (kept active)' : ' (deactivated)'}`,
+    ip: req.ip,
+  });
+  req.flash('success', `Linked ${eq.asset_number || eq.name} to Fleet/${fv.asset_id}${keepActive ? '.' : ' and deactivated the equipment row.'}`);
+  res.redirect('/fleet/reconcile');
+});
+
+// Mark an equipment row as a standalone (not in Fleet). No DB change —
+// we just clear any stale link so the row stops appearing as a
+// suggestion. The intent gets logged so future reviewers can see it
+// was already considered.
+router.post('/reconcile/:equipmentId/standalone', (req, res) => {
+  const db = getDb();
+  const eq = db.prepare('SELECT id, asset_number, name FROM equipment WHERE id = ?').get(req.params.equipmentId);
+  if (!eq) { req.flash('error', 'Equipment not found.'); return res.redirect('/fleet/reconcile'); }
+  db.prepare('UPDATE equipment SET fleet_vehicle_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(eq.id);
+  logActivity({
+    user: req.session.user, action: 'update', entityType: 'equipment',
+    entityId: eq.id,
+    entityLabel: `${eq.asset_number || eq.name} marked standalone (not in Fleet)`,
+    ip: req.ip,
+  });
+  req.flash('success', `${eq.asset_number || eq.name} marked as standalone.`);
+  res.redirect('/fleet/reconcile');
+});
+
+// Undo: clear the link + reactivate the equipment row. For when the
+// operator linked the wrong row.
+router.post('/reconcile/:equipmentId/unlink', (req, res) => {
+  const db = getDb();
+  const eq = db.prepare('SELECT id, asset_number, name, fleet_vehicle_id FROM equipment WHERE id = ?').get(req.params.equipmentId);
+  if (!eq) { req.flash('error', 'Equipment not found.'); return res.redirect('/fleet/reconcile'); }
+  db.prepare('UPDATE equipment SET fleet_vehicle_id = NULL, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(eq.id);
+  logActivity({
+    user: req.session.user, action: 'update', entityType: 'equipment',
+    entityId: eq.id,
+    entityLabel: `${eq.asset_number || eq.name} unlinked from Fleet + reactivated`,
+    ip: req.ip,
+  });
+  req.flash('success', `${eq.asset_number || eq.name} unlinked.`);
+  res.redirect('/fleet/reconcile?show=all');
+});
+
 // ── COMPLIANCE ALERTS (page) ─────────────────────────────────────────
 router.get('/compliance', (req, res) => {
   const db = getDb();
