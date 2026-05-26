@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../../db/database');
 const { logActivity } = require('../../middleware/audit');
+const { canViewInternalCost } = require('../../middleware/auth');
 
 const STATUSES = ['draft','sent','accepted','rejected','expired','superseded'];
 const STATUS_LABELS = {
@@ -28,39 +29,149 @@ function toNumberOr(v, fallback) {
 // Round to 2 dp without floating-point noise.
 function round2(n) { return Math.round(n * 100) / 100; }
 
-// Recompute every site's subtotal and the quote-level subtotal / GST /
-// total from quote_line_items.line_revenue. Cost + margin caches are
-// touched in PR #6; for now they stay at 0. Returns the totals so the
-// AJAX cell endpoint can reply without a second query.
+// ────────────────────────────────────────────────────────────────────
+// Cost resolution
+//   Returns a per-unit cost (per-hour for has_hours_input items, per
+//   unit otherwise). The caller multiplies by qty × effectiveHours to
+//   get the line_cost.
+//
+//   Precedence:
+//     1. Per-line unit_cost_override — overrides everything.
+//     2. cost_method='fixed'         — returns the snapshotted unit_cost.
+//     3. cost_method='computed_crew' — derives from the crew composition
+//        snapshot using the current quoting_settings cost rates, plus
+//        the snapshotted vehicle cost.
+//
+//   The settings cost rates are NOT snapshotted — labour cost reality
+//   shifts over time, and an unsent quote should reflect today's costs.
+//   Once a quote is locked the matrix can't change, but recompute is
+//   only triggered by edits so locked quotes preserve their numbers.
+// ────────────────────────────────────────────────────────────────────
+function resolveLineCost(line, settings) {
+  if (line.unit_cost_override != null) return Number(line.unit_cost_override) || 0;
+  if (line.cost_method_snapshot === 'computed_crew') {
+    let comp = {};
+    try { comp = JSON.parse(line.crew_composition_snapshot_json || '{}') || {}; } catch { comp = {}; }
+    const tc  = (Number(comp.tc_count) || 0)         * (Number(settings?.default_tc_cost_rate) || 0);
+    const tl  = (Number(comp.tl_count) || 0)         * (Number(settings?.default_tl_cost_rate) || 0);
+    const sup = (Number(comp.supervisor_count) || 0) * (Number(settings?.default_supervisor_cost_rate) || 0);
+    const veh = Number(line.vehicle_cost_snapshot) || 0;
+    return round2(tc + tl + sup + veh);
+  }
+  return Number(line.unit_cost_snapshot) || 0;
+}
+
+function describeCostDerivation(line, settings) {
+  if (line.unit_cost_override != null) {
+    return `Manual override: $${Number(line.unit_cost_override).toFixed(2)}`;
+  }
+  if (line.cost_method_snapshot === 'computed_crew') {
+    let comp = {};
+    try { comp = JSON.parse(line.crew_composition_snapshot_json || '{}') || {}; } catch { comp = {}; }
+    const parts = [];
+    if (comp.tc_count)         parts.push(`${comp.tc_count} TC @ $${Number(settings?.default_tc_cost_rate || 0).toFixed(2)}/hr`);
+    if (comp.tl_count)         parts.push(`${comp.tl_count} TL @ $${Number(settings?.default_tl_cost_rate || 0).toFixed(2)}/hr`);
+    if (comp.supervisor_count) parts.push(`${comp.supervisor_count} Supervisor @ $${Number(settings?.default_supervisor_cost_rate || 0).toFixed(2)}/hr`);
+    if (Number(line.vehicle_cost_snapshot) > 0) parts.push(`vehicle @ $${Number(line.vehicle_cost_snapshot).toFixed(2)}/hr`);
+    const total = resolveLineCost(line, settings);
+    return (parts.length ? parts.join(' + ') : 'No crew composition set') + ` = $${total.toFixed(2)}`;
+  }
+  return `Fixed: $${(Number(line.unit_cost_snapshot) || 0).toFixed(2)}`;
+}
+
+// ────────────────────────────────────────────────────────────────────
+// Recompute totals — runs after every cell mutation.
+//   Pass 1: per line — resolve cost, recompute line_cost / line_margin
+//           / line_margin_pct. Skip if no cost data needs touching (the
+//           cost columns are populated even for non-privileged users so
+//           that toggling visibility doesn't require a backfill pass).
+//   Pass 2: roll lines up to site (subtotal, total_cost, total_margin)
+//   Pass 3: roll sites up to quote (subtotal, total_cost, total_margin)
+//   Pass 4: apply GST.
+//
+//   Returns the full set of recomputed totals so the cell-save endpoint
+//   can reply in one round-trip.
+// ────────────────────────────────────────────────────────────────────
 function recomputeQuoteTotals(db, quoteId) {
-  const rows = db.prepare(`
-    SELECT qs.id AS site_id, COALESCE(SUM(qli.line_revenue), 0) AS subtotal
+  const settings = db.prepare('SELECT * FROM quoting_settings WHERE id = 1').get() || {};
+
+  // Pass 1: re-resolve cost on every line in this quote.
+  const lines = db.prepare(`
+    SELECT qli.* FROM quote_line_items qli
+    JOIN quote_sites qs ON qs.id = qli.quote_site_id
+    WHERE qs.quote_id = ?
+  `).all(quoteId);
+  const updateLine = db.prepare(`
+    UPDATE quote_line_items SET
+      line_cost = ?, line_margin = ?, line_margin_pct = ?
+    WHERE id = ?
+  `);
+  for (const l of lines) {
+    const effectiveHours = l.has_hours_snapshot ? (l.hours ?? 0) : 1;
+    const unitCost = resolveLineCost(l, settings);
+    const lineCost = round2(l.qty * effectiveHours * unitCost);
+    const lineRev = Number(l.line_revenue) || 0;
+    const lineMargin = round2(lineRev - lineCost);
+    const lineMarginPct = lineRev > 0 ? round2((lineMargin / lineRev) * 100) : 0;
+    updateLine.run(lineCost, lineMargin, lineMarginPct, l.id);
+  }
+
+  // Pass 2: roll into site totals.
+  const siteRows = db.prepare(`
+    SELECT qs.id AS site_id,
+           COALESCE(SUM(qli.line_revenue), 0) AS subtotal,
+           COALESCE(SUM(qli.line_cost), 0) AS cost
     FROM quote_sites qs
     LEFT JOIN quote_line_items qli ON qli.quote_site_id = qs.id
     WHERE qs.quote_id = ?
     GROUP BY qs.id
   `).all(quoteId);
-
-  const updateSite = db.prepare('UPDATE quote_sites SET subtotal_ex_gst = ? WHERE id = ?');
+  const updateSite = db.prepare(`
+    UPDATE quote_sites SET
+      subtotal_ex_gst = ?, total_cost = ?,
+      total_margin = ?, total_margin_pct = ?
+    WHERE id = ?
+  `);
   const siteSubtotals = {};
+  const siteCosts = {};
+  const siteMargins = {};
+  const siteMarginPcts = {};
   let quoteSubtotal = 0;
-  for (const r of rows) {
-    const sub = round2(r.subtotal || 0);
-    updateSite.run(sub, r.site_id);
+  let quoteCost = 0;
+  for (const r of siteRows) {
+    const sub  = round2(r.subtotal || 0);
+    const cost = round2(r.cost || 0);
+    const margin = round2(sub - cost);
+    const marginPct = sub > 0 ? round2((margin / sub) * 100) : 0;
+    updateSite.run(sub, cost, margin, marginPct, r.site_id);
     siteSubtotals[r.site_id] = sub;
+    siteCosts[r.site_id] = cost;
+    siteMargins[r.site_id] = margin;
+    siteMarginPcts[r.site_id] = marginPct;
     quoteSubtotal += sub;
+    quoteCost += cost;
   }
   quoteSubtotal = round2(quoteSubtotal);
-  const gstRate = (db.prepare('SELECT gst_rate FROM quoting_settings WHERE id = 1').get()?.gst_rate) ?? 0.10;
+  quoteCost = round2(quoteCost);
+  const quoteMargin = round2(quoteSubtotal - quoteCost);
+  const quoteMarginPct = quoteSubtotal > 0 ? round2((quoteMargin / quoteSubtotal) * 100) : 0;
+
+  const gstRate = settings.gst_rate ?? 0.10;
   const gst = round2(quoteSubtotal * gstRate);
   const total = round2(quoteSubtotal + gst);
   db.prepare(`
     UPDATE quotes SET
       subtotal_ex_gst = ?, gst = ?, total_inc_gst = ?,
+      total_cost = ?, total_margin = ?, total_margin_pct = ?,
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(quoteSubtotal, gst, total, quoteId);
-  return { quoteSubtotal, gst, total, siteSubtotals };
+  `).run(quoteSubtotal, gst, total, quoteCost, quoteMargin, quoteMarginPct, quoteId);
+
+  return {
+    quoteSubtotal, gst, total,
+    quoteCost, quoteMargin, quoteMarginPct,
+    siteSubtotals, siteCosts, siteMargins, siteMarginPcts,
+  };
 }
 
 // ────────────────────────────────────────────────────────────────────
@@ -325,23 +436,41 @@ router.get('/:id', (req, res, next) => {
     WHERE qs.quote_id = ?
   `).all(id);
 
-  // cellMap[siteId][rateCardItemId] = { qty, hours, line_revenue, line_item_id }
+  const canSeeCost = canViewInternalCost(req.session.user);
+  const settings = db.prepare('SELECT * FROM quoting_settings WHERE id = 1').get() || {};
+
+  // cellMap[siteId][rateCardItemId] = { qty, hours, line_revenue, … }
+  // Cost + margin fields are populated only when the viewer can see
+  // internal cost — non-privileged users get no margin data in the HTML.
   const cellMap = {};
   for (const l of lines) {
     if (!cellMap[l.quote_site_id]) cellMap[l.quote_site_id] = {};
-    cellMap[l.quote_site_id][l.rate_card_item_id] = {
+    const entry = {
       id: l.id, qty: l.qty, hours: l.hours, line_revenue: l.line_revenue,
     };
+    if (canSeeCost) {
+      entry.line_cost = l.line_cost;
+      entry.line_margin = l.line_margin;
+      entry.line_margin_pct = l.line_margin_pct;
+      entry.unit_cost_override = l.unit_cost_override;
+      entry.cost_derivation = describeCostDerivation(l, settings);
+    }
+    cellMap[l.quote_site_id][l.rate_card_item_id] = entry;
   }
 
-  // Column totals (sum line_revenue by rate_card_item_id, scoped to this quote)
+  // Column totals (sum line_revenue + line_cost by rate_card_item_id)
   const columnTotalsRows = db.prepare(`
-    SELECT rate_card_item_id, COALESCE(SUM(line_revenue), 0) AS total
+    SELECT rate_card_item_id,
+           COALESCE(SUM(line_revenue), 0) AS total,
+           COALESCE(SUM(line_cost), 0) AS cost
     FROM quote_line_items
     WHERE quote_site_id IN (SELECT id FROM quote_sites WHERE quote_id = ?)
     GROUP BY rate_card_item_id
   `).all(id);
   const columnTotals = Object.fromEntries(columnTotalsRows.map(r => [r.rate_card_item_id, r.total]));
+  const columnCosts = canSeeCost
+    ? Object.fromEntries(columnTotalsRows.map(r => [r.rate_card_item_id, r.cost]))
+    : {};
 
   // Group sites by group_id (null = ungrouped)
   const sitesByGroup = { __ungrouped: [] };
@@ -357,11 +486,14 @@ router.get('/:id', (req, res, next) => {
     currentPage: 'quotes',
     quote, clients,
     inclusions, exclusions,
-    columns, groups, sites, sitesByGroup, cellMap, columnTotals,
+    columns, groups, sites, sitesByGroup, cellMap, columnTotals, columnCosts,
     columnCount: columns.length, siteCount: sites.length,
     roadClassifications: ROAD_CLASSIFICATIONS,
     isLocked: LOCKED_STATUSES.has(quote.status),
     statusLabels: STATUS_LABELS,
+    canSeeCost,
+    marginHealthy: Number(settings.margin_healthy_threshold) || 25,
+    marginWatch:   Number(settings.margin_watch_threshold)   || 15,
   });
 });
 
@@ -642,21 +774,147 @@ router.post('/:id/cells', express.json(), (req, res) => {
 
   const totals = tx();
   // Column total for THIS rate item (for the footer cell update).
-  const colTotal = db.prepare(`
-    SELECT COALESCE(SUM(line_revenue), 0) AS t
+  const colTotals = db.prepare(`
+    SELECT COALESCE(SUM(line_revenue), 0) AS revenue,
+           COALESCE(SUM(line_cost), 0) AS cost
     FROM quote_line_items
     WHERE rate_card_item_id = ?
       AND quote_site_id IN (SELECT id FROM quote_sites WHERE quote_id = ?)
-  `).get(itemId, guard.quote.id).t;
+  `).get(itemId, guard.quote.id);
 
-  res.json({
+  // Fetch the freshly-recomputed line so margin fields reflect the
+  // values that just landed in the DB.
+  const savedLine = db.prepare(`
+    SELECT id, line_revenue, line_cost, line_margin, line_margin_pct, unit_cost_override
+    FROM quote_line_items
+    WHERE quote_site_id = ? AND rate_card_item_id = ?
+  `).get(siteId, itemId);
+
+  const canSeeCost = canViewInternalCost(req.session.user);
+  const response = {
     ok: true,
     line: { line_revenue: lineRevenue, qty, hours },
     site_subtotal: totals.siteSubtotals[siteId] || 0,
-    column_total: round2(colTotal),
+    column_total: round2(colTotals.revenue),
     quote_subtotal: totals.quoteSubtotal,
     quote_gst: totals.gst,
     quote_total: totals.total,
+  };
+  if (canSeeCost) {
+    // When the cell was just cleared (qty=0), the row is gone — emit
+    // zeroed fields so the client can blank out the chip rather than
+    // leaving stale margin text in place.
+    const lineCost = savedLine ? {
+      id: savedLine.id,
+      line_revenue: savedLine.line_revenue,
+      line_cost: savedLine.line_cost,
+      line_margin: savedLine.line_margin,
+      line_margin_pct: savedLine.line_margin_pct,
+      unit_cost_override: savedLine.unit_cost_override,
+    } : {
+      id: null, line_revenue: 0,
+      line_cost: 0, line_margin: 0, line_margin_pct: 0,
+      unit_cost_override: null,
+    };
+    response.cost = {
+      line: lineCost,
+      site: {
+        cost: totals.siteCosts[siteId] || 0,
+        margin: totals.siteMargins[siteId] || 0,
+        margin_pct: totals.siteMarginPcts[siteId] || 0,
+      },
+      column: {
+        cost: round2(colTotals.cost),
+      },
+      quote: {
+        cost: totals.quoteCost,
+        margin: totals.quoteMargin,
+        margin_pct: totals.quoteMarginPct,
+      },
+    };
+  }
+  res.json(response);
+});
+
+// ── Per-line cost override ──
+//   Sets / clears quote_line_items.unit_cost_override and re-runs the
+//   full recompute pass so site + quote rollups stay consistent.
+//   Cost-only data: gated behind canViewInternalCost. A non-privileged
+//   user receives 403 even on direct API hits.
+router.post('/:id/lines/override', express.json(), (req, res) => {
+  if (!canViewInternalCost(req.session.user)) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  const db = getDb();
+  const id = parseInt(req.params.id, 10);
+  const q = db.prepare('SELECT * FROM quotes WHERE id = ?').get(id);
+  if (!q) return res.status(404).json({ error: 'Quote not found' });
+  if (LOCKED_STATUSES.has(q.status)) {
+    return res.status(403).json({ error: `Quote is ${q.status}; matrix is read-only.` });
+  }
+
+  const siteId = parseInt(req.body.site_id, 10);
+  const itemId = parseInt(req.body.rate_card_item_id, 10);
+  // null / empty / missing clears the override; any finite number sets it.
+  let override = req.body.unit_cost_override;
+  if (override === '' || override === null || override === undefined) {
+    override = null;
+  } else {
+    const n = Number(override);
+    if (!Number.isFinite(n) || n < 0) return res.status(400).json({ error: 'Invalid override value' });
+    override = n;
+  }
+
+  const line = db.prepare(`
+    SELECT qli.* FROM quote_line_items qli
+    JOIN quote_sites qs ON qs.id = qli.quote_site_id
+    WHERE qs.quote_id = ? AND qli.quote_site_id = ? AND qli.rate_card_item_id = ?
+  `).get(id, siteId, itemId);
+  if (!line) return res.status(404).json({ error: 'Line not found — set a qty first.' });
+
+  const tx = db.transaction(() => {
+    db.prepare('UPDATE quote_line_items SET unit_cost_override = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .run(override, line.id);
+    return recomputeQuoteTotals(db, id);
+  });
+  const totals = tx();
+
+  logActivity({
+    user: req.session.user, action: 'update',
+    entityType: 'quote_line_item', entityId: line.id, entityLabel: line.item_name_snapshot,
+    details: override == null
+      ? `Cleared cost override on "${line.item_name_snapshot}" (${q.quote_number})`
+      : `Set cost override $${override.toFixed(2)} on "${line.item_name_snapshot}" (${q.quote_number})`,
+    ip: req.ip,
+  });
+
+  const saved = db.prepare(`
+    SELECT id, line_cost, line_margin, line_margin_pct, unit_cost_override
+    FROM quote_line_items WHERE id = ?
+  `).get(line.id);
+  const colCost = db.prepare(`
+    SELECT COALESCE(SUM(line_cost), 0) AS c
+    FROM quote_line_items
+    WHERE rate_card_item_id = ?
+      AND quote_site_id IN (SELECT id FROM quote_sites WHERE quote_id = ?)
+  `).get(itemId, id).c;
+
+  res.json({
+    ok: true,
+    cost: {
+      line: saved,
+      site: {
+        cost: totals.siteCosts[siteId] || 0,
+        margin: totals.siteMargins[siteId] || 0,
+        margin_pct: totals.siteMarginPcts[siteId] || 0,
+      },
+      column: { cost: round2(colCost) },
+      quote: {
+        cost: totals.quoteCost,
+        margin: totals.quoteMargin,
+        margin_pct: totals.quoteMarginPct,
+      },
+    },
   });
 });
 
