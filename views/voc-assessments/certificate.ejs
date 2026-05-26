@@ -99,10 +99,10 @@
   .watermark {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%) rotate(-22deg);
-    font-family: Arial, sans-serif; font-size: 120pt; font-weight: 900;
-    color: rgba(31, 56, 100, 0.04); letter-spacing: 6px;
     pointer-events: none; z-index: 1;
+    opacity: 0.06;
   }
+  .watermark img { width: 200mm; height: auto; display: block; }
 
   @media print {
     body { background: white; padding: 0; }
@@ -123,7 +123,9 @@
   <div class="corner tr"></div>
   <div class="corner bl"></div>
   <div class="corner br"></div>
-  <div class="watermark">T&amp;S</div>
+  <!-- Watermark — T&S logo at low opacity, rotated, centred. Same shape -->
+  <!-- as the PDF watermark in lib/pdf/vocCertificatePdf.js.              -->
+  <div class="watermark"><img src="/images/logo.jpg" alt=""></div>
 
   <% if (isRevoked) { %>
     <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-12deg); border:8px solid #dc2626; padding:14px 36px; font-family:Arial,sans-serif; font-size:48pt; font-weight:900; color:#dc2626; letter-spacing:8px; opacity:0.18; z-index:3; pointer-events:none;">REVOKED</div>
