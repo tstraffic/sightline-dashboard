@@ -927,13 +927,18 @@ router.get('/api/resources', (req, res) => {
       vehicles = vehicles.concat(fleetRows);
     } catch (e) { /* fleet migration may not have run on a legacy DB */ }
     try {
+      // Skip equipment rows that have already been reconciled against a
+      // Fleet vehicle (migration 237). The fleet row is the source of
+      // truth; the equipment row is kept inactive purely for history.
       const eqRows = db.prepare(`
         SELECT id, name, category, asset_number, licence_plate, current_condition
         FROM equipment
-        WHERE active = 1 AND (
-          category = 'vehicle'
-          OR LOWER(name) LIKE '%ute%' OR LOWER(name) LIKE '%truck%' OR LOWER(name) LIKE '%vms%'
-        )
+        WHERE active = 1
+          AND (fleet_vehicle_id IS NULL)
+          AND (
+            category = 'vehicle'
+            OR LOWER(name) LIKE '%ute%' OR LOWER(name) LIKE '%truck%' OR LOWER(name) LIKE '%vms%'
+          )
         ORDER BY name
       `).all().map(r => ({ ...r, source: 'equipment' }));
       vehicles = vehicles.concat(eqRows);
@@ -1140,7 +1145,16 @@ router.get('/:id', (req, res) => {
       requirements: booking.requirements || [],
       equipment: booking.equipment || [] },
     allCrew,
-    allEquipment: (() => { try { return getDb().prepare("SELECT id, name as asset_name, category FROM equipment WHERE active = 1 ORDER BY name").all(); } catch(e) { return []; } })(),
+    // Exclude equipment rows already reconciled against the Fleet
+    // register — they show up via allFleet instead. Falls back to the
+    // unfiltered query if the column doesn't exist yet (legacy DB).
+    allEquipment: (() => { try {
+      try {
+        return getDb().prepare("SELECT id, name as asset_name, category FROM equipment WHERE active = 1 AND fleet_vehicle_id IS NULL ORDER BY name").all();
+      } catch (e) {
+        return getDb().prepare("SELECT id, name as asset_name, category FROM equipment WHERE active = 1 ORDER BY name").all();
+      }
+    } catch(e) { return []; } })(),
     // Active Fleet vehicles available for the "Add vehicle" picker. Retired
     // / Verify rows are excluded so allocators don't accidentally pick a
     // duplicate-VIN sheet that's flagged for reconciliation.
