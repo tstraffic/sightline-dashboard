@@ -155,7 +155,17 @@ function loadBookingDetail(db, bookingId) {
   if (!row) return null;
   const crew = db.prepare(`SELECT bc.*, cm.full_name, cm.phone, cm.email, cm.role as crew_role, cm.employee_id FROM booking_crew bc LEFT JOIN crew_members cm ON cm.id = bc.crew_member_id WHERE bc.booking_id = ? ORDER BY bc.created_at`).all(bookingId);
   const notes = db.prepare(`SELECT bn.*, u.full_name as author_name FROM booking_notes bn LEFT JOIN users u ON u.id = bn.user_id WHERE bn.booking_id = ? ORDER BY bn.created_at DESC`).all(bookingId);
-  const vehicles = db.prepare("SELECT * FROM booking_vehicles WHERE booking_id = ? ORDER BY created_at").all(bookingId);
+  // Left-join the new Fleet register so every booking_vehicles row carries
+  // its source asset (if any) for the back-link + "Fleet" badge on the
+  // detail page. The legacy text-only / equipment-derived rows still work
+  // — they just have NULL fleet fields.
+  const vehicles = db.prepare(`
+    SELECT bv.*, fv.asset_id AS fleet_asset_id, fv.rego AS fleet_rego, fv.status AS fleet_status
+    FROM booking_vehicles bv
+    LEFT JOIN vehicles fv ON fv.id = bv.fleet_vehicle_id
+    WHERE bv.booking_id = ?
+    ORDER BY bv.created_at
+  `).all(bookingId);
   let supervisorName = '';
   if (row.supervisor_id) { const sup = db.prepare("SELECT full_name FROM crew_members WHERE id = ?").get(row.supervisor_id); if (sup) supervisorName = sup.full_name; }
   let jobInfo = row.job_id ? db.prepare("SELECT id, job_number, job_name, client, site_address, suburb, status FROM jobs WHERE id = ?").get(row.job_id) : null;
@@ -900,10 +910,24 @@ router.get('/api/resources', (req, res) => {
       return { ...p, warnings, assigned_today: assignedToday };
     });
 
-    // VEHICLES — equipment rows in the vehicle/ute family.
+    // VEHICLES — primary source is the Fleet register; equipment-vehicle
+    // rows are also included so legacy assets keep showing up while the
+    // fleet is being populated. Each item carries `source` so the panel
+    // can render a Fleet/Equipment badge.
     let vehicles = [];
     try {
-      vehicles = db.prepare(`
+      const fleetRows = db.prepare(`
+        SELECT id, asset_id AS asset_number, rego AS licence_plate,
+               COALESCE(NULLIF(TRIM(make || ' ' || model), ''), asset_id) AS name,
+               vehicle_type AS category, status
+        FROM vehicles
+        WHERE status IN ('Active','Spare')
+        ORDER BY asset_id
+      `).all().map(r => ({ ...r, source: 'fleet' }));
+      vehicles = vehicles.concat(fleetRows);
+    } catch (e) { /* fleet migration may not have run on a legacy DB */ }
+    try {
+      const eqRows = db.prepare(`
         SELECT id, name, category, asset_number, licence_plate, current_condition
         FROM equipment
         WHERE active = 1 AND (
@@ -911,7 +935,8 @@ router.get('/api/resources', (req, res) => {
           OR LOWER(name) LIKE '%ute%' OR LOWER(name) LIKE '%truck%' OR LOWER(name) LIKE '%vms%'
         )
         ORDER BY name
-      `).all();
+      `).all().map(r => ({ ...r, source: 'equipment' }));
+      vehicles = vehicles.concat(eqRows);
     } catch (e) {}
 
     // EQUIPMENT — non-vehicle assets.
@@ -1116,6 +1141,13 @@ router.get('/:id', (req, res) => {
       equipment: booking.equipment || [] },
     allCrew,
     allEquipment: (() => { try { return getDb().prepare("SELECT id, name as asset_name, category FROM equipment WHERE active = 1 ORDER BY name").all(); } catch(e) { return []; } })(),
+    // Active Fleet vehicles available for the "Add vehicle" picker. Retired
+    // / Verify rows are excluded so allocators don't accidentally pick a
+    // duplicate-VIN sheet that's flagged for reconciliation.
+    allFleet: (() => { try { return getDb().prepare(`
+      SELECT id, asset_id, rego, COALESCE(NULLIF(TRIM(make || ' ' || model), ''), asset_id) AS label, vehicle_type, status
+      FROM vehicles WHERE status IN ('Active','Spare') ORDER BY asset_id
+    `).all(); } catch(e) { return []; } })(),
     user: req.session.user,
     jobPackGrid,
     jobPackTypes: JP_TYPES,
@@ -1450,11 +1482,26 @@ router.post('/:id/vehicles', (req, res) => {
     if (isJson) return res.status(404).json({ error: 'Booking not found' });
     req.flash('error', 'Not found.'); return res.redirect('/bookings');
   }
-  // Resource Panel drag: equipment_id from the equipment register
+  // Resource Panel drag / picker: either a fleet_vehicle_id (Fleet
+  // register, preferred for utes/trucks) or an equipment_id (the legacy
+  // equipment register, still used for VMS / lighting that lives there).
   let vehicle_name = req.body.vehicle_name || '';
   let registration = req.body.registration || '';
+  let fleet_vehicle_id = parseInt(req.body.fleet_vehicle_id, 10);
+  if (!Number.isFinite(fleet_vehicle_id) || fleet_vehicle_id <= 0) fleet_vehicle_id = null;
+  if (fleet_vehicle_id) {
+    try {
+      const fv = db.prepare("SELECT asset_id, rego, make, model FROM vehicles WHERE id = ?").get(fleet_vehicle_id);
+      if (fv) {
+        if (!vehicle_name) vehicle_name = [fv.make, fv.model].filter(Boolean).join(' ') || fv.asset_id;
+        if (!registration && fv.rego) registration = fv.rego;
+      } else {
+        fleet_vehicle_id = null; // bogus id — ignore the link
+      }
+    } catch (e) { fleet_vehicle_id = null; }
+  }
   const equipment_id = parseInt(req.body.equipment_id, 10);
-  if (equipment_id) {
+  if (!fleet_vehicle_id && equipment_id) {
     try {
       const eq = db.prepare("SELECT name, licence_plate FROM equipment WHERE id = ?").get(equipment_id);
       if (eq) { if (!vehicle_name) vehicle_name = eq.name; if (!registration && eq.licence_plate) registration = eq.licence_plate; }
@@ -1471,8 +1518,8 @@ router.post('/:id/vehicles', (req, res) => {
   if (req.body.upgrade_placeholder !== '0') {
     const placeholder = db.prepare("SELECT id FROM booking_vehicles WHERE booking_id = ? AND (vehicle_name IS NULL OR vehicle_name = '') AND (registration IS NULL OR registration = '') ORDER BY id LIMIT 1").get(req.params.id);
     if (placeholder) {
-      db.prepare("UPDATE booking_vehicles SET vehicle_name = ?, registration = ?, vehicle_role = COALESCE(NULLIF(?, ''), vehicle_role) WHERE id = ?")
-        .run(vehicle_name, registration, req.body.vehicle_role || '', placeholder.id);
+      db.prepare("UPDATE booking_vehicles SET vehicle_name = ?, registration = ?, vehicle_role = COALESCE(NULLIF(?, ''), vehicle_role), fleet_vehicle_id = ? WHERE id = ?")
+        .run(vehicle_name, registration, req.body.vehicle_role || '', fleet_vehicle_id, placeholder.id);
       upgraded = placeholder.id;
     }
   }
@@ -1484,9 +1531,9 @@ router.post('/:id/vehicles', (req, res) => {
   let newId = upgraded;
   if (!upgraded) {
     const r = db.prepare(`
-      INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, vehicle_role, crew_member_id)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(req.params.id, vehicle_name, registration, req.body.vehicle_role || '', driverId);
+      INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, vehicle_role, crew_member_id, fleet_vehicle_id)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(req.params.id, vehicle_name, registration, req.body.vehicle_role || '', driverId, fleet_vehicle_id);
     newId = r.lastInsertRowid;
   }
   if (isJson) return res.json({ ok: true, id: newId, upgraded: !!upgraded });

@@ -10755,6 +10755,114 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 235: Fleet Maintenance & Compliance
+  //   `vehicles`         — one row per vehicle (the Fleet Register)
+  //   `service_records`  — every maintenance record (the Service Log)
+  //   `vehicle_summary`  — view joining vehicles with last-service date,
+  //                        highest odometer, and total maintenance cost.
+  //                        Aggregates are computed, never stored, so
+  //                        they always reflect current data.
+  //
+  //   First-run seed pulls the original 13-vehicle / 55-record register
+  //   from db/seeds/fleet.js. Verify-flagged vehicles (duplicate VINs /
+  //   Fleet ID clashes) are imported as-is with their data-quality notes
+  //   so office staff can reconcile them in-app rather than silently
+  //   merging duplicates.
+  // =============================================
+  if (!isMigrationApplied.get(235)) {
+    console.log('Running migration 235: fleet maintenance & compliance');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS vehicles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          asset_id TEXT UNIQUE NOT NULL,
+          fleet_id TEXT,
+          rego TEXT,
+          make TEXT,
+          model TEXT,
+          year INTEGER,
+          vin TEXT,
+          vehicle_type TEXT,
+          toll_tag TEXT,
+          assigned_to TEXT,
+          status TEXT NOT NULL DEFAULT 'Active',
+          registration_expiry DATE,
+          ctp_expiry DATE,
+          insurance_renewal DATE,
+          inspection_due DATE,
+          next_service_date DATE,
+          next_service_km INTEGER,
+          fire_extinguisher_expiry DATE,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS service_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          vehicle_id INTEGER NOT NULL,
+          service_date DATE,
+          odometer_km INTEGER,
+          work_performed TEXT,
+          service_type TEXT,
+          performed_by TEXT,
+          cost NUMERIC,
+          invoice_number TEXT,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_service_records_vehicle ON service_records(vehicle_id);
+        CREATE INDEX IF NOT EXISTS idx_service_records_date ON service_records(service_date);
+        CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles(status);
+        DROP VIEW IF EXISTS vehicle_summary;
+        CREATE VIEW vehicle_summary AS
+        SELECT v.*,
+          (SELECT MAX(service_date) FROM service_records sr WHERE sr.vehicle_id = v.id) AS last_service_date,
+          (SELECT MAX(odometer_km) FROM service_records sr WHERE sr.vehicle_id = v.id) AS highest_odo_km,
+          COALESCE((SELECT SUM(cost) FROM service_records sr WHERE sr.vehicle_id = v.id), 0) AS total_maint_cost,
+          (SELECT COUNT(*) FROM service_records sr WHERE sr.vehicle_id = v.id) AS service_count
+        FROM vehicles v;
+      `);
+      recordMigration.run(235, 'fleet maintenance & compliance');
+      console.log('Migration 235 applied: vehicles + service_records + vehicle_summary ready');
+
+      // One-time seed from the original T&S Fleet Register spreadsheet.
+      // Idempotent: skips if the vehicles table already has rows.
+      try {
+        require('./seeds/fleet').seedFleet(db);
+      } catch (e) {
+        console.error('Fleet seed error:', e.message);
+      }
+    } catch (e) {
+      console.error('Migration 235 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 236: link booking_vehicles back to the Fleet register
+  //   Bookings already pulled vehicles from the equipment table (utes,
+  //   trucks, VMS) — but Fleet is now the source-of-truth for everything
+  //   with a rego. Add a nullable FK so bookings can point at a Fleet
+  //   row, keeping the existing free-text + equipment-derived flow
+  //   working untouched for legacy data.
+  // =============================================
+  if (!isMigrationApplied.get(236)) {
+    console.log('Running migration 236: booking_vehicles.fleet_vehicle_id');
+    try {
+      const cols = db.prepare("PRAGMA table_info(booking_vehicles)").all().map(c => c.name);
+      if (!cols.includes('fleet_vehicle_id')) {
+        db.exec("ALTER TABLE booking_vehicles ADD COLUMN fleet_vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE SET NULL");
+      }
+      db.exec("CREATE INDEX IF NOT EXISTS idx_booking_vehicles_fleet ON booking_vehicles(fleet_vehicle_id);");
+      recordMigration.run(236, 'booking_vehicles.fleet_vehicle_id');
+      console.log('Migration 236 applied: booking_vehicles → vehicles FK ready');
+    } catch (e) {
+      console.error('Migration 236 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

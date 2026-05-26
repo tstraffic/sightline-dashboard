@@ -1,0 +1,360 @@
+const express = require('express');
+const router = express.Router();
+const { getDb } = require('../db/database');
+const { logActivity } = require('../middleware/audit');
+const { badgesFor, needsAction, todayISO } = require('../lib/fleetStatus');
+
+const SERVICE_TYPES = [
+  'Major Service',
+  'Minor Service',
+  'Oil Change / Minor',
+  'Tyres',
+  'Brakes',
+  'Battery / Electrical',
+  'Repairs / Accident',
+  'Inspection / Slip',
+  'Safety Equipment',
+  'Other',
+];
+
+const VEHICLE_STATUSES = ['Active', 'Spare', 'Retired', 'Verify'];
+const VEHICLE_TYPES   = ['Light Vehicle', 'Heavy Vehicle'];
+
+// Normalise an empty / blank form value into NULL for nullable DB columns
+// — passing '' into a DATE / INTEGER column would store the empty string
+// instead of NULL, which then breaks the status logic and the aggregates.
+const orNull = v => (v === undefined || v === null || v === '') ? null : v;
+const intOrNull = v => {
+  const s = (v === undefined || v === null) ? '' : String(v).trim();
+  if (s === '') return null;
+  const n = parseInt(s, 10);
+  return Number.isFinite(n) ? n : null;
+};
+const numOrNull = v => {
+  const s = (v === undefined || v === null) ? '' : String(v).trim();
+  if (s === '') return null;
+  const n = parseFloat(s);
+  return Number.isFinite(n) ? n : null;
+};
+
+// ── FLEET REGISTER (list) ────────────────────────────────────────────
+router.get('/', (req, res) => {
+  const db = getDb();
+  const today = todayISO();
+
+  const where = [];
+  const params = [];
+  if (req.query.status && VEHICLE_STATUSES.includes(req.query.status)) {
+    where.push('status = ?'); params.push(req.query.status);
+  }
+  if (req.query.vehicle_type && VEHICLE_TYPES.includes(req.query.vehicle_type)) {
+    where.push('vehicle_type = ?'); params.push(req.query.vehicle_type);
+  }
+  if (req.query.search) {
+    where.push('(asset_id LIKE ? OR rego LIKE ? OR fleet_id LIKE ? OR make LIKE ? OR model LIKE ?)');
+    const s = `%${req.query.search}%`;
+    params.push(s, s, s, s, s);
+  }
+  const whereClause = where.length ? 'WHERE ' + where.join(' AND ') : '';
+
+  const allowedSorts = {
+    asset_id: 'asset_id', rego: 'rego', status: 'status',
+    last_service_date: 'last_service_date',
+    highest_odo_km: 'highest_odo_km',
+    total_maint_cost: 'total_maint_cost',
+  };
+  const sort = allowedSorts[req.query.sort] ? req.query.sort : 'asset_id';
+  const order = req.query.order === 'desc' ? 'DESC' : 'ASC';
+
+  const vehicles = db.prepare(`
+    SELECT * FROM vehicle_summary
+    ${whereClause}
+    ORDER BY ${allowedSorts[sort]} ${order}, asset_id ASC
+  `).all(...params);
+
+  // Fleet-wide rollups for the KPI strip
+  const allRows = db.prepare('SELECT * FROM vehicle_summary').all();
+  const totalSpend = allRows.reduce((s, v) => s + (Number(v.total_maint_cost) || 0), 0);
+  const counts = {
+    total:    allRows.length,
+    active:   allRows.filter(v => v.status === 'Active').length,
+    verify:   allRows.filter(v => v.status === 'Verify').length,
+    retired:  allRows.filter(v => v.status === 'Retired').length,
+  };
+  const compliance = {
+    registration: allRows.filter(v => { const b = badgesFor(v, today); return b.registration.tone === 'bad' || b.registration.tone === 'warn'; }).length,
+    service:      allRows.filter(v => { const b = badgesFor(v, today); return b.service.tone === 'bad'      || b.service.tone === 'warn'; }).length,
+    inspection:   allRows.filter(v => { const b = badgesFor(v, today); return b.inspection.tone === 'bad'   || b.inspection.tone === 'warn'; }).length,
+    fireExt:      allRows.filter(v => { const b = badgesFor(v, today); return b.fireExt.tone === 'bad'      || b.fireExt.tone === 'warn'; }).length,
+  };
+
+  // Spend by service type + spend by vehicle (small tables on the index)
+  const spendByType = db.prepare(`
+    SELECT COALESCE(service_type, 'Other') AS service_type, COALESCE(SUM(cost),0) AS total
+    FROM service_records
+    GROUP BY COALESCE(service_type, 'Other')
+    ORDER BY total DESC
+  `).all();
+
+  res.render('fleet/index', {
+    title: 'Fleet Register',
+    currentPage: 'fleet',
+    vehicles,
+    filters: req.query,
+    sort,
+    order: order.toLowerCase(),
+    today,
+    counts,
+    totalSpend,
+    compliance,
+    spendByType,
+    serviceTypes: SERVICE_TYPES,
+    vehicleStatuses: VEHICLE_STATUSES,
+    vehicleTypes: VEHICLE_TYPES,
+    badgesFor,
+  });
+});
+
+// ── COMPLIANCE ALERTS (page) ─────────────────────────────────────────
+router.get('/compliance', (req, res) => {
+  const db = getDb();
+  const today = todayISO();
+  const all = db.prepare("SELECT * FROM vehicle_summary WHERE status != 'Retired'").all();
+  const flagged = all
+    .map(v => ({ vehicle: v, b: badgesFor(v, today) }))
+    .filter(({ b }) => Object.values(b).some(s => s.tone === 'bad' || s.tone === 'warn'))
+    .sort((a, b) => {
+      // bad-first, then by smallest daysUntil
+      const min = x => Math.min(...Object.values(x).filter(s => s.daysUntil !== null).map(s => s.daysUntil));
+      return min(a.b) - min(b.b);
+    });
+
+  res.render('fleet/compliance', {
+    title: 'Fleet Compliance Alerts',
+    currentPage: 'fleet',
+    flagged,
+    today,
+  });
+});
+
+// ── NEW VEHICLE FORM ─────────────────────────────────────────────────
+router.get('/new', (req, res) => {
+  res.render('fleet/form', {
+    title: 'Add Vehicle',
+    currentPage: 'fleet',
+    vehicle: null,
+    vehicleStatuses: VEHICLE_STATUSES,
+    vehicleTypes: VEHICLE_TYPES,
+  });
+});
+
+// ── CREATE VEHICLE ───────────────────────────────────────────────────
+router.post('/', (req, res) => {
+  const db = getDb();
+  const b = req.body;
+  if (!b.asset_id || !b.asset_id.trim()) {
+    req.flash('error', 'Asset ID is required.');
+    return res.redirect('/fleet/new');
+  }
+  const status = VEHICLE_STATUSES.includes(b.status) ? b.status : 'Active';
+  const vehicleType = VEHICLE_TYPES.includes(b.vehicle_type) ? b.vehicle_type : null;
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO vehicles (
+        asset_id, fleet_id, rego, make, model, year, vin, vehicle_type, toll_tag, assigned_to, status,
+        registration_expiry, ctp_expiry, insurance_renewal, inspection_due,
+        next_service_date, next_service_km, fire_extinguisher_expiry, notes
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      b.asset_id.trim(), orNull(b.fleet_id), orNull(b.rego), orNull(b.make), orNull(b.model),
+      intOrNull(b.year), orNull(b.vin), vehicleType, orNull(b.toll_tag), orNull(b.assigned_to), status,
+      orNull(b.registration_expiry), orNull(b.ctp_expiry), orNull(b.insurance_renewal), orNull(b.inspection_due),
+      orNull(b.next_service_date), intOrNull(b.next_service_km), orNull(b.fire_extinguisher_expiry), orNull(b.notes)
+    );
+    logActivity({ user: req.session.user, action: 'create', entityType: 'vehicle', entityId: result.lastInsertRowid, entityLabel: b.asset_id, ip: req.ip });
+    req.flash('success', `Vehicle ${b.asset_id} added.`);
+    res.redirect(`/fleet/${result.lastInsertRowid}`);
+  } catch (e) {
+    if (/UNIQUE/i.test(e.message)) {
+      req.flash('error', `Asset ID "${b.asset_id}" is already in use.`);
+    } else {
+      req.flash('error', 'Could not save vehicle: ' + e.message);
+    }
+    res.redirect('/fleet/new');
+  }
+});
+
+// ── VEHICLE DETAIL ───────────────────────────────────────────────────
+router.get('/:id', (req, res) => {
+  const db = getDb();
+  const vehicle = db.prepare('SELECT * FROM vehicle_summary WHERE id = ?').get(req.params.id);
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  const services = db.prepare(`
+    SELECT * FROM service_records WHERE vehicle_id = ?
+    ORDER BY COALESCE(service_date, '0000-00-00') DESC, id DESC
+  `).all(vehicle.id);
+
+  res.render('fleet/detail', {
+    title: `${vehicle.asset_id} — ${vehicle.make || ''} ${vehicle.model || ''}`.trim(),
+    currentPage: 'fleet',
+    vehicle,
+    services,
+    badges: badgesFor(vehicle),
+    today: todayISO(),
+  });
+});
+
+// ── EDIT VEHICLE FORM ────────────────────────────────────────────────
+router.get('/:id/edit', (req, res) => {
+  const db = getDb();
+  const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id);
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  res.render('fleet/form', {
+    title: `Edit ${vehicle.asset_id}`,
+    currentPage: 'fleet',
+    vehicle,
+    vehicleStatuses: VEHICLE_STATUSES,
+    vehicleTypes: VEHICLE_TYPES,
+  });
+});
+
+// ── UPDATE VEHICLE ───────────────────────────────────────────────────
+router.post('/:id', (req, res) => {
+  const db = getDb();
+  const b = req.body;
+  const existing = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
+  if (!existing) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  if (!b.asset_id || !b.asset_id.trim()) {
+    req.flash('error', 'Asset ID is required.');
+    return res.redirect(`/fleet/${req.params.id}/edit`);
+  }
+  const status = VEHICLE_STATUSES.includes(b.status) ? b.status : 'Active';
+  const vehicleType = VEHICLE_TYPES.includes(b.vehicle_type) ? b.vehicle_type : null;
+
+  try {
+    db.prepare(`
+      UPDATE vehicles SET
+        asset_id=?, fleet_id=?, rego=?, make=?, model=?, year=?, vin=?, vehicle_type=?,
+        toll_tag=?, assigned_to=?, status=?,
+        registration_expiry=?, ctp_expiry=?, insurance_renewal=?, inspection_due=?,
+        next_service_date=?, next_service_km=?, fire_extinguisher_expiry=?, notes=?,
+        updated_at=CURRENT_TIMESTAMP
+      WHERE id=?
+    `).run(
+      b.asset_id.trim(), orNull(b.fleet_id), orNull(b.rego), orNull(b.make), orNull(b.model),
+      intOrNull(b.year), orNull(b.vin), vehicleType, orNull(b.toll_tag), orNull(b.assigned_to), status,
+      orNull(b.registration_expiry), orNull(b.ctp_expiry), orNull(b.insurance_renewal), orNull(b.inspection_due),
+      orNull(b.next_service_date), intOrNull(b.next_service_km), orNull(b.fire_extinguisher_expiry), orNull(b.notes),
+      req.params.id
+    );
+    logActivity({ user: req.session.user, action: 'update', entityType: 'vehicle', entityId: req.params.id, entityLabel: b.asset_id, ip: req.ip });
+    req.flash('success', `${b.asset_id} updated.`);
+    res.redirect(`/fleet/${req.params.id}`);
+  } catch (e) {
+    if (/UNIQUE/i.test(e.message)) {
+      req.flash('error', `Asset ID "${b.asset_id}" is already in use.`);
+    } else {
+      req.flash('error', 'Could not update vehicle: ' + e.message);
+    }
+    res.redirect(`/fleet/${req.params.id}/edit`);
+  }
+});
+
+// ── DELETE VEHICLE ───────────────────────────────────────────────────
+router.post('/:id/delete', (req, res) => {
+  const db = getDb();
+  const vehicle = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  db.prepare('DELETE FROM vehicles WHERE id = ?').run(req.params.id); // cascade removes service_records
+  logActivity({ user: req.session.user, action: 'delete', entityType: 'vehicle', entityId: req.params.id, entityLabel: vehicle.asset_id, ip: req.ip });
+  req.flash('success', `${vehicle.asset_id} removed.`);
+  res.redirect('/fleet');
+});
+
+// ── NEW SERVICE RECORD FORM ──────────────────────────────────────────
+router.get('/:id/service/new', (req, res) => {
+  const db = getDb();
+  const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id);
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  res.render('fleet/service-form', {
+    title: `New Service Record — ${vehicle.asset_id}`,
+    currentPage: 'fleet',
+    vehicle,
+    record: null,
+    serviceTypes: SERVICE_TYPES,
+  });
+});
+
+// ── CREATE SERVICE RECORD ────────────────────────────────────────────
+router.post('/:id/service', (req, res) => {
+  const db = getDb();
+  const vehicle = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  const b = req.body;
+  const serviceType = SERVICE_TYPES.includes(b.service_type) ? b.service_type : 'Other';
+
+  const result = db.prepare(`
+    INSERT INTO service_records (vehicle_id, service_date, odometer_km, work_performed, service_type, performed_by, cost, invoice_number, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    vehicle.id, orNull(b.service_date), intOrNull(b.odometer_km),
+    orNull(b.work_performed), serviceType, orNull(b.performed_by),
+    numOrNull(b.cost), orNull(b.invoice_number), orNull(b.notes)
+  );
+  logActivity({
+    user: req.session.user, action: 'create', entityType: 'service_record',
+    entityId: result.lastInsertRowid,
+    entityLabel: `${vehicle.asset_id} — ${b.service_date || 'no date'} — ${serviceType}`,
+    ip: req.ip,
+  });
+  req.flash('success', 'Service record added.');
+  res.redirect(`/fleet/${vehicle.id}`);
+});
+
+// ── EDIT SERVICE RECORD FORM ─────────────────────────────────────────
+router.get('/:id/service/:sid/edit', (req, res) => {
+  const db = getDb();
+  const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id);
+  const record  = db.prepare('SELECT * FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
+  if (!vehicle || !record) { req.flash('error', 'Service record not found.'); return res.redirect('/fleet'); }
+  res.render('fleet/service-form', {
+    title: `Edit Service Record — ${vehicle.asset_id}`,
+    currentPage: 'fleet',
+    vehicle,
+    record,
+    serviceTypes: SERVICE_TYPES,
+  });
+});
+
+// ── UPDATE SERVICE RECORD ────────────────────────────────────────────
+router.post('/:id/service/:sid', (req, res) => {
+  const db = getDb();
+  const record = db.prepare('SELECT id FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
+  if (!record) { req.flash('error', 'Service record not found.'); return res.redirect(`/fleet/${req.params.id}`); }
+  const b = req.body;
+  const serviceType = SERVICE_TYPES.includes(b.service_type) ? b.service_type : 'Other';
+  db.prepare(`
+    UPDATE service_records SET service_date=?, odometer_km=?, work_performed=?, service_type=?, performed_by=?, cost=?, invoice_number=?, notes=?, updated_at=CURRENT_TIMESTAMP
+    WHERE id=?
+  `).run(
+    orNull(b.service_date), intOrNull(b.odometer_km), orNull(b.work_performed),
+    serviceType, orNull(b.performed_by), numOrNull(b.cost),
+    orNull(b.invoice_number), orNull(b.notes),
+    req.params.sid
+  );
+  logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Service record #${req.params.sid}`, ip: req.ip });
+  req.flash('success', 'Service record updated.');
+  res.redirect(`/fleet/${req.params.id}`);
+});
+
+// ── DELETE SERVICE RECORD ────────────────────────────────────────────
+router.post('/:id/service/:sid/delete', (req, res) => {
+  const db = getDb();
+  db.prepare('DELETE FROM service_records WHERE id = ? AND vehicle_id = ?').run(req.params.sid, req.params.id);
+  logActivity({ user: req.session.user, action: 'delete', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Service record #${req.params.sid}`, ip: req.ip });
+  req.flash('success', 'Service record removed.');
+  res.redirect(`/fleet/${req.params.id}`);
+});
+
+module.exports = router;

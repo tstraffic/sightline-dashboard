@@ -449,6 +449,12 @@
                   <span class="text-sm font-medium text-gray-900"><%= v.vehicle_name || v.registration || '(unnamed vehicle)' %></span>
                   <% if (v.vehicle_name && v.registration) { %><span class="text-xs text-gray-400 ml-2"><%= v.registration %></span><% } %>
                   <% if (v.vehicle_role) { %><span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700"><%= v.vehicle_role %></span><% } %>
+                  <% if (v.fleet_vehicle_id && v.fleet_asset_id) { %>
+                    <a href="/fleet/<%= v.fleet_vehicle_id %>" class="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 ring-1 ring-indigo-600/20" title="View in Fleet Register">
+                      Fleet · <%= v.fleet_asset_id %>
+                      <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14m-4 0H3v7h7v-3"/></svg>
+                    </a>
+                  <% } %>
                 </div>
                 <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/remove" class="inline shrink-0">
                   <%- include('../partials/csrf') %>
@@ -498,13 +504,42 @@
           <%- include('../partials/csrf') %>
           <div>
             <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">From register</label>
-            <select name="from_register" id="vehicle-select" onchange="if(this.value){var o=this.options[this.selectedIndex];document.getElementById('vn').value=o.text.split(' (')[0];document.getElementById('vr').value=o.getAttribute('data-rego')||''}"
+            <%
+              // Picker source format: "fleet:<id>" → fleet_vehicle_id field; "equipment:<id>" → equipment_id field.
+              // Free-text Vehicle name / Rego fields below still work without picking.
+            %>
+            <select name="register_source" id="vehicle-select"
+              onchange="(function(sel){
+                var v = sel.value;
+                var o = sel.options[sel.selectedIndex];
+                document.getElementById('bv_fleet_id').value  = v.indexOf('fleet:') === 0     ? v.slice(6) : '';
+                document.getElementById('bv_equip_id').value = v.indexOf('equipment:') === 0 ? v.slice(10) : '';
+                if (v) {
+                  document.getElementById('vn').value = o.getAttribute('data-name') || o.text.split(' · ')[0];
+                  document.getElementById('vr').value = o.getAttribute('data-rego') || '';
+                }
+              })(this)"
               class="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">— select vehicle —</option>
-              <% if (typeof allEquipment !== 'undefined') { allEquipment.filter(eq => ['vehicle','vms','lighting'].includes(eq.category) || (eq.asset_name||'').toLowerCase().includes('ute') || (eq.asset_name||'').toLowerCase().includes('truck')).forEach(eq => { %>
-                <option value="<%= eq.id %>" data-rego=""><%= eq.asset_name %> (<%= eq.category %>)</option>
-              <% }); } %>
+              <% if (typeof allFleet !== 'undefined' && allFleet.length) { %>
+                <optgroup label="Fleet (utes, trucks)">
+                  <% allFleet.forEach(fv => { %>
+                    <option value="fleet:<%= fv.id %>" data-rego="<%= fv.rego || '' %>" data-name="<%= fv.label || fv.asset_id %>"><%= fv.asset_id %> · <%= fv.label || '' %><% if (fv.rego) { %> · <%= fv.rego %><% } %></option>
+                  <% }) %>
+                </optgroup>
+              <% } %>
+              <% if (typeof allEquipment !== 'undefined') {
+                const eqVehicles = allEquipment.filter(eq => ['vehicle','vms','lighting'].includes(eq.category) || (eq.asset_name||'').toLowerCase().includes('ute') || (eq.asset_name||'').toLowerCase().includes('truck'));
+                if (eqVehicles.length) { %>
+                <optgroup label="Equipment (VMS, lighting, other)">
+                  <% eqVehicles.forEach(eq => { %>
+                    <option value="equipment:<%= eq.id %>" data-rego="" data-name="<%= eq.asset_name %>"><%= eq.asset_name %> (<%= eq.category %>)</option>
+                  <% }) %>
+                </optgroup>
+              <% } } %>
             </select>
+            <input type="hidden" name="fleet_vehicle_id" id="bv_fleet_id" value="">
+            <input type="hidden" name="equipment_id" id="bv_equip_id" value="">
           </div>
           <div class="grid grid-cols-2 gap-2">
             <input type="text" name="vehicle_name" id="vn" placeholder="Vehicle name" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">

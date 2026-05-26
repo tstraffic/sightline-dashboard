@@ -101,6 +101,34 @@ router.get('/', (req, res) => {
     console.error('[dashboard] checklist register summary failed:', e.message);
   }
 
+  // Fleet compliance summary — small attention card linking to /fleet/compliance.
+  // Skipped silently if the fleet tables don't exist yet (e.g. legacy DB
+  // before migration 235) or the user can't access the fleet module.
+  let fleetCompliance = null;
+  try {
+    const { canAccess } = require('../middleware/auth');
+    if (canAccess(user, 'fleet')) {
+      const { badgesFor } = require('../lib/fleetStatus');
+      const rows = db.prepare("SELECT * FROM vehicle_summary WHERE status != 'Retired'").all();
+      const flagged = rows.filter(v => {
+        const b = badgesFor(v, today);
+        return ['registration','service','inspection','fireExt'].some(k => b[k].tone === 'bad' || b[k].tone === 'warn');
+      });
+      if (flagged.length > 0) {
+        fleetCompliance = {
+          count: flagged.length,
+          sample: flagged.slice(0, 5).map(v => ({
+            id: v.id,
+            asset_id: v.asset_id,
+            rego: v.rego,
+            status: v.status,
+            badges: badgesFor(v, today),
+          })),
+        };
+      }
+    }
+  } catch (e) { /* fleet tables not migrated yet on a legacy DB */ }
+
   // Today's birthdays — surfaced as a banner above the KPI tiles when at
   // least one active crew member's DOB is today (Sydney). Failures are
   // non-fatal so legacy DBs without the join still load the dashboard.
@@ -167,6 +195,7 @@ router.get('/', (req, res) => {
     tasksIAssigned,
     userRole: user.role,
     birthdaysToday,
+    fleetCompliance,
   });
 });
 

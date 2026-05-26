@@ -312,6 +312,7 @@ app.use('/allocations', requireLogin, requirePermission('allocations'), require(
 app.use('/schedule', requireLogin, requirePermission('schedule'), require('./routes/schedule'));
 app.use('/equipment/hire-dockets', requireLogin, requirePermission('equipment'), require('./routes/equipmentHireDockets'));
 app.use('/equipment', requireLogin, requirePermission('equipment'), require('./routes/equipment'));
+app.use('/fleet', requireLogin, requirePermission('fleet'), require('./routes/fleet'));
 app.use('/checklists', requireLogin, requirePermission('checklists'), require('./routes/checklists'));
 app.use('/swms', requireLogin, requirePermission('swms'), require('./routes/swms'));
 app.use('/sop-register', requireLogin, requirePermission('sop_register'), require('./routes/sop-register'));

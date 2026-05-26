@@ -1,0 +1,123 @@
+<% locals.currentPage = 'fleet' %>
+<% const isEdit = vehicle !== null && typeof vehicle !== 'undefined' %>
+<% const val = k => isEdit && vehicle[k] != null ? vehicle[k] : '' %>
+
+<div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
+  <a href="/fleet" class="hover:text-gray-900 transition">Fleet Register</a>
+  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+  <% if (isEdit) { %><a href="/fleet/<%= vehicle.id %>" class="hover:text-gray-900"><%= vehicle.asset_id %></a><svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg><% } %>
+  <span class="text-gray-900"><%= isEdit ? 'Edit' : 'New Vehicle' %></span>
+</div>
+
+<h1 class="text-2xl font-bold text-gray-900 mb-1"><%= isEdit ? 'Edit ' + vehicle.asset_id : 'Add Vehicle' %></h1>
+<p class="text-gray-500 text-sm mb-5"><%= isEdit ? 'Update vehicle details and compliance dates' : 'Register a new vehicle in the fleet' %></p>
+
+<form method="POST" action="<%= isEdit ? '/fleet/' + vehicle.id : '/fleet' %>" class="space-y-5">
+  <%- include('../partials/csrf') %>
+
+  <!-- Identification -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Identification</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Asset ID <span class="text-red-500">*</span></label>
+        <input type="text" name="asset_id" required value="<%= val('asset_id') %>" placeholder="e.g. TSTC008"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fleet ID</label>
+        <input type="text" name="fleet_id" value="<%= val('fleet_id') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Rego</label>
+        <input type="text" name="rego" value="<%= val('rego') %>" placeholder="e.g. ABC 123" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Make</label>
+        <input type="text" name="make" value="<%= val('make') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Model</label>
+        <input type="text" name="model" value="<%= val('model') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Year</label>
+        <input type="number" name="year" min="1980" max="2099" value="<%= val('year') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">VIN</label>
+        <input type="text" name="vin" value="<%= val('vin') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Vehicle Type</label>
+        <select name="vehicle_type" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">—</option>
+          <% vehicleTypes.forEach(t => { %><option value="<%= t %>" <%= val('vehicle_type') === t ? 'selected' : '' %>><%= t %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Toll Tag #</label>
+        <input type="text" name="toll_tag" value="<%= val('toll_tag') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Assigned To</label>
+        <input type="text" name="assigned_to" value="<%= val('assigned_to') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Status</label>
+        <select name="status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% vehicleStatuses.forEach(s => { %><option value="<%= s %>" <%= (val('status') || 'Active') === s ? 'selected' : '' %>><%= s %></option><% }) %>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compliance Dates -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Compliance &amp; Service Dates</h2>
+    <p class="text-xs text-gray-500 mb-4">Dates trigger the colour-coded status badges. Leave blank if not yet known.</p>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Registration Expiry</label>
+        <input type="date" name="registration_expiry" value="<%= val('registration_expiry') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">CTP (Green Slip) Expiry</label>
+        <input type="date" name="ctp_expiry" value="<%= val('ctp_expiry') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Insurance Renewal</label>
+        <input type="date" name="insurance_renewal" value="<%= val('insurance_renewal') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Safety Inspection Due</label>
+        <input type="date" name="inspection_due" value="<%= val('inspection_due') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <p class="text-[10px] text-gray-400 mt-1">Pink / blue / brown slip</p>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Next Service Date</label>
+        <input type="date" name="next_service_date" value="<%= val('next_service_date') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Next Service km</label>
+        <input type="number" name="next_service_km" min="0" value="<%= val('next_service_km') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fire Extinguisher Expiry</label>
+        <input type="date" name="fire_extinguisher_expiry" value="<%= val('fire_extinguisher_expiry') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
+  <!-- Notes -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes / Action Required</label>
+    <textarea name="notes" rows="3" placeholder="Any data-quality flags, follow-ups, or context the office team needs to see..."
+      class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"><%= val('notes') %></textarea>
+  </div>
+
+  <div class="flex items-center gap-2 justify-end">
+    <a href="<%= isEdit ? '/fleet/' + vehicle.id : '/fleet' %>" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg">Cancel</a>
+    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg"><%= isEdit ? 'Save Changes' : 'Add Vehicle' %></button>
+  </div>
+</form>
