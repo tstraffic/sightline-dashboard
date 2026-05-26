@@ -180,24 +180,39 @@
     <!-- signature was drawn — rendered in cursive as a fallback). If -->
     <!-- the user draws on the canvas, that takes precedence and is   -->
     <!-- embedded as a PNG on the cert.                               -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-gray-100">
-      <div>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assessor signature</label>
-        <div class="mt-1 border border-gray-300 rounded-lg overflow-hidden bg-white">
-          <canvas id="quickVocAssessorSig" class="block w-full touch-none cursor-crosshair" style="height:120px;"></canvas>
-          <div class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 border-t border-gray-200 text-[11px] text-gray-500">
-            <span class="quick-voc-sig-hint" data-pad="quickVocAssessorSig">Draw with finger / stylus, or leave blank to use the typed name in cursive</span>
-            <button type="button" data-clear="quickVocAssessorSig" class="px-2 py-0.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-[10px] font-semibold text-gray-700">Clear</button>
-          </div>
+    <!-- ─── Assessor signature (always shown) ─── -->
+    <div class="pt-2 border-t border-gray-100">
+      <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assessor signature</label>
+      <div class="mt-1 border border-gray-300 rounded-lg overflow-hidden bg-white">
+        <canvas id="quickVocAssessorSig" class="block w-full touch-none cursor-crosshair" style="height:120px;"></canvas>
+        <div class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 border-t border-gray-200 text-[11px] text-gray-500">
+          <span class="quick-voc-sig-hint" data-pad="quickVocAssessorSig">Draw with finger / stylus, or leave blank to use the typed name in cursive</span>
+          <button type="button" data-clear="quickVocAssessorSig" class="px-2 py-0.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-[10px] font-semibold text-gray-700">Clear</button>
         </div>
-        <input type="hidden" name="assessor_signature_data" id="quickVocAssessorSigData" value="">
-        <input type="text" name="assessor_signed_name" value="<%= sticky.assessor || (user && user.full_name) || '' %>" required
-          placeholder="Typed name (also used as fallback if not drawn)"
-          class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
       </div>
-      <div>
-        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Worker signature</label>
-        <div class="mt-1 border border-gray-300 rounded-lg overflow-hidden bg-white">
+      <input type="hidden" name="assessor_signature_data" id="quickVocAssessorSigData" value="">
+      <input type="text" name="assessor_signed_name" value="<%= sticky.assessor || (user && user.full_name) || '' %>" required
+        placeholder="Typed name (also used as fallback if not drawn)"
+        class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+
+    <!-- ─── Worker signature — async by default ─── -->
+    <!-- Default flow: the cert is issued without a worker signature,    -->
+    <!-- a push lands on the worker's phone, they sign in their portal,  -->
+    <!-- the PDF auto-regenerates. The assessor only needs the toggle    -->
+    <!-- below if the worker happens to be standing right there and is   -->
+    <!-- willing to sign on the tablet now.                              -->
+    <div class="pt-2 border-t border-gray-100">
+      <label class="flex items-start gap-2 cursor-pointer">
+        <input type="checkbox" id="quickVocWorkerSignsHere" name="worker_signs_in_person" value="1"
+          class="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+        <span class="text-xs text-gray-700">
+          <span class="font-semibold">Worker is here now — capture their signature on this tablet.</span>
+          <span class="block text-gray-500 mt-0.5">Off (default): the worker gets a push to sign in their own portal — the cert PDF updates automatically once they do.</span>
+        </span>
+      </label>
+      <div id="quickVocWorkerSigBlock" class="mt-2 hidden">
+        <div class="border border-gray-300 rounded-lg overflow-hidden bg-white">
           <canvas id="quickVocWorkerSig" class="block w-full touch-none cursor-crosshair" style="height:120px;"></canvas>
           <div class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 border-t border-gray-200 text-[11px] text-gray-500">
             <span class="quick-voc-sig-hint" data-pad="quickVocWorkerSig">Hand the device to the worker — they sign here</span>
@@ -340,7 +355,20 @@
     });
   });
 
+  // Worker-here toggle reveals the worker pad. The canvas inside a
+  // display:none parent has offsetWidth=0 at bind time, so a
+  // ResizeObserver in bindPad re-sizes when the block becomes visible.
+  var workerToggle = document.getElementById('quickVocWorkerSignsHere');
+  var workerBlock = document.getElementById('quickVocWorkerSigBlock');
+  if (workerToggle && workerBlock) {
+    workerToggle.addEventListener('change', function () {
+      workerBlock.classList.toggle('hidden', !workerToggle.checked);
+    });
+  }
+
   // On submit: serialise each pad to a base64 PNG (or '' if empty).
+  // Empty pads emit '' so the server keeps worker_acknowledgement_status
+  // as 'pending' and the worker gets the in-app sign push.
   form.addEventListener('submit', function () {
     Object.keys(pads).forEach(function (key) {
       var p = pads[key];

@@ -10707,6 +10707,54 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 234: VOC worker acknowledgement workflow
+  //   Office issues the cert + signs as assessor. Worker then gets a
+  //   push, opens their portal, signs to acknowledge — at which point
+  //   the PDF regenerates with their signature embedded.
+  //
+  //   Status values:
+  //     'not_required' — issued before this feature existed OR the
+  //                      assessor captured the worker's sig in person
+  //                      on the tablet (so no follow-up needed).
+  //     'pending'      — cert issued, waiting on the worker to sign.
+  //     'signed'       — worker has signed (worker_signature_path set,
+  //                      worker_acknowledged_at populated).
+  //     'declined'     — worker explicitly declined (future scope; for
+  //                      now we just keep the column flexible).
+  //
+  //   worker_acknowledged_at carries the timestamp the worker actually
+  //   signed — separate from the original cert dates so re-signing
+  //   is auditable.
+  // =============================================
+  if (!isMigrationApplied.get(234)) {
+    console.log('Running migration 234: voc worker acknowledgement workflow');
+    try {
+      const cols = db.prepare("PRAGMA table_info(voc_assessments)").all().map(c => c.name);
+      if (!cols.includes('worker_acknowledgement_status')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN worker_acknowledgement_status TEXT NOT NULL DEFAULT 'not_required'");
+      }
+      if (!cols.includes('worker_acknowledged_at')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN worker_acknowledged_at DATETIME");
+      }
+      // Backfill: any submitted competent cert that already has a
+      // worker signature on file is implicitly 'signed' (sig was
+      // captured in person, no follow-up needed).
+      db.prepare(`
+        UPDATE voc_assessments
+        SET worker_acknowledgement_status = 'signed',
+            worker_acknowledged_at = COALESCE(worker_acknowledged_at, updated_at)
+        WHERE worker_signature_path IS NOT NULL AND worker_signature_path != ''
+          AND worker_acknowledgement_status = 'not_required'
+      `).run();
+      db.exec('CREATE INDEX IF NOT EXISTS idx_voc_ack_status ON voc_assessments(worker_acknowledgement_status);');
+      recordMigration.run(234, 'voc worker acknowledgement workflow');
+      console.log('Migration 234 applied: worker_acknowledgement_status + index ready');
+    } catch (e) {
+      console.error('Migration 234 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

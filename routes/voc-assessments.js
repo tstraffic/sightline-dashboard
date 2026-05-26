@@ -35,6 +35,48 @@ function notifyWorkerOfVocIssued(crewMemberId, equipmentName, certId, validUntil
   }).catch(err => console.error('[voc-issued push] crew', crewMemberId, ':', err.message));
 }
 
+// Stronger CTA than the generic "VOC issued" push — this one fires
+// when the office issued the cert without the worker's in-person
+// signature, so the worker needs to open their portal and sign.
+// Deep-links to /w/hr/vocs/:vocId/sign so it's one tap from the
+// notification to the signature pad.
+function notifyWorkerToSign(crewMemberId, equipmentName, vocId) {
+  if (!crewMemberId || !vocId) return;
+  sendPushToCrew(crewMemberId, {
+    title: 'Action needed: sign your ' + (equipmentName || 'VOC') + ' cert',
+    body: 'Your trainer issued a Verification of Competency — tap to sign and acknowledge.',
+    url: '/w/hr/vocs/' + vocId + '/sign',
+    type: 'voc_needs_signature',
+    category: 'voc_issued', // share the mute toggle with the regular issue push
+  }).catch(err => console.error('[voc-sign push] crew', crewMemberId, ':', err.message));
+}
+
+// Regenerate + persist the cert PDF for an assessment. Used both at
+// initial issue AND after the worker acknowledges (so the embedded
+// signature updates without a manual resubmit). The new PDF replaces
+// the path on disk; the cert ID itself is stable.
+async function regenerateCertPdf(db, vocId, certId) {
+  const fresh = getAssessmentWithTemplate(db, vocId);
+  if (!fresh || !certId) return false;
+  try {
+    ensureCertDir();
+    const pdfBuf = await renderVocCertificatePdf(fresh, certId, verifyUrlFor(certId));
+    const filename = `voc-${fresh.id}-${Date.now()}.pdf`;
+    fs.writeFileSync(path.join(CERT_DIR, filename), pdfBuf);
+    const relPath = 'voc-certificates/' + filename;
+    db.prepare(`
+      UPDATE voc_assessments
+      SET pdf_path = ?, pdf_generated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(relPath, vocId);
+    return true;
+  } catch (e) {
+    console.error('[voc-regen-pdf] failed for voc', vocId, ':', e.message);
+    return false;
+  }
+}
+router.regenerateCertPdf = regenerateCertPdf; // attached to router so the worker portal can call it after the worker signs
+
 const CERT_DIR = path.join(__dirname, '..', 'data', 'uploads', 'voc-certificates');
 function ensureCertDir() {
   try { fs.mkdirSync(CERT_DIR, { recursive: true }); } catch (e) { /* ignore */ }
@@ -237,6 +279,7 @@ router.get('/', (req, res) => {
   const rows = db.prepare(`
     SELECT a.id, a.voc_number, a.status, a.outcome, a.valid_until,
       a.assessment_date, a.certificate_status, a.marking_complete,
+      a.worker_acknowledgement_status,
       t.name AS template_name,
       cm.full_name AS worker_name, cm.employee_id AS worker_emp_id,
       assessor.full_name AS assessor_name
@@ -454,15 +497,23 @@ router.post('/quick', async (req, res) => {
     // to the typed name rendered in cursive.
     const assessorSigPath = saveSignatureDataUrl(newId, 'assessor', b.assessor_signature_data);
     const workerSigPath = saveSignatureDataUrl(newId, 'worker', b.worker_signature_data);
-    if (assessorSigPath || workerSigPath) {
-      db.prepare(`
-        UPDATE voc_assessments
-        SET assessor_signature_path = COALESCE(?, assessor_signature_path),
-            worker_signature_path   = COALESCE(?, worker_signature_path),
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?
-      `).run(assessorSigPath, workerSigPath, newId);
-    }
+    // Worker acknowledgement state machine:
+    //   - In-person signature captured here (worker_signs_in_person on
+    //     the form OR a non-empty pad data) → 'signed' now.
+    //   - Otherwise → 'pending'. The worker gets a push, signs in the
+    //     portal, the PDF regenerates on their side.
+    const workerSignedInPerson = !!workerSigPath;
+    const ackStatus = workerSignedInPerson ? 'signed' : 'pending';
+    const ackTimestamp = workerSignedInPerson ? new Date().toISOString() : null;
+    db.prepare(`
+      UPDATE voc_assessments
+      SET assessor_signature_path = COALESCE(?, assessor_signature_path),
+          worker_signature_path   = COALESCE(?, worker_signature_path),
+          worker_acknowledgement_status = ?,
+          worker_acknowledged_at = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(assessorSigPath, workerSigPath, ackStatus, ackTimestamp, newId);
 
     // Generate the certificate PDF immediately — that's the whole point
     // of the quick path. The full record is hydrated via the same
@@ -491,11 +542,19 @@ router.post('/quick', async (req, res) => {
       `).run(certId, fresh.id);
     }
 
-    // Push the worker a "your VOC is ready" notification. No-op for
-    // VOC-PENDING-* auto-created rows since they don't have a worker
-    // PIN / push subscription yet — sendPushToCrew returns
-    // {reason: 'no-subscriptions'} which is fine.
-    notifyWorkerOfVocIssued(crewId, fresh.template_name, certId, validUntil);
+    // Push routing:
+    //   - Signed in person → generic "VOC issued, here's your wallet"
+    //     notification. Wallet shows the cert immediately, no action
+    //     required.
+    //   - Pending → stronger CTA push deep-linking to the sign page
+    //     so the worker can acknowledge with one tap.
+    // Both are no-ops if the worker has no push subscription yet
+    // (sendPushToCrew returns {reason:'no-subscriptions'} silently).
+    if (workerSignedInPerson) {
+      notifyWorkerOfVocIssued(crewId, fresh.template_name, certId, validUntil);
+    } else {
+      notifyWorkerToSign(crewId, fresh.template_name, newId);
+    }
 
     // Stash redirect breadcrumbs so the form re-renders with a running
     // count and a download link for the cert that was just issued.
