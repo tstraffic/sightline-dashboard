@@ -268,6 +268,12 @@
       <% if (b.hireOverdue) { %><span class="sidebar-badge bg-red-500 text-white"><%= b.hireOverdue %></span><% } %>
     </a>
     <% } %>
+    <% if (canAccess(user, 'fleet')) { %>
+    <a href="/fleet" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'fleet' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 13l1.5-5A2 2 0 016.43 6.5h11.14a2 2 0 011.93 1.5L21 13m-18 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1a1 1 0 001-1v-5M3 13h18M7 16h.01M17 16h.01"/></svg>
+      <span class="flex-1">Fleet</span>
+    </a>
+    <% } %>
     <% } %>
 
     <% if (canAccess(user, 'crm')) { %>
@@ -419,7 +425,7 @@
     </a>
     <% } %>
 
-    <% if (canAccess(user, 'equipment') || canAccess(user, 'reports')) { %>
+    <% if (canAccess(user, 'equipment') || canAccess(user, 'fleet') || canAccess(user, 'reports')) { %>
     <div class="pt-3 mt-2 border-t border-white/10">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Assets & Reports</p>
     </div>
@@ -428,6 +434,12 @@
     <a href="/equipment" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'equipment' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
       Equipment
+    </a>
+    <% } %>
+    <% if (canAccess(user, 'fleet')) { %>
+    <a href="/fleet" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'fleet' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 13l1.5-5A2 2 0 016.43 6.5h11.14a2 2 0 011.93 1.5L21 13m-18 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1a1 1 0 001-1v-5M3 13h18M7 16h.01M17 16h.01"/></svg>
+      Fleet
     </a>
     <% } %>
     <% if (canAccess(user, 'documents')) { %>

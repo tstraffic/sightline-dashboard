@@ -46,6 +46,7 @@ const PERMISSIONS = {
   allocations:   ['admin', 'operations'],
   schedule:      ['admin', 'operations'],
   equipment:     ['admin', 'operations'],
+  fleet:         ['admin', 'operations'],
   defects:       ['admin', 'operations'],
   documents:     ['admin', 'operations', 'finance'],
   bookings:      ['admin', 'operations'],
