@@ -36,6 +36,17 @@
         Templates
       </a>
     <% } %>
+    <% if (user && (user.role || '').toLowerCase() === 'admin') { %>
+      <!-- One-shot bulk regen of every active cert PDF — used to propagate -->
+      <!-- layout changes (e.g. updated watermark) to historical records.    -->
+      <form method="POST" action="/voc-assessments/regenerate-all-pdfs" class="inline" data-confirm="Re-render every active VOC certificate PDF with the latest template? This can take a few seconds per cert.">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="inline-flex items-center justify-center px-4 py-2 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg transition" title="Re-render all active cert PDFs with the current template (e.g. after a watermark update)">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Regen PDFs
+        </button>
+      </form>
+    <% } %>
     <a href="/voc-assessments/quick" class="inline-flex items-center justify-center px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold rounded-lg transition">
       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
       Quick Cert

@@ -323,6 +323,41 @@ router.get('/', (req, res) => {
 });
 
 // ────────────────────────────────────────────────
+// REGENERATE ALL CERT PDFs  (admin only)
+// One-shot tool — re-renders every issued cert so a layout change
+// (e.g. swapping the watermark from "T&S" text to the logo image)
+// propagates to historical certs without each one needing to be
+// re-submitted. Idempotent: cert IDs are stable, so re-running this
+// just overwrites the stored pdf_path with a fresh file.
+// Placed BEFORE /:id/* routes so the literal path wins.
+// ────────────────────────────────────────────────
+router.post('/regenerate-all-pdfs', async (req, res) => {
+  if (normaliseRole(req.session.user.role) !== 'admin') {
+    req.flash('error', 'Only admins can bulk-regenerate certs.');
+    return res.redirect('/voc-assessments');
+  }
+  const db = getDb();
+  // Every issued + active cert is in scope. Revoked certs are skipped
+  // because their PDF is intentionally frozen at the moment of revoke.
+  const rows = db.prepare(`
+    SELECT id, certificate_id
+    FROM voc_assessments
+    WHERE status = 'submitted'
+      AND outcome = 'competent'
+      AND certificate_id IS NOT NULL AND certificate_id != ''
+      AND COALESCE(certificate_status, 'active') = 'active'
+  `).all();
+
+  let ok = 0, fail = 0;
+  for (const r of rows) {
+    const result = await regenerateCertPdf(db, r.id, r.certificate_id);
+    if (result) ok++; else fail++;
+  }
+  req.flash('success', `Regenerated ${ok} cert PDF${ok === 1 ? '' : 's'}${fail ? ` (${fail} failed — see logs)` : ''}.`);
+  res.redirect('/voc-assessments');
+});
+
+// ────────────────────────────────────────────────
 // QUICK CERT GENERATOR
 // Built for live VOC sessions where 30+ people queue for certificates.
 // Bypasses the full assessor flow: the assessor types name + date +
