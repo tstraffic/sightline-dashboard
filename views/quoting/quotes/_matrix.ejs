@@ -383,7 +383,7 @@ if (sitesByGroup['__ungrouped'] && sitesByGroup['__ungrouped'].length > 0) {
           const hasFootRev = (quote.subtotal_ex_gst || 0) > 0;
           const footChipClass = marginChipClass(quote.total_margin_pct || 0, marginHealthy, marginWatch, hasFootRev);
         %>
-        <div class="matrix-cost-block hidden px-5 py-2 border-t border-gray-200 bg-amber-50/40 grid grid-cols-3 gap-4 text-xs">
+        <div class="matrix-cost-block hidden px-5 py-2 border-t border-dashed border-gray-200 bg-gray-50/40 grid grid-cols-3 gap-4 text-xs">
           <div class="text-right">
             <span class="text-gray-500 uppercase tracking-wide font-semibold mr-2">Cost</span>
             <span data-quote-cost-foot class="font-mono font-semibold text-gray-700"><%= fmtMoney(quote.total_cost || 0) %></span>

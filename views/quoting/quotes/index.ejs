@@ -118,8 +118,8 @@ function listMarginClass(pct, hasRev) {
             <th class="px-4 py-3 text-left font-semibold">Valid until</th>
             <th class="px-4 py-3 text-right font-semibold">Total (inc GST)</th>
             <% if (canSeeCost) { %>
-              <th class="px-4 py-3 text-right font-semibold bg-amber-50/40">Cost</th>
-              <th class="px-4 py-3 text-right font-semibold bg-amber-50/40">Margin %</th>
+              <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Cost</th>
+              <th class="px-4 py-3 text-right font-semibold">Margin %</th>
             <% } %>
             <th class="px-4 py-3 text-left font-semibold">Prepared by</th>
           </tr>
@@ -145,8 +145,8 @@ function listMarginClass(pct, hasRev) {
               <td class="px-4 py-3 text-right font-mono text-gray-900"><%= fmtMoney(q.total_inc_gst) %></td>
               <% if (canSeeCost) { %>
                 <% const hasRev = (q.subtotal_ex_gst || 0) > 0; %>
-                <td class="px-4 py-3 text-right font-mono text-gray-700 bg-amber-50/40"><%= fmtMoney(q.total_cost || 0) %></td>
-                <td class="px-4 py-3 text-right font-mono bg-amber-50/40 <%= listMarginClass(q.total_margin_pct || 0, hasRev) %>">
+                <td class="px-4 py-3 text-right font-mono text-gray-700 border-l border-gray-100"><%= fmtMoney(q.total_cost || 0) %></td>
+                <td class="px-4 py-3 text-right font-mono <%= listMarginClass(q.total_margin_pct || 0, hasRev) %>">
                   <%= hasRev ? fmtPct(q.total_margin_pct || 0) : '—' %>
                 </td>
               <% } %>

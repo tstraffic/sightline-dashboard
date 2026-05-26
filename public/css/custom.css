@@ -3174,6 +3174,30 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 }
 .dark-glass table tbody td a { color: #6EE7B7 !important; }
 .dark-glass table tbody td a:hover { color: #A7F3D0 !important; }
+/* Light-mode resets for the table block above. Without these, the
+   `.dark-glass table thead th` rule paints the header text at 45% white
+   even in light mode, making every table's column headers invisible on
+   a white card. Match Tailwind's gray-50 / gray-500 defaults. */
+:root[data-theme="light"] body.dark-glass table thead th {
+  color: #6B7280 !important;
+  background: #F9FAFB !important;
+  border-bottom-color: #E5E7EB !important;
+}
+:root[data-theme="light"] body.dark-glass table thead {
+  background: #F9FAFB !important;
+  border-bottom-color: #E5E7EB !important;
+}
+:root[data-theme="light"] body.dark-glass table tbody tr {
+  border-bottom-color: #F3F4F6 !important;
+}
+:root[data-theme="light"] body.dark-glass table tbody tr:hover {
+  background: #F9FAFB !important;
+}
+:root[data-theme="light"] body.dark-glass table tbody td {
+  color: #374151 !important;
+}
+:root[data-theme="light"] body.dark-glass table tbody td a { color: #1D6AE5 !important; }
+:root[data-theme="light"] body.dark-glass table tbody td a:hover { color: #1750B8 !important; }
 
 /* --- Status Badge Overrides (light-bg â†’ dark translucent) --- */
 .dark-glass .bg-red-50 { background: rgba(239,68,68,0.15) !important; }
