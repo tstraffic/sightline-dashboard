@@ -5,6 +5,19 @@ function fmtMoney(n) {
   return '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 function unitLabel(u) { return u ? u.replace(/_/g, ' ') : ''; }
+function fmtPct(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toFixed(1) + '%';
+}
+// Map margin % → semantic chip class. Threshold values come from
+// quoting_settings (admin-editable). Below watch = red, watch→healthy
+// = amber, ≥ healthy = green. No revenue yet = neutral gray.
+function marginChipClass(pct, healthy, watch, hasRevenue) {
+  if (!hasRevenue) return 'bg-gray-100 text-gray-500 ring-gray-200';
+  if (pct >= healthy) return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+  if (pct >= watch)   return 'bg-amber-50 text-amber-800 ring-amber-200';
+  return 'bg-red-50 text-red-700 ring-red-200';
+}
 
 const CATEGORY_LABELS = {
   planning_compliance:  'Planning',
@@ -55,8 +68,14 @@ if (sitesByGroup['__ungrouped'] && sitesByGroup['__ungrouped'].length > 0) {
       <h2 class="text-base font-semibold text-gray-900">Site Matrix</h2>
       <p class="text-xs text-gray-500 mt-0.5"><%= siteCount %> site<%= siteCount === 1 ? '' : 's' %>, <%= columnCount %> column<%= columnCount === 1 ? '' : 's' %>. Cells auto-save as you type.</p>
     </div>
-    <% if (!isLocked) { %>
-      <div class="flex items-center gap-2 flex-wrap">
+    <div class="flex items-center gap-2 flex-wrap">
+      <% if (canSeeCost) { %>
+        <label class="inline-flex items-center gap-2 cursor-pointer select-none px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+          <input type="checkbox" id="matrix-margin-toggle" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+          <span>Show margin</span>
+        </label>
+      <% } %>
+      <% if (!isLocked) { %>
         <details class="relative">
           <summary class="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
@@ -70,8 +89,8 @@ if (sitesByGroup['__ungrouped'] && sitesByGroup['__ungrouped'].length > 0) {
             <button type="submit" class="mt-2 w-full px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded">Add group</button>
           </form>
         </details>
-      </div>
-    <% } %>
+      <% } %>
+    </div>
   </div>
 
   <% if (columnCount === 0) { %>
@@ -170,7 +189,7 @@ if (sitesByGroup['__ungrouped'] && sitesByGroup['__ungrouped'].length > 0) {
                 <!-- Cells -->
                 <% columns.forEach(col => { %>
                   <% const cell = (cellMap[site.id] && cellMap[site.id][col.rate_card_item_id]) || { qty: '', hours: '', line_revenue: 0 }; %>
-                  <td class="border-b border-r border-gray-100 px-1.5 py-1.5 align-top text-center min-w-[60px]">
+                  <td class="border-b border-r border-gray-100 px-1.5 py-1.5 align-top text-center min-w-[60px] relative">
                     <input type="number" step="any" min="0"
                       data-cell-site="<%= site.id %>" data-cell-item="<%= col.rate_card_item_id %>" data-cell-field="qty"
                       value="<%= cell.qty || '' %>"
@@ -180,6 +199,32 @@ if (sitesByGroup['__ungrouped'] && sitesByGroup['__ungrouped'].length > 0) {
                          class="text-[10px] text-gray-400 mt-0.5 font-mono min-h-[12px]">
                       <% if (cell.line_revenue) { %>$<%= Number(cell.line_revenue).toFixed(2) %><% } %>
                     </div>
+                    <% if (canSeeCost) { %>
+                      <%
+                        const hasRev = (cell.line_revenue || 0) > 0;
+                        const chipClass = marginChipClass(cell.line_margin_pct || 0, marginHealthy, marginWatch, hasRev);
+                        const hasOverride = cell.unit_cost_override != null;
+                      %>
+                      <div data-cell-margin-site="<%= site.id %>" data-cell-margin-item="<%= col.rate_card_item_id %>"
+                           class="matrix-cost-block hidden mt-1 flex items-center justify-center gap-1">
+                        <span data-cell-margin-pct="<%= site.id %>-<%= col.rate_card_item_id %>"
+                              class="inline-flex items-center px-1 py-px text-[9px] font-semibold ring-1 rounded <%= chipClass %>">
+                          <%= hasRev ? fmtPct(cell.line_margin_pct || 0) : '—' %>
+                        </span>
+                        <button type="button"
+                          data-cell-cost-trigger="<%= site.id %>-<%= col.rate_card_item_id %>"
+                          data-derivation="<%= (cell.cost_derivation || '').replace(/"/g, '&quot;') %>"
+                          data-line-id="<%= cell.id || '' %>"
+                          data-site-id="<%= site.id %>"
+                          data-item-id="<%= col.rate_card_item_id %>"
+                          data-override="<%= cell.unit_cost_override != null ? cell.unit_cost_override : '' %>"
+                          data-can-edit="<%= isLocked ? '0' : '1' %>"
+                          title="Show cost derivation"
+                          class="cell-cost-trigger inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded <%= hasOverride ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200' %>">
+                          $
+                        </button>
+                      </div>
+                    <% } %>
                   </td>
                   <% if (col.has_hours) { %>
                     <td class="border-b border-r border-gray-100 px-1.5 py-1.5 align-top text-center min-w-[60px]">
@@ -192,8 +237,22 @@ if (sitesByGroup['__ungrouped'] && sitesByGroup['__ungrouped'].length > 0) {
                   <% } %>
                 <% }) %>
 
-                <td data-site-subtotal="<%= site.id %>" class="sticky right-0 z-10 bg-white hover:bg-yellow-50/30 border-b border-l border-gray-100 px-3 py-2 text-right font-mono text-sm font-semibold text-gray-900">
-                  <%= fmtMoney(site.subtotal_ex_gst || 0) %>
+                <td class="sticky right-0 z-10 bg-white hover:bg-yellow-50/30 border-b border-l border-gray-100 px-3 py-2 text-right min-w-[120px]">
+                  <div data-site-subtotal="<%= site.id %>" class="font-mono text-sm font-semibold text-gray-900">
+                    <%= fmtMoney(site.subtotal_ex_gst || 0) %>
+                  </div>
+                  <% if (canSeeCost) { %>
+                    <%
+                      const hasSiteRev = (site.subtotal_ex_gst || 0) > 0;
+                      const siteChipClass = marginChipClass(site.total_margin_pct || 0, marginHealthy, marginWatch, hasSiteRev);
+                    %>
+                    <div data-site-margin="<%= site.id %>" class="matrix-cost-block hidden mt-1 flex justify-end gap-1 text-[10px]">
+                      <span data-site-cost="<%= site.id %>" class="font-mono text-gray-500"><%= fmtMoney(site.total_cost || 0) %></span>
+                      <span data-site-margin-pct="<%= site.id %>" class="inline-flex items-center px-1 py-px font-semibold ring-1 rounded <%= siteChipClass %>">
+                        <%= hasSiteRev ? fmtPct(site.total_margin_pct || 0) : '—' %>
+                      </span>
+                    </div>
+                  <% } %>
                 </td>
               </tr>
             <% }) %>
@@ -269,13 +328,33 @@ if (sitesByGroup['__ungrouped'] && sitesByGroup['__ungrouped'].length > 0) {
             <tr class="bg-gray-100 border-t-2 border-gray-300">
               <td class="sticky left-0 z-10 bg-gray-100 border-r border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700">Column totals</td>
               <% columns.forEach(col => { %>
-                <td colspan="<%= colSubCount(col) %>" data-column-total="<%= col.rate_card_item_id %>"
-                    class="border-r border-gray-200 px-2 py-2 text-right font-mono text-xs font-semibold text-gray-700">
-                  <%= fmtMoney(colSubtotal(col)) %>
+                <td colspan="<%= colSubCount(col) %>" class="border-r border-gray-200 px-2 py-2 text-right">
+                  <div data-column-total="<%= col.rate_card_item_id %>" class="font-mono text-xs font-semibold text-gray-700">
+                    <%= fmtMoney(colSubtotal(col)) %>
+                  </div>
+                  <% if (canSeeCost) { %>
+                    <div data-column-cost="<%= col.rate_card_item_id %>" class="matrix-cost-block hidden font-mono text-[10px] text-gray-500 mt-0.5">
+                      cost <%= fmtMoney(columnCosts[col.rate_card_item_id] || 0) %>
+                    </div>
+                  <% } %>
                 </td>
               <% }) %>
-              <td data-quote-subtotal class="sticky right-0 z-10 bg-gray-100 border-l border-gray-200 px-3 py-2 text-right font-mono text-sm font-bold text-gray-900">
-                <%= fmtMoney(quote.subtotal_ex_gst || 0) %>
+              <td class="sticky right-0 z-10 bg-gray-100 border-l border-gray-200 px-3 py-2 text-right min-w-[120px]">
+                <div data-quote-subtotal class="font-mono text-sm font-bold text-gray-900">
+                  <%= fmtMoney(quote.subtotal_ex_gst || 0) %>
+                </div>
+                <% if (canSeeCost) { %>
+                  <%
+                    const hasQuoteRev = (quote.subtotal_ex_gst || 0) > 0;
+                    const qChipClass = marginChipClass(quote.total_margin_pct || 0, marginHealthy, marginWatch, hasQuoteRev);
+                  %>
+                  <div class="matrix-cost-block hidden mt-1 flex justify-end gap-1 text-[10px]">
+                    <span data-quote-cost class="font-mono text-gray-500"><%= fmtMoney(quote.total_cost || 0) %></span>
+                    <span data-quote-margin-pct class="inline-flex items-center px-1 py-px font-semibold ring-1 rounded <%= qChipClass %>">
+                      <%= hasQuoteRev ? fmtPct(quote.total_margin_pct || 0) : '—' %>
+                    </span>
+                  </div>
+                <% } %>
               </td>
             </tr>
           </tfoot>
@@ -299,13 +378,65 @@ if (sitesByGroup['__ungrouped'] && sitesByGroup['__ungrouped'].length > 0) {
           <span data-quote-total class="font-mono font-bold text-base text-gray-900"><%= fmtMoney(quote.total_inc_gst || 0) %></span>
         </div>
       </div>
+      <% if (canSeeCost) { %>
+        <%
+          const hasFootRev = (quote.subtotal_ex_gst || 0) > 0;
+          const footChipClass = marginChipClass(quote.total_margin_pct || 0, marginHealthy, marginWatch, hasFootRev);
+        %>
+        <div class="matrix-cost-block hidden px-5 py-2 border-t border-gray-200 bg-amber-50/40 grid grid-cols-3 gap-4 text-xs">
+          <div class="text-right">
+            <span class="text-gray-500 uppercase tracking-wide font-semibold mr-2">Cost</span>
+            <span data-quote-cost-foot class="font-mono font-semibold text-gray-700"><%= fmtMoney(quote.total_cost || 0) %></span>
+          </div>
+          <div class="text-right">
+            <span class="text-gray-500 uppercase tracking-wide font-semibold mr-2">Margin</span>
+            <span data-quote-margin-foot class="font-mono font-semibold text-gray-700"><%= fmtMoney(quote.total_margin || 0) %></span>
+          </div>
+          <div class="text-right">
+            <span class="text-gray-500 uppercase tracking-wide font-semibold mr-2">Margin %</span>
+            <span data-quote-margin-pct-foot class="inline-flex items-center px-1.5 py-0.5 font-semibold ring-1 rounded <%= footChipClass %>">
+              <%= hasFootRev ? fmtPct(quote.total_margin_pct || 0) : '—' %>
+            </span>
+          </div>
+        </div>
+      <% } %>
     <% } %>
   <% } %>
 
   <span id="site-bottom"></span>
 </div>
 
-<% if (!isLocked && columnCount > 0) { %>
+<% if (canSeeCost) { %>
+  <!-- Cost override popover (one shared instance, repositioned on each trigger click) -->
+  <div id="cost-popover" class="hidden fixed z-50 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-xl text-xs">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <p class="font-semibold text-gray-900">Cost derivation</p>
+      <button type="button" id="cost-popover-close" class="text-gray-400 hover:text-gray-600 leading-none text-lg">×</button>
+    </div>
+    <p id="cost-popover-derivation" class="text-gray-700 mb-3 font-mono leading-relaxed"></p>
+    <% if (!isLocked) { %>
+      <label class="block text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Override unit cost ($)</label>
+      <div class="flex items-center gap-1.5">
+        <input type="number" step="any" min="0" id="cost-popover-input"
+          placeholder="Leave blank for default"
+          class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono">
+        <button type="button" id="cost-popover-save" class="px-2 py-1 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded">Save</button>
+        <button type="button" id="cost-popover-clear" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded">Clear</button>
+      </div>
+      <p id="cost-popover-status" class="mt-1.5 text-[10px] text-gray-500"></p>
+    <% } else { %>
+      <p class="text-[10px] text-gray-500 italic">Matrix locked — overrides disabled.</p>
+    <% } %>
+  </div>
+<% } %>
+
+<% if (columnCount > 0) { %>
   <script src="/js/quote-matrix.js" defer></script>
-  <script>window.__QUOTE_ID__ = <%= quote.id %>;</script>
+  <script>
+    window.__QUOTE_ID__ = <%= quote.id %>;
+    window.__QUOTE_LOCKED__ = <%= isLocked ? 'true' : 'false' %>;
+    window.__QUOTE_CAN_SEE_COST__ = <%= canSeeCost ? 'true' : 'false' %>;
+    window.__QUOTE_MARGIN_HEALTHY__ = <%= marginHealthy %>;
+    window.__QUOTE_MARGIN_WATCH__ = <%= marginWatch %>;
+  </script>
 <% } %>
