@@ -1,0 +1,170 @@
+<div class="max-w-3xl mx-auto space-y-6">
+
+  <!-- Header -->
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Quoting Settings</h1>
+    <p class="text-sm text-gray-500 mt-1">Company-wide defaults used when building new quotes and rate cards.</p>
+  </div>
+
+  <!-- Flash Messages -->
+  <% if (flash_success && flash_success.length > 0) { %>
+    <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm" data-auto-dismiss>
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        <%= flash_success[0] %>
+      </div>
+    </div>
+  <% } %>
+  <% if (flash_error && flash_error.length > 0) { %>
+    <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm" data-auto-dismiss>
+      <div class="flex items-center gap-2">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <%= flash_error[0] %>
+      </div>
+    </div>
+  <% } %>
+
+  <form method="POST" action="/rate-cards/settings" class="space-y-6">
+    <%- include('../partials/csrf') %>
+
+    <!-- Cost defaults -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
+        <h2 class="text-base font-semibold text-gray-900">Default Cost Rates</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Used to compute internal cost for crew rate items (TC × hours + TL × hours + Supervisor × hours). Leave blank to require a per-item cost on every rate card.</p>
+      </div>
+      <div class="p-5 grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label for="default_tc_cost_rate" class="block text-sm font-medium text-gray-700 mb-1">TC hourly cost (AUD)</label>
+          <input type="number" step="0.01" min="0" id="default_tc_cost_rate" name="default_tc_cost_rate"
+            value="<%= settings.default_tc_cost_rate ?? '' %>" placeholder="e.g. 55.00"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">Traffic Controller hourly cost (incl. on-costs).</p>
+        </div>
+        <div>
+          <label for="default_tl_cost_rate" class="block text-sm font-medium text-gray-700 mb-1">TL hourly cost (AUD)</label>
+          <input type="number" step="0.01" min="0" id="default_tl_cost_rate" name="default_tl_cost_rate"
+            value="<%= settings.default_tl_cost_rate ?? '' %>" placeholder="e.g. 65.00"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">Team Leader hourly cost.</p>
+        </div>
+        <div>
+          <label for="default_supervisor_cost_rate" class="block text-sm font-medium text-gray-700 mb-1">Supervisor hourly cost (AUD)</label>
+          <input type="number" step="0.01" min="0" id="default_supervisor_cost_rate" name="default_supervisor_cost_rate"
+            value="<%= settings.default_supervisor_cost_rate ?? '' %>" placeholder="e.g. 80.00"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">Site Supervisor hourly cost.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quote rules -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
+        <h2 class="text-base font-semibold text-gray-900">Quote Rules</h2>
+      </div>
+      <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label for="gst_rate" class="block text-sm font-medium text-gray-700 mb-1">GST rate</label>
+          <input type="number" step="0.0001" min="0" max="1" id="gst_rate" name="gst_rate"
+            value="<%= settings.gst_rate %>"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">Decimal — 0.10 for 10% GST.</p>
+        </div>
+        <div>
+          <label for="default_validity_days" class="block text-sm font-medium text-gray-700 mb-1">Default validity (days)</label>
+          <input type="number" step="1" min="1" id="default_validity_days" name="default_validity_days"
+            value="<%= settings.default_validity_days %>"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">Days from quote date until "valid until" expires.</p>
+        </div>
+        <div class="md:col-span-2">
+          <label for="quote_number_format" class="block text-sm font-medium text-gray-700 mb-1">Quote number format</label>
+          <input type="text" id="quote_number_format" name="quote_number_format"
+            value="<%= settings.quote_number_format %>"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">Supports <code class="bg-gray-100 px-1 rounded">{YYYY}</code> for year and <code class="bg-gray-100 px-1 rounded">{NNN}</code> for the zero-padded sequence number.</p>
+        </div>
+        <div>
+          <label for="tma_non_ts_vehicle_surcharge_pct" class="block text-sm font-medium text-gray-700 mb-1">TMA non-T&S vehicle surcharge (%)</label>
+          <input type="number" step="0.1" min="0" id="tma_non_ts_vehicle_surcharge_pct" name="tma_non_ts_vehicle_surcharge_pct"
+            value="<%= settings.tma_non_ts_vehicle_surcharge_pct %>"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">Loading applied when a TMA operator drives a non-T&S vehicle.</p>
+        </div>
+        <div class="flex items-center gap-3 pt-7">
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" name="default_within_50km" class="sr-only peer" <%= settings.default_within_50km ? 'checked' : '' %>>
+            <div class="w-10 h-5 bg-gray-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-brand-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-brand-600"></div>
+          </label>
+          <div>
+            <p class="text-sm text-gray-700">Within 50 km of depot (default)</p>
+            <p class="text-xs text-gray-400">When on, new quotes default to "on-site time only". Off = depot-to-depot at the applicable hourly rate.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Margin thresholds -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
+        <h2 class="text-base font-semibold text-gray-900">Margin Thresholds</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Color coding shown on the Site Matrix grid and quote list (admin / finance only).</p>
+      </div>
+      <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label for="margin_healthy_threshold" class="block text-sm font-medium text-gray-700 mb-1">Healthy threshold (%)</label>
+          <input type="number" step="0.1" min="0" id="margin_healthy_threshold" name="margin_healthy_threshold"
+            value="<%= settings.margin_healthy_threshold %>"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">≥ this margin % = <span class="inline-block px-1.5 rounded bg-emerald-100 text-emerald-700">green</span>.</p>
+        </div>
+        <div>
+          <label for="margin_watch_threshold" class="block text-sm font-medium text-gray-700 mb-1">Watch threshold (%)</label>
+          <input type="number" step="0.1" min="0" id="margin_watch_threshold" name="margin_watch_threshold"
+            value="<%= settings.margin_watch_threshold %>"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <p class="text-xs text-gray-400 mt-1">Between watch and healthy = <span class="inline-block px-1.5 rounded bg-amber-100 text-amber-700">amber</span>. Below watch = <span class="inline-block px-1.5 rounded bg-red-100 text-red-700">red</span>.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Defaults: inclusions / exclusions / terms -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
+        <h2 class="text-base font-semibold text-gray-900">Default Inclusions, Exclusions &amp; Terms</h2>
+        <p class="text-xs text-gray-500 mt-0.5">Pre-fill new quotes with these. Users can edit per quote.</p>
+      </div>
+      <div class="p-5 space-y-5">
+        <div>
+          <label for="inclusions_text" class="block text-sm font-medium text-gray-700 mb-1">Default inclusions</label>
+          <textarea id="inclusions_text" name="inclusions_text" rows="6"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= inclusionsText %></textarea>
+          <p class="text-xs text-gray-400 mt-1">One bullet point per line.</p>
+        </div>
+        <div>
+          <label for="exclusions_text" class="block text-sm font-medium text-gray-700 mb-1">Default exclusions</label>
+          <textarea id="exclusions_text" name="exclusions_text" rows="6"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= exclusionsText %></textarea>
+          <p class="text-xs text-gray-400 mt-1">One bullet point per line.</p>
+        </div>
+        <div>
+          <label for="terms_default" class="block text-sm font-medium text-gray-700 mb-1">Default terms</label>
+          <textarea id="terms_default" name="terms_default" rows="10"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= settings.company_terms_default || '' %></textarea>
+          <p class="text-xs text-gray-400 mt-1">Shown on the terms page of the PDF. Markdown-style <code class="bg-gray-100 px-1 rounded">**bold**</code> supported.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Save bar -->
+    <div class="flex items-center justify-between bg-white border border-gray-200 rounded-xl shadow-sm px-5 py-4">
+      <p class="text-xs text-gray-400">Last updated <%= settings.updated_at ? formatDateTime(settings.updated_at) : '—' %></p>
+      <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg transition-colors">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        Save settings
+      </button>
+    </div>
+
+  </form>
+</div>

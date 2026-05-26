@@ -1,0 +1,140 @@
+<%
+const inclusionsPreview = JSON.parse(settings?.company_inclusions_defaults_json || '[]');
+const exclusionsPreview = JSON.parse(settings?.company_exclusions_defaults_json || '[]');
+%>
+
+<div class="max-w-3xl mx-auto space-y-6">
+
+  <!-- Header -->
+  <div>
+    <a href="/quotes" class="inline-flex items-center gap-1 text-xs text-gray-500 hover:text-gray-700 mb-2">
+      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      Back to quotes
+    </a>
+    <h1 class="text-2xl font-bold text-gray-900">New Quote</h1>
+    <p class="text-sm text-gray-500 mt-1">Start a draft. You'll add sites and line items after the quote is created.</p>
+  </div>
+
+  <% if (flash_error && flash_error.length > 0) { %>
+    <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm" data-auto-dismiss><%= flash_error[0] %></div>
+  <% } %>
+
+  <% if (rateCards.length === 0) { %>
+    <div class="bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-lg text-sm">
+      No active rate cards exist yet. <a href="/rate-cards/new" class="font-medium underline">Create a rate card</a> first so this quote has something to bill against.
+    </div>
+  <% } %>
+
+  <form method="POST" action="/quotes" class="space-y-6">
+    <%- include('../../partials/csrf') %>
+
+    <!-- Client + project -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
+        <h2 class="text-base font-semibold text-gray-900">Client &amp; Project</h2>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label for="client_id" class="block text-sm font-medium text-gray-700 mb-1">Client</label>
+          <select id="client_id" name="client_id" class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+            <option value="">— Use free-text name below —</option>
+            <% clients.forEach(c => { %>
+              <option value="<%= c.id %>" <%= String(form.client_id) === String(c.id) ? 'selected' : '' %>><%= c.company_name %></option>
+            <% }) %>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">Pick an existing client, or leave blank and type the client name below for a one-off quote.</p>
+        </div>
+        <div>
+          <label for="client_name_freetext" class="block text-sm font-medium text-gray-700 mb-1">Client name (free-text fallback)</label>
+          <input type="text" id="client_name_freetext" name="client_name_freetext" value="<%= form.client_name_freetext %>" placeholder="Only used when no client is picked above"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        </div>
+        <div>
+          <label for="project_name" class="block text-sm font-medium text-gray-700 mb-1">Project name <span class="text-red-500">*</span></label>
+          <input type="text" id="project_name" name="project_name" required value="<%= form.project_name %>" placeholder="e.g. Pneumatic Tube Count Project"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        </div>
+        <div>
+          <label for="project_description" class="block text-sm font-medium text-gray-700 mb-1">Project description</label>
+          <textarea id="project_description" name="project_description" rows="3" placeholder="One-paragraph summary shown on the PDF scope page"
+            class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= form.project_description %></textarea>
+        </div>
+      </div>
+    </div>
+
+    <!-- Rate card + dates -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
+        <h2 class="text-base font-semibold text-gray-900">Pricing &amp; Validity</h2>
+      </div>
+      <div class="p-5 space-y-4">
+        <div>
+          <label for="rate_card_id" class="block text-sm font-medium text-gray-700 mb-1">Rate card</label>
+          <select id="rate_card_id" name="rate_card_id" class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" <%= rateCards.length === 0 ? 'disabled' : '' %>>
+            <% if (rateCards.length === 0) { %>
+              <option value="">No rate cards available</option>
+            <% } else { %>
+              <% rateCards.forEach(c => { %>
+                <option value="<%= c.id %>" <%= String(form.rate_card_id) === String(c.id) ? 'selected' : '' %>>
+                  <%= c.name %><%= c.is_default ? ' (default)' : '' %>
+                </option>
+              <% }) %>
+            <% } %>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">All active items from this card become columns on the Site Matrix. You can hide / reorder / add custom columns per-quote later.</p>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label for="quote_date" class="block text-sm font-medium text-gray-700 mb-1">Quote date</label>
+            <input type="date" id="quote_date" name="quote_date" value="<%= form.quote_date %>" required
+              class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          </div>
+          <div>
+            <label for="valid_until_date" class="block text-sm font-medium text-gray-700 mb-1">Valid until</label>
+            <input type="date" id="valid_until_date" name="valid_until_date" value="<%= form.valid_until_date %>"
+              class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+            <p class="text-xs text-gray-400 mt-1">Defaults to today + <%= settings?.default_validity_days || 30 %> days (from settings).</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Settings preview -->
+    <details class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <summary class="px-5 py-3 cursor-pointer text-sm font-medium text-gray-700 flex items-center justify-between">
+        <span>Inclusions, exclusions &amp; terms (pre-filled from settings — editable after creating)</span>
+        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </summary>
+      <div class="p-5 grid grid-cols-1 md:grid-cols-2 gap-6 border-t border-gray-200">
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700 mb-2">Inclusions</p>
+          <% if (inclusionsPreview.length) { %>
+            <ul class="space-y-1 text-xs text-gray-600 list-disc pl-4">
+              <% inclusionsPreview.forEach(i => { %><li><%= i %></li><% }) %>
+            </ul>
+          <% } else { %>
+            <p class="text-xs text-gray-400 italic">None set in settings.</p>
+          <% } %>
+        </div>
+        <div>
+          <p class="text-xs font-semibold uppercase tracking-wide text-amber-700 mb-2">Exclusions</p>
+          <% if (exclusionsPreview.length) { %>
+            <ul class="space-y-1 text-xs text-gray-600 list-disc pl-4">
+              <% exclusionsPreview.forEach(i => { %><li><%= i %></li><% }) %>
+            </ul>
+          <% } else { %>
+            <p class="text-xs text-gray-400 italic">None set in settings.</p>
+          <% } %>
+        </div>
+      </div>
+    </details>
+
+    <!-- Action bar -->
+    <div class="flex items-center justify-end gap-2">
+      <a href="/quotes" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</a>
+      <button type="submit" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg" <%= rateCards.length === 0 ? 'disabled style=opacity:0.5' : '' %>>
+        Create draft quote
+      </button>
+    </div>
+  </form>
+</div>

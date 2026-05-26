@@ -10887,6 +10887,397 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 238: Quoting Module — schema
+  //   Pricing-side counterpart to the existing tenders module. A quote is
+  //   a fixed-price offer for a known scope (vs. a tender = competitive
+  //   bid submission). Tables fall into three groups:
+  //
+  //     Rate cards   — reusable price books, with variant pricing for
+  //                    shift-type × hour-bracket matrices (Daracon-style
+  //                    SoRs) and an allowances child table for meal /
+  //                    travel / LAFHA / TMA-establishment surcharges.
+  //     Quotes       — a quote header + groups + sites + line items.
+  //                    Sell side (rate_snapshot) AND cost side
+  //                    (unit_cost_snapshot, override) are both snapshotted
+  //                    at line creation so rate-card / worker-rate edits
+  //                    later don't retroactively shift historical margins.
+  //     Imports      — rate_card_imports tracks PDF/Word/Excel uploads
+  //                    that an admin can review + commit into a rate card.
+  //                    Table only in this migration; UI lands later.
+  //
+  //   rate_cards.purpose ('quoting' | 'reference') keeps the door open for
+  //   side-by-side compare against competitor SoRs without a future
+  //   migration: reference cards are import-only, never selectable when
+  //   building a quote.
+  // =============================================
+  if (!isMigrationApplied.get(238)) {
+    console.log('Running migration 238: Quoting Module — schema');
+    try {
+      db.exec(`
+        -- ─────────────────────────────────────────────────────────────
+        -- quoting_settings (singleton)
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quoting_settings (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          default_tc_cost_rate REAL,
+          default_tl_cost_rate REAL,
+          default_supervisor_cost_rate REAL,
+          gst_rate REAL NOT NULL DEFAULT 0.10,
+          margin_healthy_threshold REAL NOT NULL DEFAULT 25.00,
+          margin_watch_threshold REAL NOT NULL DEFAULT 15.00,
+          quote_number_format TEXT NOT NULL DEFAULT 'TS-QTE-{YYYY}-{NNN}',
+          default_validity_days INTEGER NOT NULL DEFAULT 30,
+          company_inclusions_defaults_json TEXT NOT NULL DEFAULT '[]',
+          company_exclusions_defaults_json TEXT NOT NULL DEFAULT '[]',
+          company_terms_default TEXT DEFAULT '',
+          default_within_50km INTEGER NOT NULL DEFAULT 1,
+          tma_non_ts_vehicle_surcharge_pct REAL NOT NULL DEFAULT 20.0,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_card_imports — uploaded PDF/Word/Excel review queue
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_card_imports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          filename TEXT NOT NULL,
+          source_format TEXT NOT NULL CHECK(source_format IN ('pdf','docx','xlsx')),
+          file_path TEXT NOT NULL,
+          extracted_text TEXT,
+          proposed_json TEXT,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK(status IN ('pending','extracting','review','committed','failed','discarded')),
+          error_message TEXT,
+          committed_rate_card_id INTEGER REFERENCES rate_cards(id) ON DELETE SET NULL,
+          uploaded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_rate_card_imports_status ON rate_card_imports(status, created_at DESC);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_cards
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_cards (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+          effective_from DATE,
+          effective_to DATE,
+          is_default INTEGER NOT NULL DEFAULT 0,
+          purpose TEXT NOT NULL DEFAULT 'quoting'
+            CHECK(purpose IN ('quoting','reference')),
+          source TEXT
+            CHECK(source IN ('manual','imported_pdf','imported_docx','imported_xlsx') OR source IS NULL),
+          source_import_id INTEGER REFERENCES rate_card_imports(id) ON DELETE SET NULL,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_rate_cards_purpose ON rate_cards(purpose, is_active);
+        CREATE INDEX IF NOT EXISTS idx_rate_cards_client ON rate_cards(client_id);
+        CREATE INDEX IF NOT EXISTS idx_rate_cards_default ON rate_cards(is_default, is_active);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_card_items
+        --   Each row = one billable line on a rate card. Pricing lives in
+        --   rate_card_item_variants — for cards that don't differentiate
+        --   by shift/hour, exactly one variant row (shift_type='standard',
+        --   hour_bracket='standard') carries the price.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_card_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rate_card_id INTEGER NOT NULL REFERENCES rate_cards(id) ON DELETE CASCADE,
+          category TEXT NOT NULL
+            CHECK(category IN ('planning_compliance','tc_labour','equipment_vehicles','provisioning','allowances_misc')),
+          code TEXT,
+          name TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          unit TEXT NOT NULL
+            CHECK(unit IN ('per_shift','per_hour','per_site','per_day','per_week','per_km','per_application','per_plan','per_delivery','per_spa','fixed')),
+          has_hours_input INTEGER NOT NULL DEFAULT 0,
+          is_addon INTEGER NOT NULL DEFAULT 0,
+          min_booking_hours REAL,
+          pricing_status TEXT NOT NULL DEFAULT 'priced'
+            CHECK(pricing_status IN ('priced','poa')),
+          cost_method TEXT NOT NULL DEFAULT 'fixed'
+            CHECK(cost_method IN ('fixed','computed_crew')),
+          crew_composition_json TEXT,
+          vehicle_cost_per_hour REAL,
+          notes TEXT DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_rate_card_items_card ON rate_card_items(rate_card_id, category, sort_order);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_card_item_variants
+        --   (item, shift_type, hour_bracket) → sell rate + unit cost.
+        --   Daracon-style SoRs use multiple variants per item; the TfNSW
+        --   Tube Count style uses a single (standard, standard) variant.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_card_item_variants (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rate_card_item_id INTEGER NOT NULL REFERENCES rate_card_items(id) ON DELETE CASCADE,
+          shift_type TEXT NOT NULL DEFAULT 'standard'
+            CHECK(shift_type IN ('standard','weekday','weeknight','weekend','public_holiday')),
+          hour_bracket TEXT NOT NULL DEFAULT 'standard'
+            CHECK(hour_bracket IN ('standard','0_to_8','8_to_10','10_plus')),
+          rate REAL,
+          unit_cost REAL,
+          notes TEXT DEFAULT '',
+          UNIQUE(rate_card_item_id, shift_type, hour_bracket)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rcv_item ON rate_card_item_variants(rate_card_item_id);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_card_allowances
+        --   Conditional surcharges (meal allowance >9.5hr, travel per TC
+        --   per shift, LAFHA per day, TMA establishment per person per
+        --   shift). Snapshotted onto quote_allowances at quote time.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_card_allowances (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rate_card_id INTEGER NOT NULL REFERENCES rate_cards(id) ON DELETE CASCADE,
+          code TEXT,
+          name TEXT NOT NULL,
+          scope TEXT NOT NULL
+            CHECK(scope IN ('per_person_per_shift','per_person_per_day','per_shift','per_day','flat')),
+          amount REAL NOT NULL DEFAULT 0,
+          unit_cost REAL,
+          min_hours_trigger REAL,
+          auto_apply INTEGER NOT NULL DEFAULT 1,
+          notes TEXT DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_rca_card ON rate_card_allowances(rate_card_id, sort_order);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quotes
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quotes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_number TEXT NOT NULL UNIQUE,
+          client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+          client_name_snapshot TEXT NOT NULL DEFAULT '',
+          project_name TEXT NOT NULL DEFAULT '',
+          project_description TEXT DEFAULT '',
+          prepared_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          rate_card_id INTEGER REFERENCES rate_cards(id) ON DELETE SET NULL,
+          quote_date DATE NOT NULL DEFAULT (date('now')),
+          valid_until_date DATE,
+          within_50km INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK(status IN ('draft','sent','accepted','rejected','expired','superseded')),
+          version INTEGER NOT NULL DEFAULT 1,
+          parent_quote_id INTEGER REFERENCES quotes(id) ON DELETE SET NULL,
+          subtotal_ex_gst REAL NOT NULL DEFAULT 0,
+          gst REAL NOT NULL DEFAULT 0,
+          total_inc_gst REAL NOT NULL DEFAULT 0,
+          total_cost REAL NOT NULL DEFAULT 0,
+          total_margin REAL NOT NULL DEFAULT 0,
+          total_margin_pct REAL NOT NULL DEFAULT 0,
+          inclusions_json TEXT NOT NULL DEFAULT '[]',
+          exclusions_json TEXT NOT NULL DEFAULT '[]',
+          terms TEXT DEFAULT '',
+          internal_notes TEXT DEFAULT '',
+          pdf_path TEXT,
+          sent_at DATETIME,
+          accepted_at DATETIME,
+          rejected_at DATETIME,
+          rejection_reason TEXT,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_quotes_status_date ON quotes(status, quote_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_quotes_client_date ON quotes(client_id, quote_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_quotes_parent ON quotes(parent_quote_id);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_groups (optional grouping of sites — screenline / stage)
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_quote_groups_quote ON quote_groups(quote_id, sort_order);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_sites
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_sites (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+          group_id INTEGER REFERENCES quote_groups(id) ON DELETE SET NULL,
+          site_code TEXT,
+          site_name TEXT NOT NULL,
+          road_name TEXT DEFAULT '',
+          road_classification TEXT
+            CHECK(road_classification IN ('state','regional','local','arterial','other') OR road_classification IS NULL),
+          notes TEXT DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          subtotal_ex_gst REAL NOT NULL DEFAULT 0,
+          total_cost REAL NOT NULL DEFAULT 0,
+          total_margin REAL NOT NULL DEFAULT 0,
+          total_margin_pct REAL NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_quote_sites_quote ON quote_sites(quote_id, sort_order);
+        CREATE INDEX IF NOT EXISTS idx_quote_sites_group ON quote_sites(group_id);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_line_items
+        --   The cells of the Site Matrix grid. Both sell rate and cost
+        --   are snapshotted at creation. shift_type + hour_bracket
+        --   identify which rate_card_item_variant was resolved.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_line_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_site_id INTEGER NOT NULL REFERENCES quote_sites(id) ON DELETE CASCADE,
+          rate_card_item_id INTEGER REFERENCES rate_card_items(id) ON DELETE SET NULL,
+          rate_card_item_variant_id INTEGER REFERENCES rate_card_item_variants(id) ON DELETE SET NULL,
+          item_name_snapshot TEXT NOT NULL,
+          unit_snapshot TEXT NOT NULL,
+          category_snapshot TEXT,
+          shift_type TEXT NOT NULL DEFAULT 'standard'
+            CHECK(shift_type IN ('standard','weekday','weeknight','weekend','public_holiday')),
+          hour_bracket TEXT NOT NULL DEFAULT 'standard'
+            CHECK(hour_bracket IN ('standard','0_to_8','8_to_10','10_plus')),
+          rate_snapshot REAL NOT NULL DEFAULT 0,
+          has_hours_snapshot INTEGER NOT NULL DEFAULT 0,
+          qty REAL NOT NULL DEFAULT 0,
+          hours REAL,
+          cost_method_snapshot TEXT NOT NULL DEFAULT 'fixed'
+            CHECK(cost_method_snapshot IN ('fixed','computed_crew')),
+          unit_cost_snapshot REAL NOT NULL DEFAULT 0,
+          crew_composition_snapshot_json TEXT,
+          vehicle_cost_snapshot REAL,
+          unit_cost_override REAL,
+          line_revenue REAL NOT NULL DEFAULT 0,
+          line_cost REAL NOT NULL DEFAULT 0,
+          line_margin REAL NOT NULL DEFAULT 0,
+          line_margin_pct REAL NOT NULL DEFAULT 0,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_qli_site ON quote_line_items(quote_site_id, sort_order);
+        CREATE INDEX IF NOT EXISTS idx_qli_item ON quote_line_items(rate_card_item_id);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_rate_items
+        --   Per-quote column list for the Site Matrix grid. When a quote
+        --   is created from a rate card, one row per active rate_card_item
+        --   is inserted here so the grid renders. Users can then hide
+        --   columns (is_hidden=1), reorder them (sort_order), or add a
+        --   one-off custom column not on any rate card by leaving
+        --   rate_card_item_id NULL and filling the custom_* fields.
+        --   Hidden rows preserve their line items underneath — unhiding
+        --   restores everything.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_rate_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+          rate_card_item_id INTEGER REFERENCES rate_card_items(id) ON DELETE SET NULL,
+          custom_name TEXT,
+          custom_unit TEXT
+            CHECK(custom_unit IN ('per_shift','per_hour','per_site','per_day','per_week','per_km','per_application','per_plan','per_delivery','per_spa','fixed') OR custom_unit IS NULL),
+          custom_rate REAL,
+          custom_unit_cost REAL,
+          custom_has_hours_input INTEGER NOT NULL DEFAULT 0,
+          custom_category TEXT
+            CHECK(custom_category IN ('planning_compliance','tc_labour','equipment_vehicles','provisioning','allowances_misc') OR custom_category IS NULL),
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_hidden INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(quote_id, rate_card_item_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_qri_quote ON quote_rate_items(quote_id, sort_order);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_allowances
+        --   Per-quote rolled-up surcharges (meal, travel, LAFHA, TMA
+        --   establishment). Either auto-derived from the labour lines or
+        --   manually added. Snapshots amount + cost so changes to the
+        --   rate card later don't shift historical totals.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_allowances (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+          rate_card_allowance_id INTEGER REFERENCES rate_card_allowances(id) ON DELETE SET NULL,
+          name_snapshot TEXT NOT NULL,
+          scope_snapshot TEXT NOT NULL,
+          amount_snapshot REAL NOT NULL DEFAULT 0,
+          unit_cost_snapshot REAL,
+          qty REAL NOT NULL DEFAULT 0,
+          line_revenue REAL NOT NULL DEFAULT 0,
+          line_cost REAL NOT NULL DEFAULT 0,
+          notes TEXT DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_quote_allowances_quote ON quote_allowances(quote_id, sort_order);
+      `);
+
+      // Singleton quoting_settings row (required config, not demo data).
+      // Sensible defaults shipped with the module; admins edit on the
+      // /rate-cards/settings page once that UI lands.
+      const existingSettings = db.prepare('SELECT COUNT(*) AS c FROM quoting_settings').get().c;
+      if (existingSettings === 0) {
+        const defaultInclusions = JSON.stringify([
+          'TGS preparation in accordance with TfNSW TcAWS v6.1',
+          'Road Occupancy Licence (ROL) application and coordination',
+          'Site mobilisation and establishment',
+          'Accredited traffic control personnel',
+          'All required signage and equipment',
+          'Public liability insurance ($20M)',
+          'Workers compensation insurance'
+        ]);
+        const defaultExclusions = JSON.stringify([
+          'After-hours / weekend rates (charged at applicable penalty rates unless quoted)',
+          'Additional services not specified in this quotation',
+          'Council fees, permits and statutory charges',
+          'Extended standby beyond contracted hours',
+          'Damage to or theft of equipment due to client or third-party action',
+          'Variations to scope — to be quoted separately'
+        ]);
+        const defaultTerms = [
+          '**Validity:** This quote is valid for 30 days from quote date unless otherwise stated.',
+          '',
+          '**Payment Terms:** Net 30 days from date of invoice.',
+          '',
+          '**Cancellation:** Cancellations within 2 hours of shift commencement (or 4 hours for TMA/LTMA operators) incur the minimum booking period.',
+          '',
+          '**Variations:** Any changes to the scope will be quoted separately and require written approval before commencement.',
+          '',
+          '**Insurance:** T&S Traffic Management maintains Public Liability ($20M) and Workers Compensation insurance.'
+        ].join('\n');
+
+        db.prepare(`
+          INSERT INTO quoting_settings (
+            id, gst_rate, margin_healthy_threshold, margin_watch_threshold,
+            quote_number_format, default_validity_days,
+            company_inclusions_defaults_json, company_exclusions_defaults_json,
+            company_terms_default, default_within_50km,
+            tma_non_ts_vehicle_surcharge_pct
+          ) VALUES (1, 0.10, 25.0, 15.0, 'TS-QTE-{YYYY}-{NNN}', 30, ?, ?, ?, 1, 20.0)
+        `).run(defaultInclusions, defaultExclusions, defaultTerms);
+      }
+
+      recordMigration.run(238, 'Quoting Module — schema');
+      console.log('Migration 238 applied: Quoting Module schema (11 tables, indexes, settings singleton)');
+    } catch (e) {
+      console.error('Migration 238 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
