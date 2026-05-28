@@ -709,7 +709,7 @@
                 </td>
                 <td class="px-4 py-3 text-right">
                   <div class="flex items-center justify-end gap-1">
-                    <a href="/hr/documents/<%= doc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= doc.document_name || doc.original_name %>" class="px-2 py-1 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition">View</a>
+                    <a href="/hr/documents/<%= doc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= doc.document_name || doc.original_name %>" <% if (isImageFile(doc.original_name || doc.filename)) { %>data-lightbox-mime="image/*"<% } %> class="px-2 py-1 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition">View</a>
                     <a href="/hr/documents/<%= doc.id %>/download" class="px-2 py-1 text-xs text-gray-600 bg-gray-100 hover:bg-brand-50 hover:text-brand-700 rounded-lg transition">Download</a>
                     <% if (doc.verification_status === 'pending') { %>
                       <form method="POST" action="/hr/documents/<%= doc.id %>/verify" class="inline"><%- include('../partials/csrf') %><input type="hidden" name="action" value="verify"><button type="submit" class="px-2 py-1 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition">Verify</button></form>
@@ -827,7 +827,7 @@
               <div class="pt-2 mt-2 border-t border-gray-100">
                 <div class="flex items-center gap-2">
                   <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-                  <a href="/hr/documents/<%= linkedDoc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= linkedDoc.document_name || linkedDoc.original_name %>" class="text-[10px] text-brand-600 hover:text-brand-700 font-medium truncate"><%= linkedDoc.document_name || linkedDoc.original_name %></a>
+                  <a href="/hr/documents/<%= linkedDoc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= linkedDoc.document_name || linkedDoc.original_name %>" <% if (isImageFile(linkedDoc.original_name || linkedDoc.filename)) { %>data-lightbox-mime="image/*"<% } %> class="text-[10px] text-brand-600 hover:text-brand-700 font-medium truncate"><%= linkedDoc.document_name || linkedDoc.original_name %></a>
                 </div>
               </div>
             <% } %>

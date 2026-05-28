@@ -235,7 +235,7 @@
                     <input type="text" name="decision_note" placeholder="Optional note" maxlength="500" class="px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg w-full sm:w-44">
                     <button type="submit" class="px-3 py-1.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg whitespace-nowrap">Approve</button>
                   </form>
-                  <form method="POST" action="/swms/access-requests/<%= r.id %>/reject" onsubmit="var n=this.querySelector('input[name=decision_note]'); if(!n.value){ n.value = prompt('Reason for rejecting?') || ''; } return n.value !== null;" class="flex gap-2">
+                  <form method="POST" action="/swms/access-requests/<%= r.id %>/reject" onsubmit="var n=this.querySelector('input[name=decision_note]'); var p = prompt('Reason for rejecting? (optional)', n.value || ''); if (p === null) return false; n.value = p; return true;" class="flex gap-2">
                     <%- include('../partials/csrf') %>
                     <input type="hidden" name="decision_note" value="">
                     <button type="submit" class="px-3 py-1.5 text-xs font-semibold text-red-700 bg-red-50 hover:bg-red-100 ring-1 ring-red-200 rounded-lg whitespace-nowrap">Reject</button>
