@@ -643,6 +643,8 @@ router.post('/submissions/delete', (req, res) => {
 
 // Serve uploaded induction files (authenticated)
 // View URLs: /induction/admin/uploads/:id/:filename — :id is for context only, files are stored flat
+// Images and PDFs are served inline so the admin can preview them in the
+// in-app lightbox (iframe / <img>). Anything else falls back to attachment.
 router.get('/uploads/:id/:filename', (req, res) => {
   // Sanitize filename — prevent path traversal attacks
   const filename = path.basename(req.params.filename);
@@ -656,6 +658,19 @@ router.get('/uploads/:id/:filename', (req, res) => {
     if (!filePath.startsWith(legacyUploadsDir) || !fs.existsSync(filePath)) {
       return res.status(404).send('File not found');
     }
+  }
+  const ext = path.extname(filename).toLowerCase();
+  const inlineMime = {
+    '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+    '.gif': 'image/gif', '.webp': 'image/webp', '.bmp': 'image/bmp',
+    '.svg': 'image/svg+xml', '.avif': 'image/avif', '.heic': 'image/heic',
+    '.pdf': 'application/pdf',
+  };
+  if (inlineMime[ext] && req.query.download !== '1') {
+    res.setHeader('Content-Type', inlineMime[ext]);
+    res.setHeader('Content-Disposition', 'inline; filename="' + filename + '"');
+    res.setHeader('Cache-Control', 'private, max-age=3600');
+    return res.sendFile(filePath);
   }
   res.setHeader('Content-Disposition', 'attachment; filename="' + filename + '"');
   res.sendFile(filePath);

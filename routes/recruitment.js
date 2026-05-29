@@ -359,6 +359,13 @@ router.post('/:id', (req, res) => {
       params.push(req.body[k] || null);
     }
   }
+  // induction_time is a free-text HH:MM (24-hour); validate loosely so we don't
+  // wipe a saved time on a partial submit. Stored as '' when cleared.
+  if (typeof req.body.induction_time !== 'undefined') {
+    const t = String(req.body.induction_time || '').trim();
+    const ok = t === '' || /^([01]?\d|2[0-3]):[0-5]\d$/.test(t);
+    if (ok) { sets.push('induction_time = ?'); params.push(t); }
+  }
   if (typeof req.body.called !== 'undefined' && CALLED_OPTS.includes(req.body.called)) {
     sets.push('called = ?'); params.push(req.body.called);
   }
@@ -456,7 +463,7 @@ router.get('/export.csv', (req, res) => {
     ORDER BY COALESCE(date_applied, date_called, induction_date) ASC, id ASC
   `).all(monthStart, monthEnd, monthStart, monthEnd, monthStart, monthEnd);
 
-  const headers = ['#','Applicant Name','Phone','Email','Date Applied','Date Called','Called?','Interested?','Induction Booked?','Induction Date','Status','Notes'];
+  const headers = ['#','Applicant Name','Phone','Email','Date Applied','Date Called','Called?','Interested?','Induction Booked?','Induction Date','Induction Time','Status','Notes'];
   const lines = [headers.join(',')];
   rows.forEach((r, i) => {
     const cells = [
@@ -464,7 +471,7 @@ router.get('/export.csv', (req, res) => {
       r.applicant_name, r.phone, r.email,
       r.date_applied || '', r.date_called || '', r.called || '',
       r.interested || '', r.induction_booked || '',
-      r.induction_date || '', r.status || '', r.notes || '',
+      r.induction_date || '', r.induction_time || '', r.status || '', r.notes || '',
     ].map(csvCell);
     lines.push(cells.join(','));
   });

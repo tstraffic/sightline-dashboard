@@ -90,41 +90,49 @@ function loadFormChoices(db) {
   };
 }
 
-// GET /swms — register list. Two tab views:
+// GET /swms — register list. Three tab views:
 //   • active (default): Templates + Job-linked sections, archived rows hidden
 //   • archived: single combined table of everything archived
+//   • access-requests: pending worker access requests + active grants + recent decisions
 router.get('/', (req, res) => {
   const db = getDb();
   const { status, job_id } = req.query;
-  const view = req.query.view === 'archived' ? 'archived' : 'active';
+  const view = req.query.view === 'archived' ? 'archived'
+             : req.query.view === 'access-requests' ? 'access-requests'
+             : 'active';
 
   let where = '1=1';
   const params = [];
   if (view === 'archived') {
     where += " AND s.status = 'archived'";
-  } else {
+  } else if (view === 'active') {
     where += " AND s.status <> 'archived'";
     // Status filter (Draft/Active) still applies within the active tab.
     if (status && STATUS_VALUES.includes(status) && status !== 'archived') {
       where += ' AND s.status = ?'; params.push(status);
     }
   }
-  if (job_id) { where += ' AND s.job_id = ?'; params.push(parseInt(job_id, 10) || 0); }
+  if (view !== 'access-requests' && job_id) {
+    where += ' AND s.job_id = ?'; params.push(parseInt(job_id, 10) || 0);
+  }
 
-  const sql = `
-    SELECT s.*, j.job_number, j.project_name, j.client,
-      u.full_name AS owner_name, cu.full_name AS created_by_name
-    FROM swms s
-    LEFT JOIN jobs j ON j.id = s.job_id
-    LEFT JOIN users u ON u.id = s.owner_id
-    LEFT JOIN users cu ON cu.id = s.created_by_id
-    WHERE ${where}
-    ORDER BY s.created_at DESC
-  `;
-  const all = db.prepare(sql).all(...params);
-  const templates = view === 'active' ? all.filter(r => r.kind === 'template') : [];
-  const jobLinked = view === 'active' ? all.filter(r => r.kind === 'job') : [];
-  const archived = view === 'archived' ? all : [];
+  let templates = [], jobLinked = [], archived = [];
+  if (view !== 'access-requests') {
+    const sql = `
+      SELECT s.*, j.job_number, j.project_name, j.client,
+        u.full_name AS owner_name, cu.full_name AS created_by_name
+      FROM swms s
+      LEFT JOIN jobs j ON j.id = s.job_id
+      LEFT JOIN users u ON u.id = s.owner_id
+      LEFT JOIN users cu ON cu.id = s.created_by_id
+      WHERE ${where}
+      ORDER BY s.created_at DESC
+    `;
+    const all = db.prepare(sql).all(...params);
+    templates = view === 'active' ? all.filter(r => r.kind === 'template') : [];
+    jobLinked = view === 'active' ? all.filter(r => r.kind === 'job') : [];
+    archived = view === 'archived' ? all : [];
+  }
 
   // Expired / expiring counts exclude archived rows — once a SWMS is archived
   // it's no longer in use, so it can't be overdue.
@@ -141,9 +149,62 @@ router.get('/', (req, res) => {
     FROM swms
   `).get();
 
+  // Pending-requests badge count is shown on the tab regardless of which view is active.
+  const pendingRequestsCount = db.prepare(
+    "SELECT COUNT(*) AS n FROM crew_swms_access_requests WHERE status = 'pending'"
+  ).get().n || 0;
+
+  let pendingRequests = [], grants = [], decidedRequests = [];
+  if (view === 'access-requests') {
+    pendingRequests = db.prepare(`
+      SELECT r.id, r.swms_id, r.crew_member_id, r.worker_note, r.inducted_with,
+             r.induction_date, r.created_at,
+             c.full_name AS worker_name, c.employee_id AS employee_code,
+             s.title AS swms_title, s.kind AS swms_kind, s.status AS swms_status,
+             j.id AS job_id, j.job_number, j.client
+      FROM crew_swms_access_requests r
+      JOIN crew_members c ON c.id = r.crew_member_id
+      JOIN swms s ON s.id = r.swms_id
+      LEFT JOIN jobs j ON j.id = s.job_id
+      WHERE r.status = 'pending'
+      ORDER BY r.created_at ASC
+    `).all();
+
+    grants = db.prepare(`
+      SELECT g.id, g.granted_at, g.source, g.notes,
+             g.crew_member_id, g.swms_id,
+             c.full_name AS worker_name, c.employee_id AS employee_code,
+             s.title AS swms_title, s.kind AS swms_kind, s.status AS swms_status,
+             j.id AS job_id, j.job_number, j.client,
+             u.full_name AS granted_by_name
+      FROM crew_swms_grants g
+      JOIN crew_members c ON c.id = g.crew_member_id
+      JOIN swms s ON s.id = g.swms_id
+      LEFT JOIN jobs j ON j.id = s.job_id
+      LEFT JOIN users u ON u.id = g.granted_by_id
+      ORDER BY g.granted_at DESC
+    `).all();
+
+    decidedRequests = db.prepare(`
+      SELECT r.id, r.status, r.decided_at, r.decision_note,
+             c.full_name AS worker_name, c.employee_id AS employee_code,
+             s.title AS swms_title,
+             u.full_name AS decided_by_name
+      FROM crew_swms_access_requests r
+      JOIN crew_members c ON c.id = r.crew_member_id
+      JOIN swms s ON s.id = r.swms_id
+      LEFT JOIN users u ON u.id = r.decided_by_id
+      WHERE r.status <> 'pending'
+      ORDER BY r.decided_at DESC
+      LIMIT 25
+    `).all();
+  }
+
   res.render('swms/index', {
     title: 'SWMS Register', currentPage: 'swms',
     templates, jobLinked, archived, view, counts,
+    pendingRequestsCount,
+    pendingRequests, grants, decidedRequests,
     kindLabels: KIND_LABELS, statusLabels: STATUS_LABELS,
     filters: { status: status || 'all', job_id: job_id || '' },
   });
@@ -388,6 +449,92 @@ router.post('/:id/archive', (req, res) => {
     req.flash('error', 'Archive failed.');
     return res.redirect('/swms');
   }
+});
+
+// POST /swms/access-requests/:requestId/approve — approve a worker's access
+// request from the SWMS register's Access Requests tab. Mirrors the per-crew
+// endpoint at /crew/:id/swms-requests/:requestId/approve but redirects back
+// to the SWMS-side tab.
+router.post('/access-requests/:requestId/approve', (req, res) => {
+  const db = getDb();
+  const request = db.prepare(
+    'SELECT * FROM crew_swms_access_requests WHERE id = ?'
+  ).get(req.params.requestId);
+  if (!request) { req.flash('error', 'Request not found.'); return res.redirect('/swms?view=access-requests'); }
+  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return res.redirect('/swms?view=access-requests'); }
+  const member = db.prepare('SELECT id, full_name FROM crew_members WHERE id = ?').get(request.crew_member_id);
+  if (!member) { req.flash('error', 'Crew member missing.'); return res.redirect('/swms?view=access-requests'); }
+  const decisionNote = String(req.body.decision_note || '').trim().slice(0, 500);
+  try {
+    const tx = db.transaction(() => {
+      db.prepare(`
+        INSERT OR IGNORE INTO crew_swms_grants
+          (crew_member_id, swms_id, granted_by_id, source, notes)
+        VALUES (?, ?, ?, 'request_approved', ?)
+      `).run(member.id, request.swms_id, req.session.user.id, decisionNote);
+      db.prepare(`
+        UPDATE crew_swms_access_requests
+        SET status = 'approved', decided_by_id = ?, decided_at = CURRENT_TIMESTAMP, decision_note = ?
+        WHERE id = ?
+      `).run(req.session.user.id, decisionNote, request.id);
+    });
+    tx();
+    const swmsRow = db.prepare('SELECT title FROM swms WHERE id = ?').get(request.swms_id);
+    try { logActivity({ user: req.session.user, action: 'approve', entityType: 'crew_member', entityId: member.id, entityLabel: member.full_name, details: 'Approved SWMS access: ' + (swmsRow && swmsRow.title || '#' + request.swms_id), ip: req.ip }); } catch (e) {}
+    req.flash('success', 'Access granted to ' + member.full_name + '.');
+  } catch (e) {
+    console.error('[swms] access-request approve error:', e.message);
+    req.flash('error', 'Could not approve request.');
+  }
+  return res.redirect('/swms?view=access-requests');
+});
+
+// POST /swms/access-requests/:requestId/reject — decline with an optional note.
+router.post('/access-requests/:requestId/reject', (req, res) => {
+  const db = getDb();
+  const request = db.prepare(
+    'SELECT * FROM crew_swms_access_requests WHERE id = ?'
+  ).get(req.params.requestId);
+  if (!request) { req.flash('error', 'Request not found.'); return res.redirect('/swms?view=access-requests'); }
+  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return res.redirect('/swms?view=access-requests'); }
+  const member = db.prepare('SELECT id, full_name FROM crew_members WHERE id = ?').get(request.crew_member_id);
+  if (!member) { req.flash('error', 'Crew member missing.'); return res.redirect('/swms?view=access-requests'); }
+  const decisionNote = String(req.body.decision_note || '').trim().slice(0, 500);
+  try {
+    db.prepare(`
+      UPDATE crew_swms_access_requests
+      SET status = 'rejected', decided_by_id = ?, decided_at = CURRENT_TIMESTAMP, decision_note = ?
+      WHERE id = ?
+    `).run(req.session.user.id, decisionNote, request.id);
+    try { logActivity({ user: req.session.user, action: 'reject', entityType: 'crew_member', entityId: member.id, entityLabel: member.full_name, details: 'Rejected SWMS access request #' + request.id, ip: req.ip }); } catch (e) {}
+    req.flash('success', 'Request rejected.');
+  } catch (e) {
+    console.error('[swms] access-request reject error:', e.message);
+    req.flash('error', 'Could not reject request.');
+  }
+  return res.redirect('/swms?view=access-requests');
+});
+
+// POST /swms/grants/:grantId/revoke — revoke a granted SWMS competency.
+router.post('/grants/:grantId/revoke', (req, res) => {
+  const db = getDb();
+  const grant = db.prepare(`
+    SELECT g.id, g.crew_member_id, s.title, c.full_name AS worker_name
+    FROM crew_swms_grants g
+    JOIN swms s ON s.id = g.swms_id
+    JOIN crew_members c ON c.id = g.crew_member_id
+    WHERE g.id = ?
+  `).get(req.params.grantId);
+  if (!grant) { req.flash('error', 'Grant not found.'); return res.redirect('/swms?view=access-requests'); }
+  try {
+    db.prepare('DELETE FROM crew_swms_grants WHERE id = ?').run(grant.id);
+    try { logActivity({ user: req.session.user, action: 'delete', entityType: 'crew_member', entityId: grant.crew_member_id, entityLabel: grant.worker_name, details: 'Revoked SWMS competency: ' + grant.title, ip: req.ip }); } catch (e) {}
+    req.flash('success', 'Access revoked from ' + grant.worker_name + '.');
+  } catch (e) {
+    console.error('[swms] grant revoke error:', e.message);
+    req.flash('error', 'Could not revoke access.');
+  }
+  return res.redirect('/swms?view=access-requests');
 });
 
 // POST /swms/:id/delete

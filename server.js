@@ -18,6 +18,7 @@ const { initVapid } = require('./services/pushNotification');
 const { sendUpcomingShiftReminders } = require('./services/shiftReminders');
 const { sendCertExpiryReminders } = require('./services/certExpiryReminders');
 const { sendSwmsExpiryReminders } = require('./services/swmsExpiryReminders');
+const { sendInductionReminders } = require('./services/inductionReminders');
 const { csrfProtection } = require('./middleware/csrf');
 const { tenantMiddleware } = require('./middleware/tenant');
 
@@ -474,6 +475,18 @@ app.listen(PORT, () => {
     const now = new Date();
     if (now.getHours() === 7 && now.getMinutes() >= 45 && now.getMinutes() < 60) {
       sendSwmsExpiryReminders().catch(e => console.error('[cron] swms-expiry error:', e.message));
+    }
+  }, 15 * 60 * 1000);
+
+  // Induction reminders — daily at 8:00 AM. Fires for upcoming recruitment
+  // inductions at 7 / 3 / 1 / 0 days out, deduped via induction_reminder_log
+  // (mig 222). Goes to admin / operations / hr roles via notifications + push.
+  // Skips applicants already in a terminal status (Inducted / Hired / No Show /
+  // Withdrew / Not Suitable).
+  setInterval(() => {
+    const now = new Date();
+    if (now.getHours() === 8 && now.getMinutes() >= 0 && now.getMinutes() < 15) {
+      sendInductionReminders().catch(e => console.error('[cron] induction-reminder error:', e.message));
     }
   }, 15 * 60 * 1000);
 });

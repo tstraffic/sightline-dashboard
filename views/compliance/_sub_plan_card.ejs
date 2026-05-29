@@ -48,18 +48,24 @@
           <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200">extension required</span>
         <% } %>
       </div>
-      <!-- Inline description + owner. Both auto-save on change. -->
+      <!-- Inline description + owner. Both auto-save on change via AJAX so
+           they don't reload the page and wipe a half-typed comment or
+           selected upload below. -->
       <div class="mt-2 grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-2">
-        <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/description">
+        <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/description"
+          onsubmit="return window.__subPlanAjaxSave(event, this);"
+          data-ajax-save>
           <%- include('../partials/csrf') %>
           <input type="text" name="description" value="<%= sub.description || '' %>"
             placeholder="Description (e.g. Northbound 2 lanes)"
-            onblur="if (this.value !== this.defaultValue) this.form.submit()"
+            onblur="if (this.value !== this.defaultValue) window.__subPlanAjaxSave(null, this.form);"
             class="w-full px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </form>
-        <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/owner">
+        <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/owner"
+          onsubmit="return window.__subPlanAjaxSave(event, this);"
+          data-ajax-save>
           <%- include('../partials/csrf') %>
-          <select name="assigned_to_id" onchange="this.form.submit()"
+          <select name="assigned_to_id" onchange="window.__subPlanAjaxSave(null, this.form);"
             class="w-full px-2.5 py-1.5 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
             <option value="">— Owner —</option>
             <% (typeof users !== 'undefined' ? users : []).forEach(u => { %>
@@ -70,12 +76,14 @@
       </div>
       <% if (isROL) { %>
         <!-- ROL extension flag: always togglable, including post-approval -->
-        <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/extension" class="mt-2" id="ext-<%= sub.id %>">
+        <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/extension" class="mt-2" id="ext-<%= sub.id %>"
+          onsubmit="return window.__subPlanAjaxSave(event, this);"
+          data-ajax-save>
           <%- include('../partials/csrf') %>
           <input type="hidden" name="extension_required" value="<%= sub.extension_required ? '0' : '1' %>">
           <label class="inline-flex items-center text-xs text-gray-700 cursor-pointer">
             <input type="checkbox" <%= sub.extension_required ? 'checked' : '' %>
-              onchange="document.getElementById('ext-<%= sub.id %>').submit()"
+              onchange="window.__subPlanAjaxSave(null, document.getElementById('ext-<%= sub.id %>'));"
               class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 mr-2">
             ROL extension required
           </label>
