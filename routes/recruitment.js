@@ -140,12 +140,15 @@ router.get('/calendar', (req, res) => {
   const gridEndIso   = iso(gridEnd);
 
   const applicants = db.prepare(`
-    SELECT id, applicant_name, phone, email, status, notes, induction_date,
+    SELECT id, applicant_name, phone, email, status, notes, induction_date, induction_time,
            called, interested, induction_booked
     FROM seek_applicants
     WHERE induction_date IS NOT NULL
       AND induction_date BETWEEN ? AND ?
-    ORDER BY induction_date ASC, applicant_name ASC
+    ORDER BY induction_date ASC,
+             CASE WHEN induction_time IS NULL OR induction_time = '' THEN 1 ELSE 0 END,
+             induction_time ASC,
+             applicant_name ASC
   `).all(gridStartIso, gridEndIso);
 
   // Bucket applicants by date so the view doesn't have to filter the
@@ -178,11 +181,14 @@ router.get('/calendar', (req, res) => {
   // dates that actually have inductions.
   const inFourteen = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 14));
   const upcoming = db.prepare(`
-    SELECT id, applicant_name, phone, email, induction_date, status
+    SELECT id, applicant_name, phone, email, induction_date, induction_time, status
     FROM seek_applicants
     WHERE induction_date IS NOT NULL
       AND induction_date BETWEEN ? AND ?
-    ORDER BY induction_date ASC, applicant_name ASC
+    ORDER BY induction_date ASC,
+             CASE WHEN induction_time IS NULL OR induction_time = '' THEN 1 ELSE 0 END,
+             induction_time ASC,
+             applicant_name ASC
   `).all(todayIso, iso(inFourteen));
 
   // Page-load reminder pump — idempotently emits 72h / 24h / today

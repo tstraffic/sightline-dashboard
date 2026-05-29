@@ -16,6 +16,19 @@
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
     });
   }
+  // Pretty-print a 24h "HH:MM" induction_time as 12h with am/pm
+  // ("9:30 AM", "1:00 PM"). Returns '' when no time was set so the
+  // calling site can drop the separator cleanly.
+  function fmtTime(t) {
+    if (!t) return '';
+    const m = String(t).match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return '';
+    let h = parseInt(m[1], 10);
+    const min = m[2];
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return h + ':' + min + ' ' + ampm;
+  }
 %>
 
 <style>
@@ -120,6 +133,12 @@
   }
   .cal-pill:hover { filter: brightness(0.96); }
   :root[data-theme="dark"] .cal-pill:hover { filter: brightness(1.10); }
+  /* Time prefix on the pill: a touch heavier and slightly compressed so
+     "9:30 AM" / "1:00 PM" sits flush before the name without crowding. */
+  .cal-pill-time {
+    font-weight: 700; font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em; opacity: 0.92; margin-right: 2px;
+  }
   .cal-pill-more { font-size: 10px; font-weight: 600; color: var(--cal-text-mute); padding: 2px 4px; }
 
   /* Active selection highlight on the picked day. */
@@ -237,9 +256,12 @@
           </div>
           <% c.applicants.slice(0, 3).forEach(function (a) {
             var col = statusColor(a.status);
+            var timeStr = fmtTime(a.induction_time);
           %>
             <span class="cal-pill" style="background:<%= col.bg %>;color:<%= col.txt %>;border-color:<%= col.ring %>"
-                  title="<%= a.applicant_name %><%= a.phone ? ' · ' + a.phone : '' %>"><%= a.applicant_name %></span>
+                  title="<%= a.applicant_name %><%= timeStr ? ' · ' + timeStr : '' %><%= a.phone ? ' · ' + a.phone : '' %>">
+              <% if (timeStr) { %><b class="cal-pill-time"><%= timeStr %></b> <% } %><%= a.applicant_name %>
+            </span>
           <% }); %>
           <% if (c.applicants.length > 3) { %>
             <span class="cal-pill-more">+ <%= c.applicants.length - 3 %> more</span>
@@ -277,7 +299,9 @@
           var d = new Date(a.induction_date + 'T00:00:00Z');
           var isToday = a.induction_date === todayIso;
           var col = statusColor(a.status);
+          var timeStr = fmtTime(a.induction_time);
           var whenStr = (isToday ? 'TODAY · ' : '') + d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+          if (timeStr) whenStr += ' · ' + timeStr;
         %>
           <div class="upcoming-row">
             <div class="min-w-0">
@@ -347,6 +371,19 @@
     });
   }
 
+  // Mirror the server-side fmtTime helper so the day-panel rows match
+  // the pills + sidebar formatting (e.g. "9:30 AM").
+  function fmtTime(t) {
+    if (!t) return '';
+    var m = String(t).match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return '';
+    var h = parseInt(m[1], 10);
+    var min = m[2];
+    var ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return h + ':' + min + ' ' + ampm;
+  }
+
   function renderDay(iso) {
     var cell = (window.CAL_DATA.cells || []).find(function (c) { return c.iso === iso; });
     var list = (cell && cell.applicants) || [];
@@ -368,10 +405,18 @@
           ? '<a href="mailto:' + escapeHtml(a.email) + '" style="color:var(--cal-accent-deep);font-weight:600">' + escapeHtml(a.email) + '</a>'
           : '<span style="color:var(--cal-text-faint)">—</span>';
         var notesHtml = a.notes ? '<div class="day-row-notes">' + escapeHtml(a.notes) + '</div>' : '';
+        var timeStr = fmtTime(a.induction_time);
+        var timeChip = timeStr
+          ? '<span style="display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;background:var(--cal-accent-soft);color:var(--cal-accent-deep);border:1px solid var(--cal-accent-ring)">' +
+            '<svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>' +
+            escapeHtml(timeStr) +
+          '</span>'
+          : '<span style="font-size:11px;color:var(--cal-text-faint);font-style:italic">No time set</span>';
         return (
           '<div class="day-row">' +
             '<div class="min-w-0">' +
               '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+                timeChip +
                 '<span class="day-row-name">' + escapeHtml(a.applicant_name) + '</span>' +
                 statusBadge(a.status) +
               '</div>' +
