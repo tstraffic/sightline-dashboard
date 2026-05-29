@@ -10231,6 +10231,39 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 222: induction time + reminder log
+  //
+  // Adds an `induction_time` column to seek_applicants so admins can put
+  // a clock time alongside the induction date in the recruitment tracker,
+  // plus an induction_reminder_log table used by
+  // services/inductionReminders.js to dedup the 7 / 3 / 1 day reminders
+  // it fires at admin / operations / hr roles ahead of each scheduled
+  // induction. Unique tuple is (applicant_id, days_out, induction_date)
+  // so re-scheduling regenerates the window.
+  // =============================================
+  if (!isMigrationApplied.get(222)) {
+    console.log('Running migration 222: induction_time + induction_reminder_log');
+    try {
+      try { db.exec("ALTER TABLE seek_applicants ADD COLUMN induction_time TEXT DEFAULT ''"); } catch (e) { /* column may exist */ }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS induction_reminder_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          applicant_id INTEGER NOT NULL REFERENCES seek_applicants(id) ON DELETE CASCADE,
+          days_out INTEGER NOT NULL,
+          induction_date DATE NOT NULL,
+          sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(applicant_id, days_out, induction_date)
+        );
+        CREATE INDEX IF NOT EXISTS idx_induction_rem_log_applicant ON induction_reminder_log(applicant_id);
+      `);
+      recordMigration.run(222, 'seek_applicants.induction_time + induction_reminder_log');
+      console.log('Migration 222 applied: induction_time + induction_reminder_log');
+    } catch (e) {
+      console.error('Migration 222 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

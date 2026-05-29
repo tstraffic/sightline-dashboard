@@ -217,7 +217,7 @@
               <th class="text-left px-3 py-2.5">Called?</th>
               <th class="text-left px-3 py-2.5">Interested?</th>
               <th class="text-left px-3 py-2.5">Booked?</th>
-              <th class="text-left px-3 py-2.5">Induction</th>
+              <th class="text-left px-3 py-2.5">Induction (date · time)</th>
               <th class="text-left px-3 py-2.5">Status</th>
               <th class="text-left px-3 py-2.5 min-w-[160px]">Notes</th>
               <th class="text-right px-3 py-2.5"></th>
@@ -259,8 +259,13 @@
                   </select>
                 </td>
                 <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">
-                  <input type="date" value="<%= a.induction_date || '' %>" data-applicant="<%= a.id %>" data-field="induction_date"
-                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-36" />
+                  <div class="flex items-center gap-1">
+                    <input type="date" value="<%= a.induction_date || '' %>" data-applicant="<%= a.id %>" data-field="induction_date"
+                      class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-36" />
+                    <input type="time" value="<%= a.induction_time || '' %>" data-applicant="<%= a.id %>" data-field="induction_time"
+                      title="Induction time"
+                      class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-24" />
+                  </div>
                 </td>
                 <td class="px-3 py-2.5">
                   <select data-applicant="<%= a.id %>" data-field="status"
