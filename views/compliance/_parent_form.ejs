@@ -368,6 +368,41 @@
             if (cb.checked) target.focus();
           });
         });
+
+        // Inline auto-save for sub-plan description / owner / ROL extension.
+        // Previously these forms used native submit() on blur/change which
+        // caused a full page reload — wiping any half-typed comment or
+        // selected upload in the sibling Upload & Submit form on the same
+        // card. Now they POST via fetch and stay on the page. The routes
+        // already short-circuit to JSON when Accept: application/json.
+        window.__subPlanAjaxSave = function (event, form) {
+          if (event) event.preventDefault();
+          if (!form || form.__saving) return false;
+          form.__saving = true;
+          form.classList.add('opacity-60');
+          const fd = new FormData(form);
+          const csrf = (form.querySelector('input[name="_csrf"]') || {}).value || '';
+          fetch(form.action, {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'x-csrf-token': csrf },
+            body: fd,
+            credentials: 'same-origin',
+          }).then(r => r.json().catch(() => ({}))).then(data => {
+            // Sync defaultValue so subsequent onblur doesn't re-submit the
+            // same value. For the ROL extension form, flip the hidden
+            // toggle so the next click sends the opposite value.
+            form.querySelectorAll('input[type="text"], textarea').forEach(el => { el.defaultValue = el.value; });
+            const extHidden = form.querySelector('input[type="hidden"][name="extension_required"]');
+            if (extHidden) extHidden.value = (extHidden.value === '1') ? '0' : '1';
+            if (data && data.error) console.warn('[sub-plan save]', data.error);
+          }).catch(err => {
+            console.error('[sub-plan save] failed:', err);
+          }).finally(() => {
+            form.__saving = false;
+            form.classList.remove('opacity-60');
+          });
+          return false;
+        };
       </script>
 
       <!-- Add a sub-plan of any type -->
