@@ -48,19 +48,15 @@
           <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200">extension required</span>
         <% } %>
       </div>
-      <!-- Inline description + owner. Both auto-save on change via AJAX so
-           they don't reload the page and wipe a half-typed comment or
-           selected upload below. -->
-      <div class="mt-2 grid grid-cols-1 sm:grid-cols-[1fr_220px] gap-2">
-        <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/description"
-          onsubmit="return window.__subPlanAjaxSave(event, this);"
-          data-ajax-save>
-          <%- include('../partials/csrf') %>
-          <input type="text" name="description" value="<%= sub.description || '' %>"
-            placeholder="Description (e.g. Northbound 2 lanes)"
-            onblur="if (this.value !== this.defaultValue) window.__subPlanAjaxSave(null, this.form);"
-            class="w-full px-3 py-1.5 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-        </form>
+      <!-- Inline owner picker. Auto-saves on change via AJAX so it doesn't
+           reload the page and wipe a half-typed comment or selected upload
+           below. The description input used to sit next to this; it's now
+           rendered inside the upload-submit form itself (see below), which
+           is the only place description actually matters — having two
+           separate inputs was confusing and the outer one's `onblur` save
+           was the source of the "Description is required before submitting"
+           false positives. -->
+      <div class="mt-2 max-w-[220px]">
         <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/owner"
           onsubmit="return window.__subPlanAjaxSave(event, this);"
           data-ajax-save>
