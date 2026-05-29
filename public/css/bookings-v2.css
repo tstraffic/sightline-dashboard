@@ -88,6 +88,43 @@
 :root[data-theme="light"] .bk2-chip     { background: #fff; color: #374151; border-color: #E5E7EB; }
 :root[data-theme="light"] .bk2-chip-add { background: #F9FAFB; color: #6B7280; }
 
+/* Inline header search — sits next to the page title. Submits via
+   GET so the existing filter pipeline applies (same as the chip
+   bar's "Add filter" search). */
+.bk2-headersearch {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 10px;
+  background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+  margin-left: 10px;
+}
+.bk2-headersearch svg { color: rgba(255,255,255,0.5); flex-shrink: 0; }
+.bk2-headersearch input {
+  border: 0; background: transparent; outline: 0;
+  font-size: 13px; color: #F8FAFC; width: 220px;
+}
+.bk2-headersearch input::placeholder { color: rgba(255,255,255,0.45); }
+:root[data-theme="light"] .bk2-headersearch       { background: #F9FAFB; border-color: #E5E7EB; }
+:root[data-theme="light"] .bk2-headersearch svg   { color: #9CA3AF; }
+:root[data-theme="light"] .bk2-headersearch input { color: #111827; }
+
+/* Bulk-action toolbar — sits between the day-nav and the New button.
+   Buttons start disabled because the multi-select / send-to-supplier
+   workflows aren't wired yet; they're rendered so the layout matches
+   the brief and so future commits can flip the disabled state. */
+.bk2-bulkbar { display: inline-flex; align-items: center; gap: 4px; padding: 2px; }
+.bk2-bulkbtn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 10px; border-radius: 9px;
+  background: transparent; color: rgba(255,255,255,0.72);
+  border: 1px solid rgba(255,255,255,0.10);
+  font-size: 12px; font-weight: 600; cursor: pointer; transition: background 0.12s;
+}
+.bk2-bulkbtn:hover:not(:disabled) { background: rgba(255,255,255,0.06); color: #fff; }
+.bk2-bulkbtn:disabled { opacity: 0.50; cursor: not-allowed; }
+.bk2-bulkbtn svg { width: 14px; height: 14px; }
+:root[data-theme="light"] .bk2-bulkbtn { color: #374151; border-color: #E5E7EB; background: #fff; }
+:root[data-theme="light"] .bk2-bulkbtn:hover:not(:disabled) { background: #F3F4F6; }
+
 /* Primary action */
 .bk2-newbtn {
   display: inline-flex; align-items: center; gap: 6px;
@@ -104,7 +141,22 @@
 :root[data-theme="light"] .bk2-daylabel strong { color: #111827; }
 
 /* ------------------------------- Dream card ------------------------------- */
-.bk2-board { display: flex; flex-direction: column; gap: 14px; }
+/* Multi-column board: cards flow into a responsive grid that picks
+   as many columns as fit (~360px min per card). On a 1440px window
+   that's 3 columns; on a tablet, 2; on a phone, 1. Cards keep their
+   natural height — wider crews / more meta rows just make that card
+   taller, the rest of the row stays at the height of its row's
+   tallest card thanks to align-items:start.
+   This replaces the previous single-column flex stack so scrolling
+   through a busy day shows many bookings at once instead of forcing
+   the planner through a long single chain. */
+.bk2-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+.bk2-board .bk2-card { width: 100%; }
 
 .bk2-card {
   background: #0F172A;
@@ -124,13 +176,37 @@
   font-size: 14px; font-weight: 700;
   letter-spacing: 0.01em;
 }
-.bk2-card-banner .bk2-banner-meta { font-size: 13px; font-weight: 600; opacity: 0.92; }
+.bk2-card-banner .bk2-banner-meta {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.02em; opacity: 0.92;
+  font-family: ui-monospace, monospace;
+}
 .bk2-card-banner .bk2-tag {
   display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 4px;
   font-size: 10px; font-weight: 700; letter-spacing: 0.04em; background: rgba(0,0,0,0.22); color: #fff;
 }
 
+/* Dedicated time band beneath the status banner — Traffio-style. The
+   yellow tint is intentional: it stays constant across all statuses
+   so the start→end time always reads in the same spot, regardless
+   of the colour of the status banner above it. */
+.bk2-card-timeband {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 18px;
+  font-size: 12px; font-weight: 600;
+  background: rgba(250,204,21,0.16); color: #FDE68A;
+  border-bottom: 1px solid rgba(250,204,21,0.20);
+}
+.bk2-card-timeband svg { width: 13px; height: 13px; opacity: 0.85; }
+:root[data-theme="light"] .bk2-card-timeband {
+  background: #FFFBEB; color: #92400E; border-bottom-color: #FDE68A;
+}
+
 .bk2-card-body { padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+/* Client / job line picks up a subtle accent so the meta-list isn't
+   a flat block of greys — mirrors how Traffio styles the client
+   name (the blue link in the screenshots). */
+.bk2-meta-client { color: #93C5FD; font-weight: 600; }
+:root[data-theme="light"] .bk2-meta-client { color: #1D4ED8; }
 
 .bk2-card-h3 {
   font-size: 18px; font-weight: 700; color: #F8FAFC; line-height: 1.25;

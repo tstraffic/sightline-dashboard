@@ -28,10 +28,54 @@ router.get('/hr', (req, res) => {
   // Get crew member details
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(worker.id);
 
+  // Resolve the worker's wage-panel tier metadata so the "Your rate"
+  // card can show role + award mapping. We only ever expose THIS
+  // worker's row — never the panel matrix (per the panel's "Workers
+  // are not to be shown this document" confidentiality rule).
+  let tierMeta = null;
+  if (employee && employee.tier) {
+    const { tierMeta: getTierMeta } = require('../../lib/wageTiers');
+    tierMeta = getTierMeta(employee.tier);
+  }
+
+  // Night 5+ active-period detection. Scans the worker's last 14 days
+  // of allocations for a run of 5+ consecutive Mon–Fri night shifts.
+  // Only meaningful when the worker has a non-zero rate_night_5plus
+  // (i.e. they're TFN/occasional and the engine would actually
+  // promote those shifts). The callout on /w/hr lights up so the
+  // worker sees the lower 5+ rate is being applied automatically
+  // and can confirm with payroll.
+  let nightRunActive = null;
+  if (employee && parseFloat(employee.rate_night_5plus) > 0) {
+    const today = sydneyToday();
+    const start = new Date(today + 'T00:00:00');
+    start.setDate(start.getDate() - 14);
+    const startIso = start.toISOString().slice(0, 10);
+    const allocs = db.prepare(`
+      SELECT allocation_date, shift_type FROM crew_allocations
+      WHERE crew_member_id = ?
+        AND allocation_date BETWEEN ? AND ?
+        AND status != 'cancelled'
+      ORDER BY allocation_date ASC
+    `).all(worker.id, startIso, today);
+    const shifts = allocs.map(a => ({
+      date: a.allocation_date,
+      // shift_type values: 'day' | 'night' | 'afternoon' (treat afternoon as day)
+      night: String(a.shift_type || '').toLowerCase() === 'night',
+    }));
+    const { findNightRuns } = require('../../lib/payroll');
+    const runs = findNightRuns(shifts);
+    if (runs.length) {
+      nightRunActive = runs[runs.length - 1]; // most recent run
+    }
+  }
+
   res.render('worker/hr', {
     title: 'HR & My Info',
     currentPage: 'more',
     employee,
+    tierMeta,
+    nightRunActive,
     member,
     certs,
     expiringSoon,
@@ -78,15 +122,29 @@ router.get('/hr/certs', (req, res) => {
   // only surfaces completed verifications. Both Competent and NYC
   // outcomes appear so the worker can see why they're not certified
   // on a given item.
+  //
+  // worker_acknowledgement_status drives the new "needs signing"
+  // workflow — when an office trainer issued a cert without the
+  // worker present, the row comes through with status='pending' and
+  // surfaces in a dedicated panel at the top of the wallet.
   const vocs = db.prepare(`
     SELECT a.id, a.voc_number, a.outcome, a.valid_from, a.valid_until,
       a.certificate_status, a.certificate_id, a.pdf_path, a.assessment_date,
+      a.worker_acknowledgement_status, a.worker_acknowledged_at,
       t.name AS equipment_name
     FROM voc_assessments a
     JOIN voc_templates t ON t.id = a.template_id
     WHERE a.crew_member_id = ? AND a.status = 'submitted'
     ORDER BY a.assessment_date DESC, a.id DESC
   `).all(worker.id);
+
+  // Split out the rows that need the worker's signature so the view
+  // can hoist them above the regular wallet entries with a clear CTA.
+  const pendingSigVocs = vocs.filter(v =>
+    v.outcome === 'competent' &&
+    v.certificate_status !== 'revoked' &&
+    v.worker_acknowledgement_status === 'pending'
+  );
 
   res.render('worker/hr-certs', {
     title: 'My Wallet',
@@ -95,6 +153,7 @@ router.get('/hr/certs', (req, res) => {
     documents,
     member,
     vocs,
+    pendingSigVocs,
   });
 });
 
@@ -145,6 +204,106 @@ router.get('/hr/vocs/:id/pdf', async (req, res) => {
     console.error('[w-hr-vocs] PDF render failed:', e);
     return res.status(500).send('Failed to render certificate.');
   }
+});
+
+// ─────────────────────────────────────────────────────────────────
+// GET/POST /w/hr/vocs/:id/sign — Worker signs to acknowledge their
+// VOC certificate. Reached via the push notification fired when the
+// office issued the cert without an in-person signature, or via the
+// "Awaiting your signature" panel on /w/hr/certs.
+//
+// On POST the signature PNG is decoded + written, the assessment row
+// flipped to worker_acknowledgement_status='signed', and the cert PDF
+// regenerated so both worker AND admin downloads pick up the new
+// signature on next fetch.
+// ─────────────────────────────────────────────────────────────────
+const VOC_SIG_DIR = certPath.join(__dirname, '..', '..', 'data', 'uploads', 'voc-signatures');
+const VOC_SIG_DATA_URL_RE = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/;
+const VOC_MAX_SIG_BYTES = 256 * 1024;
+
+function loadWorkerVoc(db, vocId, crewMemberId) {
+  return db.prepare(`
+    SELECT a.*, t.name AS equipment_name, t.default_validity_months,
+      cm.full_name AS worker_name, cm.employee_id AS worker_emp_id
+    FROM voc_assessments a
+    JOIN voc_templates t ON t.id = a.template_id
+    JOIN crew_members cm ON cm.id = a.crew_member_id
+    WHERE a.id = ? AND a.crew_member_id = ?
+      AND a.status = 'submitted' AND a.outcome = 'competent'
+      AND COALESCE(a.certificate_status, 'active') = 'active'
+  `).get(vocId, crewMemberId);
+}
+
+router.get('/hr/vocs/:id/sign', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const a = loadWorkerVoc(db, req.params.id, worker.id);
+  if (!a) return res.status(404).send('VOC not found.');
+  // Already signed → show a confirmation page instead of the pad so
+  // the worker doesn't accidentally re-sign and overwrite.
+  res.render('worker/voc-sign', {
+    title: 'Sign your VOC',
+    currentPage: 'more',
+    a,
+    alreadySigned: a.worker_acknowledgement_status === 'signed',
+  });
+});
+
+router.post('/hr/vocs/:id/sign', async (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const a = loadWorkerVoc(db, req.params.id, worker.id);
+  if (!a) return res.status(404).send('VOC not found.');
+
+  const dataUrl = (req.body && req.body.signature_data) || '';
+  const m = String(dataUrl).match(VOC_SIG_DATA_URL_RE);
+  if (!m) {
+    req.flash('error', 'Please draw your signature first.');
+    return res.redirect('/w/hr/vocs/' + a.id + '/sign');
+  }
+  const approxBytes = Math.floor(m[1].length * 3 / 4);
+  if (approxBytes > VOC_MAX_SIG_BYTES) {
+    req.flash('error', 'Signature too large — try a simpler stroke.');
+    return res.redirect('/w/hr/vocs/' + a.id + '/sign');
+  }
+
+  // Write the PNG and stamp the row.
+  try {
+    certFs.mkdirSync(VOC_SIG_DIR, { recursive: true });
+    const filename = `voc-${a.id}-worker-${Date.now()}.png`;
+    certFs.writeFileSync(certPath.join(VOC_SIG_DIR, filename), Buffer.from(m[1], 'base64'));
+    const relPath = 'voc-signatures/' + filename;
+    db.prepare(`
+      UPDATE voc_assessments
+      SET worker_signature_path = ?,
+          worker_acknowledgement_status = 'signed',
+          worker_acknowledged_at = CURRENT_TIMESTAMP,
+          worker_signed_name = COALESCE(NULLIF(worker_signed_name, ''), ?),
+          worker_signed_date = COALESCE(worker_signed_date, DATE('now')),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(relPath, a.worker_name, a.id);
+  } catch (e) {
+    console.error('[w-hr-vocs-sign] write failed:', e);
+    req.flash('error', 'Could not save your signature — please try again.');
+    return res.redirect('/w/hr/vocs/' + a.id + '/sign');
+  }
+
+  // Regenerate the cert PDF so the embedded signature reflects what
+  // was just drawn. Both worker downloads AND admin downloads pull
+  // the updated file. We import lazily here to avoid a circular
+  // require with routes/voc-assessments at startup.
+  try {
+    const vocRoutes = require('../voc-assessments');
+    if (vocRoutes && typeof vocRoutes.regenerateCertPdf === 'function') {
+      await vocRoutes.regenerateCertPdf(db, a.id, a.certificate_id);
+    }
+  } catch (e) {
+    console.error('[w-hr-vocs-sign] PDF regen failed (non-fatal):', e.message);
+  }
+
+  req.flash('success', 'Thanks — your signature is on file. The cert PDF has been updated.');
+  res.redirect('/w/hr/certs');
 });
 
 // GET /w/hr/documents/:id — Stream a worker's own uploaded document.
@@ -605,6 +764,42 @@ router.get('/hr/pay-runs/:lineId', (req, res) => {
   res.render('worker/hr-pay-run-detail', {
     title: 'Pay breakdown', currentPage: 'more',
     line, visibleBuckets, showTravel, showMeal, expenses, deductions, fmtMoney,
+    flash_success: req.flash('success'), flash_error: req.flash('error'),
+  });
+});
+
+// GET /w/reviews — worker-visible performance reviews + notes shared
+// from the HR side. Internal-only rows (visibility = 'internal') stay
+// hidden. Empty list is fine — the view renders an empty state.
+router.get('/reviews', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const employee = db.prepare('SELECT id FROM employees WHERE linked_crew_member_id = ?').get(worker.id);
+
+  let reviews = [];
+  if (employee) {
+    try {
+      const rows = db.prepare(`
+        SELECT r.id, r.kind, r.title, r.summary, r.review_date, r.held_by,
+               r.sections_json, r.peer_comments_json, r.created_at,
+               u.full_name AS created_by_name
+        FROM employee_reviews r
+        LEFT JOIN users u ON u.id = r.created_by_id
+        WHERE r.employee_id = ? AND r.visibility = 'worker'
+        ORDER BY COALESCE(r.review_date, substr(r.created_at, 1, 10)) DESC, r.id DESC
+      `).all(employee.id);
+      reviews = rows.map(r => {
+        let sections = [], peer = [];
+        try { sections = JSON.parse(r.sections_json) || []; } catch (e) {}
+        try { peer     = JSON.parse(r.peer_comments_json) || []; } catch (e) {}
+        return Object.assign({}, r, { sections: sections, peer_comments: peer });
+      });
+    } catch (e) { /* employee_reviews table missing — migration not yet run */ }
+  }
+
+  res.render('worker/reviews', {
+    title: 'My Reviews', currentPage: 'more',
+    reviews,
     flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });

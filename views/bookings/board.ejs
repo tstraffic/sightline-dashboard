@@ -35,6 +35,12 @@
   <header class="bk2-header">
     <div class="bk2-header-left">
       <h1 class="bk2-title">Bookings</h1>
+      <!-- Inline search — submits as ?q= so the existing filter pipeline handles it. -->
+      <form method="GET" action="/bookings" class="bk2-headersearch" role="search">
+        <input type="hidden" name="date" value="<%= dateStr %>">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        <input type="text" name="q" value="<%= filters.q || '' %>" placeholder="Search bookings…" aria-label="Search bookings">
+      </form>
     </div>
 
     <div class="bk2-header-right">
@@ -60,6 +66,24 @@
         <% if (!isToday) { %>
           <a class="bk2-daynav-today" href="/bookings">Today</a>
         <% } %>
+      </div>
+
+      <!-- Bulk actions toolbar — visual scaffolding to match the Traffio
+           top bar. Wired to no-op placeholders for now; future work
+           hooks each into the multi-select / send-to-supplier flows. -->
+      <div class="bk2-bulkbar" aria-label="Bulk actions">
+        <button type="button" class="bk2-bulkbtn" title="Set supplier on selected" data-bulk="supplier" disabled>
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+          <span>Set supplier</span>
+        </button>
+        <button type="button" class="bk2-bulkbtn" title="Send selected bookings" data-bulk="send" disabled>
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12l4-4m-4 4l4 4m-4-4h14"/></svg>
+          <span>Send</span>
+        </button>
+        <button type="button" class="bk2-bulkbtn" title="Lock selected" data-bulk="lock" disabled>
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 11v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span>Lock many</span>
+        </button>
       </div>
 
       <button type="button" class="bk2-newbtn" id="bk2-new-btn" title="Create a booking (N)">
@@ -135,22 +159,34 @@
                 <% if (b.is_callout) { %><span class="bk2-tag">CALLOUT</span><% } %>
               </span>
               <span class="bk2-banner-meta">
-                #<%= b.booking_number || b.id %> · <%= fmtTime(b.start_datetime) %> → <%= fmtTime(b.end_datetime) %>
+                #<%= b.booking_number || b.id %>
               </span>
             </header>
+
+            <!-- Dedicated time band, Traffio-style. Same yellow tint
+                 across all cards so the start→end time always reads
+                 in the same spot at a glance. -->
+            <div class="bk2-card-timeband">
+              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span><%= fmtTime(b.start_datetime) %> → <%= fmtTime(b.end_datetime) %></span>
+            </div>
+
             <div class="bk2-card-body">
               <div class="bk2-card-h3">
                 <span><%= b.title || b.site_address || 'Untitled booking' %></span>
               </div>
               <div class="bk2-meta-list">
+                <% if (b.depot) { %>
+                  <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2 7-7 7 7 2 2v9a1 1 0 01-1 1h-4v-6H8v6H4a1 1 0 01-1-1v-9z"/></svg><span><%= b.depot %></span></div>
+                <% } %>
                 <% if (b.client_name || b.job_name) { %>
-                  <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5"/></svg><span><%= b.client_name || '' %><%= b.client_name && b.job_name ? ' · ' : '' %><%= b.job_name || '' %></span></div>
+                  <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0H5"/></svg><span class="bk2-meta-client"><%= b.client_name || '' %><%= b.client_name && b.job_name ? ' · ' : '' %><%= b.job_name || '' %></span></div>
                 <% } %>
                 <% if (b.site_address) { %>
                   <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span><%= b.site_address %><%= b.suburb ? ', ' + b.suburb : '' %><%= b.state ? ' ' + b.state : '' %></span></div>
                 <% } %>
-                <% if (b.requester_name || b.depot) { %>
-                  <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg><span><% if (b.requester_name) { %>Requester: <%= b.requester_name %><% } %><% if (b.requester_name && b.depot) { %> · <% } %><% if (b.depot) { %>Depot: <%= b.depot %><% } %></span></div>
+                <% if (b.requester_name) { %>
+                  <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg><span>Requester: <%= b.requester_name %></span></div>
                 <% } %>
               </div>
 
@@ -345,16 +381,26 @@
 <!-- ============================================================
      QUICK BOOK SLIDE-OVER  —  CREATE ONLY (the only mode that
      uses a slide-over; view always goes to /bookings/:id full page).
+     Hard-disabled via display:none + hidden attribute. The previous
+     transform-only approach left the element in the layout, so any
+     CSS load failure or selector shadowing brought it back on-
+     screen. Now nothing renders until openQB() explicitly sets
+     display:flex.
      ============================================================ -->
-<div class="bk2-backdrop" id="bk2-backdrop"></div>
-<aside class="bk2-slideover" id="bk2-slideover" role="dialog" aria-modal="true" aria-labelledby="bk2-so-title">
+<div class="bk2-backdrop" id="bk2-backdrop" hidden style="display:none"></div>
+<aside class="bk2-slideover" id="bk2-slideover" role="dialog" aria-modal="true" aria-labelledby="bk2-so-title"
+       hidden style="display:none"
+       aria-hidden="true">
   <header class="bk2-slideover-head">
     <div style="min-width:0">
       <h2 class="bk2-slideover-title" id="bk2-so-title">New booking</h2>
       <p class="bk2-slideover-sub">Quick Book — 6 fields. Save creates a draft.</p>
     </div>
-    <button type="button" class="bk2-slideover-close" id="bk2-so-close" aria-label="Close">
-      <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    <button type="button" class="bk2-slideover-close" id="bk2-so-close" aria-label="Close" data-bk2-close>
+      <!-- pointer-events:none on the SVG so the click always lands on
+           the button itself, never on the inner SVG path (which broke
+           the delegated [data-bk2-close] match on older Safari). -->
+      <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="pointer-events:none"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
     </button>
   </header>
 
@@ -477,40 +523,97 @@
   // ============================================================
   //  Quick Book slide-over open/close.
   //
-  //  History: this used to use inline onclick="" handlers for the X
-  //  button, which silently fell off whenever a content-security
-  //  policy update touched the page — the panel would open but no
-  //  click ever ran the close logic. Centralising on real listeners
-  //  fixed that, and gives us one place to also reset the form so
-  //  reopening Quick Book never reuses a previous draft.
+  //  Bug we keep tripping over: the panel renders open on page load
+  //  even though no JS adds `bk2-open` to it. Cause: the aside is
+  //  position:fixed with transform:translateX(100%) in CSS, but if
+  //  bookings-v2.css fails to load (CDN hiccup, stale SW cache) the
+  //  declaration is missing and the element falls into its default
+  //  `transform: none` position — fully visible.
+  //
+  //  Defence in depth:
+  //  - The aside ships with an inline transform:translateX(100%) so
+  //    the closed state is encoded in markup, not just a stylesheet.
+  //  - openQB clears the inline style so the CSS transition can take
+  //    over for the open animation.
+  //  - The X / backdrop / Esc all close through a document-level
+  //    delegated handler so even if a later script error interrupts
+  //    the wireup, the close path still fires.
   // ============================================================
   var so = $('#bk2-slideover');
   var backdrop = $('#bk2-backdrop');
   var qbForm = $('#bk2-qb-form');
+
+  // Nuclear close: the panel is display:none in markup, so it CAN'T
+  // render unless openQB() explicitly flips it. No reliance on CSS
+  // transforms surviving load order, stale stylesheets, or specificity
+  // games.
+  var soCloseTimer = null;
   function closeQB() {
     if (!so) return;
     so.classList.remove('bk2-open');
     if (backdrop) backdrop.classList.remove('bk2-open');
+    so.setAttribute('aria-hidden', 'true');
+    // Let the slide-out transition play, then truly hide.
+    if (soCloseTimer) clearTimeout(soCloseTimer);
+    soCloseTimer = setTimeout(function () {
+      so.style.display = 'none';
+      so.hidden = true;
+      if (backdrop) { backdrop.style.display = 'none'; backdrop.hidden = true; }
+      soCloseTimer = null;
+    }, 240);
   }
   function openQB() {
     if (!so) return;
-    // Reset any stale field values so Quick Book starts blank every
-    // time — the form is a draft, not a saved entity.
+    if (soCloseTimer) { clearTimeout(soCloseTimer); soCloseTimer = null; }
     if (qbForm) qbForm.reset();
+    so.hidden = false;
+    so.style.display = 'flex';
+    so.setAttribute('aria-hidden', 'false');
+    if (backdrop) { backdrop.hidden = false; backdrop.style.display = 'block'; }
+    // Force a reflow so the bk2-open class change triggers a transition
+    // from the just-flipped display state.
+    void so.offsetWidth;
     so.classList.add('bk2-open');
     if (backdrop) backdrop.classList.add('bk2-open');
     setTimeout(function () { var first = so.querySelector('input[name="client_name"]'); if (first) first.focus(); }, 80);
   }
-  // Ensure it starts closed no matter what — protects against bfcache
-  // restoring the page with the open class still applied.
-  closeQB();
+
+  // Force-closed at every lifecycle moment we can hook into so a
+  // stuck-open render from any path (bfcache, SW restore, dev hot
+  // reload) is overridden.
+  function hardClose() {
+    if (!so) return;
+    so.classList.remove('bk2-open');
+    so.style.display = 'none';
+    so.hidden = true;
+    so.setAttribute('aria-hidden', 'true');
+    if (backdrop) {
+      backdrop.classList.remove('bk2-open');
+      backdrop.style.display = 'none';
+      backdrop.hidden = true;
+    }
+  }
+  hardClose();
+  window.addEventListener('pageshow', hardClose);
+  window.addEventListener('load', hardClose);
+
+  // Document-level delegation for the close affordances. Survives any
+  // later script error that might break the direct-listener wireup,
+  // and means dynamic [data-bk2-close] elements work without extra
+  // bookkeeping.
+  document.addEventListener('click', function (e) {
+    if (!e.target || !e.target.closest) return;
+    if (e.target.closest('#bk2-so-close') ||
+        e.target.closest('[data-bk2-close]') ||
+        e.target === backdrop) {
+      e.preventDefault();
+      closeQB();
+    }
+  });
+  // Keep the backdrop's own listener too (older browsers without
+  // closest support fall back here gracefully).
   if (backdrop) backdrop.addEventListener('click', closeQB);
-  window.addEventListener('pageshow', closeQB);
-  // Wire X button (replaced its inline onclick) and let any element
-  // with [data-bk2-close] act as a close affordance.
-  var closeBtn = $('#bk2-so-close');
-  if (closeBtn) closeBtn.addEventListener('click', closeQB);
-  $$('[data-bk2-close]').forEach(function (el) { el.addEventListener('click', closeQB); });
+
   // Hide the panel immediately on submit so users don't see it lingering
   // through the round-trip + redirect. Native form submit still proceeds.
   if (qbForm) qbForm.addEventListener('submit', function () { closeQB(); });

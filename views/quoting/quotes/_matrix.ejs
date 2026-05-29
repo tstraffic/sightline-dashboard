@@ -1,0 +1,442 @@
+<%
+// Helpers — kept local to the partial
+function fmtMoney(n) {
+  if (n === null || n === undefined) return '—';
+  return '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function unitLabel(u) { return u ? u.replace(/_/g, ' ') : ''; }
+function fmtPct(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toFixed(1) + '%';
+}
+// Map margin % → semantic chip class. Threshold values come from
+// quoting_settings (admin-editable). Below watch = red, watch→healthy
+// = amber, ≥ healthy = green. No revenue yet = neutral gray.
+function marginChipClass(pct, healthy, watch, hasRevenue) {
+  if (!hasRevenue) return 'bg-gray-100 text-gray-500 ring-gray-200';
+  if (pct >= healthy) return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+  if (pct >= watch)   return 'bg-amber-50 text-amber-800 ring-amber-200';
+  return 'bg-red-50 text-red-700 ring-red-200';
+}
+
+const CATEGORY_LABELS = {
+  planning_compliance:  'Planning',
+  tc_labour:            'TC Labour',
+  equipment_vehicles:   'Equipment',
+  provisioning:         'Provisioning',
+  allowances_misc:      'Allowances',
+};
+
+// Build category groupings for the top header row (colspan)
+const categoryGroups = [];
+let currentCat = null;
+let currentGroup = null;
+for (const col of columns) {
+  if (col.category !== currentCat) {
+    currentCat = col.category;
+    currentGroup = { category: col.category, label: CATEGORY_LABELS[col.category] || col.category, columns: [] };
+    categoryGroups.push(currentGroup);
+  }
+  currentGroup.columns.push(col);
+}
+
+// Determine per-column sub-column count (1 if no hours, 2 if hours)
+function colSubCount(col) { return col.has_hours ? 2 : 1; }
+function categoryColspan(group) {
+  return group.columns.reduce((acc, c) => acc + colSubCount(c), 0);
+}
+
+// Render-time totals row data
+function colSubtotal(col) {
+  return columnTotals[col.rate_card_item_id] || 0;
+}
+
+// Determine which rows of sites to render: each group + an Ungrouped
+// row if any sites are ungrouped.
+const renderRows = [];
+for (const g of groups) {
+  renderRows.push({ group: g, sites: sitesByGroup[g.id] || [] });
+}
+if (sitesByGroup['__ungrouped'] && sitesByGroup['__ungrouped'].length > 0) {
+  renderRows.push({ group: null, sites: sitesByGroup['__ungrouped'] });
+}
+%>
+
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <div class="px-5 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-4 flex-wrap">
+    <div>
+      <h2 class="text-base font-semibold text-gray-900">Site Matrix</h2>
+      <p class="text-xs text-gray-500 mt-0.5"><%= siteCount %> site<%= siteCount === 1 ? '' : 's' %>, <%= columnCount %> column<%= columnCount === 1 ? '' : 's' %>. Cells auto-save as you type.</p>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
+      <% if (canSeeCost) { %>
+        <label class="inline-flex items-center gap-2 cursor-pointer select-none px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+          <input type="checkbox" id="matrix-margin-toggle" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+          <span>Show margin</span>
+        </label>
+      <% } %>
+      <% if (!isLocked) { %>
+        <details class="relative">
+          <summary class="cursor-pointer inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            Add group
+          </summary>
+          <form method="POST" action="/quotes/<%= quote.id %>/groups" class="absolute right-0 mt-2 w-64 p-3 bg-white border border-gray-200 rounded-lg shadow-lg z-30">
+            <%- include('../../partials/csrf') %>
+            <label class="block text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Group name</label>
+            <input type="text" name="name" required placeholder="e.g. Screenline 10"
+              class="w-full px-2 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <button type="submit" class="mt-2 w-full px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded">Add group</button>
+          </form>
+        </details>
+      <% } %>
+    </div>
+  </div>
+
+  <% if (columnCount === 0) { %>
+    <div class="px-6 py-12 text-center text-sm text-gray-500">
+      <p>This quote has no rate columns yet.</p>
+      <% if (quote.rate_card_id) { %>
+        <p class="mt-1 text-xs">The rate card may have no active items. <a href="/rate-cards/<%= quote.rate_card_id %>" class="text-brand-700 underline">Open the rate card</a> and add some.</p>
+      <% } %>
+    </div>
+  <% } else { %>
+
+    <div class="overflow-x-auto">
+      <table class="text-sm border-separate" style="border-spacing: 0; min-width: 100%;">
+        <!-- Header rows -->
+        <thead>
+          <!-- Category spans -->
+          <tr class="bg-gray-100">
+            <th class="sticky left-0 z-20 bg-gray-100 border-b border-r border-gray-200 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500 min-w-[220px]" rowspan="2">Site</th>
+            <% categoryGroups.forEach(group => { %>
+              <th colspan="<%= categoryColspan(group) %>" class="border-b border-r border-gray-200 px-2 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-gray-600 bg-gray-100">
+                <%= group.label %>
+              </th>
+            <% }) %>
+            <th class="sticky right-0 z-20 bg-gray-100 border-b border-l border-gray-200 px-3 py-2 text-right text-[11px] font-semibold uppercase tracking-wide text-gray-500 min-w-[120px]" rowspan="2">Subtotal</th>
+          </tr>
+          <!-- Item names -->
+          <tr class="bg-gray-50">
+            <% columns.forEach(col => { %>
+              <th colspan="<%= colSubCount(col) %>" class="border-b border-r border-gray-200 px-2 py-2 text-[11px] font-medium text-gray-700 align-bottom min-w-[120px]">
+                <div class="leading-tight"><%= col.name %></div>
+                <div class="text-[10px] text-gray-400 font-normal mt-0.5">
+                  <%= unitLabel(col.unit) %>
+                  <% if (col.pricing_status === 'poa') { %>
+                    · <span class="text-amber-600 font-semibold">POA</span>
+                  <% } else if (col.rate != null) { %>
+                    · $<%= Number(col.rate).toFixed(2) %>
+                  <% } %>
+                </div>
+              </th>
+            <% }) %>
+          </tr>
+          <!-- Sub-headers (Qty / Hrs) -->
+          <tr class="bg-gray-50 border-b-2 border-gray-300">
+            <th class="sticky left-0 z-20 bg-gray-50 border-b-2 border-r border-gray-300 px-3 py-1"></th>
+            <% columns.forEach(col => { %>
+              <th class="border-b-2 border-r border-gray-300 px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 min-w-[60px]">Qty</th>
+              <% if (col.has_hours) { %>
+                <th class="border-b-2 border-r border-gray-300 px-2 py-1 text-center text-[10px] font-semibold uppercase tracking-wide text-gray-500 min-w-[60px]">Hrs</th>
+              <% } %>
+            <% }) %>
+            <th class="sticky right-0 z-20 bg-gray-50 border-b-2 border-l border-gray-300 px-3 py-1"></th>
+          </tr>
+        </thead>
+
+        <tbody>
+          <% renderRows.forEach((row, rowIdx) => { %>
+            <!-- Group header row -->
+            <tr class="bg-blue-50/40">
+              <td colspan="<%= 2 + columns.reduce((acc, c) => acc + colSubCount(c), 0) %>" class="px-3 py-1.5 border-b border-blue-100">
+                <div class="flex items-center justify-between gap-3">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-blue-900">
+                    <%= row.group ? row.group.name : 'Ungrouped sites' %>
+                    <span class="ml-2 text-blue-700/70 font-normal normal-case tracking-normal">(<%= row.sites.length %>)</span>
+                  </p>
+                  <% if (row.group && !isLocked) { %>
+                    <form method="POST" action="/quotes/<%= quote.id %>/groups/<%= row.group.id %>/delete" onsubmit="return confirm('Delete group &quot;<%= row.group.name.replace(/'/g, '&#39;') %>&quot;? Its sites become ungrouped.');">
+                      <%- include('../../partials/csrf') %>
+                      <button type="submit" class="text-[11px] text-red-600 hover:text-red-700 hover:underline">Delete group</button>
+                    </form>
+                  <% } %>
+                </div>
+              </td>
+            </tr>
+
+            <!-- Site rows -->
+            <% row.sites.forEach(site => { %>
+              <tr id="site-<%= site.id %>" data-site-id="<%= site.id %>" class="hover:bg-yellow-50/30">
+                <td class="sticky left-0 z-10 bg-white hover:bg-yellow-50/30 border-b border-r border-gray-100 px-3 py-2 align-top min-w-[220px]">
+                  <div class="flex items-start justify-between gap-2">
+                    <div>
+                      <p class="text-sm font-medium text-gray-900"><%= site.site_name %></p>
+                      <p class="text-[11px] text-gray-500 mt-0.5">
+                        <% if (site.site_code) { %><span class="font-mono"><%= site.site_code %></span> · <% } %>
+                        <% if (site.road_classification) { %><%= site.road_classification %><% } else { %><span class="text-gray-400 italic">no class</span><% } %>
+                      </p>
+                    </div>
+                    <% if (!isLocked) { %>
+                      <form method="POST" action="/quotes/<%= quote.id %>/sites/<%= site.id %>/delete" onsubmit="return confirm('Delete site &quot;<%= site.site_name.replace(/'/g, '&#39;') %>&quot;? All its line items will be lost.');">
+                        <%- include('../../partials/csrf') %>
+                        <button type="submit" class="text-[11px] text-gray-400 hover:text-red-600" title="Delete site">✕</button>
+                      </form>
+                    <% } %>
+                  </div>
+                </td>
+
+                <!-- Cells -->
+                <% columns.forEach(col => { %>
+                  <% const cell = (cellMap[site.id] && cellMap[site.id][col.rate_card_item_id]) || { qty: '', hours: '', line_revenue: 0 }; %>
+                  <td class="border-b border-r border-gray-100 px-1.5 py-1.5 align-top text-center min-w-[60px] relative">
+                    <input type="number" step="any" min="0"
+                      data-cell-site="<%= site.id %>" data-cell-item="<%= col.rate_card_item_id %>" data-cell-field="qty"
+                      value="<%= cell.qty || '' %>"
+                      <%= isLocked ? 'disabled' : '' %>
+                      class="w-16 px-1 py-1 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 quote-cell">
+                    <div data-cell-revenue-site="<%= site.id %>" data-cell-revenue-item="<%= col.rate_card_item_id %>"
+                         class="text-[10px] text-gray-400 mt-0.5 font-mono min-h-[12px]">
+                      <% if (cell.line_revenue) { %>$<%= Number(cell.line_revenue).toFixed(2) %><% } %>
+                    </div>
+                    <% if (canSeeCost) { %>
+                      <%
+                        const hasRev = (cell.line_revenue || 0) > 0;
+                        const chipClass = marginChipClass(cell.line_margin_pct || 0, marginHealthy, marginWatch, hasRev);
+                        const hasOverride = cell.unit_cost_override != null;
+                      %>
+                      <div data-cell-margin-site="<%= site.id %>" data-cell-margin-item="<%= col.rate_card_item_id %>"
+                           class="matrix-cost-block hidden mt-1 flex items-center justify-center gap-1">
+                        <span data-cell-margin-pct="<%= site.id %>-<%= col.rate_card_item_id %>"
+                              class="inline-flex items-center px-1 py-px text-[9px] font-semibold ring-1 rounded <%= chipClass %>">
+                          <%= hasRev ? fmtPct(cell.line_margin_pct || 0) : '—' %>
+                        </span>
+                        <button type="button"
+                          data-cell-cost-trigger="<%= site.id %>-<%= col.rate_card_item_id %>"
+                          data-derivation="<%= (cell.cost_derivation || '').replace(/"/g, '&quot;') %>"
+                          data-line-id="<%= cell.id || '' %>"
+                          data-site-id="<%= site.id %>"
+                          data-item-id="<%= col.rate_card_item_id %>"
+                          data-override="<%= cell.unit_cost_override != null ? cell.unit_cost_override : '' %>"
+                          data-can-edit="<%= isLocked ? '0' : '1' %>"
+                          title="Show cost derivation"
+                          class="cell-cost-trigger inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded <%= hasOverride ? 'bg-amber-100 text-amber-800 hover:bg-amber-200' : 'bg-gray-100 text-gray-500 hover:bg-gray-200' %>">
+                          $
+                        </button>
+                      </div>
+                    <% } %>
+                  </td>
+                  <% if (col.has_hours) { %>
+                    <td class="border-b border-r border-gray-100 px-1.5 py-1.5 align-top text-center min-w-[60px]">
+                      <input type="number" step="any" min="0"
+                        data-cell-site="<%= site.id %>" data-cell-item="<%= col.rate_card_item_id %>" data-cell-field="hours"
+                        value="<%= cell.hours || '' %>"
+                        <%= isLocked ? 'disabled' : '' %>
+                        class="w-16 px-1 py-1 text-sm text-center border border-gray-200 rounded focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-500 quote-cell">
+                    </td>
+                  <% } %>
+                <% }) %>
+
+                <td class="sticky right-0 z-10 bg-white hover:bg-yellow-50/30 border-b border-l border-gray-100 px-3 py-2 text-right min-w-[120px]">
+                  <div data-site-subtotal="<%= site.id %>" class="font-mono text-sm font-semibold text-gray-900">
+                    <%= fmtMoney(site.subtotal_ex_gst || 0) %>
+                  </div>
+                  <% if (canSeeCost) { %>
+                    <%
+                      const hasSiteRev = (site.subtotal_ex_gst || 0) > 0;
+                      const siteChipClass = marginChipClass(site.total_margin_pct || 0, marginHealthy, marginWatch, hasSiteRev);
+                    %>
+                    <div data-site-margin="<%= site.id %>" class="matrix-cost-block hidden mt-1 flex justify-end gap-1 text-[10px]">
+                      <span data-site-cost="<%= site.id %>" class="font-mono text-gray-500"><%= fmtMoney(site.total_cost || 0) %></span>
+                      <span data-site-margin-pct="<%= site.id %>" class="inline-flex items-center px-1 py-px font-semibold ring-1 rounded <%= siteChipClass %>">
+                        <%= hasSiteRev ? fmtPct(site.total_margin_pct || 0) : '—' %>
+                      </span>
+                    </div>
+                  <% } %>
+                </td>
+              </tr>
+            <% }) %>
+
+            <!-- Inline "Add site" for this group -->
+            <% if (!isLocked) { %>
+              <tr class="bg-gray-50/50">
+                <td colspan="<%= 2 + columns.reduce((acc, c) => acc + colSubCount(c), 0) %>" class="px-3 py-2 border-b border-gray-100">
+                  <details class="text-xs">
+                    <summary class="cursor-pointer text-brand-700 hover:text-brand-800 inline-flex items-center gap-1">
+                      <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+                      Add site to <%= row.group ? row.group.name : 'Ungrouped' %>
+                    </summary>
+                    <form method="POST" action="/quotes/<%= quote.id %>/sites" class="mt-2 grid grid-cols-1 md:grid-cols-12 gap-2 items-end">
+                      <%- include('../../partials/csrf') %>
+                      <% if (row.group) { %><input type="hidden" name="group_id" value="<%= row.group.id %>"><% } %>
+                      <div class="md:col-span-2">
+                        <label class="block text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-0.5">Code</label>
+                        <input type="text" name="site_code" placeholder="SC10_01"
+                          class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500 font-mono">
+                      </div>
+                      <div class="md:col-span-4">
+                        <label class="block text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-0.5">Site name <span class="text-red-500">*</span></label>
+                        <input type="text" name="site_name" required placeholder="Site description"
+                          class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                      </div>
+                      <div class="md:col-span-3">
+                        <label class="block text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-0.5">Road name</label>
+                        <input type="text" name="road_name" placeholder="Optional"
+                          class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                      </div>
+                      <div class="md:col-span-2">
+                        <label class="block text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-0.5">Class</label>
+                        <select name="road_classification" class="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-brand-500">
+                          <option value="">—</option>
+                          <% roadClassifications.forEach(rc => { %><option value="<%= rc %>"><%= rc %></option><% }) %>
+                        </select>
+                      </div>
+                      <div class="md:col-span-1">
+                        <button type="submit" class="w-full px-2 py-1 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded">Add</button>
+                      </div>
+                    </form>
+                  </details>
+                </td>
+              </tr>
+            <% } %>
+          <% }) %>
+
+          <!-- Empty state if no groups + no sites at all -->
+          <% if (renderRows.length === 0) { %>
+            <tr>
+              <td colspan="<%= 2 + columns.reduce((acc, c) => acc + colSubCount(c), 0) %>" class="px-6 py-8 text-center text-sm text-gray-500">
+                No sites yet.
+                <% if (!isLocked) { %>
+                  <details class="inline-block mt-2 text-xs">
+                    <summary class="cursor-pointer text-brand-700 hover:text-brand-800">Add the first ungrouped site</summary>
+                    <form method="POST" action="/quotes/<%= quote.id %>/sites" class="mt-3 flex flex-wrap items-end gap-2">
+                      <%- include('../../partials/csrf') %>
+                      <input type="text" name="site_code" placeholder="Code" class="px-2 py-1 text-xs border border-gray-300 rounded font-mono">
+                      <input type="text" name="site_name" required placeholder="Site name *" class="px-2 py-1 text-xs border border-gray-300 rounded">
+                      <button type="submit" class="px-2 py-1 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded">Add</button>
+                    </form>
+                  </details>
+                <% } %>
+              </td>
+            </tr>
+          <% } %>
+        </tbody>
+
+        <!-- Column totals -->
+        <% if (siteCount > 0) { %>
+          <tfoot>
+            <tr class="bg-gray-100 border-t-2 border-gray-300">
+              <td class="sticky left-0 z-10 bg-gray-100 border-r border-gray-200 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700">Column totals</td>
+              <% columns.forEach(col => { %>
+                <td colspan="<%= colSubCount(col) %>" class="border-r border-gray-200 px-2 py-2 text-right">
+                  <div data-column-total="<%= col.rate_card_item_id %>" class="font-mono text-xs font-semibold text-gray-700">
+                    <%= fmtMoney(colSubtotal(col)) %>
+                  </div>
+                  <% if (canSeeCost) { %>
+                    <div data-column-cost="<%= col.rate_card_item_id %>" class="matrix-cost-block hidden font-mono text-[10px] text-gray-500 mt-0.5">
+                      cost <%= fmtMoney(columnCosts[col.rate_card_item_id] || 0) %>
+                    </div>
+                  <% } %>
+                </td>
+              <% }) %>
+              <td class="sticky right-0 z-10 bg-gray-100 border-l border-gray-200 px-3 py-2 text-right min-w-[120px]">
+                <div data-quote-subtotal class="font-mono text-sm font-bold text-gray-900">
+                  <%= fmtMoney(quote.subtotal_ex_gst || 0) %>
+                </div>
+                <% if (canSeeCost) { %>
+                  <%
+                    const hasQuoteRev = (quote.subtotal_ex_gst || 0) > 0;
+                    const qChipClass = marginChipClass(quote.total_margin_pct || 0, marginHealthy, marginWatch, hasQuoteRev);
+                  %>
+                  <div class="matrix-cost-block hidden mt-1 flex justify-end gap-1 text-[10px]">
+                    <span data-quote-cost class="font-mono text-gray-500"><%= fmtMoney(quote.total_cost || 0) %></span>
+                    <span data-quote-margin-pct class="inline-flex items-center px-1 py-px font-semibold ring-1 rounded <%= qChipClass %>">
+                      <%= hasQuoteRev ? fmtPct(quote.total_margin_pct || 0) : '—' %>
+                    </span>
+                  </div>
+                <% } %>
+              </td>
+            </tr>
+          </tfoot>
+        <% } %>
+      </table>
+    </div>
+
+    <!-- Grand-total footer -->
+    <% if (siteCount > 0) { %>
+      <div class="px-5 py-3 border-t border-gray-200 bg-gray-50 grid grid-cols-3 gap-4 text-sm">
+        <div class="text-right">
+          <span class="text-gray-500 text-xs uppercase tracking-wide font-semibold mr-2">Subtotal (ex GST)</span>
+          <span data-quote-subtotal-foot class="font-mono font-semibold"><%= fmtMoney(quote.subtotal_ex_gst || 0) %></span>
+        </div>
+        <div class="text-right">
+          <span class="text-gray-500 text-xs uppercase tracking-wide font-semibold mr-2">GST</span>
+          <span data-quote-gst class="font-mono font-semibold"><%= fmtMoney(quote.gst || 0) %></span>
+        </div>
+        <div class="text-right">
+          <span class="text-gray-700 text-xs uppercase tracking-wide font-semibold mr-2">Total (inc GST)</span>
+          <span data-quote-total class="font-mono font-bold text-base text-gray-900"><%= fmtMoney(quote.total_inc_gst || 0) %></span>
+        </div>
+      </div>
+      <% if (canSeeCost) { %>
+        <%
+          const hasFootRev = (quote.subtotal_ex_gst || 0) > 0;
+          const footChipClass = marginChipClass(quote.total_margin_pct || 0, marginHealthy, marginWatch, hasFootRev);
+        %>
+        <div class="matrix-cost-block hidden px-5 py-2 border-t border-dashed border-gray-200 bg-gray-50/40 grid grid-cols-3 gap-4 text-xs">
+          <div class="text-right">
+            <span class="text-gray-500 uppercase tracking-wide font-semibold mr-2">Cost</span>
+            <span data-quote-cost-foot class="font-mono font-semibold text-gray-700"><%= fmtMoney(quote.total_cost || 0) %></span>
+          </div>
+          <div class="text-right">
+            <span class="text-gray-500 uppercase tracking-wide font-semibold mr-2">Margin</span>
+            <span data-quote-margin-foot class="font-mono font-semibold text-gray-700"><%= fmtMoney(quote.total_margin || 0) %></span>
+          </div>
+          <div class="text-right">
+            <span class="text-gray-500 uppercase tracking-wide font-semibold mr-2">Margin %</span>
+            <span data-quote-margin-pct-foot class="inline-flex items-center px-1.5 py-0.5 font-semibold ring-1 rounded <%= footChipClass %>">
+              <%= hasFootRev ? fmtPct(quote.total_margin_pct || 0) : '—' %>
+            </span>
+          </div>
+        </div>
+      <% } %>
+    <% } %>
+  <% } %>
+
+  <span id="site-bottom"></span>
+</div>
+
+<% if (canSeeCost) { %>
+  <!-- Cost override popover (one shared instance, repositioned on each trigger click) -->
+  <div id="cost-popover" class="hidden fixed z-50 w-72 p-3 bg-white border border-gray-200 rounded-lg shadow-xl text-xs">
+    <div class="flex items-start justify-between gap-2 mb-2">
+      <p class="font-semibold text-gray-900">Cost derivation</p>
+      <button type="button" id="cost-popover-close" class="text-gray-400 hover:text-gray-600 leading-none text-lg">×</button>
+    </div>
+    <p id="cost-popover-derivation" class="text-gray-700 mb-3 font-mono leading-relaxed"></p>
+    <% if (!isLocked) { %>
+      <label class="block text-[10px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Override unit cost ($)</label>
+      <div class="flex items-center gap-1.5">
+        <input type="number" step="any" min="0" id="cost-popover-input"
+          placeholder="Leave blank for default"
+          class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono">
+        <button type="button" id="cost-popover-save" class="px-2 py-1 bg-brand-600 hover:bg-brand-700 text-white text-xs font-medium rounded">Save</button>
+        <button type="button" id="cost-popover-clear" class="px-2 py-1 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-medium rounded">Clear</button>
+      </div>
+      <p id="cost-popover-status" class="mt-1.5 text-[10px] text-gray-500"></p>
+    <% } else { %>
+      <p class="text-[10px] text-gray-500 italic">Matrix locked — overrides disabled.</p>
+    <% } %>
+  </div>
+<% } %>
+
+<% if (columnCount > 0) { %>
+  <script src="/js/quote-matrix.js" defer></script>
+  <script>
+    window.__QUOTE_ID__ = <%= quote.id %>;
+    window.__QUOTE_LOCKED__ = <%= isLocked ? 'true' : 'false' %>;
+    window.__QUOTE_CAN_SEE_COST__ = <%= canSeeCost ? 'true' : 'false' %>;
+    window.__QUOTE_MARGIN_HEALTHY__ = <%= marginHealthy %>;
+    window.__QUOTE_MARGIN_WATCH__ = <%= marginWatch %>;
+  </script>
+<% } %>

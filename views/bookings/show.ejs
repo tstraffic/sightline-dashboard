@@ -46,8 +46,78 @@
   </div>
 </div>
 
+<!-- POST-CREATE NAV STRIP — true tab switcher. Clicking a tab hides
+     every other [data-bk-tab] section and shows only the matching
+     one, so you stay on the view page and only see what you asked
+     for. Edit goes to the edit form. -->
+<nav class="bk-section-overnav mb-4" aria-label="Booking sections" id="bkOvernav">
+  <button type="button" data-bk-go="overview"  class="bk-onav-tab is-active"><span>Overview</span></button>
+  <button type="button" data-bk-go="crews"     class="bk-onav-tab"><span>Resources</span></button>
+  <button type="button" data-bk-go="tasks"     class="bk-onav-tab"><span>Tasks</span></button>
+  <button type="button" data-bk-go="dockets"   class="bk-onav-tab"><span>Dockets</span></button>
+  <button type="button" data-bk-go="notes"     class="bk-onav-tab"><span>Notes</span></button>
+  <button type="button" data-bk-go="documents" class="bk-onav-tab"><span>Documents</span></button>
+  <button type="button" data-bk-go="forms"     class="bk-onav-tab"><span>Forms</span></button>
+  <button type="button" data-bk-go="history"   class="bk-onav-tab"><span>History</span></button>
+  <a href="/bookings/<%= b.id %>/edit" class="bk-onav-tab" style="margin-left:auto"><span>✎ Edit</span></a>
+</nav>
+
+<style>
+  .bk-section-overnav { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid #E5E7EB; }
+  .bk-onav-tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px; border-radius: 8px; border: 0;
+    font-size: 12px; font-weight: 600; color: #4B5563;
+    background: transparent; text-decoration: none; transition: background 0.12s;
+    cursor: pointer;
+  }
+  .bk-onav-tab:hover { background: #F3F4F6; color: #111827; }
+  .bk-onav-tab.is-active { background: #ECFDF5; color: #047857; }
+  /* Cards that don't match the active tab are hidden via display:none
+     applied by JS — we leave the rule symbolic here for documentation. */
+  [data-bk-tab].bk-hidden { display: none !important; }
+
+  :root[data-theme="dark"] .bk-section-overnav { border-bottom-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] .bk-onav-tab        { color: #94A3B8; }
+  :root[data-theme="dark"] .bk-onav-tab:hover  { background: rgba(255,255,255,0.06); color: #F5F5F7; }
+  :root[data-theme="dark"] .bk-onav-tab.is-active { background: rgba(16,185,129,0.16); color: #6EE7B7; }
+</style>
+
+<script>
+// Booking-page tab switcher. Hides every [data-bk-tab] card whose
+// value doesn't match the active tab. URL hash stays in sync so
+// the edit page's "Back to overview" link can deep-link straight
+// into any tab (eg /bookings/123#tasks).
+(function () {
+  var nav = document.getElementById('bkOvernav');
+  if (!nav) return;
+  var tabs = Array.prototype.slice.call(nav.querySelectorAll('[data-bk-go]'));
+  var panes = Array.prototype.slice.call(document.querySelectorAll('[data-bk-tab]'));
+
+  function showTab(name) {
+    if (!name) name = 'overview';
+    // Multiple cards can share a tab (eg the header + location both
+    // belong to "overview"); show all that match, hide the rest.
+    panes.forEach(function (el) {
+      var t = el.getAttribute('data-bk-tab');
+      el.classList.toggle('bk-hidden', t !== name);
+    });
+    tabs.forEach(function (b) { b.classList.toggle('is-active', b.getAttribute('data-bk-go') === name); });
+    try { history.replaceState(null, '', name === 'overview' ? location.pathname + location.search : '#' + name); } catch (e) {}
+  }
+
+  tabs.forEach(function (b) { b.addEventListener('click', function () { showTab(b.getAttribute('data-bk-go')); }); });
+
+  // Initial tab from the URL hash so /bookings/123#dockets opens
+  // straight into Dockets. Defaults to Overview otherwise.
+  var initial = (location.hash || '').replace(/^#/, '').toLowerCase();
+  var valid = ['overview','crews','tasks','dockets','notes','documents','forms','history'];
+  showTab(valid.indexOf(initial) !== -1 ? initial : 'overview');
+})();
+</script>
+
 <!-- Header Card -->
-<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-5">
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-5" data-bk-tab="overview">
   <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
     <div>
       <div class="flex items-center gap-3 mb-2">
@@ -148,7 +218,7 @@
 
 <!-- Location Details (only if any location detail fields have data) -->
 <% if (b.worksite_location || b.works_direction || b.chainage_from || b.chainage_to || b.location_notes || b.latitude || b.has_mobile_works) { %>
-<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-5">
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-5" data-bk-tab="overview">
   <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Location Details</h2>
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-sm">
     <% if (b.worksite_location) { %>
@@ -290,7 +360,8 @@
 </div>
 <% } %>
 
-<section id="sec-crew-vehicles" class="bg-white border border-gray-200 rounded-xl shadow-sm mb-5 overflow-hidden">
+<span id="crews" class="block scroll-mt-20"></span>
+<section id="sec-crew-vehicles" class="bg-white border border-gray-200 rounded-xl shadow-sm mb-5 overflow-hidden" data-bk-tab="crews">
   <header class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
     <div>
       <h2 class="text-sm font-bold text-gray-900">Crew &amp; Vehicles</h2>
@@ -378,6 +449,12 @@
                   <span class="text-sm font-medium text-gray-900"><%= v.vehicle_name || v.registration || '(unnamed vehicle)' %></span>
                   <% if (v.vehicle_name && v.registration) { %><span class="text-xs text-gray-400 ml-2"><%= v.registration %></span><% } %>
                   <% if (v.vehicle_role) { %><span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700"><%= v.vehicle_role %></span><% } %>
+                  <% if (v.fleet_vehicle_id && v.fleet_asset_id) { %>
+                    <a href="/fleet/<%= v.fleet_vehicle_id %>" class="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 ring-1 ring-indigo-600/20" title="View in Fleet Register">
+                      Fleet · <%= v.fleet_asset_id %>
+                      <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 3h7m0 0v7m0-7L10 14m-4 0H3v7h7v-3"/></svg>
+                    </a>
+                  <% } %>
                 </div>
                 <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/remove" class="inline shrink-0">
                   <%- include('../partials/csrf') %>
@@ -427,13 +504,42 @@
           <%- include('../partials/csrf') %>
           <div>
             <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">From register</label>
-            <select name="from_register" id="vehicle-select" onchange="if(this.value){var o=this.options[this.selectedIndex];document.getElementById('vn').value=o.text.split(' (')[0];document.getElementById('vr').value=o.getAttribute('data-rego')||''}"
+            <%
+              // Picker source format: "fleet:<id>" → fleet_vehicle_id field; "equipment:<id>" → equipment_id field.
+              // Free-text Vehicle name / Rego fields below still work without picking.
+            %>
+            <select name="register_source" id="vehicle-select"
+              onchange="(function(sel){
+                var v = sel.value;
+                var o = sel.options[sel.selectedIndex];
+                document.getElementById('bv_fleet_id').value  = v.indexOf('fleet:') === 0     ? v.slice(6) : '';
+                document.getElementById('bv_equip_id').value = v.indexOf('equipment:') === 0 ? v.slice(10) : '';
+                if (v) {
+                  document.getElementById('vn').value = o.getAttribute('data-name') || o.text.split(' · ')[0];
+                  document.getElementById('vr').value = o.getAttribute('data-rego') || '';
+                }
+              })(this)"
               class="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
               <option value="">— select vehicle —</option>
-              <% if (typeof allEquipment !== 'undefined') { allEquipment.filter(eq => ['vehicle','vms','lighting'].includes(eq.category) || (eq.asset_name||'').toLowerCase().includes('ute') || (eq.asset_name||'').toLowerCase().includes('truck')).forEach(eq => { %>
-                <option value="<%= eq.id %>" data-rego=""><%= eq.asset_name %> (<%= eq.category %>)</option>
-              <% }); } %>
+              <% if (typeof allFleet !== 'undefined' && allFleet.length) { %>
+                <optgroup label="Fleet (utes, trucks)">
+                  <% allFleet.forEach(fv => { %>
+                    <option value="fleet:<%= fv.id %>" data-rego="<%= fv.rego || '' %>" data-name="<%= fv.label || fv.asset_id %>"><%= fv.asset_id %> · <%= fv.label || '' %><% if (fv.rego) { %> · <%= fv.rego %><% } %></option>
+                  <% }) %>
+                </optgroup>
+              <% } %>
+              <% if (typeof allEquipment !== 'undefined') {
+                const eqVehicles = allEquipment.filter(eq => ['vehicle','vms','lighting'].includes(eq.category) || (eq.asset_name||'').toLowerCase().includes('ute') || (eq.asset_name||'').toLowerCase().includes('truck'));
+                if (eqVehicles.length) { %>
+                <optgroup label="Equipment (VMS, lighting, other)">
+                  <% eqVehicles.forEach(eq => { %>
+                    <option value="equipment:<%= eq.id %>" data-rego="" data-name="<%= eq.asset_name %>"><%= eq.asset_name %> (<%= eq.category %>)</option>
+                  <% }) %>
+                </optgroup>
+              <% } } %>
             </select>
+            <input type="hidden" name="fleet_vehicle_id" id="bv_fleet_id" value="">
+            <input type="hidden" name="equipment_id" id="bv_equip_id" value="">
           </div>
           <div class="grid grid-cols-2 gap-2">
             <input type="text" name="vehicle_name" id="vn" placeholder="Vehicle name" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
@@ -486,7 +592,7 @@
         var totalDone  = jobPackGrid.reduce(function (a, w) { return a + w.submitted_count; }, 0);
         var totalPct = totalSlots ? Math.round(totalDone / totalSlots * 100) : 0;
       %>
-      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <div id="forms" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="forms">
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Job-Pack completion</h2>
           <span class="text-xs font-semibold <%= totalPct >= 95 ? 'text-emerald-700 bg-emerald-50' : totalPct >= 60 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50' %> px-2 py-0.5 rounded">
@@ -546,7 +652,7 @@
       var TASK_PRIORITY = { high: 'bg-red-50 text-red-700 ring-red-600/10', normal: 'bg-amber-50 text-amber-700 ring-amber-600/10', low: 'bg-gray-100 text-gray-600 ring-gray-500/10' };
       var TASK_PORTAL = { supervisor: 'bg-violet-50 text-violet-700', team_leader: 'bg-amber-50 text-amber-700', traffic_controller: 'bg-gray-100 text-gray-600' };
     %>
-    <div id="tasks" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div id="tasks" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="tasks">
       <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
         <div>
           <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Shift Tasks</h2>
@@ -629,7 +735,7 @@
 <!-- Crew block moved to the top of the two-column grid (see <%= 'sec-crew-vehicles' %>). -->
 
     <!-- Dockets -->
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div id="dockets" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="dockets">
       <div class="flex items-center justify-between mb-4">
         <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Dockets (<%= b.dockets ? b.dockets.length : 0 %>)</h2>
         <form method="POST" action="/bookings/<%= b.id %>/dockets" class="inline">
@@ -674,7 +780,7 @@
     </div>
 
     <!-- Notes -->
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div id="notes" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="notes">
       <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Notes</h2>
 
       <% if (b.notes && b.notes.length > 0) { %>
@@ -851,7 +957,7 @@
 <!-- Vehicles block moved to the combined Crew & Vehicles card at the top of the grid. -->
 
     <!-- Documents -->
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div id="documents" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="documents">
       <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Documents (<%= b.documents ? b.documents.length : 0 %>)</h2>
 
       <% if (b.documents && b.documents.length > 0) { %>
@@ -905,7 +1011,7 @@
 
     <!-- Activity History -->
     <% if (b.activity && b.activity.length > 0) { %>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div id="history" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="history">
       <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">History</h2>
       <div class="space-y-3">
         <% b.activity.forEach(a => { %>

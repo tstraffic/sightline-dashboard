@@ -67,15 +67,28 @@ router.get('/', (req, res) => {
     return nearest;
   }
 
-  // Compute compliance status for each + enrich with extra data
+  // Compute compliance status for each + enrich with extra data.
+  // A crew member is "pending onboarding" if they have no PIN set (so
+  // they can't log into the worker portal yet) OR if their employee_id
+  // still carries the VOC-PENDING-* placeholder we drop in when the
+  // Quick Cert flow auto-creates a row for an unknown name. HR uses
+  // this to find rows that need finishing.
   const crewWithStatus = crew.map(m => {
     const nearestExpiry = getNearestExpiry(m);
+    const pendingOnboarding = m.active && (
+      !m.pin_hash ||
+      (m.employee_id && /^VOC-PENDING-/.test(m.employee_id))
+    );
     return {
       ...m,
       compliance: getComplianceStatusBatch(m, fatigueMap, today),
       activeJobs: allocCountMap[m.id] || 0,
       lastWorked: lastWorkedMap[m.id] || null,
       nearestExpiry,
+      pendingOnboarding,
+      // Specific quick-cert flag — useful for a tighter sub-filter and
+      // for showing a distinct chip in the view.
+      vocQuickCreated: !!(m.employee_id && /^VOC-PENDING-/.test(m.employee_id)),
     };
   });
 
@@ -94,6 +107,8 @@ router.get('/', (req, res) => {
     filtered = filtered.filter(c => c.compliance.fatigueBlocked);
   } else if (filter === 'expiring') {
     filtered = filtered.filter(c => c.active && c.nearestExpiry && c.nearestExpiry.date <= expiryThreshold);
+  } else if (filter === 'pending_onboarding') {
+    filtered = filtered.filter(c => c.pendingOnboarding);
   }
 
   // Apply role filter
@@ -131,6 +146,7 @@ router.get('/', (req, res) => {
   const complianceIssues = crewWithStatus.filter(c => c.active && (!c.compliance.allTicketsValid || !c.compliance.licenceValid || !c.compliance.inductionComplete)).length;
   const fatigueBlocked = crewWithStatus.filter(c => c.compliance.fatigueBlocked).length;
   const expiringSoon = crewWithStatus.filter(c => c.active && c.nearestExpiry && c.nearestExpiry.date <= expiryThreshold).length;
+  const pendingOnboardingCount = crewWithStatus.filter(c => c.pendingOnboarding).length;
 
   res.render('crew/index', {
     title: 'Workforce',
@@ -139,7 +155,7 @@ router.get('/', (req, res) => {
     filter,
     roleFilter,
     search: req.query.search || '',
-    stats: { totalActive, allocatable, complianceIssues, fatigueBlocked, expiringSoon },
+    stats: { totalActive, allocatable, complianceIssues, fatigueBlocked, expiringSoon, pendingOnboardingCount },
     today,
     sort,
     order,
@@ -176,6 +192,50 @@ router.post('/', (req, res) => {
     }
     res.redirect('/crew/new');
   }
+});
+
+// POST /:id/deactivate — Single-row deactivate, redirects back to
+// Referer so it can be called inline from the "Duplicate crew names
+// detected" banner on /voc-assessments/quick (or anywhere else that
+// surfaces a stranded crew row). Flips active=0 + also unsets the
+// linked HR employee row if any (mirror of /hr/roster/delete) so the
+// directions stay consistent. Logged for audit because this is the
+// path most often used to clean up duplicates / placeholders.
+router.post('/:id/deactivate', (req, res) => {
+  const db = getDb();
+  const id = parseInt(req.params.id, 10);
+  if (!id) { req.flash('error', 'No crew member specified.'); return res.redirect('back'); }
+  const m = db.prepare('SELECT id, full_name, employee_id, active FROM crew_members WHERE id = ?').get(id);
+  if (!m) { req.flash('error', 'Crew member not found.'); return res.redirect('back'); }
+  if (!m.active) {
+    req.flash('success', `${m.full_name} is already deactivated.`);
+    return res.redirect(req.get('referer') || '/crew');
+  }
+  try {
+    db.prepare('UPDATE crew_members SET active = 0 WHERE id = ?').run(id);
+    // Mirror the cascade direction used by /hr/roster/delete — if this
+    // crew row had a linked HR employee, soft-delete it too so the HR
+    // view doesn't show a "live" employee whose operational row is
+    // gone.
+    const emp = db.prepare('SELECT id FROM employees WHERE linked_crew_member_id = ? AND active = 1').get(id);
+    if (emp) {
+      db.prepare(`UPDATE employees SET active = 0, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(emp.id);
+    }
+    logActivity({
+      user: req.session.user,
+      action: 'update',
+      entityType: 'crew_member',
+      entityId: id,
+      entityLabel: m.full_name + (m.employee_id ? ' (' + m.employee_id + ')' : ''),
+      details: 'Deactivated (single-row, e.g. duplicate cleanup)',
+      ip: req.ip,
+    });
+    req.flash('success', `${m.full_name} deactivated.` + (emp ? ' Linked HR employee row also removed.' : ''));
+  } catch (err) {
+    console.error('[crew] single-row deactivate error:', err);
+    req.flash('error', 'Failed to deactivate: ' + err.message);
+  }
+  res.redirect(req.get('referer') || '/crew');
 });
 
 // POST /bulk — Bulk actions on crew members

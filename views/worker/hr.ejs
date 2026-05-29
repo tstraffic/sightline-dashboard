@@ -4,6 +4,134 @@
     <p class="text-sm text-gray-500 mt-0.5">Personal records & self-service</p>
   </div>
 
+  <%
+    // "Your rate" card — surfaces THIS worker's tier + stamped rates so
+    // they can confirm what they should be paid without ringing the
+    // office. We only ever show their own row; the wage panel itself
+    // stays management-only. Rate rows shown depend on the worker's
+    // payment_type so we don't display empty $0 cells.
+    const pt = employee && employee.payment_type ? employee.payment_type.toLowerCase() : '';
+    const fmt = (v) => v == null || isNaN(parseFloat(v)) ? '—' : '$' + (parseFloat(v) || 0).toFixed(2);
+    function rateRow(label, val, sub) {
+      const v = parseFloat(val);
+      if (!isFinite(v) || v <= 0) return '';
+      return `
+        <div class="flex items-baseline justify-between py-1.5">
+          <div>
+            <p class="text-sm text-gray-700">${label}</p>
+            ${sub ? `<p class="text-[10px] text-gray-400">${sub}</p>` : ''}
+          </div>
+          <p class="text-base font-semibold text-gray-900 tabular-nums">${fmt(val)}<span class="text-[10px] text-gray-400 font-normal ml-0.5">/hr</span></p>
+        </div>
+      `;
+    }
+    function allowanceRow(label, val, unit, sub) {
+      const v = parseFloat(val);
+      if (!isFinite(v) || v <= 0) return '';
+      return `
+        <div class="flex items-baseline justify-between py-1.5">
+          <div>
+            <p class="text-sm text-gray-700">${label}</p>
+            ${sub ? `<p class="text-[10px] text-gray-400">${sub}</p>` : ''}
+          </div>
+          <p class="text-base font-semibold text-gray-900 tabular-nums">${fmt(val)}<span class="text-[10px] text-gray-400 font-normal ml-0.5">/${unit}</span></p>
+        </div>
+      `;
+    }
+
+    const PT_LABEL = { cash: 'Cash', abn: 'ABN (contractor)', tfn: 'TFN / Award (casual)' };
+    const NIGHT_PATTERN_LABEL = {
+      occasional: 'Night — occasional roster',
+      permanent: 'Night — permanent roster',
+      continuous_5plus: 'Night — continuous 5+',
+    };
+  %>
+
+  <% if (employee) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <div class="flex items-start justify-between gap-2 mb-3">
+        <div>
+          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Your rate</p>
+          <% if (tierMeta && employee.tier) { %>
+            <p class="text-base font-bold text-gray-900 mt-0.5">Tier <%= employee.tier %> · <%= tierMeta.role_label %></p>
+            <p class="text-[11px] text-gray-500 mt-0.5"><%= tierMeta.qualifications %></p>
+          <% } else { %>
+            <p class="text-base font-bold text-gray-900 mt-0.5">Rate on file</p>
+            <p class="text-[11px] text-amber-600 mt-0.5">Tier not yet assigned — speak to your supervisor.</p>
+          <% } %>
+        </div>
+        <% if (pt) { %>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-50 text-brand-700 ring-1 ring-brand-200 whitespace-nowrap"><%= PT_LABEL[pt] || pt.toUpperCase() %></span>
+        <% } %>
+      </div>
+
+      <div class="divide-y divide-gray-100">
+        <% if (pt === 'cash') { %>
+          <%- rateRow('Day / Sat',           employee.rate_day,           'Mon–Sat ordinary') %>
+          <%- rateRow('Night / Sun / PH',    employee.rate_night,         'After 6pm, Sun & PH') %>
+          <%- allowanceRow('Travel allowance', employee.rate_fares_daily, 'shift', 'Per shift, flat (not paid when you have a ute)') %>
+        <% } else if (pt === 'abn') { %>
+          <%- rateRow('Day',                 employee.rate_day,           'Mon–Fri ordinary') %>
+          <%- rateRow('Sat',                 employee.rate_weekend,       'Saturday') %>
+          <%- rateRow('Night / Sun / PH',    employee.rate_night,         'After 6pm, Sun & PH') %>
+          <%- allowanceRow('Travel allowance', employee.rate_fares_daily, 'shift', 'Per shift, flat (not paid when you have a ute)') %>
+        <% } else if (pt === 'tfn') { %>
+          <%- rateRow('Day (base)',          employee.rate_day,           'Mon–Fri ordinary — incl. industry allowance + 25% casual loading') %>
+          <% if (parseFloat(employee.rate_ot) > 0) { %>
+            <%- rateRow('Day OT',            employee.rate_ot,            'After 8hrs') %>
+          <% } %>
+          <% if (parseFloat(employee.rate_dt) > 0) { %>
+            <%- rateRow('Day DT',            employee.rate_dt,            'After 10hrs') %>
+          <% } %>
+          <%
+            const npLbl = NIGHT_PATTERN_LABEL[employee.night_pattern] || 'Night';
+          %>
+          <%- rateRow(npLbl, employee.rate_night, 'After 6pm') %>
+          <% if (parseFloat(employee.rate_night_5plus) > 0) { %>
+            <%- rateRow('Night 5+', employee.rate_night_5plus, 'When 5+ nights in a row Mon–Fri — applied automatically') %>
+          <% } %>
+
+          <%
+            // "Night 5+ active this period" callout — fires when the
+            // server-side detector has found a 5+ Mon–Fri night run in
+            // the last 14 days of this worker's allocations.
+            if (typeof nightRunActive !== 'undefined' && nightRunActive) {
+              const fmtD = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+          %>
+            <div class="-mx-4 sm:-mx-5 mt-2 mb-1 px-4 sm:px-5 py-3 bg-amber-50 border-y border-amber-100">
+              <div class="flex items-start gap-2.5">
+                <div class="w-7 h-7 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0">
+                  <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-amber-900">Night 5+ rate active this period</p>
+                  <p class="text-[11px] text-amber-800 mt-0.5 leading-snug">
+                    You worked <%= nightRunActive.length %> nights in a row (<%= fmtD(nightRunActive.start_date) %>–<%= fmtD(nightRunActive.end_date) %>), so those shifts are paid at the lower Night 5+ rate ($<%= (parseFloat(employee.rate_night_5plus) || 0).toFixed(2) %>/hr) instead of the regular Night rate.
+                  </p>
+                </div>
+              </div>
+            </div>
+          <% } %>
+          <%- rateRow('Sat ≤2h / before 12pm', employee.rate_weekend_short, 'First 2 hours of a Saturday shift') %>
+          <%- rateRow('Sat >2h / after 12pm',  employee.rate_weekend,       'Sat after 2h or starting from 12pm · Sun') %>
+          <%- rateRow('Public holiday',        employee.rate_public_holiday) %>
+          <%- allowanceRow('Fares allowance',  employee.rate_fares_daily, 'day', 'Paid each day worked') %>
+          <%- allowanceRow('Meal allowance',   employee.rate_meal,        'meal', 'For travel jobs and shifts 9.5hrs+') %>
+        <% } else { %>
+          <p class="text-sm text-gray-500 py-2">No payment type set yet. The office will confirm with you at engagement.</p>
+        <% } %>
+      </div>
+
+      <% if (pt === 'tfn' || pt === 'abn' || pt === 'cash') { %>
+        <div class="mt-3 pt-3 border-t border-gray-100">
+          <p class="text-[10px] text-gray-400 leading-relaxed">
+            Rates above are what you'll be paid on your next pay run. Confirm with the office if anything looks off.
+          </p>
+        </div>
+      <% } %>
+    </div>
+  <% } %>
+
   <!-- Quick Stats -->
   <div class="grid grid-cols-2 gap-3">
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 text-center">

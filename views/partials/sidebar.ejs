@@ -85,7 +85,7 @@
     <% } %>
 
     <%/* ── PLANNING SECTION (planners + admin) ── */%>
-    <% if (canAccess(user, 'planning_plans') || canAccess(user, 'projects') || canAccess(user, 'tenders')) { %>
+    <% if (canAccess(user, 'planning_plans') || canAccess(user, 'projects') || canAccess(user, 'tenders') || canAccess(user, 'quoting')) { %>
     <div class="pt-3 mt-2 border-t border-white/10">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Planning</p>
     </div>
@@ -93,6 +93,16 @@
     <a href="/tenders" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'tenders' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
       <span class="flex-1">Tenders</span>
+    </a>
+    <% } %>
+    <% if (canAccess(user, 'quoting')) { %>
+    <a href="/quotes" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'quotes' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m-6 4h6m-6 4h4M5 5a2 2 0 012-2h10a2 2 0 012 2v14l-4-2-3 2-3-2-4 2V5z"/></svg>
+      <span class="flex-1">Quotes</span>
+    </a>
+    <a href="/rate-cards" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'quoting' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18M3 18h18M3 6h18"/></svg>
+      <span class="flex-1">Rate Cards</span>
     </a>
     <% } %>
     <% if (canAccess(user, 'projects')) { %>
@@ -204,11 +214,8 @@
       <span class="flex-1">VOCs</span>
     </a>
     <% } %>
-    <% if (canAccess(user, 'voc_admin')) { %>
-    <a href="/voc-templates" class="sidebar-link flex items-center pl-9 pr-3 py-2 text-xs font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'voc-templates' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200/80 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
-      <span class="flex-1">VOC Templates</span>
-    </a>
-    <% } %>
+    <%/* VOC Templates link removed from sidebar — admins reach it via
+         the "Templates" button on /voc-assessments. */%>
     <% } %>
 
     <%/* ── CLIENTS (all roles) ── */%>
@@ -239,10 +246,8 @@
       <span class="flex-1">Bookings</span>
       <% if (b.allocations) { %><span class="sidebar-badge sidebar-badge-muted"><%= b.allocations %></span><% } %>
     </a>
-    <a href="/bookings/map" class="sidebar-link flex items-center px-3 py-2 ml-6 text-xs font-medium rounded-lg <%= typeof currentPage !== 'undefined' && currentPage === 'bookings-map' ? 'bg-white/15 text-white' : 'text-brand-300 hover:bg-white/10 hover:text-white' %> transition-all">
-      <svg class="w-4 h-4 mr-2 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m-6 3l6-3"/></svg>
-      <span class="flex-1">Bookings map</span>
-    </a>
+    <%/* Bookings map link removed from sidebar — reach it from the
+         map button inside the Bookings board. */%>
     <% } %>
     <%
       // Job Pack groups Forms, Checklist Register and Signed Dockets as
@@ -271,6 +276,12 @@
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"/></svg>
       <span class="flex-1">Equipment</span>
       <% if (b.hireOverdue) { %><span class="sidebar-badge bg-red-500 text-white"><%= b.hireOverdue %></span><% } %>
+    </a>
+    <% } %>
+    <% if (canAccess(user, 'fleet')) { %>
+    <a href="/fleet" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'fleet' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 13l1.5-5A2 2 0 016.43 6.5h11.14a2 2 0 011.93 1.5L21 13m-18 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1a1 1 0 001-1v-5M3 13h18M7 16h.01M17 16h.01"/></svg>
+      <span class="flex-1">Fleet</span>
     </a>
     <% } %>
     <% } %>
@@ -331,6 +342,10 @@
     <a href="/payroll/payslips" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'payslips' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
       <span class="flex-1">Payslips</span>
+    </a>
+    <a href="/payroll/wage-tiers" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'pay-runs' && typeof title !== 'undefined' && title === 'Wage Tiers' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/></svg>
+      <span class="flex-1">Wage Tiers</span>
     </a>
     <% } %>
     <% if (canAccess(user, 'timesheets')) { %>
@@ -420,7 +435,7 @@
     </a>
     <% } %>
 
-    <% if (canAccess(user, 'equipment') || canAccess(user, 'reports')) { %>
+    <% if (canAccess(user, 'equipment') || canAccess(user, 'fleet') || canAccess(user, 'reports')) { %>
     <div class="pt-3 mt-2 border-t border-white/10">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Assets & Reports</p>
     </div>
@@ -429,6 +444,12 @@
     <a href="/equipment" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'equipment' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
       Equipment
+    </a>
+    <% } %>
+    <% if (canAccess(user, 'fleet')) { %>
+    <a href="/fleet" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'fleet' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.7" d="M3 13l1.5-5A2 2 0 016.43 6.5h11.14a2 2 0 011.93 1.5L21 13m-18 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1a1 1 0 001-1v-5M3 13h18M7 16h.01M17 16h.01"/></svg>
+      Fleet
     </a>
     <% } %>
     <% if (canAccess(user, 'documents')) { %>

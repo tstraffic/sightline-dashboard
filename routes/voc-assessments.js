@@ -17,10 +17,103 @@ const QRCode = require('qrcode');
 const { getDb } = require('../db/database');
 const { normaliseRole } = require('../middleware/auth');
 const { renderVocCertificatePdf } = require('../lib/pdf/vocCertificatePdf');
+const { sendPushToCrew } = require('../services/pushNotification');
+
+// Fire a push to the crew member when a VOC certificate is issued for
+// them. Category 'voc_issued' is honoured by sendPushToCrew so workers
+// who muted it from /w/profile/notifications get nothing. Best-effort:
+// errors are logged but never block the HTTP response.
+function notifyWorkerOfVocIssued(crewMemberId, equipmentName, certId, validUntil) {
+  if (!crewMemberId || !certId) return;
+  const bodyTail = validUntil ? ` Valid until ${validUntil}.` : '';
+  sendPushToCrew(crewMemberId, {
+    title: 'New VOC issued: ' + (equipmentName || 'Equipment'),
+    body: 'Your certificate is ready to download in My Wallet.' + bodyTail,
+    url: '/w/hr/certs',
+    type: 'voc_issued',
+    category: 'voc_issued',
+  }).catch(err => console.error('[voc-issued push] crew', crewMemberId, ':', err.message));
+}
+
+// Stronger CTA than the generic "VOC issued" push — this one fires
+// when the office issued the cert without the worker's in-person
+// signature, so the worker needs to open their portal and sign.
+// Deep-links to /w/hr/vocs/:vocId/sign so it's one tap from the
+// notification to the signature pad.
+function notifyWorkerToSign(crewMemberId, equipmentName, vocId) {
+  if (!crewMemberId || !vocId) return;
+  sendPushToCrew(crewMemberId, {
+    title: 'Action needed: sign your ' + (equipmentName || 'VOC') + ' cert',
+    body: 'Your trainer issued a Verification of Competency — tap to sign and acknowledge.',
+    url: '/w/hr/vocs/' + vocId + '/sign',
+    type: 'voc_needs_signature',
+    category: 'voc_issued', // share the mute toggle with the regular issue push
+  }).catch(err => console.error('[voc-sign push] crew', crewMemberId, ':', err.message));
+}
+
+// Regenerate + persist the cert PDF for an assessment. Used both at
+// initial issue AND after the worker acknowledges (so the embedded
+// signature updates without a manual resubmit). The new PDF replaces
+// the path on disk; the cert ID itself is stable.
+async function regenerateCertPdf(db, vocId, certId) {
+  const fresh = getAssessmentWithTemplate(db, vocId);
+  if (!fresh || !certId) return false;
+  try {
+    ensureCertDir();
+    const pdfBuf = await renderVocCertificatePdf(fresh, certId, verifyUrlFor(certId));
+    const filename = `voc-${fresh.id}-${Date.now()}.pdf`;
+    fs.writeFileSync(path.join(CERT_DIR, filename), pdfBuf);
+    const relPath = 'voc-certificates/' + filename;
+    db.prepare(`
+      UPDATE voc_assessments
+      SET pdf_path = ?, pdf_generated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(relPath, vocId);
+    return true;
+  } catch (e) {
+    console.error('[voc-regen-pdf] failed for voc', vocId, ':', e.message);
+    return false;
+  }
+}
+router.regenerateCertPdf = regenerateCertPdf; // attached to router so the worker portal can call it after the worker signs
 
 const CERT_DIR = path.join(__dirname, '..', 'data', 'uploads', 'voc-certificates');
 function ensureCertDir() {
   try { fs.mkdirSync(CERT_DIR, { recursive: true }); } catch (e) { /* ignore */ }
+}
+
+// Signatures captured by signature_pad in the browser arrive as
+// `data:image/png;base64,iVBORw0K...`. We decode, validate, and write
+// one PNG per (voc_id, role) pair. The stored path is relative to
+// data/uploads/ so the PDF renderer + worker download routes can
+// resolve it without knowing the project root.
+const SIG_DIR = path.join(__dirname, '..', 'data', 'uploads', 'voc-signatures');
+function ensureSigDir() {
+  try { fs.mkdirSync(SIG_DIR, { recursive: true }); } catch (e) { /* ignore */ }
+}
+const SIG_DATA_URL_RE = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/;
+const MAX_SIG_BYTES = 256 * 1024; // 256 KB is plenty for a 600x150 signature
+function saveSignatureDataUrl(vocId, role, dataUrl) {
+  if (!dataUrl || typeof dataUrl !== 'string') return null;
+  const m = dataUrl.match(SIG_DATA_URL_RE);
+  if (!m) return null;
+  // base64 → bytes ratio is 3/4 (minus padding). Reject early so we
+  // don't waste time decoding monsters.
+  const approxBytes = Math.floor(m[1].length * 3 / 4);
+  if (approxBytes > MAX_SIG_BYTES) {
+    console.warn('[voc-sig] signature data too large:', approxBytes, 'bytes for voc', vocId, role);
+    return null;
+  }
+  try {
+    ensureSigDir();
+    const buf = Buffer.from(m[1], 'base64');
+    const filename = `voc-${vocId}-${role}-${Date.now()}.png`;
+    fs.writeFileSync(path.join(SIG_DIR, filename), buf);
+    return 'voc-signatures/' + filename;
+  } catch (e) {
+    console.error('[voc-sig] write failed for voc', vocId, role, ':', e.message);
+    return null;
+  }
 }
 
 // Certificate ID: TSC-{year}-{6-char hex}-{voc_seq}, deterministic per voc.id.
@@ -185,7 +278,8 @@ router.get('/', (req, res) => {
   if (crew_member_id) { where += ' AND a.crew_member_id = ?'; params.push(crew_member_id); }
   const rows = db.prepare(`
     SELECT a.id, a.voc_number, a.status, a.outcome, a.valid_until,
-      a.assessment_date, a.certificate_status,
+      a.assessment_date, a.certificate_status, a.marking_complete,
+      a.worker_acknowledgement_status,
       t.name AS template_name,
       cm.full_name AS worker_name, cm.employee_id AS worker_emp_id,
       assessor.full_name AS assessor_name
@@ -197,15 +291,327 @@ router.get('/', (req, res) => {
     ORDER BY a.created_at DESC
     LIMIT 500
   `).all(...params);
+
+  // Pending Marking queue — quick-cert rows that still need their
+  // theory/practical responses entered. Always loaded so the
+  // assessor can see the backlog from the top of the index regardless
+  // of which filters are active in the main list.
+  const pendingMarking = db.prepare(`
+    SELECT a.id, a.voc_number, a.assessment_date, a.valid_until,
+      a.certificate_id, t.name AS template_name,
+      cm.full_name AS worker_name, cm.employee_id AS worker_emp_id,
+      assessor.full_name AS assessor_name
+    FROM voc_assessments a
+    JOIN voc_templates t ON t.id = a.template_id
+    JOIN crew_members cm ON cm.id = a.crew_member_id
+    LEFT JOIN users assessor ON assessor.id = a.assessor_user_id
+    WHERE a.marking_complete = 0
+    ORDER BY a.created_at DESC
+    LIMIT 200
+  `).all();
+
   const templates = db.prepare('SELECT id, name FROM voc_templates ORDER BY sort_order').all();
   res.render('voc-assessments/index', {
     title: 'Verifications of Competency',
     assessments: rows,
+    pendingMarking,
     templates,
     filters: { status: status || '', outcome: outcome || '', template_id: template_id || '', crew_member_id: crew_member_id || '' },
     user: req.session.user,
     currentPage: 'voc-assessments',
   });
+});
+
+// ────────────────────────────────────────────────
+// REGENERATE ALL CERT PDFs  (admin only)
+// One-shot tool — re-renders every issued cert so a layout change
+// (e.g. swapping the watermark from "T&S" text to the logo image)
+// propagates to historical certs without each one needing to be
+// re-submitted. Idempotent: cert IDs are stable, so re-running this
+// just overwrites the stored pdf_path with a fresh file.
+// Placed BEFORE /:id/* routes so the literal path wins.
+// ────────────────────────────────────────────────
+router.post('/regenerate-all-pdfs', async (req, res) => {
+  if (normaliseRole(req.session.user.role) !== 'admin') {
+    req.flash('error', 'Only admins can bulk-regenerate certs.');
+    return res.redirect('/voc-assessments');
+  }
+  const db = getDb();
+  // Every issued + active cert is in scope. Revoked certs are skipped
+  // because their PDF is intentionally frozen at the moment of revoke.
+  const rows = db.prepare(`
+    SELECT id, certificate_id
+    FROM voc_assessments
+    WHERE status = 'submitted'
+      AND outcome = 'competent'
+      AND certificate_id IS NOT NULL AND certificate_id != ''
+      AND COALESCE(certificate_status, 'active') = 'active'
+  `).all();
+
+  let ok = 0, fail = 0;
+  for (const r of rows) {
+    const result = await regenerateCertPdf(db, r.id, r.certificate_id);
+    if (result) ok++; else fail++;
+  }
+  req.flash('success', `Regenerated ${ok} cert PDF${ok === 1 ? '' : 's'}${fail ? ` (${fail} failed — see logs)` : ''}.`);
+  res.redirect('/voc-assessments');
+});
+
+// ────────────────────────────────────────────────
+// QUICK CERT GENERATOR
+// Built for live VOC sessions where 30+ people queue for certificates.
+// Bypasses the full assessor flow: the assessor types name + date +
+// signatures, hits Save, walks away with a printable cert. Theory +
+// practical responses are filled in later from the Pending Marking
+// queue. status='submitted', outcome='competent', marking_complete=0.
+// ────────────────────────────────────────────────
+router.get('/quick', (req, res) => {
+  const db = getDb();
+  const templates = db.prepare(`
+    SELECT id, name, item_key, default_validity_months
+    FROM voc_templates WHERE active = 1 ORDER BY sort_order
+  `).all();
+  // Active crew names → <datalist> for typeahead so common cases reuse
+  // the existing crew_member row instead of spawning duplicates. Mark
+  // each row with `is_duplicate_name` so the client-side JS can show
+  // the EMP-id when there's ambiguity (and skip the auto-pick when a
+  // name maps to more than one active row).
+  const workersRaw = db.prepare(`
+    SELECT id, full_name, employee_id FROM crew_members
+    WHERE active = 1 ORDER BY full_name
+  `).all();
+  const nameCounts = {};
+  for (const w of workersRaw) {
+    const k = (w.full_name || '').toLowerCase();
+    nameCounts[k] = (nameCounts[k] || 0) + 1;
+  }
+  const workers = workersRaw.map(w => ({
+    ...w,
+    is_duplicate_name: nameCounts[(w.full_name || '').toLowerCase()] > 1,
+  }));
+  // Surface name collisions so HR can clean them up. We render each
+  // duplicate row individually (id + employee_id + has-HR-link flag)
+  // so the user can deactivate the right one in-place. Limited to 8
+  // collision groups — anything beyond that is a roster-wide job.
+  const dupeGroups = db.prepare(`
+    SELECT LOWER(full_name) AS k, full_name, COUNT(*) AS n
+    FROM crew_members
+    WHERE active = 1 AND full_name IS NOT NULL AND TRIM(full_name) != ''
+    GROUP BY LOWER(full_name)
+    HAVING n > 1
+    ORDER BY n DESC, full_name
+    LIMIT 8
+  `).all();
+  const duplicateNames = dupeGroups.map(g => {
+    const rows = db.prepare(`
+      SELECT cm.id, cm.full_name, cm.employee_id, cm.created_at,
+        (SELECT id FROM employees WHERE linked_crew_member_id = cm.id AND active = 1 LIMIT 1) AS hr_employee_id
+      FROM crew_members cm
+      WHERE cm.active = 1 AND LOWER(cm.full_name) = ?
+      ORDER BY
+        CASE WHEN cm.employee_id IS NULL OR cm.employee_id = '' THEN 2
+             WHEN cm.employee_id LIKE 'VOC-PENDING-%' THEN 1
+             ELSE 0 END,
+        cm.created_at DESC
+    `).all(g.k);
+    return { full_name: g.full_name, n: g.n, rows };
+  });
+
+  // Carry the "last submitted" stats through the redirect chain so the
+  // assessor sees a running tally as they rapid-fire through the queue.
+  const sessionCount = req.session.quickVocCount || 0;
+  const lastQuick = req.session.lastQuickVoc || null;
+  res.render('voc-assessments/quick', {
+    title: 'Quick VOC Certificate',
+    templates,
+    workers,
+    duplicateNames,
+    sessionCount,
+    lastQuick,
+    today: new Date().toISOString().slice(0, 10),
+    user: req.session.user,
+    currentPage: 'voc-assessments',
+  });
+});
+
+router.post('/quick', async (req, res) => {
+  const db = getDb();
+  const b = req.body || {};
+  const templateId = parseInt(b.template_id, 10);
+  const typedName = String(b.worker_name || '').trim();
+  if (!templateId || !typedName) {
+    req.flash('error', 'Pick an equipment template and type a worker name.');
+    return res.redirect('/voc-assessments/quick');
+  }
+  const tpl = db.prepare('SELECT id, default_validity_months FROM voc_templates WHERE id = ? AND active = 1').get(templateId);
+  if (!tpl) {
+    req.flash('error', 'That equipment template is no longer active.');
+    return res.redirect('/voc-assessments/quick');
+  }
+
+  // Find-or-create the crew_member. Resolution order:
+  //   1. Explicit crew_member_id from the form (populated by JS when the
+  //      user picks a datalist option — eliminates the multi-match
+  //      ambiguity when two active crew members share a name).
+  //   2. Case-insensitive full_name match. If multiple match, prefer the
+  //      one with a real employee_id over a 'VOC-PENDING-*' placeholder
+  //      or blank, then most-recently-created as a final tiebreak.
+  //   3. Auto-create a sparse row with placeholder 'VOC-PENDING-<ts>'.
+  let crewId = parseInt(b.crew_member_id, 10);
+  if (crewId) {
+    // Validate the picked ID actually exists + is active, otherwise
+    // fall back to name resolution.
+    const picked = db.prepare('SELECT id FROM crew_members WHERE id = ? AND active = 1').get(crewId);
+    if (!picked) crewId = 0;
+  }
+  if (!crewId) {
+    const matches = db.prepare(`
+      SELECT id, employee_id, created_at FROM crew_members
+      WHERE active = 1 AND LOWER(full_name) = LOWER(?)
+    `).all(typedName);
+    if (matches.length) {
+      // Sort: real EMP IDs first, then VOC-PENDING-* placeholders, then
+      // blanks. Within each bucket, newest crew row wins (a freshly-
+      // hired duplicate is probably more "current" than a stale one).
+      const score = m => {
+        const eid = m.employee_id || '';
+        if (!eid) return 2;
+        if (/^VOC-PENDING-/.test(eid)) return 1;
+        return 0;
+      };
+      matches.sort((a, b) => {
+        const s = score(a) - score(b);
+        return s !== 0 ? s : (b.created_at || '').localeCompare(a.created_at || '');
+      });
+      crewId = matches[0].id;
+    } else {
+      const placeholderEmpId = 'VOC-PENDING-' + Date.now().toString(36).toUpperCase();
+      const ins = db.prepare(`
+        INSERT INTO crew_members (full_name, employee_id, active)
+        VALUES (?, ?, 1)
+      `).run(typedName, placeholderEmpId);
+      crewId = ins.lastInsertRowid;
+    }
+  }
+
+  const today = (b.assessment_date || new Date().toISOString().slice(0, 10));
+  const validityMonths = parseInt(b.validity_months, 10) || tpl.default_validity_months || 24;
+  const validFrom = today;
+  const validUntil = addMonths(validFrom, validityMonths);
+  const assessorSigned = String(b.assessor_signed_name || '').trim();
+  const workerSigned = String(b.worker_signed_name || '').trim() || typedName;
+
+  const vocNumber = nextVocNumber(db);
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO voc_assessments
+        (voc_number, template_id, crew_member_id, assessor_user_id,
+         assessment_type, assessment_date, location_site,
+         status, outcome,
+         worker_signed_name, worker_signed_date,
+         assessor_signed_name, assessor_signed_date,
+         valid_from, valid_until,
+         marking_complete,
+         created_by_id)
+      VALUES (?, ?, ?, ?, 'initial', ?, ?, 'submitted', 'competent',
+              ?, ?, ?, ?, ?, ?, 0, ?)
+    `).run(
+      vocNumber, templateId, crewId, req.session.user.id,
+      today, b.location_site || '',
+      workerSigned, today,
+      assessorSigned, today,
+      validFrom, validUntil,
+      req.session.user.id
+    );
+    const newId = result.lastInsertRowid;
+
+    // Drawn signatures (base64 PNG from signature_pad on the form).
+    // Saved BEFORE the PDF render so the renderer can embed them.
+    // Each is independently optional — leaving either blank falls back
+    // to the typed name rendered in cursive.
+    const assessorSigPath = saveSignatureDataUrl(newId, 'assessor', b.assessor_signature_data);
+    const workerSigPath = saveSignatureDataUrl(newId, 'worker', b.worker_signature_data);
+    // Worker acknowledgement state machine:
+    //   - In-person signature captured here (worker_signs_in_person on
+    //     the form OR a non-empty pad data) → 'signed' now.
+    //   - Otherwise → 'pending'. The worker gets a push, signs in the
+    //     portal, the PDF regenerates on their side.
+    const workerSignedInPerson = !!workerSigPath;
+    const ackStatus = workerSignedInPerson ? 'signed' : 'pending';
+    const ackTimestamp = workerSignedInPerson ? new Date().toISOString() : null;
+    db.prepare(`
+      UPDATE voc_assessments
+      SET assessor_signature_path = COALESCE(?, assessor_signature_path),
+          worker_signature_path   = COALESCE(?, worker_signature_path),
+          worker_acknowledgement_status = ?,
+          worker_acknowledged_at = ?,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(assessorSigPath, workerSigPath, ackStatus, ackTimestamp, newId);
+
+    // Generate the certificate PDF immediately — that's the whole point
+    // of the quick path. The full record is hydrated via the same
+    // template join the regular submit flow uses so the cert looks
+    // identical to one produced through the full assessment.
+    const fresh = getAssessmentWithTemplate(db, newId);
+    const certId = deriveCertId(fresh);
+    try {
+      ensureCertDir();
+      const pdfBuf = await renderVocCertificatePdf(fresh, certId, verifyUrlFor(certId));
+      const filename = `voc-${fresh.id}-${Date.now()}.pdf`;
+      fs.writeFileSync(path.join(CERT_DIR, filename), pdfBuf);
+      const relPath = 'voc-certificates/' + filename;
+      db.prepare(`
+        UPDATE voc_assessments
+        SET certificate_id = ?, certificate_status = 'active',
+            pdf_path = ?, pdf_generated_at = CURRENT_TIMESTAMP,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(certId, relPath, fresh.id);
+    } catch (e) {
+      console.error('[voc-quick] PDF generation failed:', e);
+      db.prepare(`
+        UPDATE voc_assessments SET certificate_id = ?, certificate_status = 'active'
+        WHERE id = ? AND certificate_id IS NULL
+      `).run(certId, fresh.id);
+    }
+
+    // Push routing:
+    //   - Signed in person → generic "VOC issued, here's your wallet"
+    //     notification. Wallet shows the cert immediately, no action
+    //     required.
+    //   - Pending → stronger CTA push deep-linking to the sign page
+    //     so the worker can acknowledge with one tap.
+    // Both are no-ops if the worker has no push subscription yet
+    // (sendPushToCrew returns {reason:'no-subscriptions'} silently).
+    if (workerSignedInPerson) {
+      notifyWorkerOfVocIssued(crewId, fresh.template_name, certId, validUntil);
+    } else {
+      notifyWorkerToSign(crewId, fresh.template_name, newId);
+    }
+
+    // Stash redirect breadcrumbs so the form re-renders with a running
+    // count and a download link for the cert that was just issued.
+    req.session.quickVocCount = (req.session.quickVocCount || 0) + 1;
+    req.session.lastQuickVoc = {
+      id: newId,
+      certId,
+      vocNumber,
+      workerName: typedName,
+      templateId,
+      assessor: assessorSigned,
+      assessmentDate: today,
+      validityMonths,
+    };
+
+    req.flash('success', `Cert issued for ${typedName} (${certId}). Theory + practical pending marking.`);
+    res.redirect('/voc-assessments/quick');
+  } catch (err) {
+    console.error('[voc-quick] create error:', err);
+    req.flash('error', 'Failed to create quick cert: ' + err.message);
+    res.redirect('/voc-assessments/quick');
+  }
 });
 
 // ────────────────────────────────────────────────
@@ -324,6 +730,20 @@ router.post('/:id', (req, res) => {
   const b = req.body;
   const responses = buildResponses(b, existing);
 
+  // A quick-cert row flips to marking_complete=1 once the assessor
+  // enters at least one real response on either side. "Real response"
+  // means a non-empty theory answer OR a non-empty practical result —
+  // template counts alone don't qualify (those are baseline, not
+  // marking work). Records that started marking_complete=1 stay 1.
+  const anyTheoryAnswered = responses.theory_responses.some(r =>
+    String(r.response || '').trim() !== '' || r.correct
+  );
+  const anyPracticalMarked = responses.practical_responses.some(r =>
+    String(r.result || '').trim() !== ''
+  );
+  const markingComplete = existing.marking_complete ? 1
+    : ((anyTheoryAnswered || anyPracticalMarked) ? 1 : 0);
+
   try {
     db.prepare(`
       UPDATE voc_assessments SET
@@ -340,6 +760,7 @@ router.post('/:id', (req, res) => {
         manager_signed_name = ?, manager_signed_position = ?, manager_signed_date = ?,
         records_filed_yes = ?, records_filed_by = ?, records_filed_date = ?,
         copy_to_worker_yes = ?, matrix_entered_by = ?,
+        marking_complete = ?,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
@@ -359,9 +780,30 @@ router.post('/:id', (req, res) => {
       b.manager_signed_name || '', b.manager_signed_position || '', b.manager_signed_date || null,
       b.records_filed_yes === 'on' ? 1 : 0, b.records_filed_by || '', b.records_filed_date || null,
       b.copy_to_worker_yes === 'on' ? 1 : 0, b.matrix_entered_by || '',
+      markingComplete,
       existing.id
     );
-    req.flash('success', 'Saved.');
+    // Save any drawn signatures on this save (independent of submit).
+    // Empty pads send '' so we don't blow away existing saved sigs.
+    const assessorSigPathDraft = saveSignatureDataUrl(existing.id, 'assessor', b.assessor_signature_data);
+    const workerSigPathDraft = saveSignatureDataUrl(existing.id, 'worker', b.worker_signature_data);
+    if (assessorSigPathDraft || workerSigPathDraft) {
+      db.prepare(`
+        UPDATE voc_assessments
+        SET assessor_signature_path = COALESCE(?, assessor_signature_path),
+            worker_signature_path   = COALESCE(?, worker_signature_path),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(assessorSigPathDraft, workerSigPathDraft, existing.id);
+    }
+
+    // Show a clear flash when a quick-cert just transitioned to fully
+    // marked so the assessor knows the backlog shrank.
+    if (!existing.marking_complete && markingComplete) {
+      req.flash('success', 'Marking complete — VOC removed from pending queue.');
+    } else {
+      req.flash('success', 'Saved.');
+    }
   } catch (err) {
     console.error('[voc-assessments] update error:', err);
     req.flash('error', 'Failed to save: ' + err.message);
@@ -441,12 +883,29 @@ router.post('/:id/submit', async (req, res) => {
       existing.id
     );
 
+    // Drawn signatures on the full assessment form — same shape as the
+    // Quick flow. Sent only when the assessor or worker actually drew
+    // something (the JS submits '' for an empty pad), so we don't blow
+    // away an existing saved signature on every save.
+    const assessorSigPathFull = saveSignatureDataUrl(existing.id, 'assessor', b.assessor_signature_data);
+    const workerSigPathFull = saveSignatureDataUrl(existing.id, 'worker', b.worker_signature_data);
+    if (assessorSigPathFull || workerSigPathFull) {
+      db.prepare(`
+        UPDATE voc_assessments
+        SET assessor_signature_path = COALESCE(?, assessor_signature_path),
+            worker_signature_path   = COALESCE(?, worker_signature_path),
+            updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?
+      `).run(assessorSigPathFull, workerSigPathFull, existing.id);
+    }
+
     // On Competent: assign a certificate id (idempotent — only if missing)
     // and regenerate the PDF. A revoked cert that's re-submitted as
     // competent flips back to 'active'.
     if (outcome === 'competent') {
       const fresh = getAssessmentWithTemplate(db, existing.id);
       const certId = fresh.certificate_id || deriveCertId(fresh);
+      const isFirstIssue = !fresh.certificate_id;
       try {
         ensureCertDir();
         const pdfBuf = await renderVocCertificatePdf(fresh, certId, verifyUrlFor(certId));
@@ -470,6 +929,14 @@ router.post('/:id/submit', async (req, res) => {
           UPDATE voc_assessments SET certificate_id = ?, certificate_status = 'active'
           WHERE id = ? AND certificate_id IS NULL
         `).run(certId, fresh.id);
+      }
+      // Only push on the FIRST issue — re-saves of an already-competent
+      // assessment (e.g. fixing a typo in assessor comments) shouldn't
+      // re-notify. Also suppresses re-pushes for previously-revoked
+      // certs that are being reinstated — admins do that explicitly via
+      // /unrevoke, not the submit flow.
+      if (isFirstIssue) {
+        notifyWorkerOfVocIssued(fresh.crew_member_id, fresh.template_name, certId, validUntil);
       }
     }
 
@@ -513,6 +980,23 @@ router.get('/:id/certificate', async (req, res) => {
   } catch (e) {
     console.error('[voc-assessments] QR generation failed:', e);
   }
+
+  // Inline drawn signatures as data URLs so the HTML preview embeds
+  // them without needing a separate static route. Best-effort — if a
+  // file is missing (e.g. lost after a Railway redeploy that didn't
+  // mount the volume) the view falls back to the cursive typed name.
+  function readSigDataUrl(relPath) {
+    if (!relPath) return null;
+    try {
+      const full = path.join(__dirname, '..', 'data', 'uploads', relPath);
+      if (!fs.existsSync(full)) return null;
+      const buf = fs.readFileSync(full);
+      return 'data:image/png;base64,' + buf.toString('base64');
+    } catch (e) { return null; }
+  }
+  a.assessor_signature_data_url = readSigDataUrl(a.assessor_signature_path);
+  a.worker_signature_data_url = readSigDataUrl(a.worker_signature_path);
+
   res.render('voc-assessments/certificate', {
     a, certId, qrDataUrl, verifyUrl,
     isRevoked: a.certificate_status === 'revoked',

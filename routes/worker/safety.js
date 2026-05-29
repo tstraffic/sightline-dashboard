@@ -699,12 +699,74 @@ router.get('/safety/toolboxes/:id', (req, res) => {
     SELECT * FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?
   `).get(toolbox.id, workerId);
   const photos = db.prepare(`SELECT id FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
+  // Documents are the post-attendance materials. Surface metadata to
+  // the view always (so we can show a count / "unlocks after sign-off"
+  // hint), but the actual download endpoint gates on attendance.
+  const documents = db.prepare(`SELECT id, file_original_name FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'doc' ORDER BY id ASC`).all(toolbox.id);
+  // Prep documents — pre-meeting reading. Visible to every invited
+  // worker; no sign-off gate. Separate query so the view can render
+  // them in their own section above the post-attendance Materials.
+  const prepDocuments = db.prepare(`SELECT id, file_original_name FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'prep' ORDER BY id ASC`).all(toolbox.id);
+  const hasSignedOff = !!(myAttendance && myAttendance.status === 'attended' && myAttendance.signed_off_at);
   const isPdfSlides = !!(toolbox.slides_original_name && /\.pdf$/i.test(toolbox.slides_original_name));
   res.render('worker/safety/toolbox-detail', {
     title: toolbox.title, currentPage: 'safety',
     subtab: 'toolboxes', toolbox, myAttendance, photos,
+    documents, prepDocuments, hasSignedOff,
     isPdfSlides,
   });
+});
+
+// GET /w/safety/toolboxes/:id/prep/:prepId — un-gated download of a
+// pre-meeting prep document. Invited workers can grab these any time
+// to read before attending. We still verify the worker is invited (or
+// the toolbox is open to all) so prep docs don't leak across crews.
+router.get('/safety/toolboxes/:id/prep/:prepId', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const toolboxId = parseInt(req.params.id, 10);
+  // Same invitee-scope check as the GET /w/safety/toolboxes/:id page.
+  const invited = db.prepare(`
+    SELECT 1 FROM toolbox_talks t
+    WHERE t.id = ? AND t.status = 'published'
+      AND (
+        NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = t.id)
+        OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = t.id AND i.crew_member_id = ?)
+      )
+  `).get(toolboxId, worker.id);
+  if (!invited) return res.status(403).send('Not available.');
+  const doc = db.prepare(
+    `SELECT file_path, file_original_name FROM toolbox_attachments
+     WHERE id = ? AND toolbox_id = ? AND kind = 'prep'`
+  ).get(req.params.prepId, toolboxId);
+  if (!doc || !doc.file_path) return res.status(404).send('not found');
+  const abs = path.join(__dirname, '..', '..', doc.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('missing');
+  return res.download(abs, doc.file_original_name || path.basename(abs));
+});
+
+// GET /w/safety/toolboxes/:id/documents/:docId — gated download of a
+// post-attendance material. Only served once the worker has signed off
+// (status='attended' AND signed_off_at IS NOT NULL); otherwise 403 so
+// the view's "unlocks after sign-off" hint matches the access policy.
+router.get('/safety/toolboxes/:id/documents/:docId', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const att = db.prepare(`
+    SELECT status, signed_off_at FROM toolbox_attendance
+    WHERE toolbox_id = ? AND crew_member_id = ?
+  `).get(req.params.id, worker.id);
+  if (!att || att.status !== 'attended' || !att.signed_off_at) {
+    return res.status(403).send('Sign off attendance to unlock materials.');
+  }
+  const doc = db.prepare(
+    `SELECT file_path, file_original_name FROM toolbox_attachments
+     WHERE id = ? AND toolbox_id = ? AND kind = 'doc'`
+  ).get(req.params.docId, req.params.id);
+  if (!doc || !doc.file_path) return res.status(404).send('not found');
+  const abs = path.join(__dirname, '..', '..', doc.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('missing');
+  return res.download(abs, doc.file_original_name || path.basename(abs));
 });
 
 // POST /w/safety/toolboxes/:id/accept — worker accepts the invite.
@@ -738,6 +800,84 @@ router.post('/safety/toolboxes/:id/accept', (req, res) => {
   } catch (e) {
     console.error('[w/safety] toolbox accept error', e.message);
     req.flash('error', 'Could not record.');
+  }
+  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+});
+
+// POST /w/safety/toolboxes/:id/decline — worker can't attend.
+// Sets status='absent' with the optional reason. Allowed transition from
+// pending (no row) or attending — once a worker has actually signed off
+// (status='attended') they can't flip back without admin help.
+router.post('/safety/toolboxes/:id/decline', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
+  if (!toolbox || toolbox.status !== 'published') {
+    req.flash('error', 'Toolbox not available.');
+    return res.redirect('/w/safety/toolboxes');
+  }
+  const reason = (req.body.absence_reason || '').toString().trim().slice(0, 1000) || null;
+  try {
+    const existing = db.prepare(
+      'SELECT status FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?'
+    ).get(toolbox.id, worker.id);
+    if (existing && (existing.status === 'attended' || existing.status === 'caught_up')) {
+      req.flash('error', "You've already recorded attendance — ask the office if this needs to change.");
+    } else {
+      db.prepare(`
+        INSERT INTO toolbox_attendance
+          (toolbox_id, crew_member_id, status, absence_reason, recorded_by_id)
+        VALUES (?, ?, 'absent', ?, NULL)
+        ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+          status = 'absent', absence_reason = excluded.absence_reason,
+          recorded_at = CURRENT_TIMESTAMP, signed_off_at = NULL, signature_data = NULL
+      `).run(toolbox.id, worker.id, reason);
+      req.flash('success', 'Marked as not attending.');
+    }
+  } catch (e) {
+    console.error('[w/safety] toolbox decline error', e.message);
+    req.flash('error', 'Could not record.');
+  }
+  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+});
+
+// POST /w/safety/toolboxes/:id/sign-off — worker confirms they attended.
+// Requires a captured signature (data: URL from the canvas pad). Sets
+// status='attended', signed_off_at=now, signature_data=<png base64>.
+// This is the only path that produces a current-state 'attended' record
+// going forward (admin tick still exists for office-side overrides).
+router.post('/safety/toolboxes/:id/sign-off', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
+  if (!toolbox || toolbox.status !== 'published') {
+    req.flash('error', 'Toolbox not available.');
+    return res.redirect('/w/safety/toolboxes');
+  }
+  const sigRaw = (req.body.signature_data || '').toString();
+  // Cap at ~250 KB. PNG dataURLs from a 320×130 canvas with a couple of
+  // strokes are typically 10–25 KB; the cap keeps a malicious / overly
+  // dense payload from bloating the row.
+  if (!sigRaw.startsWith('data:image/') || sigRaw.length > 260000) {
+    req.flash('error', 'Please draw your signature before signing off.');
+    return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+  }
+  try {
+    db.prepare(`
+      INSERT INTO toolbox_attendance
+        (toolbox_id, crew_member_id, status, signature_data, signed_off_at, recorded_by_id, recorded_at)
+      VALUES (?, ?, 'attended', ?, CURRENT_TIMESTAMP, NULL, CURRENT_TIMESTAMP)
+      ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+        status = 'attended',
+        signature_data = excluded.signature_data,
+        signed_off_at = CURRENT_TIMESTAMP,
+        recorded_at = CURRENT_TIMESTAMP,
+        absence_reason = NULL
+    `).run(toolbox.id, worker.id, sigRaw);
+    req.flash('success', 'Signed off — attendance recorded.');
+  } catch (e) {
+    console.error('[w/safety] toolbox sign-off error', e.message);
+    req.flash('error', 'Could not record sign-off.');
   }
   return res.redirect('/w/safety/toolboxes/' + toolbox.id);
 });

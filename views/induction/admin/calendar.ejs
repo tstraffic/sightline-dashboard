@@ -1,0 +1,437 @@
+<% locals.currentPage = 'induction' %>
+<%
+  function statusColor(s) {
+    const k = (s || '').toLowerCase();
+    if (k === 'hired')              return { bg: '#ECFDF5', txt: '#047857', ring: '#A7F3D0' };
+    if (k === 'inducted')           return { bg: '#EFF6FF', txt: '#1D4ED8', ring: '#BFDBFE' };
+    if (k === 'induction scheduled')return { bg: '#FFFBEB', txt: '#B45309', ring: '#FDE68A' };
+    if (k === 'no show')            return { bg: '#FEF2F2', txt: '#B91C1C', ring: '#FECACA' };
+    if (k === 'not suitable')       return { bg: '#FAF5FF', txt: '#6B21A8', ring: '#E9D5FF' };
+    if (k === 'withdrew')           return { bg: '#F5F5F4', txt: '#57534E', ring: '#E7E5E4' };
+    if (k === 'contacted')          return { bg: '#F0FDFA', txt: '#0F766E', ring: '#99F6E4' };
+    return { bg: '#F3F4F6', txt: '#374151', ring: '#E5E7EB' };
+  }
+  function fmtFullDate(iso) {
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-AU', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
+    });
+  }
+%>
+
+<style>
+  /* ── Theme variables ──
+     Drives the whole tab from one place so dark/light look intentional
+     instead of "white cards floating on a dark page". Names match the
+     atomis palette already in use elsewhere. */
+  :root {
+    --cal-surface:        #FFFFFF;
+    --cal-surface-2:      #F9FAFB;
+    --cal-surface-hover:  #FAFAFA;
+    --cal-border:         #E5E7EB;
+    --cal-border-soft:    #F1F2F4;
+    --cal-text:           #0F1115;
+    --cal-text-mute:      #6B7280;
+    --cal-text-faint:     #9CA3AF;
+    --cal-accent:         #10B981;
+    --cal-accent-deep:    #047857;
+    --cal-accent-soft:    #ECFDF5;
+    --cal-accent-ring:    #A7F3D0;
+    --cal-active-bg:      #ECFDF5;
+    --cal-active-ring:    #10B981;
+    --cal-shadow:         0 1px 2px rgba(15,17,21,0.04);
+  }
+  :root[data-theme="dark"] {
+    --cal-surface:        #1A1D24;
+    --cal-surface-2:      #15181E;
+    --cal-surface-hover:  #20242C;
+    --cal-border:         rgba(255,255,255,0.08);
+    --cal-border-soft:    rgba(255,255,255,0.05);
+    --cal-text:           #F5F5F7;
+    --cal-text-mute:      #9CA3AF;
+    --cal-text-faint:     #5A5D64;
+    --cal-accent:         #10B981;
+    --cal-accent-deep:    #6EE7B7;
+    --cal-accent-soft:    rgba(16,185,129,0.16);
+    --cal-accent-ring:    rgba(16,185,129,0.30);
+    --cal-active-bg:      rgba(16,185,129,0.10);
+    --cal-active-ring:    #10B981;
+    --cal-shadow:         0 6px 24px rgba(0,0,0,0.20);
+  }
+
+  /* ── Header ── */
+  .cal-page-title { font-size: 1.5rem; font-weight: 800; color: var(--cal-text); letter-spacing: -0.01em; }
+  .cal-page-sub   { font-size: 0.78rem; color: var(--cal-text-mute); }
+  .cal-navbtn     { display: inline-flex; align-items: center; justify-content: center; height: 36px; padding: 0 12px;
+                    border-radius: 10px; border: 1px solid var(--cal-border); background: var(--cal-surface);
+                    color: var(--cal-text); font-size: 0.78rem; font-weight: 600; transition: background 0.12s; }
+  .cal-navbtn:hover { background: var(--cal-surface-hover); }
+  .cal-navbtn-icon { width: 36px; padding: 0; }
+
+  /* ── Calendar grid ──
+     6 rows × 7 cols. Always 6 rows so the grid stays a clean rectangle
+     even on 5-week months — trailing cells get a muted "out of month"
+     style instead of empty white space. */
+  .cal-grid {
+    display: grid; grid-template-columns: repeat(7, minmax(0, 1fr));
+    background: var(--cal-surface); border: 1px solid var(--cal-border);
+    border-radius: 14px; overflow: hidden; box-shadow: var(--cal-shadow);
+  }
+  .cal-weekday {
+    padding: 10px 12px; font-size: 11px; font-weight: 700; color: var(--cal-text-mute);
+    text-transform: uppercase; letter-spacing: 0.07em;
+    background: var(--cal-surface-2);
+    border-right: 1px solid var(--cal-border); border-bottom: 1px solid var(--cal-border);
+  }
+  .cal-weekday:nth-child(7n) { border-right: 0; }
+
+  .cal-cell {
+    position: relative; min-height: 124px; padding: 8px 8px 10px;
+    border-right: 1px solid var(--cal-border-soft); border-bottom: 1px solid var(--cal-border-soft);
+    background: var(--cal-surface); cursor: pointer; transition: background 0.12s, box-shadow 0.12s;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .cal-cell:nth-child(7n+7) { border-right: 0; }  /* Sunday column edge */
+  .cal-cell:hover { background: var(--cal-surface-hover); }
+  .cal-cell.is-other-month { background: var(--cal-surface-2); }
+  .cal-cell.is-other-month .cal-cell-num { color: var(--cal-text-faint); font-weight: 500; }
+
+  .cal-cell-head { display: flex; align-items: center; justify-content: space-between; gap: 4px; min-height: 22px; }
+  .cal-cell-num  { font-size: 13px; font-weight: 700; color: var(--cal-text); line-height: 1; padding: 2px 4px; }
+  .cal-cell.is-today .cal-cell-num {
+    background: var(--cal-accent); color: #fff;
+    width: 26px; height: 26px; padding: 0; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    box-shadow: 0 2px 6px rgba(16,185,129,0.45);
+  }
+  .cal-cell-count {
+    font-size: 10px; font-weight: 700; line-height: 1;
+    padding: 3px 7px; border-radius: 999px;
+    background: var(--cal-accent-soft); color: var(--cal-accent-deep); border: 1px solid var(--cal-accent-ring);
+  }
+
+  /* Status pills inside day cells — slightly tighter than free-form
+     pills so multiple fit per cell at typical widths. */
+  .cal-pill {
+    display: block; width: 100%; text-align: left;
+    font-size: 11px; font-weight: 600; line-height: 1.25;
+    padding: 4px 7px; border-radius: 6px; border: 1px solid;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    cursor: pointer;
+  }
+  .cal-pill:hover { filter: brightness(0.96); }
+  :root[data-theme="dark"] .cal-pill:hover { filter: brightness(1.10); }
+  .cal-pill-more { font-size: 10px; font-weight: 600; color: var(--cal-text-mute); padding: 2px 4px; }
+
+  /* Active selection highlight on the picked day. */
+  .cal-cell.is-active {
+    background: var(--cal-active-bg);
+    box-shadow: inset 0 0 0 2px var(--cal-active-ring);
+  }
+
+  /* ── Day detail panel ── */
+  .day-panel-card {
+    background: var(--cal-surface); border: 1px solid var(--cal-border);
+    border-radius: 14px; box-shadow: var(--cal-shadow); overflow: hidden;
+  }
+  .day-panel-head { padding: 14px 18px; border-bottom: 1px solid var(--cal-border-soft); display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .day-panel-title { font-size: 0.95rem; font-weight: 700; color: var(--cal-text); }
+  .day-panel-sub   { font-size: 0.78rem; color: var(--cal-text-mute); margin-top: 2px; }
+  .day-panel-close {
+    width: 32px; height: 32px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+    background: transparent; color: var(--cal-text-mute); border: 0; cursor: pointer;
+  }
+  .day-panel-close:hover { background: var(--cal-surface-hover); color: var(--cal-text); }
+  .day-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 14px;
+    padding: 16px 18px; border-top: 1px solid var(--cal-border-soft);
+  }
+  .day-row:first-of-type { border-top: 0; }
+  .day-row-name  { font-size: 0.95rem; font-weight: 700; color: var(--cal-text); }
+  .day-row-line  { font-size: 0.78rem; color: var(--cal-text-mute); margin-top: 4px; }
+  .day-row-line b { color: var(--cal-text); font-weight: 600; }
+  .day-row-notes { font-size: 0.78rem; color: var(--cal-text-mute); margin-top: 8px; white-space: pre-line; line-height: 1.5; }
+  .day-row-link {
+    font-size: 0.74rem; font-weight: 600; color: var(--cal-accent-deep);
+    text-decoration: none; white-space: nowrap;
+  }
+  .day-row-link:hover { text-decoration: underline; }
+
+  /* ── Upcoming sidebar ── */
+  .upcoming-card {
+    background: var(--cal-surface); border: 1px solid var(--cal-border);
+    border-radius: 14px; box-shadow: var(--cal-shadow); overflow: hidden;
+  }
+  .upcoming-head { padding: 14px 16px; border-bottom: 1px solid var(--cal-border-soft); }
+  .upcoming-head h2 { font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--cal-text); }
+  .upcoming-head p  { font-size: 11px; color: var(--cal-text-mute); margin-top: 2px; }
+
+  .upcoming-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px;
+    padding: 12px 16px; border-top: 1px solid var(--cal-border-soft);
+  }
+  .upcoming-row:first-of-type { border-top: 0; }
+  .upcoming-name { font-size: 0.88rem; font-weight: 700; color: var(--cal-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .upcoming-meta { font-size: 11px; color: var(--cal-text-mute); margin-top: 3px; line-height: 1.4; }
+  .upcoming-meta .when-today { color: var(--cal-accent-deep); font-weight: 700; }
+  .upcoming-meta .when       { color: var(--cal-text); font-weight: 600; }
+  .upcoming-meta .dot        { color: var(--cal-text-faint); margin: 0 4px; }
+  .upcoming-status {
+    align-self: start; font-size: 10px; font-weight: 700; line-height: 1;
+    padding: 4px 8px; border-radius: 999px; white-space: nowrap; border: 1px solid;
+  }
+  .upcoming-empty { padding: 22px 16px; text-align: center; font-size: 0.78rem; color: var(--cal-text-mute); }
+
+  /* Tip card under the sidebar */
+  .cal-tip {
+    border-radius: 12px; padding: 12px 14px; font-size: 11px; line-height: 1.5;
+    background: var(--cal-surface); border: 1px solid var(--cal-border); color: var(--cal-text);
+  }
+  .cal-tip b { font-weight: 700; }
+  :root[data-theme="dark"] .cal-tip { background: rgba(59,130,246,0.10); border-color: rgba(59,130,246,0.25); color: #BFDBFE; }
+  :root[data-theme="light"] .cal-tip { background: #EFF6FF; border-color: #BFDBFE; color: #1E3A8A; }
+
+  /* Day-cell pills get a small extra punch in dark mode so they don't
+     look washed out against the brighter accent backgrounds. */
+  :root[data-theme="dark"] .cal-pill { box-shadow: 0 1px 0 rgba(0,0,0,0.20); }
+</style>
+
+<!-- Tab strip — adds Calendar alongside Inductions / Recruitment -->
+<%- include('_registry-tabs', { tabActive: 'calendar' }) %>
+
+<!-- Header: month label + nav arrows + jump-to-today -->
+<div class="flex items-center justify-between flex-wrap gap-3 mb-4">
+  <div class="flex items-baseline gap-2 min-w-0">
+    <h1 class="cal-page-title"><%= monthLabel %></h1>
+    <span class="cal-page-sub" style="margin-left:4px">Inductions calendar</span>
+  </div>
+  <div class="flex items-center gap-1.5">
+    <a href="/induction/admin/recruitment/calendar?year=<%= prevYear %>&month=<%= prevMonth %>"
+       class="cal-navbtn cal-navbtn-icon" aria-label="Previous month" title="Previous month">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    </a>
+    <a href="/induction/admin/recruitment/calendar" class="cal-navbtn">Today</a>
+    <a href="/induction/admin/recruitment/calendar?year=<%= nextYear %>&month=<%= nextMonth %>"
+       class="cal-navbtn cal-navbtn-icon" aria-label="Next month" title="Next month">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    </a>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
+  <!-- Calendar grid (3/4 width) -->
+  <div class="lg:col-span-3">
+    <div class="cal-grid">
+      <% ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function (d) { %>
+        <div class="cal-weekday"><%= d %></div>
+      <% }); %>
+
+      <% cells.forEach(function (c) { %>
+        <div class="cal-cell <%= c.inMonth ? '' : 'is-other-month' %> <%= c.isToday ? 'is-today' : '' %>"
+             data-day-cell="<%= c.iso %>"
+             role="button" tabindex="0">
+          <div class="cal-cell-head">
+            <span class="cal-cell-num"><%= c.day %></span>
+            <% if (c.applicants.length) { %>
+              <span class="cal-cell-count"><%= c.applicants.length %></span>
+            <% } %>
+          </div>
+          <% c.applicants.slice(0, 3).forEach(function (a) {
+            var col = statusColor(a.status);
+          %>
+            <span class="cal-pill" style="background:<%= col.bg %>;color:<%= col.txt %>;border-color:<%= col.ring %>"
+                  title="<%= a.applicant_name %><%= a.phone ? ' · ' + a.phone : '' %>"><%= a.applicant_name %></span>
+          <% }); %>
+          <% if (c.applicants.length > 3) { %>
+            <span class="cal-pill-more">+ <%= c.applicants.length - 3 %> more</span>
+          <% } %>
+        </div>
+      <% }); %>
+    </div>
+
+    <!-- Day detail panel — populated by JS when a cell is clicked. -->
+    <div id="dayPanel" class="mt-5 day-panel-card hidden">
+      <div class="day-panel-head">
+        <div class="min-w-0">
+          <div class="day-panel-title" id="dayPanelTitle">—</div>
+          <div class="day-panel-sub" id="dayPanelSub"></div>
+        </div>
+        <button type="button" id="dayPanelClose" class="day-panel-close" aria-label="Close">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="dayPanelBody"></div>
+    </div>
+  </div>
+
+  <!-- Sidebar — upcoming next 14 days -->
+  <aside class="space-y-4">
+    <div class="upcoming-card">
+      <div class="upcoming-head">
+        <h2>Coming up</h2>
+        <p>Next 14 days</p>
+      </div>
+      <% if (!upcoming.length) { %>
+        <div class="upcoming-empty">No inductions scheduled in the next fortnight.</div>
+      <% } else { %>
+        <% upcoming.forEach(function (a) {
+          var d = new Date(a.induction_date + 'T00:00:00Z');
+          var isToday = a.induction_date === todayIso;
+          var col = statusColor(a.status);
+          var whenStr = (isToday ? 'TODAY · ' : '') + d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+        %>
+          <div class="upcoming-row">
+            <div class="min-w-0">
+              <div class="upcoming-name" title="<%= a.applicant_name %>"><%= a.applicant_name %></div>
+              <div class="upcoming-meta">
+                <span class="<%= isToday ? 'when-today' : 'when' %>"><%= whenStr %></span>
+                <% if (a.phone) { %><span class="dot">·</span><span><%= a.phone %></span><% } %>
+              </div>
+            </div>
+            <span class="upcoming-status"
+                  style="background:<%= col.bg %>;color:<%= col.txt %>;border-color:<%= col.ring %>"><%= a.status || 'New' %></span>
+          </div>
+        <% }); %>
+      <% } %>
+    </div>
+
+    <div class="cal-tip">
+      <b>How notifications work</b><br>
+      Setting an induction date drops a "Scheduled" notification, then
+      72-hour, 24-hour, and day-of reminders. Past dates won't ping.
+    </div>
+  </aside>
+</div>
+
+<!-- Inline data for the day-panel script. Server-rendered as JSON. -->
+<script>
+  window.CAL_DATA = {
+    cells: <%- JSON.stringify(cells.map(function (c) {
+      return { iso: c.iso, applicants: c.applicants };
+    })) %>,
+  };
+</script>
+
+<script>
+(function () {
+  'use strict';
+  var panel = document.getElementById('dayPanel');
+  var titleEl = document.getElementById('dayPanelTitle');
+  var subEl   = document.getElementById('dayPanelSub');
+  var bodyEl  = document.getElementById('dayPanelBody');
+
+  function statusBadge(s) {
+    var k = (s || '').toLowerCase();
+    var map = {
+      'hired':               ['#ECFDF5','#047857','#A7F3D0'],
+      'inducted':            ['#EFF6FF','#1D4ED8','#BFDBFE'],
+      'induction scheduled': ['#FFFBEB','#B45309','#FDE68A'],
+      'no show':             ['#FEF2F2','#B91C1C','#FECACA'],
+      'not suitable':        ['#FAF5FF','#6B21A8','#E9D5FF'],
+      'withdrew':            ['#F5F5F4','#57534E','#E7E5E4'],
+      'contacted':           ['#F0FDFA','#0F766E','#99F6E4'],
+    };
+    var c = map[k] || ['#F3F4F6','#374151','#E5E7EB'];
+    return '<span style="background:' + c[0] + ';color:' + c[1] + ';border:1px solid ' + c[2] +
+           ';padding:2px 8px;border-radius:999px;font-size:10px;font-weight:600">' + (s || 'New') + '</span>';
+  }
+
+  function fmtDate(iso) {
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-AU', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
+    });
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', '\'':'&#39;' }[c];
+    });
+  }
+
+  function renderDay(iso) {
+    var cell = (window.CAL_DATA.cells || []).find(function (c) { return c.iso === iso; });
+    var list = (cell && cell.applicants) || [];
+    titleEl.textContent = fmtDate(iso);
+    subEl.textContent   = list.length + ' induction' + (list.length === 1 ? '' : 's') + ' scheduled';
+    if (!list.length) {
+      bodyEl.innerHTML = '<div class="upcoming-empty" style="padding:28px 18px">No inductions on this day.</div>';
+    } else {
+      bodyEl.innerHTML = list.map(function (a) {
+        var phoneHtml = a.phone
+          ? '<a href="tel:' + encodeURIComponent(a.phone) + '" style="color:var(--cal-accent-deep);font-weight:600">' + escapeHtml(a.phone) + '</a>' +
+            ' <button type="button" data-copy-text="' + escapeHtml(a.phone) + '"' +
+            ' style="margin-left:4px;width:22px;height:22px;border-radius:6px;border:0;background:transparent;color:var(--cal-text-faint);display:inline-flex;align-items:center;justify-content:center;cursor:pointer;vertical-align:-5px"' +
+            ' title="Copy phone">' +
+            '<svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>' +
+            '</button>'
+          : '<span style="color:var(--cal-text-faint)">No phone</span>';
+        var emailHtml = a.email
+          ? '<a href="mailto:' + escapeHtml(a.email) + '" style="color:var(--cal-accent-deep);font-weight:600">' + escapeHtml(a.email) + '</a>'
+          : '<span style="color:var(--cal-text-faint)">—</span>';
+        var notesHtml = a.notes ? '<div class="day-row-notes">' + escapeHtml(a.notes) + '</div>' : '';
+        return (
+          '<div class="day-row">' +
+            '<div class="min-w-0">' +
+              '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
+                '<span class="day-row-name">' + escapeHtml(a.applicant_name) + '</span>' +
+                statusBadge(a.status) +
+              '</div>' +
+              '<div class="day-row-line" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:4px 16px;margin-top:6px">' +
+                '<div><b>Phone:</b> ' + phoneHtml + '</div>' +
+                '<div><b>Email:</b> ' + emailHtml + '</div>' +
+              '</div>' +
+              notesHtml +
+            '</div>' +
+            '<a href="/induction/admin/recruitment" class="day-row-link">Open in recruitment →</a>' +
+          '</div>'
+        );
+      }).join('');
+    }
+    panel.classList.remove('hidden');
+
+    document.querySelectorAll('[data-day-cell]').forEach(function (el) {
+      el.classList.toggle('is-active', el.getAttribute('data-day-cell') === iso);
+    });
+
+    // Scroll the panel into view on small screens so the click feels
+    // responsive even when the grid is tall.
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  document.querySelectorAll('[data-day-cell]').forEach(function (cell) {
+    cell.addEventListener('click', function (e) {
+      var iso = cell.getAttribute('data-day-cell');
+      if (!iso) return;
+      // Don't hijack clicks on the pills' nested elements — they all
+      // currently delegate to the cell anyway.
+      renderDay(iso);
+    });
+    cell.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        renderDay(cell.getAttribute('data-day-cell'));
+      }
+    });
+  });
+
+  document.getElementById('dayPanelClose').addEventListener('click', function () {
+    panel.classList.add('hidden');
+    document.querySelectorAll('[data-day-cell]').forEach(function (el) { el.classList.remove('is-active'); });
+  });
+
+  // Auto-open the picked day if URL has ?d=YYYY-MM-DD or ?id=N
+  var qp = new URL(location.href).searchParams;
+  var openDate = qp.get('d');
+  if (openDate) renderDay(openDate);
+  // ?id=N from notification links — find the date containing that applicant.
+  var openId = qp.get('id');
+  if (openId && !openDate) {
+    for (var i = 0; i < window.CAL_DATA.cells.length; i++) {
+      var found = (window.CAL_DATA.cells[i].applicants || []).find(function (a) { return String(a.id) === String(openId); });
+      if (found) { renderDay(window.CAL_DATA.cells[i].iso); break; }
+    }
+  }
+})();
+</script>
+
+<!-- Click-to-copy for phones inside the day panel. -->
+<script src="/js/copy-btn.js?v=1"></script>

@@ -47,9 +47,11 @@
     .name { flex: 1; font-weight: 600; font-size: 15px; }
     .emp { font-size: 12px; color: rgba(255,255,255,0.45); font-variant-numeric: tabular-nums; }
     .status-tag { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
-    .status-attended { background: rgba(16,185,129,0.20); color: #34D399; }
-    .status-absent { background: rgba(244,63,94,0.20); color: #FCA5A5; }
-    .status-caught { background: rgba(245,158,11,0.20); color: #FCD34D; }
+    .status-attended  { background: rgba(16,185,129,0.20); color: #34D399; }
+    .status-attending { background: rgba(43,127,255,0.20); color: #93C5FD; }
+    .status-absent    { background: rgba(244,63,94,0.20); color: #FCA5A5; }
+    .status-caught    { background: rgba(245,158,11,0.20); color: #FCD34D; }
+    .status-pending   { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.65); }
     input[type="text"], textarea {
       width: 100%; padding: 11px 13px; background: rgba(255,255,255,0.05);
       border: 1px solid rgba(255,255,255,0.10); border-radius: 10px;
@@ -57,18 +59,33 @@
     }
     input[type="text"]:focus, textarea:focus { border-color: rgba(0,210,190,0.5); }
     .seg {
-      display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px;
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px;
     }
     .seg label {
-      padding: 12px; border-radius: 12px; text-align: center; cursor: pointer; font-weight: 700;
+      padding: 12px 8px; border-radius: 12px; text-align: center; cursor: pointer; font-weight: 700;
       border: 1px solid rgba(255,255,255,0.10);
       background: rgba(255,255,255,0.03);
       transition: border-color 140ms, background 140ms;
-      font-size: 14px;
+      font-size: 13px;
     }
+    .seg label.signoff.is-checked  { background: rgba(43,127,255,0.16); border-color: rgba(43,127,255,0.6); color: #93C5FD; }
     .seg label.attended.is-checked { background: rgba(16,185,129,0.14); border-color: rgba(16,185,129,0.55); color: #6EE7B7; }
     .seg label.absent.is-checked   { background: rgba(244,63,94,0.14); border-color: rgba(244,63,94,0.55); color: #FDA4AF; }
     .seg input { display: none; }
+    /* Signature pad — shown when "I'm here — sign me off" is picked. */
+    .sig-block { display: none; margin-top: 12px; }
+    .sig-block.is-visible { display: block; }
+    .sig-wrap {
+      position: relative; border-radius: 10px; overflow: hidden;
+      background-color: #FFFFFF;
+      background-image: repeating-linear-gradient(to bottom, rgba(15,23,42,0.05) 0, rgba(15,23,42,0.05) 23px, rgba(15,23,42,0.10) 23px, rgba(15,23,42,0.10) 24px);
+      border: 1px solid rgba(255,255,255,0.18);
+    }
+    .sig-pad { display: block; width: 100%; height: 140px; touch-action: none; cursor: crosshair; }
+    .sig-placeholder { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font-size: 13px; color: #94A3B8; pointer-events: none; }
+    .sig-footer { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; background: rgba(0,0,0,0.18); }
+    .sig-footer span { font-size: 11px; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .sig-clear { background: none; border: 0; color: rgba(255,255,255,0.65); font-size: 12px; font-weight: 600; cursor: pointer; }
     .filter { width: 100%; margin-bottom: 8px; }
     .submit {
       width: 100%; padding: 14px; border: 0; border-radius: 12px;
@@ -94,7 +111,9 @@
       <div class="ok-card">
         <h2>Thanks, <%= submittedAs %>!</h2>
         <% if (submittedStatus === 'attended') { %>
-          <p>You're confirmed to attend. See you there.</p>
+          <p>Attendance signed off ✓ — your training materials are unlocked in the worker app.</p>
+        <% } else if (submittedStatus === 'attending') { %>
+          <p>You're on the list — see you there. Once the meeting wraps you'll be asked to sign off.</p>
         <% } else if (submittedStatus === 'absent') { %>
           <p>Noted — your reason has been sent to the office.</p>
         <% } %>
@@ -126,9 +145,11 @@
                 <span class="name"><%= a.full_name %></span>
                 <% if (a.employee_id) { %><span class="emp"><%= a.employee_id %></span><% } %>
                 <% if (a.currentStatus === 'attended') { %>
-                  <span class="status-tag status-attended">Will attend</span>
+                  <span class="status-tag status-attended">Attended</span>
+                <% } else if (a.currentStatus === 'attending') { %>
+                  <span class="status-tag status-attending">Attending</span>
                 <% } else if (a.currentStatus === 'absent') { %>
-                  <span class="status-tag status-absent">Absent</span>
+                  <span class="status-tag status-absent">Not attending</span>
                 <% } else if (a.currentStatus === 'caught_up') { %>
                   <span class="status-tag status-caught">Caught up</span>
                 <% } %>
@@ -140,8 +161,12 @@
         <div class="card">
           <p class="eyebrow" style="margin-bottom:6px;">Your status</p>
           <div class="seg" id="status-seg">
-            <label class="attended">
+            <label class="signoff">
               <input type="radio" name="status" value="attended" onchange="onStatus(this)">
+              <span>I'm here — sign me off</span>
+            </label>
+            <label class="attended">
+              <input type="radio" name="status" value="attending" onchange="onStatus(this)">
               <span>I will attend</span>
             </label>
             <label class="absent">
@@ -153,6 +178,18 @@
             <p class="eyebrow" style="margin-top:14px;margin-bottom:6px;">Why?</p>
             <textarea name="absence_reason" id="absence-reason" rows="3" placeholder="A short reason..." maxlength="1000"></textarea>
           </div>
+          <div class="sig-block" id="sig-block">
+            <p class="eyebrow" style="margin-top:14px;margin-bottom:6px;">Sign here</p>
+            <div class="sig-wrap">
+              <canvas id="sig-pad" class="sig-pad"></canvas>
+              <span id="sig-placeholder" class="sig-placeholder">Sign with your finger</span>
+              <div class="sig-footer">
+                <span>Signature</span>
+                <button type="button" id="sig-clear" class="sig-clear">Clear</button>
+              </div>
+            </div>
+            <input type="hidden" name="signature_data" id="sig-data">
+          </div>
         </div>
 
         <button type="submit" class="submit" id="submit-btn" disabled>Submit</button>
@@ -163,6 +200,10 @@
   <script>
     var pickedCrew = null;
     var pickedStatus = null;
+    var hasInk = false;
+    var sessionToken = <%- JSON.stringify(session.token) %>;
+    var form = document.getElementById('att-form');
+
     function onPick(input) {
       pickedCrew = input.value;
       document.querySelectorAll('label.row').forEach(function (l) { l.classList.remove('is-selected'); });
@@ -176,13 +217,24 @@
       var lbl = input.closest('label');
       if (lbl) lbl.classList.add('is-checked');
       var rb = document.getElementById('reason-block');
-      if (pickedStatus === 'absent') rb.classList.add('is-visible'); else rb.classList.remove('is-visible');
+      var sb = document.getElementById('sig-block');
+      rb.classList.toggle('is-visible', pickedStatus === 'absent');
+      sb.classList.toggle('is-visible', pickedStatus === 'attended');
+      // Sign-off uses a different endpoint so the server can write
+      // status='attended' + signed_off_at + signature_data instead of
+      // an RSVP row.
+      form.action = pickedStatus === 'attended'
+        ? '/toolbox-attend/' + sessionToken + '/sign-off'
+        : '/toolbox-attend/' + sessionToken + '/submit';
+      if (pickedStatus === 'attended') initSignaturePad();
       updateSubmit();
     }
     function updateSubmit() {
       var btn = document.getElementById('submit-btn');
       var reason = (document.getElementById('absence-reason') || {}).value || '';
-      var ok = !!pickedCrew && !!pickedStatus && (pickedStatus === 'attended' || reason.trim().length > 0);
+      var ok = !!pickedCrew && !!pickedStatus;
+      if (pickedStatus === 'absent')   ok = ok && reason.trim().length > 0;
+      if (pickedStatus === 'attended') ok = ok && hasInk;
       btn.disabled = !ok;
     }
     function filterRows(q) {
@@ -194,6 +246,64 @@
     }
     var ar = document.getElementById('absence-reason');
     if (ar) ar.addEventListener('input', updateSubmit);
+
+    // ── Signature pad (only initialised when the user picks sign-off) ──
+    var sigInitialised = false;
+    function initSignaturePad() {
+      if (sigInitialised) return;
+      sigInitialised = true;
+      var canvas = document.getElementById('sig-pad');
+      var placeholder = document.getElementById('sig-placeholder');
+      var clearBtn = document.getElementById('sig-clear');
+      var dataInput = document.getElementById('sig-data');
+      var ctx = canvas.getContext('2d');
+      var drawing = false, last = null;
+
+      function size() {
+        var dpr = window.devicePixelRatio || 1;
+        var rect = canvas.getBoundingClientRect();
+        if (rect.width === 0) return;
+        canvas.width  = rect.width * dpr;
+        canvas.height = rect.height * dpr;
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.scale(dpr, dpr);
+        ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.strokeStyle = '#0f172a';
+      }
+      // Wait a tick so the canvas is laid out before sizing.
+      requestAnimationFrame(size);
+      window.addEventListener('resize', size);
+
+      function xy(e) {
+        var r = canvas.getBoundingClientRect();
+        var t = e.touches ? e.touches[0] : e;
+        return { x: t.clientX - r.left, y: t.clientY - r.top };
+      }
+      function start(e) { e.preventDefault(); drawing = true; last = xy(e); placeholder.style.display = 'none'; }
+      function move(e) {
+        if (!drawing) return;
+        e.preventDefault();
+        var p = xy(e);
+        ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+        last = p;
+        if (!hasInk) { hasInk = true; dataInput.value = canvas.toDataURL('image/png'); updateSubmit(); }
+      }
+      function end() {
+        drawing = false;
+        if (hasInk) dataInput.value = canvas.toDataURL('image/png');
+      }
+      canvas.addEventListener('mousedown', start);
+      canvas.addEventListener('mousemove', move);
+      canvas.addEventListener('mouseup', end);
+      canvas.addEventListener('mouseleave', end);
+      canvas.addEventListener('touchstart', start, { passive: false });
+      canvas.addEventListener('touchmove', move, { passive: false });
+      canvas.addEventListener('touchend', end);
+      clearBtn.addEventListener('click', function () {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        hasInk = false; placeholder.style.display = ''; dataInput.value = ''; updateSubmit();
+      });
+    }
   </script>
 </body>
 </html>

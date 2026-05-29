@@ -10,6 +10,8 @@ const { logActivity } = require('../middleware/audit');
 const { createInvitation, TOKEN_EXPIRY_HOURS } = require('../services/invitations');
 const { sendEmail } = require('../services/email');
 const { workerInviteEmail, sopSignLinkEmail, pinResetEmail } = require('../services/emailTemplates');
+const { createNotification } = require('../middleware/create-notification');
+const { sendPushToUser } = require('../services/pushNotification');
 const crypto = require('crypto');
 const { currentVersion: currentSopVersion } = require('../lib/sop');
 const { REQUIRED_MODULES } = require('../lib/induction');
@@ -327,6 +329,18 @@ router.post('/roster/delete', requirePermission('hr_employees'), (req, res) => {
       const userPlaceholders = userIds.map(() => '?').join(',');
       db.prepare(`UPDATE users SET active = 0 WHERE id IN (${userPlaceholders})`).run(...userIds);
     }
+    // Cascade to crew_members so operational lookups (VOC dropdown,
+    // workforce roster, allocation pickers) immediately reflect the
+    // deactivation. Without this the employee disappears from /hr/roster
+    // but stays active=1 in crew_members — which is how the "duplicate
+    // Saadat Ahmed" still showed in the Quick VOC dropdown after HR
+    // thought they'd deactivated it.
+    const linkedCrew = db.prepare(`SELECT linked_crew_member_id FROM employees WHERE id IN (${placeholders}) AND linked_crew_member_id IS NOT NULL`).all(...ids);
+    const crewIds = linkedCrew.map(r => r.linked_crew_member_id).filter(Boolean);
+    if (crewIds.length > 0) {
+      const crewPlaceholders = crewIds.map(() => '?').join(',');
+      db.prepare(`UPDATE crew_members SET active = 0 WHERE id IN (${crewPlaceholders})`).run(...crewIds);
+    }
     // Soft-delete employees — preserve all related records for restore
     db.prepare(`UPDATE employees SET deleted_at = CURRENT_TIMESTAMP, active = 0, updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(...ids);
     req.flash('success', `${ids.length} employee(s) moved to Deleted.`);
@@ -356,6 +370,14 @@ router.post('/roster/restore', requirePermission('hr_employees'), (req, res) => 
     if (userIds.length > 0) {
       const userPlaceholders = userIds.map(() => '?').join(',');
       db.prepare(`UPDATE users SET active = 1 WHERE id IN (${userPlaceholders})`).run(...userIds);
+    }
+    // Cascade reactivation to crew_members so the operational side
+    // matches HR. Mirror of the cascade in /hr/roster/delete above.
+    const linkedCrew = db.prepare(`SELECT linked_crew_member_id FROM employees WHERE id IN (${placeholders}) AND linked_crew_member_id IS NOT NULL`).all(...ids);
+    const crewIds = linkedCrew.map(r => r.linked_crew_member_id).filter(Boolean);
+    if (crewIds.length > 0) {
+      const crewPlaceholders = crewIds.map(() => '?').join(',');
+      db.prepare(`UPDATE crew_members SET active = 1 WHERE id IN (${crewPlaceholders})`).run(...crewIds);
     }
     // Restore employees — clear deleted_at, reactivate, set status back to active
     db.prepare(`UPDATE employees SET deleted_at = NULL, active = 1, employment_status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id IN (${placeholders})`).run(...ids);
@@ -541,6 +563,21 @@ router.post('/employees/delete', requirePermission('hr_employees'), (req, res) =
   // Null out manager_id self-references so other employees aren't blocked
   try { db.prepare(`UPDATE employees SET manager_id = NULL WHERE manager_id IN (${placeholders})`).run(...ids); } catch (e) { /* ignore */ }
 
+  // Cascade to crew_members — hard-deleting the HR employee row would
+  // orphan the operational crew_members row otherwise (no FK link left
+  // to find it later). Mark inactive so operational pickers stop
+  // surfacing it. We don't hard-delete crew_members because it's
+  // referenced by timesheets / allocations / VOC assessments that
+  // we want to keep for audit.
+  try {
+    const linkedCrew = db.prepare(`SELECT linked_crew_member_id FROM employees WHERE id IN (${placeholders}) AND linked_crew_member_id IS NOT NULL`).all(...ids);
+    const crewIds = linkedCrew.map(r => r.linked_crew_member_id).filter(Boolean);
+    if (crewIds.length > 0) {
+      const crewPlaceholders = crewIds.map(() => '?').join(',');
+      db.prepare(`UPDATE crew_members SET active = 0 WHERE id IN (${crewPlaceholders})`).run(...crewIds);
+    }
+  } catch (e) { /* ignore */ }
+
   // Delete uploaded HR folders
   for (const id of ids) {
     const empDir = path.join(UPLOAD_BASE, `emp_${id}`);
@@ -708,6 +745,57 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     `).all(employee.linked_crew_member_id || -1, employee.linked_crew_member_id || -1);
   } catch (e) { /* table may not exist on stale DB */ }
 
+  // Employee reviews — quick notes + full performance reviews. JSON
+  // payload columns (sections, peer comments) are parsed here so the
+  // view doesn't have to. Author name resolved once per row.
+  let reviews = [];
+  try {
+    const rows = db.prepare(`
+      SELECT r.*, u.full_name AS created_by_name
+      FROM employee_reviews r
+      LEFT JOIN users u ON u.id = r.created_by_id
+      WHERE r.employee_id = ?
+      ORDER BY COALESCE(r.review_date, substr(r.created_at, 1, 10)) DESC, r.id DESC
+    `).all(employee.id);
+    reviews = rows.map(r => ({
+      ...r,
+      sections:      safeParseJson(r.sections_json, []),
+      peer_comments: safeParseJson(r.peer_comments_json, []),
+      comments:      [],
+    }));
+
+    // Load HR-internal comments in one round-trip and bucket by review.
+    // The comments table is created by migration 230 — wrap the read in
+    // its own try so a stale DB still renders the rest of the tab.
+    if (reviews.length) {
+      try {
+        const reviewIds = reviews.map(r => r.id);
+        const placeholders = reviewIds.map(() => '?').join(',');
+        const commentRows = db.prepare(`
+          SELECT c.*, u.full_name AS created_by_name
+          FROM employee_review_comments c
+          LEFT JOIN users u ON u.id = c.created_by_id
+          WHERE c.review_id IN (${placeholders})
+          ORDER BY c.created_at ASC, c.id ASC
+        `).all(...reviewIds);
+        const byReview = new Map(reviews.map(r => [r.id, r]));
+        for (const c of commentRows) {
+          c.body_html = renderCommentHtml(c.body);
+          const r = byReview.get(c.review_id);
+          if (r) r.comments.push(c);
+        }
+      } catch (e) { /* migration 230 not yet applied */ }
+    }
+  } catch (e) { /* table will exist after migration 225 runs */ }
+
+  // Users available for @mention autocomplete in the comment box.
+  let mentionUsers = [];
+  try {
+    mentionUsers = db.prepare(
+      `SELECT id, username, full_name FROM users WHERE active = 1 ORDER BY full_name`
+    ).all();
+  } catch (e) { /* no users yet */ }
+
   res.render('hr/employee-show', {
     title: employee.full_name,
     currentPage: 'hr-employees',
@@ -727,12 +815,224 @@ router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     sopHistory,
     trainingPasses,
     toolboxMeetings,
+    reviews,
+    mentionUsers,
     inductionMarkedBy: inductionMarkedBy ? inductionMarkedBy.full_name : null,
     settingsOptions,
     canViewSensitive: canViewSensitiveHR(req.session.user),
     showRates: canViewRates(req.session.user),
     user: req.session.user
   });
+});
+
+// Tiny helper for the reviews JSON columns. Local rather than imported
+// because schema.js + lib/* already have their own JSON utilities and I
+// don't want to thread another import through this file.
+function safeParseJson(s, fallback) {
+  if (!s) return fallback;
+  try { var v = JSON.parse(s); return Array.isArray(v) || (v && typeof v === 'object') ? v : fallback; }
+  catch (e) { return fallback; }
+}
+
+// HTML-escape (NOT a full sanitiser — we never trust comment bodies).
+function escapeHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Match @username tokens (letters / digits / dot / underscore / hyphen).
+// Has to start after whitespace or string start so emails (foo@bar) don't
+// false-positive. Username comes back as capture group 1.
+const MENTION_RE = /(^|\s)@([A-Za-z0-9._-]{2,40})/g;
+
+// Render a comment body to safe HTML with @mentions wrapped in a chip.
+// Pure presentation — the canonical mention list is stored separately on
+// the comment row, so this can change format without losing notifications.
+function renderCommentHtml(body) {
+  const safe = escapeHtml(body || '');
+  return safe.replace(MENTION_RE, (m, lead, name) =>
+    `${lead}<span class="inline-block bg-brand-50 text-brand-700 rounded px-1 font-semibold">@${name}</span>`
+  );
+}
+
+// Extract distinct usernames from a comment body. Lowercased so the
+// downstream user lookup is case-insensitive.
+function extractMentions(body) {
+  const out = new Set();
+  String(body || '').replace(MENTION_RE, (_, _lead, name) => { out.add(name.toLowerCase()); return ''; });
+  return [...out];
+}
+
+// ============================================
+// EMPLOYEE REVIEWS — create / delete
+// ============================================
+// POST /hr/employees/:id/reviews — add a note or a full performance
+// review. Visibility = 'internal' keeps it HR-only; 'worker' surfaces
+// it in the worker portal's My Reviews tab.
+router.post('/employees/:id/reviews', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(req.params.id);
+  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+
+  const b = req.body || {};
+  const kind = b.kind === 'review' ? 'review' : 'note';
+  const visibility = b.visibility === 'worker' ? 'worker' : 'internal';
+  const title = (b.title || '').trim() || (kind === 'review' ? 'Performance review' : 'Note');
+  const summary = (b.summary || '').trim();
+  const reviewDate = (b.review_date || '').trim() || null;
+  const heldBy = (b.held_by || '').trim();
+
+  // Sections + peer comments arrive as parallel arrays from the form
+  // (one row per section/comment). Drop blank rows so the JSON payload
+  // doesn't bloat with empty pairs.
+  const secHeadings = [].concat(b.section_heading || []);
+  const secContents = [].concat(b.section_content || []);
+  const sections = [];
+  for (let i = 0; i < Math.max(secHeadings.length, secContents.length); i++) {
+    const h = (secHeadings[i] || '').trim();
+    const c = (secContents[i] || '').trim();
+    if (h || c) sections.push({ heading: h, content: c });
+  }
+  const peerFrom = [].concat(b.peer_from || []);
+  const peerText = [].concat(b.peer_comment || []);
+  const peerComments = [];
+  for (let i = 0; i < Math.max(peerFrom.length, peerText.length); i++) {
+    const from = (peerFrom[i] || '').trim();
+    const text = (peerText[i] || '').trim();
+    if (from || text) peerComments.push({ from, comment: text });
+  }
+
+  try {
+    db.prepare(`
+      INSERT INTO employee_reviews
+        (employee_id, kind, title, summary, review_date, held_by, visibility,
+         sections_json, peer_comments_json, created_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      employee.id, kind, title, summary, reviewDate, heldBy, visibility,
+      JSON.stringify(sections), JSON.stringify(peerComments),
+      req.session.user.id
+    );
+    req.flash('success', visibility === 'worker'
+      ? `${kind === 'review' ? 'Review' : 'Note'} saved and shared to the worker's portal.`
+      : `${kind === 'review' ? 'Review' : 'Note'} saved (internal only).`);
+  } catch (e) {
+    console.error('[hr] add review failed:', e.message);
+    req.flash('error', 'Could not save review.');
+  }
+  res.redirect(`/hr/employees/${employee.id}#reviews`);
+});
+
+// POST /hr/reviews/:id/delete — remove a review/note.
+router.post('/reviews/:id/delete', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const row = db.prepare('SELECT id, employee_id FROM employee_reviews WHERE id = ?').get(req.params.id);
+  if (!row) { req.flash('error', 'Review not found.'); return res.redirect('back'); }
+  db.prepare('DELETE FROM employee_reviews WHERE id = ?').run(row.id);
+  req.flash('success', 'Review removed.');
+  res.redirect(`/hr/employees/${row.employee_id}#reviews`);
+});
+
+// POST /hr/reviews/:reviewId/comments — add a comment to a note/review.
+// HR-internal: comments are never surfaced to the worker portal, even
+// when the parent review is shared. `@username` tokens fan out to in-app
+// + push notifications for each matched, active user (skipping the
+// author themselves so we don't ping people for their own comment).
+router.post('/reviews/:reviewId/comments', requirePermission('hr_employees'), async (req, res) => {
+  const db = getDb();
+  const review = db.prepare(`
+    SELECT r.id, r.employee_id, r.title, e.full_name AS employee_name
+    FROM employee_reviews r
+    JOIN employees e ON e.id = r.employee_id
+    WHERE r.id = ?
+  `).get(req.params.reviewId);
+  if (!review) { req.flash('error', 'Review not found.'); return res.redirect('back'); }
+
+  const body = (req.body && req.body.body || '').trim();
+  if (!body) {
+    req.flash('error', 'Comment cannot be empty.');
+    return res.redirect(`/hr/employees/${review.employee_id}#reviews`);
+  }
+
+  const mentionedNames = extractMentions(body);
+  let mentionedUsers = [];
+  if (mentionedNames.length) {
+    const placeholders = mentionedNames.map(() => '?').join(',');
+    mentionedUsers = db.prepare(
+      `SELECT id, username, full_name FROM users
+       WHERE active = 1 AND LOWER(username) IN (${placeholders})`
+    ).all(...mentionedNames);
+  }
+
+  try {
+    const result = db.prepare(`
+      INSERT INTO employee_review_comments (review_id, body, mentioned_user_ids, created_by_id)
+      VALUES (?, ?, ?, ?)
+    `).run(
+      review.id,
+      body,
+      JSON.stringify(mentionedUsers.map(u => u.id)),
+      req.session.user.id
+    );
+
+    // Notify each tagged user (skipping the author). Best-effort: push
+    // failures are logged inside sendPushToUser, in-app notification is
+    // wrapped in its own try inside createNotification.
+    const authorId = req.session.user.id;
+    const authorName = req.session.user.full_name || req.session.user.username || 'Someone';
+    const link = `/hr/employees/${review.employee_id}#reviews`;
+    const snippet = body.length > 140 ? body.slice(0, 137) + '…' : body;
+    for (const u of mentionedUsers) {
+      if (u.id === authorId) continue;
+      createNotification({
+        userId: u.id,
+        type: 'general',
+        title: `${authorName} mentioned you on ${review.employee_name}`,
+        message: snippet,
+        link
+      });
+      sendPushToUser(u.id, {
+        title: `${authorName} mentioned you`,
+        body: snippet,
+        url: link,
+        icon: '/icon-192.png'
+      }).catch(err => console.error('[hr review comment] push failed:', err.message));
+    }
+
+    req.flash('success', mentionedUsers.length
+      ? `Comment added and ${mentionedUsers.length} teammate(s) notified.`
+      : 'Comment added.');
+  } catch (e) {
+    console.error('[hr] add review comment failed:', e.message);
+    req.flash('error', 'Could not save comment.');
+  }
+  res.redirect(`/hr/employees/${review.employee_id}#reviews`);
+});
+
+// POST /hr/reviews/comments/:id/delete — remove a comment. Limited to
+// the original author and admin/management roles.
+router.post('/reviews/comments/:id/delete', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const row = db.prepare(`
+    SELECT c.id, c.created_by_id, r.employee_id
+    FROM employee_review_comments c
+    JOIN employee_reviews r ON r.id = c.review_id
+    WHERE c.id = ?
+  `).get(req.params.id);
+  if (!row) { req.flash('error', 'Comment not found.'); return res.redirect('back'); }
+
+  const u = req.session.user;
+  const isOwner = u && u.id === row.created_by_id;
+  const isPrivileged = u && ['admin', 'management'].includes((u.role || '').toLowerCase());
+  if (!isOwner && !isPrivileged) {
+    req.flash('error', "You can only delete your own comments.");
+    return res.redirect(`/hr/employees/${row.employee_id}#reviews`);
+  }
+
+  db.prepare('DELETE FROM employee_review_comments WHERE id = ?').run(row.id);
+  req.flash('success', 'Comment removed.');
+  res.redirect(`/hr/employees/${row.employee_id}#reviews`);
 });
 
 // ============================================
@@ -1048,6 +1348,53 @@ function loadEmployeeWithCrew(req, res, opts = {}) {
   if (!crewMember) { req.flash('error', 'Employee is not linked to a crew member. Click "Enable Portal Access" first.'); return null; }
   return { employee, crewMember };
 }
+
+// POST /employees/:id/assign-tier — Set the worker's wage-panel tier + roster
+// pattern directly from the profile page. Stamps rates from the matching
+// preset and persists tier + payment_type + night_pattern atomically.
+router.post('/employees/:id/assign-tier', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const empId = parseInt(req.params.id, 10);
+  const employee = db.prepare('SELECT id, full_name, payment_type FROM employees WHERE id = ? AND deleted_at IS NULL').get(empId);
+  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+
+  const tier = parseInt(req.body.tier, 10);
+  // Payment type can be overridden in the same submit — fall back to the
+  // worker's existing one so admins setting only the tier don't wipe it.
+  const pt = String(req.body.payment_type || employee.payment_type || '').toLowerCase();
+  const nightPattern = String(req.body.night_pattern || 'occasional').toLowerCase();
+
+  if (!tier || tier < 1 || tier > 6) {
+    req.flash('error', 'Pick a tier between 1 and 6.');
+    return res.redirect(`/hr/employees/${empId}`);
+  }
+  if (!['cash', 'abn', 'tfn'].includes(pt)) {
+    req.flash('error', 'Pick a payment type (Cash / ABN / TFN) before assigning a tier.');
+    return res.redirect(`/hr/employees/${empId}`);
+  }
+
+  try {
+    const { stampEmployeeRates } = require('../lib/wageTiers');
+    const result = stampEmployeeRates(db, empId, tier, pt, { nightPattern });
+    if (!result.ok) {
+      req.flash('error', `Tier stamp failed: ${result.error}`);
+      return res.redirect(`/hr/employees/${empId}`);
+    }
+    try {
+      logActivity({
+        user: req.session.user, action: 'update', entityType: 'employee',
+        entityId: empId, entityLabel: employee.full_name,
+        details: `Set wage tier to ${tier} (${pt.toUpperCase()}, ${nightPattern}) — rates stamped from FY26 panel`,
+        ip: req.ip,
+      });
+    } catch (e) { /* audit shouldn't block save */ }
+    req.flash('success', `${employee.full_name} set to Tier ${tier} (${pt.toUpperCase()}). Rates stamped from the wage panel.`);
+  } catch (e) {
+    console.error('[/hr/employees/:id/assign-tier]', e);
+    req.flash('error', `Could not assign tier: ${e.message}`);
+  }
+  return res.redirect(`/hr/employees/${empId}`);
+});
 
 // POST /employees/:id/enable-portal — Auto-create crew member + link + activate
 router.post('/employees/:id/enable-portal', requirePermission('hr_employees'), (req, res) => {
@@ -2022,6 +2369,59 @@ router.post('/employees/:id/toggle-online-training', requirePermission('hr_emplo
 
   req.flash('success', newValue ? `${employee.full_name} can now take training on their portal.` : `${employee.full_name}'s online training access revoked.`);
   res.redirect(`/hr/employees/${employee.id}`);
+});
+
+// =============================================
+// Management Contacts — Operations / Accounts / HR phone + email
+// surfaced on /w/contacts in the worker app. Editor lives under the HR
+// Dashboard's toolbar so admins know exactly where to change them.
+// Storage is system_config.management_contacts as JSON; defaults are
+// returned by services/management-contacts.js when the row is empty.
+// =============================================
+router.get('/management-contacts', requirePermission('hr_dashboard'), (req, res) => {
+  const { getContacts, DEFAULT_CONTACTS } = require('../services/management-contacts');
+  res.render('hr/management-contacts', {
+    title: 'Management Contacts', currentPage: 'hr',
+    contacts: getContacts(),
+    defaults: DEFAULT_CONTACTS,
+  });
+});
+
+router.post('/management-contacts', requirePermission('hr_dashboard'), (req, res) => {
+  const { setContacts } = require('../services/management-contacts');
+  // Form posts parallel arrays — key[i] / label[i] / email[i] / phone[i].
+  // Zip them into a contacts list and drop any row whose label was
+  // cleared (admin's way to delete a row).
+  const keys   = [].concat(req.body['key']   || []);
+  const labels = [].concat(req.body['label'] || []);
+  const emails = [].concat(req.body['email'] || []);
+  const phones = [].concat(req.body['phone'] || []);
+  const n = Math.max(keys.length, labels.length, emails.length, phones.length);
+  const incoming = [];
+  for (let i = 0; i < n; i++) {
+    incoming.push({
+      key:   (keys[i]   || '').toString(),
+      label: (labels[i] || '').toString(),
+      email: (emails[i] || '').toString(),
+      phone: (phones[i] || '').toString(),
+    });
+  }
+  try {
+    setContacts(incoming, req.session.user ? req.session.user.id : null);
+    try {
+      logActivity({
+        user: req.session.user, action: 'update', entityType: 'management_contacts',
+        entityId: 0, entityLabel: 'Management Contacts',
+        details: incoming.filter(c => c.label).length + ' contact(s)',
+        ip: req.ip,
+      });
+    } catch (e) {}
+    req.flash('success', 'Management contacts saved — workers see them on /w/contacts.');
+  } catch (e) {
+    console.error('[hr management-contacts save]', e);
+    req.flash('error', 'Could not save: ' + e.message);
+  }
+  return res.redirect('/hr/management-contacts');
 });
 
 module.exports = router;

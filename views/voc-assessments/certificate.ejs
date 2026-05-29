@@ -74,9 +74,14 @@
   .detail .lbl { font-family: Arial, sans-serif; font-size: 7.5pt; letter-spacing: 2px; text-transform: uppercase; color: #888; margin-bottom: 3px; }
   .detail .val { font-family: 'Georgia', serif; font-size: 12pt; color: #1f3864; font-weight: 600; }
 
-  .signoff { width: 88%; margin: 4mm auto 0; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20mm; align-items: end; }
+  .signoff { width: 70%; margin: 4mm auto 0; display: grid; grid-template-columns: 1fr 1fr; gap: 30mm; align-items: end; }
   .sig { text-align: center; }
-  .sig-line { border-bottom: 1.5px solid #1f3864; height: 14mm; margin-bottom: 4px; }
+  /* The .sig-line slot is either an <img class="sig-img"> of the drawn */
+  /* signature, or a .sig-cursive typed-name fallback. Both share the   */
+  /* 14mm height + underline so the layout doesn't shift.               */
+  .sig-line { position: relative; border-bottom: 1.5px solid #1f3864; height: 14mm; margin-bottom: 4px; display: flex; align-items: flex-end; justify-content: center; padding-bottom: 1mm; }
+  .sig-img { max-width: 90%; max-height: 13mm; object-fit: contain; }
+  .sig-cursive { font-family: 'Brush Script MT', 'Lucida Handwriting', 'Comic Sans MS', cursive; font-size: 22pt; color: #1f3864; line-height: 1; }
   .sig-name { font-family: Arial, sans-serif; font-size: 9.5pt; color: #1f3864; font-weight: 600; min-height: 1.2em; }
   .sig-role { font-family: Arial, sans-serif; font-size: 7.5pt; letter-spacing: 1.5px; text-transform: uppercase; color: #888; margin-top: 2px; }
 
@@ -94,10 +99,10 @@
   .watermark {
     position: absolute; top: 50%; left: 50%;
     transform: translate(-50%, -50%) rotate(-22deg);
-    font-family: Arial, sans-serif; font-size: 120pt; font-weight: 900;
-    color: rgba(31, 56, 100, 0.04); letter-spacing: 6px;
     pointer-events: none; z-index: 1;
+    opacity: 0.06;
   }
+  .watermark img { width: 200mm; height: auto; display: block; }
 
   @media print {
     body { background: white; padding: 0; }
@@ -118,7 +123,9 @@
   <div class="corner tr"></div>
   <div class="corner bl"></div>
   <div class="corner br"></div>
-  <div class="watermark">T&amp;S</div>
+  <!-- Watermark — T&S logo at low opacity, rotated, centred. Same shape -->
+  <!-- as the PDF watermark in lib/pdf/vocCertificatePdf.js.              -->
+  <div class="watermark"><img src="/images/logo.jpg" alt=""></div>
 
   <% if (isRevoked) { %>
     <div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-12deg); border:8px solid #dc2626; padding:14px 36px; font-family:Arial,sans-serif; font-size:48pt; font-weight:900; color:#dc2626; letter-spacing:8px; opacity:0.18; z-index:3; pointer-events:none;">REVOKED</div>
@@ -166,19 +173,34 @@
       </div>
     </div>
 
+    <!-- Sign-off — two columns only. Manager/Supervisor was removed     -->
+    <!-- because the trainer running the VOC session signs as assessor   -->
+    <!-- and the worker signs to acknowledge; a separate manager line    -->
+    <!-- was rarely populated and just left a blank in the middle.       -->
+    <%
+      // Render the slot above the signature line: either an <img> of
+      // the drawn signature (inlined as a data URL by the route so we
+      // don't need a separate static endpoint), or the typed name in a
+      // cursive font as fallback. Same shape used by the PDF renderer
+      // so the two outputs stay consistent.
+      function sigSlot(sigDataUrl, typedName) {
+        if (sigDataUrl) {
+          return '<img class="sig-img" src="' + sigDataUrl + '" alt="signature">';
+        }
+        if (typedName) {
+          return '<span class="sig-cursive">' + String(typedName).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') + '</span>';
+        }
+        return '';
+      }
+    %>
     <div class="signoff">
       <div class="sig">
-        <div class="sig-line"></div>
+        <div class="sig-line"><%- sigSlot(a.assessor_signature_data_url, a.assessor_signed_name || a.assessor_name) %></div>
         <div class="sig-name"><%= a.assessor_signed_name || a.assessor_name || '' %></div>
         <div class="sig-role">Assessor</div>
       </div>
       <div class="sig">
-        <div class="sig-line"></div>
-        <div class="sig-name"><%= a.manager_signed_name || '' %></div>
-        <div class="sig-role">Manager / Supervisor</div>
-      </div>
-      <div class="sig">
-        <div class="sig-line"></div>
+        <div class="sig-line"><%- sigSlot(a.worker_signature_data_url, a.worker_signed_name || a.worker_name) %></div>
         <div class="sig-name"><%= a.worker_signed_name || a.worker_name || '' %></div>
         <div class="sig-role">Worker Acknowledgement</div>
       </div>

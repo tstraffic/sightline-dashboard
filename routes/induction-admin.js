@@ -458,36 +458,29 @@ router.post('/submissions/:id/status', (req, res) => {
       const newEmployee = db.prepare("SELECT id FROM employees WHERE employee_code = ?").get(employeeId);
       const newEmpId = newEmployee ? newEmployee.id : null;
 
-      // 3a. Persist any rates the approver entered on the modal — gated by
-      // the columns that exist on this deploy. Award classification id is
-      // stored separately so future pay runs can resolve from it.
+      // 3a. Stamp wage-panel rates from the tier picked in the Approve
+      // modal. The FY26 panel (/payroll/wage-tiers) is the canonical
+      // source — the helper resolves the right preset for (tier,
+      // payment_type), maps it to the employee's rate_* columns, and
+      // persists. Falls back silently when the wage_tier_presets table
+      // is missing (stale deploy pre-migration 226) or no tier was sent.
       if (newEmpId) {
         try {
-          const empCols = new Set(db.prepare("PRAGMA table_info(employees)").all().map(c => c.name));
-          const RATE_FIELDS = [
-            'rate_day', 'rate_ot', 'rate_dt',
-            'rate_night', 'rate_night_ot', 'rate_night_dt',
-            'rate_weekend', 'rate_public_holiday',
-            'rate_meal', 'rate_fares_daily',
-          ].filter(f => empCols.has(f));
-          const sets = [], params = [];
-          for (const f of RATE_FIELDS) {
-            const v = req.body[f];
-            if (v !== undefined && v !== '') {
-              const n = parseFloat(v);
-              if (Number.isFinite(n) && n >= 0) { sets.push(`${f} = ?`); params.push(n); }
+          const tier = parseInt(req.body.tier, 10);
+          const pt = String(req.body.payment_type || s.payment_type || '').toLowerCase();
+          if (tier && ['cash', 'abn', 'tfn'].includes(pt)) {
+            const { stampEmployeeRates } = require('../lib/wageTiers');
+            const nightPattern = String(req.body.night_pattern || 'occasional').toLowerCase();
+            const result = stampEmployeeRates(db, newEmpId, tier, pt, { nightPattern });
+            if (!result.ok) {
+              console.warn(`Induction approve: tier stamp skipped — ${result.error}`);
             }
+            // Also persist tier on the submission so the audit trail is preserved
+            try {
+              db.prepare('UPDATE induction_submissions SET tier = ? WHERE id = ?').run(tier, s.id);
+            } catch (e) { /* tier column may not exist on stale deploy */ }
           }
-          if (empCols.has('award_classification_id') && req.body.award_classification_id) {
-            const cid = parseInt(req.body.award_classification_id, 10);
-            if (Number.isFinite(cid)) { sets.push('award_classification_id = ?'); params.push(cid); }
-          }
-          if (sets.length) {
-            sets.push('updated_at = CURRENT_TIMESTAMP');
-            params.push(newEmpId);
-            db.prepare(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`).run(...params);
-          }
-        } catch (e) { console.error('Induction approve: rate persist failed:', e.message); }
+        } catch (e) { console.error('Induction approve: tier stamp failed:', e.message); }
       }
 
       // 3a. Seed the encrypted payroll tables (bank, super, TFN) from the induction form

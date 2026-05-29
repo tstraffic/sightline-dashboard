@@ -10232,7 +10232,1054 @@ function runMigrations(db) {
   }
 
   // =============================================
-  // Migration 222: induction time + reminder log
+  // Migration 222: Worker-driven attendance sign-off on toolbox meetings.
+  //
+  // Reworks the status flow so it reflects the real lifecycle the team
+  // wants to capture:
+  //   - Pending      (no row yet — invite link sent, no response)
+  //   - Attending    (worker RSVP'd yes via the invite link or worker app)
+  //   - Attended     (worker signed off post-meeting; signed_off_at +
+  //                   signature_data populated)
+  //   - Absent       (status='attending' AND held_at in the past with no
+  //                   signed_off_at — i.e. said they'd come, didn't sign)
+  //                   — pure display state, not stored
+  //   - Not attending (status='absent' — worker declined the invite)
+  //   - Caught up    (status='caught_up' — self-claim after the fact)
+  //
+  // Two structural moves:
+  //   1. Add signed_off_at + signature_data columns so 'attended' can be
+  //      gated on a real worker sign-off rather than admin tick alone.
+  //   2. One-time backfill: every existing status='attended' row is
+  //      downgraded to 'attending'. Reason: the legacy public RSVP picker
+  //      and admin bulk-tick both wrote 'attended' without any sign-off,
+  //      so the historical rows don't represent what the new model means
+  //      by Attended. Recorded_at is preserved as the original RSVP /
+  //      tick time so audit history isn't lost.
+  // =============================================
+  if (!isMigrationApplied.get(222)) {
+    console.log('Running migration 222: toolbox sign-off columns + status backfill');
+    try {
+      const cols = db.prepare('PRAGMA table_info(toolbox_attendance)').all().map(c => c.name);
+      if (!cols.includes('signed_off_at')) {
+        db.exec('ALTER TABLE toolbox_attendance ADD COLUMN signed_off_at DATETIME');
+      }
+      if (!cols.includes('signature_data')) {
+        db.exec('ALTER TABLE toolbox_attendance ADD COLUMN signature_data TEXT');
+      }
+      // Backfill: every legacy 'attended' row → 'attending'. The new flow
+      // requires a worker signature to reach 'attended', so historical
+      // ticks are surfaced as "Attending" until/unless the worker signs
+      // off in the portal.
+      const downgraded = db.prepare(
+        "UPDATE toolbox_attendance SET status = 'attending' WHERE status = 'attended'"
+      ).run();
+      recordMigration.run(222, 'toolbox_attendance sign-off cols + legacy attended → attending');
+      console.log(`Migration 222 applied: ${downgraded.changes} legacy 'attended' rows downgraded to 'attending'`);
+    } catch (e) {
+      console.error('Migration 222 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 223: allow 'prep' kind on toolbox_attachments.
+  //
+  // The existing CHECK constraint pins kind ∈ ('photo','doc'). Adds a
+  // third value, 'prep', for pre-meeting documents workers can review
+  // before attending — distinct from the post-attendance 'doc' rows
+  // (added in PR #423) which only unlock after sign-off. SQLite can't
+  // ALTER a CHECK constraint in place, so rebuild the table.
+  // =============================================
+  if (!isMigrationApplied.get(223)) {
+    console.log('Running migration 223: toolbox_attachments allow kind=prep');
+    try {
+      db.exec(`
+        CREATE TABLE toolbox_attachments__new (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          file_path TEXT NOT NULL,
+          file_original_name TEXT DEFAULT '',
+          kind TEXT NOT NULL DEFAULT 'photo'
+            CHECK(kind IN ('photo','doc','prep')),
+          uploaded_by_id INTEGER REFERENCES users(id),
+          uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT INTO toolbox_attachments__new
+          (id, toolbox_id, file_path, file_original_name, kind, uploaded_by_id, uploaded_at)
+        SELECT id, toolbox_id, file_path, file_original_name, kind, uploaded_by_id, uploaded_at
+        FROM toolbox_attachments;
+        DROP TABLE toolbox_attachments;
+        ALTER TABLE toolbox_attachments__new RENAME TO toolbox_attachments;
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_attach_tb ON toolbox_attachments(toolbox_id)');
+      recordMigration.run(223, "toolbox_attachments CHECK extended to allow 'prep'");
+      console.log("Migration 223 applied: toolbox_attachments.kind now accepts 'prep'");
+    } catch (e) {
+      console.error('Migration 223 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 224: Workshop group mode.
+  //
+  // Adds a 'group' mode to workshop sessions so the office can split a
+  // crowd into pre-assigned teams (one team per case) instead of every
+  // participant playing alone. Two structural moves:
+  //   1. workshop_sessions.mode    — 'individual' (existing behaviour,
+  //      default) or 'group' (new flow).
+  //   2. workshop_assignments      — add members_csv (comma-separated
+  //      names that make up the team) and claimed_by_name (the first
+  //      participant who tapped this group on the join screen).
+  //
+  // In group mode the admin creates one workshop_assignments row per
+  // group at session-creation time (player_name='Group 1', case_letter
+  // randomly pre-assigned, members_csv = the team roster). When a
+  // participant scans the QR, they see the list of groups + members,
+  // tap theirs, and the row's claimed_by_name flips from NULL to the
+  // tapper's name.
+  // =============================================
+  if (!isMigrationApplied.get(224)) {
+    console.log('Running migration 224: workshop group mode columns');
+    try {
+      const sCols = db.prepare('PRAGMA table_info(workshop_sessions)').all().map(c => c.name);
+      if (!sCols.includes('mode')) {
+        db.exec("ALTER TABLE workshop_sessions ADD COLUMN mode TEXT NOT NULL DEFAULT 'individual'");
+      }
+      const aCols = db.prepare('PRAGMA table_info(workshop_assignments)').all().map(c => c.name);
+      if (!aCols.includes('members_csv')) {
+        db.exec('ALTER TABLE workshop_assignments ADD COLUMN members_csv TEXT');
+      }
+      if (!aCols.includes('claimed_by_name')) {
+        db.exec('ALTER TABLE workshop_assignments ADD COLUMN claimed_by_name TEXT');
+      }
+      recordMigration.run(224, 'workshop group mode columns');
+      console.log('Migration 224 applied: workshop sessions can now run in group mode');
+    } catch (e) {
+      console.error('Migration 224 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 231: employee_reviews — notes + full performance reviews
+  // attached to an employee, with optional worker-portal visibility.
+  // NOTE: originally gated on version 225, but version 225 was already
+  // claimed by the FY26 Wage Panel migration on existing databases, so
+  // this block silently skipped on every fresh deploy. Renumbered to
+  // 231 — CREATE TABLE IF NOT EXISTS keeps it idempotent on DBs where
+  // the table happened to be created under an earlier history.
+  // =============================================
+  if (!isMigrationApplied.get(231)) {
+    console.log('Running migration 231: employee_reviews');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS employee_reviews (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          employee_id INTEGER NOT NULL REFERENCES employees(id) ON DELETE CASCADE,
+          kind TEXT NOT NULL DEFAULT 'note' CHECK (kind IN ('note','review')),
+          title TEXT NOT NULL,
+          summary TEXT NOT NULL DEFAULT '',
+          review_date TEXT,
+          held_by TEXT NOT NULL DEFAULT '',
+          visibility TEXT NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal','worker')),
+          sections_json TEXT NOT NULL DEFAULT '[]',
+          peer_comments_json TEXT NOT NULL DEFAULT '[]',
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_employee_reviews_employee ON employee_reviews(employee_id);');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_employee_reviews_visibility ON employee_reviews(visibility);');
+      recordMigration.run(231, 'employee_reviews');
+      console.log('Migration 231 applied: employee_reviews table ready');
+    } catch (e) {
+      console.error('Migration 231 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 226: FY26 Internal Wage Panel
+  //   T&S operates a six-tier framework (Trainee TC → Site Supervisor)
+  //   that supersedes the granular CW/ECW classifications for the day-to-
+  //   day office workflow. Each tier has three rate cards (Cash, ABN,
+  //   TFN/Award) with different shift breakdowns:
+  //
+  //     ABN  — Day / Sat / (Night|Sun|PH)               + $18 travel
+  //     Cash — (Day|Sat) / (Night|Sun|PH)               + $15 travel
+  //     TFN  — base + Sat≤2h / Sat>2h / Sun / PH /
+  //              Night<5 / Night Perm / Night 5+        (award fares used)
+  //
+  //   Plus a global allowance table (fares, meal, first aid, leading
+  //   hand %, km rates, industry allowance) that's editable from the
+  //   admin without code changes.
+  // =============================================
+  if (!isMigrationApplied.get(226)) {
+    console.log('Running migration 226: FY26 Internal Wage Panel (tier presets + allowances)');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS wage_tier_presets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tier INTEGER NOT NULL CHECK(tier BETWEEN 1 AND 6),
+          payment_type TEXT NOT NULL CHECK(payment_type IN ('cash','abn','tfn')),
+          role_label TEXT NOT NULL DEFAULT '',
+          award_mapping TEXT NOT NULL DEFAULT '',
+          qualifications TEXT NOT NULL DEFAULT '',
+          rate_day REAL NOT NULL DEFAULT 0,
+          rate_sat_short REAL NOT NULL DEFAULT 0,
+          rate_sat_long REAL NOT NULL DEFAULT 0,
+          rate_sun REAL NOT NULL DEFAULT 0,
+          rate_public_holiday REAL NOT NULL DEFAULT 0,
+          rate_night REAL NOT NULL DEFAULT 0,
+          rate_night_perm REAL NOT NULL DEFAULT 0,
+          rate_night_5plus REAL NOT NULL DEFAULT 0,
+          travel_allowance REAL NOT NULL DEFAULT 0,
+          effective_from DATE NOT NULL DEFAULT '2026-07-01',
+          effective_to DATE,
+          active INTEGER NOT NULL DEFAULT 1,
+          notes TEXT NOT NULL DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(tier, payment_type, effective_from)
+        );
+        CREATE INDEX IF NOT EXISTS idx_wtp_tier_payment ON wage_tier_presets(tier, payment_type);
+        CREATE INDEX IF NOT EXISTS idx_wtp_active ON wage_tier_presets(active, effective_from);
+
+        CREATE TABLE IF NOT EXISTS award_allowances (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT NOT NULL UNIQUE,
+          label TEXT NOT NULL,
+          amount REAL NOT NULL DEFAULT 0,
+          unit TEXT NOT NULL,
+          notes TEXT NOT NULL DEFAULT '',
+          effective_from DATE NOT NULL DEFAULT '2026-07-01',
+          active INTEGER NOT NULL DEFAULT 1,
+          display_order INTEGER NOT NULL DEFAULT 0,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_award_allow_active ON award_allowances(active, display_order);
+      `);
+
+      // Seed tier presets — FY26 (effective 2026-07-01), straight from the
+      // Internal Wage Panel v1.0 PDF. UNIQUE constraint on (tier, payment_type,
+      // effective_from) makes this idempotent across reruns.
+      const FY = '2026-07-01';
+      const TIER_META = {
+        1: { role: 'Trainee TC',         award: 'CW1(a)',          quals: 'RIIWHS205 only, first 90 days' },
+        2: { role: 'Traffic Controller', award: 'CW1(c)',          quals: 'RIIWHS205 + 90+ days experience' },
+        3: { role: 'Advanced TC / TMA',  award: 'CW2 / CW3',       quals: 'RIIWHS302 + MR/HR licence' },
+        4: { role: 'Team Leader',        award: 'CW3 + Leading Hand', quals: 'Small crew leadership' },
+        5: { role: 'Senior Team Leader', award: 'CW4 + Leading Hand', quals: 'Multi-crew leadership' },
+        6: { role: 'Site Supervisor',    award: 'CW5 + Leading Hand', quals: 'Full project oversight' },
+      };
+
+      const ABN_RATES = {
+        1: [31, 33, 40, 18],
+        2: [33, 36, 41, 18],
+        3: [35, 38, 43, 18],
+        4: [38, 40, 45, 18],
+        5: [40, 42, 47, 18],
+        6: [43, 45, 50, 18],
+      };
+      const CASH_RATES = {
+        1: [30, 37, 15],
+        2: [31, 38, 15],
+        3: [33, 40, 15],
+        4: [35, 42, 15],
+        5: [37, 44, 15],
+        6: [40, 47, 15],
+      };
+      const TFN_RATES = {
+        1: [33.94, 47.51, 61.09, 61.09, 74.66, 47.51, 42.08, 38.01],
+        2: [35.00, 49.00, 63.00, 63.00, 77.00, 49.00, 43.40, 39.20],
+        3: [36.26, 50.77, 65.27, 65.27, 79.78, 50.77, 44.97, 40.61],
+        4: [37.26, 52.17, 67.07, 67.07, 81.98, 52.17, 46.21, 41.73],
+        5: [38.36, 53.71, 69.05, 69.05, 84.40, 53.71, 47.57, 42.97],
+        6: [39.48, 55.27, 71.06, 71.06, 86.85, 55.27, 48.95, 44.21],
+      };
+
+      const insertPreset = db.prepare(`
+        INSERT OR IGNORE INTO wage_tier_presets
+          (tier, payment_type, role_label, award_mapping, qualifications,
+           rate_day, rate_sat_short, rate_sat_long, rate_sun, rate_public_holiday,
+           rate_night, rate_night_perm, rate_night_5plus, travel_allowance,
+           effective_from, active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `);
+
+      let seeded = 0;
+      for (let t = 1; t <= 6; t++) {
+        const meta = TIER_META[t];
+        const [aDay, aSat, aNight, aTravel] = ABN_RATES[t];
+        insertPreset.run(t, 'abn', meta.role, meta.award, meta.quals,
+          aDay, aSat, aSat, aNight, aNight, aNight, 0, 0, aTravel, FY);
+        seeded++;
+        const [cDay, cNight, cTravel] = CASH_RATES[t];
+        insertPreset.run(t, 'cash', meta.role, meta.award, meta.quals,
+          cDay, cDay, cDay, cNight, cNight, cNight, 0, 0, cTravel, FY);
+        seeded++;
+        const [tBase, tSatShort, tSatLong, tSun, tPH, tNight, tNightPerm, tNight5] = TFN_RATES[t];
+        insertPreset.run(t, 'tfn', meta.role, meta.award, meta.quals,
+          tBase, tSatShort, tSatLong, tSun, tPH, tNight, tNightPerm, tNight5, 0, FY);
+        seeded++;
+      }
+      if (seeded) console.log(`Migration 226: seeded ${seeded} wage_tier_presets rows (FY26)`);
+
+      const insertAllow = db.prepare(`
+        INSERT OR IGNORE INTO award_allowances
+          (code, label, amount, unit, notes, effective_from, active, display_order)
+        VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+      `);
+      const ALLOWANCES = [
+        ['fares_daily',          'Fares and travel',          21.94, 'per_day',  'All-purpose, paid for each day worked.',                              10],
+        ['meal',                 'Meal — while travelling',   19.00, 'per_meal', 'Where the worker is required to travel for the job and/or 9.5hrs+ shift.', 20],
+        ['first_aid_basic',      'First aid — basic',          3.85, 'per_day',  'Min qualifications, where nominated to provide first aid.',           30],
+        ['first_aid_higher',     'First aid — higher',         6.09, 'per_day',  'Higher than minimum first aid qualifications.',                       40],
+        ['leading_hand_1',       'Leading hand — 1 person',    2.4,  'percent',  'Of highest-class rate supervised, or own rate (whichever higher).',   50],
+        ['leading_hand_2_5',     'Leading hand — 2 to 5',      5.3,  'percent',  'Same basis. Applies to all hours worked.',                            60],
+        ['leading_hand_6_10',    'Leading hand — 6 to 10',     6.7,  'percent',  'Same basis. Applies to all hours worked.',                            70],
+        ['leading_hand_10_plus', 'Leading hand — 10+',         9.0,  'percent',  'Same basis. Applies to all hours worked.',                            80],
+        ['distant_work_km',      'Distant work — own vehicle', 0.59, 'per_km',   'Plus travel time at ordinary rate, half-hour minimum per return.',    90],
+        ['site_to_site_km',      'Site-to-site — own vehicle', 0.98, 'per_km',   'Plus paid travel time between sites.',                                100],
+        ['industry_allowance',   'Industry allowance',         1.69, 'per_hour', 'Already included in the casual TFN rates above.',                     110],
+      ];
+      let allowSeeded = 0;
+      for (const [code, label, amount, unit, notes, order] of ALLOWANCES) {
+        const r = insertAllow.run(code, label, amount, unit, notes, FY, order);
+        if (r.changes) allowSeeded++;
+      }
+      if (allowSeeded) console.log(`Migration 226: seeded ${allowSeeded} award_allowances rows`);
+
+      recordMigration.run(226, 'FY26 Internal Wage Panel: 6-tier × 3-payment presets + global allowances');
+      console.log('Migration 226 applied');
+    } catch (e) {
+      console.error('Migration 226 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 227: Wire wage tiers into employees + induction submissions
+  //   - employees.tier (1-6, nullable): which row of the FY26 panel the
+  //     worker sits on. Drives the rate stamp from wage_tier_presets and
+  //     shows as the headline badge on their profile.
+  //   - induction_submissions.tier: captured at Approve time so we can
+  //     audit which tier the worker was hired at.
+  // =============================================
+  if (!isMigrationApplied.get(227)) {
+    try {
+      const empCols = db.prepare("PRAGMA table_info(employees)").all().map(c => c.name);
+      if (!empCols.includes('tier')) {
+        db.exec("ALTER TABLE employees ADD COLUMN tier INTEGER");
+      }
+      const subCols = db.prepare("PRAGMA table_info(induction_submissions)").all().map(c => c.name);
+      if (!subCols.includes('tier')) {
+        db.exec("ALTER TABLE induction_submissions ADD COLUMN tier INTEGER");
+      }
+      recordMigration.run(227, 'employees.tier + induction_submissions.tier');
+      console.log('Migration 227 applied: tier columns');
+    } catch (e) {
+      console.error('Migration 227 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 228: Pay-run engine TFN-fidelity columns
+  //   - employees.rate_weekend_short: hourly rate for the first 2 hours
+  //     of a Saturday shift (1.5× under BCG). The pay-run engine peels
+  //     these hours off into a new weekend_short bucket. Anything past
+  //     2 hours (or any shift starting 12pm+) stays in `weekend` at the
+  //     2× rate.
+  //   - employees.night_pattern: drives which TFN night rate gets
+  //     stamped onto the worker — occasional (Night<5, default),
+  //     permanent (Night Perm 1.3×), or continuous_5plus (Night 5+
+  //     1.15×). Per the FY26 panel's operational rules.
+  // =============================================
+  if (!isMigrationApplied.get(228)) {
+    try {
+      const empCols = db.prepare("PRAGMA table_info(employees)").all().map(c => c.name);
+      if (!empCols.includes('rate_weekend_short')) {
+        db.exec("ALTER TABLE employees ADD COLUMN rate_weekend_short REAL DEFAULT 0");
+      }
+      if (!empCols.includes('night_pattern')) {
+        db.exec("ALTER TABLE employees ADD COLUMN night_pattern TEXT DEFAULT 'occasional'");
+      }
+      recordMigration.run(228, 'employees.rate_weekend_short + night_pattern for TFN PDF fidelity');
+      console.log('Migration 228 applied');
+    } catch (e) {
+      console.error('Migration 228 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 229: TFN Night 5+ auto-detection
+  //   - employees.rate_night_5plus: the Night 5+ rate (1.15×) for TFN
+  //     workers on `occasional` night pattern. Stamped from the wage
+  //     panel alongside rate_night so the pay-run engine can auto-
+  //     elevate shifts that fall inside a 5+ consecutive Mon–Fri run.
+  //   For `permanent` and `continuous_5plus` patterns this stays 0 —
+  //   the night pattern itself already selected the right rate_night.
+  // =============================================
+  if (!isMigrationApplied.get(229)) {
+    try {
+      const empCols = db.prepare("PRAGMA table_info(employees)").all().map(c => c.name);
+      if (!empCols.includes('rate_night_5plus')) {
+        db.exec("ALTER TABLE employees ADD COLUMN rate_night_5plus REAL DEFAULT 0");
+      }
+      recordMigration.run(229, 'employees.rate_night_5plus for Night 5+ auto-detection');
+      console.log('Migration 229 applied');
+    } catch (e) {
+      console.error('Migration 229 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 230: employee_review_comments — HR-internal discussion
+  // thread under each note / performance review. Always internal: the
+  // worker never sees comments even when the parent review is shared.
+  // @username mentions in `body` fan out to in-app + push notifications.
+  // =============================================
+  if (!isMigrationApplied.get(230)) {
+    console.log('Running migration 230: employee_review_comments');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS employee_review_comments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          review_id INTEGER NOT NULL REFERENCES employee_reviews(id) ON DELETE CASCADE,
+          body TEXT NOT NULL,
+          mentioned_user_ids TEXT,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_review_comments_review ON employee_review_comments(review_id);');
+      recordMigration.run(230, 'employee_review_comments');
+      console.log('Migration 230 applied: employee_review_comments table ready');
+    } catch (e) {
+      console.error('Migration 230 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 232: voc_assessments.marking_complete
+  //   Powers the "Quick Cert Generator" — when a VOC session has 30+
+  //   workers queueing for their certificate, the assessor types name +
+  //   date, hands them a printable cert immediately, and comes back to
+  //   the assessment later to enter theory/practical responses. Rows
+  //   with marking_complete=0 surface in a "Pending Marking" queue on
+  //   the VOC index.
+  //   Default = 1 so historical full assessments aren't flagged.
+  // =============================================
+  if (!isMigrationApplied.get(232)) {
+    console.log('Running migration 232: voc_assessments.marking_complete');
+    try {
+      const cols = db.prepare("PRAGMA table_info(voc_assessments)").all().map(c => c.name);
+      if (!cols.includes('marking_complete')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN marking_complete INTEGER NOT NULL DEFAULT 1");
+      }
+      db.exec('CREATE INDEX IF NOT EXISTS idx_voc_marking ON voc_assessments(marking_complete, status);');
+      recordMigration.run(232, 'voc_assessments.marking_complete');
+      console.log('Migration 232 applied: voc_assessments.marking_complete ready');
+    } catch (e) {
+      console.error('Migration 232 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 233: voc_assessments signature paths
+  //   Stores the PNG paths captured by the in-browser signature pad
+  //   (signature_pad.js) on the Quick VOC form and the regular
+  //   assessment form. When set, the PDF + HTML cert embed the
+  //   actual drawn signature above the line. When unset, the cert
+  //   falls back to the typed name rendered in cursive.
+  // =============================================
+  if (!isMigrationApplied.get(233)) {
+    console.log('Running migration 233: voc_assessments signature paths');
+    try {
+      const cols = db.prepare("PRAGMA table_info(voc_assessments)").all().map(c => c.name);
+      if (!cols.includes('assessor_signature_path')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN assessor_signature_path TEXT DEFAULT ''");
+      }
+      if (!cols.includes('worker_signature_path')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN worker_signature_path TEXT DEFAULT ''");
+      }
+      recordMigration.run(233, 'voc_assessments signature paths');
+      console.log('Migration 233 applied: signature path columns ready');
+    } catch (e) {
+      console.error('Migration 233 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 234: VOC worker acknowledgement workflow
+  //   Office issues the cert + signs as assessor. Worker then gets a
+  //   push, opens their portal, signs to acknowledge — at which point
+  //   the PDF regenerates with their signature embedded.
+  //
+  //   Status values:
+  //     'not_required' — issued before this feature existed OR the
+  //                      assessor captured the worker's sig in person
+  //                      on the tablet (so no follow-up needed).
+  //     'pending'      — cert issued, waiting on the worker to sign.
+  //     'signed'       — worker has signed (worker_signature_path set,
+  //                      worker_acknowledged_at populated).
+  //     'declined'     — worker explicitly declined (future scope; for
+  //                      now we just keep the column flexible).
+  //
+  //   worker_acknowledged_at carries the timestamp the worker actually
+  //   signed — separate from the original cert dates so re-signing
+  //   is auditable.
+  // =============================================
+  if (!isMigrationApplied.get(234)) {
+    console.log('Running migration 234: voc worker acknowledgement workflow');
+    try {
+      const cols = db.prepare("PRAGMA table_info(voc_assessments)").all().map(c => c.name);
+      if (!cols.includes('worker_acknowledgement_status')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN worker_acknowledgement_status TEXT NOT NULL DEFAULT 'not_required'");
+      }
+      if (!cols.includes('worker_acknowledged_at')) {
+        db.exec("ALTER TABLE voc_assessments ADD COLUMN worker_acknowledged_at DATETIME");
+      }
+      // Backfill: any submitted competent cert that already has a
+      // worker signature on file is implicitly 'signed' (sig was
+      // captured in person, no follow-up needed).
+      db.prepare(`
+        UPDATE voc_assessments
+        SET worker_acknowledgement_status = 'signed',
+            worker_acknowledged_at = COALESCE(worker_acknowledged_at, updated_at)
+        WHERE worker_signature_path IS NOT NULL AND worker_signature_path != ''
+          AND worker_acknowledgement_status = 'not_required'
+      `).run();
+      db.exec('CREATE INDEX IF NOT EXISTS idx_voc_ack_status ON voc_assessments(worker_acknowledgement_status);');
+      recordMigration.run(234, 'voc worker acknowledgement workflow');
+      console.log('Migration 234 applied: worker_acknowledgement_status + index ready');
+    } catch (e) {
+      console.error('Migration 234 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 235: Fleet Maintenance & Compliance
+  //   `vehicles`         — one row per vehicle (the Fleet Register)
+  //   `service_records`  — every maintenance record (the Service Log)
+  //   `vehicle_summary`  — view joining vehicles with last-service date,
+  //                        highest odometer, and total maintenance cost.
+  //                        Aggregates are computed, never stored, so
+  //                        they always reflect current data.
+  //
+  //   First-run seed pulls the original 13-vehicle / 55-record register
+  //   from db/seeds/fleet.js. Verify-flagged vehicles (duplicate VINs /
+  //   Fleet ID clashes) are imported as-is with their data-quality notes
+  //   so office staff can reconcile them in-app rather than silently
+  //   merging duplicates.
+  // =============================================
+  if (!isMigrationApplied.get(235)) {
+    console.log('Running migration 235: fleet maintenance & compliance');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS vehicles (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          asset_id TEXT UNIQUE NOT NULL,
+          fleet_id TEXT,
+          rego TEXT,
+          make TEXT,
+          model TEXT,
+          year INTEGER,
+          vin TEXT,
+          vehicle_type TEXT,
+          toll_tag TEXT,
+          assigned_to TEXT,
+          status TEXT NOT NULL DEFAULT 'Active',
+          registration_expiry DATE,
+          ctp_expiry DATE,
+          insurance_renewal DATE,
+          inspection_due DATE,
+          next_service_date DATE,
+          next_service_km INTEGER,
+          fire_extinguisher_expiry DATE,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS service_records (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          vehicle_id INTEGER NOT NULL,
+          service_date DATE,
+          odometer_km INTEGER,
+          work_performed TEXT,
+          service_type TEXT,
+          performed_by TEXT,
+          cost NUMERIC,
+          invoice_number TEXT,
+          notes TEXT,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          FOREIGN KEY (vehicle_id) REFERENCES vehicles(id) ON DELETE CASCADE
+        );
+        CREATE INDEX IF NOT EXISTS idx_service_records_vehicle ON service_records(vehicle_id);
+        CREATE INDEX IF NOT EXISTS idx_service_records_date ON service_records(service_date);
+        CREATE INDEX IF NOT EXISTS idx_vehicles_status ON vehicles(status);
+        DROP VIEW IF EXISTS vehicle_summary;
+        CREATE VIEW vehicle_summary AS
+        SELECT v.*,
+          (SELECT MAX(service_date) FROM service_records sr WHERE sr.vehicle_id = v.id) AS last_service_date,
+          (SELECT MAX(odometer_km) FROM service_records sr WHERE sr.vehicle_id = v.id) AS highest_odo_km,
+          COALESCE((SELECT SUM(cost) FROM service_records sr WHERE sr.vehicle_id = v.id), 0) AS total_maint_cost,
+          (SELECT COUNT(*) FROM service_records sr WHERE sr.vehicle_id = v.id) AS service_count
+        FROM vehicles v;
+      `);
+      recordMigration.run(235, 'fleet maintenance & compliance');
+      console.log('Migration 235 applied: vehicles + service_records + vehicle_summary ready');
+
+      // One-time seed from the original T&S Fleet Register spreadsheet.
+      // Idempotent: skips if the vehicles table already has rows.
+      try {
+        require('./seeds/fleet').seedFleet(db);
+      } catch (e) {
+        console.error('Fleet seed error:', e.message);
+      }
+    } catch (e) {
+      console.error('Migration 235 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 236: link booking_vehicles back to the Fleet register
+  //   Bookings already pulled vehicles from the equipment table (utes,
+  //   trucks, VMS) — but Fleet is now the source-of-truth for everything
+  //   with a rego. Add a nullable FK so bookings can point at a Fleet
+  //   row, keeping the existing free-text + equipment-derived flow
+  //   working untouched for legacy data.
+  // =============================================
+  if (!isMigrationApplied.get(236)) {
+    console.log('Running migration 236: booking_vehicles.fleet_vehicle_id');
+    try {
+      const cols = db.prepare("PRAGMA table_info(booking_vehicles)").all().map(c => c.name);
+      if (!cols.includes('fleet_vehicle_id')) {
+        db.exec("ALTER TABLE booking_vehicles ADD COLUMN fleet_vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE SET NULL");
+      }
+      db.exec("CREATE INDEX IF NOT EXISTS idx_booking_vehicles_fleet ON booking_vehicles(fleet_vehicle_id);");
+      recordMigration.run(236, 'booking_vehicles.fleet_vehicle_id');
+      console.log('Migration 236 applied: booking_vehicles → vehicles FK ready');
+    } catch (e) {
+      console.error('Migration 236 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 237: link Equipment rows back to the Fleet register.
+  //   Some physical vehicles are duplicated in both `equipment` (historical
+  //   home) and `vehicles` (new Fleet register). This FK lets the office
+  //   walk through equipment-vehicle rows on the Reconcile screen, point
+  //   each one at its canonical Fleet row, and deactivate the equipment
+  //   row in one click. Pickers that filter by active=1 then stop showing
+  //   the duplicate without losing the audit trail.
+  // =============================================
+  if (!isMigrationApplied.get(237)) {
+    console.log('Running migration 237: equipment.fleet_vehicle_id');
+    try {
+      const cols = db.prepare("PRAGMA table_info(equipment)").all().map(c => c.name);
+      if (!cols.includes('fleet_vehicle_id')) {
+        db.exec("ALTER TABLE equipment ADD COLUMN fleet_vehicle_id INTEGER REFERENCES vehicles(id) ON DELETE SET NULL");
+      }
+      db.exec("CREATE INDEX IF NOT EXISTS idx_equipment_fleet ON equipment(fleet_vehicle_id);");
+      recordMigration.run(237, 'equipment.fleet_vehicle_id');
+      console.log('Migration 237 applied: equipment → vehicles FK ready');
+    } catch (e) {
+      console.error('Migration 237 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 238: Quoting Module — schema
+  //   Pricing-side counterpart to the existing tenders module. A quote is
+  //   a fixed-price offer for a known scope (vs. a tender = competitive
+  //   bid submission). Tables fall into three groups:
+  //
+  //     Rate cards   — reusable price books, with variant pricing for
+  //                    shift-type × hour-bracket matrices (Daracon-style
+  //                    SoRs) and an allowances child table for meal /
+  //                    travel / LAFHA / TMA-establishment surcharges.
+  //     Quotes       — a quote header + groups + sites + line items.
+  //                    Sell side (rate_snapshot) AND cost side
+  //                    (unit_cost_snapshot, override) are both snapshotted
+  //                    at line creation so rate-card / worker-rate edits
+  //                    later don't retroactively shift historical margins.
+  //     Imports      — rate_card_imports tracks PDF/Word/Excel uploads
+  //                    that an admin can review + commit into a rate card.
+  //                    Table only in this migration; UI lands later.
+  //
+  //   rate_cards.purpose ('quoting' | 'reference') keeps the door open for
+  //   side-by-side compare against competitor SoRs without a future
+  //   migration: reference cards are import-only, never selectable when
+  //   building a quote.
+  // =============================================
+  if (!isMigrationApplied.get(238)) {
+    console.log('Running migration 238: Quoting Module — schema');
+    try {
+      db.exec(`
+        -- ─────────────────────────────────────────────────────────────
+        -- quoting_settings (singleton)
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quoting_settings (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          default_tc_cost_rate REAL,
+          default_tl_cost_rate REAL,
+          default_supervisor_cost_rate REAL,
+          gst_rate REAL NOT NULL DEFAULT 0.10,
+          margin_healthy_threshold REAL NOT NULL DEFAULT 25.00,
+          margin_watch_threshold REAL NOT NULL DEFAULT 15.00,
+          quote_number_format TEXT NOT NULL DEFAULT 'TS-QTE-{YYYY}-{NNN}',
+          default_validity_days INTEGER NOT NULL DEFAULT 30,
+          company_inclusions_defaults_json TEXT NOT NULL DEFAULT '[]',
+          company_exclusions_defaults_json TEXT NOT NULL DEFAULT '[]',
+          company_terms_default TEXT DEFAULT '',
+          default_within_50km INTEGER NOT NULL DEFAULT 1,
+          tma_non_ts_vehicle_surcharge_pct REAL NOT NULL DEFAULT 20.0,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_card_imports — uploaded PDF/Word/Excel review queue
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_card_imports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          filename TEXT NOT NULL,
+          source_format TEXT NOT NULL CHECK(source_format IN ('pdf','docx','xlsx')),
+          file_path TEXT NOT NULL,
+          extracted_text TEXT,
+          proposed_json TEXT,
+          status TEXT NOT NULL DEFAULT 'pending'
+            CHECK(status IN ('pending','extracting','review','committed','failed','discarded')),
+          error_message TEXT,
+          committed_rate_card_id INTEGER REFERENCES rate_cards(id) ON DELETE SET NULL,
+          uploaded_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_rate_card_imports_status ON rate_card_imports(status, created_at DESC);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_cards
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_cards (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+          effective_from DATE,
+          effective_to DATE,
+          is_default INTEGER NOT NULL DEFAULT 0,
+          purpose TEXT NOT NULL DEFAULT 'quoting'
+            CHECK(purpose IN ('quoting','reference')),
+          source TEXT
+            CHECK(source IN ('manual','imported_pdf','imported_docx','imported_xlsx') OR source IS NULL),
+          source_import_id INTEGER REFERENCES rate_card_imports(id) ON DELETE SET NULL,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_rate_cards_purpose ON rate_cards(purpose, is_active);
+        CREATE INDEX IF NOT EXISTS idx_rate_cards_client ON rate_cards(client_id);
+        CREATE INDEX IF NOT EXISTS idx_rate_cards_default ON rate_cards(is_default, is_active);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_card_items
+        --   Each row = one billable line on a rate card. Pricing lives in
+        --   rate_card_item_variants — for cards that don't differentiate
+        --   by shift/hour, exactly one variant row (shift_type='standard',
+        --   hour_bracket='standard') carries the price.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_card_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rate_card_id INTEGER NOT NULL REFERENCES rate_cards(id) ON DELETE CASCADE,
+          category TEXT NOT NULL
+            CHECK(category IN ('planning_compliance','tc_labour','equipment_vehicles','provisioning','allowances_misc')),
+          code TEXT,
+          name TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          unit TEXT NOT NULL
+            CHECK(unit IN ('per_shift','per_hour','per_site','per_day','per_week','per_km','per_application','per_plan','per_delivery','per_spa','fixed')),
+          has_hours_input INTEGER NOT NULL DEFAULT 0,
+          is_addon INTEGER NOT NULL DEFAULT 0,
+          min_booking_hours REAL,
+          pricing_status TEXT NOT NULL DEFAULT 'priced'
+            CHECK(pricing_status IN ('priced','poa')),
+          cost_method TEXT NOT NULL DEFAULT 'fixed'
+            CHECK(cost_method IN ('fixed','computed_crew')),
+          crew_composition_json TEXT,
+          vehicle_cost_per_hour REAL,
+          notes TEXT DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_rate_card_items_card ON rate_card_items(rate_card_id, category, sort_order);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_card_item_variants
+        --   (item, shift_type, hour_bracket) → sell rate + unit cost.
+        --   Daracon-style SoRs use multiple variants per item; the TfNSW
+        --   Tube Count style uses a single (standard, standard) variant.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_card_item_variants (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rate_card_item_id INTEGER NOT NULL REFERENCES rate_card_items(id) ON DELETE CASCADE,
+          shift_type TEXT NOT NULL DEFAULT 'standard'
+            CHECK(shift_type IN ('standard','weekday','weeknight','weekend','public_holiday')),
+          hour_bracket TEXT NOT NULL DEFAULT 'standard'
+            CHECK(hour_bracket IN ('standard','0_to_8','8_to_10','10_plus')),
+          rate REAL,
+          unit_cost REAL,
+          notes TEXT DEFAULT '',
+          UNIQUE(rate_card_item_id, shift_type, hour_bracket)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rcv_item ON rate_card_item_variants(rate_card_item_id);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- rate_card_allowances
+        --   Conditional surcharges (meal allowance >9.5hr, travel per TC
+        --   per shift, LAFHA per day, TMA establishment per person per
+        --   shift). Snapshotted onto quote_allowances at quote time.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS rate_card_allowances (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          rate_card_id INTEGER NOT NULL REFERENCES rate_cards(id) ON DELETE CASCADE,
+          code TEXT,
+          name TEXT NOT NULL,
+          scope TEXT NOT NULL
+            CHECK(scope IN ('per_person_per_shift','per_person_per_day','per_shift','per_day','flat')),
+          amount REAL NOT NULL DEFAULT 0,
+          unit_cost REAL,
+          min_hours_trigger REAL,
+          auto_apply INTEGER NOT NULL DEFAULT 1,
+          notes TEXT DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE INDEX IF NOT EXISTS idx_rca_card ON rate_card_allowances(rate_card_id, sort_order);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quotes
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quotes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_number TEXT NOT NULL UNIQUE,
+          client_id INTEGER REFERENCES clients(id) ON DELETE SET NULL,
+          client_name_snapshot TEXT NOT NULL DEFAULT '',
+          project_name TEXT NOT NULL DEFAULT '',
+          project_description TEXT DEFAULT '',
+          prepared_by_user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          rate_card_id INTEGER REFERENCES rate_cards(id) ON DELETE SET NULL,
+          quote_date DATE NOT NULL DEFAULT (date('now')),
+          valid_until_date DATE,
+          within_50km INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'draft'
+            CHECK(status IN ('draft','sent','accepted','rejected','expired','superseded')),
+          version INTEGER NOT NULL DEFAULT 1,
+          parent_quote_id INTEGER REFERENCES quotes(id) ON DELETE SET NULL,
+          subtotal_ex_gst REAL NOT NULL DEFAULT 0,
+          gst REAL NOT NULL DEFAULT 0,
+          total_inc_gst REAL NOT NULL DEFAULT 0,
+          total_cost REAL NOT NULL DEFAULT 0,
+          total_margin REAL NOT NULL DEFAULT 0,
+          total_margin_pct REAL NOT NULL DEFAULT 0,
+          inclusions_json TEXT NOT NULL DEFAULT '[]',
+          exclusions_json TEXT NOT NULL DEFAULT '[]',
+          terms TEXT DEFAULT '',
+          internal_notes TEXT DEFAULT '',
+          pdf_path TEXT,
+          sent_at DATETIME,
+          accepted_at DATETIME,
+          rejected_at DATETIME,
+          rejection_reason TEXT,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_quotes_status_date ON quotes(status, quote_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_quotes_client_date ON quotes(client_id, quote_date DESC);
+        CREATE INDEX IF NOT EXISTS idx_quotes_parent ON quotes(parent_quote_id);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_groups (optional grouping of sites — screenline / stage)
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_groups (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_quote_groups_quote ON quote_groups(quote_id, sort_order);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_sites
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_sites (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+          group_id INTEGER REFERENCES quote_groups(id) ON DELETE SET NULL,
+          site_code TEXT,
+          site_name TEXT NOT NULL,
+          road_name TEXT DEFAULT '',
+          road_classification TEXT
+            CHECK(road_classification IN ('state','regional','local','arterial','other') OR road_classification IS NULL),
+          notes TEXT DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          subtotal_ex_gst REAL NOT NULL DEFAULT 0,
+          total_cost REAL NOT NULL DEFAULT 0,
+          total_margin REAL NOT NULL DEFAULT 0,
+          total_margin_pct REAL NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_quote_sites_quote ON quote_sites(quote_id, sort_order);
+        CREATE INDEX IF NOT EXISTS idx_quote_sites_group ON quote_sites(group_id);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_line_items
+        --   The cells of the Site Matrix grid. Both sell rate and cost
+        --   are snapshotted at creation. shift_type + hour_bracket
+        --   identify which rate_card_item_variant was resolved.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_line_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_site_id INTEGER NOT NULL REFERENCES quote_sites(id) ON DELETE CASCADE,
+          rate_card_item_id INTEGER REFERENCES rate_card_items(id) ON DELETE SET NULL,
+          rate_card_item_variant_id INTEGER REFERENCES rate_card_item_variants(id) ON DELETE SET NULL,
+          item_name_snapshot TEXT NOT NULL,
+          unit_snapshot TEXT NOT NULL,
+          category_snapshot TEXT,
+          shift_type TEXT NOT NULL DEFAULT 'standard'
+            CHECK(shift_type IN ('standard','weekday','weeknight','weekend','public_holiday')),
+          hour_bracket TEXT NOT NULL DEFAULT 'standard'
+            CHECK(hour_bracket IN ('standard','0_to_8','8_to_10','10_plus')),
+          rate_snapshot REAL NOT NULL DEFAULT 0,
+          has_hours_snapshot INTEGER NOT NULL DEFAULT 0,
+          qty REAL NOT NULL DEFAULT 0,
+          hours REAL,
+          cost_method_snapshot TEXT NOT NULL DEFAULT 'fixed'
+            CHECK(cost_method_snapshot IN ('fixed','computed_crew')),
+          unit_cost_snapshot REAL NOT NULL DEFAULT 0,
+          crew_composition_snapshot_json TEXT,
+          vehicle_cost_snapshot REAL,
+          unit_cost_override REAL,
+          line_revenue REAL NOT NULL DEFAULT 0,
+          line_cost REAL NOT NULL DEFAULT 0,
+          line_margin REAL NOT NULL DEFAULT 0,
+          line_margin_pct REAL NOT NULL DEFAULT 0,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_qli_site ON quote_line_items(quote_site_id, sort_order);
+        CREATE INDEX IF NOT EXISTS idx_qli_item ON quote_line_items(rate_card_item_id);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_rate_items
+        --   Per-quote column list for the Site Matrix grid. When a quote
+        --   is created from a rate card, one row per active rate_card_item
+        --   is inserted here so the grid renders. Users can then hide
+        --   columns (is_hidden=1), reorder them (sort_order), or add a
+        --   one-off custom column not on any rate card by leaving
+        --   rate_card_item_id NULL and filling the custom_* fields.
+        --   Hidden rows preserve their line items underneath — unhiding
+        --   restores everything.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_rate_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+          rate_card_item_id INTEGER REFERENCES rate_card_items(id) ON DELETE SET NULL,
+          custom_name TEXT,
+          custom_unit TEXT
+            CHECK(custom_unit IN ('per_shift','per_hour','per_site','per_day','per_week','per_km','per_application','per_plan','per_delivery','per_spa','fixed') OR custom_unit IS NULL),
+          custom_rate REAL,
+          custom_unit_cost REAL,
+          custom_has_hours_input INTEGER NOT NULL DEFAULT 0,
+          custom_category TEXT
+            CHECK(custom_category IN ('planning_compliance','tc_labour','equipment_vehicles','provisioning','allowances_misc') OR custom_category IS NULL),
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          is_hidden INTEGER NOT NULL DEFAULT 0,
+          created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(quote_id, rate_card_item_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_qri_quote ON quote_rate_items(quote_id, sort_order);
+
+        -- ─────────────────────────────────────────────────────────────
+        -- quote_allowances
+        --   Per-quote rolled-up surcharges (meal, travel, LAFHA, TMA
+        --   establishment). Either auto-derived from the labour lines or
+        --   manually added. Snapshots amount + cost so changes to the
+        --   rate card later don't shift historical totals.
+        -- ─────────────────────────────────────────────────────────────
+        CREATE TABLE IF NOT EXISTS quote_allowances (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          quote_id INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+          rate_card_allowance_id INTEGER REFERENCES rate_card_allowances(id) ON DELETE SET NULL,
+          name_snapshot TEXT NOT NULL,
+          scope_snapshot TEXT NOT NULL,
+          amount_snapshot REAL NOT NULL DEFAULT 0,
+          unit_cost_snapshot REAL,
+          qty REAL NOT NULL DEFAULT 0,
+          line_revenue REAL NOT NULL DEFAULT 0,
+          line_cost REAL NOT NULL DEFAULT 0,
+          notes TEXT DEFAULT '',
+          sort_order INTEGER NOT NULL DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_quote_allowances_quote ON quote_allowances(quote_id, sort_order);
+      `);
+
+      // Singleton quoting_settings row (required config, not demo data).
+      // Sensible defaults shipped with the module; admins edit on the
+      // /rate-cards/settings page once that UI lands.
+      const existingSettings = db.prepare('SELECT COUNT(*) AS c FROM quoting_settings').get().c;
+      if (existingSettings === 0) {
+        const defaultInclusions = JSON.stringify([
+          'TGS preparation in accordance with TfNSW TcAWS v6.1',
+          'Road Occupancy Licence (ROL) application and coordination',
+          'Site mobilisation and establishment',
+          'Accredited traffic control personnel',
+          'All required signage and equipment',
+          'Public liability insurance ($20M)',
+          'Workers compensation insurance'
+        ]);
+        const defaultExclusions = JSON.stringify([
+          'After-hours / weekend rates (charged at applicable penalty rates unless quoted)',
+          'Additional services not specified in this quotation',
+          'Council fees, permits and statutory charges',
+          'Extended standby beyond contracted hours',
+          'Damage to or theft of equipment due to client or third-party action',
+          'Variations to scope — to be quoted separately'
+        ]);
+        const defaultTerms = [
+          '**Validity:** This quote is valid for 30 days from quote date unless otherwise stated.',
+          '',
+          '**Payment Terms:** Net 30 days from date of invoice.',
+          '',
+          '**Cancellation:** Cancellations within 2 hours of shift commencement (or 4 hours for TMA/LTMA operators) incur the minimum booking period.',
+          '',
+          '**Variations:** Any changes to the scope will be quoted separately and require written approval before commencement.',
+          '',
+          '**Insurance:** T&S Traffic Management maintains Public Liability ($20M) and Workers Compensation insurance.'
+        ].join('\n');
+
+        db.prepare(`
+          INSERT INTO quoting_settings (
+            id, gst_rate, margin_healthy_threshold, margin_watch_threshold,
+            quote_number_format, default_validity_days,
+            company_inclusions_defaults_json, company_exclusions_defaults_json,
+            company_terms_default, default_within_50km,
+            tma_non_ts_vehicle_surcharge_pct
+          ) VALUES (1, 0.10, 25.0, 15.0, 'TS-QTE-{YYYY}-{NNN}', 30, ?, ?, ?, 1, 20.0)
+        `).run(defaultInclusions, defaultExclusions, defaultTerms);
+      }
+
+      recordMigration.run(238, 'Quoting Module — schema');
+      console.log('Migration 238 applied: Quoting Module schema (11 tables, indexes, settings singleton)');
+    } catch (e) {
+      console.error('Migration 238 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 239: induction time + reminder log
   //
   // Adds an `induction_time` column to seek_applicants so admins can put
   // a clock time alongside the induction date in the recruitment tracker,
@@ -10242,8 +11289,8 @@ function runMigrations(db) {
   // induction. Unique tuple is (applicant_id, days_out, induction_date)
   // so re-scheduling regenerates the window.
   // =============================================
-  if (!isMigrationApplied.get(222)) {
-    console.log('Running migration 222: induction_time + induction_reminder_log');
+  if (!isMigrationApplied.get(239)) {
+    console.log('Running migration 239: induction_time + induction_reminder_log');
     try {
       try { db.exec("ALTER TABLE seek_applicants ADD COLUMN induction_time TEXT DEFAULT ''"); } catch (e) { /* column may exist */ }
       db.exec(`
@@ -10257,10 +11304,10 @@ function runMigrations(db) {
         );
         CREATE INDEX IF NOT EXISTS idx_induction_rem_log_applicant ON induction_reminder_log(applicant_id);
       `);
-      recordMigration.run(222, 'seek_applicants.induction_time + induction_reminder_log');
-      console.log('Migration 222 applied: induction_time + induction_reminder_log');
+      recordMigration.run(239, 'seek_applicants.induction_time + induction_reminder_log');
+      console.log('Migration 239 applied: induction_time + induction_reminder_log');
     } catch (e) {
-      console.error('Migration 222 error:', e.message);
+      console.error('Migration 239 error:', e.message);
     }
   }
 

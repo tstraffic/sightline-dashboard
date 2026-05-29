@@ -28,7 +28,7 @@
   // Upcoming shifts are the single most important thing on this page —
   // lift them to right after Today's shift so workers see what's next
   // without scrolling. Compliance + actions slot in below.
-  const defaultOrder = ['hero','birthdays','manager','today','upcoming','weather','compliance','safety','actions','week','jobpack','timeline','cards','streaks','activity'];
+  const defaultOrder = ['hero','birthdays','manager','today','upcoming','weather','compliance','rate','safety','actions','week','jobpack','timeline','cards','streaks','activity'];
   // Weather was previously buried near the bottom and a few users hid it
   // via Customise Home before realising it covered their next site.
   // Force it back into view: lift in the default order AND scrub it out
@@ -365,7 +365,7 @@
   .wh-qa-lbl { font-size: 0.68rem; font-weight: 600; line-height: 1.1; }
   .wh-qa-ic.g { background: rgba(16,185,129,0.15); color: #34D399; }
   .wh-qa-ic.r { background: rgba(239,68,68,0.15); color: #F87171; }
-  .wh-qa-ic.b { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); }
+  .wh-qa-ic.b { background: rgba(59,130,246,0.15); color: #60A5FA; }
   .wh-qa-ic.y { background: rgba(245,158,11,0.15); color: #F59E0B; }
   .wh-qa-ic.p { background: rgba(167,139,250,0.15); color: #A78BFA; }
   .wh-qa-ic.t { background: rgba(16,185,129,0.15); color: #34D399; }
@@ -518,6 +518,62 @@
   :root[data-theme="light"] .wh-card-dismiss { color: #9CA3AF; background: #F3F4F6; }
   :root[data-theme="light"] .wh-card-dismiss:hover { color: #111827; background: #E5E7EB; }
   :root[data-theme="light"] .wh-card-ic.blue { background: #EFF6FF; color: #2563EB; }
+
+  /* Hero pane + stat tiles — the dark charcoal #1A1D24 was being painted
+     over the light page surface, which made the whole top of the home
+     screen feel like a different theme. Flip the surface to white-on-
+     page so it reads as part of the light theme, drop the dark gradients
+     on the stat tiles, and re-colour every text token. The four
+     coloured icon chips (clock / check / calendar / leave) keep their
+     hues but get desaturated backgrounds that read on white. */
+  :root[data-theme="light"] .wh-hero {
+    background: #FFFFFF !important;
+    border-color: #E5E7EB !important;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04);
+  }
+  :root[data-theme="light"] .wh-hero-sub   { color: #6B7280 !important; }
+  :root[data-theme="light"] .wh-hero-greet { color: #0F1115 !important; }
+  /* Context-line colours per kind — slightly darker than the dark-mode
+     pale variants so they hit AA contrast on white. */
+  :root[data-theme="light"] .wh-hero-ctx              { color: #047857; }
+  :root[data-theme="light"] .wh-hero-ctx.shift        { color: #92400E; }
+  :root[data-theme="light"] .wh-hero-ctx.compliance   { color: #9F1239; }
+  :root[data-theme="light"] .wh-hero-ctx.leave        { color: #5B21B6; }
+  :root[data-theme="light"] .wh-hero-ctx.payslip     { color: #047857; }
+  :root[data-theme="light"] .wh-hero-ctx.birthday,
+  :root[data-theme="light"] .wh-hero-ctx.anniversary  { color: #9D174D; }
+
+  :root[data-theme="light"] .wh-stat {
+    background-color: #F9FAFB !important;
+    background-image: none !important;
+    border-color: #E5E7EB !important;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04) !important;
+  }
+  :root[data-theme="light"] .wh-stat-label { color: #6B7280 !important; }
+  :root[data-theme="light"] .wh-stat-value { color: #0F1115 !important; }
+  :root[data-theme="light"] .wh-stat-unit  { color: #9CA3AF !important; }
+  :root[data-theme="light"] .wh-stat-sub   { color: #6B7280 !important; }
+  :root[data-theme="light"] .wh-stat.hrs   .wh-stat-ico { background: #EFF6FF; color: #2563EB; }
+  :root[data-theme="light"] .wh-stat.days  .wh-stat-ico { background: #ECFDF5; color: #047857; }
+  :root[data-theme="light"] .wh-stat.up    .wh-stat-ico { background: #FFFBEB; color: #B45309; }
+  :root[data-theme="light"] .wh-stat.leave .wh-stat-ico { background: #F5F3FF; color: #6D28D9; }
+
+  /* The 4 home stat tiles render via the shared .wd-stat-tile partial.
+     The global .wd-stat-tile light override (above, ~L495) paints them
+     white — which is correct on the page background but invisible when
+     they're nested inside the now-white hero card. Re-skin only the
+     in-hero copy to a light grey so they read as four discrete tiles
+     against the hero. !important matches the override they're
+     overriding. */
+  :root[data-theme="light"] .wh-hero .wd-stat-tile {
+    background-color: #F3F4F6 !important;
+    border-color: #E5E7EB !important;
+    box-shadow: 0 1px 1px rgba(15,17,21,0.03) !important;
+  }
+  :root[data-theme="light"] .wh-hero .wd-stat-tile-label { color: #4B5563 !important; }
+  :root[data-theme="light"] .wh-hero .wd-stat-tile-value { color: #0F1115 !important; }
+  :root[data-theme="light"] .wh-hero .wd-stat-tile-unit  { color: #6B7280 !important; }
+  :root[data-theme="light"] .wh-hero .wd-stat-tile-sub   { color: #4B5563 !important; }
 </style>
 
 <div class="wh-wrap">
@@ -695,6 +751,70 @@
       <% }) %>
     </div>
   <% } %>
+<% } %>
+
+<%
+  // "Your rate" teaser — compact card linking to /w/hr where the full
+  // breakdown lives. Renders when the worker has either an assigned
+  // tier OR an active Night 5+ run (so unconfigured workers don't see
+  // an empty card, but workers in the middle of a 5+ run see the
+  // callout even if their tier hasn't been set yet).
+%>
+<% if (section === 'rate' && !hidden.includes('rate') && (typeof employee !== 'undefined' && employee) && (employee.tier || (typeof nightRunActive !== 'undefined' && nightRunActive))) {
+  const pt = (employee.payment_type || '').toLowerCase();
+  const PT_LABEL = { cash: 'Cash', abn: 'ABN', tfn: 'TFN / Award' };
+  // Pick the most relevant headline rate per payment type.
+  const headlineRate = parseFloat(employee.rate_day) || 0;
+  const fmtRD = iso => new Date(iso + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+%>
+  <a href="/w/hr" class="wh-rate-card" style="
+    display: block; text-decoration: none; margin-top: 12px;
+    padding: 14px 16px; border-radius: 16px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    transition: background 120ms ease;
+  ">
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <div style="width: 38px; height: 38px; border-radius: 12px;
+                  background: linear-gradient(135deg, #2B7FFF, #1D6AE5);
+                  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+                  box-shadow: 0 4px 10px rgba(43,127,255,0.35);">
+        <svg style="width: 18px; height: 18px; color: white;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+      </div>
+      <div style="flex: 1; min-width: 0;">
+        <p style="font-size: 0.65rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin: 0;">Your rate</p>
+        <% if (employee.tier && typeof tierMeta !== 'undefined' && tierMeta) { %>
+          <p style="font-size: 0.95rem; font-weight: 700; color: white; margin: 2px 0 0;">Tier <%= employee.tier %> · <%= tierMeta.role_label %></p>
+          <p style="font-size: 0.72rem; color: rgba(255,255,255,0.55); margin: 2px 0 0;">
+            <% if (pt) { %><%= PT_LABEL[pt] || pt.toUpperCase() %><% } %>
+            <% if (headlineRate > 0) { %> · $<%= headlineRate.toFixed(2) %>/hr base<% } %>
+          </p>
+        <% } else { %>
+          <p style="font-size: 0.95rem; font-weight: 700; color: white; margin: 2px 0 0;">Tap to see your pay rates</p>
+          <p style="font-size: 0.72rem; color: rgba(255,255,255,0.55); margin: 2px 0 0;">No tier assigned yet — speak to your supervisor.</p>
+        <% } %>
+      </div>
+      <svg style="width: 16px; height: 16px; color: rgba(255,255,255,0.4); flex-shrink: 0;" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+      </svg>
+    </div>
+
+    <% if (typeof nightRunActive !== 'undefined' && nightRunActive) { %>
+      <div style="margin-top: 10px; padding: 8px 10px; border-radius: 10px;
+                  background: rgba(245,158,11,0.12); border: 1px solid rgba(245,158,11,0.3);
+                  display: flex; align-items: flex-start; gap: 8px;">
+        <svg style="width: 14px; height: 14px; color: #FBBF24; flex-shrink: 0; margin-top: 1px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/>
+        </svg>
+        <p style="font-size: 0.72rem; color: #FBBF24; margin: 0; line-height: 1.35;">
+          <strong style="font-weight: 700;">Night 5+ active</strong> ·
+          <%= nightRunActive.length %> nights in a row (<%= fmtRD(nightRunActive.start_date) %>–<%= fmtRD(nightRunActive.end_date) %>) being paid at the lower 5+ rate.
+        </p>
+      </div>
+    <% } %>
+  </a>
 <% } %>
 
 <% if (section === 'manager' && typeof isManager !== 'undefined' && isManager) { %>
@@ -888,8 +1008,17 @@
   </div>
 <% } %>
 
-<% if (section === 'safety' && !hidden.includes('safety') && safetyCounts && (safetyCounts.unread > 0 || safetyCounts.swmsNeedsAck > 0 || safetyCounts.sopNeedsAck > 0 || safetyCounts.quizzesOutstanding > 0)) { %>
-  <div class="wh-section-head"><span class="wh-section-title">Safety</span></div>
+<% if (section === 'safety' && !hidden.includes('safety') && safetyCounts) {
+     // Show the Safety section whenever counts are available — even with
+     // nothing urgent, workers still want a one-tap entry into Updates
+     // from the home page (rather than having to dive through the
+     // bottom-tab Safety section first). The unread/needs-ack banners
+     // remain conditional below.
+%>
+  <div class="wh-section-head">
+    <span class="wh-section-title">Safety</span>
+    <a href="/w/safety/updates" class="wh-section-link">Updates ›</a>
+  </div>
   <div style="display: flex; flex-direction: column; gap: 8px;">
     <% if (safetyCounts.swmsNeedsAck > 0) { %>
       <a href="/w/safety/swms" class="wh-cta-alert wh-cta-alert--rose">
@@ -935,6 +1064,20 @@
         <div class="wh-cta-alert__body">
           <p class="wh-cta-alert__title"><%= safetyCounts.unread %> unread safety update<%= safetyCounts.unread === 1 ? '' : 's' %></p>
           <p class="wh-cta-alert__sub">Tap to read the latest bulletins</p>
+        </div>
+        <svg class="wh-cta-alert__chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+      </a>
+    <% } else if (safetyCounts.swmsNeedsAck === 0 && safetyCounts.sopNeedsAck === 0 && safetyCounts.quizzesOutstanding === 0) { %>
+      <!-- Nothing urgent — still surface Updates as a passive entry so
+           workers can reach the bulletin feed straight from home rather
+           than tab-hopping. -->
+      <a href="/w/safety/updates" class="wh-cta-alert wh-cta-alert--feed">
+        <div class="wh-cta-alert__icon" style="background: rgba(16,185,129,0.12); color: #10B981;">
+          <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"/></svg>
+        </div>
+        <div class="wh-cta-alert__body">
+          <p class="wh-cta-alert__title">Safety updates</p>
+          <p class="wh-cta-alert__sub">All caught up — view the latest bulletins</p>
         </div>
         <svg class="wh-cta-alert__chev" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
       </a>
@@ -1027,7 +1170,7 @@
   <div class="wh-qa">
     <a href="/w/forms/prestart" class="wh-qa-btn"><div class="wh-qa-ic g"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></div><span class="wh-qa-lbl">Pre-Start</span></a>
     <a href="/w/forms/incident" class="wh-qa-btn"><div class="wh-qa-ic r"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg></div><span class="wh-qa-lbl">Incident</span></a>
-    <a href="/w/dockets" class="wh-qa-btn"><div class="wh-qa-ic b"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg></div><span class="wh-qa-lbl">Dockets</span></a>
+    <a href="/w/dockets" class="wh-qa-btn"><div class="wh-qa-ic b"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg></div><span class="wh-qa-lbl">Dockets</span></a>
     <a href="/w/forms" class="wh-qa-btn"><div class="wh-qa-ic p"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg></div><span class="wh-qa-lbl">Forms</span></a>
   </div>
 <% } %>

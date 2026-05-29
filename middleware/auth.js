@@ -34,6 +34,10 @@ const PERMISSIONS = {
   jobs:          ['admin', 'operations', 'planning', 'finance', 'management'],
   projects:      ['admin', 'operations', 'planning', 'finance', 'management'],
   tenders:       ['admin', 'planning', 'management'],
+  // Quotes = fixed-price offers for a known scope (vs. tenders = competitive
+  // bid submissions). Same office cohort as tenders. Margin/cost columns
+  // inside the module are gated separately by canViewInternalCost.
+  quoting:       ['admin', 'planning', 'management'],
   clients:       ['admin', 'operations', 'planning', 'finance', 'hr', 'management', 'accounts'],
   notifications: ['admin', 'operations', 'planning', 'finance', 'hr', 'management', 'accounts', 'safety'],
 
@@ -46,6 +50,7 @@ const PERMISSIONS = {
   allocations:   ['admin', 'operations'],
   schedule:      ['admin', 'operations'],
   equipment:     ['admin', 'operations'],
+  fleet:         ['admin', 'operations'],
   defects:       ['admin', 'operations'],
   documents:     ['admin', 'operations', 'finance'],
   bookings:      ['admin', 'operations'],

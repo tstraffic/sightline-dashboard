@@ -5,13 +5,36 @@
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
   const allocatedSet = new Set(allocatedIds);
+  // Meeting timing — used to derive the "Absent" label for workers who
+  // RSVP'd attending but never signed off after a past meeting.
+  const heldMs = toolbox.held_at ? new Date(toolbox.held_at + 'T00:00:00').getTime() : null;
+  const isPastMeeting = heldMs !== null && heldMs <= Date.now();
+
+  // Header summary counts — same vocabulary the worker app uses.
+  // "Absent" is the derived state (attending + past + no sign-off) plus
+  // pending-on-past-meetings; not stored as its own DB value.
+  const summary = { attended: 0, attending: 0, absent: 0, notAttending: 0, caughtUp: 0, pending: 0 };
+  rows.forEach(r => {
+    const s = r.attendance_status;
+    if (s === 'attended') summary.attended++;
+    else if (s === 'caught_up') summary.caughtUp++;
+    else if (s === 'absent') summary.notAttending++;
+    else if (s === 'attending') {
+      if (isPastMeeting && !r.signed_off_at) summary.absent++;
+      else summary.attending++;
+    } else {
+      if (isPastMeeting) summary.absent++;
+      else summary.pending++;
+    }
+  });
+  const totalInvitees = rows.length;
 %>
 
 <div class="max-w-5xl mx-auto space-y-5">
   <div>
     <a href="/toolbox-talks/<%= toolbox.id %>" class="text-sm text-brand-600 hover:underline">← <%= toolbox.title %></a>
     <h1 class="text-2xl font-bold text-gray-900 mt-1">Attendance</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Tick everyone who was there. "Caught up" rows are self-claimed by workers and aren't overwritten by this form.</p>
+    <p class="text-sm text-gray-500 mt-0.5">Workers sign off their own attendance from the portal — those rows show <strong>Attended ✓</strong> with the signature timestamp. Use the dropdown to set status on behalf of any worker (no phone, missed signoff, late cancel, etc.). "Caught up" is reserved for worker self-claim.</p>
   </div>
 
   <!-- Tabs -->
@@ -20,16 +43,136 @@
     <span class="px-4 py-2 -mb-px border-b-2 border-brand-600 text-brand-700 text-sm font-semibold">Attendance</span>
   </div>
 
-  <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/attendance" class="bg-white border border-gray-200 rounded-xl shadow-sm">
+  <!-- Sign-off QR — project this in the meeting room. Workers scan,
+       pick their name, sign with their finger, and the row flips to
+       Attended ✓ here (auto-loaded on next page render) and unlocks
+       the post-attendance Materials in the worker portal. -->
+  <% if (attendanceUrl) { %>
+    <div class="bg-gradient-to-br from-brand-50 to-emerald-50 border border-brand-200 rounded-xl shadow-sm p-5">
+      <div class="flex flex-col sm:flex-row items-start gap-4">
+        <div class="bg-white p-3 rounded-lg shadow-sm flex-shrink-0">
+          <div id="att-qr" style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 11px;">Loading QR…</div>
+        </div>
+        <div class="flex-1 min-w-0 space-y-2">
+          <p class="text-[10px] font-bold text-brand-700 uppercase tracking-widest">Sign-off QR · project in the meeting room</p>
+          <p class="text-sm text-gray-700">
+            Workers scan, pick their name, sign with their finger. Their row here flips to <strong>Attended ✓</strong> and post-attendance materials unlock on their phone.
+          </p>
+          <div class="flex items-center gap-2">
+            <input id="att-url" type="text" readonly value="<%= attendanceUrl %>" onclick="this.select()"
+              class="flex-1 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg text-gray-800 font-mono min-w-0">
+            <button type="button" id="att-url-copy" class="inline-flex items-center gap-1 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg flex-shrink-0">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              Copy
+            </button>
+            <a href="<%= attendanceUrl %>" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg flex-shrink-0">
+              Preview
+            </a>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script>
+      (function () {
+        var box = document.getElementById('att-qr');
+        if (window.QRCode && box) {
+          box.innerHTML = '';
+          try {
+            new QRCode(box, {
+              text: <%- JSON.stringify(attendanceUrl) %>,
+              width: 180, height: 180,
+              colorDark: '#111827', colorLight: '#ffffff',
+              correctLevel: QRCode.CorrectLevel.M,
+            });
+          } catch (e) { box.textContent = 'QR render failed — share the URL below instead.'; }
+        } else if (box) {
+          box.textContent = 'QR library failed to load — share the URL below.';
+        }
+        var copyBtn = document.getElementById('att-url-copy');
+        if (copyBtn) copyBtn.addEventListener('click', function () {
+          var i = document.getElementById('att-url');
+          (navigator.clipboard ? navigator.clipboard.writeText(i.value) : Promise.reject())
+            .then(function () { var t = copyBtn.textContent; copyBtn.textContent = 'Copied!'; setTimeout(function () { copyBtn.textContent = t; }, 1500); })
+            .catch(function () { i.select(); document.execCommand('copy'); });
+        });
+      })();
+    </script>
+  <% } %>
+
+  <!-- Status summary — live counts that match the worker portal's
+       vocabulary. Updates client-side as the dropdowns are flipped so
+       admins can see the running totals before they hit Save. -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs" data-att-summary>
+    <div class="bg-white border border-gray-200 rounded-lg px-3 py-2">
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Total invited</div>
+      <div class="text-lg font-bold text-gray-900 tabular-nums mt-0.5" data-summary-total><%= totalInvitees %></div>
+    </div>
+    <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">Attended</div>
+      <div class="text-lg font-bold text-emerald-900 tabular-nums mt-0.5" data-summary-attended><%= summary.attended %></div>
+    </div>
+    <div class="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-blue-700">Attending</div>
+      <div class="text-lg font-bold text-blue-900 tabular-nums mt-0.5" data-summary-attending><%= summary.attending %></div>
+    </div>
+    <div class="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-rose-700">Absent</div>
+      <div class="text-lg font-bold text-rose-900 tabular-nums mt-0.5" data-summary-absent><%= summary.absent %></div>
+    </div>
+    <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-amber-700">Not attending</div>
+      <div class="text-lg font-bold text-amber-900 tabular-nums mt-0.5" data-summary-notattending><%= summary.notAttending %></div>
+    </div>
+    <div class="bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
+      <div class="text-[10px] font-semibold uppercase tracking-wider text-violet-700">Caught up</div>
+      <div class="text-lg font-bold text-violet-900 tabular-nums mt-0.5" data-summary-caughtup><%= summary.caughtUp %></div>
+    </div>
+  </div>
+  <% if (summary.pending > 0) { %>
+    <p class="text-xs text-gray-500 -mt-2">Plus <span class="font-semibold text-gray-700" data-summary-pending><%= summary.pending %></span> pending (no response yet).</p>
+  <% } else { %>
+    <p class="hidden text-xs text-gray-500 -mt-2" data-summary-pending-wrap>Plus <span class="font-semibold text-gray-700" data-summary-pending>0</span> pending (no response yet).</p>
+  <% } %>
+
+  <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/attendance" class="bg-white border border-gray-200 rounded-xl shadow-sm" id="att-form">
     <%- include('../partials/csrf') %>
     <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
       <div class="flex items-center gap-3 flex-wrap text-xs text-gray-500">
         <span><%= allocatedIds.length %> workers were allocated on <%= toolbox.held_at %></span>
       </div>
-      <div class="flex items-center gap-2">
-        <button type="button" onclick="document.querySelectorAll('.tb-att-row input[type=checkbox]').forEach(c => c.checked = false)" class="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded">Clear all</button>
+      <div class="flex items-center gap-2 flex-wrap">
+        <div class="relative" data-add-invitee>
+          <button type="button" data-add-invitee-toggle class="px-3 py-1.5 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded inline-flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Add worker
+          </button>
+          <div data-add-invitee-pop class="hidden absolute right-0 top-full mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2">
+            <% if (isOpenToAll) { %>
+              <p class="text-xs text-gray-600 px-2 py-1.5">This toolbox is currently <strong>open to everyone</strong> — every active crew member is already invited. Use <em>Remove</em> on any row to scope the invite list first.</p>
+            <% } else if (!selectableCrew || !selectableCrew.length) { %>
+              <p class="text-xs text-gray-600 px-2 py-1.5">All active crew are already on the invite list.</p>
+            <% } else { %>
+              <input type="text" data-add-invitee-search placeholder="Search by name or ID…" class="block w-full px-2 py-1.5 text-xs border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500 mb-1.5">
+              <div data-add-invitee-list class="max-h-56 overflow-y-auto">
+                <% selectableCrew.forEach(cm => { %>
+                  <button type="button" data-add-invitee-crew-id="<%= cm.id %>" data-add-invitee-crew-name="<%= cm.full_name %>" data-add-invitee-crew-emp="<%= cm.employee_id || '' %>"
+                          data-name="<%= (cm.full_name || '').toLowerCase() %>" data-emp="<%= (cm.employee_id || '').toLowerCase() %>"
+                          class="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 rounded flex items-center justify-between gap-2">
+                    <span class="font-medium text-gray-800"><%= cm.full_name %></span>
+                    <span class="text-gray-500 tabular-nums"><%= cm.employee_id || '' %></span>
+                  </button>
+                <% }) %>
+              </div>
+              <p class="text-[11px] text-gray-400 mt-1.5 px-1" data-add-invitee-empty hidden>No matches.</p>
+            <% } %>
+          </div>
+        </div>
+        <button type="button" data-bulk="pending" class="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded">Clear all</button>
+        <button type="button" data-bulk="attending" class="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded">Mark all attending</button>
+        <button type="button" data-bulk="attended" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded">Mark all attended</button>
         <% if (allocatedIds.length) { %>
-          <button type="button" onclick="document.querySelectorAll('.tb-att-row[data-allocated=&quot;1&quot;] input[type=checkbox]').forEach(c => c.checked = true)" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded">Tick allocated on this date</button>
+          <button type="button" data-bulk-allocated="attended" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded">Attended: allocated only</button>
         <% } %>
         <button type="submit" class="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded">Save attendance</button>
       </div>
@@ -37,10 +180,10 @@
     <table class="min-w-full text-sm">
       <thead class="bg-gray-50 border-b border-gray-200">
         <tr>
-          <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest w-12">Attended</th>
           <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Worker</th>
           <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Employee ID</th>
-          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Status</th>
+          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest w-48">Set status</th>
+          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Current</th>
           <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Recorded</th>
           <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest w-20">Invite</th>
         </tr>
@@ -48,38 +191,62 @@
       <tbody class="divide-y divide-gray-100">
         <% rows.forEach(r => {
           const isAllocated = allocatedSet.has(r.crew_id);
-          const isAttended  = r.attendance_status === 'attended';
-          const isAttending = r.attendance_status === 'attending';
-          const isCaughtUp  = r.attendance_status === 'caught_up';
-          const isAbsent    = r.attendance_status === 'absent';
+          const cur = r.attendance_status || '';
+          const isAttended  = cur === 'attended';
+          const isAttending = cur === 'attending';
+          const isCaughtUp  = cur === 'caught_up';
+          const isAbsent    = cur === 'absent';
+          const isPending   = !cur;
+          const isDerivedAbsent = isAttending && isPastMeeting && !r.signed_off_at;
+          // The dropdown's selected value reflects the stored status; the
+          // derived "Absent" label is for the Current column only.
+          const dropdownValue = cur;
+          const reasonText = (r.absence_reason || '').toString();
         %>
-          <tr class="tb-att-row hover:bg-gray-50/50" data-allocated="<%= isAllocated ? '1' : '0' %>" data-crew-id="<%= r.crew_id %>">
-            <td class="px-3 py-2">
-              <% if (isCaughtUp) { %>
-                <span class="text-xs text-violet-700" title="Worker self-claimed caught up">↻</span>
-              <% } else { %>
-                <input type="checkbox" name="attended_crew_ids" value="<%= r.crew_id %>" <%= isAttended ? 'checked' : '' %> class="w-4 h-4 text-brand-600 border-gray-300 rounded focus:ring-brand-500">
-              <% } %>
-            </td>
+          <tr class="tb-att-row hover:bg-gray-50/50 align-top" data-allocated="<%= isAllocated ? '1' : '0' %>" data-crew-id="<%= r.crew_id %>" data-signed-off="<%= r.signed_off_at ? '1' : '0' %>">
+            <input type="hidden" name="manageable_crew_ids[]" value="<%= r.crew_id %>">
             <td class="px-3 py-2 text-sm font-medium text-gray-900">
               <%= r.full_name %>
               <% if (isAllocated) { %><span class="ml-1 text-[10px] text-emerald-600">· allocated</span><% } %>
+              <% if (isCaughtUp) { %><span class="ml-1 text-[10px] text-violet-600" title="Worker self-claimed">↻ self-claim</span><% } %>
             </td>
             <td class="px-2 py-2 text-xs text-gray-500"><%= r.employee_id || '—' %></td>
             <td class="px-2 py-2">
+              <select name="status[<%= r.crew_id %>]" data-status-select class="block w-full text-xs font-semibold rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500" <%= isCaughtUp ? '' : '' %>>
+                <option value=""          <%= isPending   ? 'selected' : '' %>>Pending</option>
+                <option value="attending" <%= isAttending ? 'selected' : '' %>>Attending</option>
+                <option value="attended"  <%= isAttended  ? 'selected' : '' %>>Attended (mark off)</option>
+                <option value="absent"    <%= isAbsent    ? 'selected' : '' %>>Not attending</option>
+                <option value="caught_up" <%= isCaughtUp  ? 'selected' : '' %>>Caught up</option>
+              </select>
+              <input
+                type="text"
+                name="absence_reason[<%= r.crew_id %>]"
+                data-reason-input
+                placeholder="Reason (required)"
+                value="<%= reasonText %>"
+                maxlength="500"
+                class="mt-1.5 block w-full text-xs rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500 <%= isAbsent ? '' : 'hidden' %>"
+              >
+            </td>
+            <td class="px-2 py-2">
               <% if (isAttended) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200">Attended</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200" title="<%= r.signed_off_at ? 'Worker signed off ' + fmt(r.signed_off_at) : 'Marked by office' %>">Attended<% if (r.signed_off_at) { %> ✓<% } %></span>
+              <% } else if (isDerivedAbsent) { %>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-rose-50 text-rose-700 ring-rose-200" title="Said they'd attend but never signed off">Absent</span>
               <% } else if (isAttending) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200">Attending</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-blue-50 text-blue-700 ring-blue-200">Attending</span>
               <% } else if (isCaughtUp) { %>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-violet-50 text-violet-700 ring-violet-200">Caught up</span>
               <% } else if (isAbsent) { %>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200" title="<%= r.absence_reason || 'Declined the invite' %>">Not attending</span>
+              <% } else if (isPending && isPastMeeting) { %>
                 <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-rose-50 text-rose-700 ring-rose-200">Absent</span>
               <% } else { %>
-                <span class="text-xs text-gray-400">—</span>
+                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-gray-100 text-gray-600 ring-gray-200">Pending</span>
               <% } %>
             </td>
-            <td class="px-2 py-2 text-xs text-gray-500 tabular-nums"><%= fmt(r.recorded_at) %></td>
+            <td class="px-2 py-2 text-xs text-gray-500 tabular-nums whitespace-nowrap"><%= fmt(r.signed_off_at || r.recorded_at) %></td>
             <td class="px-2 py-2 text-right">
               <button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>" title="Remove from invite list">Remove</button>
             </td>
@@ -89,10 +256,106 @@
     </table>
   </form>
 
-  <!-- Remove-invite worker. Mounted outside the attendance form so the
-       per-row Remove buttons don't accidentally submit the bulk save. -->
   <script>
     (function () {
+      // Show/hide the absence-reason input as the status dropdown flips.
+      function syncReason(sel) {
+        const row = sel.closest('tr');
+        const reason = row.querySelector('input[data-reason-input]');
+        if (!reason) return;
+        if (sel.value === 'absent') {
+          reason.classList.remove('hidden');
+          reason.setAttribute('required', 'required');
+        } else {
+          reason.classList.add('hidden');
+          reason.removeAttribute('required');
+        }
+      }
+      // Live summary counters at the top — recompute whenever a dropdown
+      // changes so the admin sees the running totals before saving.
+      // "Absent" includes both stored 'absent' values that fall under the
+      // past-meeting derived rule and pending-on-past-meeting rows; here
+      // on the client we keep it simple and treat stored 'absent' as
+      // "Not attending" — the derived past-meeting Absent count only
+      // shifts on server reload, which is fine since save → reload.
+      const isPastMeeting = <%= JSON.stringify(isPastMeeting) %>;
+      function recomputeSummary() {
+        const c = { attended: 0, attending: 0, absent: 0, notAttending: 0, caughtUp: 0, pending: 0 };
+        document.querySelectorAll('select[data-status-select]').forEach(sel => {
+          const v = sel.value;
+          const row = sel.closest('tr');
+          if (v === 'attended') c.attended++;
+          else if (v === 'caught_up') c.caughtUp++;
+          else if (v === 'absent') c.notAttending++;
+          else if (v === 'attending') {
+            const signedOff = row && row.dataset.signedOff === '1';
+            if (isPastMeeting && !signedOff) c.absent++;
+            else c.attending++;
+          } else {
+            if (isPastMeeting) c.absent++;
+            else c.pending++;
+          }
+        });
+        const set = (sel, n) => { const el = document.querySelector(sel); if (el) el.textContent = n; };
+        set('[data-summary-attended]', c.attended);
+        set('[data-summary-attending]', c.attending);
+        set('[data-summary-absent]', c.absent);
+        set('[data-summary-notattending]', c.notAttending);
+        set('[data-summary-caughtup]', c.caughtUp);
+        set('[data-summary-pending]', c.pending);
+        const pendingWrap = document.querySelector('[data-summary-pending-wrap]');
+        if (pendingWrap) pendingWrap.classList.toggle('hidden', c.pending === 0);
+        set('[data-summary-total]', document.querySelectorAll('tr.tb-att-row').length);
+      }
+
+      document.querySelectorAll('select[data-status-select]').forEach(sel => {
+        syncReason(sel);
+        sel.addEventListener('change', () => { syncReason(sel); recomputeSummary(); });
+      });
+
+      // Bulk-set helpers — apply the chosen status to every row at once.
+      // "Attended: allocated only" limits the change to workers who were
+      // on shift the day of the meeting, which is the usual "everyone who
+      // should have been here" subset.
+      function setAll(value, predicate) {
+        document.querySelectorAll('select[data-status-select]').forEach(sel => {
+          const row = sel.closest('tr');
+          if (predicate && !predicate(row)) return;
+          sel.value = value;
+          syncReason(sel);
+        });
+        recomputeSummary();
+      }
+      document.querySelectorAll('button[data-bulk]').forEach(btn => {
+        btn.addEventListener('click', () => setAll(btn.dataset.bulk === 'pending' ? '' : btn.dataset.bulk));
+      });
+      document.querySelectorAll('button[data-bulk-allocated]').forEach(btn => {
+        btn.addEventListener('click', () => setAll(btn.dataset.bulkAllocated, row => row.dataset.allocated === '1'));
+      });
+
+      // Guard rail: don't let the form submit with "Not attending" rows
+      // missing a reason — backend rejects them otherwise.
+      document.getElementById('att-form').addEventListener('submit', (e) => {
+        const bad = [];
+        document.querySelectorAll('select[data-status-select]').forEach(sel => {
+          if (sel.value === 'absent') {
+            const row = sel.closest('tr');
+            const reason = row.querySelector('input[data-reason-input]');
+            if (!reason || !reason.value.trim()) {
+              bad.push(row.querySelector('td')?.innerText?.trim() || 'a worker');
+              if (reason) { reason.focus(); reason.classList.add('ring-2', 'ring-rose-400'); }
+            }
+          }
+        });
+        if (bad.length) {
+          e.preventDefault();
+          alert('Add a reason for: ' + bad.join(', '));
+        }
+      });
+
+      // Remove-from-invite — same flow as before, mounted outside the
+      // attendance form so the per-row Remove button doesn't accidentally
+      // submit the bulk save.
       const csrfMeta = document.querySelector('meta[name="csrf-token"]');
       const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') :
         (document.querySelector('input[name="_csrf"]') || {}).value || '';
@@ -101,7 +364,7 @@
         btn.addEventListener('click', async () => {
           const crewId = btn.getAttribute('data-crew-id');
           const name = btn.getAttribute('data-name') || 'this worker';
-          if (!confirm('Remove ' + name + ' from the invite list? They’ll disappear from this attendance page.')) return;
+          if (!confirm('Remove ' + name + " from the invite list? They'll disappear from this attendance page.")) return;
           btn.disabled = true;
           btn.textContent = 'Removing…';
           try {
@@ -114,6 +377,7 @@
             if (!r.ok || !data.ok) throw new Error(data.error || 'Remove failed');
             const row = btn.closest('tr');
             if (row) row.remove();
+            recomputeSummary();
           } catch (e) {
             alert('Could not remove: ' + e.message);
             btn.disabled = false;
@@ -121,6 +385,131 @@
           }
         });
       });
+
+      // ── Add-worker picker ──────────────────────────────────────────
+      // Toggle the popover, filter as you type, and AJAX-insert a new
+      // table row when a crew member is picked. Hides the picker entry
+      // for that crew so they can't be added twice.
+      const addRoot = document.querySelector('[data-add-invitee]');
+      if (addRoot) {
+        const toggle = addRoot.querySelector('[data-add-invitee-toggle]');
+        const pop = addRoot.querySelector('[data-add-invitee-pop]');
+        const search = addRoot.querySelector('[data-add-invitee-search]');
+        const list = addRoot.querySelector('[data-add-invitee-list]');
+        const empty = addRoot.querySelector('[data-add-invitee-empty]');
+
+        toggle.addEventListener('click', () => {
+          const isOpen = !pop.classList.contains('hidden');
+          if (isOpen) { pop.classList.add('hidden'); return; }
+          pop.classList.remove('hidden');
+          if (search) { search.value = ''; search.focus(); }
+          if (list) list.querySelectorAll('[data-add-invitee-crew-id]').forEach(b => b.classList.remove('hidden'));
+          if (empty) empty.hidden = true;
+        });
+        document.addEventListener('click', (e) => {
+          if (!addRoot.contains(e.target)) pop.classList.add('hidden');
+        });
+        if (search) {
+          search.addEventListener('input', () => {
+            const q = search.value.trim().toLowerCase();
+            let shown = 0;
+            list.querySelectorAll('[data-add-invitee-crew-id]').forEach(btn => {
+              if (btn.dataset.hidden === '1') { btn.classList.add('hidden'); return; }
+              const name = btn.dataset.name || '';
+              const emp  = btn.dataset.emp  || '';
+              const match = !q || name.includes(q) || emp.includes(q);
+              btn.classList.toggle('hidden', !match);
+              if (match) shown++;
+            });
+            if (empty) empty.hidden = shown > 0;
+          });
+        }
+        if (list) {
+          list.addEventListener('click', async (e) => {
+            const btn = e.target.closest('[data-add-invitee-crew-id]');
+            if (!btn) return;
+            const crewId = btn.getAttribute('data-add-invitee-crew-id');
+            const crewName = btn.getAttribute('data-add-invitee-crew-name');
+            const crewEmp  = btn.getAttribute('data-add-invitee-crew-emp') || '';
+            btn.disabled = true;
+            try {
+              const body = new URLSearchParams({ crew_member_id: crewId, _csrf: csrfToken });
+              const r = await fetch('/toolbox-talks/' + toolboxId + '/invitees/add', {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
+                credentials: 'same-origin',
+                body,
+              });
+              const data = await r.json().catch(() => ({}));
+              if (!r.ok || !data.ok) throw new Error(data.error || 'Add failed');
+              if (data.was_already_invited) {
+                alert(crewName + ' is already invited (this toolbox is open to everyone).');
+                return;
+              }
+              // Insert a fresh row into the table, defaulted to Pending.
+              const tbody = document.querySelector('#att-form tbody');
+              const tr = document.createElement('tr');
+              tr.className = 'tb-att-row hover:bg-gray-50/50 align-top';
+              tr.dataset.allocated = '0';
+              tr.dataset.crewId = crewId;
+              tr.dataset.signedOff = '0';
+              tr.innerHTML = (
+                '<input type="hidden" name="manageable_crew_ids[]" value="' + crewId + '">' +
+                '<td class="px-3 py-2 text-sm font-medium text-gray-900">' + crewName + ' <span class="ml-1 text-[10px] text-brand-600">· just added</span></td>' +
+                '<td class="px-2 py-2 text-xs text-gray-500">' + (crewEmp || '—') + '</td>' +
+                '<td class="px-2 py-2">' +
+                  '<select name="status[' + crewId + ']" data-status-select class="block w-full text-xs font-semibold rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500">' +
+                    '<option value="" selected>Pending</option>' +
+                    '<option value="attending">Attending</option>' +
+                    '<option value="attended">Attended (mark off)</option>' +
+                    '<option value="absent">Not attending</option>' +
+                    '<option value="caught_up">Caught up</option>' +
+                  '</select>' +
+                  '<input type="text" name="absence_reason[' + crewId + ']" data-reason-input placeholder="Reason (required)" maxlength="500" class="mt-1.5 block w-full text-xs rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500 hidden">' +
+                '</td>' +
+                '<td class="px-2 py-2"><span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-gray-100 text-gray-600 ring-gray-200">Pending</span></td>' +
+                '<td class="px-2 py-2 text-xs text-gray-500 tabular-nums whitespace-nowrap">—</td>' +
+                '<td class="px-2 py-2 text-right"><button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" data-crew-id="' + crewId + '" data-name="' + crewName + '" title="Remove from invite list">Remove</button></td>'
+              );
+              tbody.appendChild(tr);
+              // Wire the new row's select + remove button into existing handlers.
+              const newSel = tr.querySelector('select[data-status-select]');
+              newSel.addEventListener('change', () => { syncReason(newSel); recomputeSummary(); });
+              const newRemove = tr.querySelector('.tb-remove-invite');
+              newRemove.addEventListener('click', async () => {
+                if (!confirm('Remove ' + crewName + " from the invite list? They'll disappear from this attendance page.")) return;
+                newRemove.disabled = true; newRemove.textContent = 'Removing…';
+                try {
+                  const rr = await fetch('/toolbox-talks/' + toolboxId + '/invitees/' + crewId + '/remove', {
+                    method: 'POST',
+                    headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrfToken },
+                    credentials: 'same-origin',
+                  });
+                  const dd = await rr.json().catch(() => ({}));
+                  if (!rr.ok || !dd.ok) throw new Error(dd.error || 'Remove failed');
+                  tr.remove();
+                  recomputeSummary();
+                  // Re-show the crew in the picker so they can be re-added.
+                  btn.dataset.hidden = '0';
+                  btn.classList.remove('hidden');
+                  btn.disabled = false;
+                } catch (e) {
+                  alert('Could not remove: ' + e.message);
+                  newRemove.disabled = false; newRemove.textContent = 'Remove';
+                }
+              });
+              // Hide this crew in the picker so admin can't double-add.
+              btn.dataset.hidden = '1';
+              btn.classList.add('hidden');
+              pop.classList.add('hidden');
+              recomputeSummary();
+            } catch (e) {
+              alert('Could not add: ' + e.message);
+              btn.disabled = false;
+            }
+          });
+        }
+      }
     })();
   </script>
 </div>

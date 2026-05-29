@@ -201,6 +201,50 @@
 </div>
 <% } %>
 
+<!-- Fleet compliance — vehicles with registration / servicing / inspection /
+     fire-extinguisher items overdue or due in the next 30 days. Compact
+     by design; full breakdown lives on /fleet/compliance. -->
+<% if (typeof fleetCompliance !== 'undefined' && fleetCompliance && fleetCompliance.count > 0) { %>
+<div class="bg-red-50/60 border border-red-200 rounded-2xl p-4 mb-5">
+  <div class="flex items-center justify-between gap-2 mb-3">
+    <div class="flex items-center gap-2">
+      <svg class="w-4 h-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l1.5-5A2 2 0 016.43 6.5h11.14a2 2 0 011.93 1.5L21 13m-18 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1a1 1 0 001-1v-5M3 13h18"/></svg>
+      <h2 class="text-sm font-bold text-red-900">Fleet compliance — needs attention</h2>
+      <span class="text-[10px] font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full"><%= fleetCompliance.count %></span>
+    </div>
+    <a href="/fleet/compliance" class="text-xs font-semibold text-red-800 hover:underline">View all →</a>
+  </div>
+  <ul class="divide-y divide-red-200/70">
+    <% fleetCompliance.sample.forEach(function (v) {
+      const flags = [];
+      if (v.badges.registration.tone === 'bad' || v.badges.registration.tone === 'warn') flags.push({ label: 'Rego',        s: v.badges.registration });
+      if (v.badges.service.tone      === 'bad' || v.badges.service.tone      === 'warn') flags.push({ label: 'Service',     s: v.badges.service });
+      if (v.badges.inspection.tone   === 'bad' || v.badges.inspection.tone   === 'warn') flags.push({ label: 'Inspection',  s: v.badges.inspection });
+      if (v.badges.fireExt.tone      === 'bad' || v.badges.fireExt.tone      === 'warn') flags.push({ label: 'Fire ext.',   s: v.badges.fireExt });
+    %>
+      <li class="py-2 flex items-center justify-between gap-3 text-sm">
+        <div class="min-w-0 flex-1">
+          <a href="/fleet/<%= v.id %>" class="font-medium text-gray-900 hover:underline">
+            <%= v.asset_id %><% if (v.rego) { %> · <span class="text-gray-500 font-normal font-mono"><%= v.rego %></span><% } %>
+          </a>
+          <p class="text-[11px] mt-0.5 flex flex-wrap gap-1">
+            <% flags.forEach(function (f) { %>
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold <%= f.s.tone === 'bad' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800' %>">
+                <%= f.label %>: <%= f.s.label %>
+              </span>
+            <% }) %>
+          </p>
+        </div>
+        <a href="/fleet/<%= v.id %>/edit" class="shrink-0 text-xs font-semibold text-red-700 hover:underline">Update →</a>
+      </li>
+    <% }) %>
+  </ul>
+  <% if (fleetCompliance.count > 5) { %>
+    <p class="text-[11px] text-red-800 mt-2 text-right"><%= fleetCompliance.count - 5 %> more — <a href="/fleet/compliance" class="font-semibold hover:underline">full list</a></p>
+  <% } %>
+</div>
+<% } %>
+
 <!-- Checklist Register — single column, sorted by completion % (lowest first).
      Failing rows rise to the top where attention is actually needed.
      A small delta arrow indicates the change vs last week. -->

@@ -278,18 +278,54 @@
     <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
       <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Worker Declaration</h2>
       <p class="text-xs text-gray-500 italic mb-4">I declare that I have been observed performing the tasks listed above. I agree to operate this equipment only in accordance with the T&amp;S SOP, the relevant SWMS, manufacturer's instructions, and applicable NSW WHS / road regulations.</p>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <div><label class="text-xs font-semibold text-gray-500 uppercase">Worker Name</label><input type="text" name="worker_signed_name" value="<%= a.worker_signed_name || a.worker_name || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
         <div><label class="text-xs font-semibold text-gray-500 uppercase">Date</label><input type="date" name="worker_signed_date" value="<%= fmtDate(a.worker_signed_date) %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+      </div>
+      <!-- Worker signature pad — overrides typed name on the cert if drawn -->
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase">Worker Signature</label>
+        <% if (a.worker_signature_path) { %>
+          <div class="mt-1 px-3 py-2 border border-emerald-300 bg-emerald-50 rounded-lg text-xs text-emerald-800 mb-2 flex items-center justify-between">
+            <span>✓ Signature already on file.</span>
+            <span class="text-emerald-600 text-[10px]">Drawing below replaces it.</span>
+          </div>
+        <% } %>
+        <div class="border border-gray-300 rounded-lg overflow-hidden bg-white">
+          <canvas id="vocFormWorkerSig" class="block w-full touch-none cursor-crosshair" style="height:120px;"></canvas>
+          <div class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 border-t border-gray-200 text-[11px] text-gray-500">
+            <span class="voc-form-sig-hint" data-pad="vocFormWorkerSig">Draw with finger / stylus, or leave blank to use the typed name in cursive on the cert</span>
+            <button type="button" data-clear="vocFormWorkerSig" class="px-2 py-0.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-[10px] font-semibold text-gray-700">Clear</button>
+          </div>
+        </div>
+        <input type="hidden" name="worker_signature_data" id="vocFormWorkerSigData" value="">
       </div>
     </section>
 
     <!-- Assessor Sign-Off -->
     <section class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
       <h2 class="text-sm font-bold uppercase tracking-wider text-brand-700 mb-2">Assessor Sign-Off</h2>
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
         <div><label class="text-xs font-semibold text-gray-500 uppercase">Assessor Name</label><input type="text" name="assessor_signed_name" value="<%= a.assessor_signed_name || a.assessor_name || '' %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
         <div><label class="text-xs font-semibold text-gray-500 uppercase">Date</label><input type="date" name="assessor_signed_date" value="<%= fmtDate(a.assessor_signed_date) %>" class="w-full mt-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></div>
+      </div>
+      <!-- Assessor signature pad — overrides typed name on the cert if drawn -->
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase">Assessor Signature</label>
+        <% if (a.assessor_signature_path) { %>
+          <div class="mt-1 px-3 py-2 border border-emerald-300 bg-emerald-50 rounded-lg text-xs text-emerald-800 mb-2 flex items-center justify-between">
+            <span>✓ Signature already on file.</span>
+            <span class="text-emerald-600 text-[10px]">Drawing below replaces it.</span>
+          </div>
+        <% } %>
+        <div class="border border-gray-300 rounded-lg overflow-hidden bg-white">
+          <canvas id="vocFormAssessorSig" class="block w-full touch-none cursor-crosshair" style="height:120px;"></canvas>
+          <div class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 border-t border-gray-200 text-[11px] text-gray-500">
+            <span class="voc-form-sig-hint" data-pad="vocFormAssessorSig">Draw with finger / stylus, or leave blank to use the typed name in cursive on the cert</span>
+            <button type="button" data-clear="vocFormAssessorSig" class="px-2 py-0.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-[10px] font-semibold text-gray-700">Clear</button>
+          </div>
+        </div>
+        <input type="hidden" name="assessor_signature_data" id="vocFormAssessorSigData" value="">
       </div>
     </section>
 
@@ -389,3 +425,63 @@
 </div>
 
 <script src="/js/voc-assessment.js"></script>
+
+<!-- signature_pad — see views/voc-assessments/quick.ejs for the           -->
+<!-- equivalent wiring on the Quick VOC form. Same library, same handling. -->
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script>
+(function () {
+  if (typeof SignaturePad === 'undefined') return;
+  var form = document.querySelector('form[action^="/voc-assessments/"]');
+  if (!form) return;
+
+  function bindPad(canvasId, hiddenId, hintEl) {
+    var canvas = document.getElementById(canvasId);
+    var hidden = document.getElementById(hiddenId);
+    if (!canvas || !hidden) return null;
+    function sizeCanvas() {
+      var ratio = Math.max(window.devicePixelRatio || 1, 1);
+      var newW = (canvas.offsetWidth  || 0) * ratio;
+      var newH = (canvas.offsetHeight || 0) * ratio;
+      if (newW === canvas.width && newH === canvas.height) return;
+      canvas.width  = newW;
+      canvas.height = newH;
+      canvas.getContext('2d').scale(ratio, ratio);
+    }
+    sizeCanvas();
+    window.addEventListener('resize', sizeCanvas);
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(sizeCanvas).observe(canvas);
+    }
+    var pad = new SignaturePad(canvas, {
+      backgroundColor: 'rgba(255,255,255,0)',
+      penColor: '#1f3864',
+      minWidth: 0.8, maxWidth: 2.4,
+    });
+    pad.addEventListener('beginStroke', function () { if (hintEl) hintEl.style.visibility = 'hidden'; });
+    return { pad: pad, hidden: hidden, hintEl: hintEl };
+  }
+
+  var pads = {};
+  document.querySelectorAll('.voc-form-sig-hint').forEach(function (hint) {
+    var canvasId = hint.getAttribute('data-pad');
+    var hiddenId = canvasId + 'Data';
+    var p = bindPad(canvasId, hiddenId, hint);
+    if (p) pads[canvasId] = p;
+  });
+  document.querySelectorAll('[data-clear]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var p = pads[btn.getAttribute('data-clear')];
+      if (!p) return;
+      p.pad.clear();
+      if (p.hintEl) p.hintEl.style.visibility = '';
+    });
+  });
+  form.addEventListener('submit', function () {
+    Object.keys(pads).forEach(function (key) {
+      var p = pads[key];
+      p.hidden.value = p.pad.isEmpty() ? '' : p.pad.toDataURL('image/png');
+    });
+  });
+})();
+</script>

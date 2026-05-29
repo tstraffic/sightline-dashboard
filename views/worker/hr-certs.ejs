@@ -7,6 +7,41 @@
   <h1 class="text-xl font-bold text-gray-900">My Wallet</h1>
   <p class="text-xs text-gray-500 -mt-3">Licences, certifications and documents the office has on file.</p>
 
+  <% if (typeof pendingSigVocs !== 'undefined' && pendingSigVocs && pendingSigVocs.length > 0) { %>
+    <!-- Awaiting-signature panel — hoisted above the regular wallet     -->
+    <!-- so the worker sees the CTA the moment they open the page.       -->
+    <!-- Each row links to the sign canvas; once signed the row falls    -->
+    <!-- out of this panel and joins the regular VOC list below.         -->
+    <div class="bg-amber-50 border-2 border-amber-300 rounded-xl shadow-sm overflow-hidden" data-attention="amber">
+      <div class="px-4 py-3 bg-amber-100/60 border-b border-amber-200 flex items-center gap-2">
+        <svg class="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
+        <h2 class="text-sm font-bold text-amber-900">Awaiting your signature</h2>
+        <span class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-bold tracking-wider"><%= pendingSigVocs.length %></span>
+      </div>
+      <div class="divide-y divide-amber-200">
+        <% pendingSigVocs.forEach(function(v) { %>
+          <div class="p-4">
+            <div class="flex items-start justify-between gap-2 mb-2">
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-semibold text-amber-900"><%= v.equipment_name %></p>
+                <p class="text-[11px] text-amber-700 mt-0.5">
+                  Issued <%= new Date(v.assessment_date).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) %>
+                  <% if (v.voc_number) { %> · <span class="font-mono"><%= v.voc_number %></span><% } %>
+                </p>
+              </div>
+            </div>
+            <p class="text-xs text-amber-800 mb-3 leading-relaxed">Your trainer issued this VOC without your signature. Tap below to sign and acknowledge — the cert PDF will update once you do.</p>
+            <a href="/w/hr/vocs/<%= v.id %>/sign"
+               class="inline-flex items-center justify-center gap-1.5 w-full px-3 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-sm font-bold rounded-lg">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/></svg>
+              Sign now
+            </a>
+          </div>
+        <% }); %>
+      </div>
+    </div>
+  <% } %>
+
   <!-- Crew Member Licence -->
   <% if (member && member.licence_type) { %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
@@ -175,11 +210,13 @@
           const isExpiring = exp && !isExpired && (exp - now) < 30 * 24 * 60 * 60 * 1000;
           const isRevoked = v.certificate_status === 'revoked';
           const isNYC = v.outcome === 'nyc';
+          const needsSig = v.outcome === 'competent' && !isRevoked && v.worker_acknowledgement_status === 'pending';
           let pillClass = 'bg-emerald-50 text-emerald-700';
           let pillLabel = 'Valid';
           if (isRevoked) { pillClass = 'bg-gray-100 text-gray-600'; pillLabel = 'Revoked'; }
           else if (isNYC) { pillClass = 'bg-orange-50 text-orange-700'; pillLabel = 'Not Yet Competent'; }
           else if (isExpired) { pillClass = 'bg-red-50 text-red-700'; pillLabel = 'Expired'; }
+          else if (needsSig) { pillClass = 'bg-amber-50 text-amber-700'; pillLabel = 'Awaiting your signature'; }
           else if (isExpiring) { pillClass = 'bg-amber-50 text-amber-700'; pillLabel = 'Expiring Soon'; }
         %>
           <div class="p-4">

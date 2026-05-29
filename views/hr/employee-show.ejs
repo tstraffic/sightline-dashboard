@@ -139,6 +139,9 @@
           <% if (employee.employee_code) { %><span class="text-xs font-mono text-gray-400"><%= employee.employee_code %></span><% } %>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium <%= statusBadge[employee.employment_status] || statusBadge.inactive %>"><%= (employee.employment_status || 'unknown').replace(/_/g, ' ') %></span>
           <% if (employee.payment_type) { %><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-600"><%= employee.payment_type.toUpperCase() %></span><% } %>
+          <% if (employee.tier) {
+            const TIER_LABELS = { 1: 'Trainee TC', 2: 'Traffic Controller', 3: 'Advanced TC / TMA', 4: 'Team Leader', 5: 'Senior Team Leader', 6: 'Site Supervisor' };
+          %><span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-brand-50 text-brand-700 ring-1 ring-brand-200" title="FY26 Wage Panel">Tier <%= employee.tier %> · <%= TIER_LABELS[employee.tier] || '' %></span><% } %>
           <% if (readiness) { %><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium <%= readinessBadge[readiness.status] || 'bg-gray-100 text-gray-500' %>"><%= readinessLabel[readiness.status] || readiness.status %></span><% } %>
         </div>
       </div>
@@ -210,6 +213,8 @@
       <% var tbCount = (typeof toolboxMeetings !== 'undefined' && toolboxMeetings) ? toolboxMeetings.length : 0; %>
       <% var tbAttendedCount = (typeof toolboxMeetings !== 'undefined' && toolboxMeetings) ? toolboxMeetings.filter(function (m) { return m.my_status === 'attended' || m.my_status === 'caught_up'; }).length : 0; %>
       <button onclick="switchEmpTab('toolbox-meetings')" data-tab="toolbox-meetings" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Toolbox Meetings <% if (tbCount > 0) { %><span class="ml-1 bg-gray-100 text-gray-600 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= tbAttendedCount %>/<%= tbCount %></span><% } %></button>
+      <% var _revs = (typeof reviews !== 'undefined' && reviews) ? reviews : []; %>
+      <button onclick="switchEmpTab('reviews')" data-tab="reviews" class="emp-tab whitespace-nowrap pb-3 px-1 border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-medium transition cursor-pointer">Reviews <% if (_revs.length > 0) { %><span class="ml-1 bg-indigo-50 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full"><%= _revs.length %></span><% } %></button>
     </nav>
   </div>
 
@@ -277,14 +282,85 @@
         <!-- Pay Rates (Admin / Finance only) -->
         <% if (typeof showRates !== 'undefined' && showRates) { %>
         <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
-          <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Pay Rates</h2>
-          <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
-            <% const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_ot:'Night OT',rate_night_dt:'Night DT',rate_travel:'Travel',rate_meal:'Meal',rate_weekend:'Weekend'}; %>
-            <% Object.entries(rateLabels).forEach(([key, label]) => { %>
+          <div class="flex items-start justify-between mb-3 gap-2">
             <div>
-              <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"><%= label %></p>
-              <p class="text-lg font-bold text-gray-900 mt-0.5">$<%= (employee[key] || 0).toFixed(2) %></p>
+              <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Pay Rates</h2>
+              <% if (employee.tier) {
+                const TIER_LABELS = { 1: 'Trainee TC', 2: 'Traffic Controller', 3: 'Advanced TC / TMA', 4: 'Team Leader', 5: 'Senior Team Leader', 6: 'Site Supervisor' };
+                const TIER_AWARDS = { 1: 'CW1(a)', 2: 'CW1(c)', 3: 'CW2 / CW3', 4: 'CW3 + LH', 5: 'CW4 + LH', 6: 'CW5 + LH' };
+              %>
+                <p class="text-xs text-gray-500 mt-1">
+                  Tier <%= employee.tier %> · <span class="font-medium text-gray-700"><%= TIER_LABELS[employee.tier] %></span>
+                  <span class="font-mono text-[10px] text-gray-400 ml-1"><%= TIER_AWARDS[employee.tier] %></span>
+                  · <%= (employee.payment_type || '').toUpperCase() || 'Unclassified' %>
+                </p>
+              <% } else { %>
+                <p class="text-xs text-amber-600 mt-1">No tier assigned — pick one below to stamp rates from the wage panel.</p>
+              <% } %>
             </div>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <% if (employee.tier) { %>
+                <button type="button" onclick="document.getElementById('tierAssignForm').classList.toggle('hidden')" class="text-[10px] text-brand-600 hover:underline whitespace-nowrap">Change tier</button>
+              <% } %>
+              <a href="/payroll/wage-tiers" class="text-[10px] text-brand-600 hover:underline whitespace-nowrap">View panel →</a>
+            </div>
+          </div>
+
+          <!--
+            Inline tier picker. On submit, /hr/employees/:id/assign-tier
+            calls stampEmployeeRates which writes tier + payment_type +
+            night_pattern + all rate_* columns from the matching wage_tier_presets
+            row, so the change propagates to /payroll/rates, the worker
+            portal's "Your rate" card, and the next pay run automatically.
+          -->
+          <form method="POST" action="/hr/employees/<%= employee.id %>/assign-tier"
+                id="tierAssignForm"
+                class="<%= employee.tier ? 'hidden' : '' %> mb-4 p-3 bg-brand-50/50 border border-brand-100 rounded-lg">
+            <%- include('../partials/csrf') %>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-2">
+              <label class="block">
+                <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Tier</span>
+                <select name="tier" required class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                  <option value="">— Pick tier —</option>
+                  <% [1,2,3,4,5,6].forEach(t => {
+                    const TIER_OPTS = { 1: 'Trainee TC', 2: 'Traffic Controller', 3: 'Advanced TC / TMA', 4: 'Team Leader', 5: 'Senior Team Leader', 6: 'Site Supervisor' };
+                  %>
+                    <option value="<%= t %>" <%= employee.tier == t ? 'selected' : (t === 2 && !employee.tier ? 'selected' : '') %>>Tier <%= t %> · <%= TIER_OPTS[t] %></option>
+                  <% }) %>
+                </select>
+              </label>
+              <label class="block">
+                <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Payment type</span>
+                <select name="payment_type" required class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                  <option value="cash" <%= employee.payment_type === 'cash' ? 'selected' : '' %>>Cash</option>
+                  <option value="abn"  <%= employee.payment_type === 'abn'  ? 'selected' : '' %>>ABN</option>
+                  <option value="tfn"  <%= employee.payment_type === 'tfn'  ? 'selected' : '' %>>TFN / Award</option>
+                </select>
+              </label>
+              <label class="block">
+                <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Night roster <span class="text-gray-300 normal-case">(TFN)</span></span>
+                <select name="night_pattern" class="mt-1 w-full px-2 py-1.5 border border-gray-300 rounded text-sm bg-white">
+                  <option value="occasional"        <%= (!employee.night_pattern || employee.night_pattern === 'occasional')      ? 'selected' : '' %>>Night &lt;5 (default)</option>
+                  <option value="permanent"         <%= employee.night_pattern === 'permanent'          ? 'selected' : '' %>>Night Perm.</option>
+                  <option value="continuous_5plus"  <%= employee.night_pattern === 'continuous_5plus'   ? 'selected' : '' %>>Night 5+</option>
+                </select>
+              </label>
+            </div>
+            <div class="flex items-center justify-between gap-2">
+              <p class="text-[10px] text-gray-500">Saving stamps the rates from the FY26 panel onto this worker. Changes immediately reflect on Worker Rates, the next pay run, and the worker's portal.</p>
+              <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg whitespace-nowrap">Save tier</button>
+            </div>
+          </form>
+
+          <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
+            <% const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_5plus:'Night 5+',rate_weekend_short:'Sat ≤2h',rate_weekend:'Sat / Wknd',rate_public_holiday:'PH',rate_fares_daily:'Travel',rate_meal:'Meal'}; %>
+            <% Object.entries(rateLabels).forEach(([key, label]) => { %>
+              <% if (employee[key]) { %>
+                <div>
+                  <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"><%= label %></p>
+                  <p class="text-lg font-bold text-gray-900 mt-0.5">$<%= (employee[key] || 0).toFixed(2) %></p>
+                </div>
+              <% } %>
             <% }); %>
           </div>
         </div>
@@ -556,7 +632,7 @@
                     <code class="bg-gray-100 px-1 py-0.5 rounded text-[10px]"><%= h.sop_version %></code>
                     <span class="flex-1"><%= new Date(h.signed_at + (h.signed_at.includes('T') ? '' : 'Z')).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', year:'numeric' }) %></span>
                     <% if (h.signature_url) { %>
-                      <a href="<%= h.signature_url %>" data-lightbox data-lightbox-name="SOP Signature <%= h.sop_version %>" data-lightbox-mime="image/*" class="text-brand-600 hover:text-brand-700 font-medium">view</a>
+                      <a href="<%= h.signature_url %>" data-doc-viewer data-doc-name="SOP signature" class="text-brand-600 hover:text-brand-700 font-medium">view</a>
                     <% } %>
                   </li>
                 <% }) %>
@@ -623,17 +699,25 @@
           <!-- Card Body -->
           <div class="p-4">
             <% if (hasDoc) { %>
-              <!-- Document exists -->
+              <!-- Document exists. Clicking the thumbnail opens the in-app
+                   doc viewer (modal with X / Esc / backdrop close) instead
+                   of triggering a download or popping a new tab. -->
               <% if (isImageFile(doc.original_name || doc.filename)) { %>
                 <div class="w-full h-28 bg-gray-100 rounded-lg mb-3 overflow-hidden flex items-center justify-center">
-                  <a href="/hr/documents/<%= doc.id %>/download" data-lightbox data-lightbox-name="<%= kd.label %>" data-lightbox-mime="image/*" class="block w-full h-full cursor-zoom-in">
+                  <a href="/hr/documents/<%= doc.id %>/download?inline=1"
+                     data-doc-viewer
+                     data-doc-name="<%= doc.original_name || doc.filename || kd.label %>"
+                     class="block w-full h-full cursor-zoom-in">
                     <img src="/hr/documents/<%= doc.id %>/download" alt="<%= kd.label %>" class="w-full h-full object-cover" onerror="this.parentElement.innerHTML='<div class=\'flex items-center justify-center h-full text-gray-400 text-xs\'>Preview unavailable</div>'">
                   </a>
                 </div>
               <% } else { %>
-                <a href="/hr/documents/<%= doc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= kd.label %>" class="block w-full h-28 bg-gray-50 rounded-lg mb-3 flex flex-col items-center justify-center cursor-zoom-in hover:bg-gray-100 transition">
+                <a href="/hr/documents/<%= doc.id %>/download?inline=1"
+                   data-doc-viewer
+                   data-doc-name="<%= doc.original_name || doc.filename || kd.label %>"
+                   class="block w-full h-28 bg-gray-50 rounded-lg mb-3 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 transition">
                   <svg class="w-8 h-8 text-gray-300 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                  <span class="text-[10px] text-gray-400 font-medium">Preview</span>
+                  <span class="text-[10px] text-gray-500 font-medium">Click to view</span>
                 </a>
               <% } %>
 
@@ -646,7 +730,11 @@
                   <p class="text-[10px] text-gray-400">Expires: <span class="<%= isExpired ? 'text-red-600 font-medium' : 'text-gray-600' %>"><%= formatDate(doc.expiry_date) %></span></p>
                 <% } %>
                 <div class="flex gap-1.5 pt-1">
-                  <a href="/hr/documents/<%= doc.id %>/download" class="flex-1 text-center px-2 py-1.5 text-[10px] font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition">Download</a>
+                  <a href="/hr/documents/<%= doc.id %>/download?inline=1"
+                     data-doc-viewer
+                     data-doc-name="<%= doc.original_name || doc.filename || kd.label %>"
+                     class="flex-1 text-center px-2 py-1.5 text-[10px] font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition">View</a>
+                  <a href="/hr/documents/<%= doc.id %>/download" class="flex-1 text-center px-2 py-1.5 text-[10px] font-medium text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">Download</a>
                   <% if (vStatus === 'pending') { %>
                     <form method="POST" action="/hr/documents/<%= doc.id %>/verify" class="flex-1"><%- include('../partials/csrf') %><input type="hidden" name="action" value="verify"><button type="submit" class="w-full px-2 py-1.5 text-[10px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition">Verify</button></form>
                   <% } %>
@@ -709,8 +797,11 @@
                 </td>
                 <td class="px-4 py-3 text-right">
                   <div class="flex items-center justify-end gap-1">
-                    <a href="/hr/documents/<%= doc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= doc.document_name || doc.original_name %>" <% if (isImageFile(doc.original_name || doc.filename)) { %>data-lightbox-mime="image/*"<% } %> class="px-2 py-1 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition">View</a>
-                    <a href="/hr/documents/<%= doc.id %>/download" class="px-2 py-1 text-xs text-gray-600 bg-gray-100 hover:bg-brand-50 hover:text-brand-700 rounded-lg transition">Download</a>
+                    <a href="/hr/documents/<%= doc.id %>/download?inline=1"
+                       data-doc-viewer
+                       data-doc-name="<%= doc.original_name || doc.document_name || 'Document' %>"
+                       class="px-2 py-1 text-xs text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg transition">View</a>
+                    <a href="/hr/documents/<%= doc.id %>/download" class="px-2 py-1 text-xs text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg transition">Download</a>
                     <% if (doc.verification_status === 'pending') { %>
                       <form method="POST" action="/hr/documents/<%= doc.id %>/verify" class="inline"><%- include('../partials/csrf') %><input type="hidden" name="action" value="verify"><button type="submit" class="px-2 py-1 text-xs text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-lg transition">Verify</button></form>
                     <% } %>
@@ -827,7 +918,10 @@
               <div class="pt-2 mt-2 border-t border-gray-100">
                 <div class="flex items-center gap-2">
                   <svg class="w-3.5 h-3.5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
-                  <a href="/hr/documents/<%= linkedDoc.id %>/download?inline=1" data-lightbox data-lightbox-name="<%= linkedDoc.document_name || linkedDoc.original_name %>" <% if (isImageFile(linkedDoc.original_name || linkedDoc.filename)) { %>data-lightbox-mime="image/*"<% } %> class="text-[10px] text-brand-600 hover:text-brand-700 font-medium truncate"><%= linkedDoc.document_name || linkedDoc.original_name %></a>
+                  <a href="/hr/documents/<%= linkedDoc.id %>/download?inline=1"
+                     data-doc-viewer
+                     data-doc-name="<%= linkedDoc.original_name || linkedDoc.document_name %>"
+                     class="text-[10px] text-brand-600 hover:text-brand-700 font-medium truncate"><%= linkedDoc.document_name || linkedDoc.original_name %></a>
                 </div>
               </div>
             <% } %>
@@ -1431,7 +1525,7 @@
                       <p class="text-xs text-gray-600 mt-1 whitespace-pre-line"><%= t.notes %></p>
                     <% } %>
                     <% if (t.certificate_url) { %>
-                      <a href="<%= t.certificate_url %>" data-lightbox data-lightbox-name="<%= t.training_name %> — Certificate" class="text-xs text-brand-600 hover:underline mt-1 inline-block">Certificate</a>
+                      <a href="<%= t.certificate_url %>" target="_blank" rel="noopener" class="text-xs text-brand-600 hover:underline mt-1 inline-block">Certificate ↗</a>
                     <% } %>
                   </div>
                   <div class="flex items-center gap-1 flex-shrink-0">
@@ -1589,6 +1683,360 @@
     <% } %>
   </div>
 
+  <!-- ═══════════════════════════════════════════ -->
+  <!-- TAB: Reviews                                -->
+  <!-- Notes + full performance reviews. Visibility = 'worker' shares -->
+  <!-- the entry to the worker portal; 'internal' keeps it HR-only.  -->
+  <!-- ═══════════════════════════════════════════ -->
+  <%
+    // SQLite emits "YYYY-MM-DD HH:MM:SS" (UTC, no 'T'/'Z'). Native Date
+    // parses that as Invalid on Safari and some older Chromes — convert
+    // it to ISO before constructing. Date-only strings get a midnight
+    // local-time suffix (we don't want timezone math shifting the day).
+    function fmtReviewStamp(s) {
+      if (!s) return '';
+      var str = String(s);
+      var iso = str.includes('T') ? str
+              : str.includes(' ') ? (str.replace(' ', 'T') + 'Z')
+              : (str + 'T00:00:00');
+      var d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleString('en-AU', {
+        timeZone: 'Australia/Sydney',
+        day: 'numeric', month: 'short', year: 'numeric',
+        hour: 'numeric', minute: '2-digit', hour12: true
+      });
+    }
+    function fmtReviewDateOnly(s) {
+      if (!s) return '';
+      var d = new Date(String(s) + 'T00:00:00');
+      if (isNaN(d.getTime())) return '';
+      return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+  %>
+  <div id="tab-reviews" class="emp-tab-content" style="display:none;">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
+      <!-- Left: existing reviews -->
+      <div class="lg:col-span-2 space-y-4">
+        <% if (!_revs.length) { %>
+          <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-8 text-center">
+            <svg class="w-10 h-10 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <h3 class="text-gray-900 font-semibold text-base mb-1">No reviews or notes yet</h3>
+            <p class="text-gray-500 text-sm">Add your first one using the form on the right. Quick notes stay internal; full reviews can be shared with the worker.</p>
+          </div>
+        <% } else { %>
+          <% _revs.forEach(function (r) {
+            var kindLabel = r.kind === 'review' ? 'Performance review' : 'Note';
+            var kindCls   = r.kind === 'review' ? 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' : 'bg-blue-50 text-blue-700 ring-blue-600/20';
+            var visLabel  = r.visibility === 'worker' ? 'Shared with worker' : 'Internal only';
+            var visCls    = r.visibility === 'worker' ? 'bg-violet-50 text-violet-700 ring-violet-600/20' : 'bg-gray-100 text-gray-600 ring-gray-300';
+          %>
+            <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+              <div class="flex items-start justify-between gap-3">
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5 mb-1.5">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 <%= kindCls %>"><%= kindLabel %></span>
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold ring-1 <%= visCls %>"><%= visLabel %></span>
+                  </div>
+                  <h3 class="text-base font-bold text-gray-900"><%= r.title %></h3>
+                  <p class="text-xs text-gray-500 mt-1">
+                    <% if (r.review_date) { %>
+                      <span class="font-medium text-gray-700"><%= fmtReviewDateOnly(r.review_date) %></span>
+                    <% } %>
+                    <% if (r.review_date && r.held_by) { %><span class="text-gray-300">·</span><% } %>
+                    <% if (r.held_by) { %>Held by <span class="text-gray-700 font-medium"><%= r.held_by %></span><% } %>
+                    <% if (r.created_by_name) { %><span class="text-gray-300">·</span> Added by <span class="text-gray-700"><%= r.created_by_name %></span><% } %>
+                    <% if (r.created_at) { %><span class="text-gray-300">·</span> <span title="<%= r.created_at %> UTC"><%= fmtReviewStamp(r.created_at) %></span><% } %>
+                  </p>
+                </div>
+                <form method="POST" action="/hr/reviews/<%= r.id %>/delete" onsubmit="return confirm('Delete this <%= r.kind === 'review' ? 'review' : 'note' %>?')">
+                  <%- include('../partials/csrf') %>
+                  <button type="submit" class="p-1.5 text-red-500 hover:bg-red-50 rounded-lg transition" title="Delete">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                  </button>
+                </form>
+              </div>
+
+              <% if (r.summary) { %>
+                <p class="text-sm text-gray-700 mt-3 leading-relaxed whitespace-pre-line"><%= r.summary %></p>
+              <% } %>
+
+              <% if (r.sections && r.sections.length) { %>
+                <div class="mt-4 space-y-3">
+                  <% r.sections.forEach(function (sec) { if (sec.heading || sec.content) { %>
+                    <div class="border-l-2 border-emerald-200 pl-3">
+                      <% if (sec.heading) { %><p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1"><%= sec.heading %></p><% } %>
+                      <% if (sec.content) { %><p class="text-sm text-gray-800 whitespace-pre-line"><%= sec.content %></p><% } %>
+                    </div>
+                  <% } }); %>
+                </div>
+              <% } %>
+
+              <% if (r.peer_comments && r.peer_comments.length) { %>
+                <div class="mt-4 pt-3 border-t border-gray-100">
+                  <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Feedback from others</p>
+                  <div class="space-y-2">
+                    <% r.peer_comments.forEach(function (p) { if (p.from || p.comment) { %>
+                      <div class="bg-violet-50/60 border border-violet-100 rounded-lg p-3">
+                        <% if (p.from) { %><p class="text-xs font-semibold text-violet-900 mb-0.5"><%= p.from %></p><% } %>
+                        <% if (p.comment) { %><p class="text-sm text-gray-700 whitespace-pre-line"><%= p.comment %></p><% } %>
+                      </div>
+                    <% } }); %>
+                  </div>
+                </div>
+              <% } %>
+
+              <!-- HR-internal discussion thread. Anyone with hr_employees -->
+              <!-- can post. Worker never sees these. @username tags the   -->
+              <!-- user and fires a notification (in-app + push).          -->
+              <div class="mt-4 pt-3 border-t border-gray-100">
+                <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">
+                  Internal comments
+                  <% if (r.comments && r.comments.length) { %>
+                    <span class="text-gray-400 font-semibold">· <%= r.comments.length %></span>
+                  <% } %>
+                </p>
+
+                <% if (r.comments && r.comments.length) { %>
+                  <div class="space-y-2 mb-3">
+                    <% r.comments.forEach(function (c) { %>
+                      <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 group">
+                        <div class="flex items-start justify-between gap-2 mb-1">
+                          <div class="min-w-0 flex-1">
+                            <span class="text-xs font-semibold text-gray-900"><%= c.created_by_name || 'Someone' %></span>
+                            <span class="text-[11px] text-gray-400 ml-1.5" title="<%= c.created_at %> UTC"><%= fmtReviewStamp(c.created_at) %></span>
+                          </div>
+                          <% if (user && (user.id === c.created_by_id || ['admin','management'].includes(user.role))) { %>
+                            <form method="POST" action="/hr/reviews/comments/<%= c.id %>/delete" class="opacity-0 group-hover:opacity-100 transition" data-confirm="Delete this comment?">
+                              <%- include('../partials/csrf') %>
+                              <button type="submit" class="text-[11px] text-red-500 hover:text-red-700 font-medium">Delete</button>
+                            </form>
+                          <% } %>
+                        </div>
+                        <p class="text-sm text-gray-800 whitespace-pre-line"><%- (c.body_html || '') %></p>
+                      </div>
+                    <% }); %>
+                  </div>
+                <% } %>
+
+                <form method="POST" action="/hr/reviews/<%= r.id %>/comments" class="flex gap-2 items-start">
+                  <%- include('../partials/csrf') %>
+                  <div class="flex-1">
+                    <textarea name="body" rows="2" required placeholder="Add a comment… @mention to notify a teammate"
+                      class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm resize-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                      list="hr-mention-users-<%= r.id %>"></textarea>
+                    <datalist id="hr-mention-users-<%= r.id %>">
+                      <% (typeof mentionUsers !== 'undefined' ? mentionUsers : []).forEach(function (u) { %>
+                        <option value="@<%= u.username %>"><%= u.full_name %></option>
+                      <% }); %>
+                    </datalist>
+                  </div>
+                  <button type="submit" class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg whitespace-nowrap">Comment</button>
+                </form>
+              </div>
+            </div>
+          <% }); %>
+        <% } %>
+      </div>
+
+      <!-- Right: add-review form (sticky so it stays visible while scrolling history) -->
+      <div class="lg:col-span-1">
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 lg:sticky lg:top-4">
+          <h2 class="text-sm font-bold text-gray-800 mb-1">Add review or note</h2>
+          <p class="text-xs text-gray-500 mb-4">Notes stay internal by default. Switch to <em>Performance review</em> to attach reviewer, sections, and peer comments.</p>
+
+          <form method="POST" action="/hr/employees/<%= employee.id %>/reviews" id="empReviewForm" class="space-y-3">
+            <%- include('../partials/csrf') %>
+
+            <!-- Kind toggle — JS hides/shows the review-only fieldsets and
+                 paints the chosen card. Real fill + ring is applied via
+                 the [data-kind-card][data-active] CSS below; using a real
+                 attribute (not peer-checked) sidesteps Tailwind JIT
+                 ordering on CDN builds. -->
+            <div>
+              <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Kind</p>
+              <div class="flex gap-1.5">
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="kind" value="note" checked class="sr-only" onclick="toggleReviewKind('note')">
+                  <span data-kind-card="note" data-active="1" class="relative flex items-center justify-center gap-1.5 py-2.5 rounded-lg border-2 text-xs font-bold transition">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                    Quick note
+                  </span>
+                </label>
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="kind" value="review" class="sr-only" onclick="toggleReviewKind('review')">
+                  <span data-kind-card="review" class="relative flex items-center justify-center gap-1.5 py-2.5 rounded-lg border-2 text-xs font-bold transition">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+                    Performance review
+                  </span>
+                </label>
+              </div>
+            </div>
+            <style>
+              /* Default (un-selected) card */
+              [data-kind-card] { border-color: #E5E7EB; background: #F9FAFB; color: #6B7280; }
+              /* Selected — quick note */
+              [data-kind-card="note"][data-active]   { border-color: #2563EB; background: #EFF6FF; color: #1D4ED8;
+                box-shadow: 0 0 0 3px rgba(37,99,235,0.15); }
+              /* Selected — performance review */
+              [data-kind-card="review"][data-active] { border-color: #059669; background: #ECFDF5; color: #047857;
+                box-shadow: 0 0 0 3px rgba(5,150,105,0.18); }
+              [data-kind-card]:hover { border-color: #D1D5DB; }
+            </style>
+
+            <div>
+              <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Title</label>
+              <input name="title" type="text" required placeholder="e.g. Q2 review, On-site coaching" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+            </div>
+
+            <div>
+              <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest" id="empReviewSummaryLabel">Note</label>
+              <textarea name="summary" rows="4" placeholder="What did you observe / discuss?" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"></textarea>
+            </div>
+
+            <!-- Review-only block -->
+            <div class="emp-review-only space-y-3" style="display:none">
+              <div class="grid grid-cols-2 gap-2">
+                <div>
+                  <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Date</label>
+                  <input name="review_date" type="date" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                </div>
+                <div>
+                  <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Held by</label>
+                  <input name="held_by" type="text" placeholder="e.g. Jane, Manager" class="mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+                </div>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Sections covered</label>
+                  <button type="button" onclick="addReviewSection()" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">+ Add section</button>
+                </div>
+                <div id="empReviewSections" class="space-y-2"></div>
+                <p class="text-[10px] text-gray-400 mt-1">Sections appear as headings in the review (e.g. "Strengths", "Areas to improve").</p>
+              </div>
+
+              <div>
+                <div class="flex items-center justify-between mb-1.5">
+                  <label class="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Comments from others</label>
+                  <button type="button" onclick="addPeerComment()" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">+ Add comment</button>
+                </div>
+                <div id="empReviewPeers" class="space-y-2"></div>
+                <p class="text-[10px] text-gray-400 mt-1">Peer / supervisor feedback shown as quoted blocks.</p>
+              </div>
+            </div>
+
+            <!-- Visibility -->
+            <div class="pt-2 border-t border-gray-100">
+              <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Visibility</p>
+              <div class="space-y-1.5">
+                <label class="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" name="visibility" value="internal" checked class="mt-0.5">
+                  <span class="text-xs text-gray-700"><span class="font-semibold text-gray-900">Internal only</span> — HR / managers can see it; the worker cannot.</span>
+                </label>
+                <label class="flex items-start gap-2 cursor-pointer">
+                  <input type="radio" name="visibility" value="worker" class="mt-0.5">
+                  <span class="text-xs text-gray-700"><span class="font-semibold text-gray-900">Share privately to worker</span> — appears in their worker-portal <em>My Reviews</em> tab.</span>
+                </label>
+              </div>
+            </div>
+
+            <button type="submit" class="w-full mt-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">Save</button>
+          </form>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+<!-- Flatpickr — small, dependency-free date picker. Gives us a real
+     calendar with month-year nav, today-highlight, and AU date format
+     instead of relying on the browser-default native picker (which
+     varies wildly across Safari / Firefox / Chrome on each OS). -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/themes/airbnb.css">
+<script src="https://cdn.jsdelivr.net/npm/flatpickr@4.6.13/dist/flatpickr.min.js"></script>
+<script>
+// ── Reviews tab: kind toggle + dynamic sections / peer comments ──
+function toggleReviewKind(kind) {
+  document.querySelectorAll('.emp-review-only').forEach(function (el) {
+    el.style.display = (kind === 'review') ? '' : 'none';
+  });
+  var lbl = document.getElementById('empReviewSummaryLabel');
+  if (lbl) lbl.textContent = kind === 'review' ? 'Summary' : 'Note';
+  // Repaint the kind cards so the chosen one carries the [data-active]
+  // attribute the CSS hooks into. We toggle the attribute instead of
+  // relying on Tailwind's :peer-checked because the CDN build often
+  // doesn't see arbitrary peer-checked: utilities at JIT time.
+  document.querySelectorAll('[data-kind-card]').forEach(function (card) {
+    if (card.getAttribute('data-kind-card') === kind) card.setAttribute('data-active', '1');
+    else card.removeAttribute('data-active');
+  });
+}
+
+// Initialise the flatpickr calendar on the review_date field as soon
+// as the library is available. Falls back to the native date input if
+// the CDN load fails — the input keeps name="review_date" so the form
+// still submits something the server can parse.
+(function initReviewDatePicker() {
+  function tryInit() {
+    if (typeof flatpickr === 'undefined') { setTimeout(tryInit, 80); return; }
+    var input = document.querySelector('input[name="review_date"]');
+    if (!input) return;
+    // Switch the input to type=text so flatpickr can fully take over
+    // (native pickers fight back on iOS otherwise).
+    input.setAttribute('type', 'text');
+    input.setAttribute('placeholder', 'Pick a date');
+    flatpickr(input, {
+      dateFormat: 'Y-m-d',       // server-friendly value (the real input)
+      altInput: true,            // visible friendly input alongside the hidden Y-m-d one
+      altFormat: 'D j M Y',      // e.g. "Mon 25 May 2026"
+      // Reuse the same Tailwind look as the other form fields so the
+      // picker doesn't visually drift from sibling inputs.
+      altInputClass: 'mt-1 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm bg-white',
+      maxDate: 'today',          // review dates are always in the past
+      allowInput: true,
+      locale: { firstDayOfWeek: 1 }, // Mon-start matches AU calendars
+    });
+  }
+  tryInit();
+})();
+
+function addReviewSection(heading, content) {
+  var wrap = document.getElementById('empReviewSections'); if (!wrap) return;
+  var row = document.createElement('div');
+  row.className = 'border border-gray-200 rounded-lg p-2 bg-gray-50';
+  row.innerHTML =
+    '<div class="flex gap-1 items-start">' +
+      '<input name="section_heading" type="text" placeholder="Heading (e.g. Strengths)" class="flex-1 rounded border border-gray-300 px-2 py-1 text-xs" />' +
+      '<button type="button" onclick="this.closest(\'div.border\').remove()" class="text-red-500 hover:bg-red-50 rounded p-1">' +
+        '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '<textarea name="section_content" rows="2" placeholder="What was covered" class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"></textarea>';
+  wrap.appendChild(row);
+  if (heading) row.querySelector('[name=section_heading]').value = heading;
+  if (content) row.querySelector('[name=section_content]').value = content;
+}
+function addPeerComment(from, comment) {
+  var wrap = document.getElementById('empReviewPeers'); if (!wrap) return;
+  var row = document.createElement('div');
+  row.className = 'border border-gray-200 rounded-lg p-2 bg-violet-50/40';
+  row.innerHTML =
+    '<div class="flex gap-1 items-start">' +
+      '<input name="peer_from" type="text" placeholder="From (e.g. Mark — Site supervisor)" class="flex-1 rounded border border-gray-300 px-2 py-1 text-xs" />' +
+      '<button type="button" onclick="this.closest(\'div.border\').remove()" class="text-red-500 hover:bg-red-50 rounded p-1">' +
+        '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>' +
+      '</button>' +
+    '</div>' +
+    '<textarea name="peer_comment" rows="2" placeholder="What they said" class="mt-1 w-full rounded border border-gray-300 px-2 py-1 text-xs"></textarea>';
+  wrap.appendChild(row);
+  if (from)    row.querySelector('[name=peer_from]').value = from;
+  if (comment) row.querySelector('[name=peer_comment]').value = comment;
+}
+</script>
+
 <script>
 // ── Tab switching (global so onclick works) ──
 function switchEmpTab(target) {
@@ -1645,3 +2093,7 @@ function openEditComp(comp) {
   modal.classList.remove('hidden');
 }
 </script>
+<!-- In-app document viewer (modal w/ X / Esc / backdrop close).
+     Anchors / images marked [data-doc-viewer] are intercepted by the
+     script and rendered inline rather than opening a new tab. -->
+<script src="/js/doc-viewer.js?v=1"></script>

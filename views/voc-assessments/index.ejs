@@ -36,12 +36,90 @@
         Templates
       </a>
     <% } %>
+    <% if (user && (user.role || '').toLowerCase() === 'admin') { %>
+      <!-- One-shot bulk regen of every active cert PDF — used to propagate -->
+      <!-- layout changes (e.g. updated watermark) to historical records.    -->
+      <form method="POST" action="/voc-assessments/regenerate-all-pdfs" class="inline" data-confirm="Re-render every active VOC certificate PDF with the latest template? This can take a few seconds per cert.">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="inline-flex items-center justify-center px-4 py-2 bg-white hover:bg-gray-50 border border-gray-300 text-gray-700 text-sm font-medium rounded-lg transition" title="Re-render all active cert PDFs with the current template (e.g. after a watermark update)">
+          <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Regen PDFs
+        </button>
+      </form>
+    <% } %>
+    <a href="/voc-assessments/quick" class="inline-flex items-center justify-center px-4 py-2 bg-amber-500 hover:bg-amber-400 text-white text-sm font-semibold rounded-lg transition">
+      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      Quick Cert
+    </a>
     <a href="/voc-assessments/new" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">
       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
       Start New VOC
     </a>
   </div>
 </div>
+
+<% if (pendingMarking && pendingMarking.length) { %>
+  <!-- ─────────────────────────────────────────────── -->
+  <!-- Pending Marking queue                            -->
+  <!-- Quick-cert rows where theory/practical hasn't    -->
+  <!-- been entered yet. Click in to finish.            -->
+  <!-- ─────────────────────────────────────────────── -->
+  <div class="bg-amber-50 border border-amber-200 rounded-xl shadow-sm overflow-hidden mb-5">
+    <div class="px-4 py-3 border-b border-amber-200 bg-amber-100/60 flex items-center justify-between gap-3">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <h2 class="text-sm font-bold text-amber-900">Pending Marking</h2>
+        <span class="inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[10px] font-bold tracking-wider"><%= pendingMarking.length %></span>
+      </div>
+      <p class="text-[11px] text-amber-800 hidden sm:block">Quick-cert workers waiting on their theory / practical responses.</p>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-amber-50">
+          <tr class="border-b border-amber-100">
+            <th class="px-3 py-2 text-left text-[10px] font-bold text-amber-700 uppercase tracking-widest">VOC #</th>
+            <th class="px-3 py-2 text-left text-[10px] font-bold text-amber-700 uppercase tracking-widest">Worker</th>
+            <th class="px-3 py-2 text-left text-[10px] font-bold text-amber-700 uppercase tracking-widest">Equipment</th>
+            <th class="px-3 py-2 text-left text-[10px] font-bold text-amber-700 uppercase tracking-widest hidden md:table-cell">Assessor</th>
+            <th class="px-3 py-2 text-left text-[10px] font-bold text-amber-700 uppercase tracking-widest hidden sm:table-cell">Date</th>
+            <th class="px-3 py-2 text-right text-[10px] font-bold text-amber-700 uppercase tracking-widest">Actions</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-amber-100">
+          <% pendingMarking.forEach(function(p) { %>
+            <tr class="hover:bg-amber-100/40">
+              <td class="px-3 py-2 font-mono text-xs text-gray-700"><%= p.voc_number || ('#' + p.id) %></td>
+              <td class="px-3 py-2">
+                <div class="font-medium text-gray-900"><%= p.worker_name %></div>
+                <% if (p.worker_emp_id) { %>
+                  <div class="text-[10px] text-gray-400 font-mono"><%= p.worker_emp_id %></div>
+                <% } %>
+              </td>
+              <td class="px-3 py-2 text-gray-700"><%= p.template_name %></td>
+              <td class="px-3 py-2 text-gray-600 hidden md:table-cell"><%= p.assessor_name || '-' %></td>
+              <td class="px-3 py-2 text-gray-600 hidden sm:table-cell"><%= fmtDate(p.assessment_date) %></td>
+              <td class="px-3 py-2 text-right">
+                <div class="inline-flex items-center gap-1">
+                  <% if (p.certificate_id) { %>
+                    <a href="/voc-assessments/<%= p.id %>/pdf" target="_blank"
+                       title="Re-print cert"
+                       class="inline-flex items-center px-2 py-1 bg-white hover:bg-emerald-50 border border-emerald-300 text-emerald-700 text-xs font-semibold rounded-md">
+                      PDF
+                    </a>
+                  <% } %>
+                  <a href="/voc-assessments/<%= p.id %>/edit"
+                     class="inline-flex items-center px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-md">
+                    Mark now
+                  </a>
+                </div>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+<% } %>
 
 <!-- Filters -->
 <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 mb-5">
@@ -109,7 +187,15 @@
             const isExpiring = a.outcome === 'competent' && !isExpired && !isRevoked && a.valid_until && dUntil <= 30;
           %>
             <tr class="hover:bg-gray-50 <%= isRevoked ? 'opacity-60' : (isExpired || isExpiring ? 'border-l-4 border-l-orange-400' : '') %>">
-              <td class="px-3 py-2.5 font-mono text-xs text-brand-600 font-semibold"><%= a.voc_number || ('#' + a.id) %></td>
+              <td class="px-3 py-2.5 font-mono text-xs text-brand-600 font-semibold">
+                <%= a.voc_number || ('#' + a.id) %>
+                <% if (!a.marking_complete) { %>
+                  <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-800 text-[9px] font-bold tracking-wider" title="Theory + practical not yet entered">PENDING</span>
+                <% } %>
+                <% if (a.outcome === 'competent' && a.certificate_status !== 'revoked' && a.worker_acknowledgement_status === 'pending') { %>
+                  <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[9px] font-bold tracking-wider" title="Worker hasn't signed yet — push notification fired on issue">AWAITING SIG</span>
+                <% } %>
+              </td>
               <td class="px-3 py-2.5">
                 <div class="font-medium text-gray-900"><%= a.worker_name %></div>
                 <% if (a.worker_emp_id) { %><div class="text-[10px] text-gray-400"><%= a.worker_emp_id %></div><% } %>

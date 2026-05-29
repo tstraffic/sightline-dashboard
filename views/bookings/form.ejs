@@ -72,18 +72,31 @@
   <% } %>
 </div>
 
-<!-- Quick nav — anchor links to every section so the form is navigable
-     without endless scrolling. Sticks to the top on scroll. -->
-<nav class="sticky top-0 z-20 bg-gray-50/95 backdrop-blur-sm border-b border-gray-200 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 mb-5 overflow-x-auto">
-  <div class="flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap">
-    <a href="#sec-depot"     class="px-2.5 py-1 rounded text-gray-600 hover:bg-white hover:text-brand-700">Depot</a>
-    <a href="#sec-client"    class="px-2.5 py-1 rounded text-gray-600 hover:bg-white hover:text-brand-700">Client</a>
-    <a href="#sec-schedule"  class="px-2.5 py-1 rounded text-gray-600 hover:bg-white hover:text-brand-700">Schedule</a>
-    <a href="#sec-location"  class="px-2.5 py-1 rounded text-gray-600 hover:bg-white hover:text-brand-700">Location</a>
-    <a href="#sec-docs"      class="px-2.5 py-1 rounded text-brand-700 bg-brand-50">Site Docs</a>
-    <a href="#sec-type"      class="px-2.5 py-1 rounded text-gray-600 hover:bg-white hover:text-brand-700">Type</a>
-    <a href="#sec-req"       class="px-2.5 py-1 rounded text-gray-600 hover:bg-white hover:text-brand-700">Requirements</a>
-    <a href="#sec-pool"      class="px-2.5 py-1 rounded text-gray-600 hover:bg-white hover:text-brand-700">Pool / Notes</a>
+<% if (isEdit) { %>
+  <!-- Single "Back to overview" link in edit mode. The previous
+       version had a full Resources / Tasks / Dockets / Notes etc.
+       strip here, but every tab navigated AWAY from edit to the
+       view page, which made the strip feel like "section tabs that
+       eject you". Cleaner to keep edit strictly about editing the
+       form and surface section nav only on the view page. -->
+  <div class="mb-3">
+    <a href="/bookings/<%= booking.id %>" class="bk-onav-tab"><span>← Back to overview</span></a>
+  </div>
+<% } %>
+
+<!-- SECTION TAB STRIP — toggles between the form's sections so only
+     one is visible at a time. Replaces the prior anchor-link nav
+     that scrolled within a single long page. -->
+<nav class="bk-section-tabs sticky top-0 z-20 bg-gray-50/95 backdrop-blur-sm border-b border-gray-200 -mx-4 px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 py-2 mb-5 overflow-x-auto" aria-label="Form sections">
+  <div class="flex items-center gap-1.5 text-xs font-semibold whitespace-nowrap" id="bk-section-tablist">
+    <button type="button" data-tab="depot"    class="bk-stab is-active">Depot</button>
+    <button type="button" data-tab="client"   class="bk-stab">Client</button>
+    <button type="button" data-tab="schedule" class="bk-stab">Schedule</button>
+    <button type="button" data-tab="location" class="bk-stab">Location</button>
+    <button type="button" data-tab="docs"     class="bk-stab">Site Docs</button>
+    <button type="button" data-tab="type"     class="bk-stab">Type</button>
+    <button type="button" data-tab="req"      class="bk-stab">Requirements</button>
+    <button type="button" data-tab="pool"     class="bk-stab">Pool / Notes</button>
   </div>
 </nav>
 
@@ -92,7 +105,7 @@
 
   <!-- Section 1: BOOKING DEPOT -->
   <div id="sec-depot"></div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-section="depot">
     <h2 class="booking-form-section-header">BOOKING DEPOT</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <div>
@@ -126,7 +139,7 @@
 
   <!-- Section 2: CLIENT INFORMATION -->
   <div id="sec-client"></div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-section="client">
     <h2 class="booking-form-section-header">CLIENT INFORMATION</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <div>
@@ -210,7 +223,7 @@
 
   <!-- Section 3: BOOKING INFORMATION -->
   <div id="sec-schedule"></div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-section="schedule">
     <h2 class="booking-form-section-header">BOOKING INFORMATION</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div>
@@ -295,7 +308,7 @@
 
   <!-- Section 4: LOCATION -->
   <div id="sec-location"></div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-section="location">
     <h2 class="booking-form-section-header">LOCATION</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
       <div class="sm:col-span-2">
@@ -399,7 +412,7 @@
        valid HTML. The anchor + summary card here is the in-flow marker;
        the upload card sits at the bottom of the page so the file inputs
        can post multipart without hijacking the main edit submission. -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-section="docs">
     <div class="flex items-center justify-between gap-2 flex-wrap">
       <div>
         <h2 class="booking-form-section-header" style="margin-bottom:0;">SITE DOCUMENTS</h2>
@@ -419,7 +432,7 @@
 
   <!-- Section 6: BOOKING TYPE -->
   <div id="sec-type"></div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-section="type">
     <h2 class="booking-form-section-header">BOOKING TYPE</h2>
     <div class="flex gap-6">
       <label class="flex items-center gap-2 cursor-pointer">
@@ -437,7 +450,7 @@
 
   <!-- Section 7: BOOKING REQUIREMENTS -->
   <div id="sec-req"></div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-section="req">
     <h2 class="booking-form-section-header">BOOKING REQUIREMENTS</h2>
     <div id="requirements-grid">
       <table class="w-full text-sm">
@@ -497,7 +510,7 @@
 
   <!-- Section 8: BOOKING POOL + NOTES -->
   <div id="sec-pool"></div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-section="pool">
     <h2 class="booking-form-section-header">BOOKING POOL & NOTES</h2>
     <div class="flex items-center gap-2 mb-4">
       <input type="checkbox" name="is_booking_pool" id="is_booking_pool" value="1" <%= checked('is_booking_pool') %>
@@ -513,12 +526,23 @@
     </div>
   </div>
 
-  <!-- Submit -->
-  <div class="flex items-center gap-3">
-    <button type="submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">
-      <%= isEdit ? 'Update Booking' : 'Create Booking' %>
-    </button>
-    <a href="<%= isEdit ? '/bookings/' + booking.id : '/bookings' %>" class="px-5 py-2.5 text-sm text-gray-500 hover:text-gray-700">Cancel</a>
+  <!-- Sticky save bar — visible on every tab so the user can save
+       from any section without scrolling. Prev/Next walk between the
+       form's sections in display order; "Save" submits the whole
+       form (every tab's inputs are still in the DOM, just hidden). -->
+  <div class="bk-savebar">
+    <div class="bk-savebar-inner">
+      <div class="flex items-center gap-1.5">
+        <button type="button" id="bk-prev" class="bk-step-btn">← Prev</button>
+        <button type="button" id="bk-next" class="bk-step-btn">Next →</button>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="<%= isEdit ? '/bookings/' + booking.id : '/bookings' %>" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancel</a>
+        <button type="submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">
+          <%= isEdit ? 'Update Booking' : 'Create Booking' %>
+        </button>
+      </div>
+    </div>
   </div>
 
 </form>
@@ -530,7 +554,7 @@
     var DOC_LABEL = { tgs:'TGS', tmp:'TMP', ctmp:'CTMP', rol:'ROL', rol_day:'ROL — Day', rol_night:'ROL — Night', stage_plan:'Stage Plan', swms:'SWMS', permit:'Permit', invoice:'Invoice', photo:'Photo', other:'Other' };
     function fmtSize(n) { if (!n) return ''; if (n < 1024) return n + ' B'; if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB'; return (n/1048576).toFixed(1) + ' MB'; }
   %>
-  <div id="sec-docs" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mt-5">
+  <div id="sec-docs" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mt-5" data-section="docs">
     <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
       <div>
         <h2 class="booking-form-section-header" style="margin-bottom:0;">SITE DOCUMENTS</h2>
@@ -764,4 +788,121 @@
     st.addEventListener('change', applyAutoEnd);
     if (sd) sd.addEventListener('change', applyAutoEnd);
   })();
+
+  // ── Section tabs: show one section at a time ──
+  // Each section's white card carries data-section="<name>"; this
+  // hides all of them except the one the active tab points at. The
+  // sequence drives Prev/Next so the planner can walk the form in
+  // order without using the tab strip.
+  (function () {
+    var SEQUENCE = ['depot','client','schedule','location','docs','type','req','pool'];
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.bk-stab'));
+    var panes = Array.prototype.slice.call(document.querySelectorAll('[data-section]'));
+    if (!tabs.length) return;
+
+    function show(name) {
+      if (SEQUENCE.indexOf(name) === -1) name = 'depot';
+      panes.forEach(function (el) { el.style.display = (el.getAttribute('data-section') === name) ? '' : 'none'; });
+      tabs.forEach(function (t) { t.classList.toggle('is-active', t.getAttribute('data-tab') === name); });
+      try { history.replaceState(null, '', '#sec-' + name); } catch (e) {}
+      var prev = document.getElementById('bk-prev');
+      var next = document.getElementById('bk-next');
+      var i = SEQUENCE.indexOf(name);
+      if (prev) prev.disabled = (i <= 0);
+      if (next) next.disabled = (i >= SEQUENCE.length - 1);
+    }
+
+    tabs.forEach(function (t) {
+      t.addEventListener('click', function () { show(t.getAttribute('data-tab')); });
+    });
+    var prev = document.getElementById('bk-prev');
+    var next = document.getElementById('bk-next');
+    if (prev) prev.addEventListener('click', function () {
+      var cur = document.querySelector('.bk-stab.is-active');
+      var i = cur ? SEQUENCE.indexOf(cur.getAttribute('data-tab')) : 0;
+      show(SEQUENCE[Math.max(0, i - 1)]);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    if (next) next.addEventListener('click', function () {
+      var cur = document.querySelector('.bk-stab.is-active');
+      var i = cur ? SEQUENCE.indexOf(cur.getAttribute('data-tab')) : 0;
+      show(SEQUENCE[Math.min(SEQUENCE.length - 1, i + 1)]);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+
+    // Initial section from URL hash (so a #sec-X link still works).
+    var hash = (location.hash || '').replace(/^#sec-/, '');
+    show(hash || 'depot');
+
+    // If the form fails validation on submit, switch to the first
+    // tab that contains the invalid field — otherwise the browser's
+    // "please fill in this field" tooltip points at a hidden input
+    // and the user has no idea where the problem is.
+    var form = document.querySelector('form[action^="/bookings"]');
+    if (form) {
+      form.addEventListener('invalid', function (ev) {
+        var bad = ev.target;
+        if (!bad) return;
+        var pane = bad.closest('[data-section]');
+        if (pane) show(pane.getAttribute('data-section'));
+      }, true);
+    }
+  })();
 </script>
+
+<style>
+  /* Post-create nav — top-of-page link strip that lets the planner
+     jump from Edit straight to the corresponding section on the
+     view page. Visually echoes the Traffio "Overview / Resources /
+     Tasks / Dockets / …" toolbar. */
+  .bk-section-overnav { display: flex; gap: 4px; flex-wrap: wrap; padding-bottom: 8px; border-bottom: 1px solid #E5E7EB; }
+  .bk-onav-tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 7px 12px; border-radius: 8px;
+    font-size: 12px; font-weight: 600; color: #4B5563;
+    background: transparent; text-decoration: none; transition: background 0.12s;
+  }
+  .bk-onav-tab:hover { background: #F3F4F6; color: #111827; }
+  .bk-onav-tab.is-active { background: #ECFDF5; color: #047857; }
+
+  /* Section tabs */
+  .bk-stab {
+    padding: 6px 12px; border-radius: 8px; border: 0;
+    background: transparent; color: #6B7280; cursor: pointer;
+    font-size: 12px; font-weight: 600; transition: background 0.12s, color 0.12s;
+  }
+  .bk-stab:hover { background: #fff; color: #047857; }
+  .bk-stab.is-active { background: #ECFDF5; color: #047857; box-shadow: inset 0 0 0 1px #A7F3D0; }
+
+  /* Sticky bottom save bar — appears below the form, pinned to the
+     bottom of the viewport so the planner can save from any section. */
+  .bk-savebar {
+    position: sticky; bottom: 0; z-index: 30; margin-top: 18px;
+    background: rgba(249,250,251,0.96); backdrop-filter: blur(6px);
+    border-top: 1px solid #E5E7EB;
+    margin-left: -1rem; margin-right: -1rem;
+    padding: 10px 1rem;
+  }
+  @media (min-width: 640px) { .bk-savebar { margin-left: -1.5rem; margin-right: -1.5rem; padding-left: 1.5rem; padding-right: 1.5rem; } }
+  @media (min-width: 1024px) { .bk-savebar { margin-left: -2rem; margin-right: -2rem; padding-left: 2rem; padding-right: 2rem; } }
+  .bk-savebar-inner { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+  .bk-step-btn {
+    padding: 7px 12px; border-radius: 8px; border: 1px solid #E5E7EB;
+    background: #fff; color: #374151; font-size: 12px; font-weight: 600;
+    cursor: pointer; transition: background 0.12s;
+  }
+  .bk-step-btn:hover:not(:disabled) { background: #F9FAFB; }
+  .bk-step-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  /* Dark-mode polish so the form looks correct on both themes. */
+  :root[data-theme="dark"] .bk-section-overnav { border-bottom-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] .bk-onav-tab        { color: #94A3B8; }
+  :root[data-theme="dark"] .bk-onav-tab:hover  { background: rgba(255,255,255,0.06); color: #F5F5F7; }
+  :root[data-theme="dark"] .bk-onav-tab.is-active { background: rgba(16,185,129,0.16); color: #6EE7B7; }
+  :root[data-theme="dark"] .bk-stab            { color: #94A3B8; }
+  :root[data-theme="dark"] .bk-stab:hover      { background: rgba(255,255,255,0.06); color: #6EE7B7; }
+  :root[data-theme="dark"] .bk-stab.is-active  { background: rgba(16,185,129,0.16); color: #6EE7B7; box-shadow: inset 0 0 0 1px rgba(16,185,129,0.30); }
+  :root[data-theme="dark"] .bk-savebar         { background: rgba(15,17,21,0.92); border-top-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] .bk-step-btn        { background: #1A1D24; color: #F5F5F7; border-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] .bk-step-btn:hover:not(:disabled) { background: #20242C; }
+</style>

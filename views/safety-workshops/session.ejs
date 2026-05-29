@@ -74,27 +74,121 @@
         <p class="text-xs text-gray-500 mt-3">Project this screen in the workshop room. Office staff scan with their phone.</p>
       </div>
 
-      <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-        <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
-          <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Case assignments</p>
-          <span id="assignedCount" class="text-xs font-semibold text-gray-500 tabular-nums"><%= assignments.length %> joined</span>
+      <% if (session.mode === 'group') { %>
+        <%# Group mode: assignments are pre-created teams (one per case).
+            Show each team's roster + claim status. %>
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Teams</p>
+            <span id="assignedCount" class="text-xs font-semibold text-gray-500 tabular-nums"><%= assignments.filter(a => a.claimed_by_name).length %>/<%= assignments.length %> claimed</span>
+          </div>
+          <ul id="assignList" class="divide-y divide-gray-100">
+            <% assignments.forEach(a => {
+              // claimed_by_name falls back to the group name when the
+              // participant tapped without giving theirs — show the
+              // generic Claimed pill in that case, otherwise show who
+              // picked it up so the office can see who's running each team.
+              const claimer = a.claimed_by_name && a.claimed_by_name !== a.player_name ? a.claimed_by_name : null;
+            %>
+              <li class="px-4 py-3">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0"><%= a.case_letter %></span>
+                  <span class="text-sm font-bold text-gray-900"><%= a.player_name %></span>
+                  <% if (a.claimed_by_name) { %>
+                    <span class="ml-auto text-right text-[11px] leading-tight">
+                      <span class="block font-semibold text-emerald-700">
+                        <%= claimer ? 'Picked by ' + claimer : 'Claimed' %>
+                      </span>
+                    </span>
+                  <% } else { %>
+                    <span class="ml-auto text-[10px] text-gray-400 uppercase tracking-widest">Open</span>
+                  <% } %>
+                </div>
+                <p class="text-xs text-gray-500 break-words"><%= a.members_csv || '—' %></p>
+              </li>
+            <% }) %>
+          </ul>
         </div>
-        <ul id="assignList" class="divide-y divide-gray-100">
-          <% cases.forEach(c => {
-            const who = assignments.find(a => a.case_letter === c.letter);
-          %>
-            <li class="px-4 py-2.5 flex items-center gap-3">
-              <span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0"><%= c.letter %></span>
-              <span class="text-xs text-gray-600 flex-1 min-w-0 truncate"><%= c.title %></span>
-              <% if (who) { %>
-                <span class="text-xs font-semibold text-emerald-700 truncate"><%= who.player_name %></span>
-              <% } else { %>
-                <span class="text-[10px] text-gray-400 uppercase tracking-widest">Free</span>
-              <% } %>
-            </li>
-          <% }) %>
-        </ul>
-      </div>
+      <% } else { %>
+        <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <p class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Case assignments</p>
+            <span id="assignedCount" class="text-xs font-semibold text-gray-500 tabular-nums"><%= assignments.length %> joined</span>
+          </div>
+          <ul id="assignList" class="divide-y divide-gray-100">
+            <% cases.forEach(c => {
+              const who = assignments.find(a => a.case_letter === c.letter);
+            %>
+              <li class="px-4 py-2.5 flex items-center gap-3">
+                <span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0"><%= c.letter %></span>
+                <span class="text-xs text-gray-600 flex-1 min-w-0 truncate"><%= c.title %></span>
+                <% if (who) { %>
+                  <span class="text-xs font-semibold text-emerald-700 truncate"><%= who.player_name %></span>
+                <% } else { %>
+                  <span class="text-[10px] text-gray-400 uppercase tracking-widest">Free</span>
+                <% } %>
+              </li>
+            <% }) %>
+          </ul>
+        </div>
+      <% } %>
+      <% if (session.mode === 'group') { %>
+        <p class="text-[11px] text-gray-500 px-1">
+          Restart keeps the teams — only the scoreboard and claim status get cleared.
+        </p>
+      <% } %>
+
+      <!-- Manual add — for workers without phones, late arrivals, or
+           anyone whose phone wouldn't scan the QR. Score is optional;
+           if blank the player just appears under Case assignments
+           (no leaderboard row until they submit).
+           Group mode skips this: teams are fixed at session creation. -->
+      <% if (session.status === 'open' && session.mode !== 'group') { %>
+        <details class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <summary class="px-4 py-3 cursor-pointer select-none flex items-center justify-between gap-2 hover:bg-gray-50">
+            <span class="text-[10px] font-bold tracking-widest text-gray-500 uppercase">Add participant manually</span>
+            <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+          </summary>
+          <form method="POST" action="/safety-workshops/sessions/<%= session.session_code %>/add-participant" class="p-4 space-y-3 border-t border-gray-100">
+            <%- include('../partials/csrf') %>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Name</label>
+              <input type="text" name="name" required minlength="2" maxlength="60" placeholder="e.g. Taj Rahman"
+                class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+            </div>
+            <div class="grid grid-cols-2 gap-2">
+              <div>
+                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Case</label>
+                <select name="case_letter" required class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+                  <option value="">Pick…</option>
+                  <% cases.forEach(c => { %>
+                    <option value="<%= c.letter %>">Case <%= c.letter %> · <%= c.title %></option>
+                  <% }) %>
+                </select>
+              </div>
+              <div>
+                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Score <span class="text-gray-400 font-normal">(optional)</span></label>
+                <input type="number" name="score" min="0" step="1" placeholder="e.g. 145"
+                  class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+                <% if (attempts && attempts.length) { %>
+                  <p class="text-[10px] text-gray-400 mt-0.5">Max: <%= attempts[0].max_score %></p>
+                <% } %>
+              </div>
+            </div>
+            <p class="text-[11px] text-gray-500">Leave score blank if they haven't completed the case yet — they'll show up under <em>Case assignments</em> only. Fill in a score to place them on the leaderboard immediately.</p>
+            <label class="flex items-start gap-2 text-[11px] text-gray-700 cursor-pointer select-none">
+              <input type="checkbox" name="override" value="1" class="mt-0.5 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+              <span><strong>Override existing entry</strong> — replace the assignment + leaderboard row for this name. Use when a worker accidentally refreshed mid-quiz and lost their answers.</span>
+            </label>
+            <div class="flex items-center justify-end">
+              <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                Add / Override
+              </button>
+            </div>
+          </form>
+        </details>
+      <% } %>
     </div>
 
     <!-- RIGHT: leaderboard -->
@@ -113,12 +207,26 @@
                 const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1) + '.';
                 const pct = a.max_score ? Math.round((a.score / a.max_score) * 100) : 0;
                 const tone = pct >= 80 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-gray-500';
+                const debriefHref = a.id ? ('/safety-workshops/sessions/' + session.session_code + '/debrief/' + a.id) : null;
               %>
-                <li class="px-4 py-2.5 flex items-center gap-3">
-                  <span class="w-7 text-center text-sm font-bold text-gray-700"><%= medal %></span>
-                  <span class="font-semibold text-gray-900 flex-1 min-w-0 truncate"><%= a.player_name %></span>
-                  <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Case <%= a.case_letter %></span>
-                  <span class="font-mono font-bold tabular-nums <%= tone %>"><%= a.score %><span class="text-gray-400 font-normal">/<%= a.max_score %></span></span>
+                <li>
+                  <% if (debriefHref) { %>
+                    <a href="<%= debriefHref %>" class="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition group">
+                  <% } else { %>
+                    <div class="px-4 py-2.5 flex items-center gap-3">
+                  <% } %>
+                    <span class="w-7 text-center text-sm font-bold text-gray-700"><%= medal %></span>
+                    <span class="font-semibold text-gray-900 flex-1 min-w-0 truncate"><%= a.player_name %></span>
+                    <span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Case <%= a.case_letter %></span>
+                    <span class="font-mono font-bold tabular-nums <%= tone %>"><%= a.score %><span class="text-gray-400 font-normal">/<%= a.max_score %></span></span>
+                    <% if (debriefHref) { %>
+                      <span class="text-[10px] font-bold text-brand-700 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition">Debrief →</span>
+                    <% } %>
+                  <% if (debriefHref) { %>
+                    </a>
+                  <% } else { %>
+                    </div>
+                  <% } %>
                 </li>
               <% }) %>
             </ol>
@@ -134,6 +242,7 @@
   var participantUrl = <%- JSON.stringify(participantUrl) %>;
   var sessionCode = <%- JSON.stringify(session.session_code) %>;
   var sessionStatus = <%- JSON.stringify(session.status) %>;
+  var sessionMode = <%- JSON.stringify(session.mode || 'individual') %>;
   var caseTitles = <%- JSON.stringify(cases) %>;
 
   // ── Render QR code (qrcodejs from CDN) ──
@@ -160,8 +269,36 @@
     });
   }
   function renderAssignments(assignments) {
-    document.getElementById('assignedCount').textContent =
-      assignments.length + ' joined';
+    var countEl = document.getElementById('assignedCount');
+    var listEl = document.getElementById('assignList');
+    if (!countEl || !listEl) return;
+    if (sessionMode === 'group') {
+      var claimed = assignments.filter(function (a) { return a.claimed_by_name; }).length;
+      countEl.textContent = claimed + '/' + assignments.length + ' claimed';
+      var html = assignments.map(function (a) {
+        var claimer = a.claimed_by_name && a.claimed_by_name !== a.player_name ? a.claimed_by_name : null;
+        var claimHtml;
+        if (a.claimed_by_name) {
+          claimHtml = '<span class="ml-auto text-right text-[11px] leading-tight">' +
+            '<span class="block font-semibold text-emerald-700">' +
+              (claimer ? 'Picked by ' + escapeHtml(claimer) : 'Claimed') +
+            '</span></span>';
+        } else {
+          claimHtml = '<span class="ml-auto text-[10px] text-gray-400 uppercase tracking-widest">Open</span>';
+        }
+        return '<li class="px-4 py-3">' +
+          '<div class="flex items-center gap-2 mb-1">' +
+            '<span class="w-6 h-6 rounded-md bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0">' + a.case_letter + '</span>' +
+            '<span class="text-sm font-bold text-gray-900">' + escapeHtml(a.player_name) + '</span>' +
+            claimHtml +
+          '</div>' +
+          '<p class="text-xs text-gray-500 break-words">' + escapeHtml(a.members_csv || '—') + '</p>' +
+        '</li>';
+      }).join('');
+      listEl.innerHTML = html;
+      return;
+    }
+    countEl.textContent = assignments.length + ' joined';
     var byCase = {};
     assignments.forEach(function (a) { byCase[a.case_letter] = a; });
     var html = caseTitles.map(function (c) {
@@ -174,7 +311,7 @@
           : '<span class="text-[10px] text-gray-400 uppercase tracking-widest">Free</span>') +
         '</li>';
     }).join('');
-    document.getElementById('assignList').innerHTML = html;
+    listEl.innerHTML = html;
   }
   function renderLeaderboard(attempts) {
     var box = document.getElementById('leaderboard');
@@ -187,12 +324,17 @@
       var medal = i < 3 ? medals[i] : (i + 1) + '.';
       var pct = a.max_score ? Math.round((a.score / a.max_score) * 100) : 0;
       var tone = pct >= 80 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-gray-500';
-      return '<li class="px-4 py-2.5 flex items-center gap-3">' +
+      var debriefHref = a.id ? '/safety-workshops/sessions/' + encodeURIComponent(sessionCode) + '/debrief/' + a.id : null;
+      var open  = debriefHref ? '<a href="' + debriefHref + '" class="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition group">' : '<div class="px-4 py-2.5 flex items-center gap-3">';
+      var close = debriefHref ? '</a>' : '</div>';
+      var trailing = debriefHref ? '<span class="text-[10px] font-bold text-brand-700 uppercase tracking-widest opacity-0 group-hover:opacity-100 transition">Debrief →</span>' : '';
+      return '<li>' + open +
         '<span class="w-7 text-center text-sm font-bold text-gray-700">' + medal + '</span>' +
         '<span class="font-semibold text-gray-900 flex-1 min-w-0 truncate">' + escapeHtml(a.player_name) + '</span>' +
         '<span class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Case ' + a.case_letter + '</span>' +
         '<span class="font-mono font-bold tabular-nums ' + tone + '">' + a.score + '<span class="text-gray-400 font-normal">/' + a.max_score + '</span></span>' +
-        '</li>';
+        trailing +
+        close + '</li>';
     }).join('') + '</ol>';
     box.innerHTML = html;
   }

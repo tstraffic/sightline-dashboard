@@ -97,6 +97,66 @@ function generateSessionCode() {
   return c;
 }
 
+// ── Helpers for group mode ──
+// Active crew, same shape the toolbox picker uses (excludes soft-deleted-only).
+function listSelectableCrew(db) {
+  return db.prepare(`
+    SELECT cm.id, cm.full_name, cm.employee_id
+    FROM crew_members cm
+    WHERE cm.active = 1
+      AND (
+        NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+        OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL)
+      )
+    ORDER BY cm.full_name
+  `).all();
+}
+
+// Published toolbox talks (most-recent first) for the source picker.
+function listPublishedToolboxes(db) {
+  return db.prepare(`
+    SELECT id, title, held_at
+    FROM toolbox_talks
+    WHERE status = 'published'
+    ORDER BY held_at DESC, created_at DESC
+    LIMIT 50
+  `).all();
+}
+
+// Names of workers who marked themselves Attending OR signed off as
+// Attended on a toolbox. These are the people the office would actually
+// expect to be in the room, so they're the default attendee set for a
+// group session.
+function listToolboxAttendees(db, toolboxId) {
+  return db.prepare(`
+    SELECT cm.id, cm.full_name, cm.employee_id, a.status
+    FROM toolbox_attendance a
+    JOIN crew_members cm ON cm.id = a.crew_member_id
+    WHERE a.toolbox_id = ?
+      AND a.status IN ('attending','attended')
+    ORDER BY cm.full_name
+  `).all(toolboxId);
+}
+
+// Fisher-Yates shuffle, returns a new array.
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// Split `names` into `n` groups, fairly distributed (sizes differ by at
+// most 1). Pre-shuffled names produces random teams; passing names as-is
+// keeps order. Returns array of arrays.
+function partition(names, n) {
+  const out = Array.from({ length: n }, () => []);
+  names.forEach((name, i) => out[i % n].push(name));
+  return out;
+}
+
 // Read the public base URL so the QR points at the right host.
 // APP_BASE_URL is set on Railway; locally falls back to a sensible default.
 function publicBaseUrl(req) {
@@ -194,8 +254,59 @@ router.get('/:slug', (req, res) => {
 });
 
 // =====================================================================
+// GET /safety-workshops/:slug/sessions/new — configure a new session
+// =====================================================================
+// Pre-flight form that lets the facilitator pick the mode
+// (individual / group) and, for group mode, choose attendees from a
+// toolbox talk or hand-pick them, then preview the auto-generated teams.
+router.get('/:slug/sessions/new', (req, res) => {
+  const db = getDb();
+  const wk = db
+    .prepare('SELECT * FROM workshop_definitions WHERE slug = ?')
+    .get(req.params.slug);
+  if (!wk) {
+    req.flash('error', 'Workshop not found.');
+    return res.redirect('/safety-workshops');
+  }
+  const module = WORKSHOPS[wk.slug];
+  if (!module) {
+    req.flash('error', 'Workshop ' + wk.slug + ' has no content module registered.');
+    return res.redirect('/safety-workshops');
+  }
+  res.render('safety-workshops/session-new', {
+    title: 'Start session · ' + wk.title,
+    currentPage: 'safety-workshops',
+    workshop: wk,
+    cases: module.CASES.map((c) => ({ letter: c.letter, title: c.title })),
+    crew: listSelectableCrew(db),
+    toolboxes: listPublishedToolboxes(db),
+  });
+});
+
+// JSON endpoint used by the config form when the facilitator picks a
+// toolbox talk — returns the list of crew who marked Attending /
+// Attended so they can be pre-selected as the attendee set.
+router.get('/toolbox-attendees/:id', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  if (!id) return res.status(400).json({ error: 'bad_id' });
+  const db = getDb();
+  const tb = db.prepare('SELECT id, title FROM toolbox_talks WHERE id = ?').get(id);
+  if (!tb) return res.status(404).json({ error: 'not_found' });
+  res.json({
+    toolbox: { id: tb.id, title: tb.title },
+    attendees: listToolboxAttendees(db, id),
+  });
+});
+
+// =====================================================================
 // POST /safety-workshops/:slug/sessions — create a new session
 // =====================================================================
+// Body:
+//   mode        — 'individual' (default) or 'group'
+//   groups_json — required if mode='group'. Array of
+//                 { name, members: [string], case_letter }.
+//                 Server validates case_letter is in the workshop's
+//                 CASES list and that group count matches case count.
 router.post('/:slug/sessions', (req, res) => {
   const db = getDb();
   const wk = db
@@ -205,6 +316,39 @@ router.post('/:slug/sessions', (req, res) => {
     req.flash('error', 'Workshop not found.');
     return res.redirect('/safety-workshops');
   }
+  const module = WORKSHOPS[wk.slug];
+  const validCases = module ? module.CASES.map((c) => c.letter) : [];
+
+  const mode = (req.body && req.body.mode === 'group') ? 'group' : 'individual';
+  let groups = null;
+  if (mode === 'group') {
+    try {
+      groups = JSON.parse(String((req.body && req.body.groups_json) || '[]'));
+    } catch (e) {
+      req.flash('error', 'Group data was malformed — try generating the teams again.');
+      return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+    }
+    if (!Array.isArray(groups) || groups.length === 0) {
+      req.flash('error', 'Pick attendees and generate at least one group first.');
+      return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+    }
+    // Each group must have a valid case + a name + at least one member.
+    for (const g of groups) {
+      if (!g || typeof g.name !== 'string' || !g.name.trim()) {
+        req.flash('error', 'Every group needs a name.');
+        return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+      }
+      if (!validCases.includes(String(g.case_letter || '').toUpperCase())) {
+        req.flash('error', 'A group was assigned an unknown case (' + g.case_letter + ').');
+        return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+      }
+      if (!Array.isArray(g.members) || g.members.length === 0) {
+        req.flash('error', 'Group "' + g.name + '" has no members.');
+        return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+      }
+    }
+  }
+
   // Generate a unique session code. Retry on the (vanishingly rare)
   // collision; bail after 10 tries.
   let code = null;
@@ -223,19 +367,48 @@ router.post('/:slug/sessions', (req, res) => {
     return res.redirect('/safety-workshops/' + wk.slug);
   }
   const facId = req.session.user && req.session.user.id;
-  const info = db
-    .prepare(
-      `INSERT INTO workshop_sessions (workshop_id, facilitator_id, session_code)
-       VALUES (?, ?, ?)`
-    )
-    .run(wk.id, facId || null, code);
+
+  const create = db.transaction(() => {
+    const info = db
+      .prepare(
+        `INSERT INTO workshop_sessions (workshop_id, facilitator_id, session_code, mode)
+         VALUES (?, ?, ?, ?)`
+      )
+      .run(wk.id, facId || null, code, mode);
+    if (mode === 'group' && groups) {
+      const ins = db.prepare(
+        `INSERT INTO workshop_assignments
+           (session_id, player_name, case_letter, members_csv, user_id)
+         VALUES (?, ?, ?, ?, ?)`
+      );
+      for (const g of groups) {
+        ins.run(
+          info.lastInsertRowid,
+          g.name.trim(),
+          String(g.case_letter).toUpperCase(),
+          g.members.join(', '),
+          facId || null
+        );
+      }
+    }
+    return info.lastInsertRowid;
+  });
+
+  let sessionId;
+  try {
+    sessionId = create();
+  } catch (e) {
+    console.error('[safety-workshops create]', e);
+    req.flash('error', 'Could not create session: ' + e.message);
+    return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+  }
   try {
     logActivity({
       user: req.session.user,
       action: 'create',
       entityType: 'workshop_session',
-      entityId: info.lastInsertRowid,
-      entityLabel: wk.title + ' · ' + code,
+      entityId: sessionId,
+      entityLabel: wk.title + ' · ' + code + (mode === 'group' ? ' (group)' : ''),
       ip: req.ip,
     });
   } catch (e) {}
@@ -264,20 +437,41 @@ router.get('/sessions/:code', (req, res) => {
   const module = WORKSHOPS[session.workshop_slug];
   const assignments = db
     .prepare(
-      `SELECT player_name, case_letter, claimed_at
+      `SELECT player_name, case_letter, claimed_at, members_csv, claimed_by_name
        FROM workshop_assignments
        WHERE session_id = ?
        ORDER BY claimed_at ASC`
     )
     .all(session.id);
-  const attempts = db
-    .prepare(
-      `SELECT player_name, case_letter, score, max_score, completed_at
-       FROM workshop_attempts
-       WHERE session_id = ? AND completed_at IS NOT NULL
-       ORDER BY score DESC, completed_at ASC`
-    )
-    .all(session.id);
+  // In group mode we collapse multiple attempts per group down to the
+  // single best score so the leaderboard has one row per team. Individual
+  // mode keeps every attempt as its own row (existing behaviour).
+  // Leaderboard rows carry the attempt id so the facilitator can click
+  // through to the debrief view. In group mode multiple devices in a
+  // team can submit; we surface the best-scoring attempt per team so
+  // the debrief shows the team's strongest run.
+  const attempts = (session.mode === 'group')
+    ? db.prepare(
+        `SELECT a.id, a.player_name, a.case_letter, a.score, a.max_score, a.completed_at
+         FROM workshop_attempts a
+         WHERE a.session_id = ?
+           AND a.completed_at IS NOT NULL
+           AND a.id = (
+             SELECT a2.id FROM workshop_attempts a2
+             WHERE a2.session_id = a.session_id
+               AND a2.player_name = a.player_name
+               AND a2.completed_at IS NOT NULL
+             ORDER BY a2.score DESC, a2.completed_at ASC
+             LIMIT 1
+           )
+         ORDER BY a.score DESC, a.completed_at ASC`
+      ).all(session.id)
+    : db.prepare(
+        `SELECT id, player_name, case_letter, score, max_score, completed_at
+         FROM workshop_attempts
+         WHERE session_id = ? AND completed_at IS NOT NULL
+         ORDER BY score DESC, completed_at ASC`
+      ).all(session.id);
   const participantUrl = publicBaseUrl(req) + '/wq/' + session.session_code;
   res.render('safety-workshops/session', {
     title: session.workshop_title + ' · ' + session.session_code,
@@ -301,25 +495,185 @@ router.get('/sessions/:code/live', (req, res) => {
   const db = getDb();
   const session = db
     .prepare(
-      'SELECT id, status FROM workshop_sessions WHERE session_code = ?'
+      'SELECT id, status, mode FROM workshop_sessions WHERE session_code = ?'
     )
     .get(req.params.code);
   if (!session) return res.status(404).json({ error: 'session_not_found' });
   const assignments = db
     .prepare(
-      `SELECT player_name, case_letter, claimed_at
+      `SELECT player_name, case_letter, claimed_at, members_csv, claimed_by_name
        FROM workshop_assignments WHERE session_id = ? ORDER BY claimed_at`
     )
     .all(session.id);
-  const attempts = db
+  const attempts = (session.mode === 'group')
+    ? db.prepare(
+        `SELECT a.id, a.player_name, a.case_letter, a.score, a.max_score, a.completed_at
+         FROM workshop_attempts a
+         WHERE a.session_id = ?
+           AND a.completed_at IS NOT NULL
+           AND a.id = (
+             SELECT a2.id FROM workshop_attempts a2
+             WHERE a2.session_id = a.session_id
+               AND a2.player_name = a.player_name
+               AND a2.completed_at IS NOT NULL
+             ORDER BY a2.score DESC, a2.completed_at ASC
+             LIMIT 1
+           )
+         ORDER BY a.score DESC, a.completed_at ASC`
+      ).all(session.id)
+    : db.prepare(
+        `SELECT id, player_name, case_letter, score, max_score, completed_at
+         FROM workshop_attempts
+         WHERE session_id = ? AND completed_at IS NOT NULL
+         ORDER BY score DESC, completed_at ASC`
+      ).all(session.id);
+  res.json({ status: session.status, mode: session.mode, assignments, attempts });
+});
+
+// =====================================================================
+// POST /safety-workshops/sessions/:code/add-participant — manual add
+// =====================================================================
+// Facilitator-side fallback for adding someone to a session the public
+// QR flow didn't capture — workers without phones, late arrivals, or
+// someone whose phone won't scan. Body:
+//   name         — display name (required, 2–60 chars)
+//   case_letter  — A/B/C/… (required, must be valid for this workshop)
+//   score        — optional integer. If provided, also writes a
+//                  workshop_attempts row so the new participant lands on
+//                  the leaderboard immediately. Max defaults to the
+//                  largest max_score already recorded this session, or
+//                  100 if no attempts have been submitted yet.
+//   max_score    — optional override for the max if the admin wants to
+//                  override the inherited default.
+router.post('/sessions/:code/add-participant', (req, res) => {
+  const db = getDb();
+  const session = db
     .prepare(
-      `SELECT player_name, case_letter, score, max_score, completed_at
-       FROM workshop_attempts
-       WHERE session_id = ? AND completed_at IS NOT NULL
-       ORDER BY score DESC, completed_at ASC`
+      `SELECT s.*, w.slug AS workshop_slug, w.title AS workshop_title
+       FROM workshop_sessions s
+       JOIN workshop_definitions w ON w.id = s.workshop_id
+       WHERE s.session_code = ?`
     )
-    .all(session.id);
-  res.json({ status: session.status, assignments, attempts });
+    .get(req.params.code);
+  if (!session) {
+    req.flash('error', 'Session not found.');
+    return res.redirect('/safety-workshops');
+  }
+  if (session.status !== 'open') {
+    req.flash('error', "Can't add — session is closed. Reopen it first.");
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  const module = WORKSHOPS[session.workshop_slug];
+  if (!module) {
+    req.flash('error', 'Workshop content module missing.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  const validCases = module.CASES.map((c) => c.letter);
+
+  const name = String((req.body && req.body.name) || '').trim();
+  const caseLetter = String((req.body && req.body.case_letter) || '').toUpperCase().trim();
+  const rawScore = (req.body && req.body.score != null) ? String(req.body.score).trim() : '';
+  const rawMax   = (req.body && req.body.max_score != null) ? String(req.body.max_score).trim() : '';
+  // When the admin ticks "Override existing entry" on the form the
+  // existing assignment/attempt is replaced rather than blocking the
+  // submit. Use case: a worker accidentally refreshed mid-quiz and lost
+  // their answers, but the case assignment is still claimed so the
+  // public flow won't take a fresh entry under the same name.
+  const override = !!(req.body && (req.body.override === '1' || req.body.override === 'on' || req.body.override === true));
+
+  if (name.length < 2 || name.length > 60) {
+    req.flash('error', 'Name is required (2–60 characters).');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  if (!validCases.includes(caseLetter)) {
+    req.flash('error', 'Pick a valid case.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  // Same case-insensitive name dedupe as the public start endpoint.
+  const existing = db
+    .prepare(
+      `SELECT id, case_letter FROM workshop_assignments
+       WHERE session_id = ? AND LOWER(player_name) = LOWER(?)`
+    )
+    .get(session.id, name);
+  if (existing && !override) {
+    req.flash('error', name + ' is already on the board (Case ' + existing.case_letter + '). Tick "Override existing entry" to replace.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+
+  // Inherit max_score from an existing attempt so the leaderboard's
+  // /160 (or whatever) stays consistent across all rows. Admin can
+  // override via the max_score form field.
+  let maxScore = parseInt(rawMax, 10);
+  if (!Number.isFinite(maxScore) || maxScore <= 0) {
+    const fromAttempt = db
+      .prepare('SELECT MAX(max_score) AS m FROM workshop_attempts WHERE session_id = ?')
+      .get(session.id);
+    maxScore = (fromAttempt && fromAttempt.m) || 100;
+  }
+  let score = null;
+  if (rawScore !== '') {
+    score = parseInt(rawScore, 10);
+    if (!Number.isFinite(score) || score < 0 || score > maxScore) {
+      req.flash('error', 'Score must be between 0 and ' + maxScore + '.');
+      return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    }
+  }
+
+  const userId = req.session.user ? req.session.user.id : null;
+  const tx = db.transaction(() => {
+    if (existing) {
+      // Override path — re-point the assignment to the new case (if
+      // the admin picked a different one) and replace any prior attempt
+      // for this name. Clears the player's old answers_json since the
+      // override is authoritative.
+      db.prepare(
+        `UPDATE workshop_assignments
+         SET case_letter = ?, user_id = COALESCE(?, user_id)
+         WHERE id = ?`
+      ).run(caseLetter, userId, existing.id);
+      db.prepare(
+        `DELETE FROM workshop_attempts WHERE session_id = ? AND LOWER(player_name) = LOWER(?)`
+      ).run(session.id, name);
+    } else {
+      db.prepare(
+        `INSERT INTO workshop_assignments (session_id, player_name, case_letter, user_id)
+         VALUES (?, ?, ?, ?)`
+      ).run(session.id, name, caseLetter, userId);
+    }
+    if (score != null) {
+      db.prepare(
+        `INSERT INTO workshop_attempts
+           (session_id, workshop_id, case_letter, player_name, score, max_score,
+            answers_json, started_at, completed_at)
+         VALUES (?, ?, ?, ?, ?, ?, '{}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)`
+      ).run(session.id, session.workshop_id, caseLetter, name, score, maxScore);
+    }
+  });
+  try {
+    tx();
+  } catch (e) {
+    console.error('[safety-workshops add-participant]', e);
+    req.flash('error', 'Could not add: ' + e.message);
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  try {
+    logActivity({
+      user: req.session.user,
+      action: existing ? 'override_participant' : 'add_participant',
+      entityType: 'workshop_session',
+      entityId: session.id,
+      entityLabel: session.session_code,
+      details: name + ' → Case ' + caseLetter + (score != null ? ' (' + score + '/' + maxScore + ')' : '') + (existing ? ' [override]' : ''),
+      ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash('success',
+    (existing ? 'Overrode ' : 'Added ') + name +
+    ' → Case ' + caseLetter +
+    (score != null ? ' with score ' + score + '/' + maxScore + '.' : '.')
+  );
+  return res.redirect('/safety-workshops/sessions/' + session.session_code);
 });
 
 // =====================================================================
@@ -372,12 +726,21 @@ router.post('/sessions/:code/restart', (req, res) => {
     req.flash('error', 'Session not found.');
     return res.redirect('/safety-workshops');
   }
-  // Wrap the wipe + status flip in a transaction so the dashboard never
-  // shows the "in-between" state where assignments are gone but old
-  // attempts still rank on the leaderboard.
+  // In group mode we keep the team rows (they're the whole point of the
+  // session — same crowd plays another round) but clear the claim so any
+  // device can pick again. In individual mode every assignment row was
+  // created on a player's claim, so wiping them is correct.
   const restart = db.transaction(() => {
-    db.prepare('DELETE FROM workshop_attempts    WHERE session_id = ?').run(session.id);
-    db.prepare('DELETE FROM workshop_assignments WHERE session_id = ?').run(session.id);
+    db.prepare('DELETE FROM workshop_attempts WHERE session_id = ?').run(session.id);
+    if (session.mode === 'group') {
+      db.prepare(
+        `UPDATE workshop_assignments
+         SET claimed_by_name = NULL
+         WHERE session_id = ?`
+      ).run(session.id);
+    } else {
+      db.prepare('DELETE FROM workshop_assignments WHERE session_id = ?').run(session.id);
+    }
     db.prepare(
       `UPDATE workshop_sessions
        SET status = 'open', closed_at = NULL
@@ -460,6 +823,70 @@ router.get('/attempts/all', (req, res) => {
     title: 'Workshop attempts',
     currentPage: 'safety-workshops',
     rows,
+  });
+});
+
+// =====================================================================
+// GET /safety-workshops/sessions/:code/debrief/:attemptId — debrief view
+// =====================================================================
+// Facilitator-facing post-quiz walkthrough. Loads the case from the
+// workshop content module and merges it with the attempt's stored
+// answers_json (per-question { short, pts, max, picked }) so each
+// question can be rendered alongside the team's pick and the correct
+// answer. Used after scores are in to debrief teams from the
+// leaderboard — click a row, walk the team through what they got
+// right / wrong with the SWMS clause reference.
+router.get('/sessions/:code/debrief/:attemptId', (req, res) => {
+  const db = getDb();
+  const session = db
+    .prepare(
+      `SELECT s.*, w.slug AS workshop_slug, w.title AS workshop_title
+       FROM workshop_sessions s
+       JOIN workshop_definitions w ON w.id = s.workshop_id
+       WHERE s.session_code = ?`
+    )
+    .get(req.params.code);
+  if (!session) {
+    req.flash('error', 'Session not found.');
+    return res.redirect('/safety-workshops');
+  }
+  const attempt = db
+    .prepare(
+      `SELECT * FROM workshop_attempts
+       WHERE id = ? AND session_id = ?`
+    )
+    .get(parseInt(req.params.attemptId, 10), session.id);
+  if (!attempt) {
+    req.flash('error', 'Attempt not found in this session.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  const module = WORKSHOPS[session.workshop_slug];
+  if (!module) {
+    req.flash('error', 'Workshop content module missing — debrief needs it.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+  const caseDef = module.CASES.find((c) => c.letter === attempt.case_letter);
+  if (!caseDef) {
+    req.flash('error', 'Case ' + attempt.case_letter + ' not in this workshop.');
+    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  }
+
+  // Parse stored answers. Older / truncated rows might have null —
+  // render them as "no answer recorded" instead of crashing.
+  let answers = [];
+  try { answers = JSON.parse(attempt.answers_json || '[]') || []; } catch (e) {}
+
+  res.render('safety-workshops/debrief', {
+    title: 'Debrief · ' + attempt.player_name + ' · Case ' + attempt.case_letter,
+    currentPage: 'safety-workshops',
+    session,
+    attempt,
+    caseDef,
+    answers,
+    IMPACTS: module.IMPACTS,
+    LIKE: module.LIKE,
+    BANDS: module.BANDS,
+    CLAUSE_DETAIL: (module.CLAUSE_DETAIL && module.CLAUSE_DETAIL[caseDef.letter]) || [],
   });
 });
 

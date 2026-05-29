@@ -1,0 +1,161 @@
+<%
+const statusBadgeClass = {
+  draft:      'bg-gray-100 text-gray-700 ring-gray-200',
+  sent:       'bg-blue-50 text-blue-700 ring-blue-200',
+  accepted:   'bg-emerald-50 text-emerald-700 ring-emerald-200',
+  rejected:   'bg-red-50 text-red-700 ring-red-200',
+  expired:    'bg-amber-50 text-amber-700 ring-amber-200',
+  superseded: 'bg-purple-50 text-purple-700 ring-purple-200',
+};
+function fmtMoney(n) {
+  if (n === null || n === undefined) return '—';
+  return '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fmtPct(n) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toFixed(1) + '%';
+}
+function listMarginClass(pct, hasRev) {
+  if (!hasRev) return 'text-gray-400';
+  if (pct >= 25) return 'text-emerald-700 font-semibold';
+  if (pct >= 15) return 'text-amber-700 font-semibold';
+  return 'text-red-700 font-semibold';
+}
+%>
+
+<div class="max-w-7xl mx-auto space-y-6">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between gap-4">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">Quotes</h1>
+      <p class="text-sm text-gray-500 mt-1">Fixed-price offers for known scopes. <%= counts.all %> total.</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/rate-cards" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Rate Cards</a>
+      <a href="/quotes/new" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        New Quote
+      </a>
+    </div>
+  </div>
+
+  <% if (flash_success && flash_success.length > 0) { %>
+    <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm" data-auto-dismiss><%= flash_success[0] %></div>
+  <% } %>
+  <% if (flash_error && flash_error.length > 0) { %>
+    <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm" data-auto-dismiss><%= flash_error[0] %></div>
+  <% } %>
+
+  <!-- Status filter pills -->
+  <div class="flex flex-wrap items-center gap-2">
+    <%
+    const pills = [['all','All']].concat(statuses.map(s => [s, statusLabels[s]]));
+    pills.forEach(([key, label]) => {
+      const isActive = filter.status === key;
+      const count = counts[key] || 0;
+    %>
+      <a href="?status=<%= key %><%= filter.client_id ? '&client_id=' + filter.client_id : '' %><%= filter.prepared_by ? '&prepared_by=' + filter.prepared_by : '' %><%= filter.search ? '&search=' + encodeURIComponent(filter.search) : '' %>"
+        class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg border <%= isActive ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50' %>">
+        <%= label %>
+        <span class="<%= isActive ? 'bg-white/25 text-white' : 'bg-gray-100 text-gray-600' %> px-1.5 py-0.5 rounded text-[10px] font-semibold"><%= count %></span>
+      </a>
+    <% }) %>
+  </div>
+
+  <!-- Filters + search -->
+  <form method="GET" action="/quotes" class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 grid grid-cols-1 md:grid-cols-12 gap-3">
+    <input type="hidden" name="status" value="<%= filter.status %>">
+    <div class="md:col-span-4">
+      <label class="block text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Search</label>
+      <input type="text" name="search" value="<%= filter.search %>" placeholder="Quote #, project, client…"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div class="md:col-span-3">
+      <label class="block text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Client</label>
+      <select name="client_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All clients</option>
+        <% clients.forEach(c => { %>
+          <option value="<%= c.id %>" <%= String(filter.client_id) === String(c.id) ? 'selected' : '' %>><%= c.company_name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="md:col-span-3">
+      <label class="block text-[11px] uppercase tracking-wide text-gray-500 font-semibold mb-1">Prepared by</label>
+      <select name="prepared_by" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">Anyone</option>
+        <% preparers.forEach(u => { %>
+          <option value="<%= u.id %>" <%= String(filter.prepared_by) === String(u.id) ? 'selected' : '' %>><%= u.full_name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="md:col-span-2 flex items-end gap-2">
+      <button type="submit" class="flex-1 px-3 py-2 bg-gray-900 hover:bg-gray-800 text-white text-sm font-medium rounded-lg">Filter</button>
+      <a href="/quotes" class="px-3 py-2 text-sm text-gray-600 hover:text-gray-900">Reset</a>
+    </div>
+  </form>
+
+  <!-- Quotes table -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <% if (quotes.length === 0) { %>
+      <div class="px-6 py-16 text-center">
+        <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 7h6m-6 4h6m-6 4h4M5 5a2 2 0 012-2h10a2 2 0 012 2v14l-4-2-3 2-3-2-4 2V5z"/></svg>
+        <p class="text-sm text-gray-500">No quotes match these filters.</p>
+        <a href="/quotes/new" class="inline-flex items-center gap-2 mt-4 px-3 py-2 text-sm font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 rounded-lg">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+          Create the first quote
+        </a>
+      </div>
+    <% } else { %>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+          <tr>
+            <th class="px-4 py-3 text-left font-semibold">Quote #</th>
+            <th class="px-4 py-3 text-left font-semibold">Project</th>
+            <th class="px-4 py-3 text-left font-semibold">Client</th>
+            <th class="px-4 py-3 text-left font-semibold">Status</th>
+            <th class="px-4 py-3 text-left font-semibold">Quote date</th>
+            <th class="px-4 py-3 text-left font-semibold">Valid until</th>
+            <th class="px-4 py-3 text-right font-semibold">Total (inc GST)</th>
+            <% if (canSeeCost) { %>
+              <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Cost</th>
+              <th class="px-4 py-3 text-right font-semibold">Margin %</th>
+            <% } %>
+            <th class="px-4 py-3 text-left font-semibold">Prepared by</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <% quotes.forEach(q => { %>
+            <tr class="hover:bg-gray-50 cursor-pointer" onclick="window.location='/quotes/<%= q.id %>'">
+              <td class="px-4 py-3 font-mono text-xs">
+                <a href="/quotes/<%= q.id %>" class="text-brand-700 font-semibold hover:text-brand-800"><%= q.quote_number %></a>
+                <% if (q.version > 1) { %>
+                  <span class="ml-1 text-[10px] text-gray-400">v<%= q.version %></span>
+                <% } %>
+              </td>
+              <td class="px-4 py-3"><%= q.project_name || '—' %></td>
+              <td class="px-4 py-3 text-gray-700"><%= q.client_name || q.client_name_snapshot || '—' %></td>
+              <td class="px-4 py-3">
+                <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium ring-1 rounded <%= statusBadgeClass[q.status] || 'bg-gray-100 text-gray-700 ring-gray-200' %>">
+                  <%= statusLabels[q.status] || q.status %>
+                </span>
+              </td>
+              <td class="px-4 py-3 text-xs text-gray-700"><%= q.quote_date ? formatDateShort(q.quote_date) : '—' %></td>
+              <td class="px-4 py-3 text-xs text-gray-700"><%= q.valid_until_date ? formatDateShort(q.valid_until_date) : '—' %></td>
+              <td class="px-4 py-3 text-right font-mono text-gray-900"><%= fmtMoney(q.total_inc_gst) %></td>
+              <% if (canSeeCost) { %>
+                <% const hasRev = (q.subtotal_ex_gst || 0) > 0; %>
+                <td class="px-4 py-3 text-right font-mono text-gray-700 border-l border-gray-100"><%= fmtMoney(q.total_cost || 0) %></td>
+                <td class="px-4 py-3 text-right font-mono <%= listMarginClass(q.total_margin_pct || 0, hasRev) %>">
+                  <%= hasRev ? fmtPct(q.total_margin_pct || 0) : '—' %>
+                </td>
+              <% } %>
+              <td class="px-4 py-3 text-gray-600 text-xs"><%= q.prepared_by_name || '—' %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+
+</div>

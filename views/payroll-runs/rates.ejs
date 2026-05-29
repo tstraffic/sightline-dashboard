@@ -29,16 +29,16 @@
       { key: 'rate_fares_daily',   label: 'Travel',  step: '0.01' },
     ],
     tfn: [
-      { key: 'rate_day',           label: 'Day',     step: '0.01' },
-      { key: 'rate_ot',            label: 'Day OT',  step: '0.01' },
-      { key: 'rate_dt',            label: 'Day DT',  step: '0.01' },
-      { key: 'rate_night',         label: 'Night',   step: '0.01' },
-      { key: 'rate_night_ot',      label: 'Night OT',step: '0.01' },
-      { key: 'rate_night_dt',      label: 'Night DT',step: '0.01' },
-      { key: 'rate_weekend',       label: 'Weekend', step: '0.01' },
-      { key: 'rate_public_holiday',label: 'PH',      step: '0.01' },
-      { key: 'rate_meal',          label: 'Meal',    step: '0.01' },
-      { key: 'rate_fares_daily',   label: 'Fares',   step: '0.01' },
+      { key: 'rate_day',            label: 'Day',      step: '0.01' },
+      { key: 'rate_ot',             label: 'Day OT',   step: '0.01' },
+      { key: 'rate_dt',             label: 'Day DT',   step: '0.01' },
+      { key: 'rate_night',          label: 'Night',    step: '0.01' },
+      { key: 'rate_night_5plus',    label: 'Night 5+', step: '0.01' },
+      { key: 'rate_weekend_short',  label: 'Sat ≤2h',  step: '0.01' },
+      { key: 'rate_weekend',        label: 'Sat >2h',  step: '0.01' },
+      { key: 'rate_public_holiday', label: 'PH',       step: '0.01' },
+      { key: 'rate_meal',           label: 'Meal',     step: '0.01' },
+      { key: 'rate_fares_daily',    label: 'Fares',    step: '0.01' },
     ],
     unclassified: [],
   };
@@ -80,7 +80,36 @@
       <%- include('../partials/csrf') %>
       <% TABS.forEach((tab, i) => { %>
         <div id="tab-<%= tab.key %>" class="tab-pane <%= i === 0 ? '' : 'hidden' %>">
-          <% const cols = COLS[tab.key]; const list = groups[tab.key]; %>
+          <%
+            const cols = COLS[tab.key]; const list = groups[tab.key];
+            // Count workers in this tab without a tier — drives the
+            // "Default unassigned to Tier 2" banner. Skips Unclassified
+            // (no payment type means we don't know which preset to use).
+            const unassignedInTab = (tab.key === 'cash' || tab.key === 'abn' || tab.key === 'tfn')
+              ? list.filter(e => !e.tier).length
+              : 0;
+          %>
+          <% if (unassignedInTab > 0) { %>
+            <%
+              // Standalone <button> rather than a nested <form>: this tab
+              // sits inside the parent "save all rates" form, and HTML
+              // doesn't allow nested forms. The bulk POST is built and
+              // submitted via JS below — same CSRF token as the parent
+              // form, posted to /payroll/rates/bulk-tier.
+            %>
+            <div class="bg-brand-50 border-b border-brand-100 px-4 py-2.5 flex items-center justify-between gap-3 flex-wrap">
+              <p class="text-xs text-brand-900">
+                <strong><%= unassignedInTab %></strong> <%= tab.label %> worker<%= unassignedInTab === 1 ? '' : 's' %> have no tier yet.
+                <span class="text-brand-700/70">Per the panel's rule, the default is Tier 2 (Traffic Controller).</span>
+              </p>
+              <button type="button"
+                      data-bulk-tier="<%= tab.key %>"
+                      data-bulk-count="<%= unassignedInTab %>"
+                      class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg whitespace-nowrap">
+                Default <%= unassignedInTab %> to Tier 2
+              </button>
+            </div>
+          <% } %>
           <% if (list.length === 0) { %>
             <div class="p-10 text-center text-sm text-gray-500">
               <% if (tab.key === 'unclassified') { %>
@@ -96,7 +125,11 @@
                   <tr>
                     <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest sticky left-0 bg-gray-50 z-10">Worker</th>
                     <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Section</th>
+                    <% if (tab.key !== 'unclassified') { %>
+                      <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Tier</th>
+                    <% } %>
                     <% if (tab.key === 'tfn') { %>
+                      <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest" title="Night roster pattern — Night <5 (occasional) is the panel default">Night roster</th>
                       <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Award class.</th>
                     <% } %>
                     <% cols.forEach(c => { %>
@@ -114,14 +147,34 @@
                         <% if (e.employee_code) { %><p class="text-[10px] text-gray-400 font-mono"><%= e.employee_code %></p><% } %>
                       </td>
                       <td class="px-2 py-1">
-                        <select name="rows[emp_<%= e.id %>][payment_type]" class="px-2 py-1 border border-gray-300 rounded text-sm">
+                        <select name="rows[emp_<%= e.id %>][payment_type]" class="px-2 py-1 border border-gray-300 rounded text-sm" data-pt-for="<%= e.id %>">
                           <option value="" <%= !e.payment_type ? 'selected' : '' %>>—</option>
                           <option value="cash" <%= e.payment_type === 'cash' ? 'selected' : '' %>>Cash</option>
                           <option value="tfn"  <%= e.payment_type === 'tfn'  ? 'selected' : '' %>>TFN</option>
                           <option value="abn"  <%= e.payment_type === 'abn'  ? 'selected' : '' %>>ABN</option>
                         </select>
                       </td>
+                      <% if (tab.key !== 'unclassified') { %>
+                        <td class="px-2 py-1">
+                          <select name="rows[emp_<%= e.id %>][tier]" class="px-2 py-1 border border-gray-300 rounded text-sm" data-tier-for="<%= e.id %>">
+                            <option value="" <%= !e.tier ? 'selected' : '' %>>—</option>
+                            <option value="1" <%= e.tier == 1 ? 'selected' : '' %>>T1 · Trainee</option>
+                            <option value="2" <%= e.tier == 2 ? 'selected' : '' %>>T2 · TC</option>
+                            <option value="3" <%= e.tier == 3 ? 'selected' : '' %>>T3 · Adv TC/TMA</option>
+                            <option value="4" <%= e.tier == 4 ? 'selected' : '' %>>T4 · Team Leader</option>
+                            <option value="5" <%= e.tier == 5 ? 'selected' : '' %>>T5 · Senior TL</option>
+                            <option value="6" <%= e.tier == 6 ? 'selected' : '' %>>T6 · Site Supervisor</option>
+                          </select>
+                        </td>
+                      <% } %>
                       <% if (tab.key === 'tfn') { %>
+                        <td class="px-2 py-1">
+                          <select name="rows[emp_<%= e.id %>][night_pattern]" class="px-2 py-1 border border-gray-300 rounded text-sm" data-night-for="<%= e.id %>" title="Night roster pattern — drives which TFN night rate gets stamped">
+                            <option value="occasional"        <%= (!e.night_pattern || e.night_pattern === 'occasional')      ? 'selected' : '' %>>Night &lt;5</option>
+                            <option value="permanent"         <%= e.night_pattern === 'permanent'          ? 'selected' : '' %>>Night Perm.</option>
+                            <option value="continuous_5plus"  <%= e.night_pattern === 'continuous_5plus'   ? 'selected' : '' %>>Night 5+</option>
+                          </select>
+                        </td>
                         <td class="px-2 py-1">
                           <select name="rows[emp_<%= e.id %>][award_classification_id]" class="px-2 py-1 border border-gray-300 rounded text-sm">
                             <option value="">— None —</option>
@@ -162,12 +215,16 @@
                     </tr>
 
                     <!-- Hidden mirror inputs so columns NOT shown in this tab still post their current values -->
-                    <% const allRateKeys = ['rate_day','rate_ot','rate_dt','rate_night','rate_night_ot','rate_night_dt','rate_weekend','rate_public_holiday','rate_meal','rate_fares_daily']; %>
+                    <% const allRateKeys = ['rate_day','rate_ot','rate_dt','rate_night','rate_night_ot','rate_night_dt','rate_night_5plus','rate_weekend','rate_weekend_short','rate_public_holiday','rate_meal','rate_fares_daily']; %>
                     <% allRateKeys.forEach(k => { if (!cols.find(c => c.key === k)) { %>
                       <input type="hidden" name="rows[emp_<%= e.id %>][<%= k %>]" value="<%= e[k] || 0 %>">
                     <% } }) %>
                     <% if (tab.key !== 'tfn') { %>
                       <input type="hidden" name="rows[emp_<%= e.id %>][award_classification_id]" value="<%= e.award_classification_id || '' %>">
+                      <input type="hidden" name="rows[emp_<%= e.id %>][night_pattern]" value="<%= e.night_pattern || 'occasional' %>">
+                    <% } %>
+                    <% if (tab.key === 'unclassified') { %>
+                      <input type="hidden" name="rows[emp_<%= e.id %>][tier]" value="<%= e.tier || '' %>">
                     <% } %>
                   <% }) %>
                 </tbody>
@@ -231,6 +288,80 @@
       } catch (err) {
         console.error('Award fetch failed:', err);
       }
+    });
+  });
+
+  // When a worker's tier (or payment_type) changes, fetch the matching
+  // wage-panel preset and stamp the row's rate inputs from it. Mirrors
+  // the existing award-classification dropdown behaviour above, but
+  // sources from /payroll/wage-tiers (the canonical FY26 panel).
+  function applyTierPreset(empId, row) {
+    if (!row) return;
+    const tierSel = row.querySelector('select[data-tier-for]');
+    const ptSel   = row.querySelector('select[data-pt-for]');
+    const npSel   = row.querySelector('select[data-night-for]');
+    const tier = tierSel && tierSel.value;
+    const pt   = ptSel && ptSel.value;
+    const np   = (npSel && npSel.value) || 'occasional';
+    if (!tier || !pt) return;
+    fetch('/payroll/wage-tiers/preset.json?tier=' + encodeURIComponent(tier) + '&payment_type=' + encodeURIComponent(pt) + '&night_pattern=' + encodeURIComponent(np), { headers: { Accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data || !data.rates) return;
+        Object.entries(data.rates).forEach(([k, v]) => {
+          if (v == null) return;
+          document.querySelectorAll('input[name="rows[emp_' + empId + '][' + k + ']"]').forEach(inp => {
+            inp.value = (parseFloat(v) || 0).toFixed(2);
+          });
+        });
+        row.classList.add('bg-emerald-50');
+        setTimeout(() => row.classList.remove('bg-emerald-50'), 900);
+      })
+      .catch(() => { /* silent — admin can still edit manually */ });
+  }
+  document.querySelectorAll('select[data-tier-for]').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const empId = e.target.dataset.tierFor;
+      applyTierPreset(empId, e.target.closest('tr'));
+    });
+  });
+  document.querySelectorAll('select[data-pt-for]').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const empId = e.target.dataset.ptFor;
+      const row = e.target.closest('tr');
+      const tierSel = row && row.querySelector('select[data-tier-for]');
+      if (tierSel && tierSel.value) applyTierPreset(empId, row);
+    });
+  });
+  document.querySelectorAll('select[data-night-for]').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const empId = e.target.dataset.nightFor;
+      const row = e.target.closest('tr');
+      const tierSel = row && row.querySelector('select[data-tier-for]');
+      if (tierSel && tierSel.value) applyTierPreset(empId, row);
+    });
+  });
+
+  // Bulk "Default unassigned to Tier 2" — build an ad-hoc form outside
+  // the parent rates form and submit it. Submitting via fetch and then
+  // redirecting keeps the CSRF flow simple (re-uses the parent form's
+  // token).
+  document.querySelectorAll('button[data-bulk-tier]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const pt = btn.dataset.bulkTier;
+      const count = btn.dataset.bulkCount;
+      if (!confirm('Stamp ' + count + ' unassigned ' + pt.toUpperCase() + ' worker(s) at Tier 2 using the FY26 wage panel?\nRates will be set to the Tier 2 (Traffic Controller) preset. You can adjust individuals afterwards.')) return;
+      const csrf = document.querySelector('form[action="/payroll/rates"] input[name="_csrf"]')?.value;
+      const f = document.createElement('form');
+      f.method = 'POST';
+      f.action = '/payroll/rates/bulk-tier';
+      f.style.display = 'none';
+      const add = (n, v) => { const i = document.createElement('input'); i.name = n; i.value = v; f.appendChild(i); };
+      if (csrf) add('_csrf', csrf);
+      add('payment_type', pt);
+      add('tier', '2');
+      document.body.appendChild(f);
+      f.submit();
     });
   });
 

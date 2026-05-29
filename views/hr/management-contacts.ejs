@@ -1,0 +1,142 @@
+<% locals.currentPage = 'hr' %>
+
+<div class="max-w-3xl mx-auto space-y-5">
+  <div>
+    <a href="/hr" class="text-sm text-brand-600 hover:underline">← HR Dashboard</a>
+    <h1 class="text-2xl font-bold text-gray-900 mt-1">Management Contacts</h1>
+    <p class="text-sm text-gray-500 mt-1">
+      These contacts show on the worker portal under <code class="text-xs px-1.5 py-0.5 rounded bg-gray-100">More → Contacts</code>.
+      Workers tap the phone to call, or the email to write. Update any field below and hit <strong>Save</strong>.
+    </p>
+  </div>
+
+  <form method="POST" action="/hr/management-contacts" class="bg-white border border-gray-200 rounded-xl shadow-sm" id="mc-form">
+    <%- include('../partials/csrf') %>
+
+    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+      <p class="text-xs text-gray-500">
+        Clear a row's <em>Label</em> to delete it. Add a new row with the button below.
+      </p>
+      <div class="flex items-center gap-2">
+        <button type="button" id="mc-add-row" class="px-3 py-1.5 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded inline-flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          Add contact
+        </button>
+        <button type="submit" class="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded">Save</button>
+      </div>
+    </div>
+
+    <div id="mc-rows" class="divide-y divide-gray-100">
+      <% contacts.forEach(function (c, i) { %>
+        <div class="mc-row grid grid-cols-1 sm:grid-cols-12 gap-2 p-4">
+          <div class="sm:col-span-2">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Slug</label>
+            <input type="text" name="key" value="<%= c.key %>" maxlength="40" placeholder="e.g. operations"
+              class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500 font-mono">
+          </div>
+          <div class="sm:col-span-3">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Label</label>
+            <input type="text" name="label" value="<%= c.label %>" maxlength="80" placeholder="e.g. Operations"
+              class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+          </div>
+          <div class="sm:col-span-4">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Email</label>
+            <input type="email" name="email" value="<%= c.email %>" maxlength="200" placeholder="name@tstc.com.au"
+              class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+          </div>
+          <div class="sm:col-span-2">
+            <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Phone</label>
+            <input type="text" name="phone" value="<%= c.phone %>" maxlength="40" placeholder="0400 000 000"
+              class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+          </div>
+          <div class="sm:col-span-1 flex items-end justify-end">
+            <button type="button" class="mc-remove text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" title="Remove this row">Remove</button>
+          </div>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="px-5 py-3 border-t border-gray-200 bg-gray-50 rounded-b-xl flex items-center justify-between gap-3 flex-wrap">
+      <p class="text-[11px] text-gray-500">
+        Slugs <code class="px-1 rounded bg-white border border-gray-200">operations</code>,
+        <code class="px-1 rounded bg-white border border-gray-200">accounts</code>,
+        <code class="px-1 rounded bg-white border border-gray-200">hr</code>
+        get coloured icons on the worker side. Other slugs render with a neutral icon.
+      </p>
+      <button type="submit" class="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded">Save</button>
+    </div>
+  </form>
+
+  <% if (defaults && defaults.length) { %>
+    <details class="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <summary class="px-5 py-3 text-sm font-semibold text-gray-700 cursor-pointer select-none">Defaults (used if every row above is cleared)</summary>
+      <ul class="px-5 py-3 text-xs text-gray-600 space-y-1 border-t border-gray-100">
+        <% defaults.forEach(function (d) { %>
+          <li><span class="font-mono text-gray-400 mr-2"><%= d.key %></span><strong><%= d.label %></strong> · <%= d.email %> · <%= d.phone %></li>
+        <% }) %>
+      </ul>
+    </details>
+  <% } %>
+</div>
+
+<template id="mc-row-template">
+  <div class="mc-row grid grid-cols-1 sm:grid-cols-12 gap-2 p-4">
+    <div class="sm:col-span-2">
+      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Slug</label>
+      <input type="text" name="key" value="" maxlength="40" placeholder="e.g. operations"
+        class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500 font-mono">
+    </div>
+    <div class="sm:col-span-3">
+      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Label</label>
+      <input type="text" name="label" value="" maxlength="80" placeholder="e.g. Operations"
+        class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+    </div>
+    <div class="sm:col-span-4">
+      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Email</label>
+      <input type="email" name="email" value="" maxlength="200" placeholder="name@tstc.com.au"
+        class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+    </div>
+    <div class="sm:col-span-2">
+      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Phone</label>
+      <input type="text" name="phone" value="" maxlength="40" placeholder="0400 000 000"
+        class="block w-full text-sm border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500">
+    </div>
+    <div class="sm:col-span-1 flex items-end justify-end">
+      <button type="button" class="mc-remove text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline">Remove</button>
+    </div>
+  </div>
+</template>
+
+<script>
+  (function () {
+    const rowsEl = document.getElementById('mc-rows');
+    const tpl    = document.getElementById('mc-row-template');
+    const addBtn = document.getElementById('mc-add-row');
+
+    function wireRemove(scope) {
+      (scope || document).querySelectorAll('.mc-remove').forEach(function (btn) {
+        if (btn.dataset.wired) return;
+        btn.dataset.wired = '1';
+        btn.addEventListener('click', function () {
+          const row = btn.closest('.mc-row');
+          // Don't delete the only row — leave it empty so admin can
+          // refill rather than getting an empty list with no inputs to
+          // type into.
+          if (rowsEl.querySelectorAll('.mc-row').length <= 1) {
+            row.querySelectorAll('input').forEach(function (i) { i.value = ''; });
+            return;
+          }
+          row.remove();
+        });
+      });
+    }
+    wireRemove();
+
+    addBtn.addEventListener('click', function () {
+      const node = tpl.content.firstElementChild.cloneNode(true);
+      rowsEl.appendChild(node);
+      wireRemove(node);
+      node.querySelector('input[name="key"]').focus();
+    });
+  })();
+</script>

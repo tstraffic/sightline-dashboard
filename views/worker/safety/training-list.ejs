@@ -5,11 +5,13 @@
     if (isNaN(d.getTime())) return s;
     return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' });
   }
+  // Class-based chips (was inline-style) so light-mode rules can reach
+  // them. Dark-mode hues live alongside the new classes below.
   function statusChip(t) {
-    if (t.status === 'expired')        return { label: 'Expired',        style: 'background: rgba(244,63,94,0.18); color: #fda4af; border: 1px solid rgba(244,63,94,0.3);' };
-    if (t.status === 'expiring_soon')  return { label: 'Expiring soon',  style: 'background: rgba(245,158,11,0.18); color: #fcd34d; border: 1px solid rgba(245,158,11,0.3);' };
-    if (t.status === 'no_expiry')      return { label: 'No expiry',      style: 'background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6); border: 1px solid rgba(255,255,255,0.10);' };
-    return { label: 'Valid', style: 'background: rgba(16,185,129,0.18); color: #6ee7b7; border: 1px solid rgba(16,185,129,0.3);' };
+    if (t.status === 'expired')        return { label: 'Expired',       cls: 'tr-chip-expired' };
+    if (t.status === 'expiring_soon')  return { label: 'Expiring soon', cls: 'tr-chip-expiring' };
+    if (t.status === 'no_expiry')      return { label: 'No expiry',     cls: 'tr-chip-none' };
+    return { label: 'Valid', cls: 'tr-chip-valid' };
   }
   var groups = { expired: [], expiring_soon: [], valid: [], no_expiry: [] };
   (records || []).forEach(function (r) { groups[r.status || 'valid'].push(r); });
@@ -32,11 +34,36 @@
   .tr-card.valid         { border-left: 3px solid #34d399; }
   .tr-title { font-size: 0.95rem; font-weight: 700; }
   .tr-meta  { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 4px; }
-  .tr-chip  { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; }
+  .tr-chip  { font-size: 0.65rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; border: 1px solid transparent; }
+  .tr-chip-expired  { background: rgba(244,63,94,0.18); color: #fda4af; border-color: rgba(244,63,94,0.3); }
+  .tr-chip-expiring { background: rgba(245,158,11,0.18); color: #fcd34d; border-color: rgba(245,158,11,0.3); }
+  .tr-chip-none     { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.6); border-color: rgba(255,255,255,0.10); }
+  .tr-chip-valid    { background: rgba(16,185,129,0.18); color: #6ee7b7; border-color: rgba(16,185,129,0.3); }
   .tr-notes { font-size: 0.78rem; color: rgba(255,255,255,0.65); margin-top: 6px; line-height: 1.4; white-space: pre-line; }
   .tr-empty { text-align: center; padding: 32px 16px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
   .tr-section-h { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: rgba(255,255,255,0.45); margin: 14px 4px 6px; }
   .tr-link  { color: #93C5FD; font-size: 0.75rem; text-decoration: underline; }
+
+  /* ---- Light mode ---- */
+  :root[data-theme="light"] .saf-wrap { color: #0F1115; }
+  :root[data-theme="light"] .saf-h1   { color: #0F1115; }
+  :root[data-theme="light"] .tr-card  {
+    background: #FFFFFF; border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04);
+  }
+  :root[data-theme="light"] .tr-card.expired       { border-left-color: #B91C1C; }
+  :root[data-theme="light"] .tr-card.expiring_soon { border-left-color: #B45309; }
+  :root[data-theme="light"] .tr-card.valid         { border-left-color: #047857; }
+  :root[data-theme="light"] .tr-title { color: #0F1115; }
+  :root[data-theme="light"] .tr-meta  { color: #6B7280; }
+  :root[data-theme="light"] .tr-notes { color: #374151; }
+  :root[data-theme="light"] .tr-empty { color: #6B7280; }
+  :root[data-theme="light"] .tr-section-h { color: #6B7280; }
+  :root[data-theme="light"] .tr-link  { color: #1D4ED8; }
+  :root[data-theme="light"] .tr-chip-expired  { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
+  :root[data-theme="light"] .tr-chip-expiring { background: #FFFBEB; color: #B45309; border-color: #FDE68A; }
+  :root[data-theme="light"] .tr-chip-none     { background: #F3F4F6; color: #4B5563; border-color: #E5E7EB; }
+  :root[data-theme="light"] .tr-chip-valid    { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
 </style>
 
 <div class="saf-wrap">
@@ -54,7 +81,7 @@
         <div class="tr-card <%= t.status %>">
           <div class="tr-title"><%= t.training_name %></div>
           <div class="tr-meta">
-            <span class="tr-chip" style="<%= chip.style %>"><%= chip.label %></span>
+            <span class="tr-chip <%= chip.cls %>"><%= chip.label %></span>
             <% if (t.completed_date) { %><span>Completed <%= fmtDate(t.completed_date) %></span><% } %>
             <% if (t.expiry_date) { %><span>· Expires <%= fmtDate(t.expiry_date) %></span><% } %>
             <% if (t.trainer_name) { %><span>· Trainer: <%= t.trainer_name %></span><% } %>

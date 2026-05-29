@@ -1,0 +1,282 @@
+<% locals.currentPage = 'pay-runs' %>
+<%
+  // PDF column shape per payment_type. Each tab shows only the columns that
+  // apply — ABN combines Night/Sun/PH into one column, Cash combines Day/Sat
+  // into one and Night/Sun/PH into another, TFN has the full 7 penalty cols.
+  const COLS = {
+    cash: [
+      { key: 'rate_day',          label: 'Day / Sat',     hint: 'Mon–Sat ordinary' },
+      { key: 'rate_night',        label: 'Night / Sun / PH', hint: 'After 6pm, weekends & PH' },
+    ],
+    abn: [
+      { key: 'rate_day',          label: 'Day',           hint: 'Mon–Fri ordinary' },
+      { key: 'rate_sat_long',     label: 'Sat',           hint: 'Saturday' },
+      { key: 'rate_night',        label: 'Night / Sun / PH', hint: 'After 6pm, Sun & PH' },
+    ],
+    tfn: [
+      { key: 'rate_day',          label: 'Base',          hint: 'Casual ordinary (incl. 25% loading + industry)' },
+      { key: 'rate_sat_short',    label: 'Sat ≤2h',       hint: '1.5×' },
+      { key: 'rate_sat_long',     label: 'Sat >2h',       hint: '2× (after 12pm)' },
+      { key: 'rate_sun',          label: 'Sun',           hint: '2×' },
+      { key: 'rate_public_holiday', label: 'Pub. Hol.',   hint: '2.5×' },
+      { key: 'rate_night',        label: 'Night <5',      hint: '1.5× (occasional / <5 in a row)' },
+      { key: 'rate_night_perm',   label: 'Night Perm.',   hint: '1.3× (permanent roster)' },
+      { key: 'rate_night_5plus',  label: 'Night 5+',      hint: '1.15× (continuous 5+ in a row Mon–Fri)' },
+    ],
+  };
+
+  const TAB_META = {
+    cash: { label: 'Cash', accent: 'amber',   note: 'No on-costs to T&S. Compliance and audit risk borne by management.' },
+    abn:  { label: 'ABN',  accent: 'sky',     note: 'Contractors operate under their own ABN. They bear their own tax, super, and leave.' },
+    tfn:  { label: 'TFN',  accent: 'emerald', note: 'Statutory minimum — Casual, Civil construction. BCG Award MA000020. Rates include 25% casual loading + industry allowance.' },
+  };
+
+  const TIER_BG = {
+    1: 'bg-white',
+    2: 'bg-brand-50/40',
+    3: 'bg-white',
+    4: 'bg-brand-50/40',
+    5: 'bg-white',
+    6: 'bg-white',
+  };
+
+  const UNIT_LABELS = {
+    per_day:  '/ day',
+    per_meal: '/ meal',
+    per_hour: '/ hour',
+    per_km:   '/ km',
+    percent:  '%',
+  };
+
+  function moneyOrPct(amount, unit) {
+    const n = parseFloat(amount) || 0;
+    return unit === 'percent' ? n.toFixed(1) : n.toFixed(2);
+  }
+%>
+
+<div class="space-y-5">
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <a href="/payroll/runs" class="text-sm text-brand-600 hover:underline">← Pay Runs</a>
+      <h1 class="text-2xl font-bold text-gray-900 mt-1">Wage Tiers</h1>
+      <p class="text-sm text-gray-500 mt-1 max-w-3xl">
+        FY26 Internal Wage Panel — six-tier framework × three payment types.
+        Edit a cell and Save to update the canonical rate card used across
+        approvals, worker rates, and pay runs.
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <a href="/payroll/rates" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Worker rates →</a>
+      <a href="/payroll/award-rates" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Award library →</a>
+    </div>
+  </div>
+
+  <!-- Confidentiality strip — straight from the PDF brief -->
+  <div class="bg-amber-50 border border-amber-200 rounded-lg px-4 py-2.5 text-xs text-amber-900 flex items-start gap-2">
+    <svg class="w-4 h-4 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    <span><strong>Confidential — management only.</strong> Workers are not to be shown this panel. Rates are disclosed verbally at engagement and confirmed in the individual agreement.</span>
+  </div>
+
+  <form method="POST" action="/payroll/wage-tiers">
+    <%- include('../partials/csrf') %>
+
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm">
+      <!-- Tabs -->
+      <div class="border-b border-gray-200 flex overflow-x-auto">
+        <% ['cash','abn','tfn','allowances'].forEach((key, i) => {
+             const meta = key === 'allowances' ? { label: 'Allowances' } : TAB_META[key];
+             const count = key === 'allowances' ? allowances.length : (byType[key] || []).length;
+        %>
+          <button type="button" onclick="showTab('<%= key %>')" id="tabBtn-<%= key %>"
+            class="tab-btn px-5 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition <%= i === 0 ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700' %>"
+            data-tab="<%= key %>">
+            <%= meta.label %>
+            <span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-700"><%= count %></span>
+          </button>
+        <% }) %>
+      </div>
+
+      <!-- Tier tabs: cash / abn / tfn -->
+      <% ['cash','abn','tfn'].forEach((key, i) => {
+           const meta = TAB_META[key];
+           const cols = COLS[key];
+           const list = (byType[key] || []).slice().sort((a, b) => a.tier - b.tier);
+      %>
+        <div id="tab-<%= key %>" class="tab-pane <%= i === 0 ? '' : 'hidden' %>">
+          <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
+            <p class="text-xs text-gray-600"><%= meta.note %></p>
+          </div>
+
+          <% if (list.length === 0) { %>
+            <div class="p-10 text-center text-sm text-gray-500">
+              No presets seeded for <%= meta.label %>. Run migration 226.
+            </div>
+          <% } else { %>
+            <div class="overflow-x-auto">
+              <table class="min-w-full text-sm">
+                <thead class="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest sticky left-0 bg-gray-50 z-10 w-12">Tier</th>
+                    <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Role</th>
+                    <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Award map</th>
+                    <% cols.forEach(c => { %>
+                      <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest" title="<%= c.hint %>">
+                        <%= c.label %>
+                      </th>
+                    <% }) %>
+                    <% if (key !== 'tfn') { %>
+                      <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest" title="Per-shift, flat. Not paid where the worker is supplied a ute.">Travel</th>
+                    <% } %>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                  <% list.forEach(p => { %>
+                    <tr class="<%= TIER_BG[p.tier] || 'bg-white' %>">
+                      <td class="px-3 py-3 sticky left-0 <%= TIER_BG[p.tier] || 'bg-white' %> z-[5]">
+                        <span class="inline-flex items-center justify-center w-7 h-7 rounded-full bg-brand-100 text-brand-700 font-bold text-xs"><%= p.tier %></span>
+                      </td>
+                      <td class="px-3 py-3">
+                        <p class="font-semibold text-gray-900 text-sm"><%= p.role_label %></p>
+                        <p class="text-[10px] text-gray-500 mt-0.5"><%= p.qualifications %></p>
+                      </td>
+                      <td class="px-2 py-3 text-xs text-gray-600 font-mono whitespace-nowrap"><%= p.award_mapping %></td>
+                      <% cols.forEach(c => { %>
+                        <td class="px-1 py-2 text-right">
+                          <div class="inline-flex items-center">
+                            <span class="text-gray-400 text-xs mr-0.5">$</span>
+                            <input type="number" step="0.01" min="0"
+                              name="presets[p_<%= p.id %>][<%= c.key %>]"
+                              value="<%= (parseFloat(p[c.key]) || 0).toFixed(2) %>"
+                              class="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm text-right tabular-nums focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                          </div>
+                        </td>
+                      <% }) %>
+                      <% if (key !== 'tfn') { %>
+                        <td class="px-1 py-2 text-right">
+                          <div class="inline-flex items-center">
+                            <span class="text-gray-400 text-xs mr-0.5">$</span>
+                            <input type="number" step="0.01" min="0"
+                              name="presets[p_<%= p.id %>][travel_allowance]"
+                              value="<%= (parseFloat(p.travel_allowance) || 0).toFixed(2) %>"
+                              class="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm text-right tabular-nums focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                          </div>
+                        </td>
+                      <% } else { %>
+                        <input type="hidden" name="presets[p_<%= p.id %>][travel_allowance]" value="0">
+                      <% } %>
+
+                      <%
+                        // Mirror any cols not visible on this tab so we never
+                        // wipe them by submit. TFN shows all 8, ABN/Cash hide
+                        // the TFN-only penalty cols.
+                        const VISIBLE = new Set(cols.map(c => c.key));
+                        const ALL = ['rate_day','rate_sat_short','rate_sat_long','rate_sun','rate_public_holiday','rate_night','rate_night_perm','rate_night_5plus'];
+                      %>
+                      <% ALL.forEach(k => { if (!VISIBLE.has(k)) { %>
+                        <input type="hidden" name="presets[p_<%= p.id %>][<%= k %>]" value="<%= (parseFloat(p[k]) || 0).toFixed(2) %>">
+                      <% } }) %>
+                    </tr>
+                  <% }) %>
+                </tbody>
+              </table>
+            </div>
+
+            <% if (key === 'tfn') { %>
+              <div class="px-5 py-3 bg-gray-50/60 border-t border-gray-100 text-[11px] text-gray-500 space-y-0.5">
+                <p>Sat ≤2h = 1.5× · Sat >2h / after 12pm = 2× · Sun = 2× · Pub. Hol. = 2.5×</p>
+                <p>Night &lt;5 (occasional / less than 5 in a row) = 1.5× · Night Perm. (permanent night roster) = 1.3× · Night 5+ (continuous, 5+ in a row Mon–Fri) = 1.15×</p>
+                <p class="text-gray-400 italic">Most T&amp;S night shifts attract Night &lt;5. Use Night Perm. only where the worker is on a rostered permanent-night arrangement. TFN travel is handled via the fares allowance, not a per-shift flat.</p>
+              </div>
+            <% } else { %>
+              <div class="px-5 py-3 bg-gray-50/60 border-t border-gray-100 text-[11px] text-gray-500">
+                <p>Travel allowance is per-shift, flat. Not paid where the worker is supplied a ute for the shift.</p>
+              </div>
+            <% } %>
+          <% } %>
+        </div>
+      <% }) %>
+
+      <!-- Allowances tab -->
+      <div id="tab-allowances" class="tab-pane hidden">
+        <div class="px-5 py-3 border-b border-gray-100 bg-gray-50/50">
+          <p class="text-xs text-gray-600">Global allowance table — applied across all tiers and payment types per the rules in each row.</p>
+        </div>
+        <% if (allowances.length === 0) { %>
+          <div class="p-10 text-center text-sm text-gray-500">No allowances seeded — run migration 226.</div>
+        <% } else { %>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Allowance</th>
+                  <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest w-40">Amount</th>
+                  <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest w-20">Unit</th>
+                  <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Notes</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <% allowances.forEach(a => { %>
+                  <tr>
+                    <td class="px-3 py-3">
+                      <p class="font-semibold text-gray-900 text-sm"><%= a.label %></p>
+                      <p class="text-[10px] text-gray-400 font-mono mt-0.5"><%= a.code %></p>
+                    </td>
+                    <td class="px-2 py-2 text-right">
+                      <div class="inline-flex items-center">
+                        <% if (a.unit !== 'percent') { %>
+                          <span class="text-gray-400 text-xs mr-0.5">$</span>
+                        <% } %>
+                        <input type="number" step="<%= a.unit === 'percent' ? '0.1' : '0.01' %>" min="0"
+                          name="allowances[a_<%= a.id %>][amount]"
+                          value="<%= moneyOrPct(a.amount, a.unit) %>"
+                          class="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right tabular-nums focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                        <% if (a.unit === 'percent') { %>
+                          <span class="text-gray-400 text-xs ml-0.5">%</span>
+                        <% } %>
+                      </div>
+                    </td>
+                    <td class="px-2 py-2 text-xs text-gray-500"><%= UNIT_LABELS[a.unit] || a.unit %></td>
+                    <td class="px-3 py-2 text-xs text-gray-600"><%= a.notes %></td>
+                  </tr>
+                <% }) %>
+              </tbody>
+            </table>
+          </div>
+        <% } %>
+      </div>
+
+      <div class="bg-gray-50 px-4 py-3 border-t border-gray-200 flex items-center justify-between rounded-b-xl">
+        <p class="text-xs text-gray-500">
+          Effective FY26 · 6 tiers × 3 payment types · <%= allowances.length %> allowances
+        </p>
+        <button type="submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">Save changes</button>
+      </div>
+    </div>
+  </form>
+</div>
+
+<script>
+  function showTab(key) {
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+    const pane = document.getElementById('tab-' + key);
+    if (pane) pane.classList.remove('hidden');
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      if (b.dataset.tab === key) {
+        b.classList.add('border-brand-600', 'text-brand-700');
+        b.classList.remove('border-transparent', 'text-gray-500');
+      } else {
+        b.classList.remove('border-brand-600', 'text-brand-700');
+        b.classList.add('border-transparent', 'text-gray-500');
+      }
+    });
+  }
+</script>
+
+<% if (flash_success && flash_success.length) { %>
+  <div class="fixed top-20 right-4 px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold shadow-lg z-50" id="flash"><%= flash_success[0] %></div>
+  <script>setTimeout(()=>document.getElementById('flash')?.remove(), 2800);</script>
+<% } %>
+<% if (flash_error && flash_error.length) { %>
+  <div class="fixed top-20 right-4 px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold shadow-lg z-50" id="flasherr"><%= flash_error[0] %></div>
+  <script>setTimeout(()=>document.getElementById('flasherr')?.remove(), 4000);</script>
+<% } %>

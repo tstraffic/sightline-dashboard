@@ -28,6 +28,7 @@
     night_normal:  'text-indigo-700',
     night_ot:      'text-orange-700',
     night_dt:      'text-red-700',
+    weekend_short: 'text-fuchsia-700',
     weekend:       'text-purple-700',
     public_holiday:'text-rose-700',
   };
@@ -88,7 +89,7 @@
       <tbody class="divide-y divide-gray-100">
         <% lines.forEach(l => { %>
           <%
-            const sectionBucketKeys = section.buckets || ['day_normal', 'day_ot', 'day_dt', 'night_normal', 'night_ot', 'night_dt', 'weekend', 'public_holiday'];
+            const sectionBucketKeys = section.buckets || ['day_normal', 'day_ot', 'day_dt', 'night_normal', 'night_ot', 'night_dt', 'weekend_short', 'weekend', 'public_holiday'];
             const activeKeys = sectionBucketKeys.filter(k => (l.buckets[k] && l.buckets[k].total_hours > 0));
             const rowSpan = Math.max(activeKeys.length, 1);
           %>

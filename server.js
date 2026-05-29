@@ -286,6 +286,14 @@ app.use('/projects', requireLogin, requirePermission('projects'), require('./rou
 app.use('/clients', requireLogin, requirePermission('clients'), require('./routes/clients'));
 app.use('/jobs', requireLogin, requirePermission('jobs'), require('./routes/jobs'));
 app.use('/tenders', requireLogin, requirePermission('tenders'), require('./routes/tenders'));
+// Quoting Module — fixed-price offers (vs. tenders = competitive bids).
+// /rate-cards/settings = singleton-row admin form; /rate-cards = CRUD over
+// rate cards + nested items; /quotes (later) = the quote builder. Settings
+// must be mounted FIRST so its '/' route shadows what would otherwise be a
+// GET /rate-cards/:id matching 'settings' as an integer-coerced id.
+app.use('/rate-cards/settings', requireLogin, requirePermission('quoting'), require('./routes/quoting/settings'));
+app.use('/rate-cards',          requireLogin, requirePermission('quoting'), require('./routes/quoting/rate-cards'));
+app.use('/quotes',              requireLogin, requirePermission('quoting'), require('./routes/quoting/quotes'));
 app.use('/tasks', requireLogin, requirePermission('tasks'), require('./routes/tasks'));
 app.use('/compliance', requireLogin, requirePermission('compliance'), require('./routes/compliance'));
 app.use('/audits', requireLogin, requirePermission('audits'), require('./routes/audits'));
@@ -313,6 +321,7 @@ app.use('/allocations', requireLogin, requirePermission('allocations'), require(
 app.use('/schedule', requireLogin, requirePermission('schedule'), require('./routes/schedule'));
 app.use('/equipment/hire-dockets', requireLogin, requirePermission('equipment'), require('./routes/equipmentHireDockets'));
 app.use('/equipment', requireLogin, requirePermission('equipment'), require('./routes/equipment'));
+app.use('/fleet', requireLogin, requirePermission('fleet'), require('./routes/fleet'));
 app.use('/checklists', requireLogin, requirePermission('checklists'), require('./routes/checklists'));
 app.use('/swms', requireLogin, requirePermission('swms'), require('./routes/swms'));
 app.use('/sop-register', requireLogin, requirePermission('sop_register'), require('./routes/sop-register'));

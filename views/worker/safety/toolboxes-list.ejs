@@ -17,18 +17,24 @@
     const heldMs = row.held_at ? new Date(row.held_at).getTime() : null;
     const isPast = heldMs !== null && heldMs <= nowMs;
     const s = row.my_status;
-    if (s === 'attended')  return { cls: 'att',     label: 'Attended',      detail: row.my_recorded_at ? 'Marked attended ' + fmtStamp(row.my_recorded_at) : '' };
-    if (s === 'caught_up') return { cls: 'caught',  label: 'Caught up',     detail: row.my_recorded_at ? 'Caught up ' + fmtStamp(row.my_recorded_at)       : '' };
-    if (s === 'absent')    return { cls: 'absent',  label: 'Not attending', detail: row.my_recorded_at ? 'You declined ' + fmtStamp(row.my_recorded_at)    : '' };
+    // Status vocabulary (matches the admin attendance page + invite link):
+    //   Pending       — no row yet (invite sent, no response)
+    //   Attending     — RSVP'd yes, meeting still upcoming
+    //   Attended      — signed off after the meeting (timestamped)
+    //   Absent        — said attending but the meeting passed without a
+    //                   sign-off; also covers no-response rows on past
+    //                   meetings (so they don't read as "Pending forever")
+    //   Not attending — explicitly declined the invite
+    //   Caught up     — self-claimed they read the materials
+    if (s === 'attended')  return { cls: 'att',     label: 'Attended',      detail: row.my_recorded_at ? 'Signed off ' + fmtStamp(row.my_recorded_at) : '' };
+    if (s === 'caught_up') return { cls: 'caught',  label: 'Caught up',     detail: row.my_recorded_at ? 'Caught up ' + fmtStamp(row.my_recorded_at)   : '' };
+    if (s === 'absent')    return { cls: 'absent',  label: 'Not attending', detail: row.my_recorded_at ? 'You declined ' + fmtStamp(row.my_recorded_at) : '' };
     if (s === 'attending') {
-      // Worker said they'd be there. If the toolbox has already happened
-      // and they were never marked off, surface that as "Did not attend"
-      // so it isn't visually identical to a confirmed future attendance.
-      if (isPast) return { cls: 'absent', label: 'Did not attend', detail: row.my_recorded_at ? 'You confirmed ' + fmtStamp(row.my_recorded_at) + ' but were not marked off' : '' };
+      if (isPast) return { cls: 'absent', label: 'Absent', detail: row.my_recorded_at ? 'You said you would attend on ' + fmtStamp(row.my_recorded_at) + ' but never signed off' : '' };
       return { cls: 'att', label: 'Attending', detail: row.my_recorded_at ? 'You confirmed to attend on ' + fmtStamp(row.my_recorded_at) : '' };
     }
     // No record at all.
-    if (isPast) return { cls: 'absent', label: 'Did not attend', detail: '' };
+    if (isPast) return { cls: 'absent', label: 'Absent', detail: 'No response recorded before the meeting' };
     return { cls: 'pending', label: 'Pending', detail: '' };
   }
 %>
@@ -61,6 +67,28 @@
   }
   .tb-reason b { color: #fff; font-weight: 600; }
   .saf-empty { text-align: center; padding: 32px 16px; color: rgba(255,255,255,0.45); font-size: 0.85rem; }
+
+  /* ---- Light mode ---- mirror the SWMS/SOP white-card look so the
+     Toolbox tab doesn't render as washed-out white-on-white once chips
+     and reasons are populated. */
+  :root[data-theme="light"] .saf-wrap { color: #0F1115; }
+  :root[data-theme="light"] .saf-h1   { color: #0F1115; }
+  :root[data-theme="light"] .tb-card  {
+    background: #FFFFFF; border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04);
+  }
+  :root[data-theme="light"] .tb-card-title { color: #0F1115; }
+  :root[data-theme="light"] .tb-card-meta  { color: #6B7280; }
+  :root[data-theme="light"] .tb-snip       { color: #4B5563; }
+  :root[data-theme="light"] .tb-chip.att    { background: #ECFDF5; color: #047857; border-color: #A7F3D0; }
+  :root[data-theme="light"] .tb-chip.caught { background: #F5F3FF; color: #6D28D9; border-color: #DDD6FE; }
+  :root[data-theme="light"] .tb-chip.absent { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
+  :root[data-theme="light"] .tb-chip.pending{ background: #FFFBEB; color: #B45309; border-color: #FDE68A; }
+  :root[data-theme="light"] .tb-chip.miss   { background: #F3F4F6; color: #4B5563; border-color: #E5E7EB; }
+  :root[data-theme="light"] .tb-chip-detail { color: #6B7280; }
+  :root[data-theme="light"] .tb-reason      { background: #FEF2F2; border-color: #FECACA; color: #9F1239; }
+  :root[data-theme="light"] .tb-reason b    { color: #7F1D1D; }
+  :root[data-theme="light"] .saf-empty      { color: #6B7280; }
 </style>
 
 <div class="saf-wrap">

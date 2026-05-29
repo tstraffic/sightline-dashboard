@@ -1,0 +1,379 @@
+<% locals.currentPage = 'voc-assessments' %>
+<%
+  // Pre-fill the equipment template + date with whatever the previous
+  // quick cert used, so an assessor processing a queue of 30 workers
+  // doesn't re-pick the same dropdown 30 times. Same for the assessor
+  // signed name — usually they sign every cert in the session.
+  const sticky = lastQuick || {};
+%>
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+  <div class="mb-4 flex items-center gap-2">
+    <a href="/voc-assessments" class="inline-flex items-center text-sm text-gray-500 hover:text-gray-700">
+      <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      Back to VOCs
+    </a>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-5">
+    <div class="bg-gradient-to-r from-brand-700 to-brand-500 text-white px-6 py-4 flex items-center gap-3">
+      <svg class="w-9 h-9" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      <div class="flex-1">
+        <div class="text-[10px] uppercase tracking-widest opacity-80">Bulk-session shortcut</div>
+        <h1 class="text-xl font-bold leading-tight">Quick VOC Certificate</h1>
+        <p class="text-[12px] opacity-90 mt-0.5">Type name + signatures, hand them a cert, mark the rest later.</p>
+      </div>
+      <% if (sessionCount > 0) { %>
+        <div class="text-right">
+          <div class="text-2xl font-bold leading-none"><%= sessionCount %></div>
+          <div class="text-[10px] uppercase tracking-widest opacity-80">this session</div>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
+  <% if (typeof duplicateNames !== 'undefined' && duplicateNames && duplicateNames.length) { %>
+    <!-- Duplicate-name banner. Surfaced when two or more ACTIVE crew  -->
+    <!-- rows share a name. Each row is rendered individually so the   -->
+    <!-- user can deactivate the wrong one in-place. Stranded rows     -->
+    <!-- (no linked HR employee) are explicitly tagged because they    -->
+    <!-- can't be cleaned up from /hr/roster — only from here.         -->
+    <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-5">
+      <div class="flex items-start gap-2">
+        <svg class="w-4 h-4 text-amber-700 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div class="text-xs text-amber-900 leading-relaxed flex-1 min-w-0">
+          <p class="font-semibold">Duplicate crew names detected</p>
+          <p class="mt-0.5 text-amber-800">
+            Each name below appears on more than one active crew row. The dropdown handles this safely (EMP-id in brackets), but you should still deactivate the stale ones. <strong>Open</strong> the profile first if you're not sure which is the keeper.
+          </p>
+          <div class="mt-2 space-y-2">
+            <% duplicateNames.forEach(function(d) { %>
+              <div class="bg-white/60 border border-amber-200 rounded-md p-2">
+                <p class="font-semibold text-amber-900 mb-1"><%= d.full_name %> <span class="text-amber-700 font-normal">· <%= d.n %> rows</span></p>
+                <ul class="space-y-1">
+                  <% d.rows.forEach(function(r, i) {
+                       const isPlaceholder = r.employee_id && /^VOC-PENDING-/.test(r.employee_id);
+                       const isBlank = !r.employee_id;
+                       const isStranded = !r.hr_employee_id;
+                  %>
+                    <li class="flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span class="font-mono text-amber-900"><%= r.employee_id || ('#crew_' + r.id) %></span>
+                      <% if (isPlaceholder) { %>
+                        <span class="px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-800 text-[9px] font-bold tracking-wider">PLACEHOLDER</span>
+                      <% } else if (isBlank) { %>
+                        <span class="px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-700 text-[9px] font-bold tracking-wider">NO EMP-ID</span>
+                      <% } %>
+                      <% if (isStranded) { %>
+                        <span class="px-1.5 py-0.5 rounded-full bg-amber-200 text-amber-900 text-[9px] font-bold tracking-wider" title="No linked HR employee — can't be cleaned up from /hr/roster, only from here.">STRANDED</span>
+                      <% } %>
+                      <span class="text-amber-700">added <%= r.created_at ? r.created_at.slice(0, 10) : '?' %></span>
+                      <span class="flex-1"></span>
+                      <a href="/crew/<%= r.id %>" class="px-2 py-0.5 bg-white hover:bg-amber-50 border border-amber-300 text-amber-800 rounded text-[10px] font-semibold">Open</a>
+                      <form method="POST" action="/crew/<%= r.id %>/deactivate" class="inline" data-confirm="Deactivate <%= d.full_name %> (<%= r.employee_id || '#' + r.id %>)? It will drop out of the VOC dropdown and other operational lists.">
+                        <%- include('../partials/csrf') %>
+                        <button type="submit" class="px-2 py-0.5 bg-red-50 hover:bg-red-100 border border-red-300 text-red-700 rounded text-[10px] font-semibold">Deactivate</button>
+                      </form>
+                    </li>
+                  <% }) %>
+                </ul>
+              </div>
+            <% }) %>
+          </div>
+        </div>
+      </div>
+    </div>
+  <% } %>
+
+  <% if (lastQuick) { %>
+    <!-- Last-issued strip — quick link to print the cert that was just generated -->
+    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-3 mb-5 flex flex-wrap items-center justify-between gap-2">
+      <div class="text-sm">
+        <span class="font-semibold text-emerald-900">Last issued:</span>
+        <span class="text-emerald-800"><%= lastQuick.workerName %></span>
+        <span class="text-emerald-700 font-mono text-xs">· <%= lastQuick.certId %></span>
+      </div>
+      <div class="flex gap-2">
+        <a href="/voc-assessments/<%= lastQuick.id %>/pdf" target="_blank"
+           class="inline-flex items-center px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold rounded-lg">
+          <svg class="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+          Download PDF
+        </a>
+        <a href="/voc-assessments/<%= lastQuick.id %>/edit"
+           class="inline-flex items-center px-3 py-1.5 bg-white hover:bg-gray-50 border border-emerald-300 text-emerald-700 text-xs font-semibold rounded-lg">
+          Mark now
+        </a>
+      </div>
+    </div>
+  <% } %>
+
+  <form method="POST" action="/voc-assessments/quick" class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 space-y-4" id="quickVocForm">
+    <%- include('../partials/csrf') %>
+
+    <!-- Equipment template (sticky across submits) -->
+    <div>
+      <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Equipment / Operation</label>
+      <select name="template_id" required
+        class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">— pick one —</option>
+        <% templates.forEach(function(t){ %>
+          <option value="<%= t.id %>" <%= sticky.templateId == t.id ? 'selected' : '' %>>
+            <%= t.name %> · <%= t.default_validity_months %>-mth validity
+          </option>
+        <% }) %>
+      </select>
+    </div>
+
+    <!-- Worker name — free text with autocomplete from active crew. -->
+    <!-- When a name maps to multiple active crew rows (e.g. two       -->
+    <!-- people named "Saadat Ahmed") the datalist option value        -->
+    <!-- carries the EMP-id in brackets so the user can pick the right -->
+    <!-- one, and the hidden crew_member_id below captures the picked  -->
+    <!-- ID so the server never has to guess.                          -->
+    <div>
+      <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Worker name</label>
+      <input type="text" name="worker_name" id="quickVocWorkerName" required autofocus autocomplete="off"
+        list="quick-voc-crew" placeholder="Type a name (autocompletes existing crew)"
+        class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <input type="hidden" name="crew_member_id" id="quickVocCrewId" value="">
+      <datalist id="quick-voc-crew">
+        <% workers.forEach(function(w){
+             // Duplicate names get the EMP-id folded into the value so
+             // the picker is unambiguous. Unique names stay clean
+             // (typeable for brand-new hires).
+             var displayValue = w.is_duplicate_name
+               ? (w.full_name + ' [' + (w.employee_id || ('#' + w.id)) + ']')
+               : w.full_name;
+        %>
+          <option value="<%= displayValue %>" data-crew-id="<%= w.id %>" data-crew-name="<%= w.full_name %>"><%= w.employee_id || '' %></option>
+        <% }) %>
+      </datalist>
+      <p class="mt-1 text-[11px] text-gray-500">
+        If the name isn't in the roster yet a placeholder crew record is created — HR can finish onboarding later.
+        <span class="text-amber-700">Workers sharing a name show their EMP-id in brackets so you can pick the right one.</span>
+      </p>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <!-- Date -->
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assessment date</label>
+        <input type="date" name="assessment_date" value="<%= sticky.assessmentDate || today %>" required
+          class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <!-- Validity override -->
+      <div>
+        <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Validity (months)</label>
+        <input type="number" name="validity_months" min="1" max="60" value="<%= sticky.validityMonths || '' %>"
+          placeholder="(defaults to template)"
+          class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+
+    <!-- Location (optional) -->
+    <div>
+      <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Location / site (optional)</label>
+      <input type="text" name="location_site" placeholder="e.g. Villawood depot, Site 14 — M5"
+        class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+
+    <!-- Signatures — touch / stylus pad on top of the typed name.    -->
+    <!-- The typed name is still required (used for the cert when no  -->
+    <!-- signature was drawn — rendered in cursive as a fallback). If -->
+    <!-- the user draws on the canvas, that takes precedence and is   -->
+    <!-- embedded as a PNG on the cert.                               -->
+    <!-- ─── Assessor signature (always shown) ─── -->
+    <div class="pt-2 border-t border-gray-100">
+      <label class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assessor signature</label>
+      <div class="mt-1 border border-gray-300 rounded-lg overflow-hidden bg-white">
+        <canvas id="quickVocAssessorSig" class="block w-full touch-none cursor-crosshair" style="height:120px;"></canvas>
+        <div class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 border-t border-gray-200 text-[11px] text-gray-500">
+          <span class="quick-voc-sig-hint" data-pad="quickVocAssessorSig">Draw with finger / stylus, or leave blank to use the typed name in cursive</span>
+          <button type="button" data-clear="quickVocAssessorSig" class="px-2 py-0.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-[10px] font-semibold text-gray-700">Clear</button>
+        </div>
+      </div>
+      <input type="hidden" name="assessor_signature_data" id="quickVocAssessorSigData" value="">
+      <input type="text" name="assessor_signed_name" value="<%= sticky.assessor || (user && user.full_name) || '' %>" required
+        placeholder="Typed name (also used as fallback if not drawn)"
+        class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+
+    <!-- ─── Worker signature — async by default ─── -->
+    <!-- Default flow: the cert is issued without a worker signature,    -->
+    <!-- a push lands on the worker's phone, they sign in their portal,  -->
+    <!-- the PDF auto-regenerates. The assessor only needs the toggle    -->
+    <!-- below if the worker happens to be standing right there and is   -->
+    <!-- willing to sign on the tablet now.                              -->
+    <div class="pt-2 border-t border-gray-100">
+      <label class="flex items-start gap-2 cursor-pointer">
+        <input type="checkbox" id="quickVocWorkerSignsHere" name="worker_signs_in_person" value="1"
+          class="mt-0.5 w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+        <span class="text-xs text-gray-700">
+          <span class="font-semibold">Worker is here now — capture their signature on this tablet.</span>
+          <span class="block text-gray-500 mt-0.5">Off (default): the worker gets a push to sign in their own portal — the cert PDF updates automatically once they do.</span>
+        </span>
+      </label>
+      <div id="quickVocWorkerSigBlock" class="mt-2 hidden">
+        <div class="border border-gray-300 rounded-lg overflow-hidden bg-white">
+          <canvas id="quickVocWorkerSig" class="block w-full touch-none cursor-crosshair" style="height:120px;"></canvas>
+          <div class="flex items-center justify-between gap-2 px-2 py-1 bg-gray-50 border-t border-gray-200 text-[11px] text-gray-500">
+            <span class="quick-voc-sig-hint" data-pad="quickVocWorkerSig">Hand the device to the worker — they sign here</span>
+            <button type="button" data-clear="quickVocWorkerSig" class="px-2 py-0.5 bg-white hover:bg-gray-100 border border-gray-300 rounded text-[10px] font-semibold text-gray-700">Clear</button>
+          </div>
+        </div>
+        <input type="hidden" name="worker_signature_data" id="quickVocWorkerSigData" value="">
+        <input type="text" name="worker_signed_name" placeholder="Typed name (defaults to worker name if blank)"
+          class="mt-1 w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+
+    <div class="flex flex-wrap items-center justify-between gap-2 pt-3 border-t border-gray-100">
+      <p class="text-[11px] text-gray-500">Outcome will default to <span class="font-semibold text-emerald-700">Competent</span> — change later if needed from the Pending Marking queue.</p>
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg inline-flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        Issue cert + next
+      </button>
+    </div>
+  </form>
+
+  <p class="mt-4 text-[11px] text-gray-400 text-center">
+    Tip: Press <kbd class="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px] font-mono">Tab</kbd> through the fields and
+    <kbd class="px-1 py-0.5 bg-gray-100 border border-gray-300 rounded text-[10px] font-mono">Enter</kbd> to submit — the next form keeps your equipment / date / signature so you can rapid-fire through a queue.
+  </p>
+</div>
+
+<script>
+// Wire the worker-name datalist so picking a row passes the exact
+// crew_member_id to the server (kills the "two Saadat Ahmeds, which
+// one did you mean?" ambiguity). On submit we also strip the
+// "[EMP-xxx]" suffix that the view added to duplicate-name options so
+// the server sees a clean name string.
+(function () {
+  var nameInput = document.getElementById('quickVocWorkerName');
+  var crewIdInput = document.getElementById('quickVocCrewId');
+  var datalist = document.getElementById('quick-voc-crew');
+  var form = document.getElementById('quickVocForm');
+  if (!nameInput || !crewIdInput || !datalist || !form) return;
+
+  // Build a lookup: option.value → { id, plainName }
+  var byValue = {};
+  Array.prototype.forEach.call(datalist.querySelectorAll('option'), function (opt) {
+    byValue[opt.value] = {
+      id: opt.getAttribute('data-crew-id') || '',
+      name: opt.getAttribute('data-crew-name') || opt.value,
+    };
+  });
+
+  function resolvePick() {
+    var v = nameInput.value;
+    var hit = byValue[v];
+    crewIdInput.value = hit ? hit.id : '';
+  }
+  // Fires when the user clicks a datalist option AND on every keystroke.
+  nameInput.addEventListener('input', resolvePick);
+  nameInput.addEventListener('change', resolvePick);
+
+  form.addEventListener('submit', function () {
+    // Strip "[EMP-xxx]" suffix on submit so the typed-name field
+    // carries just the human name (server reuses it for signatures /
+    // flash messages).
+    var v = nameInput.value;
+    var hit = byValue[v];
+    if (hit && hit.name && hit.name !== v) {
+      nameInput.value = hit.name;
+    }
+  });
+})();
+</script>
+
+<!-- signature_pad — 5KB, MIT, mature. Loaded from jsdelivr. If the CDN -->
+<!-- ever fails the form still submits, just without a drawn signature  -->
+<!-- (typed name still works as fallback).                              -->
+<script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+<script>
+// Bind a signature_pad instance to each canvas, hook up the Clear
+// buttons, and dump the canvas as a base64 PNG into the hidden
+// `<id>Data` field on form submit. Empty pads send '' so the server
+// can fall back to the typed cursive name.
+(function () {
+  if (typeof SignaturePad === 'undefined') return; // CDN load failed, skip
+  var form = document.getElementById('quickVocForm');
+  if (!form) return;
+
+  function bindPad(canvasId, hiddenId, hintEl) {
+    var canvas = document.getElementById(canvasId);
+    var hidden = document.getElementById(hiddenId);
+    if (!canvas || !hidden) return null;
+    // Size the canvas pixel buffer to its CSS box (HiDPI-aware) so
+    // signature lines don't render fuzzy. Re-run on resize.
+    function sizeCanvas() {
+      // Resizing wipes the canvas, so only do it when the box size
+      // actually changes. SignaturePad has no opinion on this — it
+      // tracks strokes in CSS-pixel coordinates internally.
+      var ratio = Math.max(window.devicePixelRatio || 1, 1);
+      var newW = (canvas.offsetWidth  || 0) * ratio;
+      var newH = (canvas.offsetHeight || 0) * ratio;
+      if (newW === canvas.width && newH === canvas.height) return;
+      canvas.width  = newW;
+      canvas.height = newH;
+      canvas.getContext('2d').scale(ratio, ratio);
+    }
+    sizeCanvas();
+    window.addEventListener('resize', sizeCanvas);
+    // Some browsers (and preview harnesses) finish layout AFTER body-end
+    // scripts run — sizeCanvas above might see offsetWidth=0. A
+    // ResizeObserver wakes us up the moment the box actually has a
+    // measurable size so the pad is ready to draw.
+    if (typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(sizeCanvas).observe(canvas);
+    }
+    var pad = new SignaturePad(canvas, {
+      backgroundColor: 'rgba(255,255,255,0)', // transparent so the PDF embed blends
+      penColor: '#1f3864',                    // navy — matches cert ink
+      minWidth: 0.8,
+      maxWidth: 2.4,
+    });
+    // Hide the hint as soon as the user starts drawing — easy at-a-glance
+    // "is this pad signed?" feedback.
+    pad.addEventListener('beginStroke', function () { if (hintEl) hintEl.style.visibility = 'hidden'; });
+    return { pad: pad, hidden: hidden, hintEl: hintEl };
+  }
+
+  var pads = {};
+  document.querySelectorAll('.quick-voc-sig-hint').forEach(function (hint) {
+    var canvasId = hint.getAttribute('data-pad');
+    var hiddenId = canvasId + 'Data';
+    var p = bindPad(canvasId, hiddenId, hint);
+    if (p) pads[canvasId] = p;
+  });
+
+  // Clear-button wiring — also restores the hint text.
+  document.querySelectorAll('[data-clear]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var p = pads[btn.getAttribute('data-clear')];
+      if (!p) return;
+      p.pad.clear();
+      if (p.hintEl) p.hintEl.style.visibility = '';
+    });
+  });
+
+  // Worker-here toggle reveals the worker pad. The canvas inside a
+  // display:none parent has offsetWidth=0 at bind time, so a
+  // ResizeObserver in bindPad re-sizes when the block becomes visible.
+  var workerToggle = document.getElementById('quickVocWorkerSignsHere');
+  var workerBlock = document.getElementById('quickVocWorkerSigBlock');
+  if (workerToggle && workerBlock) {
+    workerToggle.addEventListener('change', function () {
+      workerBlock.classList.toggle('hidden', !workerToggle.checked);
+    });
+  }
+
+  // On submit: serialise each pad to a base64 PNG (or '' if empty).
+  // Empty pads emit '' so the server keeps worker_acknowledgement_status
+  // as 'pending' and the worker gets the in-app sign push.
+  form.addEventListener('submit', function () {
+    Object.keys(pads).forEach(function (key) {
+      var p = pads[key];
+      p.hidden.value = p.pad.isEmpty() ? '' : p.pad.toDataURL('image/png');
+    });
+  });
+})();
+</script>
