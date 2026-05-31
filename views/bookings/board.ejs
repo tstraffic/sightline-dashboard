@@ -307,18 +307,75 @@
     <% } %>
     </div>
 
+    <!-- Re-show button — sits on the cards column when the panel is
+         hidden. CSS keeps it hidden until #bk2-rp-toggle sets the
+         is-collapsed class on .bk2-pane--with-panel. -->
+    <button type="button" id="bk2-rp-show" class="bk2-rp-show" title="Show resource panel" aria-label="Show resource panel" hidden>
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+      <span>Resources</span>
+    </button>
+
     <!-- ─────────────  Resource panel  ─────────────
-         Sticky on the right. Three tabs hit the same /api/resources
-         endpoint (one call returns people/vehicles/equipment). Search
-         filters within the active tab; drag handles are wired by the
-         existing bookings JS so panels can drop onto cards. -->
-    <aside class="bk2-resourcepanel" aria-label="Resources">
+         Icon tabs, filter chips, sticky on the right. Pulls from one
+         /api/resources call so flipping tabs is instant. Items are
+         draggable so booking-card drop handlers can wire onto them. -->
+    <aside class="bk2-resourcepanel" id="bk2-resourcepanel" aria-label="Resources">
       <header class="bk2-rp-head">
-        <div class="bk2-rp-tabs" role="tablist">
-          <button type="button" class="bk2-rp-tab" data-rp-tab="people"    aria-selected="true" role="tab">Roster</button>
-          <button type="button" class="bk2-rp-tab" data-rp-tab="vehicles"  role="tab">Vehicles</button>
-          <button type="button" class="bk2-rp-tab" data-rp-tab="equipment" role="tab">Towed Equipment</button>
+        <div class="bk2-rp-tabbar">
+          <div class="bk2-rp-tabs" role="tablist">
+            <button type="button" class="bk2-rp-tab" data-rp-tab="people" aria-selected="true" role="tab" title="Roster">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+              <span>People</span>
+            </button>
+            <button type="button" class="bk2-rp-tab" data-rp-tab="vehicles" role="tab" title="Vehicles">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 17h8m-8 0a2 2 0 11-4 0 2 2 0 014 0zm8 0a2 2 0 104 0 2 2 0 00-4 0zm-9-5h10l-1-4H4v4zm10 0h3l3 3v2h-2"/></svg>
+              <span>Vehicles</span>
+            </button>
+            <button type="button" class="bk2-rp-tab" data-rp-tab="equipment" role="tab" title="Towed Equipment">
+              <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 20h18L12 4 3 20z"/></svg>
+              <span>Towed</span>
+            </button>
+          </div>
+          <button type="button" id="bk2-rp-toggle" class="bk2-rp-iconbtn" title="Hide panel" aria-label="Hide panel">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+          </button>
         </div>
+
+        <!-- Show/Hide filter chip group. Server doesn't need to know;
+             each chip toggles a flag on the client and the list re-filters. -->
+        <div class="bk2-rp-chipset" data-rp-chipset="people">
+          <span class="bk2-rp-chipset-label">Show/Hide</span>
+          <div class="bk2-rp-chips">
+            <button type="button" class="bk2-rp-chip" data-rp-filter="tls"          title="Only team leads / supervisors">Only TLs</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="assigned"     title="Already on a booking today">Assigned</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="conflicts"    title="Workers with warnings (conflict / fatigue / expiry)">Conflicts</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="blocked"      title="Blocked from allocation">Blocked</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="on_leave"     title="Workers on leave">On Leave</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="reserved"     title="Reserved roster members">Reserved</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="can_drive"    title="Has a licence type recorded">Can Drive</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="first_aid"    title="First-aid certified">First Aid</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="subcontractor" title="Subcontractor crew">Subcontractor</button>
+          </div>
+        </div>
+        <div class="bk2-rp-chipset" data-rp-chipset="vehicles" hidden>
+          <span class="bk2-rp-chipset-label">Show/Hide</span>
+          <div class="bk2-rp-chips">
+            <button type="button" class="bk2-rp-chip" data-rp-filter="trucks"   title="Trucks only">Only Trucks</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="utes"     title="Utes only">Only Utes</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="vms"      title="VMS only">Only VMS</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="fleet"    title="Fleet register only">Fleet only</button>
+          </div>
+        </div>
+        <div class="bk2-rp-chipset" data-rp-chipset="equipment" hidden>
+          <span class="bk2-rp-chipset-label">Show/Hide</span>
+          <div class="bk2-rp-chips">
+            <button type="button" class="bk2-rp-chip" data-rp-filter="arrow"    title="Arrow boards">Arrow Boards</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="trailer"  title="Trailers">Trailers</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="vms_eq"   title="VMS boards">VMS</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="signs"    title="Signs / barriers / cones">Signs &amp; Barriers</button>
+          </div>
+        </div>
+
         <div class="bk2-rp-search">
           <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
           <input type="search" id="bk2-rp-search" placeholder="Search resources…" autocomplete="off">
@@ -860,15 +917,21 @@
   if (v0 === 'calendar') loadCalendar();
 
   // ============================================================
-  //  Resource panel — Roster / Vehicles / Towed Equipment.
-  //  Single fetch hydrates all three tabs. Search filters within
-  //  the active tab. Each item is draggable so existing drop
-  //  handlers on booking cards can wire it up.
+  //  Resource panel — People / Vehicles / Towed Equipment.
+  //
+  //  - One /api/resources fetch hydrates all three tabs.
+  //  - Per-tab filter chips toggle independent boolean flags.
+  //  - Search filters within the active tab.
+  //  - Each row carries data-resource-* attrs for future drag-drop.
+  //  - The whole panel can be collapsed with the chevron; state is
+  //    persisted in localStorage so it stays the way the user left it.
   // ============================================================
   var rpDate = '<%= dateStr %>';
   var rpData = null;
   var rpQuery = '';
   var rpActive = 'people';
+  // Per-tab boolean filter map. Keys mirror data-rp-filter values.
+  var rpFilters = { people: {}, vehicles: {}, equipment: {} };
 
   function rpEsc(s) {
     return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
@@ -879,15 +942,74 @@
     if (!name) return '?';
     return name.split(/\s+/).map(function (n) { return n[0]; }).join('').substring(0, 2).toUpperCase();
   }
-  function rpWarnLabel(w) {
-    switch (w) {
-      case 'blocked':            return ['Blocked', ''];
-      case 'licence_expired':    return ['Licence', ''];
-      case 'tc_expired':         return ['TC', ''];
-      case 'whitecard_expired':  return ['WC', ''];
-      case 'on_leave':           return ['Leave', 'bk2-rp-warn--info'];
-      default:                   return [w, 'bk2-rp-warn--mute'];
+  function rpIsTl(role) {
+    var r = (role || '').toLowerCase();
+    return /(team[_ ]?lead|leading[_ ]?hand|super|supervisor)/.test(r);
+  }
+  function rpCatHas(cat, needles) {
+    var c = (cat || '').toLowerCase();
+    return needles.some(function (n) { return c.indexOf(n) !== -1; });
+  }
+
+  // ── Filter predicates per tab ─────────────────────────────────
+  function rpPersonOk(p) {
+    var f = rpFilters.people;
+    if (f.tls           && !rpIsTl(p.role)) return false;
+    if (f.assigned      && !p.assigned_today) return false;
+    if (f.conflicts     && !(p.warnings && p.warnings.length)) return false;
+    if (f.blocked       && !p.blocked_from_allocation) return false;
+    if (f.on_leave      && p.employment_status !== 'on_leave') return false;
+    if (f.reserved      && p.employment_status !== 'reserved') return false;
+    if (f.can_drive     && !p.licence_type) return false;
+    if (f.first_aid     && !p.first_aid) return false;
+    if (f.subcontractor && (p.employment_type || '').toLowerCase() !== 'subcontractor') return false;
+    return true;
+  }
+  function rpVehicleOk(v) {
+    var f = rpFilters.vehicles;
+    var cat = (v.category || '').toLowerCase();
+    var name = (v.name || '').toLowerCase();
+    if (f.trucks && !(rpCatHas(cat, ['truck']) || name.indexOf('truck') !== -1 || name.indexOf('isuzu') !== -1 || name.indexOf('npr') !== -1)) return false;
+    if (f.utes   && !(rpCatHas(cat, ['ute']) || name.indexOf('ute') !== -1 || name.indexOf('hilux') !== -1)) return false;
+    if (f.vms    && !(rpCatHas(cat, ['vms']) || name.indexOf('vms') !== -1)) return false;
+    if (f.fleet  && v.source !== 'fleet') return false;
+    return true;
+  }
+  function rpEquipmentOk(e) {
+    var f = rpFilters.equipment;
+    var cat = (e.category || '').toLowerCase();
+    var name = (e.name || '').toLowerCase();
+    if (f.arrow   && !(rpCatHas(cat, ['arrow']) || name.indexOf('arrow') !== -1)) return false;
+    if (f.trailer && !(rpCatHas(cat, ['trailer']) || name.indexOf('trailer') !== -1)) return false;
+    if (f.vms_eq  && !(rpCatHas(cat, ['vms']) || name.indexOf('vms') !== -1)) return false;
+    if (f.signs   && !(rpCatHas(cat, ['sign','barrier','cone','delineator']))) return false;
+    return true;
+  }
+
+  function rpSearchHit(it) {
+    if (!rpQuery) return true;
+    var q = rpQuery.toLowerCase();
+    var hay = [
+      it.full_name, it.name, it.role, it.licence_type, it.category,
+      it.licence_plate, it.rego, it.asset_number, it.phone, it.employee_id,
+    ].filter(Boolean).join(' ').toLowerCase();
+    return hay.indexOf(q) !== -1;
+  }
+
+  // Status mark on the right of each list item: ✓ if available for
+  // assignment, ✗ if there's something blocking (assigned today,
+  // blocked, on leave, expired ticket, etc.).
+  function rpPersonMark(p) {
+    if (p.assigned_today || p.blocked_from_allocation
+        || p.employment_status === 'on_leave'
+        || (p.warnings && p.warnings.length)) {
+      var why = p.assigned_today ? 'Already booked today'
+              : p.blocked_from_allocation ? 'Blocked from allocation'
+              : p.employment_status === 'on_leave' ? 'On leave'
+              : 'Has warnings';
+      return '<span class="bk2-rp-mark bk2-rp-mark--no" title="' + rpEsc(why) + '">✗</span>';
     }
+    return '<span class="bk2-rp-mark bk2-rp-mark--yes" title="Available">✓</span>';
   }
 
   function rpRenderPeople(list) {
@@ -895,9 +1017,6 @@
     return list.map(function (p) {
       var sub = [p.role, p.licence_type, p.tcp_level ? ('TCP ' + p.tcp_level) : null]
                 .filter(Boolean).join(' · ');
-      var warnsHtml = (p.warnings || []).map(function (w) {
-        var label = rpWarnLabel(w); return '<span class="bk2-rp-warn ' + label[1] + '">' + rpEsc(label[0]) + '</span>';
-      }).join('');
       return (
         '<li class="bk2-rp-item ' + (p.assigned_today ? 'is-assigned' : '') + '"' +
             ' draggable="true" data-resource-type="person" data-resource-id="' + p.id + '"' +
@@ -908,14 +1027,14 @@
             '<div class="bk2-rp-item-name">' + rpEsc(p.full_name) + '</div>' +
             (sub ? '<div class="bk2-rp-item-sub">' + rpEsc(sub) + '</div>' : '') +
           '</div>' +
-          warnsHtml +
+          rpPersonMark(p) +
         '</li>'
       );
     }).join('');
   }
 
   function rpRenderVehicles(list) {
-    if (!list.length) return '<li class="bk2-rp-empty">No vehicles in fleet.</li>';
+    if (!list.length) return '<li class="bk2-rp-empty">No vehicles match.</li>';
     return list.map(function (v) {
       var rego = v.licence_plate || v.rego || '';
       var sub = [v.category, v.asset_number].filter(Boolean).join(' · ');
@@ -938,7 +1057,7 @@
   }
 
   function rpRenderEquipment(list) {
-    if (!list.length) return '<li class="bk2-rp-empty">No towed equipment registered.</li>';
+    if (!list.length) return '<li class="bk2-rp-empty">No equipment matches.</li>';
     return list.map(function (e) {
       var sub = [e.category, e.asset_number].filter(Boolean).join(' · ');
       return (
@@ -955,30 +1074,20 @@
     }).join('');
   }
 
-  function rpFilter(items, key) {
-    if (!rpQuery) return items;
-    var q = rpQuery.toLowerCase();
-    return items.filter(function (it) {
-      var hay = [
-        it.full_name, it.name, it.role, it.licence_type, it.category,
-        it.licence_plate, it.rego, it.asset_number, it.phone, it.employee_id,
-      ].filter(Boolean).join(' ').toLowerCase();
-      return hay.indexOf(q) !== -1;
-    });
-  }
-
   function rpRepaint() {
     if (!rpData) return;
     var meta = $('#bk2-rp-meta');
-    var ppl = rpFilter(rpData.people, 'people');
-    var veh = rpFilter(rpData.vehicles, 'vehicles');
-    var eqp = rpFilter(rpData.equipment, 'equipment');
+    var ppl = (rpData.people    || []).filter(rpSearchHit).filter(rpPersonOk);
+    var veh = (rpData.vehicles  || []).filter(rpSearchHit).filter(rpVehicleOk);
+    var eqp = (rpData.equipment || []).filter(rpSearchHit).filter(rpEquipmentOk);
     var pList = $('#bk2-rp-list-people');     if (pList) pList.innerHTML = rpRenderPeople(ppl);
     var vList = $('#bk2-rp-list-vehicles');   if (vList) vList.innerHTML = rpRenderVehicles(veh);
     var eList = $('#bk2-rp-list-equipment');  if (eList) eList.innerHTML = rpRenderEquipment(eqp);
     if (meta) {
-      var counts = { people: ppl.length, vehicles: veh.length, equipment: eqp.length };
-      meta.textContent = counts.people + ' workers · ' + counts.vehicles + ' vehicles · ' + counts.equipment + ' equipment';
+      var label = rpActive === 'vehicles' ? (veh.length + ' of ' + (rpData.vehicles  || []).length + ' vehicles')
+                : rpActive === 'equipment' ? (eqp.length + ' of ' + (rpData.equipment || []).length + ' equipment')
+                : (ppl.length + ' of ' + (rpData.people || []).length + ' workers');
+      meta.textContent = label;
     }
   }
 
@@ -987,35 +1096,56 @@
     $$('.bk2-rp-tab').forEach(function (t) {
       t.setAttribute('aria-selected', t.dataset.rpTab === name ? 'true' : 'false');
     });
-    $$('[data-rp-list]').forEach(function (w) {
-      w.hidden = w.dataset.rpList !== name;
-    });
+    $$('[data-rp-list]').forEach(function (w) { w.hidden = w.dataset.rpList !== name; });
+    $$('[data-rp-chipset]').forEach(function (w) { w.hidden = w.dataset.rpChipset !== name; });
+    rpRepaint();
+  }
+
+  function rpToggleChip(btn) {
+    var key = btn.dataset.rpFilter;
+    var tab = btn.closest('[data-rp-chipset]').dataset.rpChipset;
+    var on = btn.getAttribute('aria-pressed') === 'true';
+    btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+    rpFilters[tab][key] = !on;
+    rpRepaint();
   }
 
   function rpLoad() {
     var meta = $('#bk2-rp-meta');
     fetch('/bookings/api/resources?date=' + encodeURIComponent(rpDate), { credentials: 'same-origin' })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-      .then(function (data) {
-        rpData = data;
-        rpRepaint();
-      })
-      .catch(function (err) {
-        if (meta) meta.textContent = 'Could not load resources (' + err + ').';
-      });
+      .then(function (data) { rpData = data; rpRepaint(); })
+      .catch(function (err) { if (meta) meta.textContent = 'Could not load resources (' + err + ').'; });
+  }
+
+  // ── Hide / show panel — persisted in localStorage ──
+  var RP_STATE_KEY = 'bk2.rp.collapsed';
+  function rpSetCollapsed(on) {
+    var pane = document.querySelector('.bk2-pane--with-panel');
+    if (!pane) return;
+    pane.classList.toggle('is-collapsed', !!on);
+    var showBtn = $('#bk2-rp-show'); if (showBtn) showBtn.hidden = !on;
+    try { localStorage.setItem(RP_STATE_KEY, on ? '1' : '0'); } catch (e) {}
   }
 
   if (document.querySelector('.bk2-resourcepanel')) {
     $$('.bk2-rp-tab').forEach(function (t) {
       t.addEventListener('click', function () { rpSetTab(t.dataset.rpTab); });
     });
+    $$('.bk2-rp-chip').forEach(function (c) {
+      c.setAttribute('aria-pressed', 'false');
+      c.addEventListener('click', function () { rpToggleChip(c); });
+    });
     var rpSearchEl = $('#bk2-rp-search');
     if (rpSearchEl) {
-      rpSearchEl.addEventListener('input', function () {
-        rpQuery = this.value.trim();
-        rpRepaint();
-      });
+      rpSearchEl.addEventListener('input', function () { rpQuery = this.value.trim(); rpRepaint(); });
     }
+    var rpToggleBtn = $('#bk2-rp-toggle'); if (rpToggleBtn) rpToggleBtn.addEventListener('click', function () { rpSetCollapsed(true); });
+    var rpShowBtn   = $('#bk2-rp-show');   if (rpShowBtn)   rpShowBtn.addEventListener('click',   function () { rpSetCollapsed(false); });
+    // Restore last collapsed state
+    var saved = '0'; try { saved = localStorage.getItem(RP_STATE_KEY) || '0'; } catch (e) {}
+    if (saved === '1') rpSetCollapsed(true);
+
     rpLoad();
   }
 })();

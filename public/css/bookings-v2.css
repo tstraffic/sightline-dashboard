@@ -455,14 +455,32 @@
    ───────────────────────────────────────────────────────────── */
 .bk2-pane--with-panel[aria-current="true"] {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 320px;
+  grid-template-columns: minmax(0, 1fr) 340px;
   gap: 16px;
   align-items: start;
 }
 @media (max-width: 980px) {
   .bk2-pane--with-panel[aria-current="true"] { grid-template-columns: 1fr; }
 }
+/* Collapsed: drop the panel column entirely so cards reflow full-width. */
+.bk2-pane--with-panel.is-collapsed[aria-current="true"] {
+  grid-template-columns: 1fr;
+}
+.bk2-pane--with-panel.is-collapsed .bk2-resourcepanel { display: none; }
 .bk2-board-col { min-width: 0; }
+
+/* Re-show button — appears at the top of the cards column when the
+   panel is collapsed. `[hidden]` (UA display:none) keeps it out of the
+   layout normally; :not([hidden]) brings it back as inline-flex. */
+.bk2-rp-show:not([hidden]) {
+  display: inline-flex; align-items: center; gap: 5px;
+  margin: 0 0 10px auto;
+  padding: 5px 10px; font-size: 11px; font-weight: 600;
+  background: #1E293B; color: #E2E8F0;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
+  cursor: pointer; transition: background 100ms ease;
+}
+.bk2-rp-show:hover { background: #334155; }
 
 /* Resource panel: sticky, scrollable, dark surface matching the cards */
 .bk2-resourcepanel {
@@ -478,19 +496,55 @@
   box-shadow: 0 10px 24px rgba(0,0,0,0.25);
   color: #E2E8F0;
 }
-.bk2-rp-head { padding: 10px 12px 8px; border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); }
-.bk2-rp-tabs { display: flex; gap: 2px; background: rgba(255,255,255,0.04); padding: 3px; border-radius: 9px; }
+.bk2-rp-head { padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); }
+.bk2-rp-tabbar { display: flex; align-items: center; gap: 6px; }
+.bk2-rp-tabs { flex: 1; min-width: 0; display: flex; gap: 2px; background: rgba(255,255,255,0.04); padding: 2px; border-radius: 9px; }
 .bk2-rp-tab {
   flex: 1; min-width: 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: 5px;
   font-size: 11px; font-weight: 600;
-  padding: 6px 8px; border-radius: 7px;
+  padding: 6px 6px; border-radius: 7px;
   background: transparent; color: #94A3B8;
   border: 0; cursor: pointer;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   transition: background 120ms ease, color 120ms ease;
 }
+.bk2-rp-tab svg { flex-shrink: 0; }
 .bk2-rp-tab:hover { color: #E2E8F0; }
 .bk2-rp-tab[aria-selected="true"] { background: #1E293B; color: #F8FAFC; box-shadow: 0 1px 0 rgba(0,0,0,0.4); }
+/* Header icon button — used by the hide-panel chevron. */
+.bk2-rp-iconbtn {
+  flex-shrink: 0;
+  width: 28px; height: 28px; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: #94A3B8;
+  border: 1px solid rgba(255,255,255,0.06); border-radius: 7px;
+  cursor: pointer; transition: background 120ms ease, color 120ms ease;
+}
+.bk2-rp-iconbtn:hover { background: rgba(255,255,255,0.06); color: #E2E8F0; }
+
+/* Filter chip set — collapsed Show/Hide row above search. */
+.bk2-rp-chipset { margin-top: 9px; }
+.bk2-rp-chipset-label {
+  display: block; margin-bottom: 4px;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.07em;
+  text-transform: uppercase; color: #64748B;
+}
+.bk2-rp-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.bk2-rp-chip {
+  font-size: 10px; font-weight: 600;
+  padding: 4px 8px; border-radius: 999px;
+  background: rgba(255,255,255,0.04); color: #94A3B8;
+  border: 1px solid rgba(255,255,255,0.06);
+  cursor: pointer; transition: background 100ms ease, color 100ms ease, border-color 100ms ease;
+  white-space: nowrap;
+}
+.bk2-rp-chip:hover { background: rgba(255,255,255,0.08); color: #E2E8F0; }
+.bk2-rp-chip[aria-pressed="true"] {
+  background: rgba(16,185,129,0.18); color: #6EE7B7;
+  border-color: rgba(16,185,129,0.4);
+}
+
 .bk2-rp-search {
   position: relative; margin-top: 8px;
   display: flex; align-items: center; gap: 6px;
@@ -537,6 +591,19 @@
 .bk2-rp-warn--info { background: rgba(59,130,246,0.18); color: #93C5FD; border-color: rgba(59,130,246,0.35); }
 .bk2-rp-warn--mute { background: rgba(148,163,184,0.18); color: #CBD5E1; border-color: rgba(148,163,184,0.35); }
 .bk2-rp-empty { padding: 22px 12px; text-align: center; color: #64748B; font-size: 12px; }
+
+/* Status mark on the right of each row — green ✓ when the worker is
+   eligible, red ✗ when something blocks them (assigned today, blocked,
+   on leave, has warnings). Matches the Traffio-style cue. */
+.bk2-rp-mark {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px;
+  font-size: 12px; font-weight: 700;
+  border-radius: 4px;
+}
+.bk2-rp-mark--yes { color: #34D399; }
+.bk2-rp-mark--no  { color: #F87171; }
 
 /* List view */
 .bk2-list { width: 100%; border-collapse: collapse; background: #0F172A; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; overflow: hidden; color: #E2E8F0; }
