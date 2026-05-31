@@ -134,9 +134,13 @@
   <p class="bk2-daylabel"><strong><%= dayLabel %></strong> · <%= bookings.length %> booking<%= bookings.length === 1 ? '' : 's' %></p>
 
   <!-- ============================================================
-       BOARD PANE — wide cards sorted by start time
+       BOARD PANE — wide cards sorted by start time + resource panel
+       Layout: cards take the bulk of the screen, resource panel pins
+       on the right with tabs for Roster / Vehicles / Towed Equipment.
+       Below 980px the panel stacks under the cards.
        ============================================================ -->
-  <section class="bk2-pane" data-view-pane="board" aria-current="true">
+  <section class="bk2-pane bk2-pane--with-panel" data-view-pane="board" aria-current="true">
+    <div class="bk2-board-col">
     <% if (!bookings.length) { %>
       <div class="bk2-empty">
         <div style="font-size:42px;margin-bottom:10px">📋</div>
@@ -301,6 +305,30 @@
         <% }); %>
       </div>
     <% } %>
+    </div>
+
+    <!-- ─────────────  Resource panel  ─────────────
+         Sticky on the right. Three tabs hit the same /api/resources
+         endpoint (one call returns people/vehicles/equipment). Search
+         filters within the active tab; drag handles are wired by the
+         existing bookings JS so panels can drop onto cards. -->
+    <aside class="bk2-resourcepanel" aria-label="Resources">
+      <header class="bk2-rp-head">
+        <div class="bk2-rp-tabs" role="tablist">
+          <button type="button" class="bk2-rp-tab" data-rp-tab="people"    aria-selected="true" role="tab">Roster</button>
+          <button type="button" class="bk2-rp-tab" data-rp-tab="vehicles"  role="tab">Vehicles</button>
+          <button type="button" class="bk2-rp-tab" data-rp-tab="equipment" role="tab">Towed Equipment</button>
+        </div>
+        <div class="bk2-rp-search">
+          <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          <input type="search" id="bk2-rp-search" placeholder="Search resources…" autocomplete="off">
+        </div>
+      </header>
+      <div class="bk2-rp-meta" id="bk2-rp-meta">Loading resources…</div>
+      <div class="bk2-rp-listwrap" data-rp-list="people"    role="tabpanel"><ul class="bk2-rp-list" id="bk2-rp-list-people"></ul></div>
+      <div class="bk2-rp-listwrap" data-rp-list="vehicles"  role="tabpanel" hidden><ul class="bk2-rp-list" id="bk2-rp-list-vehicles"></ul></div>
+      <div class="bk2-rp-listwrap" data-rp-list="equipment" role="tabpanel" hidden><ul class="bk2-rp-list" id="bk2-rp-list-equipment"></ul></div>
+    </aside>
   </section>
 
   <!-- ============================================================
@@ -830,5 +858,165 @@
 
   if (v0 === 'map')      initMap();
   if (v0 === 'calendar') loadCalendar();
+
+  // ============================================================
+  //  Resource panel — Roster / Vehicles / Towed Equipment.
+  //  Single fetch hydrates all three tabs. Search filters within
+  //  the active tab. Each item is draggable so existing drop
+  //  handlers on booking cards can wire it up.
+  // ============================================================
+  var rpDate = '<%= dateStr %>';
+  var rpData = null;
+  var rpQuery = '';
+  var rpActive = 'people';
+
+  function rpEsc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', '\'':'&#39;' }[c];
+    });
+  }
+  function rpInitials(name) {
+    if (!name) return '?';
+    return name.split(/\s+/).map(function (n) { return n[0]; }).join('').substring(0, 2).toUpperCase();
+  }
+  function rpWarnLabel(w) {
+    switch (w) {
+      case 'blocked':            return ['Blocked', ''];
+      case 'licence_expired':    return ['Licence', ''];
+      case 'tc_expired':         return ['TC', ''];
+      case 'whitecard_expired':  return ['WC', ''];
+      case 'on_leave':           return ['Leave', 'bk2-rp-warn--info'];
+      default:                   return [w, 'bk2-rp-warn--mute'];
+    }
+  }
+
+  function rpRenderPeople(list) {
+    if (!list.length) return '<li class="bk2-rp-empty">No matching workers.</li>';
+    return list.map(function (p) {
+      var sub = [p.role, p.licence_type, p.tcp_level ? ('TCP ' + p.tcp_level) : null]
+                .filter(Boolean).join(' · ');
+      var warnsHtml = (p.warnings || []).map(function (w) {
+        var label = rpWarnLabel(w); return '<span class="bk2-rp-warn ' + label[1] + '">' + rpEsc(label[0]) + '</span>';
+      }).join('');
+      return (
+        '<li class="bk2-rp-item ' + (p.assigned_today ? 'is-assigned' : '') + '"' +
+            ' draggable="true" data-resource-type="person" data-resource-id="' + p.id + '"' +
+            ' data-resource-name="' + rpEsc(p.full_name) + '"' +
+            ' title="' + rpEsc(p.full_name + (sub ? ' — ' + sub : '')) + '">' +
+          '<span class="bk2-rp-item-avatar">' + rpEsc(rpInitials(p.full_name)) + '</span>' +
+          '<div class="bk2-rp-item-body">' +
+            '<div class="bk2-rp-item-name">' + rpEsc(p.full_name) + '</div>' +
+            (sub ? '<div class="bk2-rp-item-sub">' + rpEsc(sub) + '</div>' : '') +
+          '</div>' +
+          warnsHtml +
+        '</li>'
+      );
+    }).join('');
+  }
+
+  function rpRenderVehicles(list) {
+    if (!list.length) return '<li class="bk2-rp-empty">No vehicles in fleet.</li>';
+    return list.map(function (v) {
+      var rego = v.licence_plate || v.rego || '';
+      var sub = [v.category, v.asset_number].filter(Boolean).join(' · ');
+      var srcBadge = v.source === 'fleet'
+        ? '<span class="bk2-rp-warn bk2-rp-warn--info">Fleet</span>'
+        : '<span class="bk2-rp-warn bk2-rp-warn--mute">Equip</span>';
+      return (
+        '<li class="bk2-rp-item" draggable="true" data-resource-type="vehicle" data-resource-id="' + v.id + '"' +
+            ' data-resource-name="' + rpEsc(v.name || rego) + '" data-resource-source="' + rpEsc(v.source || '') + '"' +
+            ' title="' + rpEsc((v.name || '') + (rego ? ' · ' + rego : '')) + '">' +
+          '<span class="bk2-rp-item-avatar">' + rpEsc((v.category || 'V').substring(0,2).toUpperCase()) + '</span>' +
+          '<div class="bk2-rp-item-body">' +
+            '<div class="bk2-rp-item-name">' + rpEsc(v.name || rego || 'Vehicle') + '</div>' +
+            '<div class="bk2-rp-item-sub">' + rpEsc(rego ? rego + (sub ? ' · ' + sub : '') : sub) + '</div>' +
+          '</div>' +
+          srcBadge +
+        '</li>'
+      );
+    }).join('');
+  }
+
+  function rpRenderEquipment(list) {
+    if (!list.length) return '<li class="bk2-rp-empty">No towed equipment registered.</li>';
+    return list.map(function (e) {
+      var sub = [e.category, e.asset_number].filter(Boolean).join(' · ');
+      return (
+        '<li class="bk2-rp-item" draggable="true" data-resource-type="equipment" data-resource-id="' + e.id + '"' +
+            ' data-resource-name="' + rpEsc(e.name) + '"' +
+            ' title="' + rpEsc(e.name + (sub ? ' — ' + sub : '')) + '">' +
+          '<span class="bk2-rp-item-avatar">' + rpEsc((e.category || 'EQ').substring(0,2).toUpperCase()) + '</span>' +
+          '<div class="bk2-rp-item-body">' +
+            '<div class="bk2-rp-item-name">' + rpEsc(e.name || 'Equipment') + '</div>' +
+            (sub ? '<div class="bk2-rp-item-sub">' + rpEsc(sub) + '</div>' : '') +
+          '</div>' +
+        '</li>'
+      );
+    }).join('');
+  }
+
+  function rpFilter(items, key) {
+    if (!rpQuery) return items;
+    var q = rpQuery.toLowerCase();
+    return items.filter(function (it) {
+      var hay = [
+        it.full_name, it.name, it.role, it.licence_type, it.category,
+        it.licence_plate, it.rego, it.asset_number, it.phone, it.employee_id,
+      ].filter(Boolean).join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+  }
+
+  function rpRepaint() {
+    if (!rpData) return;
+    var meta = $('#bk2-rp-meta');
+    var ppl = rpFilter(rpData.people, 'people');
+    var veh = rpFilter(rpData.vehicles, 'vehicles');
+    var eqp = rpFilter(rpData.equipment, 'equipment');
+    var pList = $('#bk2-rp-list-people');     if (pList) pList.innerHTML = rpRenderPeople(ppl);
+    var vList = $('#bk2-rp-list-vehicles');   if (vList) vList.innerHTML = rpRenderVehicles(veh);
+    var eList = $('#bk2-rp-list-equipment');  if (eList) eList.innerHTML = rpRenderEquipment(eqp);
+    if (meta) {
+      var counts = { people: ppl.length, vehicles: veh.length, equipment: eqp.length };
+      meta.textContent = counts.people + ' workers · ' + counts.vehicles + ' vehicles · ' + counts.equipment + ' equipment';
+    }
+  }
+
+  function rpSetTab(name) {
+    rpActive = name;
+    $$('.bk2-rp-tab').forEach(function (t) {
+      t.setAttribute('aria-selected', t.dataset.rpTab === name ? 'true' : 'false');
+    });
+    $$('[data-rp-list]').forEach(function (w) {
+      w.hidden = w.dataset.rpList !== name;
+    });
+  }
+
+  function rpLoad() {
+    var meta = $('#bk2-rp-meta');
+    fetch('/bookings/api/resources?date=' + encodeURIComponent(rpDate), { credentials: 'same-origin' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (data) {
+        rpData = data;
+        rpRepaint();
+      })
+      .catch(function (err) {
+        if (meta) meta.textContent = 'Could not load resources (' + err + ').';
+      });
+  }
+
+  if (document.querySelector('.bk2-resourcepanel')) {
+    $$('.bk2-rp-tab').forEach(function (t) {
+      t.addEventListener('click', function () { rpSetTab(t.dataset.rpTab); });
+    });
+    var rpSearchEl = $('#bk2-rp-search');
+    if (rpSearchEl) {
+      rpSearchEl.addEventListener('input', function () {
+        rpQuery = this.value.trim();
+        rpRepaint();
+      });
+    }
+    rpLoad();
+  }
 })();
 </script>
