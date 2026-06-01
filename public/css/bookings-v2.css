@@ -328,10 +328,12 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
   transition: background 100ms ease, color 100ms ease;
 }
 .bk2-edit-statuspill:hover { background: #D1D5DB; color: #111827; }
-.bk2-edit-statuspill-icon { font-size: 14px; line-height: 1; opacity: 0.85; }
-.bk2-edit-statuspill.is-active { background: #4B5563; color: #fff; }
+.bk2-edit-statuspill-icon { opacity: 0.85; }
+.bk2-edit-statuspill.is-active { background: #7C3AED; color: #fff; }
 .bk2-edit-statuspill.is-active.bk2-status--green_to_go,
 .bk2-edit-statuspill.bk2-status--green_to_go.is-active { background: #10B981; color: #fff; }
+.bk2-edit-statuspill.is-active.bk2-status--late_cancelled,
+.bk2-edit-statuspill.bk2-status--late_cancelled.is-active { background: #4B5563; color: #fff; }
 .bk2-edit-spacer { flex: 1; }
 .bk2-edit-actbtn {
   flex-shrink: 0;
@@ -356,50 +358,151 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-edit-pane { padding: 18px 22px; }
 .bk2-edit-pane[hidden] { display: none; }
 
-/* Overview form sections — match the screenshot's pale cards. */
-.bk2-edit-formgrid { display: flex; flex-direction: column; gap: 14px; }
-.bk2-edit-section {
+/* Mode visibility — tabs are edit-only, Create button is create-only,
+   Save+Clone are edit-only. Driven by [data-mode] on .bk2-editor. */
+.bk2-editor[data-mode="create"] .bk2-edit-tabs { display: none; }
+.bk2-editor[data-mode="edit"]   [data-mode-only="create"] { display: none !important; }
+.bk2-editor[data-mode="create"] [data-mode-only="edit"]   { display: none !important; }
+.bk2-editor[data-mode="edit"]   .bk2-edit-pane[data-edit-pane="overview"] .bk2-create-card { /* small reset for tab view */ }
+
+/* ─── Create-mode form — clean section cards ─────────────────────
+   Each section is a white card with an orange uppercase head and a
+   responsive 2-column field grid. Required fields get a soft yellow
+   tint to mirror the screenshot's highlight pattern. */
+.bk2-create { display: flex; flex-direction: column; gap: 14px; }
+.bk2-create-card {
   background: #fff;
   border: 1px solid #E5E7EB;
   border-radius: 10px;
-  padding: 14px 16px;
+  padding: 16px 18px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.03);
 }
-.bk2-edit-section h3 {
-  margin: 0 0 10px;
-  font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
-  text-transform: uppercase; color: #C2410C; /* Traffio-ish orange section heads */
+.bk2-create-card--collapsible > summary { cursor: pointer; list-style: none; }
+.bk2-create-card--collapsible > summary::-webkit-details-marker { display: none; }
+.bk2-create-card--collapsible[open] > summary { margin-bottom: 12px; }
+.bk2-create-head {
+  margin: 0 0 14px;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: #EA580C;
 }
-.bk2-edit-fieldrow {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 10px;
+.bk2-create-head--summary { display: flex; align-items: center; gap: 8px; }
+.bk2-create-head--summary::before {
+  content: '▸'; font-size: 11px; transition: transform 120ms ease;
 }
-.bk2-edit-fieldrow label {
-  display: flex; flex-direction: column; gap: 4px;
+.bk2-create-card[open] .bk2-create-head--summary::before { transform: rotate(90deg); }
+
+.bk2-create-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 16px;
+}
+@media (max-width: 720px) { .bk2-create-grid { grid-template-columns: 1fr; } }
+.bk2-create-field { display: flex; flex-direction: column; gap: 4px; }
+.bk2-create-field--full { grid-column: 1 / -1; }
+.bk2-create-lbl {
   font-size: 11px; font-weight: 600; color: #6B7280;
+  text-transform: none; letter-spacing: 0;
 }
-.bk2-edit-fieldrow input,
-.bk2-edit-fieldrow select {
-  padding: 7px 10px;
-  background: #FFFBEB;
-  border: 1px solid #FDE68A;
-  border-radius: 6px;
+.bk2-create-field input,
+.bk2-create-field select,
+.bk2-create-field textarea {
+  width: 100%; padding: 8px 11px;
+  background: #fff;
+  border: 1px solid #D1D5DB;
+  border-radius: 8px;
   font-size: 13px; color: #111827;
   outline: 0;
+  transition: border-color 100ms ease, background 100ms ease, box-shadow 100ms ease;
 }
-.bk2-edit-fieldrow input:focus,
-.bk2-edit-fieldrow select:focus { border-color: #2B7FFF; background: #fff; }
-.bk2-edit-hint { font-size: 11px; color: #6B7280; margin: -4px 0 10px; }
-.bk2-edit-cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
-.bk2-edit-counter {
+.bk2-create-field input:focus,
+.bk2-create-field select:focus,
+.bk2-create-field textarea:focus { border-color: #2B7FFF; box-shadow: 0 0 0 3px rgba(43,127,255,0.15); }
+.bk2-create-field--required input,
+.bk2-create-field--required select,
+.bk2-create-field--required textarea {
+  background: #FFFBEB;
+  border-color: #FDE68A;
+}
+.bk2-create-field--required .bk2-create-lbl::after { content: ' *'; color: #EA580C; }
+.bk2-create-field--required .bk2-create-lbl { color: #C2410C; font-weight: 700; }
+
+.bk2-create-toggle {
+  display: inline-flex; align-items: center; gap: 10px;
+  padding: 8px 12px; background: #F9FAFB;
+  border: 1px solid #E5E7EB; border-radius: 8px;
+  font-size: 13px; color: #374151; cursor: pointer;
+}
+.bk2-create-toggle input { accent-color: #2B7FFF; }
+.bk2-create-hint {
+  grid-column: 1 / -1;
+  margin: 0; padding: 8px 12px;
+  background: #F9FAFB; border: 1px solid #F3F4F6; border-radius: 8px;
+  font-size: 12px; color: #6B7280;
+}
+
+/* Booking type — radio-as-card. */
+.bk2-create-typegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.bk2-create-typecard {
+  display: block; padding: 14px 16px;
+  background: #fff; border: 1.5px solid #E5E7EB; border-radius: 10px;
+  cursor: pointer; transition: border-color 100ms ease, background 100ms ease;
+}
+.bk2-create-typecard input { position: absolute; opacity: 0; pointer-events: none; }
+.bk2-create-typecard.is-active { border-color: #2B7FFF; background: #EFF6FF; }
+.bk2-create-typename { display: block; font-size: 14px; font-weight: 700; color: #111827; text-align: center; }
+.bk2-create-typesub  { display: block; font-size: 11px; color: #6B7280; margin-top: 3px; text-align: center; }
+
+/* Requirements list — compact rows with steppers. */
+.bk2-create-search {
+  width: 220px; max-width: 100%; padding: 6px 10px;
+  background: #FFFBEB; border: 1px solid #FDE68A; border-radius: 7px;
+  font-size: 12px; color: #111827; outline: 0;
+}
+.bk2-create-search:focus { border-color: #2B7FFF; background: #fff; }
+.bk2-create-reqs {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 6px; margin-top: 10px;
+}
+.bk2-create-req {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 8px; padding: 8px 12px;
-  background: #fff; border: 1px solid #E5E7EB; border-radius: 8px;
+  gap: 8px; padding: 6px 10px;
+  background: #F9FAFB; border: 1px solid #F3F4F6; border-radius: 7px;
   font-size: 12px;
 }
-.bk2-edit-counter input {
-  width: 56px; padding: 4px 6px; border: 1px solid #D1D5DB; border-radius: 5px;
-  text-align: center; font-size: 13px; font-weight: 600;
+.bk2-create-req-name { color: #374151; font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk2-create-stepper {
+  display: inline-flex; align-items: center; gap: 0;
+  background: #fff; border: 1px solid #D1D5DB; border-radius: 6px; overflow: hidden;
 }
+.bk2-create-stepper button {
+  width: 24px; height: 24px;
+  background: transparent; border: 0; color: #6B7280;
+  font-size: 14px; font-weight: 700; cursor: pointer;
+  transition: background 100ms ease;
+}
+.bk2-create-stepper button:hover { background: #F3F4F6; color: #111827; }
+.bk2-create-stepper input {
+  width: 32px; height: 24px; padding: 0;
+  background: transparent; border: 0; border-left: 1px solid #E5E7EB; border-right: 1px solid #E5E7EB;
+  text-align: center; font-size: 12px; font-weight: 700; color: #111827;
+  outline: 0;
+}
+.bk2-create-reqs-summary {
+  margin: 12px 0 0; padding: 10px 14px;
+  background: #F9FAFB; border-top: 1px solid #E5E7EB;
+  font-size: 12px; color: #6B7280; text-align: right;
+}
+.bk2-create-reqs-summary strong { color: #111827; font-weight: 700; min-width: 22px; display: inline-block; }
+
+/* Create button — large green outlined, top-right. */
+.bk2-edit-actbtn--create {
+  padding: 8px 18px;
+  background: #fff; color: #10B981;
+  border: 1.5px solid #10B981; border-radius: 8px;
+  font-size: 13px; font-weight: 700;
+}
+.bk2-edit-actbtn--create:hover:not(:disabled),
+.bk2-edit-actbtn--create:focus:not(:disabled) { background: #ECFDF5; color: #047857; border-color: #047857; }
+.bk2-edit-actbtn--create.is-saving { opacity: 0.7; }
 
 /* Placeholder content for tabs that are awaiting spec. */
 .bk2-edit-placeholder {
@@ -413,23 +516,6 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-edit-placeholder h3 { margin: 0 0 8px; font-size: 16px; color: #111827; }
 .bk2-edit-placeholder p { font-size: 13px; margin: 0 0 6px; }
 .bk2-edit-spec { color: #2B7FFF; font-weight: 600; font-size: 12px !important; margin-top: 12px !important; }
-
-/* Footer (Save). */
-.bk2-edit-foot {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 18px;
-  background: #F3F4F6;
-  border-top: 1px solid #E5E7EB;
-}
-.bk2-edit-foot-info { font-size: 12px; color: #6B7280; }
-.bk2-edit-savebtn {
-  padding: 9px 22px;
-  background: #2B7FFF; color: #fff;
-  border: 0; border-radius: 8px;
-  font-size: 13px; font-weight: 600;
-  cursor: pointer; transition: background 100ms ease;
-}
-.bk2-edit-savebtn:hover { background: #1D6AE5; }
 
 @media (max-width: 640px) {
   .bk2-editor { width: 100vw; }

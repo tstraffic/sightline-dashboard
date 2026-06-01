@@ -569,19 +569,22 @@
 </div>
 
 <!-- ============================================================
-     BOOKING EDITOR SLIDE-OVER  —  full-width right-side overlay
-     with the same tabbed layout as the /bookings/:id detail page.
-     Opens when the user clicks "New booking" — stays on the board,
-     just docks an editor on the right. Tabs from left to right:
-     Overview, Resources, Tasks, Dockets, History, Notes, Documents,
-     Forms, Req. Plans, Req. Permits, Works, Stories, Invoices, Print.
+     BOOKING EDITOR SLIDE-OVER  —  full-width right-side overlay.
+     Two modes inside one component:
+       • data-mode="create" — single comprehensive form, no tab strip,
+         "Create" button on the right of the status row.
+       • data-mode="edit"   — multi-tab interface (Overview, Resources,
+         Tasks…), "Save" + "Clone" on the right of the status row.
+     "New booking" opens the slide-over in create mode. A successful
+     POST /bookings/quick switches it to edit mode for the new booking
+     so the planner can keep working without losing context.
      ============================================================ -->
 <div class="bk2-edit-backdrop" id="bk2-edit-backdrop" hidden></div>
-<aside class="bk2-editor" id="bk2-editor" role="dialog" aria-modal="true" aria-labelledby="bk2-edit-title" hidden>
-  <!-- Dark title row: calendar icon · breadcrumb title · collapse · close -->
+<aside class="bk2-editor" id="bk2-editor" data-mode="create" role="dialog" aria-modal="true" aria-labelledby="bk2-edit-title" hidden>
+  <!-- Dark title row: calendar icon · breadcrumb · collapse · close -->
   <header class="bk2-edit-titlebar">
     <span class="bk2-edit-cal"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></span>
-    <h2 id="bk2-edit-title" class="bk2-edit-title">New booking</h2>
+    <h2 id="bk2-edit-title" class="bk2-edit-title">New Booking</h2>
     <button type="button" class="bk2-edit-iconbtn" id="bk2-edit-collapse" title="Dock to side / expand" aria-label="Collapse">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7 7-7M21 12H3"/></svg>
     </button>
@@ -590,7 +593,7 @@
     </button>
   </header>
 
-  <!-- Tab strip — icons + labels. Each tab swaps the active panel below. -->
+  <!-- Tab strip — only visible in edit mode. -->
   <nav class="bk2-edit-tabs" role="tablist" aria-label="Booking sections">
     <% var EDIT_TABS = [
       { k: 'overview',  l: 'Overview',     i: 'M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.5 12C3.8 7.9 7.5 5 12 5s8.2 2.9 9.5 7c-1.3 4.1-5 7-9.5 7s-8.2-2.9-9.5-7z' },
@@ -616,34 +619,39 @@
     <% }); %>
   </nav>
 
-  <!-- Lifecycle status row + Save/Clone. The status pills are the same
-       set used on the cards' colour banner; clicking one would normally
-       move the booking through its lifecycle. Wired as visual placeholders
-       until the user maps them. -->
+  <!-- Status pill row — visible in both modes. Action button on the
+       right switches between Create (create mode) and Save/Clone
+       (edit mode) via the [data-mode] CSS rules. -->
   <div class="bk2-edit-statusrow">
     <% [
-      { k: 'client_booking', short: 'Client Bk.',   icon: '?' },
-      { k: 'unconfirmed',    short: 'Unconf.',      icon: '?' },
-      { k: 'confirmed',      short: 'Confirmed',    icon: '🔓' },
-      { k: 'locked',         short: 'Locked',       icon: '🔒' },
-      { k: 'conflict',       short: 'Conflict',     icon: '!' },
-      { k: 'green_to_go',    short: 'GTG',          icon: '✓' },
-      { k: 'complete',       short: 'Complete',     icon: '🏆' },
-      { k: 'finalised',      short: 'Finalised',    icon: '🏁' },
-      { k: 'cancelled',      short: 'Cancel',       icon: '⊘' },
-      { k: 'late_cancelled', short: 'Late Cancl.',  icon: '🗓' },
-    ].forEach(function (s, i) { %>
-      <button type="button" class="bk2-edit-statuspill bk2-status--<%= s.k %><%= i === 1 ? ' is-active' : '' %>" data-status-set="<%= s.k %>" title="<%= s.short %>">
-        <span class="bk2-edit-statuspill-icon"><%= s.icon %></span>
+      { k: 'client_booking', short: 'Client Bk.', icon: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { k: 'unconfirmed',    short: 'Unconf.',    icon: 'M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z', active: true },
+      { k: 'confirmed',      short: 'Confirmed',  icon: 'M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z' },
+      { k: 'locked',         short: 'Locked',     icon: 'M12 11v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' },
+      { k: 'conflict',       short: 'Conflict',   icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z' },
+      { k: 'green_to_go',    short: 'G T G',      icon: 'M5 13l4 4L19 7' },
+      { k: 'complete',       short: 'Complete',   icon: 'M5 4h14M5 4v8a7 7 0 0014 0V4M9 21h6m-3 0v-4m-1.5-9h3l1 5h-5l1-5z' },
+      { k: 'finalised',      short: 'Finalised',  icon: 'M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9' },
+      { k: 'cancelled',      short: 'Cancel',     icon: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636' },
+      { k: 'late_cancelled', short: 'Late Cancl.',icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+    ].forEach(function (s) { %>
+      <button type="button" class="bk2-edit-statuspill bk2-status--<%= s.k %><%= s.active ? ' is-active' : '' %>" data-status-set="<%= s.k %>" title="<%= s.short %>">
+        <svg class="bk2-edit-statuspill-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="<%= s.icon %>"/></svg>
         <span class="bk2-edit-statuspill-lbl"><%= s.short %></span>
       </button>
     <% }); %>
     <span class="bk2-edit-spacer"></span>
-    <button type="button" class="bk2-edit-actbtn" id="bk2-edit-save" disabled>
+    <!-- Create button — visible only in create mode. -->
+    <button type="submit" form="bk2-edit-form" class="bk2-edit-actbtn bk2-edit-actbtn--create" id="bk2-edit-create" data-mode-only="create">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+      Create
+    </button>
+    <!-- Save & Clone — visible only in edit mode. -->
+    <button type="button" class="bk2-edit-actbtn" id="bk2-edit-save" data-mode-only="edit" disabled>
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
       Save
     </button>
-    <button type="button" class="bk2-edit-actbtn bk2-edit-actbtn--primary" id="bk2-edit-clone">
+    <button type="button" class="bk2-edit-actbtn bk2-edit-actbtn--primary" id="bk2-edit-clone" data-mode-only="edit">
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
       Clone
     </button>
@@ -651,77 +659,254 @@
 
   <!-- Tab content panels. Only the active one is visible. -->
   <div class="bk2-edit-body">
-    <!-- OVERVIEW — the create form (same fields the old Quick Book had). -->
+    <!-- ─── OVERVIEW / CREATE FORM ───
+         Single comprehensive form when in create mode. In edit mode
+         this stays as the Overview tab so all fields remain editable. -->
     <section class="bk2-edit-pane" data-edit-pane="overview" aria-current="true">
-      <form id="bk2-edit-form" method="POST" action="/bookings/quick">
+      <form id="bk2-edit-form" method="POST" action="/bookings/quick" class="bk2-create">
+
         <%- include('../partials/csrf') %>
 
-        <div class="bk2-edit-formgrid">
-          <div class="bk2-edit-section">
-            <h3>Booking depot</h3>
-            <div class="bk2-edit-fieldrow">
-              <label>Booking depot *<select name="depot" required>
+        <!-- BOOKING DEPOT -->
+        <div class="bk2-create-card">
+          <h3 class="bk2-create-head">Booking Depot</h3>
+          <div class="bk2-create-grid">
+            <label class="bk2-create-field bk2-create-field--required">
+              <span class="bk2-create-lbl">Booking depot *</span>
+              <select name="depot" required>
                 <option value="">— pick —</option>
                 <% depots.forEach(function (d) { %><option value="<%= d %>"><%= d %></option><% }); %>
-              </select></label>
-              <label>Supplier<input type="text" name="supplier_name" placeholder="Optional"></label>
-            </div>
-          </div>
-
-          <div class="bk2-edit-section">
-            <h3>Client information</h3>
-            <div class="bk2-edit-fieldrow">
-              <label>Client *<input list="bk2-clients" name="client_name" autocomplete="off" placeholder="Start typing…" required></label>
-              <label>Project<input list="bk2-jobs" name="site_label" placeholder="Optional — job name or site label"></label>
-            </div>
-            <div class="bk2-edit-fieldrow">
-              <label>Purchase Order / Client job number<input type="text" name="order_number" placeholder="Optional"></label>
-              <label>Client Billing Code<input type="text" name="client_billing_code" placeholder="Optional"></label>
-            </div>
-          </div>
-
-          <div class="bk2-edit-section">
-            <h3>Booking information</h3>
-            <div class="bk2-edit-fieldrow">
-              <label>Site address *<input type="text" name="site_address" placeholder="Start typing the address…" required></label>
-            </div>
-            <div class="bk2-edit-fieldrow">
-              <label>Date *<input type="date" name="start_date" value="<%= dateStr %>" required></label>
-              <label>Start time *<input type="time" name="start_time" value="06:00" required></label>
-              <label>End time<input type="time" name="end_time" value="14:30"></label>
-            </div>
-          </div>
-
-          <div class="bk2-edit-section">
-            <h3>Crew composition</h3>
-            <p class="bk2-edit-hint">Each crew comes with a UTE slot built in. Resources tab lets you drop named workers / vehicles into the slots.</p>
-            <div class="bk2-edit-cgrid">
-              <% [1,2,3,4,5].forEach(function (n) {
-                var defaults = (n === 2);
-              %>
-                <label class="bk2-edit-counter">
-                  <span><%= n %>-man crew</span>
-                  <input type="number" name="crew_size_<%= n %>" value="<%= defaults ? 1 : 0 %>" min="0" max="20">
-                </label>
-              <% }); %>
-            </div>
-            <h3 style="margin-top:14px">Add-ons</h3>
-            <div class="bk2-edit-cgrid">
-              <% addons.forEach(function (a) { %>
-                <label class="bk2-edit-counter">
-                  <span><%= a.label %></span>
-                  <input type="number" name="addon_<%= a.key %>" value="0" min="0" max="20">
-                </label>
-              <% }); %>
-            </div>
+              </select>
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Supplier</span>
+              <input type="text" name="supplier_name" placeholder="Select Supplier">
+            </label>
           </div>
         </div>
+
+        <!-- CLIENT INFORMATION -->
+        <div class="bk2-create-card">
+          <h3 class="bk2-create-head">Client Information</h3>
+          <div class="bk2-create-grid">
+            <label class="bk2-create-field bk2-create-field--required bk2-create-field--full">
+              <span class="bk2-create-lbl">Client *</span>
+              <input list="bk2-clients" name="client_name" required placeholder="Select Client" autocomplete="off">
+            </label>
+            <label class="bk2-create-field bk2-create-field--required">
+              <span class="bk2-create-lbl">Project *</span>
+              <input list="bk2-jobs" name="site_label" required placeholder="Select Project" autocomplete="off">
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Location Context</span>
+              <select name="location_context"><option value="">Select Location Context</option></select>
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Purchase Order / Client job number</span>
+              <input type="text" name="order_number">
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Client Billing Code</span>
+              <input type="text" name="client_billing_code">
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Requester</span>
+              <select name="requester_id"><option value="">Select one</option></select>
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Planner</span>
+              <select name="planner_id"><option value="">Select one</option></select>
+            </label>
+            <label class="bk2-create-field bk2-create-field--required bk2-create-field--full">
+              <span class="bk2-create-lbl">Site contacts *</span>
+              <input type="text" name="site_contacts" placeholder="Type to search contacts…">
+            </label>
+          </div>
+        </div>
+
+        <!-- BOOKING INFORMATION -->
+        <div class="bk2-create-card">
+          <h3 class="bk2-create-head">Booking Information</h3>
+          <div class="bk2-create-grid">
+            <label class="bk2-create-field bk2-create-field--full">
+              <span class="bk2-create-lbl">Booking title</span>
+              <input type="text" name="title" placeholder="Optional — defaults to the project name">
+            </label>
+            <label class="bk2-create-field bk2-create-field--full">
+              <span class="bk2-create-lbl">Booking description</span>
+              <textarea name="description" rows="2"></textarea>
+            </label>
+            <label class="bk2-create-field bk2-create-field--full">
+              <span class="bk2-create-lbl">Booking tags</span>
+              <input type="text" name="tags" placeholder="Select one or more tags">
+            </label>
+            <label class="bk2-create-field bk2-create-field--required">
+              <span class="bk2-create-lbl">Date *</span>
+              <input type="date" name="start_date" value="<%= dateStr %>" required>
+            </label>
+            <label class="bk2-create-field bk2-create-field--required">
+              <span class="bk2-create-lbl">Start time *</span>
+              <input type="time" name="start_time" value="06:00" required>
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Approximate end time</span>
+              <input type="time" name="end_time" value="14:30">
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Depot meeting time</span>
+              <input type="time" name="depot_meeting_time">
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Straight-to-site time</span>
+              <input type="time" name="straight_to_site_time">
+            </label>
+            <label class="bk2-create-toggle bk2-create-field--full">
+              <input type="checkbox" name="is_callout" value="1">
+              <span>This booking is a callout</span>
+            </label>
+            <label class="bk2-create-field" data-show-when="is_callout">
+              <span class="bk2-create-lbl">Callout time</span>
+              <input type="time" name="callout_time">
+            </label>
+          </div>
+        </div>
+
+        <!-- LOCATION -->
+        <div class="bk2-create-card">
+          <h3 class="bk2-create-head">Location</h3>
+          <div class="bk2-create-grid">
+            <label class="bk2-create-field bk2-create-field--required bk2-create-field--full">
+              <span class="bk2-create-lbl">Main address *</span>
+              <input type="text" name="site_address" required placeholder="Start typing the address…">
+            </label>
+            <input type="hidden" name="suburb">
+            <input type="hidden" name="state">
+            <input type="hidden" name="postcode">
+            <input type="hidden" name="latitude">
+            <input type="hidden" name="longitude">
+            <label class="bk2-create-toggle bk2-create-field--full">
+              <input type="checkbox" name="marker_is_accurate" value="1">
+              <span>Marker is accurate — pin can be used to find the site (required for auto travel time calc)</span>
+            </label>
+            <label class="bk2-create-field bk2-create-field--full">
+              <span class="bk2-create-lbl">Location notes</span>
+              <textarea name="location_notes" rows="2" placeholder="Type your location notes here"></textarea>
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Where is the worksite?</span>
+              <input type="text" name="worksite_position">
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Which direction is the works happening?</span>
+              <input type="text" name="works_direction">
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Chainage / street name from</span>
+              <input type="text" name="chainage_from">
+            </label>
+            <label class="bk2-create-field">
+              <span class="bk2-create-lbl">Chainage / street name to</span>
+              <input type="text" name="chainage_to">
+            </label>
+            <label class="bk2-create-toggle bk2-create-field--full">
+              <input type="checkbox" name="mobile_works" value="1">
+              <span>This booking has mobile works</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- PLANS / PERMITS — collapsible -->
+        <details class="bk2-create-card bk2-create-card--collapsible">
+          <summary class="bk2-create-head bk2-create-head--summary">Plans / Permits</summary>
+          <div class="bk2-create-grid">
+            <p class="bk2-create-hint bk2-create-field--full">Linked TGS, TCP, TMP and ROL items will appear here once they're attached. Tell me what controls you want in this section.</p>
+          </div>
+        </details>
+
+        <!-- BOOKING TYPE -->
+        <div class="bk2-create-card">
+          <h3 class="bk2-create-head">Booking Type</h3>
+          <div class="bk2-create-typegrid">
+            <label class="bk2-create-typecard is-active">
+              <input type="radio" name="booking_type" value="regular" checked>
+              <span class="bk2-create-typename">Regular booking</span>
+              <span class="bk2-create-typesub">Standard shift work.</span>
+            </label>
+            <label class="bk2-create-typecard">
+              <input type="radio" name="booking_type" value="hire">
+              <span class="bk2-create-typename">Hire booking</span>
+              <span class="bk2-create-typesub">Equipment / vehicles only. Requirements may vary over time.</span>
+            </label>
+          </div>
+          <label class="bk2-create-field bk2-create-field--full" style="margin-top:12px">
+            <span class="bk2-create-lbl">Apply Booking Templates</span>
+            <input type="text" name="templates" placeholder="Select booking templates">
+          </label>
+          <p class="bk2-create-hint">Templates add predefined requirements and tasks to a booking.</p>
+        </div>
+
+        <!-- BOOKING REQUIREMENTS -->
+        <div class="bk2-create-card">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+            <h3 class="bk2-create-head" style="margin:0">Booking Requirements</h3>
+            <input type="search" class="bk2-create-search" placeholder="Search requirements…">
+          </div>
+          <p class="bk2-create-hint">Set the quantity per item — Crew steppers feed into the crew composition, others into add-ons.</p>
+          <div class="bk2-create-reqs">
+            <% [
+              { name: '1x TC Crew',  field: 'crew_size_1' },
+              { name: '2x TC Crew',  field: 'crew_size_2', defaultQty: 1 },
+              { name: '3x TC Crew',  field: 'crew_size_3' },
+              { name: '4x TC Crew',  field: 'crew_size_4' },
+              { name: '5x TC Crew',  field: 'crew_size_5' },
+              { name: 'Arrow Board', field: 'addon_arrow' },
+              { name: 'Hoist Operator', field: 'addon_hoist' },
+              { name: 'Labour', field: 'addon_labour' },
+              { name: 'Light Tower', field: 'addon_light_tower' },
+              { name: 'Permit', field: 'addon_permit' },
+              { name: 'Pod Truck', field: 'addon_pod_truck' },
+              { name: 'Portaboom', field: 'addon_portaboom' },
+              { name: 'Security', field: 'addon_security' },
+              { name: 'Speed Advisory Sign', field: 'addon_speed_advisory' },
+              { name: 'Spotter', field: 'addon_spotter' },
+              { name: 'TMA (dry hire)', field: 'addon_tma_dry' },
+              { name: 'TMA (wet hire)', field: 'addon_tma_wet' },
+              { name: 'TMP', field: 'addon_tmp' },
+              { name: 'TMP with Traffic Management', field: 'addon_tmp_tm' },
+              { name: 'Traffic Controller', field: 'addon_tc' },
+              { name: 'Traffic Guidance Scheme', field: 'addon_tgs' },
+              { name: 'Trainee', field: 'addon_trainee' },
+              { name: 'VMS Board', field: 'addon_vms_board' },
+              { name: 'VMS Ute', field: 'addon_vms_ute' },
+              { name: 'Vehicle', field: 'addon_vehicle' },
+            ].forEach(function (r) { %>
+              <div class="bk2-create-req" data-req-name="<%= r.name.toLowerCase() %>">
+                <span class="bk2-create-req-name"><%= r.name %></span>
+                <div class="bk2-create-stepper" data-stepper-name="<%= r.field %>">
+                  <button type="button" data-step="-1" aria-label="Decrease">−</button>
+                  <input type="number" name="<%= r.field %>" value="<%= r.defaultQty || 0 %>" min="0" max="20" readonly>
+                  <button type="button" data-step="+1" aria-label="Increase">+</button>
+                </div>
+              </div>
+            <% }); %>
+          </div>
+          <p class="bk2-create-reqs-summary">People: <strong id="bk2-create-pp">2</strong> · Vehicles: <strong id="bk2-create-vv">1</strong> · Equipment: <strong id="bk2-create-ee">0</strong></p>
+        </div>
+
+        <!-- BOOKING POOL -->
+        <div class="bk2-create-card">
+          <h3 class="bk2-create-head">Booking Pool</h3>
+          <label class="bk2-create-toggle">
+            <input type="checkbox" name="is_booking_pool" value="1">
+            <span>This is a booking pool</span>
+          </label>
+          <p class="bk2-create-hint">A booking pool lets you schedule resources ahead of time without knowing the exact makeup of jobs. Pools appear in a lighter green on the board.</p>
+        </div>
+
       </form>
     </section>
 
-    <!-- RESOURCES — placeholder mirroring the right-panel pattern.
-         When you describe the desired behaviour we'll wire drag-from
-         /api/resources directly onto the booking's crew/vehicle slots. -->
+    <!-- RESOURCES — placeholder mirroring the right-panel pattern. -->
     <section class="bk2-edit-pane" data-edit-pane="resources" hidden>
       <div class="bk2-edit-placeholder">
         <h3>Resources</h3>
@@ -752,13 +937,6 @@
       </section>
     <% }); %>
   </div>
-
-  <!-- Sticky footer: Save action lives in the status row above; this
-       footer is for secondary helpers like 'Open full editor'. -->
-  <footer class="bk2-edit-foot">
-    <span class="bk2-edit-foot-info">New bookings save as draft. Edit further from the tabs above.</span>
-    <button type="submit" form="bk2-edit-form" class="bk2-edit-savebtn">Save booking</button>
-  </footer>
 </aside>
 
 <!-- ============================================================
@@ -1021,21 +1199,27 @@
   //  + NEW BOOKING — opens Quick Book
   // ============================================================
   // ============================================================
-  //  Booking editor slide-over — tabbed right-side overlay.
-  //  Opens via "New booking" / Empty-state button / N keyboard.
-  //  Tab switching is local; the Resources tab will hand-off to
-  //  the right-side resource list once we map the drop targets.
+  //  Booking editor slide-over — two modes:
+  //    "create" → single comprehensive form, no tab strip, big Create button
+  //    "edit"   → tabbed shell, Save + Clone in the status row
+  //  "New booking" opens in create mode; on save the slide-over
+  //  switches to edit mode for the new booking.
   // ============================================================
+  function setEditorMode(mode) {
+    var ed = $('#bk2-editor'); if (!ed) return;
+    ed.dataset.mode = mode;
+    if (mode === 'edit') setEditorTab('overview');
+  }
   function openEditor() {
     var ed = $('#bk2-editor'); var bd = $('#bk2-edit-backdrop');
     if (!ed || !bd) return;
+    setEditorMode('create');
+    var title = $('#bk2-edit-title'); if (title) title.textContent = 'New Booking';
     bd.hidden = false; ed.hidden = false;
     requestAnimationFrame(function () {
       bd.classList.add('is-open'); ed.classList.add('is-open');
     });
     document.body.style.overflow = 'hidden';
-    // Default to the Overview tab on every open.
-    setEditorTab('overview');
   }
   function closeEditor() {
     var ed = $('#bk2-editor'); var bd = $('#bk2-edit-backdrop');
@@ -1064,6 +1248,118 @@
       var ed = $('#bk2-editor'); if (ed && !ed.hidden) closeEditor();
     }
   });
+
+  // Stepper buttons inside the Booking Requirements grid.
+  $$('.bk2-create-stepper').forEach(function (st) {
+    var input = st.querySelector('input[type="number"]');
+    st.querySelectorAll('button[data-step]').forEach(function (b) {
+      b.addEventListener('click', function () {
+        var step = parseInt(b.dataset.step, 10) || 0;
+        var v = Math.max(0, Math.min(20, (parseInt(input.value, 10) || 0) + step));
+        input.value = v; input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    });
+  });
+
+  // Live People/Vehicles/Equipment count under Booking Requirements.
+  var REQ_PEOPLE_FIELDS = ['crew_size_1','crew_size_2','crew_size_3','crew_size_4','crew_size_5','addon_tc','addon_hoist','addon_labour','addon_spotter','addon_trainee','addon_security'];
+  var REQ_VEHICLE_FIELDS = ['addon_pod_truck','addon_vms_ute','addon_vehicle'];
+  function reqSum(fields, mul) {
+    var s = 0;
+    fields.forEach(function (f) {
+      var el = document.querySelector('input[name="' + f + '"]'); if (!el) return;
+      var v = parseInt(el.value, 10) || 0;
+      s += v * (mul && mul[f] || 1);
+    });
+    return s;
+  }
+  function reqRepaint() {
+    var crewMul = { crew_size_1: 1, crew_size_2: 2, crew_size_3: 3, crew_size_4: 4, crew_size_5: 5 };
+    var pp = reqSum(REQ_PEOPLE_FIELDS, crewMul);
+    var vv = reqSum(['crew_size_1','crew_size_2','crew_size_3','crew_size_4','crew_size_5'], { crew_size_1:1, crew_size_2:1, crew_size_3:1, crew_size_4:1, crew_size_5:1 }) + reqSum(REQ_VEHICLE_FIELDS);
+    var allReqs = $$('.bk2-create-req input[type="number"]');
+    var total = 0; allReqs.forEach(function (i) { total += (parseInt(i.value, 10) || 0); });
+    var ee = Math.max(0, total - reqSum(REQ_PEOPLE_FIELDS.concat(['crew_size_1','crew_size_2','crew_size_3','crew_size_4','crew_size_5']).concat(REQ_VEHICLE_FIELDS)));
+    var ppEl = $('#bk2-create-pp'); if (ppEl) ppEl.textContent = pp;
+    var vvEl = $('#bk2-create-vv'); if (vvEl) vvEl.textContent = vv;
+    var eeEl = $('#bk2-create-ee'); if (eeEl) eeEl.textContent = ee;
+  }
+  $$('.bk2-create-req input[type="number"]').forEach(function (i) { i.addEventListener('input', reqRepaint); });
+  reqRepaint();
+
+  // Search filter for the requirements list.
+  var reqSearch = $('.bk2-create-search');
+  if (reqSearch) {
+    reqSearch.addEventListener('input', function () {
+      var q = this.value.toLowerCase();
+      $$('.bk2-create-req').forEach(function (r) {
+        r.style.display = (!q || (r.dataset.reqName || '').indexOf(q) !== -1) ? '' : 'none';
+      });
+    });
+  }
+
+  // Status pill clicks — set the displayed-active pill in create mode.
+  // (Wired client-side; the actual booking status flip is server-side
+  // and comes online when the user maps the lifecycle controls.)
+  $$('.bk2-edit-statuspill').forEach(function (p) {
+    p.addEventListener('click', function () {
+      $$('.bk2-edit-statuspill').forEach(function (x) { x.classList.remove('is-active'); });
+      p.classList.add('is-active');
+    });
+  });
+
+  // Toggle the callout-time field's visibility based on the callout toggle.
+  var calloutBox = document.querySelector('input[name="is_callout"]');
+  var calloutWrap = document.querySelector('[data-show-when="is_callout"]');
+  if (calloutBox && calloutWrap) {
+    function syncCallout() { calloutWrap.style.display = calloutBox.checked ? '' : 'none'; }
+    calloutBox.addEventListener('change', syncCallout); syncCallout();
+  }
+
+  // Booking type radio — highlight active card.
+  $$('input[name="booking_type"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      $$('.bk2-create-typecard').forEach(function (c) { c.classList.remove('is-active'); });
+      var card = r.closest('.bk2-create-typecard'); if (card) card.classList.add('is-active');
+    });
+  });
+
+  // ── Create submit — POST as JSON so we stay on the board ──
+  var createForm = $('#bk2-edit-form');
+  if (createForm) {
+    createForm.addEventListener('submit', function (e) {
+      if (document.querySelector('#bk2-editor').dataset.mode !== 'create') return;
+      e.preventDefault();
+      var fd = new FormData(createForm);
+      var btn = $('#bk2-edit-create');
+      if (btn) { btn.disabled = true; btn.classList.add('is-saving'); }
+      fetch('/bookings/quick', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+        body: fd,
+        credentials: 'same-origin',
+      }).then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function (data) {
+          if (data && data.ok) {
+            // Switch to edit mode for the brand-new booking — keep the
+            // slide-over open so the planner can keep editing.
+            var title = $('#bk2-edit-title');
+            if (title) title.textContent = '#' + (data.booking_number || data.id) + ' · ' +
+              ((fd.get('client_name') || '') + (fd.get('site_label') ? ' · ' + fd.get('site_label') : '')).trim();
+            setEditorMode('edit');
+            // Update the board — easiest is a soft reload so the new card appears.
+            // To preserve the slide-over state in the future we'd do AJAX append.
+            setTimeout(function () { location.reload(); }, 600);
+          } else {
+            alert((data && data.error) || 'Could not create the booking.');
+            if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+          }
+        }).catch(function () {
+          alert('Could not create the booking — network error.');
+          if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+        });
+    });
+  }
 
   $('#bk2-new-btn').addEventListener('click', openEditor);
   var emptyNew = $('#bk2-empty-new');
