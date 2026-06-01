@@ -317,6 +317,129 @@
     </div>
   </div>
 
+  <!-- Monthly package job — when on, the form submits one job per
+       ticked month, named "<Month> - <pattern>" (e.g. "May - Packages")
+       and dated to the 1st of that month. Hidden on edit because this
+       is a create-time multiplier; flipping the toggle on an existing
+       job wouldn't retroactively split it. -->
+  <% if (!isEdit) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6" id="monthly-package-card">
+    <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Monthly Package Job</h2>
+    <label class="inline-flex items-center gap-2 cursor-pointer mb-3">
+      <input type="checkbox" id="monthly_package" name="monthly_package" value="1" class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+      <span class="text-sm font-medium text-gray-700">This is a monthly package job</span>
+    </label>
+    <p class="text-xs text-gray-500 mb-4">When on, tick the months you want jobs for — one job per month will be created, e.g. <code class="bg-gray-100 px-1.5 py-0.5 rounded">May - Packages</code>, <code class="bg-gray-100 px-1.5 py-0.5 rounded">June - Packages</code>. All siblings share the client / suburb / PM you set above.</p>
+
+    <div id="monthly-package-config" class="space-y-4" style="display:none">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="recurring_pattern_name" class="block text-sm font-medium text-gray-600 mb-1">Pattern name</label>
+          <input type="text" id="recurring_pattern_name" name="recurring_pattern_name" value="Packages" placeholder="e.g. Packages"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <p class="text-[11px] text-gray-400 mt-1">Used as the suffix after each month name.</p>
+        </div>
+        <div>
+          <label for="monthly_year" class="block text-sm font-medium text-gray-600 mb-1">Year</label>
+          <select id="monthly_year" name="monthly_year" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <% var thisYear = new Date().getFullYear(); for (var y = thisYear; y <= thisYear + 2; y++) { %>
+              <option value="<%= y %>" <%= y === thisYear ? 'selected' : '' %>><%= y %></option>
+            <% } %>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-2">Months to create</label>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2" id="monthly-months-grid">
+          <%
+            var MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            var currentMonthIdx = new Date().getMonth();
+            MONTH_NAMES.forEach(function(name, i) {
+          %>
+            <label class="bk2-month-chip">
+              <input type="checkbox" name="monthly_months" value="<%= name %>" <%= i === currentMonthIdx ? 'checked' : '' %>>
+              <span><%= name %></span>
+            </label>
+          <% }); %>
+        </div>
+        <div class="mt-2 flex gap-2 text-xs">
+          <button type="button" id="monthly-pick-all"   class="text-brand-600 hover:underline">Select all</button>
+          <span class="text-gray-300">·</span>
+          <button type="button" id="monthly-pick-rest"  class="text-brand-600 hover:underline">Rest of year</button>
+          <span class="text-gray-300">·</span>
+          <button type="button" id="monthly-pick-clear" class="text-gray-500 hover:underline">Clear</button>
+        </div>
+      </div>
+      <p id="monthly-preview" class="text-xs text-gray-500"></p>
+    </div>
+  </div>
+
+  <style>
+    .bk2-month-chip {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 6px 10px; border: 1px solid #E5E7EB; border-radius: 8px;
+      background: #fff; font-size: 12px; font-weight: 500; color: #374151;
+      cursor: pointer; transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+      user-select: none;
+    }
+    .bk2-month-chip input { position: absolute; opacity: 0; pointer-events: none; }
+    .bk2-month-chip:hover { background: #F9FAFB; }
+    .bk2-month-chip.is-on, .bk2-month-chip:has(input:checked) {
+      background: #EFF6FF; border-color: #2B7FFF; color: #1D4ED8; font-weight: 600;
+    }
+  </style>
+
+  <script>
+    (function () {
+      var toggle = document.getElementById('monthly_package');
+      var cfg    = document.getElementById('monthly-package-config');
+      var preview = document.getElementById('monthly-preview');
+      var pattern = document.getElementById('recurring_pattern_name');
+      var year    = document.getElementById('monthly_year');
+      var grid    = document.getElementById('monthly-months-grid');
+      if (!toggle || !cfg) return;
+
+      function activeMonths() {
+        return Array.from(grid.querySelectorAll('input[name="monthly_months"]:checked')).map(function (i) { return i.value; });
+      }
+      function renderPreview() {
+        if (!preview) return;
+        var months = activeMonths();
+        if (!months.length) { preview.textContent = 'No months selected — tick one or more above.'; return; }
+        var p = (pattern.value || 'Packages').trim();
+        var y = year.value;
+        preview.innerHTML = 'Will create ' + months.length + ' job(s): ' +
+          months.map(function (m) { return '<code style="background:#F3F4F6;padding:1px 6px;border-radius:4px">' + m + ' - ' + p + ' (' + y + ')</code>'; }).join(' ');
+      }
+      function sync() {
+        cfg.style.display = toggle.checked ? '' : 'none';
+        if (toggle.checked) renderPreview();
+      }
+      toggle.addEventListener('change', sync);
+      if (pattern) pattern.addEventListener('input', renderPreview);
+      if (year)    year.addEventListener('change', renderPreview);
+      grid.addEventListener('change', function (e) {
+        if (e.target.matches('input[name="monthly_months"]')) renderPreview();
+      });
+
+      var pickAll = document.getElementById('monthly-pick-all');
+      var pickRest = document.getElementById('monthly-pick-rest');
+      var pickClear = document.getElementById('monthly-pick-clear');
+      function set(filterFn) {
+        grid.querySelectorAll('input[name="monthly_months"]').forEach(function (cb, idx) {
+          cb.checked = filterFn(idx);
+        });
+        renderPreview();
+      }
+      if (pickAll)   pickAll.addEventListener('click',   function () { set(function () { return true; }); });
+      if (pickRest)  pickRest.addEventListener('click',  function () { var now = new Date().getMonth(); set(function (i) { return i >= now; }); });
+      if (pickClear) pickClear.addEventListener('click', function () { set(function () { return false; }); });
+
+      sync();
+    })();
+  </script>
+  <% } %>
+
   <!-- Notes -->
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
     <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Notes</h2>

@@ -11311,6 +11311,38 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 240: monthly recurring jobs
+  //
+  // Some clients (Labour Connect's "May - Packages" pattern is the
+  // motivating case) book the same shape of work every month. This
+  // migration tags a job as a monthly-recurring template + records
+  // a pattern name + tracks whether it has been rolled forward,
+  // so the planner can either press a button or let the daily cron
+  // mint next month's job automatically.
+  //
+  //   recurring_monthly       INTEGER 0/1 — is this job a monthly template
+  //   recurring_pattern_name  TEXT — the suffix, e.g. "Packages"
+  //                            (used when auto-naming the next month)
+  //   rolled_over_to_job_id   INTEGER — points at the next-month job once
+  //                            we've created it, so the button hides
+  //                            and the cron can't double-fire.
+  // =============================================
+  if (!isMigrationApplied.get(240)) {
+    console.log('Running migration 240: monthly recurring jobs');
+    try {
+      const cols = db.prepare('PRAGMA table_info(jobs)').all().map(c => c.name);
+      if (!cols.includes('recurring_monthly'))      db.exec("ALTER TABLE jobs ADD COLUMN recurring_monthly INTEGER DEFAULT 0");
+      if (!cols.includes('recurring_pattern_name')) db.exec("ALTER TABLE jobs ADD COLUMN recurring_pattern_name TEXT DEFAULT ''");
+      if (!cols.includes('rolled_over_to_job_id'))  db.exec("ALTER TABLE jobs ADD COLUMN rolled_over_to_job_id INTEGER");
+      try { db.exec("CREATE INDEX IF NOT EXISTS idx_jobs_recurring_monthly ON jobs(recurring_monthly) WHERE recurring_monthly = 1"); } catch (e) {}
+      recordMigration.run(240, 'jobs.recurring_monthly + recurring_pattern_name + rolled_over_to_job_id');
+      console.log('Migration 240 applied: monthly recurring jobs');
+    } catch (e) {
+      console.error('Migration 240 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

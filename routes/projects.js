@@ -6,6 +6,7 @@ const { recalculateJobHealth, HEALTH_CALC_SQL } = require('../middleware/jobHeal
 const { logActivity } = require('../middleware/audit');
 const { ensureThreadForEntity, addMembersToThread, postSystemMessage, getThreadForEntity } = require('../lib/chat');
 const { generateJobNumber } = require('../lib/jobNumbers');
+const { MONTH_NAMES, monthlyJobName, firstOfMonth, parseSelectedMonths } = require('../lib/recurringJobs');
 
 // List all projects (top-level jobs only, parent_project_id IS NULL)
 router.get('/', (req, res) => {
@@ -83,13 +84,10 @@ router.get('/new', (req, res) => {
   res.render('projects/form', { title: 'Create New Project', job: null, users, clients, preselectedClientId, user: req.session.user });
 });
 
-// Create project
+// Create project (or — if monthly_package is on — a job per selected month)
 router.post('/', (req, res) => {
   const db = getDb();
   const b = req.body;
-
-  // Auto-generate job number (J-XXXX)
-  const jobNumber = generateJobNumber();
 
   // Resolve client name from client_id if provided
   let clientName = b.client || '';
@@ -97,14 +95,75 @@ router.post('/', (req, res) => {
     const client = db.prepare('SELECT company_name FROM clients WHERE id = ?').get(b.client_id);
     if (client) clientName = client.company_name;
   }
+
+  // ── Monthly package mode ─────────────────────────────────────
+  // If the planner ticked "Monthly package job" and picked one or
+  // more months, we mint one job per selected month named
+  // "<Month> - <pattern>", with start_date set to the 1st of that
+  // month and end_date to the last day. Year is the current year
+  // unless the form passes one; the planner can always edit later.
+  const isMonthly = !!b.monthly_package;
+  const patternName = (b.recurring_pattern_name || 'Packages').toString().trim().slice(0, 80);
+  const selectedMonths = isMonthly ? parseSelectedMonths(b.monthly_months) : [];
+  const monthlyYear = parseInt(b.monthly_year, 10) || new Date().getFullYear();
+
+  if (isMonthly && selectedMonths.length) {
+    const insertStmt = db.prepare(`
+      INSERT INTO jobs (job_number, job_name, project_name, client, client_id, site_address, suburb, status, stage, percent_complete, start_date, end_date, project_manager_id, ops_supervisor_id, planning_owner_id, marketing_owner_id, accounts_owner_id, health, accounts_status, division_tags, notes,
+        client_project_number, principal_contractor, traffic_supervisor_id,
+        contract_value, estimated_hours, crew_size, rol_required, tmp_required, sharepoint_url, state, required_tcp_level, priority,
+        recurring_monthly, recurring_pattern_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+    `);
+    const createdNumbers = [];
+    try {
+      const tx = db.transaction(() => {
+        for (const m of selectedMonths) {
+          const jobNumber = generateJobNumber();
+          const startIso = firstOfMonth(monthlyYear, m.index);
+          // end-of-month = day before the 1st of the next month
+          const endDate = new Date(Date.UTC(monthlyYear, m.index + 1, 0));
+          const endIso = endDate.toISOString().slice(0, 10);
+          const projectName = monthlyJobName(m.name, patternName);
+          const jobName = `${jobNumber} | ${clientName} | ${b.suburb || ''} | ${startIso}`;
+          insertStmt.run(
+            jobNumber, jobName, projectName, clientName, b.client_id || null, b.site_address || '', b.suburb || '',
+            b.status || 'tender', b.stage || 'tender', 0,
+            startIso, endIso,
+            b.project_manager_id || null, b.ops_supervisor_id || null,
+            b.planning_owner_id || null, b.marketing_owner_id || null, b.accounts_owner_id || null,
+            b.health || 'green', b.accounts_status || 'na',
+            b.division_tags || '', b.notes || '',
+            b.client_project_number || '', b.principal_contractor || '', b.traffic_supervisor_id || null,
+            parseFloat(b.contract_value) || 0, parseFloat(b.estimated_hours) || 0, parseInt(b.crew_size) || 0,
+            b.rol_required ? 1 : 0, b.tmp_required ? 1 : 0, b.sharepoint_url || '', b.state || '',
+            b.required_tcp_level || '',
+            b.priority || 'normal',
+            patternName
+          );
+          createdNumbers.push(jobNumber);
+        }
+      });
+      tx();
+      req.flash('success', `Created ${createdNumbers.length} monthly job(s) — ${selectedMonths.map(m => m.name).join(', ')} ${monthlyYear} (${patternName}).`);
+      return res.redirect('/projects');
+    } catch (err) {
+      req.flash('error', 'Failed to create monthly jobs: ' + err.message);
+      return res.redirect('/projects/new');
+    }
+  }
+
+  // ── Single project (the original create flow) ────────────────
+  const jobNumber = generateJobNumber();
   const jobName = `${jobNumber} | ${clientName} | ${b.suburb} | ${b.start_date}`;
 
   try {
     db.prepare(`
       INSERT INTO jobs (job_number, job_name, client, client_id, site_address, suburb, status, stage, percent_complete, start_date, end_date, project_manager_id, ops_supervisor_id, planning_owner_id, marketing_owner_id, accounts_owner_id, health, accounts_status, division_tags, notes,
         client_project_number, project_name, principal_contractor, traffic_supervisor_id,
-        contract_value, estimated_hours, crew_size, rol_required, tmp_required, sharepoint_url, state, required_tcp_level, priority)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        contract_value, estimated_hours, crew_size, rol_required, tmp_required, sharepoint_url, state, required_tcp_level, priority,
+        recurring_monthly, recurring_pattern_name)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       jobNumber, jobName, clientName, b.client_id || null, b.site_address, b.suburb,
       b.status || 'tender', b.stage || 'tender', parseInt(b.percent_complete) || 0,
@@ -117,7 +176,8 @@ router.post('/', (req, res) => {
       parseFloat(b.contract_value) || 0, parseFloat(b.estimated_hours) || 0, parseInt(b.crew_size) || 0,
       b.rol_required ? 1 : 0, b.tmp_required ? 1 : 0, b.sharepoint_url || '', b.state || '',
       b.required_tcp_level || '',
-      b.priority || 'normal'
+      b.priority || 'normal',
+      0, ''
     );
     req.flash('success', `Project ${jobNumber} created successfully.`);
 
