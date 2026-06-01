@@ -34,6 +34,13 @@
        ============================================================ -->
   <header class="bk2-header">
     <div class="bk2-header-left">
+      <!-- Hide-sidebar button — only visible on the bookings page (CSS scoped
+           to the .bk2-page wrapper). Toggles body.bk2-sidebar-hidden which
+           collapses the main #sidebar so the planner gets the full width. -->
+      <button type="button" id="bk2-hide-sidebar" class="bk2-sidetoggle"
+              title="Hide / show the left menu" aria-label="Toggle sidebar">
+        <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h16"/></svg>
+      </button>
       <h1 class="bk2-title">Bookings</h1>
       <!-- Inline search — submits as ?q= so the existing filter pipeline handles it. -->
       <form method="GET" action="/bookings" class="bk2-headersearch" role="search">
@@ -562,13 +569,202 @@
 </div>
 
 <!-- ============================================================
-     QUICK BOOK SLIDE-OVER  —  CREATE ONLY (the only mode that
-     uses a slide-over; view always goes to /bookings/:id full page).
-     Hard-disabled via display:none + hidden attribute. The previous
-     transform-only approach left the element in the layout, so any
-     CSS load failure or selector shadowing brought it back on-
-     screen. Now nothing renders until openQB() explicitly sets
-     display:flex.
+     BOOKING EDITOR SLIDE-OVER  —  full-width right-side overlay
+     with the same tabbed layout as the /bookings/:id detail page.
+     Opens when the user clicks "New booking" — stays on the board,
+     just docks an editor on the right. Tabs from left to right:
+     Overview, Resources, Tasks, Dockets, History, Notes, Documents,
+     Forms, Req. Plans, Req. Permits, Works, Stories, Invoices, Print.
+     ============================================================ -->
+<div class="bk2-edit-backdrop" id="bk2-edit-backdrop" hidden></div>
+<aside class="bk2-editor" id="bk2-editor" role="dialog" aria-modal="true" aria-labelledby="bk2-edit-title" hidden>
+  <!-- Dark title row: calendar icon · breadcrumb title · collapse · close -->
+  <header class="bk2-edit-titlebar">
+    <span class="bk2-edit-cal"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></span>
+    <h2 id="bk2-edit-title" class="bk2-edit-title">New booking</h2>
+    <button type="button" class="bk2-edit-iconbtn" id="bk2-edit-collapse" title="Dock to side / expand" aria-label="Collapse">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7 7-7M21 12H3"/></svg>
+    </button>
+    <button type="button" class="bk2-edit-iconbtn" id="bk2-edit-close" title="Close" aria-label="Close" data-bk2-edit-close>
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="pointer-events:none"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+    </button>
+  </header>
+
+  <!-- Tab strip — icons + labels. Each tab swaps the active panel below. -->
+  <nav class="bk2-edit-tabs" role="tablist" aria-label="Booking sections">
+    <% var EDIT_TABS = [
+      { k: 'overview',  l: 'Overview',     i: 'M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.5 12C3.8 7.9 7.5 5 12 5s8.2 2.9 9.5 7c-1.3 4.1-5 7-9.5 7s-8.2-2.9-9.5-7z' },
+      { k: 'resources', l: 'Resources',    i: 'M4 6h2v2H4V6zm0 5h2v2H4v-2zm0 5h2v2H4v-2zm5-10h11v2H9V6zm0 5h11v2H9v-2zm0 5h11v2H9v-2z' },
+      { k: 'tasks',     l: 'Tasks',        i: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
+      { k: 'dockets',   l: 'Dockets',      i: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { k: 'history',   l: 'History',      i: 'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.4-4 8-9 8a9.9 9.9 0 01-4-.8L3 21l1.5-4.5C3.5 15.3 3 13.7 3 12c0-4.4 4-8 9-8s9 3.6 9 8z' },
+      { k: 'notes',     l: 'Notes',        i: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L12 15H9v-3l8.6-8.4z' },
+      { k: 'documents', l: 'Documents',    i: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.6a1 1 0 01.7.3l5.4 5.4a1 1 0 01.3.7V19a2 2 0 01-2 2z' },
+      { k: 'forms',     l: 'Forms',        i: 'M9 5h6a2 2 0 012 2v12a2 2 0 01-2 2H9a2 2 0 01-2-2V7a2 2 0 012-2zm0 0V3h6v2M9 12h6m-6 4h6' },
+      { k: 'reqplans',  l: 'Req. Plans',   i: 'M9 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-3M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 13h6m-6 4h6m-6-8h.01' },
+      { k: 'reqperm',   l: 'Req. Permits', i: 'M5 13l4 4L19 7M9 21H4v-5' },
+      { k: 'works',     l: 'Works',        i: 'M5 13l4 4L19 7' },
+      { k: 'stories',   l: 'Stories',      i: 'M15 10l4.6-3.3A1 1 0 0121 7.5v9a1 1 0 01-1.4.8L15 14m-11 1h7a2 2 0 002-2V9a2 2 0 00-2-2H4a2 2 0 00-2 2v6a2 2 0 002 2z' },
+      { k: 'invoices',  l: 'Invoices',     i: 'M12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2m0-8c1.1 0 2.1.4 2.6 1M12 8V7m0 1v8m0 0v1m0-1c-1.1 0-2.1-.4-2.6-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+      { k: 'print',     l: 'Print',        i: 'M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z' },
+    ]; %>
+    <% EDIT_TABS.forEach(function (t, i) { %>
+      <button type="button" class="bk2-edit-tab" data-edit-tab="<%= t.k %>" role="tab" aria-selected="<%= i === 0 ? 'true' : 'false' %>" title="<%= t.l %>">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="<%= t.i %>"/></svg>
+        <span><%= t.l %></span>
+      </button>
+    <% }); %>
+  </nav>
+
+  <!-- Lifecycle status row + Save/Clone. The status pills are the same
+       set used on the cards' colour banner; clicking one would normally
+       move the booking through its lifecycle. Wired as visual placeholders
+       until the user maps them. -->
+  <div class="bk2-edit-statusrow">
+    <% [
+      { k: 'client_booking', short: 'Client Bk.',   icon: '?' },
+      { k: 'unconfirmed',    short: 'Unconf.',      icon: '?' },
+      { k: 'confirmed',      short: 'Confirmed',    icon: '🔓' },
+      { k: 'locked',         short: 'Locked',       icon: '🔒' },
+      { k: 'conflict',       short: 'Conflict',     icon: '!' },
+      { k: 'green_to_go',    short: 'GTG',          icon: '✓' },
+      { k: 'complete',       short: 'Complete',     icon: '🏆' },
+      { k: 'finalised',      short: 'Finalised',    icon: '🏁' },
+      { k: 'cancelled',      short: 'Cancel',       icon: '⊘' },
+      { k: 'late_cancelled', short: 'Late Cancl.',  icon: '🗓' },
+    ].forEach(function (s, i) { %>
+      <button type="button" class="bk2-edit-statuspill bk2-status--<%= s.k %><%= i === 1 ? ' is-active' : '' %>" data-status-set="<%= s.k %>" title="<%= s.short %>">
+        <span class="bk2-edit-statuspill-icon"><%= s.icon %></span>
+        <span class="bk2-edit-statuspill-lbl"><%= s.short %></span>
+      </button>
+    <% }); %>
+    <span class="bk2-edit-spacer"></span>
+    <button type="button" class="bk2-edit-actbtn" id="bk2-edit-save" disabled>
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      Save
+    </button>
+    <button type="button" class="bk2-edit-actbtn bk2-edit-actbtn--primary" id="bk2-edit-clone">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      Clone
+    </button>
+  </div>
+
+  <!-- Tab content panels. Only the active one is visible. -->
+  <div class="bk2-edit-body">
+    <!-- OVERVIEW — the create form (same fields the old Quick Book had). -->
+    <section class="bk2-edit-pane" data-edit-pane="overview" aria-current="true">
+      <form id="bk2-edit-form" method="POST" action="/bookings/quick">
+        <%- include('../partials/csrf') %>
+
+        <div class="bk2-edit-formgrid">
+          <div class="bk2-edit-section">
+            <h3>Booking depot</h3>
+            <div class="bk2-edit-fieldrow">
+              <label>Booking depot *<select name="depot" required>
+                <option value="">— pick —</option>
+                <% depots.forEach(function (d) { %><option value="<%= d %>"><%= d %></option><% }); %>
+              </select></label>
+              <label>Supplier<input type="text" name="supplier_name" placeholder="Optional"></label>
+            </div>
+          </div>
+
+          <div class="bk2-edit-section">
+            <h3>Client information</h3>
+            <div class="bk2-edit-fieldrow">
+              <label>Client *<input list="bk2-clients" name="client_name" autocomplete="off" placeholder="Start typing…" required></label>
+              <label>Project<input list="bk2-jobs" name="site_label" placeholder="Optional — job name or site label"></label>
+            </div>
+            <div class="bk2-edit-fieldrow">
+              <label>Purchase Order / Client job number<input type="text" name="order_number" placeholder="Optional"></label>
+              <label>Client Billing Code<input type="text" name="client_billing_code" placeholder="Optional"></label>
+            </div>
+          </div>
+
+          <div class="bk2-edit-section">
+            <h3>Booking information</h3>
+            <div class="bk2-edit-fieldrow">
+              <label>Site address *<input type="text" name="site_address" placeholder="Start typing the address…" required></label>
+            </div>
+            <div class="bk2-edit-fieldrow">
+              <label>Date *<input type="date" name="start_date" value="<%= dateStr %>" required></label>
+              <label>Start time *<input type="time" name="start_time" value="06:00" required></label>
+              <label>End time<input type="time" name="end_time" value="14:30"></label>
+            </div>
+          </div>
+
+          <div class="bk2-edit-section">
+            <h3>Crew composition</h3>
+            <p class="bk2-edit-hint">Each crew comes with a UTE slot built in. Resources tab lets you drop named workers / vehicles into the slots.</p>
+            <div class="bk2-edit-cgrid">
+              <% [1,2,3,4,5].forEach(function (n) {
+                var defaults = (n === 2);
+              %>
+                <label class="bk2-edit-counter">
+                  <span><%= n %>-man crew</span>
+                  <input type="number" name="crew_size_<%= n %>" value="<%= defaults ? 1 : 0 %>" min="0" max="20">
+                </label>
+              <% }); %>
+            </div>
+            <h3 style="margin-top:14px">Add-ons</h3>
+            <div class="bk2-edit-cgrid">
+              <% addons.forEach(function (a) { %>
+                <label class="bk2-edit-counter">
+                  <span><%= a.label %></span>
+                  <input type="number" name="addon_<%= a.key %>" value="0" min="0" max="20">
+                </label>
+              <% }); %>
+            </div>
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- RESOURCES — placeholder mirroring the right-panel pattern.
+         When you describe the desired behaviour we'll wire drag-from
+         /api/resources directly onto the booking's crew/vehicle slots. -->
+    <section class="bk2-edit-pane" data-edit-pane="resources" hidden>
+      <div class="bk2-edit-placeholder">
+        <h3>Resources</h3>
+        <p>This tab will overlay the People / Vehicles / Towed Equipment list and let you drag rows onto the booking's crew slots — or click a row to assign it.</p>
+        <p class="bk2-edit-spec">Tell me: should it use the same list as the right-side panel, or a separate scoped list (e.g. filtered to the booking's depot)?</p>
+      </div>
+    </section>
+
+    <% [
+      { k: 'tasks',     l: 'Tasks' },
+      { k: 'dockets',   l: 'Dockets' },
+      { k: 'history',   l: 'History' },
+      { k: 'notes',     l: 'Notes' },
+      { k: 'documents', l: 'Documents' },
+      { k: 'forms',     l: 'Forms' },
+      { k: 'reqplans',  l: 'Req. Plans' },
+      { k: 'reqperm',   l: 'Req. Permits' },
+      { k: 'works',     l: 'Works' },
+      { k: 'stories',   l: 'Stories' },
+      { k: 'invoices',  l: 'Invoices' },
+      { k: 'print',     l: 'Print' },
+    ].forEach(function (t) { %>
+      <section class="bk2-edit-pane" data-edit-pane="<%= t.k %>" hidden>
+        <div class="bk2-edit-placeholder">
+          <h3><%= t.l %></h3>
+          <p class="bk2-edit-spec">Tell me what this tab should do, or whether to drop it.</p>
+        </div>
+      </section>
+    <% }); %>
+  </div>
+
+  <!-- Sticky footer: Save action lives in the status row above; this
+       footer is for secondary helpers like 'Open full editor'. -->
+  <footer class="bk2-edit-foot">
+    <span class="bk2-edit-foot-info">New bookings save as draft. Edit further from the tabs above.</span>
+    <button type="submit" form="bk2-edit-form" class="bk2-edit-savebtn">Save booking</button>
+  </footer>
+</aside>
+
+<!-- ============================================================
+     QUICK BOOK SLIDE-OVER  —  kept around for reference but no
+     longer wired to the New booking button (it now opens the
+     tabbed editor above).
      ============================================================ -->
 <div class="bk2-backdrop" id="bk2-backdrop" hidden style="display:none"></div>
 <aside class="bk2-slideover" id="bk2-slideover" role="dialog" aria-modal="true" aria-labelledby="bk2-so-title"
@@ -824,9 +1020,54 @@
   // ============================================================
   //  + NEW BOOKING — opens Quick Book
   // ============================================================
-  $('#bk2-new-btn').addEventListener('click', openQB);
+  // ============================================================
+  //  Booking editor slide-over — tabbed right-side overlay.
+  //  Opens via "New booking" / Empty-state button / N keyboard.
+  //  Tab switching is local; the Resources tab will hand-off to
+  //  the right-side resource list once we map the drop targets.
+  // ============================================================
+  function openEditor() {
+    var ed = $('#bk2-editor'); var bd = $('#bk2-edit-backdrop');
+    if (!ed || !bd) return;
+    bd.hidden = false; ed.hidden = false;
+    requestAnimationFrame(function () {
+      bd.classList.add('is-open'); ed.classList.add('is-open');
+    });
+    document.body.style.overflow = 'hidden';
+    // Default to the Overview tab on every open.
+    setEditorTab('overview');
+  }
+  function closeEditor() {
+    var ed = $('#bk2-editor'); var bd = $('#bk2-edit-backdrop');
+    if (!ed || !bd) return;
+    ed.classList.remove('is-open'); bd.classList.remove('is-open');
+    setTimeout(function () { ed.hidden = true; bd.hidden = true; }, 220);
+    document.body.style.overflow = '';
+  }
+  function setEditorTab(name) {
+    $$('.bk2-edit-tab').forEach(function (t) {
+      t.setAttribute('aria-selected', t.dataset.editTab === name ? 'true' : 'false');
+    });
+    $$('[data-edit-pane]').forEach(function (p) {
+      p.hidden = p.dataset.editPane !== name;
+      if (p.dataset.editPane === name) p.setAttribute('aria-current', 'true');
+      else p.removeAttribute('aria-current');
+    });
+  }
+  $$('.bk2-edit-tab').forEach(function (t) {
+    t.addEventListener('click', function () { setEditorTab(t.dataset.editTab); });
+  });
+  var edClose = $('#bk2-edit-close'); if (edClose) edClose.addEventListener('click', closeEditor);
+  var edBd = $('#bk2-edit-backdrop'); if (edBd) edBd.addEventListener('click', closeEditor);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      var ed = $('#bk2-editor'); if (ed && !ed.hidden) closeEditor();
+    }
+  });
+
+  $('#bk2-new-btn').addEventListener('click', openEditor);
   var emptyNew = $('#bk2-empty-new');
-  if (emptyNew) emptyNew.addEventListener('click', openQB);
+  if (emptyNew) emptyNew.addEventListener('click', openEditor);
 
   // Keyboard: N opens Quick Book, Esc closes it
   document.addEventListener('keydown', function (e) {
@@ -838,7 +1079,7 @@
       }
       return;
     }
-    if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openQB(); }
+    if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openEditor(); }
   });
 
   // ============================================================
@@ -1250,6 +1491,24 @@
       fsApplySort(); fsPersist();
     });
   });
+
+  // Sidebar hide button — toggles the main app sidebar from the
+  // bookings header so the planner can claim the full width on demand.
+  // Scoped to this page only via the .bk2-page wrapper in CSS.
+  var SIDEBAR_KEY = 'bk2.sidebar.hidden';
+  var hideSidebarBtn = $('#bk2-hide-sidebar');
+  function applySidebarHidden(on) {
+    document.body.classList.toggle('bk2-sidebar-hidden', !!on);
+    if (hideSidebarBtn) hideSidebarBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    try { localStorage.setItem(SIDEBAR_KEY, on ? '1' : '0'); } catch (e) {}
+  }
+  if (hideSidebarBtn) {
+    hideSidebarBtn.addEventListener('click', function () {
+      applySidebarHidden(!document.body.classList.contains('bk2-sidebar-hidden'));
+    });
+    var savedSb = '0'; try { savedSb = localStorage.getItem(SIDEBAR_KEY) || '0'; } catch (e) {}
+    if (savedSb === '1') applySidebarHidden(true);
+  }
 
   var togMenus = $('#bk2-fs-togmenus');
   if (togMenus) togMenus.addEventListener('click', function () {

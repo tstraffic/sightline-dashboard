@@ -219,6 +219,224 @@
 .bk2-fs-popover-foot .bk2-fs-popover-close { background: #2B7FFF; color: #fff; }
 .bk2-fs-popover-foot button:hover { filter: brightness(1.15); }
 
+/* Hide-sidebar button — bookings-only. The button itself just toggles
+   body.bk2-sidebar-hidden; the actual sidebar collapse lives below. */
+.bk2-sidetoggle {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  background: rgba(255,255,255,0.06); color: #CBD5E1;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
+  cursor: pointer; margin-right: 8px;
+  transition: background 100ms ease;
+}
+.bk2-sidetoggle:hover { background: rgba(255,255,255,0.12); color: #F1F5F9; }
+.bk2-sidetoggle[aria-pressed="true"] { background: #2B7FFF; border-color: #2B7FFF; color: #fff; }
+
+/* When the bookings page asks for it, hide the main app sidebar and
+   collapse its grid column so the planner gets the full width. */
+body.bk2-sidebar-hidden #sidebar { display: none !important; }
+body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
+
+/* ─────────────────────────────────────────────────────────────
+   Booking editor slide-over — full-height right-side overlay
+   with a dark header, icon-tab strip, status pill row, and the
+   tab-panel body. Mirrors the booking detail page layout but
+   stays inside the bookings board so the planner doesn't lose
+   their place.
+   ───────────────────────────────────────────────────────────── */
+.bk2-edit-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);
+  opacity: 0; transition: opacity 200ms ease;
+  z-index: 1000;
+}
+.bk2-edit-backdrop.is-open { opacity: 1; }
+.bk2-editor {
+  position: fixed; top: 0; right: 0; bottom: 0;
+  width: min(92vw, 1200px);
+  background: #F9FAFB; color: #111827;
+  display: flex; flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  z-index: 1001;
+  box-shadow: -16px 0 40px rgba(0,0,0,0.4);
+}
+.bk2-editor.is-open { transform: translateX(0); }
+
+/* Dark title bar — calendar icon · breadcrumb · collapse · close */
+.bk2-edit-titlebar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 14px;
+  background: #1F2937; color: #F9FAFB;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+.bk2-edit-cal { color: #94A3B8; display: inline-flex; }
+.bk2-edit-title { flex: 1; font-size: 14px; font-weight: 500; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk2-edit-iconbtn {
+  width: 32px; height: 32px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: transparent; color: #CBD5E1;
+  border: 0; border-radius: 6px; cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+.bk2-edit-iconbtn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+
+/* Tab strip — dark, icon + label rows. Active tab inverts to light. */
+.bk2-edit-tabs {
+  display: flex; gap: 2px;
+  padding: 6px 10px;
+  background: #1F2937;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  overflow-x: auto;
+}
+.bk2-edit-tab {
+  flex-shrink: 0;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px;
+  min-width: 78px;
+  padding: 8px 6px;
+  background: transparent; color: #CBD5E1;
+  border: 0; border-radius: 8px;
+  font-size: 11px; font-weight: 500;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+.bk2-edit-tab svg { color: inherit; }
+.bk2-edit-tab:hover { background: rgba(255,255,255,0.06); color: #fff; }
+.bk2-edit-tab[aria-selected="true"] {
+  background: #F9FAFB; color: #111827;
+}
+.bk2-edit-tab[aria-selected="true"] svg { color: #1F2937; }
+
+/* Status pill row — booking lifecycle + Save/Clone on the right. */
+.bk2-edit-statusrow {
+  display: flex; align-items: center; gap: 4px;
+  padding: 10px 14px;
+  background: #F3F4F6;
+  border-bottom: 1px solid #E5E7EB;
+  overflow-x: auto;
+}
+.bk2-edit-statuspill {
+  flex-shrink: 0;
+  display: inline-flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 1px;
+  min-width: 60px; padding: 6px 8px;
+  background: #E5E7EB; color: #6B7280;
+  border: 0; border-radius: 6px;
+  font-size: 11px; font-weight: 600;
+  cursor: pointer;
+  transition: background 100ms ease, color 100ms ease;
+}
+.bk2-edit-statuspill:hover { background: #D1D5DB; color: #111827; }
+.bk2-edit-statuspill-icon { font-size: 14px; line-height: 1; opacity: 0.85; }
+.bk2-edit-statuspill.is-active { background: #4B5563; color: #fff; }
+.bk2-edit-statuspill.is-active.bk2-status--green_to_go,
+.bk2-edit-statuspill.bk2-status--green_to_go.is-active { background: #10B981; color: #fff; }
+.bk2-edit-spacer { flex: 1; }
+.bk2-edit-actbtn {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 7px 14px;
+  background: #E5E7EB; color: #6B7280;
+  border: 0; border-radius: 6px;
+  font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: background 100ms ease;
+}
+.bk2-edit-actbtn:hover:not(:disabled) { background: #D1D5DB; color: #111827; }
+.bk2-edit-actbtn:disabled { opacity: 0.55; cursor: not-allowed; }
+.bk2-edit-actbtn--primary { background: #2B7FFF; color: #fff; }
+.bk2-edit-actbtn--primary:hover { background: #1D6AE5; }
+
+/* Tab body — scrollable. */
+.bk2-edit-body {
+  flex: 1; min-height: 0;
+  overflow-y: auto;
+  background: #F9FAFB;
+}
+.bk2-edit-pane { padding: 18px 22px; }
+.bk2-edit-pane[hidden] { display: none; }
+
+/* Overview form sections — match the screenshot's pale cards. */
+.bk2-edit-formgrid { display: flex; flex-direction: column; gap: 14px; }
+.bk2-edit-section {
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.bk2-edit-section h3 {
+  margin: 0 0 10px;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.05em;
+  text-transform: uppercase; color: #C2410C; /* Traffio-ish orange section heads */
+}
+.bk2-edit-fieldrow {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+}
+.bk2-edit-fieldrow label {
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 11px; font-weight: 600; color: #6B7280;
+}
+.bk2-edit-fieldrow input,
+.bk2-edit-fieldrow select {
+  padding: 7px 10px;
+  background: #FFFBEB;
+  border: 1px solid #FDE68A;
+  border-radius: 6px;
+  font-size: 13px; color: #111827;
+  outline: 0;
+}
+.bk2-edit-fieldrow input:focus,
+.bk2-edit-fieldrow select:focus { border-color: #2B7FFF; background: #fff; }
+.bk2-edit-hint { font-size: 11px; color: #6B7280; margin: -4px 0 10px; }
+.bk2-edit-cgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+.bk2-edit-counter {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 8px; padding: 8px 12px;
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 8px;
+  font-size: 12px;
+}
+.bk2-edit-counter input {
+  width: 56px; padding: 4px 6px; border: 1px solid #D1D5DB; border-radius: 5px;
+  text-align: center; font-size: 13px; font-weight: 600;
+}
+
+/* Placeholder content for tabs that are awaiting spec. */
+.bk2-edit-placeholder {
+  background: #fff;
+  border: 1px dashed #E5E7EB;
+  border-radius: 10px;
+  padding: 28px 24px;
+  text-align: center;
+  color: #6B7280;
+}
+.bk2-edit-placeholder h3 { margin: 0 0 8px; font-size: 16px; color: #111827; }
+.bk2-edit-placeholder p { font-size: 13px; margin: 0 0 6px; }
+.bk2-edit-spec { color: #2B7FFF; font-weight: 600; font-size: 12px !important; margin-top: 12px !important; }
+
+/* Footer (Save). */
+.bk2-edit-foot {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px;
+  background: #F3F4F6;
+  border-top: 1px solid #E5E7EB;
+}
+.bk2-edit-foot-info { font-size: 12px; color: #6B7280; }
+.bk2-edit-savebtn {
+  padding: 9px 22px;
+  background: #2B7FFF; color: #fff;
+  border: 0; border-radius: 8px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: background 100ms ease;
+}
+.bk2-edit-savebtn:hover { background: #1D6AE5; }
+
+@media (max-width: 640px) {
+  .bk2-editor { width: 100vw; }
+  .bk2-edit-tab span { display: none; }
+  .bk2-edit-tab { min-width: 44px; }
+}
+
 /* Inline header search — sits next to the page title. Submits via
    GET so the existing filter pipeline applies (same as the chip
    bar's "Add filter" search). */
