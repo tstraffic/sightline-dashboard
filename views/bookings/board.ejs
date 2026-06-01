@@ -996,40 +996,80 @@
     return hay.indexOf(q) !== -1;
   }
 
-  // Status mark on the right of each list item: ✓ if available for
-  // assignment, ✗ if there's something blocking (assigned today,
-  // blocked, on leave, expired ticket, etc.).
-  function rpPersonMark(p) {
-    if (p.assigned_today || p.blocked_from_allocation
-        || p.employment_status === 'on_leave'
-        || (p.warnings && p.warnings.length)) {
-      var why = p.assigned_today ? 'Already booked today'
-              : p.blocked_from_allocation ? 'Blocked from allocation'
-              : p.employment_status === 'on_leave' ? 'On leave'
-              : 'Has warnings';
-      return '<span class="bk2-rp-mark bk2-rp-mark--no" title="' + rpEsc(why) + '">✗</span>';
+  // Decide why someone isn't available — feeds the tooltip on the ✗.
+  function rpPersonReason(p) {
+    if (p.assigned_today)           return 'Already booked today';
+    if (p.blocked_from_allocation)  return 'Blocked from allocation';
+    if (p.employment_status === 'on_leave') return 'On leave';
+    if (p.warnings && p.warnings.length) {
+      if (p.warnings.indexOf('licence_expired')   !== -1) return 'Licence expired';
+      if (p.warnings.indexOf('tc_expired')        !== -1) return 'TC ticket expired';
+      if (p.warnings.indexOf('whitecard_expired') !== -1) return 'White card expired';
+      return 'Has warnings';
     }
-    return '<span class="bk2-rp-mark bk2-rp-mark--yes" title="Available">✓</span>';
+    return '';
   }
+  function rpPersonOkFlag(p) { return !rpPersonReason(p); }
+  function rpVehicleOkFlag(v) {
+    var s = (v.status || '').toLowerCase();
+    // Active = ready; everything else (Spare, Maintenance, Out of Service) = not currently available.
+    return s === '' || s === 'active';
+  }
+  function rpEquipmentOkFlag(e) {
+    var c = (e.current_condition || '').toLowerCase();
+    return c === '' || c === 'good' || c === 'serviceable' || c === 'available';
+  }
+
+  // Reusable row: hours slot · type icon · name · indicators · ✓/✗.
+  // Two of these sit side-by-side in the 2-column grid.
+  function rpRow(opts) {
+    var hoursHtml = '<span class="bk2-rp-hrs" title="Hours this week — not yet tracked">' + (opts.hours == null ? '?' : opts.hours) + '</span>';
+    var iconHtml  = '<svg class="bk2-rp-icon" width="14" height="14" fill="currentColor" viewBox="0 0 24 24">' + opts.icon + '</svg>';
+    var nameHtml  = '<span class="bk2-rp-name">' + rpEsc(opts.name) + '</span>';
+    var badgeHtml = (opts.badges || []).join('');
+    var markHtml  = opts.ok
+      ? '<span class="bk2-rp-mark bk2-rp-mark--yes" title="' + rpEsc(opts.okTitle || 'Available') + '">✓</span>'
+      : '<span class="bk2-rp-mark bk2-rp-mark--no"  title="' + rpEsc(opts.notOkTitle || 'Not available') + '">✗</span>';
+    return (
+      '<li class="bk2-rp-item ' + (opts.ok ? '' : 'is-unavailable') + '"' +
+          ' draggable="true"' +
+          ' data-resource-type="' + opts.type + '"' +
+          ' data-resource-id="'   + opts.id   + '"' +
+          ' data-resource-name="' + rpEsc(opts.name) + '"' +
+          ' title="' + rpEsc(opts.tooltip || opts.name) + '">' +
+        hoursHtml + iconHtml + nameHtml + badgeHtml + markHtml +
+      '</li>'
+    );
+  }
+
+  // SVG path data — defined once and reused. `<svg>` wrapper added in rpRow.
+  var ICON_PERSON    = '<path d="M12 12c2.7 0 4.9-2.2 4.9-4.9S14.7 2.2 12 2.2 7.1 4.4 7.1 7.1 9.3 12 12 12zm0 2.4c-3.3 0-9.8 1.6-9.8 4.9v2.4h19.6v-2.4c0-3.3-6.5-4.9-9.8-4.9z"/>';
+  var ICON_TRUCK     = '<path d="M3 6h11v9H3V6zm12 3h4l3 3v3h-7V9zM7 19a2 2 0 100-4 2 2 0 000 4zm11 0a2 2 0 100-4 2 2 0 000 4z"/>';
+  var ICON_TRIANGLE  = '<path d="M12 3l10 18H2L12 3z"/>';
+  var ICON_LICENCE   = '<path d="M3 5h18v14H3V5zm2 2v10h7V7H5zm9 1h5v2h-5V8zm0 3h5v2h-5v-2zm0 3h5v2h-5v-2z"/>';
+  var ICON_MEGAPHONE = '<path d="M3 11v2a2 2 0 002 2h1l5 3V6L6 9H5a2 2 0 00-2 2zm15-4v10c1.7 0 3-2.2 3-5s-1.3-5-3-5z"/>';
 
   function rpRenderPeople(list) {
     if (!list.length) return '<li class="bk2-rp-empty">No matching workers.</li>';
     return list.map(function (p) {
-      var sub = [p.role, p.licence_type, p.tcp_level ? ('TCP ' + p.tcp_level) : null]
-                .filter(Boolean).join(' · ');
-      return (
-        '<li class="bk2-rp-item ' + (p.assigned_today ? 'is-assigned' : '') + '"' +
-            ' draggable="true" data-resource-type="person" data-resource-id="' + p.id + '"' +
-            ' data-resource-name="' + rpEsc(p.full_name) + '"' +
-            ' title="' + rpEsc(p.full_name + (sub ? ' — ' + sub : '')) + '">' +
-          '<span class="bk2-rp-item-avatar">' + rpEsc(rpInitials(p.full_name)) + '</span>' +
-          '<div class="bk2-rp-item-body">' +
-            '<div class="bk2-rp-item-name">' + rpEsc(p.full_name) + '</div>' +
-            (sub ? '<div class="bk2-rp-item-sub">' + rpEsc(sub) + '</div>' : '') +
-          '</div>' +
-          rpPersonMark(p) +
-        '</li>'
-      );
+      var sub = [p.role, p.licence_type, p.tcp_level ? ('TCP ' + p.tcp_level) : null].filter(Boolean).join(' · ');
+      var badges = [];
+      // Megaphone marker for TLs / supervisors — quick read on who can run a crew.
+      if (rpIsTl(p.role))     badges.push('<svg class="bk2-rp-badge bk2-rp-badge--tl"     viewBox="0 0 24 24" fill="currentColor" width="12" height="12" title="Team lead / supervisor">' + ICON_MEGAPHONE + '</svg>');
+      // Truck marker if they hold a driver's licence — quick read on who can drive.
+      if (p.licence_type)     badges.push('<svg class="bk2-rp-badge bk2-rp-badge--drive"  viewBox="0 0 24 24" fill="currentColor" width="12" height="12" title="Has driver licence: ' + rpEsc(p.licence_type) + '">' + ICON_TRUCK + '</svg>');
+      var reason = rpPersonReason(p);
+      return rpRow({
+        type: 'person',
+        id: p.id,
+        name: p.full_name,
+        icon: ICON_PERSON,
+        badges: badges,
+        ok: !reason,
+        okTitle: 'Available',
+        notOkTitle: reason,
+        tooltip: p.full_name + (sub ? ' — ' + sub : '') + (reason ? ' (' + reason + ')' : ''),
+      });
     }).join('');
   }
 
@@ -1037,22 +1077,21 @@
     if (!list.length) return '<li class="bk2-rp-empty">No vehicles match.</li>';
     return list.map(function (v) {
       var rego = v.licence_plate || v.rego || '';
-      var sub = [v.category, v.asset_number].filter(Boolean).join(' · ');
-      var srcBadge = v.source === 'fleet'
-        ? '<span class="bk2-rp-warn bk2-rp-warn--info">Fleet</span>'
-        : '<span class="bk2-rp-warn bk2-rp-warn--mute">Equip</span>';
-      return (
-        '<li class="bk2-rp-item" draggable="true" data-resource-type="vehicle" data-resource-id="' + v.id + '"' +
-            ' data-resource-name="' + rpEsc(v.name || rego) + '" data-resource-source="' + rpEsc(v.source || '') + '"' +
-            ' title="' + rpEsc((v.name || '') + (rego ? ' · ' + rego : '')) + '">' +
-          '<span class="bk2-rp-item-avatar">' + rpEsc((v.category || 'V').substring(0,2).toUpperCase()) + '</span>' +
-          '<div class="bk2-rp-item-body">' +
-            '<div class="bk2-rp-item-name">' + rpEsc(v.name || rego || 'Vehicle') + '</div>' +
-            '<div class="bk2-rp-item-sub">' + rpEsc(rego ? rego + (sub ? ' · ' + sub : '') : sub) + '</div>' +
-          '</div>' +
-          srcBadge +
-        '</li>'
-      );
+      var sub = [v.category, rego, v.asset_number].filter(Boolean).join(' · ');
+      var badges = [];
+      if (v.source === 'fleet') badges.push('<svg class="bk2-rp-badge bk2-rp-badge--fleet" viewBox="0 0 24 24" fill="currentColor" width="12" height="12" title="Fleet register">' + ICON_LICENCE + '</svg>');
+      var ok = rpVehicleOkFlag(v);
+      return rpRow({
+        type: 'vehicle',
+        id: v.id,
+        name: v.name || rego || 'Vehicle',
+        icon: ICON_TRUCK,
+        badges: badges,
+        ok: ok,
+        okTitle: 'Active in fleet',
+        notOkTitle: v.status || 'Not active',
+        tooltip: (v.name || '') + (rego ? ' · ' + rego : '') + (sub ? ' — ' + sub : ''),
+      });
     }).join('');
   }
 
@@ -1060,17 +1099,18 @@
     if (!list.length) return '<li class="bk2-rp-empty">No equipment matches.</li>';
     return list.map(function (e) {
       var sub = [e.category, e.asset_number].filter(Boolean).join(' · ');
-      return (
-        '<li class="bk2-rp-item" draggable="true" data-resource-type="equipment" data-resource-id="' + e.id + '"' +
-            ' data-resource-name="' + rpEsc(e.name) + '"' +
-            ' title="' + rpEsc(e.name + (sub ? ' — ' + sub : '')) + '">' +
-          '<span class="bk2-rp-item-avatar">' + rpEsc((e.category || 'EQ').substring(0,2).toUpperCase()) + '</span>' +
-          '<div class="bk2-rp-item-body">' +
-            '<div class="bk2-rp-item-name">' + rpEsc(e.name || 'Equipment') + '</div>' +
-            (sub ? '<div class="bk2-rp-item-sub">' + rpEsc(sub) + '</div>' : '') +
-          '</div>' +
-        '</li>'
-      );
+      var ok = rpEquipmentOkFlag(e);
+      return rpRow({
+        type: 'equipment',
+        id: e.id,
+        name: e.name || 'Equipment',
+        icon: ICON_TRIANGLE,
+        badges: [],
+        ok: ok,
+        okTitle: 'Available',
+        notOkTitle: e.current_condition || 'Check condition',
+        tooltip: (e.name || '') + (sub ? ' — ' + sub : ''),
+      });
     }).join('');
   }
 
