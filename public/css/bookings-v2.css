@@ -88,6 +88,137 @@
 :root[data-theme="light"] .bk2-chip     { background: #fff; color: #374151; border-color: #E5E7EB; }
 :root[data-theme="light"] .bk2-chip-add { background: #F9FAFB; color: #6B7280; }
 
+/* ─────────────────────────────────────────────────────────────
+   Filter strip — Traffio-style grid above the cards.
+   Each chip is a fixed-min-width button that can hold a label +
+   selected value pair, or a single-line cycle button. The strip
+   wraps freely so any narrow viewport gets the full set.
+   ───────────────────────────────────────────────────────────── */
+.bk2-filterstrip {
+  margin: 4px 0 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.bk2-filterstrip.is-menus-collapsed .bk2-fs-grid { display: none; }
+.bk2-fs-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 6px;
+  padding: 10px;
+}
+.bk2-fs-chip {
+  display: flex; align-items: center; gap: 6px;
+  min-height: 46px;
+  padding: 6px 10px;
+  font-size: 12px; font-weight: 500;
+  text-align: left;
+  background: rgba(255,255,255,0.03);
+  color: #CBD5E1;
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+}
+.bk2-fs-chip:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); color: #F1F5F9; }
+.bk2-fs-chip.is-active {
+  background: rgba(43,127,255,0.10);
+  border-color: rgba(43,127,255,0.45);
+  color: #DBEAFE;
+}
+.bk2-fs-chip-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1; }
+.bk2-fs-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: none; color: #60A5FA;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bk2-fs-chip .bk2-fs-label { /* slightly more muted when chip is idle */ color: #94A3B8; }
+.bk2-fs-chip.is-active .bk2-fs-label { color: #60A5FA; }
+.bk2-fs-value {
+  font-size: 12px; font-weight: 600; color: #E2E8F0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  display: inline-flex; gap: 4px; align-items: center;
+}
+.bk2-fs-pill {
+  display: inline-flex; align-items: center;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 6px;
+  padding: 1px 6px; font-size: 11px;
+}
+.bk2-fs-pill-more { font-size: 10px; color: #94A3B8; }
+/* Date chip carries prev/next arrows inside. */
+.bk2-fs-chip--date { display: flex; align-items: center; gap: 6px; }
+.bk2-fs-datestep {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border-radius: 6px;
+  color: #94A3B8; flex-shrink: 0;
+}
+.bk2-fs-datestep:hover { background: rgba(255,255,255,0.08); color: #F1F5F9; }
+/* Cycle chips are single-line bold labels (no label/value split). */
+.bk2-fs-cycle { justify-content: center; }
+.bk2-fs-cycle.is-active { color: #DBEAFE; }
+
+/* Bottom toolbar — toggle/sort buttons. */
+.bk2-fs-toolbar {
+  display: flex; flex-wrap: wrap; gap: 6px; align-items: center;
+  padding: 8px 10px;
+  background: rgba(255,255,255,0.03);
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+.bk2-fs-tool {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 12px; font-size: 12px; font-weight: 600;
+  background: rgba(255,255,255,0.06); color: #CBD5E1;
+  border: 1px solid rgba(255,255,255,0.08); border-radius: 8px;
+  cursor: pointer; transition: background 100ms ease;
+}
+.bk2-fs-tool:hover { background: rgba(255,255,255,0.12); color: #F1F5F9; }
+.bk2-fs-tool.is-active,
+.bk2-fs-tool--primary { background: #2B7FFF; border-color: rgba(255,255,255,0.18); color: #fff; }
+.bk2-fs-tool--primary:hover { background: #1D6AE5; }
+.bk2-fs-spacer { flex: 1; }
+
+/* Search popover. Positioned via JS (top/left in window-doc coords). */
+.bk2-fs-popover {
+  position: absolute; z-index: 200;
+  width: 280px;
+  background: #0F172A;
+  color: #E2E8F0;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+  overflow: hidden;
+}
+.bk2-fs-popover-head { padding: 8px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.bk2-fs-popover-search {
+  width: 100%; padding: 6px 9px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 7px; outline: 0;
+  font-size: 12px; color: #F1F5F9;
+}
+.bk2-fs-popover-search:focus { border-color: #2B7FFF; }
+.bk2-fs-popover-list { list-style: none; padding: 4px; margin: 0; max-height: 260px; overflow-y: auto; }
+.bk2-fs-popover-opt {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 6px;
+  font-size: 12px; cursor: pointer;
+}
+.bk2-fs-popover-opt:hover { background: rgba(255,255,255,0.06); }
+.bk2-fs-popover-opt.is-on { background: rgba(43,127,255,0.12); color: #DBEAFE; }
+.bk2-fs-popover-opt input { accent-color: #2B7FFF; }
+.bk2-fs-popover-empty { padding: 14px; text-align: center; color: #64748B; font-size: 12px; }
+.bk2-fs-popover-foot { display: flex; gap: 6px; padding: 8px; border-top: 1px solid rgba(255,255,255,0.06); }
+.bk2-fs-popover-foot button {
+  flex: 1; padding: 5px 10px; font-size: 11px; font-weight: 600;
+  border-radius: 6px; cursor: pointer;
+  background: rgba(255,255,255,0.06); color: #CBD5E1; border: 0;
+}
+.bk2-fs-popover-foot .bk2-fs-popover-close { background: #2B7FFF; color: #fff; }
+.bk2-fs-popover-foot button:hover { filter: brightness(1.15); }
+
 /* Inline header search — sits next to the page title. Submits via
    GET so the existing filter pipeline applies (same as the chip
    bar's "Add filter" search). */

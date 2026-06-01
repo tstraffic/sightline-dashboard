@@ -94,44 +94,131 @@
     </div>
   </header>
 
-  <!-- Filter chips bar -->
-  <div class="bk2-chips">
-    <% if (filters.depot) { %>
-      <span class="bk2-chip">Depot: <%= filters.depot %><a href="?date=<%= dateStr %>" aria-label="Clear depot"><button type="button">×</button></a></span>
-    <% } %>
-    <% if (filters.status) { %>
-      <span class="bk2-chip">Status: <%= statusLabel(filters.status) %><a href="?date=<%= dateStr %>" aria-label="Clear status"><button type="button">×</button></a></span>
-    <% } %>
-    <% if (filters.q) { %>
-      <span class="bk2-chip">Search: "<%= filters.q %>"<a href="?date=<%= dateStr %>" aria-label="Clear search"><button type="button">×</button></a></span>
-    <% } %>
-    <details class="bk2-chip bk2-chip-add" style="position:relative">
-      <summary style="list-style:none;cursor:pointer">+ Add filter</summary>
-      <div style="position:absolute;top:100%;left:0;margin-top:6px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:10px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:30;min-width:240px">
-        <form method="GET" action="/bookings" style="display:flex;flex-direction:column;gap:8px">
-          <input type="hidden" name="date" value="<%= dateStr %>">
-          <label style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase">Depot
-            <select name="depot" style="width:100%;padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;margin-top:3px">
-              <option value="">— any —</option>
-              <% depots.forEach(function (d) { %><option value="<%= d %>" <%= filters.depot === d ? 'selected' : '' %>><%= d %></option><% }); %>
-            </select>
-          </label>
-          <label style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase">Status
-            <select name="status" style="width:100%;padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;margin-top:3px">
-              <option value="">— any —</option>
-              <% statuses.forEach(function (s) { %><option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= statusLabel(s) %></option><% }); %>
-            </select>
-          </label>
-          <label style="font-size:10px;font-weight:700;color:#6B7280;text-transform:uppercase">Search
-            <input type="text" name="q" value="<%= filters.q %>" placeholder="title, site, client…" style="width:100%;padding:5px 8px;border:1px solid #D1D5DB;border-radius:6px;font-size:12px;margin-top:3px">
-          </label>
-          <button type="submit" style="background:#2B7FFF;color:#fff;border:0;padding:6px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer">Apply</button>
-        </form>
+  <!-- ============================================================
+       FILTER STRIP — Traffio-style grid above the cards.
+       Search chips open a popover with a search input + multi-select.
+       Cycle chips rotate through 3 states (default → A → B → default).
+       Both store state in window.bk2Filters and re-run applyFilters().
+       The bottom toolbar holds Toggle menus / panel + sort buttons.
+       ============================================================ -->
+  <section class="bk2-filterstrip" id="bk2-filterstrip" aria-label="Booking filters">
+    <div class="bk2-fs-grid">
+      <!-- Row 1: Date, Depots, States -->
+      <div class="bk2-fs-chip bk2-fs-chip--date">
+        <a class="bk2-fs-datestep" href="/bookings?date=<%= prevDate %>" title="Previous day" aria-label="Previous day">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        </a>
+        <div class="bk2-fs-chip-body">
+          <span class="bk2-fs-label">Date, from 6 am</span>
+          <span class="bk2-fs-value"><%= new Date(dateStr + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/,/g, '') %></span>
+        </div>
+        <a class="bk2-fs-datestep" href="/bookings?date=<%= nextDate %>" title="Next day" aria-label="Next day">
+          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </a>
       </div>
-    </details>
+
+      <button type="button" class="bk2-fs-chip" data-fs-search="depots" data-fs-options='<%= JSON.stringify(depots || []) %>'>
+        <span class="bk2-fs-label">Depots</span>
+        <span class="bk2-fs-value" data-fs-display></span>
+      </button>
+
+      <button type="button" class="bk2-fs-chip" data-fs-search="states" data-fs-options='["NSW","VIC","QLD","WA","SA","TAS","ACT","NT"]'>
+        <span class="bk2-fs-label">States</span>
+        <span class="bk2-fs-value" data-fs-display></span>
+      </button>
+
+      <!-- Row 2: Client / Project / Supplier / Project category -->
+      <button type="button" class="bk2-fs-chip" data-fs-search="client"           data-fs-source="bookings"   data-fs-source-key="client">           <span class="bk2-fs-label">Client</span>           <span class="bk2-fs-value" data-fs-display></span></button>
+      <button type="button" class="bk2-fs-chip" data-fs-search="project"          data-fs-source="bookings"   data-fs-source-key="job">              <span class="bk2-fs-label">Project</span>          <span class="bk2-fs-value" data-fs-display></span></button>
+      <button type="button" class="bk2-fs-chip" data-fs-search="supplier"         data-fs-placeholder="1">                                              <span class="bk2-fs-label">Supplier</span>         <span class="bk2-fs-value" data-fs-display></span></button>
+      <button type="button" class="bk2-fs-chip" data-fs-search="project_category" data-fs-placeholder="1">                                              <span class="bk2-fs-label">Project category</span> <span class="bk2-fs-value" data-fs-display></span></button>
+
+      <!-- Row 3: Classification / Booking status / Location context -->
+      <button type="button" class="bk2-fs-chip" data-fs-search="classification"   data-fs-placeholder="1">                                              <span class="bk2-fs-label">Classification</span>   <span class="bk2-fs-value" data-fs-display></span></button>
+      <button type="button" class="bk2-fs-chip" data-fs-search="booking_status"   data-fs-options='<%= JSON.stringify(statuses || []) %>'>            <span class="bk2-fs-label">Booking status</span>   <span class="bk2-fs-value" data-fs-display></span></button>
+      <button type="button" class="bk2-fs-chip" data-fs-search="location_context" data-fs-placeholder="1">                                              <span class="bk2-fs-label">Location context</span> <span class="bk2-fs-value" data-fs-display></span></button>
+
+      <!-- Row 4: cycle buttons — Billable / Invoiced / Cash -->
+      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="billable"
+              data-fs-cycle-labels="Billable &amp; non billable|Billable|Non billable">
+        Billable &amp; non billable
+      </button>
+      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="invoiced"
+              data-fs-cycle-labels="Invoiced &amp; not invoiced|Invoiced|Not invoiced">
+        Invoiced &amp; not invoiced
+      </button>
+      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="payment"
+              data-fs-cycle-labels="Cash &amp; account|Cash|Account">
+        Cash &amp; account
+      </button>
+
+      <!-- Row 5: callout cycle, Location/People search, supplier cycle, client changes cycle -->
+      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="callouts"
+              data-fs-cycle-labels="Includes callouts|Only callouts|No callouts">
+        Includes callouts
+      </button>
+      <button type="button" class="bk2-fs-chip" data-fs-search="location" data-fs-source="bookings" data-fs-source-key="location">
+        <span class="bk2-fs-label">Location</span><span class="bk2-fs-value" data-fs-display></span>
+      </button>
+      <button type="button" class="bk2-fs-chip" data-fs-search="people" data-fs-placeholder="1">
+        <span class="bk2-fs-label">People</span><span class="bk2-fs-value" data-fs-display></span>
+      </button>
+      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="supplier_scope"
+              data-fs-cycle-labels="Supplier/All|Supplier only|Direct only">
+        Supplier/All
+      </button>
+      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="client_changes"
+              data-fs-cycle-labels="Client Changes/all|Client Changes only|No client changes">
+        Client Changes/all
+      </button>
+
+      <!-- Row 6: Hire cycle + Deleted items -->
+      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="hire"
+              data-fs-cycle-labels="Hire/Non-Hire|Non-Hire|Hire">
+        Hire/Non-Hire
+      </button>
+      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="deleted"
+              data-fs-cycle-labels="Hide Deleted|Show Deleted|Deleted only">
+        <span class="bk2-fs-label">Deleted items</span><span class="bk2-fs-value">Hide Deleted</span>
+      </button>
+    </div>
+
+    <div class="bk2-fs-toolbar">
+      <button type="button" class="bk2-fs-tool" id="bk2-fs-togmenus" title="Hide/show the filter strip">Toggle menus</button>
+      <button type="button" class="bk2-fs-tool" id="bk2-fs-togpanel" title="Hide/show the resource panel">Toggle resource panel</button>
+      <button type="button" class="bk2-fs-tool" data-fs-sort="depot">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9M3 12h5M21 18l-3 3m0 0l-3-3m3 3V8"/></svg>
+        Sort by depot name
+      </button>
+      <button type="button" class="bk2-fs-tool" data-fs-sort="client">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9M3 12h5M21 18l-3 3m0 0l-3-3m3 3V8"/></svg>
+        Sort by client name
+      </button>
+      <button type="button" class="bk2-fs-tool bk2-fs-tool--primary is-active" data-fs-sort="time">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        Sort by time
+      </button>
+      <span class="bk2-fs-spacer"></span>
+      <button type="button" class="bk2-fs-tool" id="bk2-fs-history" title="View change history">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3M3 12a9 9 0 1018 0 9 9 0 00-18 0z"/></svg>
+        History
+      </button>
+    </div>
+  </section>
+
+  <!-- Search popover — single element, repositioned under whichever chip is clicked. -->
+  <div class="bk2-fs-popover" id="bk2-fs-popover" hidden role="dialog" aria-modal="true">
+    <div class="bk2-fs-popover-head">
+      <input type="search" class="bk2-fs-popover-search" placeholder="Search…" autocomplete="off">
+    </div>
+    <ul class="bk2-fs-popover-list"></ul>
+    <div class="bk2-fs-popover-foot">
+      <button type="button" class="bk2-fs-popover-clear">Clear</button>
+      <button type="button" class="bk2-fs-popover-close">Done</button>
+    </div>
   </div>
 
-  <p class="bk2-daylabel"><strong><%= dayLabel %></strong> · <%= bookings.length %> booking<%= bookings.length === 1 ? '' : 's' %></p>
+  <p class="bk2-daylabel"><strong><%= dayLabel %></strong> · <span id="bk2-daycount"><%= bookings.length %></span> booking<%= bookings.length === 1 ? '' : 's' %></p>
 
   <!-- ============================================================
        BOARD PANE — wide cards sorted by start time + resource panel
@@ -155,7 +242,18 @@
     <% } else { %>
       <div class="bk2-board">
         <% bookings.forEach(function (b) { %>
-          <a class="bk2-card bk2-status-tone-<%= b.status %>" href="/bookings/<%= b.id %>" data-booking-id="<%= b.id %>" style="text-decoration:none;color:inherit">
+          <a class="bk2-card bk2-status-tone-<%= b.status %>" href="/bookings/<%= b.id %>"
+             data-booking-id="<%= b.id %>"
+             data-depot="<%= (b.depot || '').toLowerCase() %>"
+             data-state="<%= (b.state || '').toLowerCase() %>"
+             data-status="<%= b.status || '' %>"
+             data-client="<%= (b.client_name || '').toLowerCase() %>"
+             data-job="<%= (b.job_name || '').toLowerCase() %>"
+             data-location="<%= ((b.suburb || '') + ' ' + (b.site_address || '')).toLowerCase() %>"
+             data-callout="<%= b.is_callout ? '1' : '0' %>"
+             data-emergency="<%= b.is_emergency ? '1' : '0' %>"
+             data-start="<%= b.start_datetime || '' %>"
+             style="text-decoration:none;color:inherit">
             <header class="bk2-card-banner bk2-status--<%= b.status %>">
               <span style="display:inline-flex;align-items:center;gap:8px">
                 <span><%= statusLabel(b.status) %></span>
@@ -915,6 +1013,261 @@
 
   if (v0 === 'map')      initMap();
   if (v0 === 'calendar') loadCalendar();
+
+  // ============================================================
+  // ============================================================
+  //  Filter strip — search popovers, cycle buttons, sort, toggles.
+  //
+  //  State is held client-side in window.bk2Filters and applied by
+  //  hiding/showing cards (the server query already narrowed to the
+  //  selected date + URL params, so this just narrows the visible
+  //  set further without a reload). Persisted in localStorage so
+  //  toggles survive a refresh.
+  // ============================================================
+  var FS_KEY = 'bk2.filters.v1';
+  window.bk2Filters = {
+    multi:  { depots: [], states: [], client: [], project: [], location: [], booking_status: [] },
+    cycle:  { billable: 0, invoiced: 0, payment: 0, callouts: 0, supplier_scope: 0, client_changes: 0, hire: 0, deleted: 0 },
+    sort:   'time',
+  };
+  try {
+    var saved = JSON.parse(localStorage.getItem(FS_KEY) || 'null');
+    if (saved && typeof saved === 'object') {
+      if (saved.multi) Object.assign(window.bk2Filters.multi, saved.multi);
+      if (saved.cycle) Object.assign(window.bk2Filters.cycle, saved.cycle);
+      if (saved.sort)  window.bk2Filters.sort = saved.sort;
+    }
+  } catch (e) {}
+  function fsPersist() {
+    try { localStorage.setItem(FS_KEY, JSON.stringify(window.bk2Filters)); } catch (e) {}
+  }
+
+  // Pull unique values from the rendered booking cards for the
+  // "source: bookings" search chips (Client, Project, Location).
+  function fsValuesFromBookings(key) {
+    var attr = 'data-' + key;
+    var out = {};
+    $$('.bk2-card[' + attr + ']').forEach(function (card) {
+      var v = card.getAttribute(attr); if (v) out[v] = true;
+    });
+    return Object.keys(out).sort();
+  }
+
+  function fsSetChipDisplay(chip, list) {
+    var el = chip.querySelector('[data-fs-display]'); if (!el) return;
+    chip.classList.toggle('is-active', list.length > 0);
+    if (!list.length) { el.textContent = ''; return; }
+    var first = list[0];
+    var rest = list.length - 1;
+    el.innerHTML = '<span class="bk2-fs-pill">× ' + first.replace(/[<>&]/g, '') + '</span>' +
+      (rest > 0 ? ' <span class="bk2-fs-pill-more">+' + rest + '</span>' : '');
+  }
+
+  // ── Search popover ────────────────────────────────────────────
+  var pop = $('#bk2-fs-popover');
+  var popInput = pop && pop.querySelector('.bk2-fs-popover-search');
+  var popList  = pop && pop.querySelector('.bk2-fs-popover-list');
+  var popClear = pop && pop.querySelector('.bk2-fs-popover-clear');
+  var popClose = pop && pop.querySelector('.bk2-fs-popover-close');
+  var popActiveChip = null;
+  var popOptions = [];
+  var popKey = '';
+  var popQuery = '';
+
+  function fsPopRender() {
+    if (!popList) return;
+    var sel = (window.bk2Filters.multi[popKey] || []);
+    var q = popQuery.toLowerCase();
+    var items = popOptions.filter(function (o) { return !q || o.toLowerCase().indexOf(q) !== -1; });
+    if (!items.length) { popList.innerHTML = '<li class="bk2-fs-popover-empty">No matches</li>'; return; }
+    popList.innerHTML = items.map(function (o) {
+      var on = sel.indexOf(o) !== -1;
+      return '<li><label class="bk2-fs-popover-opt' + (on ? ' is-on' : '') + '">' +
+        '<input type="checkbox" ' + (on ? 'checked' : '') + ' data-fs-opt="' + (o.replace(/"/g, '&quot;')) + '">' +
+        '<span>' + (o.replace(/[<>&]/g, '')) + '</span>' +
+      '</label></li>';
+    }).join('');
+  }
+
+  function fsPopOpen(chip) {
+    if (!pop) return;
+    popActiveChip = chip;
+    popKey = chip.getAttribute('data-fs-search');
+    if (chip.getAttribute('data-fs-placeholder')) {
+      popOptions = [];
+    } else if (chip.getAttribute('data-fs-options')) {
+      try { popOptions = JSON.parse(chip.getAttribute('data-fs-options')); } catch (e) { popOptions = []; }
+    } else if (chip.getAttribute('data-fs-source') === 'bookings') {
+      popOptions = fsValuesFromBookings(chip.getAttribute('data-fs-source-key'));
+    } else {
+      popOptions = [];
+    }
+    // Position the popover below the chip
+    var r = chip.getBoundingClientRect();
+    pop.style.top  = (window.scrollY + r.bottom + 6) + 'px';
+    pop.style.left = (window.scrollX + r.left) + 'px';
+    pop.hidden = false;
+    popQuery = '';
+    if (popInput) {
+      popInput.value = '';
+      popInput.placeholder = chip.getAttribute('data-fs-placeholder')
+        ? 'Coming soon — no data yet'
+        : ('Search ' + (popKey || 'options') + '…');
+      popInput.disabled = !!chip.getAttribute('data-fs-placeholder');
+      setTimeout(function () { popInput.focus(); }, 30);
+    }
+    fsPopRender();
+  }
+
+  function fsPopHide() {
+    if (!pop) return;
+    pop.hidden = true; popActiveChip = null;
+  }
+
+  if (popInput) popInput.addEventListener('input', function () { popQuery = this.value.trim(); fsPopRender(); });
+  if (popList) popList.addEventListener('change', function (e) {
+    var cb = e.target.closest('input[data-fs-opt]'); if (!cb) return;
+    var val = cb.getAttribute('data-fs-opt');
+    var arr = window.bk2Filters.multi[popKey] || (window.bk2Filters.multi[popKey] = []);
+    var idx = arr.indexOf(val);
+    if (cb.checked && idx === -1) arr.push(val);
+    if (!cb.checked && idx !== -1) arr.splice(idx, 1);
+    if (popActiveChip) fsSetChipDisplay(popActiveChip, arr);
+    fsApply(); fsPersist();
+    fsPopRender();
+  });
+  if (popClear) popClear.addEventListener('click', function () {
+    window.bk2Filters.multi[popKey] = [];
+    if (popActiveChip) fsSetChipDisplay(popActiveChip, []);
+    fsApply(); fsPersist(); fsPopRender();
+  });
+  if (popClose) popClose.addEventListener('click', fsPopHide);
+  document.addEventListener('click', function (e) {
+    if (!pop || pop.hidden) return;
+    if (pop.contains(e.target)) return;
+    if (e.target.closest('[data-fs-search]')) return;
+    fsPopHide();
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && pop && !pop.hidden) fsPopHide();
+  });
+
+  // ── Cycle buttons ────────────────────────────────────────────
+  function fsApplyCycleLabel(btn) {
+    var key = btn.getAttribute('data-fs-cycle');
+    var labels = (btn.getAttribute('data-fs-cycle-labels') || '').split('|');
+    var n = window.bk2Filters.cycle[key] || 0;
+    if (n >= labels.length) n = 0;
+    // Special-case the Deleted-items chip which has a label/value pair.
+    var valEl = btn.querySelector('.bk2-fs-value');
+    if (valEl) valEl.textContent = labels[n];
+    else btn.textContent = labels[n];
+    btn.classList.toggle('is-active', n !== 0);
+    btn.setAttribute('data-fs-cycle-state', String(n));
+  }
+
+  // ── Filter predicates ────────────────────────────────────────
+  // Each booking card is hidden when ANY predicate fails. The cycle
+  // states are 0 = default (no filter), 1 = first option, 2 = second.
+  function fsCardOk(card) {
+    var f = window.bk2Filters;
+    // Multi-select: each non-empty set narrows the cards to its members.
+    function multiOk(key, attr) {
+      var arr = f.multi[key]; if (!arr || !arr.length) return true;
+      var v = (card.getAttribute(attr) || '').toLowerCase();
+      return arr.some(function (s) { return s.toLowerCase() === v || v.indexOf(s.toLowerCase()) !== -1; });
+    }
+    if (!multiOk('depots',          'data-depot'))    return false;
+    if (!multiOk('states',          'data-state'))    return false;
+    if (!multiOk('client',          'data-client'))   return false;
+    if (!multiOk('project',         'data-job'))      return false;
+    if (!multiOk('location',        'data-location')) return false;
+    if (!multiOk('booking_status',  'data-status'))   return false;
+
+    // Cycle: callouts — 1 = only callouts, 2 = no callouts.
+    var co = f.cycle.callouts || 0;
+    if (co === 1 && card.getAttribute('data-callout') !== '1') return false;
+    if (co === 2 && card.getAttribute('data-callout') === '1') return false;
+    return true;
+  }
+
+  function fsApply() {
+    var visible = 0;
+    var cards = $$('.bk2-card');
+    cards.forEach(function (card) {
+      var ok = fsCardOk(card);
+      card.style.display = ok ? '' : 'none';
+      if (ok) visible++;
+    });
+    var counter = $('#bk2-daycount'); if (counter) counter.textContent = String(visible);
+  }
+
+  // ── Sort ─────────────────────────────────────────────────────
+  function fsSortKey(card, by) {
+    if (by === 'depot')  return (card.getAttribute('data-depot')  || '').toLowerCase();
+    if (by === 'client') return (card.getAttribute('data-client') || '').toLowerCase();
+    return card.getAttribute('data-start') || '';
+  }
+  function fsApplySort() {
+    var by = window.bk2Filters.sort || 'time';
+    var container = document.querySelector('.bk2-board'); if (!container) return;
+    var cards = Array.from(container.querySelectorAll('.bk2-card'));
+    cards.sort(function (a, b) {
+      var ka = fsSortKey(a, by), kb = fsSortKey(b, by);
+      return ka < kb ? -1 : ka > kb ? 1 : 0;
+    });
+    cards.forEach(function (c) { container.appendChild(c); });
+    $$('[data-fs-sort]').forEach(function (b) {
+      b.classList.toggle('is-active', b.getAttribute('data-fs-sort') === by);
+    });
+  }
+
+  // ── Wire up ──────────────────────────────────────────────────
+  $$('[data-fs-search]').forEach(function (chip) {
+    var key = chip.getAttribute('data-fs-search');
+    fsSetChipDisplay(chip, window.bk2Filters.multi[key] || []);
+    chip.addEventListener('click', function (e) {
+      e.stopPropagation();
+      if (popActiveChip === chip) { fsPopHide(); return; }
+      fsPopOpen(chip);
+    });
+  });
+  $$('[data-fs-cycle]').forEach(function (btn) {
+    fsApplyCycleLabel(btn);
+    btn.addEventListener('click', function () {
+      var key = btn.getAttribute('data-fs-cycle');
+      var labels = (btn.getAttribute('data-fs-cycle-labels') || '').split('|');
+      var n = (window.bk2Filters.cycle[key] || 0) + 1;
+      if (n >= labels.length) n = 0;
+      window.bk2Filters.cycle[key] = n;
+      fsApplyCycleLabel(btn);
+      fsApply(); fsPersist();
+    });
+  });
+  $$('[data-fs-sort]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      window.bk2Filters.sort = btn.getAttribute('data-fs-sort');
+      fsApplySort(); fsPersist();
+    });
+  });
+
+  var togMenus = $('#bk2-fs-togmenus');
+  if (togMenus) togMenus.addEventListener('click', function () {
+    var strip = $('#bk2-filterstrip'); if (!strip) return;
+    strip.classList.toggle('is-menus-collapsed');
+  });
+  var togPanel = $('#bk2-fs-togpanel');
+  if (togPanel) togPanel.addEventListener('click', function () {
+    var pane = document.querySelector('.bk2-pane--with-panel');
+    if (!pane) return;
+    var on = !pane.classList.contains('is-collapsed');
+    if (typeof rpSetCollapsed === 'function') rpSetCollapsed(on);
+    else { pane.classList.toggle('is-collapsed'); }
+  });
+
+  // Initial paint
+  fsApplySort();
+  fsApply();
 
   // ============================================================
   //  Resource panel — People / Vehicles / Towed Equipment.
