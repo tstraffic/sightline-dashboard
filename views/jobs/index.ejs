@@ -122,6 +122,36 @@
             <% } %>
           </div>
           <p class="text-gray-400 text-xs truncate max-w-[180px] sm:hidden"><%= job.client %></p>
+          <%
+            // Monthly Package label — shows the month(s) the job covers when
+            // recurring_monthly = 1. Derives the span from start_date /
+            // end_date so split jobs read "May" and combined jobs read
+            // "May–July" automatically.
+            if (job.recurring_monthly) {
+              var _MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+              var _MONTHS_FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+              var _label = '';
+              if (job.start_date) {
+                var _sd = String(job.start_date).slice(0, 10);
+                var _sm = parseInt(_sd.slice(5, 7), 10) - 1;
+                var _sy = _sd.slice(0, 4);
+                if (Number.isFinite(_sm) && _sm >= 0 && _sm <= 11) {
+                  _label = _MONTHS_FULL[_sm];
+                  if (job.end_date) {
+                    var _ed = String(job.end_date).slice(0, 10);
+                    var _em = parseInt(_ed.slice(5, 7), 10) - 1;
+                    if (Number.isFinite(_em) && _em > _sm) _label = _MONTHS[_sm] + '–' + _MONTHS[_em];
+                  }
+                  _label += ' ' + _sy;
+                }
+              }
+          %>
+            <span class="inline-flex items-center gap-1 px-1.5 py-0.5 mt-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-600/20"
+                  title="Monthly package job<%= job.recurring_pattern_name ? ' — ' + job.recurring_pattern_name : '' %><%= _label ? ' (' + _label + ')' : '' %>">
+              <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Monthly Package<% if (_label) { %> · <%= _label %><% } %>
+            </span>
+          <% } %>
           <% if (job.pending_tasks > 0 || job.pending_plans > 0 || job.overdue_tasks > 0 || job.overdue_compliance > 0) { %>
             <div class="flex flex-wrap gap-1 mt-0.5">
               <% if (job.overdue_tasks > 0) { %>
