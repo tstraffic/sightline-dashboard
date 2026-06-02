@@ -337,25 +337,139 @@
 
 </div>
 
+<!-- Floating save bar — appears the moment there's a pending change.
+     Lets the planner make a run of edits without the page reloading
+     after every dropdown. Auto-flushes after 5 unique pending changes
+     or 8 seconds of idle; manual Save / Discard always available. -->
+<div id="rec-savebar" class="rec-savebar" hidden>
+  <span class="rec-savebar-icon" aria-hidden="true">●</span>
+  <span class="rec-savebar-info"><span id="rec-savebar-count">0</span> unsaved change<span id="rec-savebar-s">s</span></span>
+  <button type="button" id="rec-discard" class="rec-savebar-btn rec-savebar-btn--ghost">Discard</button>
+  <button type="button" id="rec-save"    class="rec-savebar-btn rec-savebar-btn--primary">Save</button>
+</div>
+
+<style>
+  /* Dirty cell — subtle amber border so the planner can see what's
+     queued without it being intrusive. */
+  .inline-edit.is-dirty {
+    background-color: #FFFBEB !important;
+    border-color: #F59E0B !important;
+    box-shadow: 0 0 0 2px rgba(245,158,11,0.18);
+  }
+  body.dark-glass .inline-edit.is-dirty {
+    background-color: rgba(245,158,11,0.18) !important;
+    border-color: #F59E0B !important;
+  }
+  /* Floating save bar — pinned bottom-centre. */
+  .rec-savebar {
+    position: fixed; bottom: 22px; left: 50%;
+    transform: translateX(-50%) translateY(8px);
+    display: inline-flex; align-items: center; gap: 12px;
+    padding: 10px 14px;
+    background: #1F2937; color: #F9FAFB;
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0,0,0,0.35);
+    z-index: 1000;
+    opacity: 0; pointer-events: none;
+    transition: opacity 160ms ease, transform 160ms ease;
+    font-size: 13px;
+  }
+  .rec-savebar.is-visible {
+    opacity: 1; pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+  .rec-savebar.is-saving { opacity: 0.7; }
+  .rec-savebar-icon {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #F59E0B; color: transparent;
+    box-shadow: 0 0 0 4px rgba(245,158,11,0.15);
+  }
+  .rec-savebar-info { font-weight: 500; }
+  .rec-savebar-btn {
+    border: 0; border-radius: 8px; cursor: pointer;
+    padding: 6px 14px; font-size: 12px; font-weight: 600;
+    transition: background 100ms ease;
+  }
+  .rec-savebar-btn--ghost   { background: transparent; color: #CBD5E1; }
+  .rec-savebar-btn--ghost:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  .rec-savebar-btn--primary { background: #10B981; color: #fff; }
+  .rec-savebar-btn--primary:hover { background: #047857; }
+  .rec-savebar-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+</style>
+
 <script>
-  // Live-save inline edits — POST as application/x-www-form-urlencoded so the
-  // server's urlencoded body parser actually reads the field. After a
-  // successful save we soft-reload so the monthly summary + weekly stats
-  // recompute instantly.
+  // ============================================================
+  //  Batched inline-edit save for the Recruitment table.
+  //
+  //  Previously every <select>/<input> change POSTed immediately
+  //  and then reloaded the whole page — confirming one applicant's
+  //  status mid-row would reset the page and lose context. Now:
+  //
+  //    - On change: stash the new value in a pending map, mark the
+  //      cell dirty (amber border), show a floating save bar.
+  //    - User clicks Save in the bar → flush all pending changes,
+  //      then soft-reload so the monthly stats refresh.
+  //    - User clicks Discard → reload, dropping pending changes.
+  //    - Auto-flush triggers after either:
+  //        • 5 unique pending changes (so a run of edits stays
+  //          interactive but doesn't lose work)
+  //        • 8 seconds of no further edits (a "you're done" signal)
+  //    - beforeunload guards against navigating away with unsaved
+  //      changes.
+  // ============================================================
   (function () {
-    const csrf = document.querySelector('input[name="_csrf"]')?.value || '';
-    document.querySelectorAll('.inline-edit').forEach(el => {
-      el.addEventListener('change', async () => {
-        const id = el.dataset.applicant;
-        const field = el.dataset.field;
-        const value = el.value;
-        const row = document.getElementById('row-' + id);
-        if (row) row.classList.add('saving');
+    var csrf = (document.querySelector('input[name="_csrf"]') || {}).value || '';
+    var bar = document.getElementById('rec-savebar');
+    if (!bar) return;
+    var countEl = document.getElementById('rec-savebar-count');
+    var sEl     = document.getElementById('rec-savebar-s');
+    var saveBtn = document.getElementById('rec-save');
+    var discardBtn = document.getElementById('rec-discard');
+    var AUTO_THRESHOLD = 5;
+    var IDLE_MS = 8000;
+
+    // key = "<applicant_id>:<field>" → { id, field, value, el }
+    var pending = new Map();
+    var idleTimer = null;
+    var isSaving = false;
+
+    function markDirty(el, on) {
+      if (!el) return;
+      el.classList.toggle('is-dirty', !!on);
+    }
+    function repaintBar() {
+      var n = pending.size;
+      bar.classList.toggle('is-visible', n > 0 || isSaving);
+      bar.classList.toggle('is-saving', isSaving);
+      if (countEl) countEl.textContent = n;
+      if (sEl) sEl.textContent = n === 1 ? '' : 's';
+      saveBtn.disabled = isSaving || n === 0;
+      discardBtn.disabled = isSaving || n === 0;
+    }
+    function scheduleAutoFlush() {
+      if (idleTimer) clearTimeout(idleTimer);
+      idleTimer = setTimeout(function () {
+        if (pending.size > 0) flush({ reloadAfter: true });
+      }, IDLE_MS);
+    }
+
+    async function flush(opts) {
+      opts = opts || {};
+      if (isSaving || pending.size === 0) return;
+      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+      isSaving = true;
+      repaintBar();
+      var jobs = Array.from(pending.values());
+      var failed = [];
+      // Sequential so two edits on the same row don't race each other.
+      for (var i = 0; i < jobs.length; i++) {
+        var c = jobs[i];
         try {
-          const body = new URLSearchParams();
-          body.set(field, value);
+          var body = new URLSearchParams();
+          body.set(c.field, c.value == null ? '' : c.value);
           body.set('_csrf', csrf);
-          const r = await fetch('/induction/admin/recruitment/' + encodeURIComponent(id), {
+          var r = await fetch('/induction/admin/recruitment/' + encodeURIComponent(c.id), {
             method: 'POST',
             headers: {
               'Accept': 'application/json',
@@ -365,15 +479,54 @@
             body: body.toString(),
           });
           if (!r.ok) throw new Error('HTTP ' + r.status);
-          const data = await r.json().catch(() => ({}));
+          var data = await r.json().catch(function () { return {}; });
           if (data && data.ok === false) throw new Error(data.error || 'Save failed');
-          window.location.reload();
+          // Clear from pending + drop dirty highlight.
+          pending.delete(c.id + ':' + c.field);
+          markDirty(c.el, false);
         } catch (err) {
-          console.error('inline-edit save failed:', err);
-          alert('Could not save — ' + (err.message || 'please try again.'));
-          if (row) row.classList.remove('saving');
+          console.error('inline-edit save failed for', c.id, c.field, err);
+          failed.push(c);
         }
+      }
+      isSaving = false;
+      repaintBar();
+      if (failed.length) {
+        alert('Could not save ' + failed.length + ' change(s). The affected cells are still highlighted — try Save again or refresh.');
+        return;
+      }
+      // All saved — reload so monthly summary + weekly stats refresh,
+      // unless the caller asked us not to (no current use, but useful
+      // for future ajax-only flows).
+      if (opts.reloadAfter !== false) window.location.reload();
+    }
+
+    document.querySelectorAll('.inline-edit').forEach(function (el) {
+      el.addEventListener('change', function () {
+        var id = el.dataset.applicant;
+        var field = el.dataset.field;
+        if (!id || !field) return;
+        pending.set(id + ':' + field, { id: id, field: field, value: el.value, el: el });
+        markDirty(el, true);
+        repaintBar();
+        if (pending.size >= AUTO_THRESHOLD) flush();
+        else scheduleAutoFlush();
       });
+    });
+
+    saveBtn.addEventListener('click', function () { flush(); });
+    discardBtn.addEventListener('click', function () {
+      if (pending.size === 0) return;
+      if (!confirm('Discard ' + pending.size + ' unsaved change(s)?')) return;
+      window.location.reload();
+    });
+
+    // Guard against navigating away with pending edits.
+    window.addEventListener('beforeunload', function (e) {
+      if (pending.size > 0 && !isSaving) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
     });
   })();
 </script>
