@@ -181,7 +181,10 @@
        so the user can spawn the most-used flows from any page. Replaces
        the per-page dashboard Quick Actions strip. -->
   <% if (typeof user !== 'undefined' && user) { %>
-  <div class="fixed bottom-5 right-5 z-40 print:hidden" id="globalFab">
+  <!-- bottom: 76px so the New FAB stacks above the IT Feedback pill
+       (Feedback sits at bottom: 20px right: 20px). z-40 keeps both
+       above page content but below the lightbox / slide-overs. -->
+  <div class="fixed right-5 z-40 print:hidden" id="globalFab" style="bottom: 76px">
     <div id="globalFabMenu" class="hidden flex-col-reverse gap-2 mb-3">
       <% if (canAccess(user, 'jobs')) { %>
       <a href="/jobs/new" class="fab-item flex items-center gap-2 bg-white shadow-lg rounded-full pl-2.5 pr-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 hover:translate-x-[-2px] transition-transform">

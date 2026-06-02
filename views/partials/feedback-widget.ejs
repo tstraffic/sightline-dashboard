@@ -55,14 +55,14 @@
   }
   .fb-fab:hover { transform: translateY(-1px); box-shadow: 0 10px 22px rgba(0,0,0,0.22); }
   .fb-fab:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
-  /* Admin: pill with label. Stacked above the global "New" FAB
-     (which lives at bottom-5 right-5 = 20px from each edge and is
-     ~44px tall). 76px clears the FAB plus a 12px gap. */
+  /* Admin: pill with label. Sits at the very bottom; the global
+     "New" Quick-Actions FAB is bumped up to stack on top of it
+     (see #globalFab override in views/layout.ejs). */
   .fb-fab--admin {
     padding: 9px 14px 9px 12px; border-radius: 999px;
     background: #2B7FFF; color: #fff;
     font-size: 12px; font-weight: 600;
-    bottom: 76px;
+    bottom: 20px;
   }
   .fb-fab--admin:hover { background: #1D6AE5; }
   /* Worker: tiny + icon, deliberately subtle so it doesn't eat the
@@ -86,7 +86,7 @@
   .fb-backdrop.is-open { opacity: 1; }
   .fb-modal {
     position: fixed; z-index: 9600;
-    bottom: 76px; right: 20px;
+    bottom: 20px; right: 20px;
     width: min(380px, calc(100vw - 24px));
     background: #fff; color: #111827;
     border: 1px solid #E5E7EB;
