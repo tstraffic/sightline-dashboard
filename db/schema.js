@@ -11636,6 +11636,24 @@ function runMigrations(db) {
     }
   }
 
+  // Geocoding provenance — tracks which provider returned the coords
+  // and when. Lets the geocode service skip rows that already have
+  // street-level Google coords, and re-upgrade rows that were set by
+  // the legacy suburb-level Open-Meteo provider.
+  if (!isMigrationApplied.get(247)) {
+    console.log('Running migration 247: bookings geocode provenance');
+    try {
+      const cols = db.prepare("PRAGMA table_info(bookings)").all().map(c => c.name);
+      if (!cols.includes('geocode_source')) db.exec("ALTER TABLE bookings ADD COLUMN geocode_source TEXT");
+      if (!cols.includes('geocoded_at'))    db.exec("ALTER TABLE bookings ADD COLUMN geocoded_at DATETIME");
+      if (!cols.includes('geocoded_query')) db.exec("ALTER TABLE bookings ADD COLUMN geocoded_query TEXT");
+      recordMigration.run(247, 'bookings: geocode_source + geocoded_at + geocoded_query');
+      console.log('Migration 247 applied');
+    } catch (e) {
+      console.error('Migration 247 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -5,6 +5,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
+const { requireRole } = require('../middleware/auth');
 
 // Multer config for booking document uploads
 const BOOKING_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'bookings');
@@ -321,7 +322,24 @@ function normaliseTimeStr(raw) {
 
 // Auto-fill lat/lng from the address fields after every save. Imported
 // here so the booking POST/PUT routes can fire-and-forget the geocode.
-const { geocodeBookingIfNeeded } = require('../services/bookingGeocode');
+const { geocodeBookingIfNeeded, geocodeBackfill } = require('../services/bookingGeocode');
+
+// POST /geocode/backfill — admin-only utility to upgrade every booking's
+// coordinates using the currently-configured provider (Google if the
+// GOOGLE_MAPS_API_KEY env var is set, else Open-Meteo). Useful one-shot
+// after enabling Google Geocoding so existing bookings get street-level
+// precision instead of the legacy suburb-level pins.
+router.post('/geocode/backfill', requireRole('management', 'admin'), async (req, res) => {
+  try {
+    const limit = Math.min(parseInt(req.body.limit, 10) || 500, 2000);
+    const onlyMissing = req.body.only_missing === '1' || req.body.only_missing === 'true' || req.body.only_missing === true;
+    const summary = await geocodeBackfill({ limit, onlyMissing });
+    logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: 0, details: `Geocode backfill (${summary.provider}): scanned ${summary.scanned}, upgraded ${summary.upgraded}, failed ${summary.failed}`, req });
+    res.json({ ok: true, ...summary });
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e.message });
+  }
+});
 
 // POST / — Create booking
 router.post('/', (req, res) => {
