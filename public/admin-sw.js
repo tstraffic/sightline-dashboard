@@ -1,5 +1,5 @@
 // Atomis Admin Service Worker — Network-first with offline fallback
-const CACHE_NAME = 'atomis-admin-v8-status-pills-editor';
+const CACHE_NAME = 'atomis-admin-v9-light-mode-polish';
 const OFFLINE_URL = '/offline.html';
 
 // Assets to pre-cache

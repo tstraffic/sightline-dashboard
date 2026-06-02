@@ -1222,124 +1222,124 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
    ============================================================= */
 
 /* Editor body + status row */
-body.dark-glass .bk2-edit-body { background: var(--atomis-base, #0F1115); }
-body.dark-glass .bk2-edit-statusrow {
+:root[data-theme="dark"] body.dark-glass .bk2-edit-body { background: var(--atomis-base, #0F1115); }
+:root[data-theme="dark"] body.dark-glass .bk2-edit-statusrow {
   background: rgba(255,255,255,0.04);
   border-bottom-color: rgba(255,255,255,0.06);
 }
-body.dark-glass .bk2-edit-statuspill {
+:root[data-theme="dark"] body.dark-glass .bk2-edit-statuspill {
   background: rgba(255,255,255,0.06);
   color: rgba(255,255,255,0.70);
 }
-body.dark-glass .bk2-edit-statuspill:hover { background: rgba(255,255,255,0.12); color: #fff; }
+:root[data-theme="dark"] body.dark-glass .bk2-edit-statuspill:hover { background: rgba(255,255,255,0.12); color: #fff; }
 
-body.dark-glass .bk2-edit-actbtn {
+:root[data-theme="dark"] body.dark-glass .bk2-edit-actbtn {
   background: rgba(255,255,255,0.06);
   color: rgba(255,255,255,0.85);
 }
-body.dark-glass .bk2-edit-actbtn:hover:not(:disabled) { background: rgba(255,255,255,0.12); color: #fff; }
-body.dark-glass .bk2-edit-actbtn--create {
+:root[data-theme="dark"] body.dark-glass .bk2-edit-actbtn:hover:not(:disabled) { background: rgba(255,255,255,0.12); color: #fff; }
+:root[data-theme="dark"] body.dark-glass .bk2-edit-actbtn--create {
   background: transparent;
   border: 1.5px solid #10B981;
   color: #34D399;
 }
-body.dark-glass .bk2-edit-actbtn--create:hover:not(:disabled) {
+:root[data-theme="dark"] body.dark-glass .bk2-edit-actbtn--create:hover:not(:disabled) {
   background: rgba(16,185,129,0.12);
   color: #6EE7B7;
 }
 
-body.dark-glass .bk2-edit-foot {
+:root[data-theme="dark"] body.dark-glass .bk2-edit-foot {
   background: rgba(255,255,255,0.04);
   border-top-color: rgba(255,255,255,0.06);
 }
-body.dark-glass .bk2-edit-foot-info { color: rgba(255,255,255,0.55); }
+:root[data-theme="dark"] body.dark-glass .bk2-edit-foot-info { color: rgba(255,255,255,0.55); }
 
 /* Edit-tab inactive titles need a bit more contrast in dark mode */
-body.dark-glass .bk2-edit-tab[aria-selected="true"] { background: #F9FAFB; color: #1F2937; }
-body.dark-glass .bk2-edit-tab[aria-selected="true"] svg { color: #1F2937; }
+:root[data-theme="dark"] body.dark-glass .bk2-edit-tab[aria-selected="true"] { background: #F9FAFB; color: #1F2937; }
+:root[data-theme="dark"] body.dark-glass .bk2-edit-tab[aria-selected="true"] svg { color: #1F2937; }
 
 /* Create form cards */
-body.dark-glass .bk2-create-card {
+:root[data-theme="dark"] body.dark-glass .bk2-create-card {
   background: rgba(255,255,255,0.04);
   border-color: rgba(255,255,255,0.08);
   box-shadow: none;
 }
-body.dark-glass .bk2-create-head { color: #F59E0B; }
-body.dark-glass .bk2-create-head--summary { color: #F59E0B; }
-body.dark-glass .bk2-create-lbl { color: rgba(255,255,255,0.60); }
-body.dark-glass .bk2-create-field input,
-body.dark-glass .bk2-create-field select,
-body.dark-glass .bk2-create-field textarea {
+:root[data-theme="dark"] body.dark-glass .bk2-create-head { color: #F59E0B; }
+:root[data-theme="dark"] body.dark-glass .bk2-create-head--summary { color: #F59E0B; }
+:root[data-theme="dark"] body.dark-glass .bk2-create-lbl { color: rgba(255,255,255,0.60); }
+:root[data-theme="dark"] body.dark-glass .bk2-create-field input,
+:root[data-theme="dark"] body.dark-glass .bk2-create-field select,
+:root[data-theme="dark"] body.dark-glass .bk2-create-field textarea {
   background: rgba(255,255,255,0.04);
   color: rgba(255,255,255,0.92);
   border-color: rgba(255,255,255,0.12);
 }
-body.dark-glass .bk2-create-field input::placeholder,
-body.dark-glass .bk2-create-field textarea::placeholder { color: rgba(255,255,255,0.35); }
-body.dark-glass .bk2-create-field--required input,
-body.dark-glass .bk2-create-field--required select,
-body.dark-glass .bk2-create-field--required textarea {
+:root[data-theme="dark"] body.dark-glass .bk2-create-field input::placeholder,
+:root[data-theme="dark"] body.dark-glass .bk2-create-field textarea::placeholder { color: rgba(255,255,255,0.35); }
+:root[data-theme="dark"] body.dark-glass .bk2-create-field--required input,
+:root[data-theme="dark"] body.dark-glass .bk2-create-field--required select,
+:root[data-theme="dark"] body.dark-glass .bk2-create-field--required textarea {
   background: rgba(245,158,11,0.08);
   border-color: rgba(245,158,11,0.40);
   color: rgba(255,255,255,0.95);
 }
-body.dark-glass .bk2-create-field--required .bk2-create-lbl { color: #FBBF24; }
-body.dark-glass .bk2-create-toggle {
+:root[data-theme="dark"] body.dark-glass .bk2-create-field--required .bk2-create-lbl { color: #FBBF24; }
+:root[data-theme="dark"] body.dark-glass .bk2-create-toggle {
   background: rgba(255,255,255,0.04);
   border-color: rgba(255,255,255,0.08);
   color: rgba(255,255,255,0.85);
 }
-body.dark-glass .bk2-create-hint {
+:root[data-theme="dark"] body.dark-glass .bk2-create-hint {
   background: rgba(255,255,255,0.03);
   border-color: rgba(255,255,255,0.06);
   color: rgba(255,255,255,0.55);
 }
-body.dark-glass .bk2-create-typecard {
+:root[data-theme="dark"] body.dark-glass .bk2-create-typecard {
   background: rgba(255,255,255,0.04);
   border-color: rgba(255,255,255,0.12);
 }
-body.dark-glass .bk2-create-typecard.is-active {
+:root[data-theme="dark"] body.dark-glass .bk2-create-typecard.is-active {
   background: rgba(43,127,255,0.18);
   border-color: #2B7FFF;
 }
-body.dark-glass .bk2-create-typename { color: rgba(255,255,255,0.92); }
-body.dark-glass .bk2-create-typesub  { color: rgba(255,255,255,0.55); }
-body.dark-glass .bk2-create-search {
+:root[data-theme="dark"] body.dark-glass .bk2-create-typename { color: rgba(255,255,255,0.92); }
+:root[data-theme="dark"] body.dark-glass .bk2-create-typesub  { color: rgba(255,255,255,0.55); }
+:root[data-theme="dark"] body.dark-glass .bk2-create-search {
   background: rgba(245,158,11,0.10);
   border-color: rgba(245,158,11,0.35);
   color: rgba(255,255,255,0.92);
 }
-body.dark-glass .bk2-create-search:focus { background: rgba(255,255,255,0.06); border-color: #2B7FFF; }
-body.dark-glass .bk2-create-req {
+:root[data-theme="dark"] body.dark-glass .bk2-create-search:focus { background: rgba(255,255,255,0.06); border-color: #2B7FFF; }
+:root[data-theme="dark"] body.dark-glass .bk2-create-req {
   background: rgba(255,255,255,0.03);
   border-color: rgba(255,255,255,0.06);
 }
-body.dark-glass .bk2-create-req-name { color: rgba(255,255,255,0.80); }
-body.dark-glass .bk2-create-stepper {
+:root[data-theme="dark"] body.dark-glass .bk2-create-req-name { color: rgba(255,255,255,0.80); }
+:root[data-theme="dark"] body.dark-glass .bk2-create-stepper {
   background: rgba(255,255,255,0.04);
   border-color: rgba(255,255,255,0.12);
 }
-body.dark-glass .bk2-create-stepper button { color: rgba(255,255,255,0.70); }
-body.dark-glass .bk2-create-stepper button:hover { background: rgba(255,255,255,0.08); color: #fff; }
-body.dark-glass .bk2-create-stepper input {
+:root[data-theme="dark"] body.dark-glass .bk2-create-stepper button { color: rgba(255,255,255,0.70); }
+:root[data-theme="dark"] body.dark-glass .bk2-create-stepper button:hover { background: rgba(255,255,255,0.08); color: #fff; }
+:root[data-theme="dark"] body.dark-glass .bk2-create-stepper input {
   border-left-color: rgba(255,255,255,0.08);
   border-right-color: rgba(255,255,255,0.08);
   color: rgba(255,255,255,0.95);
 }
-body.dark-glass .bk2-create-reqs-summary {
+:root[data-theme="dark"] body.dark-glass .bk2-create-reqs-summary {
   background: rgba(255,255,255,0.03);
   border-top-color: rgba(255,255,255,0.06);
   color: rgba(255,255,255,0.55);
 }
-body.dark-glass .bk2-create-reqs-summary strong { color: rgba(255,255,255,0.95); }
+:root[data-theme="dark"] body.dark-glass .bk2-create-reqs-summary strong { color: rgba(255,255,255,0.95); }
 
 /* Editor placeholder cards (the "tell me what this does" tabs) */
-body.dark-glass .bk2-edit-placeholder {
+:root[data-theme="dark"] body.dark-glass .bk2-edit-placeholder {
   background: rgba(255,255,255,0.03);
   border-color: rgba(255,255,255,0.08);
   color: rgba(255,255,255,0.55);
 }
-body.dark-glass .bk2-edit-placeholder h3 { color: rgba(255,255,255,0.92); }
+:root[data-theme="dark"] body.dark-glass .bk2-edit-placeholder h3 { color: rgba(255,255,255,0.92); }
 
 /* ===============================================================
    STATUS PILL PALETTE + LEGIBILITY PASS — slide-over "New Booking"
@@ -1448,50 +1448,52 @@ body.dark-glass .bk2-edit-placeholder h3 { color: rgba(255,255,255,0.92); }
 /* ────────────────────────────────────────────────────────────────
    DARK MODE — pill row + editor surfaces. Inactive pills sit on a
    dark base with a tinted bg in lifecycle colour; active pill fills
-   the same way as light mode.
+   the same way as light mode. Scoped to :root[data-theme="dark"]
+   because <body> always has class .dark-glass regardless of theme,
+   so a bare `body.dark-glass` selector would bleed into light mode.
    ──────────────────────────────────────────────────────────────── */
-body.dark-glass .bk2-editor      { background: #0F1115; color: #F5F5F7; }
-body.dark-glass .bk2-edit-body   { background: #0F1115; }
-body.dark-glass .bk2-edit-statusrow {
+:root[data-theme="dark"] .bk2-editor      { background: #0F1115; color: #F5F5F7; }
+:root[data-theme="dark"] .bk2-edit-body   { background: #0F1115; }
+:root[data-theme="dark"] .bk2-edit-statusrow {
   background: rgba(255,255,255,0.04);
   border-bottom-color: rgba(255,255,255,0.06);
 }
 
-body.dark-glass .bk2-edit-statuspill {
+:root[data-theme="dark"] .bk2-edit-statuspill {
   background: color-mix(in srgb, var(--pill-c, #94A3B8) 18%, rgba(15,23,42,0.55));
   color: color-mix(in srgb, var(--pill-c, #94A3B8) 70%, #fff 30%);
   border: 1px solid color-mix(in srgb, var(--pill-c, #94A3B8) 35%, transparent);
 }
-body.dark-glass .bk2-edit-statuspill-icon { color: color-mix(in srgb, var(--pill-c, #94A3B8) 80%, #fff 20%); opacity: 1; }
-body.dark-glass .bk2-edit-statuspill:hover {
+:root[data-theme="dark"] .bk2-edit-statuspill-icon { color: color-mix(in srgb, var(--pill-c, #94A3B8) 80%, #fff 20%); opacity: 1; }
+:root[data-theme="dark"] .bk2-edit-statuspill:hover {
   background: color-mix(in srgb, var(--pill-c, #94A3B8) 28%, rgba(15,23,42,0.4));
   color: #fff;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--pill-c, #94A3B8) 35%, transparent);
 }
-body.dark-glass .bk2-edit-statuspill.is-active {
+:root[data-theme="dark"] .bk2-edit-statuspill.is-active {
   background: var(--pill-c, #2B7FFF);
   color: #fff;
   border-color: color-mix(in srgb, var(--pill-c, #2B7FFF) 60%, #000 40%);
   box-shadow: 0 4px 14px color-mix(in srgb, var(--pill-c, #2B7FFF) 55%, transparent),
               0 0 0 3px color-mix(in srgb, var(--pill-c, #2B7FFF) 28%, transparent);
 }
-body.dark-glass .bk2-edit-statuspill.is-active .bk2-edit-statuspill-icon { color: #fff; }
+:root[data-theme="dark"] .bk2-edit-statuspill.is-active .bk2-edit-statuspill-icon { color: #fff; }
 
 /* Dark-mode labels — were too dim (rgba 0.60); lift to readable. */
-body.dark-glass .bk2-create-lbl { color: rgba(255,255,255,0.78); font-weight: 600; }
-body.dark-glass .bk2-create-head { color: #FB923C; font-weight: 700; }
-body.dark-glass .bk2-create-card {
+:root[data-theme="dark"] .bk2-create-lbl { color: rgba(255,255,255,0.78); font-weight: 600; }
+:root[data-theme="dark"] .bk2-create-head { color: #FB923C; font-weight: 700; }
+:root[data-theme="dark"] .bk2-create-card {
   background: rgba(255,255,255,0.04);
   border-color: rgba(255,255,255,0.08);
 }
 
 /* Dark-mode bulk buttons — give them readable text on dark */
-body.dark-glass .bk2-bulkbtn {
+:root[data-theme="dark"] .bk2-bulkbtn {
   background: rgba(255,255,255,0.04);
   color: rgba(255,255,255,0.88);
   border-color: rgba(255,255,255,0.12);
 }
-body.dark-glass .bk2-bulkbtn:hover:not(:disabled) {
+:root[data-theme="dark"] .bk2-bulkbtn:hover:not(:disabled) {
   background: rgba(255,255,255,0.10); color: #fff;
 }
 
@@ -1499,6 +1501,188 @@ body.dark-glass .bk2-bulkbtn:hover:not(:disabled) {
 .bk2-fs-chip, .bk2-fs-toolbtn {
   background: #fff; color: #334155; border: 1px solid #E2E8F0;
 }
-body.dark-glass .bk2-fs-chip, body.dark-glass .bk2-fs-toolbtn {
+:root[data-theme="dark"] .bk2-fs-chip,
+:root[data-theme="dark"] .bk2-fs-toolbtn {
   background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.85); border-color: rgba(255,255,255,0.10);
 }
+
+/* ============================================================
+   LIGHT-MODE polish for the New Booking slide-over
+   ------------------------------------------------------------
+   Make the form read like a clean enterprise app: white cards
+   on a soft slate canvas, crisp orange section heads, dark
+   labels, prominent inputs, and a vivid green Create button.
+   ============================================================ */
+:root[data-theme="light"] .bk2-editor {
+  background: #F1F5F9;
+  color: #0F172A;
+  box-shadow: -16px 0 40px rgba(15,23,42,0.18);
+}
+:root[data-theme="light"] .bk2-edit-body {
+  background: #F1F5F9;
+}
+
+/* Title bar — keep dark navy so brand colour stays visible */
+:root[data-theme="light"] .bk2-edit-titlebar {
+  background: #0F172A; color: #F8FAFC;
+  border-bottom: 1px solid #1E293B;
+}
+:root[data-theme="light"] .bk2-edit-cal     { color: #94A3B8; }
+:root[data-theme="light"] .bk2-edit-title   { color: #F8FAFC; font-weight: 600; }
+:root[data-theme="light"] .bk2-edit-iconbtn { color: #CBD5E1; }
+:root[data-theme="light"] .bk2-edit-iconbtn:hover { background: rgba(255,255,255,0.10); color: #fff; }
+
+/* Section card */
+:root[data-theme="light"] .bk2-create-card {
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  padding: 18px 20px;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.04);
+}
+:root[data-theme="light"] .bk2-create-head {
+  color: #DC2626;
+  font-weight: 800; font-size: 12px; letter-spacing: 0.06em;
+  margin-bottom: 16px;
+}
+
+/* Field labels — strong contrast in light mode */
+:root[data-theme="light"] .bk2-create-lbl {
+  color: #1F2937; font-weight: 600; font-size: 11px;
+  text-transform: none; letter-spacing: 0;
+}
+:root[data-theme="light"] .bk2-create-field--required .bk2-create-lbl {
+  color: #C2410C; font-weight: 700;
+}
+
+/* Inputs — soft borders, lift on focus */
+:root[data-theme="light"] .bk2-create-field input,
+:root[data-theme="light"] .bk2-create-field select,
+:root[data-theme="light"] .bk2-create-field textarea {
+  background: #fff;
+  border: 1px solid #CBD5E1;
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: #0F172A;
+  font-size: 13px;
+  box-shadow: 0 1px 0 rgba(15,23,42,0.04);
+  transition: border-color 120ms ease, box-shadow 120ms ease, background 120ms ease;
+}
+:root[data-theme="light"] .bk2-create-field input::placeholder,
+:root[data-theme="light"] .bk2-create-field textarea::placeholder {
+  color: #94A3B8;
+}
+:root[data-theme="light"] .bk2-create-field input:hover,
+:root[data-theme="light"] .bk2-create-field select:hover,
+:root[data-theme="light"] .bk2-create-field textarea:hover {
+  border-color: #94A3B8;
+}
+:root[data-theme="light"] .bk2-create-field input:focus,
+:root[data-theme="light"] .bk2-create-field select:focus,
+:root[data-theme="light"] .bk2-create-field textarea:focus {
+  border-color: #2B7FFF;
+  box-shadow: 0 0 0 3px rgba(43,127,255,0.18);
+  outline: 0;
+}
+
+/* Required field — soft amber backdrop */
+:root[data-theme="light"] .bk2-create-field--required input,
+:root[data-theme="light"] .bk2-create-field--required select,
+:root[data-theme="light"] .bk2-create-field--required textarea {
+  background: #FFFBEB;
+  border-color: #FCD34D;
+}
+:root[data-theme="light"] .bk2-create-field--required input:focus,
+:root[data-theme="light"] .bk2-create-field--required select:focus,
+:root[data-theme="light"] .bk2-create-field--required textarea:focus {
+  background: #fff;
+  border-color: #2B7FFF;
+}
+
+/* Status row — soft slate background lifts the pills */
+:root[data-theme="light"] .bk2-edit-statusrow {
+  background: #F1F5F9;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+/* Inactive pills — coloured tint */
+:root[data-theme="light"] .bk2-edit-statuspill {
+  background: color-mix(in srgb, var(--pill-c, #6B7280) 10%, #fff 90%);
+  color: color-mix(in srgb, var(--pill-c, #6B7280) 80%, #1F2937 20%);
+  border: 1px solid color-mix(in srgb, var(--pill-c, #6B7280) 25%, transparent);
+}
+:root[data-theme="light"] .bk2-edit-statuspill-icon {
+  color: var(--pill-c, #6B7280);
+}
+:root[data-theme="light"] .bk2-edit-statuspill:hover {
+  background: color-mix(in srgb, var(--pill-c, #6B7280) 18%, #fff 82%);
+  color: color-mix(in srgb, var(--pill-c, #6B7280) 90%, #000 10%);
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--pill-c, #6B7280) 25%, transparent);
+}
+
+/* Active pill — solid fill, white text, halo glow */
+:root[data-theme="light"] .bk2-edit-statuspill.is-active,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--client_booking,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--unconfirmed,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--confirmed,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--locked,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--conflict,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--green_to_go,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--in_progress,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--complete,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--finalised,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--cancelled,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--cancel,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--late_cancelled,
+:root[data-theme="light"] .bk2-edit-statuspill.is-active.bk2-status--late_cancellation {
+  background: var(--pill-c, #2B7FFF);
+  color: #fff;
+  border-color: color-mix(in srgb, var(--pill-c, #2B7FFF) 70%, #000 30%);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--pill-c, #2B7FFF) 45%, transparent),
+              0 0 0 3px color-mix(in srgb, var(--pill-c, #2B7FFF) 18%, transparent);
+}
+:root[data-theme="light"] .bk2-edit-statuspill.is-active .bk2-edit-statuspill-icon { color: #fff; }
+
+/* Action buttons — Create stands out as a solid green pill */
+:root[data-theme="light"] .bk2-edit-actbtn {
+  background: #fff; color: #475569; border: 1px solid #E2E8F0;
+}
+:root[data-theme="light"] .bk2-edit-actbtn:hover:not(:disabled) {
+  background: #F1F5F9; color: #0F172A; border-color: #CBD5E1;
+}
+:root[data-theme="light"] .bk2-edit-actbtn--create {
+  background: #10B981; color: #fff; border: 1px solid #059669;
+  padding: 8px 18px; font-weight: 700;
+  box-shadow: 0 2px 6px rgba(16,185,129,0.25);
+}
+:root[data-theme="light"] .bk2-edit-actbtn--create:hover:not(:disabled) {
+  background: #059669; color: #fff; border-color: #047857;
+  box-shadow: 0 4px 12px rgba(16,185,129,0.35);
+}
+
+/* Toggle + hint + type cards — clean light styling */
+:root[data-theme="light"] .bk2-create-toggle {
+  background: #F8FAFC; border-color: #E2E8F0; color: #1F2937;
+}
+:root[data-theme="light"] .bk2-create-hint {
+  background: #F8FAFC; border-color: #E2E8F0; color: #475569;
+}
+:root[data-theme="light"] .bk2-create-typecard {
+  background: #fff; border: 1.5px solid #E2E8F0;
+}
+:root[data-theme="light"] .bk2-create-typecard:hover { border-color: #CBD5E1; }
+:root[data-theme="light"] .bk2-create-typecard.is-active {
+  background: #EFF6FF; border-color: #2B7FFF;
+}
+
+/* Requirements list */
+:root[data-theme="light"] .bk2-create-req {
+  background: #F8FAFC; border-color: #E2E8F0;
+}
+:root[data-theme="light"] .bk2-create-search {
+  background: #FFFBEB; border-color: #FCD34D; color: #0F172A;
+}
+:root[data-theme="light"] .bk2-create-search:focus { background: #fff; border-color: #2B7FFF; }
+
+/* Pane padding feels more generous on light */
+:root[data-theme="light"] .bk2-edit-pane { padding: 22px 26px; }
