@@ -31,7 +31,12 @@
 .bk2-status-tone-on_hold         { --bk2-tone: #9CA3AF; }
 
 /* ------------------------------- Layout shell ----------------------------- */
-.bk2-page { min-height: calc(100vh - 64px); color: #E2E8F0; }
+/* min-width: 0 prevents a wide descendant (a long booking title,
+   a stretched grid track, etc.) from forcing the whole page wider
+   than its parent flex container — a class of "things look fine on
+   Mac, broken on PC" bugs where Chrome's narrower default scrollbar
+   accounting tips the layout into overflow. */
+.bk2-page { min-height: calc(100vh - 64px); color: #E2E8F0; min-width: 0; }
 .bk2-header {
   display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between;
   margin: -8px -4px 14px;
@@ -104,7 +109,8 @@
 .bk2-filterstrip.is-menus-collapsed .bk2-fs-grid { display: none; }
 .bk2-fs-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  /* min() clamp so a narrow viewport doesn't push tracks past parent. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 160px), 1fr));
   gap: 6px;
   padding: 10px;
 }
@@ -440,7 +446,7 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 }
 
 /* Booking type — radio-as-card. */
-.bk2-create-typegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.bk2-create-typegrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
 .bk2-create-typecard {
   display: block; padding: 14px 16px;
   background: #fff; border: 1.5px solid #E5E7EB; border-radius: 10px;
@@ -459,7 +465,7 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 }
 .bk2-create-search:focus { border-color: #2B7FFF; background: #fff; }
 .bk2-create-reqs {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
   gap: 6px; margin-top: 10px;
 }
 .bk2-create-req {
@@ -587,7 +593,14 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
    the planner through a long single chain. */
 .bk2-board {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  /* minmax(min(100%, 360px), 1fr) prevents the column track from
+     overflowing its parent when the available width is below 360px.
+     The old `minmax(360px, 1fr)` would force a 360px track regardless
+     of parent width, causing the card grid to bleed under the
+     resource panel on narrow PC laptop widths (sidebar + panel can
+     leave ~340px for cards). The min() clamp keeps single-column
+     layouts honest. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 360px), 1fr));
   gap: 14px;
   align-items: start;
 }
