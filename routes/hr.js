@@ -280,6 +280,78 @@ router.get('/roster', requirePermission('hr_employees'), (req, res) => {
   });
 });
 
+// GET /hr/roster/export.csv — Export the current roster filter set as CSV.
+// Honours the same query params as the roster page (status / payment_type /
+// employment_type / level / induction / search / view) so whatever's on
+// screen is what gets exported. Format=names returns a single-column
+// list of full names; the default is a fuller details export.
+router.get('/roster/export.csv', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const { employment_type, status, level, search, payment_type, view, induction, format } = req.query;
+  const showDeleted = view === 'deleted';
+
+  let where = showDeleted ? 'e.deleted_at IS NOT NULL' : 'e.deleted_at IS NULL';
+  const params = [];
+  if (payment_type) { where += ' AND e.payment_type = ?'; params.push(payment_type); }
+  if (employment_type) { where += ' AND e.employment_type = ?'; params.push(employment_type); }
+  if (status === 'inactive' || status === 'deactivated') {
+    where += " AND e.employment_status IN ('inactive', 'deactivated')";
+  } else if (status === 'terminated') {
+    where += " AND e.employment_status IN ('terminated', 'offboarded')";
+  } else if (status) {
+    where += ' AND e.employment_status = ?'; params.push(status);
+  }
+  if (level) { where += ' AND (e.traffic_role_level = ? OR e.role_title = ?)'; params.push(level, level); }
+  if (search) { where += ' AND (e.full_name LIKE ? OR e.employee_code LIKE ? OR e.email LIKE ? OR e.phone LIKE ?)'; const s = `%${search}%`; params.push(s, s, s, s); }
+  if (induction === 'inducted') where += ' AND e.inducted_at IS NOT NULL';
+  else if (induction === 'not_inducted') where += ' AND e.inducted_at IS NULL';
+
+  const rows = db.prepare(`
+    SELECT e.full_name, e.employee_code, e.role_title, e.employment_type, e.employment_status,
+           e.payment_type, e.phone, e.email, e.start_date, e.inducted_at, m.full_name AS manager_name
+    FROM employees e
+    LEFT JOIN employees m ON e.manager_id = m.id
+    WHERE ${where}
+    ORDER BY e.full_name ASC
+  `).all(...params);
+
+  function csvCell(v) {
+    const s = String(v == null ? '' : v);
+    return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  }
+
+  let csv;
+  if (format === 'names') {
+    // Single-column names-only export — for quick paste into emails / lists.
+    csv = ['Name', ...rows.map(r => csvCell(r.full_name))].join('\r\n');
+  } else {
+    const headers = ['#', 'Name', 'Employee Code', 'Role', 'Employment Type', 'Status', 'Payment Type', 'Phone', 'Email', 'Start Date', 'Inducted', 'Manager'];
+    const lines = [headers.join(',')];
+    rows.forEach((r, i) => {
+      lines.push([
+        i + 1, r.full_name, r.employee_code || '', r.role_title || '',
+        r.employment_type || '', r.employment_status || '', r.payment_type || '',
+        r.phone || '', r.email || '',
+        r.start_date || '', r.inducted_at ? 'Yes' : 'No', r.manager_name || '',
+      ].map(csvCell).join(','));
+    });
+    csv = lines.join('\r\n');
+  }
+
+  // Filename reflects what was exported so the file is recognisable on disk.
+  const stamp = new Date().toISOString().slice(0, 10);
+  const tag = [
+    showDeleted ? 'deleted' : (status || 'all'),
+    payment_type, induction === 'inducted' ? 'inducted' : induction === 'not_inducted' ? 'not_inducted' : null,
+    format === 'names' ? 'names' : null,
+  ].filter(Boolean).join('-');
+  const filename = `roster-${tag || 'all'}-${stamp}.csv`;
+
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.send(csv);
+});
+
 // WORKER PORTAL PREVIEW — log in as test dummy account
 // ============================================
 router.post('/roster/preview-worker', requirePermission('hr_employees'), (req, res) => {

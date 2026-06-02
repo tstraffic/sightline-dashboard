@@ -37,13 +37,110 @@
       <h1 class="text-2xl font-bold text-gray-900">Roster<% if (locals.showDeleted) { %> <span class="text-gray-400">— Deleted</span><% } %></h1>
       <p class="text-sm text-gray-500 mt-1"><% if (locals.showDeleted) { %>Deleted employees — restore to reactivate their login<% } else { %>Full workforce list &mdash; manage, filter and bulk-action employees<% } %></p>
     </div>
-    <% if (!locals.showDeleted) { %>
-    <a href="/hr/employees/new" class="inline-flex items-center justify-center px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">
-      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-      Add Employee
-    </a>
-    <% } %>
+    <div class="flex items-center gap-2">
+      <!-- Export menu — opens a small dropdown so the user can choose
+           which slice of the roster to export (matches the tab filters)
+           and whether they want a names-only list or the full details
+           CSV. Each option submits a GET to /hr/roster/export.csv with
+           the right query params. -->
+      <details class="relative" id="roster-export">
+        <summary class="inline-flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition cursor-pointer list-none">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+          Export
+          <svg class="w-3 h-3 text-gray-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+        </summary>
+        <div class="absolute right-0 mt-2 w-72 bg-white border border-gray-200 rounded-xl shadow-lg z-30 overflow-hidden">
+          <div class="px-3 py-2 bg-gray-50 border-b border-gray-100">
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Pick what to export</p>
+          </div>
+          <%
+            // Each export row hits /hr/roster/export.csv with the
+            // matching tab filter + optional format=names.
+            var exportRows = [
+              { label: 'All employees',  qs: '',                count: stats.totalActiveAll, accent: 'text-gray-700' },
+              { label: 'Active',         qs: '?status=active',  count: stats.totalActive,    accent: 'text-emerald-700' },
+              { label: 'Reserved',       qs: '?status=reserved',count: stats.totalReserved,  accent: 'text-blue-700' },
+              { label: 'On Leave',       qs: '?status=on_leave',count: stats.totalOnLeave,   accent: 'text-blue-700' },
+              { label: 'Deactivated',    qs: '?status=inactive',count: stats.totalDeactivated, accent: 'text-gray-600' },
+              { label: 'Terminated',     qs: '?status=terminated',count: stats.totalTerminated, accent: 'text-red-700' },
+              { label: 'Deleted',        qs: '?view=deleted',   count: stats.totalDeleted,   accent: 'text-gray-500' },
+            ];
+          %>
+          <ul class="py-1 max-h-72 overflow-y-auto">
+            <% exportRows.forEach(function (row) { %>
+              <li class="border-b border-gray-50 last:border-b-0">
+                <div class="px-3 py-2 flex items-center justify-between gap-2 hover:bg-gray-50">
+                  <div class="min-w-0">
+                    <p class="text-sm font-medium <%= row.accent %>"><%= row.label %></p>
+                    <p class="text-[10px] text-gray-400 mt-0.5"><%= row.count %> record<%= row.count === 1 ? '' : 's' %></p>
+                  </div>
+                  <div class="flex items-center gap-1 flex-shrink-0">
+                    <a href="/hr/roster/export.csv<%= row.qs %><%= row.qs ? '&' : '?' %>format=names"
+                       class="px-2 py-1 text-[11px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded ring-1 ring-brand-200 transition"
+                       title="Just the full names, single column">Names</a>
+                    <a href="/hr/roster/export.csv<%= row.qs %>"
+                       class="px-2 py-1 text-[11px] font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded ring-1 ring-gray-200 transition"
+                       title="Full roster export with all fields">Full</a>
+                  </div>
+                </div>
+              </li>
+            <% }); %>
+          </ul>
+          <%
+            // Re-use whatever filters are currently active on the page —
+            // status / payment_type / induction / search — so the user
+            // can also export exactly what they're looking at.
+            var currentQs = [];
+            if (filters.status)        currentQs.push('status=' + encodeURIComponent(filters.status));
+            if (filters.payment_type)  currentQs.push('payment_type=' + encodeURIComponent(filters.payment_type));
+            if (filters.employment_type) currentQs.push('employment_type=' + encodeURIComponent(filters.employment_type));
+            if (filters.induction)     currentQs.push('induction=' + encodeURIComponent(filters.induction));
+            if (filters.search)        currentQs.push('search=' + encodeURIComponent(filters.search));
+            if (locals.showDeleted)    currentQs.push('view=deleted');
+            var qsCurrent = currentQs.length ? '?' + currentQs.join('&') : '';
+            var hasActiveFilter = currentQs.length > 0;
+          %>
+          <% if (hasActiveFilter) { %>
+            <div class="border-t border-gray-100 bg-amber-50/40 px-3 py-2">
+              <p class="text-[10px] font-bold text-amber-700 uppercase tracking-widest mb-1">Current view</p>
+              <div class="flex items-center justify-between gap-2">
+                <p class="text-xs text-gray-600 truncate" title="<%= qsCurrent %>">Exports <%= employees.length %> visible record<%= employees.length === 1 ? '' : 's' %></p>
+                <div class="flex items-center gap-1">
+                  <a href="/hr/roster/export.csv<%= qsCurrent %>&format=names" class="px-2 py-1 text-[11px] font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded ring-1 ring-brand-200 transition">Names</a>
+                  <a href="/hr/roster/export.csv<%= qsCurrent %>" class="px-2 py-1 text-[11px] font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded ring-1 ring-gray-200 transition">Full</a>
+                </div>
+              </div>
+            </div>
+          <% } %>
+        </div>
+      </details>
+      <% if (!locals.showDeleted) { %>
+      <a href="/hr/employees/new" class="inline-flex items-center justify-center px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+        Add Employee
+      </a>
+      <% } %>
+    </div>
   </div>
+
+  <script>
+    // Close the export dropdown on outside-click + ESC so it behaves like
+    // a real menu rather than a stuck-open <details>.
+    (function () {
+      var menu = document.getElementById('roster-export');
+      if (!menu) return;
+      document.addEventListener('click', function (e) {
+        if (menu.open && !menu.contains(e.target)) menu.open = false;
+      });
+      document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape' && menu.open) menu.open = false;
+      });
+      // Auto-close after picking an export.
+      menu.querySelectorAll('a').forEach(function (a) {
+        a.addEventListener('click', function () { setTimeout(function () { menu.open = false; }, 150); });
+      });
+    })();
+  </script>
 
   <!-- Induction quick filters -->
   <% if (!locals.showDeleted) { %>
