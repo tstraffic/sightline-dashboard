@@ -57,6 +57,11 @@ function generateNotifications() {
       return result;
     }
 
+    // Admin/management recipients for org-wide alerts (ticket expiry, equipment
+    // inspections, inductions, over-budget). Referenced by several blocks below;
+    // its definition had gone missing, which threw and aborted the whole engine.
+    const mgmtUsers = db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) IN ('admin','management')").all();
+
     // 0. Upcoming task deadlines --> notify task owner (due today, tomorrow, or in 3 days)
     const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
     const in3days = new Date(Date.now() + 3 * 86400000).toISOString().split('T')[0];
@@ -115,7 +120,7 @@ function generateNotifications() {
     // Plan (internal_approver, falling back to PM). The link drops the
     // user straight onto the parent's edit page so they can extend / re-
     // submit / chase the authority.
-    const next7 = new Date(now + 7 * 86400000).toISOString().split('T')[0];
+    const next7 = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
     const expiringSubPlans = db.prepare(`
       SELECT sub.id, sub.parent_id, sub.reference_number, sub.expiry_date,
              sub.item_type, sub.extension_required,
@@ -465,6 +470,40 @@ function generateNotifications() {
         }
       }
     } catch (e) { console.error('[notifications] birthday step failed:', e.message); }
+
+    // Plans Module reminders (spec §7 + §8). Council Application keys off the
+    // Job Date; ROL keys off the Job Date or the approved works-start. Both
+    // fire at 7 and 2 days out to the responsible person, deduped over 24h.
+    try {
+      const next7 = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      const next2 = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
+      const planRows = db.prepare(`
+        SELECT tp.id, tp.plan_number, tp.plan_types, tp.job_date, tp.rol_summary_from, tp.status,
+               j.id AS job_id, j.job_number, j.planning_owner_id, j.ops_supervisor_id, j.created_by_id
+        FROM traffic_plans tp JOIN jobs j ON tp.job_id = j.id
+        WHERE tp.status NOT IN ('rejected','expired')
+          AND (tp.plan_types LIKE '%Council Application%' OR tp.plan_types LIKE '%ROL%')
+          AND (tp.job_date IN (?, ?) OR tp.rol_summary_from IN (?, ?))
+      `).all(next7, next2, next7, next2);
+
+      for (const p of planRows) {
+        const types = (p.plan_types || '').split(',');
+        const isCouncil = types.includes('Council Application');
+        const refDate = (p.job_date === next7 || p.job_date === next2) ? p.job_date : p.rol_summary_from;
+        if (refDate !== next7 && refDate !== next2) continue;
+        const daysOut = refDate === next2 ? 2 : 7;
+        const recipient = isCouncil
+          ? (p.planning_owner_id || p.created_by_id)
+          : (p.ops_supervisor_id || p.planning_owner_id || p.created_by_id);
+        if (!recipient) continue;
+        const label = isCouncil ? 'Council Application' : 'ROL';
+        const title = `${label} reminder (${daysOut} day${daysOut === 1 ? '' : 's'}): ${p.plan_number}`;
+        const message = `${label} ${p.plan_number} on ${p.job_number} — ${daysOut} days until ${isCouncil ? 'job date' : 'works start'} (${refDate}).`;
+        // 'deadline_reminder' is an allowed notifications.type (the table has a
+        // CHECK enum); the plan-specific title keeps the 24h dedup distinct.
+        insertAndTrack(recipient, 'deadline_reminder', title, message, `/plans/${p.id}`, p.job_id);
+      }
+    } catch (e) { console.error('[notifications] plan reminder step failed:', e.message); }
 
     // Send immediate email notifications for newly created notifications
     sendImmediateEmails(db, newNotificationIds);

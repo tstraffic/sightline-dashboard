@@ -3,6 +3,30 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const upload = require('../middleware/upload');
 const { autoLogDiary, logStatusChange } = require('../lib/diary');
+const { logActivity } = require('../middleware/audit');
+
+// Conditional date rules (spec §3). Council Application + ROL require all
+// three dates; every other plan type requires the two office dates but the
+// Job Date is optional. Returns an array of missing human-readable labels.
+function missingRequiredDates(types, b) {
+  const list = (Array.isArray(types) ? types : [types]).filter(Boolean);
+  const strict = list.some(t => t === 'Council Application' || t === 'ROL');
+  const missing = [];
+  if (!b.client_required_date) missing.push('Client Requested Date');
+  if (!b.submitted_date) missing.push('Submission Date');
+  if (strict && !b.job_date) missing.push('Job Date');
+  return missing;
+}
+
+// Normalise the plan_types checkbox payload into { planTypes (csv), planType (primary) }.
+function normalisePlanTypes(b) {
+  if (b.plan_types) {
+    const types = Array.isArray(b.plan_types) ? b.plan_types : [b.plan_types];
+    return { planTypes: types.join(','), planType: types[0] || '', list: types };
+  }
+  if (b.plan_type) return { planTypes: b.plan_type, planType: b.plan_type, list: [b.plan_type] };
+  return { planTypes: '', planType: '', list: [] };
+}
 
 // Convert a multer error message into something a human can act on. Multer's
 // own "File too large" doesn't tell the user the limit, which is the actual
@@ -103,15 +127,14 @@ router.post('/', uploadPlanFile(false), (req, res) => {
   const planNumber = `${codePrefix}-${jobSeq}-${String(nextSuffix).padStart(2, '0')}`;
 
   // Handle multi-select plan types
-  let planTypes = '';
-  let planType = '';
-  if (b.plan_types) {
-    const types = Array.isArray(b.plan_types) ? b.plan_types : [b.plan_types];
-    planTypes = types.join(',');
-    planType = types[0]; // backward compat
-  } else if (b.plan_type) {
-    planType = b.plan_type;
-    planTypes = b.plan_type;
+  const { planTypes, planType } = normalisePlanTypes(b);
+
+  // Conditional date validation (spec §3). The drag-drop quick-upload has
+  // its own route and is intentionally exempt from this.
+  const dateErrors = missingRequiredDates(planTypes, b);
+  if (dateErrors.length) {
+    req.flash('error', 'Missing required date(s): ' + dateErrors.join(', ') + '.');
+    return res.redirect(b.return_to && b.return_to !== '/plans' ? b.return_to : '/plans/new');
   }
 
   // Handle file upload. Store the public URL path (uploads/<filename>),
@@ -133,14 +156,14 @@ router.post('/', uploadPlanFile(false), (req, res) => {
 
   try {
     const result = db.prepare(`
-      INSERT INTO traffic_plans (job_id, plan_number, plan_type, plan_types, designer, rol_required, rol_submitted, rol_approved, council, tfnsw, submitted_date, approval_date, approved_date, expiry_date, client_required_date, works_expected_date, status, file_link, file_path, file_original_name, notes, is_final, marked_final_at, marked_final_by, created_by_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO traffic_plans (job_id, plan_number, plan_type, plan_types, council_plan_type, designer, rol_required, rol_submitted, rol_approved, council, tfnsw, submitted_date, approval_date, approved_date, expiry_date, client_required_date, works_expected_date, job_date, status, file_link, file_path, file_original_name, notes, is_final, marked_final_at, marked_final_by, created_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      b.job_id || null, planNumber, planType, planTypes, designer,
+      b.job_id || null, planNumber, planType, planTypes, b.council_plan_type || '', designer,
       b.rol_required ? 1 : 0, b.rol_submitted ? 1 : 0, b.rol_approved ? 1 : 0,
       b.council || '', b.tfnsw || '',
       b.submitted_date || null, b.approval_date || null, b.approved_date || null, b.expiry_date || null,
-      b.client_required_date || null, b.works_expected_date || null,
+      b.client_required_date || null, b.works_expected_date || null, b.job_date || null,
       status, b.file_link || '', filePath, fileOriginalName, b.notes || '',
       markFinal ? 1 : 0,
       markFinal ? new Date().toISOString() : null,
@@ -163,6 +186,27 @@ router.post('/', uploadPlanFile(false), (req, res) => {
       summary: `[${req.session.user.full_name}] Traffic plan created: ${planNumber} (${typeLabel}). Designer: ${designer || 'unassigned'}. Status: ${status}${markFinal ? ' → FINAL' : ''}.`,
       userId: req.session.user.id
     });
+
+    // Per-plan audit trail (spec §1) — drives the activity feed on the detail page.
+    logActivity({
+      user: req.session.user, action: 'create', entityType: 'plan',
+      entityId: result.lastInsertRowid, entityLabel: planNumber,
+      jobId: b.job_id || null, details: `Created ${typeLabel || 'plan'}`, ip: req.ip
+    });
+
+    // Council Application automation (spec §7): auto-create a finalisation
+    // task assigned to the job's planning owner, due on the Job Date.
+    if (planTypes.split(',').includes('Council Application') && b.job_id) {
+      try {
+        const job = db.prepare('SELECT planning_owner_id, created_by_id FROM jobs WHERE id = ?').get(b.job_id);
+        const ownerId = (job && (job.planning_owner_id || job.created_by_id)) || req.session.user.id;
+        db.prepare(`INSERT INTO tasks (job_id, title, description, owner_id, due_date, status, priority, division, task_type, created_by, created_at)
+          VALUES (?, ?, ?, ?, ?, 'not_started', 'high', 'planning', 'one_off', ?, CURRENT_TIMESTAMP)`)
+          .run(b.job_id, `Finalise Council Application ${planNumber}`,
+            `Auto-created when the plan was logged. Job date: ${b.job_date || 'TBC'}.`,
+            ownerId, b.job_date || null, req.session.user.id);
+      } catch (e) { console.error('[Plans] Council auto-task failed:', e.message); }
+    }
 
     req.flash('success', `Traffic Plan ${planNumber} created successfully${markFinal ? ' and pushed to Final Plans.' : '.'}`);
     const returnTo = b.return_to && b.return_to !== '/plans' ? b.return_to : '/plans';
@@ -272,35 +316,35 @@ router.post('/:id', upload.single('plan_file'), (req, res) => {
   const oldPlan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
 
   // Handle multi-select plan types
-  let planTypes = '';
-  let planType = '';
-  if (b.plan_types) {
-    const types = Array.isArray(b.plan_types) ? b.plan_types : [b.plan_types];
-    planTypes = types.join(',');
-    planType = types[0];
-  } else if (b.plan_type) {
-    planType = b.plan_type;
-    planTypes = b.plan_type;
+  const { planTypes, planType } = normalisePlanTypes(b);
+
+  // Conditional date validation (spec §3).
+  const dateErrors = missingRequiredDates(planTypes, b);
+  if (dateErrors.length) {
+    req.flash('error', 'Missing required date(s): ' + dateErrors.join(', ') + '.');
+    return res.redirect(`/plans/${req.params.id}/edit`);
   }
 
-  // Handle file upload (keep existing file if no new upload)
+  // Handle file upload (keep existing file if no new upload). Store the
+  // public URL form uploads/<filename> — not multer's absolute disk path
+  // (the absolute path is what migration 197 had to clean up).
   let filePath = b.existing_file_path || '';
   let fileOriginalName = b.existing_file_original_name || '';
   if (req.file) {
-    filePath = req.file.path.replace(/\\/g, '/');
+    filePath = 'uploads/' + req.file.filename;
     fileOriginalName = req.file.originalname;
   }
 
   try {
     db.prepare(`
-      UPDATE traffic_plans SET job_id=?, plan_type=?, plan_types=?, designer=?, rol_required=?, rol_submitted=?, rol_approved=?, council=?, tfnsw=?, submitted_date=?, approval_date=?, approved_date=?, expiry_date=?, client_required_date=?, works_expected_date=?, status=?, file_link=?, file_path=?, file_original_name=?, notes=?, updated_at=CURRENT_TIMESTAMP
+      UPDATE traffic_plans SET job_id=?, plan_type=?, plan_types=?, council_plan_type=?, designer=?, rol_required=?, rol_submitted=?, rol_approved=?, council=?, tfnsw=?, submitted_date=?, approval_date=?, approved_date=?, expiry_date=?, client_required_date=?, works_expected_date=?, job_date=?, status=?, file_link=?, file_path=?, file_original_name=?, notes=?, updated_at=CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
-      b.job_id || null, planType, planTypes, b.designer || '',
+      b.job_id || null, planType, planTypes, b.council_plan_type || '', b.designer || '',
       b.rol_required ? 1 : 0, b.rol_submitted ? 1 : 0, b.rol_approved ? 1 : 0,
       b.council || '', b.tfnsw || '',
       b.submitted_date || null, b.approval_date || null, b.approved_date || null, b.expiry_date || null,
-      b.client_required_date || null, b.works_expected_date || null,
+      b.client_required_date || null, b.works_expected_date || null, b.job_date || null,
       b.status || 'draft', b.file_link || '', filePath, fileOriginalName, b.notes || '',
       req.params.id
     );
@@ -322,8 +366,16 @@ router.post('/:id', upload.single('plan_file'), (req, res) => {
       }
     }
 
+    // Per-plan audit trail (spec §1).
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'plan',
+      entityId: Number(req.params.id), entityLabel: oldPlan ? oldPlan.plan_number : `Plan ${req.params.id}`,
+      jobId: b.job_id || (oldPlan && oldPlan.job_id) || null, details: 'Updated plan details',
+      beforeValue: oldPlan ? (oldPlan.status || '') : '', afterValue: b.status || '', ip: req.ip
+    });
+
     req.flash('success', 'Traffic plan updated successfully.');
-    const returnTo = b.return_to && b.return_to !== '/plans' ? b.return_to : '/plans';
+    const returnTo = b.return_to && b.return_to !== '/plans' ? b.return_to : `/plans/${req.params.id}`;
     res.redirect(returnTo);
   } catch (err) {
     req.flash('error', 'Failed to update plan: ' + err.message);
@@ -516,5 +568,187 @@ router.post('/:id/flag', (req, res) => {
   }
   res.redirect(req.body.return_to || `/jobs/${plan.jid}#final-plans`);
 });
+
+// ─── PLAN DETAIL PAGE (the hub) ──────────────────
+// Previously missing entirely — mark-final and other routes redirected to
+// /plans/:id with no handler. This is now the editable record with fees,
+// extensions, CTMPs, revisions, ROL conditions and the activity feed.
+router.get('/:id', (req, res) => {
+  const db = getDb();
+  const plan = db.prepare(`SELECT tp.*, j.job_number, j.client, j.project_name, j.site_address, j.suburb,
+      u.full_name AS created_by_name
+    FROM traffic_plans tp
+    LEFT JOIN jobs j ON tp.job_id = j.id
+    LEFT JOIN users u ON tp.created_by_id = u.id
+    WHERE tp.id = ?`).get(req.params.id);
+  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+
+  const fees = db.prepare('SELECT pf.*, u.full_name AS created_by_name FROM plan_fees pf LEFT JOIN users u ON pf.created_by = u.id WHERE pf.plan_id = ? ORDER BY pf.created_at DESC').all(plan.id);
+  const extensions = db.prepare('SELECT pe.*, u.full_name AS created_by_name FROM plan_extensions pe LEFT JOIN users u ON pe.created_by = u.id WHERE pe.plan_id = ? ORDER BY pe.created_at DESC').all(plan.id);
+  const ctmps = db.prepare('SELECT * FROM ctmps WHERE plan_id = ? ORDER BY created_at DESC').all(plan.id);
+  const revisions = db.prepare('SELECT pr.*, u.full_name AS created_by_name FROM plan_revisions pr LEFT JOIN users u ON pr.created_by = u.id WHERE pr.plan_id = ? ORDER BY pr.id DESC').all(plan.id);
+  const rolShifts = db.prepare('SELECT * FROM rol_shifts WHERE plan_id = ? ORDER BY start_date, start_time').all(plan.id);
+  const rolConditions = db.prepare('SELECT * FROM rol_conditions WHERE plan_id = ? ORDER BY is_alert DESC, condition_no').all(plan.id);
+  const activity = db.prepare("SELECT * FROM activity_log WHERE entity_type = 'plan' AND entity_id = ? ORDER BY created_at DESC LIMIT 50").all(plan.id);
+  const feesTotal = fees.reduce((s, f) => s + (f.amount || 0), 0);
+  const planTypeList = (plan.plan_types || plan.plan_type || '').split(',').map(t => t.trim()).filter(Boolean);
+
+  res.render('plans/show', {
+    title: `Plan ${plan.plan_number}`,
+    plan, planTypeList, fees, feesTotal, extensions, ctmps, revisions, rolShifts, rolConditions, activity,
+    user: req.session.user
+  });
+});
+
+// ─── FEES (council permits — spec §5) ────────────
+router.post('/:id/fees', upload.single('receipt'), (req, res) => {
+  const db = getDb();
+  const plan = db.prepare('SELECT id, plan_number, job_id FROM traffic_plans WHERE id = ?').get(req.params.id);
+  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  const receiptPath = req.file ? 'uploads/' + req.file.filename : '';
+  const receiptName = req.file ? req.file.originalname : '';
+  const amount = parseFloat(req.body.amount) || 0;
+  try {
+    db.prepare('INSERT INTO plan_fees (plan_id, description, amount, receipt_file_path, receipt_original_name, created_by) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(plan.id, req.body.description || '', amount, receiptPath, receiptName, req.session.user.id);
+    logActivity({ user: req.session.user, action: 'create', entityType: 'plan', entityId: plan.id, entityLabel: plan.plan_number, jobId: plan.job_id, details: `Added fee: ${req.body.description || ''} ($${amount.toFixed(2)})`, ip: req.ip });
+    req.flash('success', 'Fee added.');
+  } catch (err) { req.flash('error', 'Failed to add fee: ' + err.message); }
+  res.redirect(`/plans/${plan.id}`);
+});
+
+router.post('/:id/fees/:feeId/delete', (req, res) => {
+  const db = getDb();
+  const fee = db.prepare('SELECT * FROM plan_fees WHERE id = ? AND plan_id = ?').get(req.params.feeId, req.params.id);
+  if (fee) {
+    if (fee.receipt_file_path) { try { require('fs').unlinkSync(require('path').join(__dirname, '..', 'public', fee.receipt_file_path)); } catch (e) {} }
+    db.prepare('DELETE FROM plan_fees WHERE id = ?').run(fee.id);
+  }
+  res.redirect(`/plans/${req.params.id}`);
+});
+
+// ─── EXTENSIONS (ROL / Council Application — spec §4) ─
+router.post('/:id/extensions', upload.single('extension_file'), (req, res) => {
+  const db = getDb();
+  const plan = db.prepare('SELECT id, plan_number, job_id FROM traffic_plans WHERE id = ?').get(req.params.id);
+  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  const filePath = req.file ? 'uploads/' + req.file.filename : '';
+  const fileName = req.file ? req.file.originalname : '';
+  try {
+    db.prepare('INSERT INTO plan_extensions (plan_id, label, extended_to, reason, file_path, file_original_name, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(plan.id, req.body.label || '', req.body.extended_to || null, req.body.reason || '', filePath, fileName, req.session.user.id);
+    logActivity({ user: req.session.user, action: 'create', entityType: 'plan', entityId: plan.id, entityLabel: plan.plan_number, jobId: plan.job_id, details: `Added extension${req.body.extended_to ? ' to ' + req.body.extended_to : ''}`, ip: req.ip });
+    autoLogDiary(db, { jobId: plan.job_id, summary: `[${req.session.user.full_name}] Extension added to ${plan.plan_number}${req.body.extended_to ? ' (extended to ' + req.body.extended_to + ')' : ''}.`, userId: req.session.user.id });
+    req.flash('success', 'Extension added.');
+  } catch (err) { req.flash('error', 'Failed to add extension: ' + err.message); }
+  res.redirect(`/plans/${plan.id}`);
+});
+
+router.post('/:id/extensions/:extId/delete', (req, res) => {
+  const db = getDb();
+  const ext = db.prepare('SELECT * FROM plan_extensions WHERE id = ? AND plan_id = ?').get(req.params.extId, req.params.id);
+  if (ext) {
+    if (ext.file_path) { try { require('fs').unlinkSync(require('path').join(__dirname, '..', 'public', ext.file_path)); } catch (e) {} }
+    db.prepare('DELETE FROM plan_extensions WHERE id = ?').run(ext.id);
+  }
+  res.redirect(`/plans/${req.params.id}`);
+});
+
+// Replace a plan's ROL conditions from a textarea (one per line; a leading
+// "!" marks a condition as an on-dashboard alert). Phase 2's PDF parser
+// writes the same table directly.
+function replaceRolConditions(db, planId, raw) {
+  db.prepare('DELETE FROM rol_conditions WHERE plan_id = ?').run(planId);
+  const lines = String(raw || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const ins = db.prepare('INSERT INTO rol_conditions (plan_id, condition_no, text, is_alert) VALUES (?, ?, ?, ?)');
+  lines.forEach((line, i) => {
+    const isAlert = line.startsWith('!') ? 1 : 0;
+    ins.run(planId, i + 1, isAlert ? line.slice(1).trim() : line, isAlert);
+  });
+}
+
+// Replace the stored ROL/ROLA shifts (actual rows, gaps preserved) for one
+// source from a JSON payload produced by the PDF review screen.
+function saveShiftsJson(db, planId, source, json) {
+  let arr;
+  try { arr = JSON.parse(json || '[]'); } catch (e) { return; }
+  if (!Array.isArray(arr)) return;
+  db.prepare('DELETE FROM rol_shifts WHERE plan_id = ? AND source = ?').run(planId, source);
+  const ins = db.prepare('INSERT INTO rol_shifts (plan_id, source, start_date, start_time, end_date, end_time) VALUES (?, ?, ?, ?, ?, ?)');
+  for (const s of arr) ins.run(planId, source, s.start_date || null, s.start_time || '', s.end_date || null, s.end_time || '');
+}
+
+// ─── ROL STAGE 1: ROLA application (spec §8) ─────
+router.post('/:id/rola', upload.single('rola_file'), (req, res) => {
+  const db = getDb();
+  const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
+  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  const b = req.body;
+  const filePath = req.file ? 'uploads/' + req.file.filename : (b.existing_rola_file_path || plan.rola_file_path || '');
+  const fileName = req.file ? req.file.originalname : (b.existing_rola_file_original_name || plan.rola_file_original_name || '');
+  const stage = plan.rol_stage === 'approved' ? 'approved' : 'applied';
+  try {
+    db.prepare(`UPDATE traffic_plans SET rola_application_number=?, rola_file_path=?, rola_file_original_name=?,
+        rol_summary_from=COALESCE(?, rol_summary_from), rol_summary_to=COALESCE(?, rol_summary_to),
+        rol_time_window=COALESCE(NULLIF(?, ''), rol_time_window), rol_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(b.rola_application_number || '', filePath, fileName, b.rol_summary_from || null, b.rol_summary_to || null, b.rol_time_window || '', stage, plan.id);
+    if (typeof b.shifts_json !== 'undefined') saveShiftsJson(db, plan.id, 'rola', b.shifts_json);
+    logActivity({ user: req.session.user, action: 'update', entityType: 'plan', entityId: plan.id, entityLabel: plan.plan_number, jobId: plan.job_id, details: `Logged ROLA application ${b.rola_application_number || ''}`, ip: req.ip });
+    req.flash('success', 'ROLA application saved.');
+  } catch (err) { req.flash('error', 'Failed to save ROLA: ' + err.message); }
+  res.redirect(`/plans/${plan.id}`);
+});
+
+// ─── ROL STAGE 2: issued ROL (spec §8) ───────────
+router.post('/:id/rol', upload.single('rol_file'), (req, res) => {
+  const db = getDb();
+  const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
+  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  const b = req.body;
+  const filePath = req.file ? 'uploads/' + req.file.filename : (b.existing_rol_file_path || plan.rol_file_path || '');
+  const fileName = req.file ? req.file.originalname : (b.existing_rol_file_original_name || plan.rol_file_original_name || '');
+  try {
+    db.prepare(`UPDATE traffic_plans SET rol_actual_number=?, rol_file_path=?, rol_file_original_name=?,
+        rol_summary_from=?, rol_summary_to=?, rol_time_window=?, rol_approved=1, rol_stage='approved',
+        updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(b.rol_actual_number || '', filePath, fileName, b.rol_summary_from || null, b.rol_summary_to || null, b.rol_time_window || '', plan.id);
+    if (typeof b.conditions !== 'undefined') replaceRolConditions(db, plan.id, b.conditions);
+    if (typeof b.shifts_json !== 'undefined') saveShiftsJson(db, plan.id, 'rol', b.shifts_json);
+    logActivity({ user: req.session.user, action: 'approve', entityType: 'plan', entityId: plan.id, entityLabel: plan.plan_number, jobId: plan.job_id, details: `Logged issued ROL ${b.rol_actual_number || ''}`, ip: req.ip });
+    autoLogDiary(db, { jobId: plan.job_id, summary: `[${req.session.user.full_name}] Issued ROL ${b.rol_actual_number || ''} recorded on ${plan.plan_number}.`, userId: req.session.user.id });
+    req.flash('success', 'Issued ROL saved.');
+  } catch (err) { req.flash('error', 'Failed to save ROL: ' + err.message); }
+  res.redirect(`/plans/${plan.id}`);
+});
+
+// ─── PDF AUTO-EXTRACTION (Phase 2 — parse-then-confirm) ──
+// Upload a ROLA/ROL PDF, parse it, then show a review screen pre-filled with
+// the extracted number, date/time range, shifts (gaps preserved) and (ROL)
+// conditions. Nothing is saved until the user confirms on that screen, which
+// posts to the existing /:id/rola or /:id/rol save endpoints.
+function parsePlanPdf(stage, fileField) {
+  return async (req, res) => {
+    const db = getDb();
+    const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
+    if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+    if (!req.file) { req.flash('error', 'Please choose a PDF to extract.'); return res.redirect(`/plans/${plan.id}`); }
+    const filePath = 'uploads/' + req.file.filename;
+    try {
+      const { parseRolPdf } = require('../services/rolParser');
+      const path = require('path');
+      const parsed = await parseRolPdf(path.join(__dirname, '..', 'public', filePath), stage);
+      res.render('plans/rol-review', {
+        title: 'Review extracted ' + stage.toUpperCase(),
+        plan, stage, parsed, filePath, fileOriginalName: req.file.originalname, user: req.session.user
+      });
+    } catch (err) {
+      console.error(`[Plans] ${stage} parse failed:`, err.message);
+      req.flash('error', 'Could not read that PDF automatically — enter the details manually. (' + err.message + ')');
+      res.redirect(`/plans/${plan.id}`);
+    }
+  };
+}
+router.post('/:id/rola/parse', upload.single('rola_file'), parsePlanPdf('rola', 'rola_file'));
+router.post('/:id/rol/parse', upload.single('rol_file'), parsePlanPdf('rol', 'rol_file'));
 
 module.exports = router;

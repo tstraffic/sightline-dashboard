@@ -1,0 +1,75 @@
+<% locals.currentPage = 'plans' %>
+<%
+  const isRol = stage === 'rol';
+  const shifts = parsed.shifts || [];
+  const conditions = parsed.conditions || [];
+  const saveAction = isRol ? `/plans/${plan.id}/rol` : `/plans/${plan.id}/rola`;
+  const condText = conditions.map(c => (c.is_alert ? '!' : '') + c.text).join('\n');
+%>
+
+<div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
+  <a href="/plans" class="hover:text-gray-900 transition">Traffic Plans</a>
+  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+  <a href="/plans/<%= plan.id %>" class="hover:text-gray-900 transition"><%= plan.plan_number %></a>
+  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+  <span class="text-gray-900">Review extracted <%= isRol ? 'ROL' : 'ROLA' %></span>
+</div>
+
+<div class="mb-5">
+  <h1 class="text-2xl font-bold text-gray-900">Review extracted data</h1>
+  <p class="text-gray-500 text-sm mt-0.5">We read <span class="font-medium"><%= fileOriginalName %></span> and pre-filled the fields below. Check and correct anything, then save. <span class="text-gray-400">Nothing is stored until you click Confirm.</span></p>
+</div>
+
+<form method="POST" action="<%= saveAction %>" class="space-y-5 max-w-3xl">
+  <%- include('../partials/csrf') %>
+  <input type="hidden" name="existing_<%= isRol ? 'rol' : 'rola' %>_file_path" value="<%= filePath %>">
+  <input type="hidden" name="existing_<%= isRol ? 'rol' : 'rola' %>_file_original_name" value="<%= fileOriginalName %>">
+  <input type="hidden" name="shifts_json" value="<%= JSON.stringify(shifts) %>">
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4"><%= isRol ? 'Issued ROL' : 'ROLA Application' %></h2>
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <% if (isRol) { %>
+        <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">ROL #</label><input name="rol_actual_number" value="<%= parsed.licenceNumber || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+      <% } else { %>
+        <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">ROLA App #</label><input name="rola_application_number" value="<%= parsed.applicationNumber || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+      <% } %>
+      <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1"><%= isRol ? 'Approved From' : 'Applied From' %></label><input type="date" name="rol_summary_from" value="<%= parsed.summaryFrom || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+      <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1"><%= isRol ? 'Approved To' : 'Applied To' %></label><input type="date" name="rol_summary_to" value="<%= parsed.summaryTo || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+      <div class="sm:col-span-3"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Time Window</label><input name="rol_time_window" value="<%= parsed.timeWindow || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+    </div>
+  </div>
+
+  <!-- Extracted shifts (stored as-is, gaps preserved; range above is the summary) -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Extracted shifts (<%= shifts.length %>) — gaps preserved</h2>
+    <% if (shifts.length) { %>
+      <div class="max-h-64 overflow-y-auto border border-gray-100 rounded-lg">
+        <table class="w-full text-xs">
+          <thead class="bg-gray-50"><tr class="text-left text-[10px] font-bold text-gray-400 uppercase"><th class="px-3 py-1.5">Start</th><th class="px-3 py-1.5">End</th></tr></thead>
+          <tbody>
+            <% shifts.forEach(function(s){ %>
+              <tr class="border-t border-gray-50"><td class="px-3 py-1"><%= s.start_date %> <%= s.start_time %></td><td class="px-3 py-1"><%= s.end_date %> <%= s.end_time %></td></tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <p class="text-[11px] text-gray-400 mt-1">These <%= shifts.length %> shifts will be saved underneath; the dashboard and detail page show the summarised range.</p>
+    <% } else { %>
+      <p class="text-sm text-amber-600">No shifts could be read — set the From/To range above manually.</p>
+    <% } %>
+  </div>
+
+  <% if (isRol) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-2">Conditions (<%= conditions.length %>)</h2>
+    <p class="text-[11px] text-gray-400 mb-2">One per line. Lines starting with <span class="font-mono">!</span> show as red dashboard/site alerts — we pre-flagged contact, late-start, no-works and long-weekend conditions.</p>
+    <textarea name="conditions" rows="10" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"><%= condText %></textarea>
+  </div>
+  <% } %>
+
+  <div class="flex items-center gap-3">
+    <button type="submit" class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition">Confirm &amp; Save</button>
+    <a href="/plans/<%= plan.id %>" class="px-6 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition">Cancel</a>
+  </div>
+</form>

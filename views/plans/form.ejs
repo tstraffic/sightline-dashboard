@@ -59,16 +59,21 @@
       </div>
       <div class="sm:col-span-2">
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Plan Type(s)</label>
-        <div class="flex flex-wrap gap-4">
-          <% ['TGS','TCP','TMP','ROL'].forEach(function(type) { %>
+        <div class="flex flex-wrap gap-x-5 gap-y-2">
+          <% ['TGS','TCP','TMP','ROL','Council Application','CTMP','Permit'].forEach(function(type) { %>
             <label class="flex items-center gap-2 cursor-pointer">
-              <input type="checkbox" name="plan_types" value="<%= type %>"
+              <input type="checkbox" name="plan_types" value="<%= type %>" data-plan-type
                 <%= selectedTypes.includes(type) ? 'checked' : '' %>
                 class="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-brand-500 focus:ring-offset-0">
               <span class="text-sm font-medium text-gray-600"><%= type %></span>
             </label>
           <% }) %>
         </div>
+      </div>
+      <div class="sm:col-span-2" id="council_plan_type_wrap" style="display:none;">
+        <label for="council_plan_type" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Type of Council Plan</label>
+        <input type="text" id="council_plan_type" name="council_plan_type" value="<%= isEdit && plan.council_plan_type ? plan.council_plan_type : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="Free text — e.g. Works Zone, Road Opening Permit...">
       </div>
       <div>
         <label for="designer" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Designer</label>
@@ -125,18 +130,23 @@
     <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Dates, Documents & Notes</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <div>
-        <label for="client_required_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Required Date</label>
+        <label for="client_required_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Requested Date <span class="text-red-500">*</span></label>
         <input type="date" id="client_required_date" name="client_required_date" value="<%= isEdit && plan.client_required_date ? new Date(plan.client_required_date).toISOString().split('T')[0] : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label for="submitted_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Submission Date <span class="text-red-500">*</span></label>
+        <input type="date" id="submitted_date" name="submitted_date" value="<%= isEdit && plan.submitted_date ? new Date(plan.submitted_date).toISOString().split('T')[0] : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label for="job_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Job Date <span id="job_date_req" class="text-red-500" style="display:none;">*</span></label>
+        <input type="date" id="job_date" name="job_date" value="<%= isEdit && plan.job_date ? new Date(plan.job_date).toISOString().split('T')[0] : '' %>"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
       <div>
         <label for="works_expected_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Works Expected Date</label>
         <input type="date" id="works_expected_date" name="works_expected_date" value="<%= isEdit && plan.works_expected_date ? new Date(plan.works_expected_date).toISOString().split('T')[0] : '' %>"
-          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-      </div>
-      <div>
-        <label for="submitted_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Submitted Date</label>
-        <input type="date" id="submitted_date" name="submitted_date" value="<%= isEdit && plan.submitted_date ? new Date(plan.submitted_date).toISOString().split('T')[0] : '' %>"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
       <div>
@@ -213,4 +223,19 @@
       addressDisplay.textContent = jobAddresses[this.value] || 'Select a job above';
     });
   }
+
+  // Reveal "Type of Council Plan" + the Job Date requirement marker based on
+  // selected plan types. Server-side validation in routes/plans.js is the
+  // source of truth; this is just guidance.
+  const typeBoxes = document.querySelectorAll('input[data-plan-type]');
+  const councilWrap = document.getElementById('council_plan_type_wrap');
+  const jobDateReq = document.getElementById('job_date_req');
+  function syncTypeUI() {
+    const checked = Array.from(typeBoxes).filter(b => b.checked).map(b => b.value);
+    if (councilWrap) councilWrap.style.display = checked.includes('Council Application') ? '' : 'none';
+    const strict = checked.includes('Council Application') || checked.includes('ROL');
+    if (jobDateReq) jobDateReq.style.display = strict ? '' : 'none';
+  }
+  typeBoxes.forEach(b => b.addEventListener('change', syncTypeUI));
+  syncTypeUI();
 </script>

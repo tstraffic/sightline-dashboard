@@ -11343,6 +11343,255 @@ function runMigrations(db) {
     }
   }
 
+// =============================================
+  // Migration 241: Plans Module — unlock plan types + Council/Job dates
+  //
+  // The original traffic_plans.plan_type column is locked by
+  // CHECK(plan_type IN ('TGS','TCP','TMP')), which blocks the real
+  // council/ROL workflow (Council Application, ROL, CTMP, Permit). SQLite
+  // can't drop a CHECK in place, so rebuild the table without it (same
+  // 12-step idiom as migration 142). Also add council_plan_type (free-text
+  // "Type of Council Plan") + job_date, and register the new plan types in
+  // app_settings. Every other column is preserved verbatim.
+  // =============================================
+  if (!isMigrationApplied.get(241)) {
+    try {
+      const sqlRow = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='traffic_plans'").get();
+      const hasCheck = sqlRow && /CHECK\(plan_type IN/i.test(sqlRow.sql);
+      if (hasCheck) {
+        db.pragma('foreign_keys = OFF');
+        db.exec(`
+          CREATE TABLE traffic_plans_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+            plan_number TEXT UNIQUE NOT NULL,
+            plan_type TEXT NOT NULL DEFAULT '',
+            designer TEXT DEFAULT '',
+            rol_required INTEGER DEFAULT 0,
+            rol_submitted INTEGER DEFAULT 0,
+            rol_approved INTEGER DEFAULT 0,
+            council TEXT DEFAULT '',
+            tfnsw TEXT DEFAULT '',
+            submitted_date DATE,
+            approval_date DATE,
+            approved_date DATE,
+            expiry_date DATE,
+            status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','submitted','under_review','approved','rejected','expired')),
+            file_link TEXT DEFAULT '',
+            notes TEXT DEFAULT '',
+            created_by_id INTEGER REFERENCES users(id),
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            plan_types TEXT DEFAULT '',
+            client_required_date DATE,
+            works_expected_date DATE,
+            file_path TEXT DEFAULT '',
+            file_original_name TEXT DEFAULT '',
+            is_final INTEGER DEFAULT 0,
+            marked_final_at DATETIME,
+            marked_final_by INTEGER REFERENCES users(id),
+            current_revision_label TEXT DEFAULT 'Rev A'
+          );
+        `);
+        db.exec(`
+          INSERT INTO traffic_plans_new
+            (id, job_id, plan_number, plan_type, designer, rol_required, rol_submitted, rol_approved,
+             council, tfnsw, submitted_date, approval_date, approved_date, expiry_date, status,
+             file_link, notes, created_by_id, created_at, updated_at, plan_types, client_required_date,
+             works_expected_date, file_path, file_original_name, is_final, marked_final_at, marked_final_by,
+             current_revision_label)
+          SELECT
+             id, job_id, plan_number, plan_type, designer, rol_required, rol_submitted, rol_approved,
+             council, tfnsw, submitted_date, approval_date, approved_date, expiry_date, status,
+             file_link, notes, created_by_id, created_at, updated_at, plan_types, client_required_date,
+             works_expected_date, file_path, file_original_name, is_final, marked_final_at, marked_final_by,
+             current_revision_label
+          FROM traffic_plans;
+        `);
+        db.exec('DROP TABLE traffic_plans;');
+        db.exec('ALTER TABLE traffic_plans_new RENAME TO traffic_plans;');
+        db.exec(`
+          CREATE INDEX IF NOT EXISTS idx_traffic_plans_job ON traffic_plans(job_id);
+          CREATE INDEX IF NOT EXISTS idx_traffic_plans_status ON traffic_plans(status);
+          CREATE INDEX IF NOT EXISTS idx_traffic_plans_type ON traffic_plans(plan_type);
+          CREATE INDEX IF NOT EXISTS idx_traffic_plans_expiry ON traffic_plans(expiry_date);
+        `);
+        db.pragma('foreign_keys = ON');
+        console.log('Migration 241: traffic_plans rebuilt without plan_type CHECK');
+      }
+      // New columns — idempotent (no-op if a rebuilt table already has them)
+      try { db.exec("ALTER TABLE traffic_plans ADD COLUMN council_plan_type TEXT DEFAULT ''"); } catch (e) { /* exists */ }
+      try { db.exec("ALTER TABLE traffic_plans ADD COLUMN job_date DATE"); } catch (e) { /* exists */ }
+
+      // Register new plan types (INSERT OR IGNORE keeps existing rows intact)
+      const insType = db.prepare("INSERT OR IGNORE INTO app_settings (category, key, label, display_order, is_active, color) VALUES ('plan_type', ?, ?, ?, 1, ?)");
+      [['Council Application', 'Council Application', 10, 'indigo'],
+       ['ROL', 'Road Occupancy Licence (ROL)', 11, 'blue'],
+       ['CTMP', 'Construction TMP (CTMP)', 12, 'purple'],
+       ['Permit', 'Permit', 13, 'amber']].forEach(([k, l, o, c]) => { try { insType.run(k, l, o, c); } catch (e) {} });
+
+      recordMigration.run(241, 'Plans: unlock plan_type CHECK + council_plan_type/job_date + new types');
+      console.log('Migration 241 applied');
+    } catch (e) {
+      console.error('Migration 241 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 242: plan_fees — multiple fees per plan (council permits),
+  // each with a description, amount and an optional receipt attachment.
+  // =============================================
+  if (!isMigrationApplied.get(242)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS plan_fees (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_id INTEGER NOT NULL REFERENCES traffic_plans(id) ON DELETE CASCADE,
+          description TEXT DEFAULT '',
+          amount REAL DEFAULT 0,
+          receipt_file_path TEXT DEFAULT '',
+          receipt_original_name TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_plan_fees_plan ON plan_fees(plan_id);
+      `);
+      recordMigration.run(242, 'Plans: plan_fees (council permit fees w/ receipts)');
+      console.log('Migration 242 applied');
+    } catch (e) {
+      console.error('Migration 242 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 243: plan_extensions — extensions on ROL / Council
+  // Application records (extend validity, keep link to the original plan).
+  // =============================================
+  if (!isMigrationApplied.get(243)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS plan_extensions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_id INTEGER NOT NULL REFERENCES traffic_plans(id) ON DELETE CASCADE,
+          label TEXT DEFAULT '',
+          extended_to DATE,
+          reason TEXT DEFAULT '',
+          file_path TEXT DEFAULT '',
+          file_original_name TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_plan_extensions_plan ON plan_extensions(plan_id);
+      `);
+      recordMigration.run(243, 'Plans: plan_extensions (ROL/Council extensions)');
+      console.log('Migration 243 applied');
+    } catch (e) {
+      console.error('Migration 243 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 244: CTMP as its own linked entity. A CTMP belongs to a
+  // parent traffic_plan (and its job) but tracks its own version history
+  // and per-version QA status, surfaced as a dashboard chip
+  // (e.g. "Rev B - pending QA").
+  // =============================================
+  if (!isMigrationApplied.get(244)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ctmps (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_id INTEGER REFERENCES traffic_plans(id) ON DELETE CASCADE,
+          job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE,
+          ctmp_number TEXT DEFAULT '',
+          title TEXT DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'draft',
+          qa_status TEXT NOT NULL DEFAULT 'pending',
+          current_revision_label TEXT DEFAULT 'Draft',
+          designer TEXT DEFAULT '',
+          file_path TEXT DEFAULT '',
+          file_original_name TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_ctmps_plan ON ctmps(plan_id);
+        CREATE INDEX IF NOT EXISTS idx_ctmps_job ON ctmps(job_id);
+
+        CREATE TABLE IF NOT EXISTS ctmp_revisions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          ctmp_id INTEGER NOT NULL REFERENCES ctmps(id) ON DELETE CASCADE,
+          revision_label TEXT NOT NULL,
+          file_path TEXT DEFAULT '',
+          file_original_name TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          qa_status TEXT DEFAULT 'pending',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_ctmp_revisions_ctmp ON ctmp_revisions(ctmp_id);
+      `);
+      recordMigration.run(244, 'Plans: ctmps + ctmp_revisions (CTMP as linked entity)');
+      console.log('Migration 244 applied');
+    } catch (e) {
+      console.error('Migration 244 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 245: ROL two-stage workflow. Stage 1 (ROLA application) and
+  // Stage 2 (issued ROL) data lives on traffic_plans; the actual approved
+  // shifts (which contain gaps) go in rol_shifts so we can store every row
+  // but display a summarised range; surfaced special conditions go in
+  // rol_conditions (is_alert flags ones the team must see before site).
+  // =============================================
+  if (!isMigrationApplied.get(245)) {
+    try {
+      const rolCols = [
+        ['rola_application_number', "TEXT DEFAULT ''"],
+        ['rola_file_path', "TEXT DEFAULT ''"],
+        ['rola_file_original_name', "TEXT DEFAULT ''"],
+        ['rol_actual_number', "TEXT DEFAULT ''"],
+        ['rol_file_path', "TEXT DEFAULT ''"],
+        ['rol_file_original_name', "TEXT DEFAULT ''"],
+        ['rol_summary_from', 'DATE'],
+        ['rol_summary_to', 'DATE'],
+        ['rol_time_window', "TEXT DEFAULT ''"],
+        ['rol_stage', "TEXT DEFAULT 'none'"],
+      ];
+      rolCols.forEach(([c, t]) => { try { db.exec(`ALTER TABLE traffic_plans ADD COLUMN ${c} ${t}`); } catch (e) { /* exists */ } });
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS rol_shifts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_id INTEGER NOT NULL REFERENCES traffic_plans(id) ON DELETE CASCADE,
+          source TEXT NOT NULL DEFAULT 'rol',
+          start_date DATE,
+          start_time TEXT DEFAULT '',
+          end_date DATE,
+          end_time TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_rol_shifts_plan ON rol_shifts(plan_id);
+
+        CREATE TABLE IF NOT EXISTS rol_conditions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_id INTEGER NOT NULL REFERENCES traffic_plans(id) ON DELETE CASCADE,
+          condition_no INTEGER,
+          text TEXT DEFAULT '',
+          is_alert INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_rol_conditions_plan ON rol_conditions(plan_id);
+      `);
+      recordMigration.run(245, 'Plans: ROL two-stage fields + rol_shifts + rol_conditions');
+      console.log('Migration 245 applied');
+    } catch (e) {
+      console.error('Migration 245 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
