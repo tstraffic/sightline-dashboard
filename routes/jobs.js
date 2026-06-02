@@ -678,7 +678,9 @@ router.post('/:id', (req, res) => {
     else req.flash('success', 'Job updated successfully.');
     res.redirect(`/jobs/${req.params.id}`);
   } catch (err) {
+    console.error('[Jobs] UPDATE ERROR:', err && err.stack || err);
     req.flash('error', 'Failed to update job: ' + err.message);
+    // Stay on edit so the user can retry without losing their other changes.
     res.redirect(`/jobs/${req.params.id}/edit`);
   }
 });
