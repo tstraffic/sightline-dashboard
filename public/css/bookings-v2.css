@@ -1340,3 +1340,165 @@ body.dark-glass .bk2-edit-placeholder {
   color: rgba(255,255,255,0.55);
 }
 body.dark-glass .bk2-edit-placeholder h3 { color: rgba(255,255,255,0.92); }
+
+/* ===============================================================
+   STATUS PILL PALETTE + LEGIBILITY PASS — slide-over "New Booking"
+   ---------------------------------------------------------------
+   The status row at the top of the editor previously rendered every
+   pill in the same neutral gray, so the planner couldn't tell at a
+   glance which lifecycle phase was selected. Each pill now carries
+   its own colour — tinted in inactive state, solid fill when active
+   — and works on both light + dark themes. Also tightens label /
+   section heading contrast so the form reads without straining.
+   =============================================================== */
+
+/* Per-state colour palette (drives both inactive tint + active fill). */
+.bk2-edit-statuspill.bk2-status--client_booking { --pill-c: #8B5CF6; }
+.bk2-edit-statuspill.bk2-status--unconfirmed    { --pill-c: #64748B; }
+.bk2-edit-statuspill.bk2-status--confirmed      { --pill-c: #3B82F6; }
+.bk2-edit-statuspill.bk2-status--locked         { --pill-c: #1E40AF; }
+.bk2-edit-statuspill.bk2-status--conflict       { --pill-c: #F59E0B; }
+.bk2-edit-statuspill.bk2-status--green_to_go    { --pill-c: #10B981; }
+.bk2-edit-statuspill.bk2-status--in_progress    { --pill-c: #14B8A6; }
+.bk2-edit-statuspill.bk2-status--complete       { --pill-c: #0EA5E9; }
+.bk2-edit-statuspill.bk2-status--finalised      { --pill-c: #6366F1; }
+.bk2-edit-statuspill.bk2-status--cancelled,
+.bk2-edit-statuspill.bk2-status--cancel         { --pill-c: #F43F5E; }
+.bk2-edit-statuspill.bk2-status--late_cancelled,
+.bk2-edit-statuspill.bk2-status--late_cancellation { --pill-c: #DC2626; }
+
+/* Status row — lift contrast so pills don't disappear into the bar. */
+.bk2-edit-statusrow {
+  background: #F1F5F9;
+  border-bottom-color: #E2E8F0;
+  gap: 6px;
+}
+
+/* Inactive pill — tinted background in lifecycle colour, colored icon.
+   Pill stays its identity colour even when not selected, so the
+   planner builds spatial memory of where each phase lives. */
+.bk2-edit-statuspill {
+  background: color-mix(in srgb, var(--pill-c, #6B7280) 12%, #fff 88%);
+  color: color-mix(in srgb, var(--pill-c, #6B7280) 75%, #1F2937 25%);
+  border: 1px solid color-mix(in srgb, var(--pill-c, #6B7280) 22%, transparent);
+  transition: background 120ms ease, color 120ms ease, transform 60ms ease, box-shadow 120ms ease;
+}
+.bk2-edit-statuspill-icon { color: var(--pill-c, #6B7280); opacity: 1; }
+
+.bk2-edit-statuspill:hover {
+  background: color-mix(in srgb, var(--pill-c, #6B7280) 20%, #fff 80%);
+  color: color-mix(in srgb, var(--pill-c, #6B7280) 85%, #000 15%);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px color-mix(in srgb, var(--pill-c, #6B7280) 22%, transparent);
+}
+
+/* Active pill — solid lifecycle colour, white text, glow halo. The
+   broad .is-active rule overrides the legacy purple/emerald/grey
+   single-colour rules above by being more specific (uses --pill-c). */
+.bk2-edit-statuspill.is-active,
+.bk2-edit-statuspill.is-active.bk2-status--client_booking,
+.bk2-edit-statuspill.is-active.bk2-status--unconfirmed,
+.bk2-edit-statuspill.is-active.bk2-status--confirmed,
+.bk2-edit-statuspill.is-active.bk2-status--locked,
+.bk2-edit-statuspill.is-active.bk2-status--conflict,
+.bk2-edit-statuspill.is-active.bk2-status--green_to_go,
+.bk2-edit-statuspill.is-active.bk2-status--in_progress,
+.bk2-edit-statuspill.is-active.bk2-status--complete,
+.bk2-edit-statuspill.is-active.bk2-status--finalised,
+.bk2-edit-statuspill.is-active.bk2-status--cancelled,
+.bk2-edit-statuspill.is-active.bk2-status--cancel,
+.bk2-edit-statuspill.is-active.bk2-status--late_cancelled,
+.bk2-edit-statuspill.is-active.bk2-status--late_cancellation {
+  background: var(--pill-c, #2B7FFF);
+  color: #fff;
+  border-color: color-mix(in srgb, var(--pill-c, #2B7FFF) 75%, #000 25%);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--pill-c, #2B7FFF) 45%, transparent),
+              0 0 0 3px color-mix(in srgb, var(--pill-c, #2B7FFF) 18%, transparent);
+}
+.bk2-edit-statuspill.is-active .bk2-edit-statuspill-icon { color: #fff; }
+
+/* Section labels — bump to fully readable grey so non-required field
+   labels (Supplier / Location Context / etc.) don't fade into the card. */
+.bk2-create-lbl { color: #334155; font-weight: 600; }
+.bk2-create-head { color: #C2410C; font-size: 12.5px; letter-spacing: 0.05em; }
+.bk2-create-card {
+  background: #fff;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.02);
+}
+
+/* Editor surfaces — slightly cooler background so cards visually
+   separate from the body. */
+.bk2-editor { background: #F1F5F9; }
+.bk2-edit-body { background: #F1F5F9; }
+
+/* Bulk-action toolbar buttons (board page) — were rendered with
+   transparent backgrounds + low-contrast text in light mode, so
+   "Set supplier / Send / Lock many" sat invisible on white. */
+.bk2-bulkbtn {
+  background: #fff;
+  color: #334155;
+  border-color: #E2E8F0;
+  box-shadow: 0 1px 0 rgba(15,23,42,0.04);
+}
+.bk2-bulkbtn:hover:not(:disabled) {
+  background: #F8FAFC; color: #0F172A; border-color: #CBD5E1;
+}
+
+/* ────────────────────────────────────────────────────────────────
+   DARK MODE — pill row + editor surfaces. Inactive pills sit on a
+   dark base with a tinted bg in lifecycle colour; active pill fills
+   the same way as light mode.
+   ──────────────────────────────────────────────────────────────── */
+body.dark-glass .bk2-editor      { background: #0F1115; color: #F5F5F7; }
+body.dark-glass .bk2-edit-body   { background: #0F1115; }
+body.dark-glass .bk2-edit-statusrow {
+  background: rgba(255,255,255,0.04);
+  border-bottom-color: rgba(255,255,255,0.06);
+}
+
+body.dark-glass .bk2-edit-statuspill {
+  background: color-mix(in srgb, var(--pill-c, #94A3B8) 18%, rgba(15,23,42,0.55));
+  color: color-mix(in srgb, var(--pill-c, #94A3B8) 70%, #fff 30%);
+  border: 1px solid color-mix(in srgb, var(--pill-c, #94A3B8) 35%, transparent);
+}
+body.dark-glass .bk2-edit-statuspill-icon { color: color-mix(in srgb, var(--pill-c, #94A3B8) 80%, #fff 20%); opacity: 1; }
+body.dark-glass .bk2-edit-statuspill:hover {
+  background: color-mix(in srgb, var(--pill-c, #94A3B8) 28%, rgba(15,23,42,0.4));
+  color: #fff;
+  box-shadow: 0 2px 8px color-mix(in srgb, var(--pill-c, #94A3B8) 35%, transparent);
+}
+body.dark-glass .bk2-edit-statuspill.is-active {
+  background: var(--pill-c, #2B7FFF);
+  color: #fff;
+  border-color: color-mix(in srgb, var(--pill-c, #2B7FFF) 60%, #000 40%);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--pill-c, #2B7FFF) 55%, transparent),
+              0 0 0 3px color-mix(in srgb, var(--pill-c, #2B7FFF) 28%, transparent);
+}
+body.dark-glass .bk2-edit-statuspill.is-active .bk2-edit-statuspill-icon { color: #fff; }
+
+/* Dark-mode labels — were too dim (rgba 0.60); lift to readable. */
+body.dark-glass .bk2-create-lbl { color: rgba(255,255,255,0.78); font-weight: 600; }
+body.dark-glass .bk2-create-head { color: #FB923C; font-weight: 700; }
+body.dark-glass .bk2-create-card {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+}
+
+/* Dark-mode bulk buttons — give them readable text on dark */
+body.dark-glass .bk2-bulkbtn {
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.88);
+  border-color: rgba(255,255,255,0.12);
+}
+body.dark-glass .bk2-bulkbtn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.10); color: #fff;
+}
+
+/* Filter chips bar — was washed out on light mode. */
+.bk2-fs-chip, .bk2-fs-toolbtn {
+  background: #fff; color: #334155; border: 1px solid #E2E8F0;
+}
+body.dark-glass .bk2-fs-chip, body.dark-glass .bk2-fs-toolbtn {
+  background: rgba(255,255,255,0.04); color: rgba(255,255,255,0.85); border-color: rgba(255,255,255,0.10);
+}
