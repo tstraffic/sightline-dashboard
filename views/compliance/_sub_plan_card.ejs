@@ -207,6 +207,22 @@
             class="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
 
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Job date
+            <% if (sub.item_type === 'council_permit' || sub.item_type === 'rol' || sub.item_type === 'road_occupancy') { %><span class="text-rose-500">*</span><% } %>
+          </label>
+          <input type="date" name="job_date" value="<%= sub.job_date || '' %>"
+            class="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+        <% if (sub.item_type === 'council_permit') { %>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Type of Council Plan</label>
+          <input type="text" name="council_plan_type" value="<%= sub.council_plan_type || '' %>"
+            placeholder="e.g. Road Opening Permit"
+            class="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        </div>
+        <% } %>
+
         <div class="sm:col-span-2">
           <label class="block text-xs font-medium text-gray-700 mb-1">Comments</label>
           <textarea name="notes" rows="2"
@@ -254,5 +270,134 @@
         </div>
       </form>
     </details>
+  <% } %>
+
+  <%
+    // ── Plans Module enhancements (council/ROL/CTMP) ──
+    const cFees = (typeof fees !== 'undefined' && fees) ? fees : [];
+    const cExt = (typeof extensions !== 'undefined' && extensions) ? extensions : [];
+    const cShifts = (typeof rolShifts !== 'undefined' && rolShifts) ? rolShifts : [];
+    const cConds = (typeof rolConditions !== 'undefined' && rolConditions) ? rolConditions : [];
+    const isCouncilType = sub.item_type === 'council_permit';
+    const isCtmpType = sub.item_type === 'tmp_approval';
+    const isRolType = sub.item_type === 'rol' || sub.item_type === 'road_occupancy';
+    const feesTotal = cFees.reduce((s, f) => s + (parseFloat(f.amount) || 0), 0);
+    const condAlerts = cConds.filter(c => c.is_alert);
+    const qaCol = { pending: 'bg-gray-100 text-gray-600', in_qa: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700' };
+  %>
+
+  <!-- ROL condition alerts -->
+  <% if (condAlerts.length) { %>
+    <div class="mt-3 bg-rose-50 ring-1 ring-rose-200 rounded-md p-3">
+      <p class="text-[10px] font-bold uppercase tracking-wide text-rose-700 mb-1.5">Conditions — read before site</p>
+      <ul class="space-y-1">
+        <% condAlerts.forEach(c => { %><li class="text-xs text-rose-800 flex gap-1.5"><span class="font-bold">!</span><span><%= c.text %></span></li><% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <!-- CTMP QA status -->
+  <% if (isCtmpType) { %>
+    <div class="mt-3 flex items-center gap-2 text-xs">
+      <span class="text-[10px] font-bold uppercase tracking-wide text-gray-500">CTMP QA</span>
+      <% if (sub.qa_status) { %><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium <%= qaCol[sub.qa_status] || qaCol.pending %>"><%= (sub.qa_status || 'pending').replace('_',' ') %></span><% } %>
+      <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/qa" class="inline-flex items-center gap-1" onsubmit="return window.__subPlanAjaxSave ? window.__subPlanAjaxSave(event, this) : true;" data-ajax-save>
+        <%- include('../partials/csrf') %>
+        <select name="qa_status" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()" class="px-2 py-1 text-xs bg-white border border-gray-300 rounded-md">
+          <% ['pending','in_qa','approved'].forEach(s => { %><option value="<%= s %>" <%= sub.qa_status === s ? 'selected' : '' %>><%= s.replace('_',' ') %></option><% }) %>
+        </select>
+      </form>
+    </div>
+  <% } %>
+
+  <!-- Fees (itemised, with receipts) -->
+  <details class="mt-3 group">
+    <summary class="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 inline-flex items-center list-none">
+      <svg class="w-3.5 h-3.5 mr-1 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      Fees<% if (cFees.length) { %> · <%= cFees.length %> ($<%= feesTotal.toFixed(2) %>)<% } %>
+    </summary>
+    <div class="mt-2 p-3 bg-gray-50 rounded-md space-y-2">
+      <% cFees.forEach(f => { %>
+        <div class="flex items-center justify-between gap-2 text-xs">
+          <span class="text-gray-800"><%= f.description || '—' %> · <span class="font-medium">$<%= (parseFloat(f.amount)||0).toFixed(2) %></span><% if (f.receipt_file_path) { %> · <a href="<%= f.receipt_file_path %>" target="_blank" class="text-brand-600 hover:underline"><%= f.receipt_original_name || 'receipt' %></a><% } %></span>
+          <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/fees/<%= f.id %>/delete" onsubmit="return confirm('Delete this fee?')"><%- include('../partials/csrf') %><button class="text-gray-400 hover:text-rose-600">✕</button></form>
+        </div>
+      <% }) %>
+      <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/fees" enctype="multipart/form-data" class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end pt-1">
+        <%- include('../partials/csrf') %>
+        <input type="text" name="description" placeholder="Description" class="sm:col-span-2 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md">
+        <input type="number" step="0.01" min="0" name="amount" placeholder="Amount ($)" class="px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md">
+        <input type="file" name="receipt" accept=".pdf,.jpg,.jpeg,.png,.webp" class="text-[11px]">
+        <div class="sm:col-span-4"><button class="px-3 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-md">Add fee</button></div>
+      </form>
+    </div>
+  </details>
+
+  <!-- Extensions (ROL / Council) -->
+  <% if (isRolType || isCouncilType) { %>
+  <details class="mt-2 group">
+    <summary class="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 inline-flex items-center list-none">
+      <svg class="w-3.5 h-3.5 mr-1 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      Extensions<% if (cExt.length) { %> · <%= cExt.length %><% } %>
+    </summary>
+    <div class="mt-2 p-3 bg-gray-50 rounded-md space-y-2">
+      <% cExt.forEach(e => { %>
+        <div class="flex items-center justify-between gap-2 text-xs">
+          <span class="text-gray-800"><%= e.label || 'Extension' %><%= e.extended_to ? ' → ' + e.extended_to : '' %><% if (e.reason) { %> <span class="text-gray-500">(<%= e.reason %>)</span><% } %><% if (e.file_path) { %> · <a href="<%= e.file_path %>" target="_blank" class="text-brand-600 hover:underline"><%= e.file_original_name || 'file' %></a><% } %></span>
+          <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/extensions/<%= e.id %>/delete" onsubmit="return confirm('Delete this extension?')"><%- include('../partials/csrf') %><button class="text-gray-400 hover:text-rose-600">✕</button></form>
+        </div>
+      <% }) %>
+      <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/extensions" enctype="multipart/form-data" class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end pt-1">
+        <%- include('../partials/csrf') %>
+        <input type="text" name="label" placeholder="Label (e.g. Extension 1)" class="px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md">
+        <input type="date" name="extended_to" class="px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md">
+        <input type="text" name="reason" placeholder="Reason" class="px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md">
+        <input type="file" name="extension_file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="text-[11px]">
+        <div class="sm:col-span-4"><button class="px-3 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-md">Add extension</button></div>
+      </form>
+    </div>
+  </details>
+  <% } %>
+
+  <!-- ROL two-stage + PDF auto-extraction -->
+  <% if (isRolType) { %>
+  <details class="mt-2 group">
+    <summary class="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 inline-flex items-center list-none">
+      <svg class="w-3.5 h-3.5 mr-1 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      ROL workflow<% if (sub.rol_stage && sub.rol_stage !== 'none') { %> · <%= sub.rol_stage %><% } %><% if (cShifts.length) { %> · <%= cShifts.length %> shifts<% } %>
+    </summary>
+    <div class="mt-2 p-3 bg-gray-50 rounded-md space-y-3">
+      <div class="bg-brand-50 ring-1 ring-brand-100 rounded p-2">
+        <p class="text-[10px] font-bold uppercase tracking-wide text-brand-700 mb-1.5">Auto-extract from PDF</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/rola/parse" enctype="multipart/form-data" class="flex items-center gap-1.5">
+            <%- include('../partials/csrf') %>
+            <input type="file" name="rola_file" accept=".pdf" required class="text-[11px]">
+            <button class="px-2.5 py-1 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-md whitespace-nowrap">Read ROLA</button>
+          </form>
+          <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/rol/parse" enctype="multipart/form-data" class="flex items-center gap-1.5">
+            <%- include('../partials/csrf') %>
+            <input type="file" name="rol_file" accept=".pdf" required class="text-[11px]">
+            <button class="px-2.5 py-1 text-xs font-medium text-white bg-emerald-600 hover:bg-emerald-700 rounded-md whitespace-nowrap">Read issued ROL</button>
+          </form>
+        </div>
+      </div>
+      <% if (sub.rola_application_number || sub.rol_actual_number || sub.rol_summary_from) { %>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+          <% if (sub.rola_application_number) { %><div><span class="text-gray-400">ROLA #</span> <%= sub.rola_application_number %></div><% } %>
+          <% if (sub.rol_actual_number) { %><div><span class="text-gray-400">ROL #</span> <%= sub.rol_actual_number %></div><% } %>
+          <% if (sub.rol_summary_from) { %><div><span class="text-gray-400">Range</span> <%= sub.rol_summary_from %> → <%= sub.rol_summary_to || '' %></div><% } %>
+          <% if (sub.rol_time_window) { %><div><span class="text-gray-400">Times</span> <%= sub.rol_time_window %></div><% } %>
+        </div>
+      <% } %>
+      <% if (cShifts.length) { %>
+        <div class="max-h-40 overflow-y-auto border border-gray-200 rounded bg-white">
+          <table class="w-full text-[11px]"><tbody>
+            <% cShifts.forEach(s => { %><tr class="border-b border-gray-50"><td class="px-2 py-0.5"><%= s.start_date %> <%= s.start_time %></td><td class="px-2 py-0.5 text-gray-400">→</td><td class="px-2 py-0.5"><%= s.end_date %> <%= s.end_time %></td></tr><% }) %>
+          </tbody></table>
+        </div>
+      <% } %>
+    </div>
+  </details>
   <% } %>
 </div>

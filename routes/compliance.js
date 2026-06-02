@@ -545,18 +545,22 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
     const councilFeePaid = (req.body.council_fee_paid === '1' || req.body.council_fee_paid === 1 || req.body.council_fee_paid === true || req.body.council_fee_paid === 'on') ? 1 : 0;
     const councilFeeAmount = parseFloat(req.body.council_fee_amount) || 0;
 
+    const jobDate = req.body.job_date || sub.job_date || null;
+    const councilPlanType = (req.body.council_plan_type !== undefined) ? req.body.council_plan_type : (sub.council_plan_type || '');
     db.prepare(`
       UPDATE compliance
       SET description = ?, status = 'submitted', submitted_date = ?, expiry_date = ?, notes = ?,
           hours_spent = ?,
           charge_client = ?, charge_amount = ?,
           council_fee_paid = ?, council_fee_amount = ?,
+          job_date = ?, council_plan_type = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(desc, submittedDate, expiryDate, notes,
            hoursSpent,
            chargeClient, chargeAmount,
            councilFeePaid, councilFeeAmount,
+           jobDate, councilPlanType,
            sub.id);
 
     planStatus.syncParentStatus(db, sub.parent_id);
@@ -647,6 +651,148 @@ router.post('/sub-plans/:subId/delete', (req, res) => {
   if (req.headers.accept && req.headers.accept.includes('json')) return res.json({ success: true });
   req.flash('success', `Sub-plan ${sub.reference_number} removed.`);
   res.redirect('/compliance/' + parentId + '/edit');
+});
+
+// ─── Plans Module enhancements on the compliance sub-plan ────────────────
+const wantsJson = (req) => !!(req.headers.accept && req.headers.accept.includes('json'));
+const subRel = (sub, f) => '/data/uploads/compliance/' + sub.id + '/' + f.filename;
+const unlinkRel = (p) => { if (p) { try { fs.unlinkSync(path.join(__dirname, '..', String(p).replace(/^\//, ''))); } catch (e) {} } };
+
+// Inline save: Job Date + free-text Type of Council Plan (spec §2/§3).
+router.post('/sub-plans/:subId/details', (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  db.prepare("UPDATE compliance SET job_date = ?, council_plan_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(req.body.job_date || null, req.body.council_plan_type || '', sub.id);
+  if (wantsJson(req)) return res.json({ success: true });
+  req.flash('success', 'Details saved.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// Itemised fees with receipts (spec §5).
+router.post('/sub-plans/:subId/fees', subPlanUpload.single('receipt'), (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  db.prepare("INSERT INTO compliance_fees (compliance_id, description, amount, receipt_file_path, receipt_original_name, created_by) VALUES (?,?,?,?,?,?)")
+    .run(sub.id, req.body.description || '', parseFloat(req.body.amount) || 0, req.file ? subRel(sub, req.file) : '', req.file ? req.file.originalname : '', req.session.user.id);
+  req.flash('success', 'Fee added.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+router.post('/sub-plans/:subId/fees/:feeId/delete', (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  const fee = db.prepare('SELECT * FROM compliance_fees WHERE id = ? AND compliance_id = ?').get(req.params.feeId, sub.id);
+  if (fee) { unlinkRel(fee.receipt_file_path); db.prepare('DELETE FROM compliance_fees WHERE id = ?').run(fee.id); }
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// Extension records (spec §4) — ROL / Council.
+router.post('/sub-plans/:subId/extensions', subPlanUpload.single('extension_file'), (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  db.prepare("INSERT INTO compliance_extensions (compliance_id, label, extended_to, reason, file_path, file_original_name, created_by) VALUES (?,?,?,?,?,?,?)")
+    .run(sub.id, req.body.label || '', req.body.extended_to || null, req.body.reason || '', req.file ? subRel(sub, req.file) : '', req.file ? req.file.originalname : '', req.session.user.id);
+  if (sub.item_type === 'rol' || sub.item_type === 'road_occupancy') { try { db.prepare("UPDATE compliance SET extension_required = 1 WHERE id = ?").run(sub.id); } catch (e) {} }
+  autoLogDiary(db, { jobId: sub.job_id, complianceItemId: sub.id, summary: `[${req.session.user.full_name}] Extension added to ${sub.reference_number}${req.body.extended_to ? ' (to ' + req.body.extended_to + ')' : ''}.`, userId: req.session.user.id });
+  req.flash('success', 'Extension added.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+router.post('/sub-plans/:subId/extensions/:extId/delete', (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  const ext = db.prepare('SELECT * FROM compliance_extensions WHERE id = ? AND compliance_id = ?').get(req.params.extId, sub.id);
+  if (ext) { unlinkRel(ext.file_path); db.prepare('DELETE FROM compliance_extensions WHERE id = ?').run(ext.id); }
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// CTMP QA status (spec §6) — set on the (tmp_approval) sub-plan.
+router.post('/sub-plans/:subId/qa', (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  const qa = req.body.qa_status || 'pending';
+  db.prepare("UPDATE compliance SET qa_status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(qa, sub.id);
+  if (wantsJson(req)) return res.json({ success: true });
+  req.flash('success', 'QA status updated.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// Replace this sub-plan's ROL conditions (one per line; leading "!" = alert).
+function replaceComplianceConditions(db, cid, raw) {
+  db.prepare('DELETE FROM compliance_rol_conditions WHERE compliance_id = ?').run(cid);
+  const lines = String(raw || '').split('\n').map(l => l.trim()).filter(Boolean);
+  const ins = db.prepare('INSERT INTO compliance_rol_conditions (compliance_id, condition_no, text, is_alert) VALUES (?,?,?,?)');
+  lines.forEach((line, i) => { const a = line.startsWith('!') ? 1 : 0; ins.run(cid, i + 1, a ? line.slice(1).trim() : line, a); });
+}
+function saveComplianceShifts(db, cid, source, json) {
+  let arr; try { arr = JSON.parse(json || '[]'); } catch (e) { return; }
+  if (!Array.isArray(arr)) return;
+  db.prepare('DELETE FROM compliance_rol_shifts WHERE compliance_id = ? AND source = ?').run(cid, source);
+  const ins = db.prepare('INSERT INTO compliance_rol_shifts (compliance_id, source, start_date, start_time, end_date, end_time) VALUES (?,?,?,?,?,?)');
+  for (const s of arr) ins.run(cid, source, s.start_date || null, s.start_time || '', s.end_date || null, s.end_time || '');
+}
+
+// ROL PDF auto-extraction → review screen (parse-then-confirm, spec §8).
+function parseComplianceRol(stage) {
+  return async (req, res) => {
+    const db = getDb();
+    const sub = getSubPlan(db, req.params.subId);
+    if (!sub) { req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+    if (!req.file) { req.flash('error', 'Choose a PDF to extract.'); return res.redirect('/compliance/' + sub.parent_id + '/edit'); }
+    const filePath = subRel(sub, req.file);
+    try {
+      const { parseRolPdf } = require('../services/rolParser');
+      const parsed = await parseRolPdf(path.join(__dirname, '..', filePath.replace(/^\//, '')), stage);
+      res.render('compliance/rol-review', { title: 'Review extracted ' + stage.toUpperCase(), sub, stage, parsed, filePath, fileOriginalName: req.file.originalname, user: req.session.user });
+    } catch (err) {
+      console.error('[Compliance] ' + stage + ' parse failed:', err.message);
+      req.flash('error', 'Could not read that PDF automatically — enter details manually. (' + err.message + ')');
+      res.redirect('/compliance/' + sub.parent_id + '/edit');
+    }
+  };
+}
+router.post('/sub-plans/:subId/rola/parse', subPlanUpload.single('rola_file'), parseComplianceRol('rola'));
+router.post('/sub-plans/:subId/rol/parse', subPlanUpload.single('rol_file'), parseComplianceRol('rol'));
+
+// ROL Stage 1 — ROLA application
+router.post('/sub-plans/:subId/rola', subPlanUpload.single('rola_file'), (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  const b = req.body;
+  const filePath = req.file ? subRel(sub, req.file) : (b.existing_rola_file_path || sub.rola_file_path || '');
+  const fileName = req.file ? req.file.originalname : (b.existing_rola_file_original_name || sub.rola_file_original_name || '');
+  const stage = sub.rol_stage === 'approved' ? 'approved' : 'applied';
+  db.prepare(`UPDATE compliance SET rola_application_number=?, rola_file_path=?, rola_file_original_name=?,
+      rol_summary_from=COALESCE(?, rol_summary_from), rol_summary_to=COALESCE(?, rol_summary_to),
+      rol_time_window=COALESCE(NULLIF(?, ''), rol_time_window), rol_stage=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .run(b.rola_application_number || '', filePath, fileName, b.rol_summary_from || null, b.rol_summary_to || null, b.rol_time_window || '', stage, sub.id);
+  if (typeof b.shifts_json !== 'undefined') saveComplianceShifts(db, sub.id, 'rola', b.shifts_json);
+  req.flash('success', 'ROLA application saved.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// ROL Stage 2 — issued ROL
+router.post('/sub-plans/:subId/rol', subPlanUpload.single('rol_file'), (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  const b = req.body;
+  const filePath = req.file ? subRel(sub, req.file) : (b.existing_rol_file_path || sub.rol_file_path || '');
+  const fileName = req.file ? req.file.originalname : (b.existing_rol_file_original_name || sub.rol_file_original_name || '');
+  db.prepare(`UPDATE compliance SET rol_actual_number=?, rol_file_path=?, rol_file_original_name=?,
+      rol_summary_from=?, rol_summary_to=?, rol_time_window=?, rol_stage='approved', updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+    .run(b.rol_actual_number || '', filePath, fileName, b.rol_summary_from || null, b.rol_summary_to || null, b.rol_time_window || '', sub.id);
+  if (typeof b.conditions !== 'undefined') replaceComplianceConditions(db, sub.id, b.conditions);
+  if (typeof b.shifts_json !== 'undefined') saveComplianceShifts(db, sub.id, 'rol', b.shifts_json);
+  autoLogDiary(db, { jobId: sub.job_id, complianceItemId: sub.id, summary: `[${req.session.user.full_name}] Issued ROL ${b.rol_actual_number || ''} recorded on ${sub.reference_number}.`, userId: req.session.user.id });
+  req.flash('success', 'Issued ROL saved.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
 });
 
 router.get('/new', (req, res) => {
@@ -951,6 +1097,18 @@ router.get('/:id/edit', (req, res) => {
     } catch (e) { /* schema not migrated yet */ }
   }
 
+  // Per-sub-plan council/ROL data for the card (fees, extensions, ROL
+  // shifts/conditions). Guarded — pre-mig-247 DBs won't have these tables.
+  let subPlanFees = {}, subPlanExtensions = {}, subPlanRolShifts = {}, subPlanRolConditions = {};
+  if (isParent && subPlans.length > 0) {
+    const subIds = subPlans.map(s => s.id);
+    const ph = subIds.map(() => '?').join(',');
+    try { db.prepare(`SELECT * FROM compliance_fees WHERE compliance_id IN (${ph}) ORDER BY created_at`).all(...subIds).forEach(r => (subPlanFees[r.compliance_id] = subPlanFees[r.compliance_id] || []).push(r)); } catch (e) {}
+    try { db.prepare(`SELECT * FROM compliance_extensions WHERE compliance_id IN (${ph}) ORDER BY created_at`).all(...subIds).forEach(r => (subPlanExtensions[r.compliance_id] = subPlanExtensions[r.compliance_id] || []).push(r)); } catch (e) {}
+    try { db.prepare(`SELECT * FROM compliance_rol_shifts WHERE compliance_id IN (${ph}) ORDER BY start_date, start_time`).all(...subIds).forEach(r => (subPlanRolShifts[r.compliance_id] = subPlanRolShifts[r.compliance_id] || []).push(r)); } catch (e) {}
+    try { db.prepare(`SELECT * FROM compliance_rol_conditions WHERE compliance_id IN (${ph}) ORDER BY is_alert DESC, condition_no`).all(...subIds).forEach(r => (subPlanRolConditions[r.compliance_id] = subPlanRolConditions[r.compliance_id] || []).push(r)); } catch (e) {}
+  }
+
   // Tender link (if this plan is rolled up under a tender)
   let tender = null;
   if (item.tender_id) {
@@ -966,7 +1124,7 @@ router.get('/:id/edit', (req, res) => {
     prefillJobId: '', prefillClientId: '', prefillTenderId: '', returnTo,
     documents, linkedTask, revisions, tender,
     isParent, subPlans, subPlanDocs, subPlanTypes: SUB_PLAN_TYPES,
-    raBySubPlan,
+    raBySubPlan, subPlanFees, subPlanExtensions, subPlanRolShifts, subPlanRolConditions,
   });
 });
 
