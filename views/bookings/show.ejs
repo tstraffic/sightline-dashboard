@@ -143,38 +143,144 @@
     </form>
   </div>
 
-  <!-- Status Flow Bar -->
+  <!-- Status Flow Bar — full lifecycle as colour-coded pills. Active
+       phase fills with its lifecycle colour; completed phases are
+       muted but stay readable; future phases sit pale. Clicking any
+       pill posts the status change. -->
   <%
     const flowSteps = [
-      { key: 'unconfirmed', label: 'Unconf.' },
-      { key: 'confirmed', label: 'Confirmed' },
-      { key: 'green_to_go', label: 'GTG' },
-      { key: 'complete', label: 'Complete' },
-      { key: 'finalised', label: 'Finalised' },
+      { key: 'client_booking',    label: 'Client Bk', short: 'CB' },
+      { key: 'unconfirmed',       label: 'Unconf.',   short: 'UC' },
+      { key: 'confirmed',         label: 'Confirmed', short: 'CF' },
+      { key: 'locked',            label: 'Locked',    short: 'LK' },
+      { key: 'green_to_go',       label: 'GTG',       short: 'G' },
+      { key: 'in_progress',       label: 'In Prog.',  short: 'IP' },
+      { key: 'complete',          label: 'Complete',  short: 'CP' },
+      { key: 'finalised',         label: 'Finalised', short: 'F' },
     ];
+    const breakStates = ['cancelled','late_cancellation','on_hold','conflict'];
     const currentIdx = flowSteps.findIndex(s => s.key === b.status);
-    const isCancelled = b.status === 'cancelled' || b.status === 'late_cancellation' || b.status === 'on_hold' || b.status === 'conflict' || b.status === 'locked';
+    const isOnBreak = breakStates.indexOf(b.status) !== -1;
   %>
-  <div class="flex gap-1.5 mt-4 overflow-x-auto pb-1">
+  <div class="bk-flowbar mt-4">
     <% flowSteps.forEach((step, i) => { %>
-      <form method="POST" action="/bookings/<%= b.id %>/status" class="inline">
+      <form method="POST" action="/bookings/<%= b.id %>/status" class="inline-flex">
         <%- include('../partials/csrf') %>
         <input type="hidden" name="status" value="<%= step.key %>">
-        <button type="submit" class="px-3 py-1.5 text-xs font-semibold rounded-lg border whitespace-nowrap transition-all
-          <%= i === currentIdx ? 'bg-brand-600 text-white border-brand-600 shadow-sm' : i < currentIdx && !isCancelled ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-white text-gray-400 border-gray-200 hover:border-gray-300 hover:text-gray-600' %>">
-          <% if (i < currentIdx && !isCancelled) { %>
-            <svg class="w-3 h-3 inline mr-0.5 -mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+        <button type="submit"
+                class="bk-flow-pill bk-flow--<%= step.key %> <%= b.status === step.key ? 'is-active' : '' %> <%= !isOnBreak && currentIdx >= 0 && i < currentIdx ? 'is-done' : '' %>"
+                title="<%= step.label %>">
+          <% if (!isOnBreak && currentIdx >= 0 && i < currentIdx) { %>
+            <svg class="bk-flow-tick" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7"/></svg>
+          <% } else { %>
+            <span class="bk-flow-dot"></span>
           <% } %>
-          <%= step.label %>
+          <span class="bk-flow-label"><%= step.label %></span>
         </button>
       </form>
+      <% if (i < flowSteps.length - 1) { %>
+        <span class="bk-flow-sep" aria-hidden="true">›</span>
+      <% } %>
     <% }); %>
-    <% if (isCancelled) { %>
-      <span class="px-3 py-1.5 text-xs font-semibold rounded-lg bg-red-50 text-red-600 border border-red-200">
-        <%= b.status === 'cancelled' ? 'Cancelled' : 'On Hold' %>
-      </span>
-    <% } %>
-  </div>
+
+    <!-- Off-lifecycle states get their own pill cluster on the right
+         so the planner can see at a glance that the booking has been
+         taken off the main flow. -->
+    <span class="bk-flow-divider" aria-hidden="true"></span>
+    <% [{key:'conflict',label:'Conflict'},{key:'on_hold',label:'On Hold'},{key:'cancelled',label:'Cancelled'},{key:'late_cancellation',label:'Late Cancl.'}].forEach(function (step) { %>
+      <form method="POST" action="/bookings/<%= b.id %>/status" class="inline-flex">
+        <%- include('../partials/csrf') %>
+        <input type="hidden" name="status" value="<%= step.key %>">
+        <button type="submit"
+                class="bk-flow-pill bk-flow--<%= step.key %> bk-flow--break <%= b.status === step.key ? 'is-active' : '' %>"
+                title="<%= step.label %>">
+          <span class="bk-flow-dot"></span>
+          <span class="bk-flow-label"><%= step.label %></span>
+        </button>
+      </form>
+    <% }); %></div>
+
+  <style>
+    /* Status flow bar — distinct per-phase colours, clear active state
+       on both themes. Each pill stays its colour even when inactive so
+       the planner builds spatial memory of where each phase lives. */
+    .bk-flowbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 4px;
+      padding: 8px; margin: 0;
+      background: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px;
+      overflow-x: auto;
+    }
+    .bk-flow-pill {
+      appearance: none; border: 1px solid transparent; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 11px; border-radius: 9999px;
+      background: #fff; color: #475569;
+      font-size: 12px; font-weight: 600; white-space: nowrap;
+      box-shadow: 0 1px 0 rgba(15,23,42,0.04);
+      transition: background 0.12s, color 0.12s, transform 0.05s, box-shadow 0.12s;
+    }
+    .bk-flow-pill:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(15,23,42,0.08); }
+    .bk-flow-pill:active { transform: translateY(0); }
+    .bk-flow-dot {
+      width: 7px; height: 7px; border-radius: 9999px; flex-shrink: 0;
+      background: var(--bk-flow-c, #94A3B8);
+      box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
+    }
+    .bk-flow-tick {
+      width: 12px; height: 12px; flex-shrink: 0;
+      color: var(--bk-flow-c, #94A3B8);
+    }
+    .bk-flow-sep { color: #CBD5E1; font-size: 14px; padding: 0 1px; user-select: none; }
+    .bk-flow-divider { width: 1px; height: 22px; background: #E2E8F0; margin: 0 6px; flex-shrink: 0; }
+
+    /* Per-phase lifecycle colour palette */
+    .bk-flow--client_booking    { --bk-flow-c: #8B5CF6; }
+    .bk-flow--unconfirmed       { --bk-flow-c: #64748B; }
+    .bk-flow--confirmed         { --bk-flow-c: #3B82F6; }
+    .bk-flow--locked            { --bk-flow-c: #1E40AF; }
+    .bk-flow--green_to_go       { --bk-flow-c: #10B981; }
+    .bk-flow--in_progress       { --bk-flow-c: #14B8A6; }
+    .bk-flow--complete          { --bk-flow-c: #0EA5E9; }
+    .bk-flow--finalised         { --bk-flow-c: #6366F1; }
+    .bk-flow--conflict          { --bk-flow-c: #F59E0B; }
+    .bk-flow--on_hold           { --bk-flow-c: #9CA3AF; }
+    .bk-flow--cancelled         { --bk-flow-c: #F43F5E; }
+    .bk-flow--late_cancellation { --bk-flow-c: #DC2626; }
+
+    .bk-flow-pill.is-done {
+      background: color-mix(in srgb, var(--bk-flow-c) 12%, #fff 88%);
+      color: color-mix(in srgb, var(--bk-flow-c) 75%, #000 25%);
+      border-color: color-mix(in srgb, var(--bk-flow-c) 25%, transparent);
+    }
+    .bk-flow-pill.is-active {
+      background: var(--bk-flow-c); color: #fff;
+      border-color: rgba(0,0,0,0.10);
+      box-shadow: 0 2px 8px color-mix(in srgb, var(--bk-flow-c) 45%, transparent),
+                  0 0 0 3px color-mix(in srgb, var(--bk-flow-c) 18%, transparent);
+    }
+    .bk-flow-pill.is-active .bk-flow-dot,
+    .bk-flow-pill.is-active .bk-flow-tick { color: #fff; background: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,0.3); }
+    .bk-flow-pill.is-active .bk-flow-tick { background: transparent; }
+    .bk-flow-pill.is-active:hover { background: color-mix(in srgb, var(--bk-flow-c) 85%, #000 15%); }
+
+    /* Dark theme */
+    :root[data-theme="dark"] .bk-flowbar { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.08); }
+    :root[data-theme="dark"] .bk-flow-pill { background: rgba(255,255,255,0.05); color: #CBD5E1; border-color: rgba(255,255,255,0.08); box-shadow: none; }
+    :root[data-theme="dark"] .bk-flow-pill:hover { background: rgba(255,255,255,0.10); color: #F8FAFC; box-shadow: 0 2px 8px rgba(0,0,0,0.30); }
+    :root[data-theme="dark"] .bk-flow-pill.is-done {
+      background: color-mix(in srgb, var(--bk-flow-c) 22%, rgba(15,23,42,0.5));
+      color: color-mix(in srgb, var(--bk-flow-c) 70%, #fff 30%);
+      border-color: color-mix(in srgb, var(--bk-flow-c) 35%, transparent);
+    }
+    :root[data-theme="dark"] .bk-flow-pill.is-active {
+      color: #fff; border-color: rgba(0,0,0,0.20);
+      box-shadow: 0 4px 14px color-mix(in srgb, var(--bk-flow-c) 55%, transparent),
+                  0 0 0 3px color-mix(in srgb, var(--bk-flow-c) 28%, transparent);
+    }
+    :root[data-theme="dark"] .bk-flow-sep { color: #475569; }
+    :root[data-theme="dark"] .bk-flow-divider { background: rgba(255,255,255,0.10); }
+    :root[data-theme="dark"] .bk-flow-dot { box-shadow: 0 0 0 2px rgba(15,23,42,0.6); }
+  </style>
 
   <!-- Schedule + Location -->
   <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-5 pt-5 border-t border-gray-100">

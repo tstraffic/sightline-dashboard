@@ -107,10 +107,10 @@
   <div id="sec-depot"></div>
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-section="depot">
     <h2 class="booking-form-section-header">BOOKING DEPOT</h2>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Depot <span class="text-red-500">*</span></label>
-        <select name="depot" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        <select name="depot" required class="bk-input w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           <option value="">-- Select Depot --</option>
           <% depots.forEach(d => { %>
             <option value="<%= d %>" <%= val('depot') === d ? 'selected' : '' %>><%= d %></option>
@@ -119,20 +119,34 @@
       </div>
       <div>
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Supervisor</label>
-        <select name="supervisor_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        <select name="supervisor_id" class="bk-input w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           <option value="">-- Select Supervisor --</option>
           <% supervisors.forEach(s => { %>
             <option value="<%= s.id %>" <%= isEdit && booking.supervisor_id == s.id ? 'selected' : '' %>><%= s.full_name %></option>
           <% }); %>
         </select>
       </div>
-      <div>
-        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Status</label>
-        <select name="status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-          <% statusOptions.forEach(s => { %>
-            <option value="<%= s.val %>" <%= selected('status', s.val) %>><%= s.label %></option>
-          <% }); %>
-        </select>
+    </div>
+
+    <!-- Visual status lifecycle picker. Replaces the legacy <select>
+         so the planner can see at a glance which state the booking
+         is in. Each pill carries its lifecycle colour; clicking sets
+         the hidden status input and highlights the active pill. -->
+    <div class="mt-5">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Status</label>
+      <input type="hidden" name="status" id="bk-status-input" value="<%= val('status') || 'unconfirmed' %>">
+      <div class="bk-statusrow" role="radiogroup" aria-label="Booking status">
+        <% statusOptions.forEach(s => { %>
+          <button type="button"
+                  class="bk-statuspill bk-status--<%= s.val %> <%= (val('status') || 'unconfirmed') === s.val ? 'is-active' : '' %>"
+                  data-status="<%= s.val %>"
+                  role="radio"
+                  aria-checked="<%= (val('status') || 'unconfirmed') === s.val ? 'true' : 'false' %>"
+                  title="<%= s.label %>">
+            <span class="bk-statuspill-dot"></span>
+            <span class="bk-statuspill-label"><%= s.label %></span>
+          </button>
+        <% }); %>
       </div>
     </div>
   </div>
@@ -847,6 +861,26 @@
         if (pane) show(pane.getAttribute('data-section'));
       }, true);
     }
+
+    // Status pill row — clicking a pill writes to the hidden input
+    // and visually marks it active. Used in place of the legacy
+    // dropdown so the planner can see lifecycle colours at a glance.
+    var statusInput = document.getElementById('bk-status-input');
+    var statusRow = document.querySelector('.bk-statusrow');
+    if (statusRow && statusInput) {
+      statusRow.addEventListener('click', function (e) {
+        var btn = e.target.closest('.bk-statuspill');
+        if (!btn || !statusRow.contains(btn)) return;
+        e.preventDefault();
+        var val = btn.getAttribute('data-status');
+        statusInput.value = val;
+        statusRow.querySelectorAll('.bk-statuspill').forEach(function (p) {
+          var on = p === btn;
+          p.classList.toggle('is-active', on);
+          p.setAttribute('aria-checked', on ? 'true' : 'false');
+        });
+      });
+    }
   })();
 </script>
 
@@ -865,14 +899,97 @@
   .bk-onav-tab:hover { background: #F3F4F6; color: #111827; }
   .bk-onav-tab.is-active { background: #ECFDF5; color: #047857; }
 
-  /* Section tabs */
+  /* Section tabs — clearly distinguishable in both themes. Inactive
+     pills are pale; the active one fills with the brand emerald so
+     the planner can find their place at a glance even when paging
+     through 8 sections. */
+  .bk-section-tabs { gap: 4px !important; }
   .bk-stab {
-    padding: 6px 12px; border-radius: 8px; border: 0;
-    background: transparent; color: #6B7280; cursor: pointer;
-    font-size: 12px; font-weight: 600; transition: background 0.12s, color 0.12s;
+    padding: 7px 14px; border-radius: 8px; border: 1px solid transparent;
+    background: #fff; color: #475569; cursor: pointer;
+    font-size: 12px; font-weight: 600; letter-spacing: 0.01em;
+    transition: background 0.12s, color 0.12s, border-color 0.12s, box-shadow 0.12s;
+    box-shadow: 0 1px 0 rgba(15,23,42,0.04);
   }
-  .bk-stab:hover { background: #fff; color: #047857; }
-  .bk-stab.is-active { background: #ECFDF5; color: #047857; box-shadow: inset 0 0 0 1px #A7F3D0; }
+  .bk-stab:hover { background: #F8FAFC; color: #0F172A; border-color: #E2E8F0; }
+  .bk-stab.is-active {
+    background: #10B981; color: #fff; border-color: #059669;
+    box-shadow: 0 1px 2px rgba(16,185,129,0.30), 0 0 0 3px rgba(16,185,129,0.12);
+  }
+  .bk-stab.is-active:hover { background: #059669; color: #fff; }
+
+  /* Booking form field polish — inputs / selects pick up clearer
+     borders and a tighter focus ring so the form feels like one
+     cohesive component instead of separate Tailwind primitives. */
+  .bk-input,
+  [data-section] input[type="text"],
+  [data-section] input[type="date"],
+  [data-section] input[type="time"],
+  [data-section] input[type="number"],
+  [data-section] input[type="email"],
+  [data-section] input[type="tel"],
+  [data-section] textarea,
+  [data-section] select {
+    transition: border-color 0.12s, box-shadow 0.12s, background 0.12s;
+  }
+
+  /* === Status pill row (Depot section) =================================== */
+  .bk-statusrow {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    padding: 8px;
+    background: #F8FAFC;
+    border: 1px solid #E2E8F0;
+    border-radius: 12px;
+  }
+  .bk-statuspill {
+    appearance: none; border: 1px solid transparent; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 7px;
+    padding: 7px 12px; border-radius: 9999px;
+    background: #fff; color: #475569;
+    font-size: 12px; font-weight: 600;
+    box-shadow: 0 1px 0 rgba(15,23,42,0.04);
+    transition: background 0.12s, color 0.12s, transform 0.05s, box-shadow 0.12s;
+  }
+  .bk-statuspill:hover { transform: translateY(-1px); box-shadow: 0 2px 6px rgba(15,23,42,0.08); }
+  .bk-statuspill:active { transform: translateY(0); }
+  .bk-statuspill-dot {
+    width: 8px; height: 8px; border-radius: 9999px; flex-shrink: 0;
+    background: var(--pill-c, #94A3B8);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.6);
+  }
+  .bk-statuspill-label { line-height: 1; }
+
+  /* Per-status colour palette — colours the dot in inactive state and
+     fills the pill in active state. Picked so each lifecycle phase has
+     its own identifiable hue. */
+  .bk-status--client_booking    { --pill-c: #8B5CF6; }
+  .bk-status--unconfirmed       { --pill-c: #64748B; }
+  .bk-status--confirmed         { --pill-c: #3B82F6; }
+  .bk-status--locked            { --pill-c: #1E40AF; }
+  .bk-status--conflict          { --pill-c: #F59E0B; }
+  .bk-status--green_to_go       { --pill-c: #10B981; }
+  .bk-status--in_progress       { --pill-c: #14B8A6; }
+  .bk-status--complete          { --pill-c: #0EA5E9; }
+  .bk-status--finalised         { --pill-c: #6366F1; }
+  .bk-status--cancelled         { --pill-c: #F43F5E; }
+  .bk-status--late_cancellation { --pill-c: #DC2626; }
+  .bk-status--on_hold           { --pill-c: #9CA3AF; }
+
+  .bk-statuspill.is-active {
+    background: var(--pill-c);
+    color: #fff;
+    border-color: rgba(0,0,0,0.10);
+    box-shadow: 0 2px 8px color-mix(in srgb, var(--pill-c) 45%, transparent),
+                0 0 0 3px color-mix(in srgb, var(--pill-c) 18%, transparent);
+  }
+  .bk-statuspill.is-active .bk-statuspill-dot {
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.3);
+  }
+  .bk-statuspill.is-active:hover {
+    background: color-mix(in srgb, var(--pill-c) 85%, #000 15%);
+    transform: translateY(-1px);
+  }
 
   /* Sticky bottom save bar — appears below the form, pinned to the
      bottom of the viewport so the planner can save from any section. */
@@ -899,10 +1016,31 @@
   :root[data-theme="dark"] .bk-onav-tab        { color: #94A3B8; }
   :root[data-theme="dark"] .bk-onav-tab:hover  { background: rgba(255,255,255,0.06); color: #F5F5F7; }
   :root[data-theme="dark"] .bk-onav-tab.is-active { background: rgba(16,185,129,0.16); color: #6EE7B7; }
-  :root[data-theme="dark"] .bk-stab            { color: #94A3B8; }
-  :root[data-theme="dark"] .bk-stab:hover      { background: rgba(255,255,255,0.06); color: #6EE7B7; }
-  :root[data-theme="dark"] .bk-stab.is-active  { background: rgba(16,185,129,0.16); color: #6EE7B7; box-shadow: inset 0 0 0 1px rgba(16,185,129,0.30); }
+  :root[data-theme="dark"] .bk-section-tabs    { background: rgba(15,17,21,0.92) !important; border-bottom-color: rgba(255,255,255,0.08) !important; }
+  :root[data-theme="dark"] .bk-stab            { background: rgba(255,255,255,0.04); color: #CBD5E1; border-color: rgba(255,255,255,0.06); box-shadow: none; }
+  :root[data-theme="dark"] .bk-stab:hover      { background: rgba(255,255,255,0.08); color: #F8FAFC; border-color: rgba(255,255,255,0.12); }
+  :root[data-theme="dark"] .bk-stab.is-active  {
+    background: #10B981; color: #fff; border-color: #059669;
+    box-shadow: 0 1px 6px rgba(16,185,129,0.45), 0 0 0 3px rgba(16,185,129,0.18);
+  }
   :root[data-theme="dark"] .bk-savebar         { background: rgba(15,17,21,0.92); border-top-color: rgba(255,255,255,0.08); }
   :root[data-theme="dark"] .bk-step-btn        { background: #1A1D24; color: #F5F5F7; border-color: rgba(255,255,255,0.08); }
   :root[data-theme="dark"] .bk-step-btn:hover:not(:disabled) { background: #20242C; }
+
+  /* Status pill row — dark theme. Inactive pills sit on a dark slate
+     background with their dot picking up the lifecycle colour; active
+     pill fills with the colour and reads white. */
+  :root[data-theme="dark"] .bk-statusrow      { background: rgba(255,255,255,0.03); border-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] .bk-statuspill     { background: rgba(255,255,255,0.05); color: #CBD5E1; border-color: rgba(255,255,255,0.08); box-shadow: none; }
+  :root[data-theme="dark"] .bk-statuspill:hover { background: rgba(255,255,255,0.10); color: #F8FAFC; box-shadow: 0 2px 8px rgba(0,0,0,0.30); }
+  :root[data-theme="dark"] .bk-statuspill-dot { box-shadow: 0 0 0 2px rgba(15,23,42,0.6); }
+  :root[data-theme="dark"] .bk-statuspill.is-active {
+    color: #fff; border-color: rgba(0,0,0,0.20);
+    box-shadow: 0 4px 14px color-mix(in srgb, var(--pill-c) 55%, transparent),
+                0 0 0 3px color-mix(in srgb, var(--pill-c) 28%, transparent);
+  }
+  :root[data-theme="dark"] .bk-statuspill.is-active .bk-statuspill-dot {
+    background: #fff;
+    box-shadow: 0 0 0 2px rgba(0,0,0,0.20);
+  }
 </style>

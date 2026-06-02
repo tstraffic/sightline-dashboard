@@ -4043,3 +4043,113 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
   border-top-color: #60a5fa;
 }
 
+/* ============================================================
+   Booking form (views/bookings/form.ejs) — dark + light polish
+   ============================================================
+   The form is built from Tailwind primitives (bg-white, text-gray-900)
+   that look harsh in dark mode and lack contrast in light mode. This
+   block re-skins the [data-section] cards, labels and inputs so the
+   New / Edit Booking page reads cleanly on both themes without
+   touching the markup. */
+
+/* Light mode polish — softer card edge, brighter section header */
+:root[data-theme="light"] [data-section] {
+  border-color: #E2E8F0;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.02);
+}
+:root[data-theme="light"] [data-section] label.block {
+  color: #475569;
+}
+:root[data-theme="light"] .booking-form-section-header {
+  color: #C2410C;
+  border-left-color: #F97316;
+}
+:root[data-theme="light"] .bk-section-tabs {
+  background: rgba(249,250,251,0.96) !important;
+  border-bottom-color: #E2E8F0 !important;
+}
+
+/* Dark mode — re-skin the bg-white cards, white inputs, gray labels */
+:root[data-theme="dark"] [data-section] {
+  background: rgba(255,255,255,0.03) !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  box-shadow: none;
+  color: #E2E8F0;
+}
+:root[data-theme="dark"] [data-section] label,
+:root[data-theme="dark"] [data-section] label.block {
+  color: #94A3B8 !important;
+}
+:root[data-theme="dark"] [data-section] input[type="text"],
+:root[data-theme="dark"] [data-section] input[type="date"],
+:root[data-theme="dark"] [data-section] input[type="time"],
+:root[data-theme="dark"] [data-section] input[type="number"],
+:root[data-theme="dark"] [data-section] input[type="email"],
+:root[data-theme="dark"] [data-section] input[type="tel"],
+:root[data-theme="dark"] [data-section] input[type="url"],
+:root[data-theme="dark"] [data-section] textarea,
+:root[data-theme="dark"] [data-section] select,
+:root[data-theme="dark"] [data-section] .bk-input {
+  background: rgba(15,23,42,0.55) !important;
+  border-color: rgba(255,255,255,0.10) !important;
+  color: #F8FAFC !important;
+  color-scheme: dark;
+}
+:root[data-theme="dark"] [data-section] input::placeholder,
+:root[data-theme="dark"] [data-section] textarea::placeholder {
+  color: #64748B;
+}
+:root[data-theme="dark"] [data-section] input:focus,
+:root[data-theme="dark"] [data-section] select:focus,
+:root[data-theme="dark"] [data-section] textarea:focus {
+  border-color: #2B7FFF !important;
+  box-shadow: 0 0 0 3px rgba(43,127,255,0.18);
+}
+:root[data-theme="dark"] [data-section] option {
+  background: #0F172A;
+  color: #F8FAFC;
+}
+:root[data-theme="dark"] .booking-form-section-header {
+  color: #FB923C;
+  border-left-color: #F97316;
+}
+/* Read-only / display text inside the cards */
+:root[data-theme="dark"] [data-section] .text-gray-900 { color: #F8FAFC !important; }
+:root[data-theme="dark"] [data-section] .text-gray-700 { color: #E2E8F0 !important; }
+:root[data-theme="dark"] [data-section] .text-gray-600 { color: #CBD5E1 !important; }
+:root[data-theme="dark"] [data-section] .text-gray-500 { color: #94A3B8 !important; }
+:root[data-theme="dark"] [data-section] .text-gray-400 { color: #94A3B8 !important; }
+:root[data-theme="dark"] [data-section] .border-gray-200 { border-color: rgba(255,255,255,0.08) !important; }
+:root[data-theme="dark"] [data-section] .border-gray-300 { border-color: rgba(255,255,255,0.10) !important; }
+:root[data-theme="dark"] [data-section] .bg-gray-50 { background: rgba(255,255,255,0.02) !important; }
+:root[data-theme="dark"] [data-section] .bg-gray-100 { background: rgba(255,255,255,0.04) !important; }
+
+/* Booking detail page (views/bookings/show.ejs) — same Tailwind cards
+   live under [data-bk-tab] instead of [data-section]. Mirror the
+   same polish so the view page reads correctly. */
+:root[data-theme="dark"] [data-bk-tab] {
+  background: rgba(255,255,255,0.03) !important;
+  border-color: rgba(255,255,255,0.08) !important;
+  box-shadow: none;
+  color: #E2E8F0;
+}
+:root[data-theme="dark"] [data-bk-tab] .text-gray-900 { color: #F8FAFC !important; }
+:root[data-theme="dark"] [data-bk-tab] .text-gray-700 { color: #E2E8F0 !important; }
+:root[data-theme="dark"] [data-bk-tab] .text-gray-600 { color: #CBD5E1 !important; }
+:root[data-theme="dark"] [data-bk-tab] .text-gray-500 { color: #94A3B8 !important; }
+:root[data-theme="dark"] [data-bk-tab] .text-gray-400 { color: #94A3B8 !important; }
+:root[data-theme="dark"] [data-bk-tab] .border-gray-100,
+:root[data-theme="dark"] [data-bk-tab] .border-gray-200 { border-color: rgba(255,255,255,0.08) !important; }
+:root[data-theme="dark"] [data-bk-tab] .border-gray-300 { border-color: rgba(255,255,255,0.10) !important; }
+:root[data-theme="dark"] [data-bk-tab] .bg-gray-50 { background: rgba(255,255,255,0.02) !important; }
+:root[data-theme="dark"] [data-bk-tab] .bg-gray-100 { background: rgba(255,255,255,0.04) !important; }
+:root[data-theme="dark"] [data-bk-tab] select,
+:root[data-theme="dark"] [data-bk-tab] input,
+:root[data-theme="dark"] [data-bk-tab] textarea {
+  background: rgba(15,23,42,0.55) !important;
+  border-color: rgba(255,255,255,0.10) !important;
+  color: #F8FAFC !important;
+  color-scheme: dark;
+}
+:root[data-theme="dark"] [data-bk-tab] option { background: #0F172A; color: #F8FAFC; }
+
