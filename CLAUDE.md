@@ -34,11 +34,12 @@ Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney tr
 - **Permissions**: `middleware/auth.js` has `PERMISSIONS` object mapping modules to allowed roles
 
 ## Database
-- SQLite via better-sqlite3, file at `./data/database.sqlite`
-- 29+ migrations in `db/schema.js`
-- Key tables: `users`, `jobs`, `crew_members`, `crew_allocations`, `tasks`, `incidents`, `notifications`, `push_subscriptions`, `system_config`, `invitations`
+- SQLite via better-sqlite3, file at `./data/tstraffic.db` (env `DB_PATH`)
+- 245+ migrations in `db/schema.js`, run on startup by `initializeDatabase()`. Each is gated by `isMigrationApplied(version)` and recorded via `recordMigration.run(version, name)` in `schema_migrations`. **New migrations must use the next unused version number** (check the max before adding) — duplicate versions silently skip.
+- Key tables: `users`, `jobs`, `crew_members`, `crew_allocations`, `tasks`, `incidents`, `notifications`, `push_subscriptions`, `system_config`, `invitations`, `compliance`, `traffic_plans`, `plan_revisions`, `plan_flags`, `plan_fees`, `plan_extensions`, `ctmps`, `ctmp_revisions`, `rol_shifts`, `rol_conditions`, `activity_log`, `app_settings`
 - Migration 14 = Worker Portal auth columns on `crew_members`
 - Migration 29 = `push_subscriptions` table for Web Push
+- Migrations 241–245 = Plans Module (council/ROL workflow, fees, extensions, CTMP entity, ROL two-stage + PDF extraction)
 
 ## Key Middleware
 - `middleware/auth.js` — Admin auth (`requireLogin`, `requireRole`, `requirePermission`, `canAccess`)
@@ -53,6 +54,7 @@ Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney tr
 - `services/emailTemplates.js` — Branded HTML email templates
 - `services/pushNotification.js` — Web Push (VAPID key management, subscription CRUD, sending)
 - `services/invitations.js` — Token-based invitations/password resets
+- `services/rolParser.js` — ROL/ROLA PDF text extraction (pdfjs-dist): licence/application number, date+time range, shifts (gaps preserved), conditions w/ alert flagging
 
 ## Test Data
 - Admin: username `admin` / password `admin123` (**CHANGE THIS ON PRODUCTION**)
@@ -61,6 +63,16 @@ Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney tr
 ---
 
 ## Completed Work
+
+### Plans Module — council/ROL workflow (completed, PR #462)
+Enhanced the existing **Traffic Plans** module (`routes/plans.js`, `traffic_plans`) for T&S's real council/ROL workflow:
+- **Plan types unlocked**: dropped the `plan_type` CHECK (table rebuild) so `Council Application`, `ROL`, `CTMP`, `Permit` are valid alongside TGS/TCP/TMP; added `council_plan_type` (free-text) + `job_date`.
+- **Editable detail hub**: new `GET /plans/:id` (`views/plans/show.ejs`) with a per-plan activity log (`activity_log`, `entityType:'plan'`). Conditional date validation — Council/ROL require Client Requested + Submission + Job Date; others Job-Date-optional.
+- **Fees** (`plan_fees`, multiple w/ receipts) and **extensions** (`plan_extensions`, ROL/Council).
+- **CTMP as its own linked entity**: `routes/ctmps.js` (mounted `/ctmps`) + `views/ctmps/`, `ctmps` + `ctmp_revisions` tables. Draft→Rev A→B versioning, per-version QA status, dashboard chip.
+- **Council automation**: auto-creates a finalisation task on creation; 7- and 2-day reminders for Council/ROL added to `generateNotifications()`. Dashboard "Plans & Safety" widget (upcoming, CTMP QA, ROL alerts).
+- **ROL two-stage + PDF auto-extraction**: `services/rolParser.js` parses ROLA/issued-ROL PDFs (parse-then-confirm via `views/plans/rol-review.ejs`); stores actual shifts (`rol_shifts`, gaps preserved) and conditions (`rol_conditions`, alerts surfaced on detail page + dashboard).
+- Also fixed two pre-existing `middleware/notifications.js` bugs (`now`, `mgmtUsers` undefined) that had disabled the whole notification engine.
 
 ### UI Rebrand (completed)
 - Migrated all 52+ EJS views from dark to light enterprise theme
