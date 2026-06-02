@@ -350,7 +350,7 @@
             </div>
             <div class="space-y-3">
               <% list.forEach(sub => { %>
-                <%- include('./_sub_plan_card', { sub, docs: (subPlanDocs && subPlanDocs[sub.id]) || [], parentId: item.id, statusBadge: STATUS_BADGE, ra: (typeof raBySubPlan !== 'undefined' && raBySubPlan) ? raBySubPlan[sub.id] : null }) %>
+                <%- include('./_sub_plan_card', { sub, docs: (subPlanDocs && subPlanDocs[sub.id]) || [], parentId: item.id, statusBadge: STATUS_BADGE, ra: (typeof raBySubPlan !== 'undefined' && raBySubPlan) ? raBySubPlan[sub.id] : null, fees: (typeof subPlanFees !== 'undefined' && subPlanFees) ? (subPlanFees[sub.id] || []) : [], extensions: (typeof subPlanExtensions !== 'undefined' && subPlanExtensions) ? (subPlanExtensions[sub.id] || []) : [], rolShifts: (typeof subPlanRolShifts !== 'undefined' && subPlanRolShifts) ? (subPlanRolShifts[sub.id] || []) : [], rolConditions: (typeof subPlanRolConditions !== 'undefined' && subPlanRolConditions) ? (subPlanRolConditions[sub.id] || []) : [] }) %>
               <% }) %>
             </div>
           </div>

@@ -505,6 +505,35 @@ function generateNotifications() {
       }
     } catch (e) { console.error('[notifications] plan reminder step failed:', e.message); }
 
+    // Compliance ("Plans & Approvals") council/ROL reminders (spec §7/§8):
+    // Council Permit + ROL sub-plans with a Job Date 7 or 2 days out notify
+    // the sub-plan owner (falling back to the parent owner / job owners).
+    try {
+      const next7c = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+      const next2c = new Date(Date.now() + 2 * 86400000).toISOString().split('T')[0];
+      const rows = db.prepare(`
+        SELECT c.id, c.reference_number, c.item_type, c.job_date, c.assigned_to_id, c.parent_id, c.job_id,
+               p.assigned_to_id AS parent_owner_id, j.job_number, j.planning_owner_id, j.ops_supervisor_id
+        FROM compliance c
+        LEFT JOIN compliance p ON c.parent_id = p.id
+        LEFT JOIN jobs j ON c.job_id = j.id
+        WHERE c.parent_id IS NOT NULL
+          AND c.item_type IN ('council_permit','rol','road_occupancy')
+          AND c.status NOT IN ('rejected','expired')
+          AND c.job_date IN (?, ?)
+      `).all(next7c, next2c);
+      for (const c of rows) {
+        const daysOut = c.job_date === next2c ? 2 : 7;
+        const isCouncil = c.item_type === 'council_permit';
+        const recipient = c.assigned_to_id || c.parent_owner_id || (isCouncil ? c.planning_owner_id : c.ops_supervisor_id) || c.planning_owner_id;
+        if (!recipient) continue;
+        const label = isCouncil ? 'Council Permit' : 'ROL';
+        const title = `${label} reminder (${daysOut} day${daysOut === 1 ? '' : 's'}): ${c.reference_number}`;
+        const message = `${label} ${c.reference_number}${c.job_number ? ' on ' + c.job_number : ''} — ${daysOut} days until job date (${c.job_date}).`;
+        insertAndTrack(recipient, 'deadline_reminder', title, message, `/compliance/${c.parent_id}/edit#sub-${c.id}`, c.job_id);
+      }
+    } catch (e) { console.error('[notifications] compliance plan reminder step failed:', e.message); }
+
     // Send immediate email notifications for newly created notifications
     sendImmediateEmails(db, newNotificationIds);
 

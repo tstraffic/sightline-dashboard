@@ -11654,6 +11654,89 @@ function runMigrations(db) {
     }
   }
 
+// =============================================
+  // Migration 248: Compliance ("Plans & Approvals") — council/ROL workflow
+  //
+  // Adds the team's council/ROL/CTMP needs onto the compliance sub-plan model
+  // (the module they actually use): free-text Type of Council Plan, a Job Date,
+  // itemised fees with receipts (beyond the single council_fee_amount),
+  // extension records, per-revision QA status (for CTMP), and ROL two-stage +
+  // PDF-extraction fields. Shifts/conditions get compliance-scoped tables
+  // (distinct from the traffic_plans rol_shifts/rol_conditions).
+  // =============================================
+  if (!isMigrationApplied.get(248)) {
+    try {
+      const addCol = (table, col, type) => { try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch (e) { /* exists */ } };
+      addCol('compliance', 'council_plan_type', "TEXT DEFAULT ''");
+      addCol('compliance', 'job_date', 'DATE');
+      // ROL two-stage (Stage 1 ROLA application, Stage 2 issued ROL)
+      addCol('compliance', 'rola_application_number', "TEXT DEFAULT ''");
+      addCol('compliance', 'rola_file_path', "TEXT DEFAULT ''");
+      addCol('compliance', 'rola_file_original_name', "TEXT DEFAULT ''");
+      addCol('compliance', 'rol_actual_number', "TEXT DEFAULT ''");
+      addCol('compliance', 'rol_file_path', "TEXT DEFAULT ''");
+      addCol('compliance', 'rol_file_original_name', "TEXT DEFAULT ''");
+      addCol('compliance', 'rol_summary_from', 'DATE');
+      addCol('compliance', 'rol_summary_to', 'DATE');
+      addCol('compliance', 'rol_time_window', "TEXT DEFAULT ''");
+      addCol('compliance', 'rol_stage', "TEXT DEFAULT 'none'");
+      // CTMP QA per revision + a rolled-up qa_status on the item
+      addCol('compliance_revisions', 'qa_status', "TEXT DEFAULT 'pending'");
+      addCol('compliance', 'qa_status', "TEXT DEFAULT ''");
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS compliance_fees (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          compliance_id INTEGER NOT NULL REFERENCES compliance(id) ON DELETE CASCADE,
+          description TEXT DEFAULT '',
+          amount REAL DEFAULT 0,
+          receipt_file_path TEXT DEFAULT '',
+          receipt_original_name TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_compliance_fees_cid ON compliance_fees(compliance_id);
+
+        CREATE TABLE IF NOT EXISTS compliance_extensions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          compliance_id INTEGER NOT NULL REFERENCES compliance(id) ON DELETE CASCADE,
+          label TEXT DEFAULT '',
+          extended_to DATE,
+          reason TEXT DEFAULT '',
+          file_path TEXT DEFAULT '',
+          file_original_name TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_compliance_extensions_cid ON compliance_extensions(compliance_id);
+
+        CREATE TABLE IF NOT EXISTS compliance_rol_shifts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          compliance_id INTEGER NOT NULL REFERENCES compliance(id) ON DELETE CASCADE,
+          source TEXT NOT NULL DEFAULT 'rol',
+          start_date DATE, start_time TEXT DEFAULT '',
+          end_date DATE, end_time TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_compliance_rol_shifts_cid ON compliance_rol_shifts(compliance_id);
+
+        CREATE TABLE IF NOT EXISTS compliance_rol_conditions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          compliance_id INTEGER NOT NULL REFERENCES compliance(id) ON DELETE CASCADE,
+          condition_no INTEGER,
+          text TEXT DEFAULT '',
+          is_alert INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_compliance_rol_conditions_cid ON compliance_rol_conditions(compliance_id);
+      `);
+      recordMigration.run(248, 'Compliance council/ROL workflow: council_plan_type, job_date, fees, extensions, ROL two-stage, CTMP QA');
+      console.log('Migration 248 applied');
+    } catch (e) {
+      console.error('Migration 248 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

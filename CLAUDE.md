@@ -34,11 +34,16 @@ Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney tr
 - **Permissions**: `middleware/auth.js` has `PERMISSIONS` object mapping modules to allowed roles
 
 ## Database
-- SQLite via better-sqlite3, file at `./data/database.sqlite`
-- 29+ migrations in `db/schema.js`
-- Key tables: `users`, `jobs`, `crew_members`, `crew_allocations`, `tasks`, `incidents`, `notifications`, `push_subscriptions`, `system_config`, `invitations`
+- SQLite via better-sqlite3, file at `./data/tstraffic.db` (env `DB_PATH`)
+- 247+ migrations in `db/schema.js`, run on startup by `initializeDatabase()`. Each is gated by `isMigrationApplied(version)`; **new migrations must use the next unused version** (check the max first — duplicate versions silently skip).
+- Key tables: `users`, `jobs`, `crew_members`, `crew_allocations`, `tasks`, `incidents`, `notifications`, `push_subscriptions`, `system_config`, `invitations`, `compliance` (+ `compliance_documents`, `compliance_revisions`, `compliance_fees`, `compliance_extensions`, `compliance_rol_shifts`, `compliance_rol_conditions`), `activity_log`, `app_settings`
 - Migration 14 = Worker Portal auth columns on `crew_members`
 - Migration 29 = `push_subscriptions` table for Web Push
+- Migration 247 = Compliance council/ROL workflow (council_plan_type, job_date, itemised fees, extensions, ROL two-stage + PDF extraction, CTMP QA)
+
+## Two "plans" areas — don't confuse them
+- **Compliance / "Plans & Approvals"** (`/compliance`, `compliance` table, sidebar "Plans & Approvals") — **the module the team actually uses.** Parent plans → sub-plans with refs `TSCA` (council_permit), `TSROL` (rol), `TSTMP` (CTMP/tmp_approval), `TSTGS`, `TSSPA`, etc. Owner, status workflow, fees, dates, revisions live here. Council/ROL/CTMP features belong here.
+- **Traffic Plans** (`/plans`, `traffic_plans` table) — a separate, lightly-used design-document register. (A council/ROL build landed here by mistake via PR #462; the real work is in Compliance.)
 
 ## Key Middleware
 - `middleware/auth.js` — Admin auth (`requireLogin`, `requireRole`, `requirePermission`, `canAccess`)
@@ -61,6 +66,15 @@ Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney tr
 ---
 
 ## Completed Work
+
+### Compliance — council/ROL/CTMP workflow (completed)
+Extended the **Compliance** sub-plan module (`routes/compliance.js`, `views/compliance/_sub_plan_card.ejs`) for the council/ROL workflow:
+- **Type of Council Plan** (free-text) + **Job Date** on sub-plans (saved via upload-submit / `/sub-plans/:id/details`).
+- **Itemised fees** with description + amount + receipt (`compliance_fees`, `POST /sub-plans/:id/fees`) — alongside the legacy single council fee.
+- **Extension records** (`compliance_extensions`, `POST /sub-plans/:id/extensions`) for ROL/Council.
+- **CTMP QA status** on `tmp_approval` sub-plans (`POST /sub-plans/:id/qa`).
+- **ROL two-stage + PDF auto-extraction**: `services/rolParser.js` (pdfjs-dist) reads ROLA/issued-ROL PDFs → number, date+time range, shifts (gaps preserved → `compliance_rol_shifts`), conditions (`compliance_rol_conditions`, contact/late-start/no-works/long-weekend flagged as alerts). Parse-then-confirm via `views/compliance/rol-review.ejs`; alerts surface on the sub-plan card.
+- **Council/ROL reminders** (Job Date 7 + 2 days) in `generateNotifications()`.
 
 ### UI Rebrand (completed)
 - Migrated all 52+ EJS views from dark to light enterprise theme
