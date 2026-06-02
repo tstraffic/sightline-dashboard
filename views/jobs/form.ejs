@@ -312,6 +312,189 @@
   </div>
 
   <!-- Actions (fallback for no-JS, hidden when wizard active) -->
+  <!-- 8. Monthly Package — optional. When toggled on, ticked months
+       either mint one job each (split, default) or collapse into a
+       single multi-month job (combined). Works on both create and
+       edit; on edit, existing siblings (same client + pattern + year)
+       are skipped so re-saving is safe. -->
+  <%
+    var mpExistingPattern = isEdit ? (job.recurring_pattern_name || 'Packages') : 'Packages';
+    var mpExistingMonthly = isEdit && job.recurring_monthly;
+    var mpExistingYear = new Date().getFullYear();
+    var mpExistingMonthIdx = -1;
+    if (isEdit && job.start_date) {
+      var _d = new Date(String(job.start_date).slice(0, 10) + 'T00:00:00');
+      if (!isNaN(_d)) { mpExistingMonthIdx = _d.getMonth(); mpExistingYear = _d.getFullYear(); }
+    }
+  %>
+  <div id="section-7" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5" data-wizard-step="7" data-wizard-title="Monthly Package">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Monthly Package</h2>
+    <label class="inline-flex items-center gap-2 cursor-pointer mb-3">
+      <input type="checkbox" id="monthly_package" name="<%= isEdit ? 'recurring_monthly' : 'monthly_package' %>" value="1" <%= mpExistingMonthly ? 'checked' : '' %> class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+      <span class="text-sm font-medium text-gray-700">This is a monthly package job</span>
+    </label>
+    <p class="text-xs text-gray-500 mb-4">
+      <% if (isEdit) { %>
+        Tick months below to add as new sibling jobs (months that already exist for this client + pattern are skipped).
+      <% } else { %>
+        Tick the months you want jobs for. Each ticked month gets its own job (<code class="bg-gray-100 px-1.5 py-0.5 rounded">May - Packages</code>), or collapse them into one (<code class="bg-gray-100 px-1.5 py-0.5 rounded">May–July - Packages</code>) using the mode below.
+      <% } %>
+    </p>
+
+    <div id="monthly-package-config" class="space-y-4" style="display:<%= mpExistingMonthly ? 'block' : 'none' %>">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label for="recurring_pattern_name" class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Pattern name</label>
+          <input type="text" id="recurring_pattern_name" name="recurring_pattern_name" value="<%= mpExistingPattern %>" placeholder="e.g. Packages"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <p class="text-[11px] text-gray-400 mt-1">Used as the suffix after each month name.</p>
+        </div>
+        <div>
+          <label for="monthly_year" class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-1">Year</label>
+          <select id="monthly_year" name="monthly_year" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <% var _ty = new Date().getFullYear(); for (var _y = _ty - 1; _y <= _ty + 2; _y++) { %>
+              <option value="<%= _y %>" <%= _y === mpExistingYear ? 'selected' : '' %>><%= _y %></option>
+            <% } %>
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Naming mode</label>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <label class="bk2-month-mode is-on">
+            <input type="radio" name="monthly_mode" value="split" checked>
+            <span class="bk2-month-mode-title">One job per month</span>
+            <span class="bk2-month-mode-sub">e.g. <code>May - Packages</code>, <code>June - Packages</code></span>
+          </label>
+          <label class="bk2-month-mode">
+            <input type="radio" name="monthly_mode" value="combined">
+            <span class="bk2-month-mode-title">Single combined job</span>
+            <span class="bk2-month-mode-sub">e.g. <code>May–July - Packages</code></span>
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-wider mb-2">Months <%= isEdit ? 'to add' : 'to create' %></label>
+        <div class="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2" id="monthly-months-grid">
+          <%
+            var MP_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+            var _defaultTick = isEdit ? -1 : new Date().getMonth();
+            MP_NAMES.forEach(function (name, i) {
+          %>
+            <label class="bk2-month-chip">
+              <input type="checkbox" name="monthly_months" value="<%= name %>" <%= i === _defaultTick ? 'checked' : '' %>>
+              <span><%= name %></span>
+            </label>
+          <% }); %>
+        </div>
+        <div class="mt-2 flex gap-2 text-xs">
+          <button type="button" id="monthly-pick-all"   class="text-brand-600 hover:underline">Select all</button>
+          <span class="text-gray-300">·</span>
+          <button type="button" id="monthly-pick-rest"  class="text-brand-600 hover:underline">Rest of year</button>
+          <span class="text-gray-300">·</span>
+          <button type="button" id="monthly-pick-clear" class="text-gray-500 hover:underline">Clear</button>
+        </div>
+      </div>
+      <p id="monthly-preview" class="text-xs text-gray-500"></p>
+    </div>
+  </div>
+
+  <style>
+    .bk2-month-chip {
+      display: inline-flex; align-items: center; justify-content: center;
+      padding: 6px 10px; border: 1px solid #E5E7EB; border-radius: 8px;
+      background: #fff; font-size: 12px; font-weight: 500; color: #374151;
+      cursor: pointer; transition: background 100ms ease, border-color 100ms ease, color 100ms ease;
+      user-select: none; position: relative;
+    }
+    .bk2-month-chip input { position: absolute; opacity: 0; pointer-events: none; }
+    .bk2-month-chip:hover { background: #F9FAFB; }
+    .bk2-month-chip.is-on, .bk2-month-chip:has(input:checked) {
+      background: #EFF6FF; border-color: #2B7FFF; color: #1D4ED8; font-weight: 600;
+    }
+    .bk2-month-mode {
+      display: flex; flex-direction: column; gap: 2px;
+      padding: 10px 12px; border: 1.5px solid #E5E7EB; border-radius: 9px;
+      background: #fff; cursor: pointer; position: relative;
+      transition: border-color 100ms ease, background 100ms ease;
+    }
+    .bk2-month-mode input { position: absolute; opacity: 0; pointer-events: none; }
+    .bk2-month-mode:hover { background: #F9FAFB; }
+    .bk2-month-mode.is-on, .bk2-month-mode:has(input:checked) { border-color: #2B7FFF; background: #EFF6FF; }
+    .bk2-month-mode-title { font-size: 13px; font-weight: 600; color: #111827; }
+    .bk2-month-mode-sub   { font-size: 11px; color: #6B7280; }
+    .bk2-month-mode-sub code { background: #F3F4F6; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 10.5px; }
+  </style>
+
+  <script>
+  (function () {
+    var toggle = document.getElementById('monthly_package');
+    var cfg    = document.getElementById('monthly-package-config');
+    var preview = document.getElementById('monthly-preview');
+    var pattern = document.getElementById('recurring_pattern_name');
+    var year    = document.getElementById('monthly_year');
+    var grid    = document.getElementById('monthly-months-grid');
+    if (!toggle || !cfg) return;
+    var FULL = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+    function active() {
+      return Array.from(grid.querySelectorAll('input[name="monthly_months"]:checked')).map(function (i) { return i.value; });
+    }
+    function mode() {
+      var on = document.querySelector('input[name="monthly_mode"]:checked');
+      return on ? on.value : 'split';
+    }
+    function combinedName(months, p) {
+      var sorted = months.slice().map(function (n) { return FULL.indexOf(n); }).sort(function (a, b) { return a - b; });
+      if (!sorted.length) return p;
+      if (sorted.length === 1) return FULL[sorted[0]] + ' - ' + p;
+      var contig = sorted.every(function (n, i) { return i === 0 || n === sorted[i - 1] + 1; });
+      if (contig) return FULL[sorted[0]] + '–' + FULL[sorted[sorted.length - 1]] + ' - ' + p;
+      if (sorted.length <= 3) return sorted.map(function (n) { return FULL[n].slice(0, 3); }).join(', ') + ' - ' + p;
+      return 'Multiple months - ' + p;
+    }
+    function render() {
+      if (!preview) return;
+      var ms = active();
+      if (!ms.length) { preview.textContent = 'No months selected — tick one or more above.'; return; }
+      var p = (pattern.value || 'Packages').trim();
+      var y = year.value;
+      if (mode() === 'combined') {
+        preview.innerHTML = 'Will create 1 combined job: <code style="background:#F3F4F6;padding:1px 6px;border-radius:4px">' + combinedName(ms, p) + ' (' + y + ')</code>';
+      } else {
+        preview.innerHTML = 'Will create ' + ms.length + ' job(s): ' +
+          ms.map(function (m) { return '<code style="background:#F3F4F6;padding:1px 6px;border-radius:4px">' + m + ' - ' + p + ' (' + y + ')</code>'; }).join(' ');
+      }
+    }
+    function sync() { cfg.style.display = toggle.checked ? '' : 'none'; if (toggle.checked) render(); }
+    toggle.addEventListener('change', sync);
+    if (pattern) pattern.addEventListener('input', render);
+    if (year)    year.addEventListener('change', render);
+    grid.addEventListener('change', function (e) {
+      if (e.target.matches('input[name="monthly_months"]')) render();
+    });
+    document.querySelectorAll('input[name="monthly_mode"]').forEach(function (r) {
+      r.addEventListener('change', function () {
+        document.querySelectorAll('.bk2-month-mode').forEach(function (m) { m.classList.toggle('is-on', m.querySelector('input').checked); });
+        render();
+      });
+    });
+    function set(filter) {
+      grid.querySelectorAll('input[name="monthly_months"]').forEach(function (cb, i) { cb.checked = filter(i); });
+      render();
+    }
+    var a = document.getElementById('monthly-pick-all');
+    var r = document.getElementById('monthly-pick-rest');
+    var c = document.getElementById('monthly-pick-clear');
+    if (a) a.addEventListener('click', function () { set(function () { return true; }); });
+    if (r) r.addEventListener('click', function () { var n = new Date().getMonth(); set(function (i) { return i >= n; }); });
+    if (c) c.addEventListener('click', function () { set(function () { return false; }); });
+    sync();
+  })();
+  </script>
+
   <noscript>
     <div class="sticky bottom-0 bg-gray-50/95 backdrop-blur-sm border-t border-gray-200 -mx-4 sm:-mx-6 px-4 sm:px-6 py-3 flex items-center gap-3">
       <button type="submit" class="px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition-colors">

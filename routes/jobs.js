@@ -9,6 +9,7 @@ const { recalculateJobHealth, HEALTH_CALC_SQL } = require('../middleware/jobHeal
 const { ensureThreadForEntity, addMembersToThread, postSystemMessage, getThreadForEntity } = require('../lib/chat');
 const { generateJobNumber } = require('../lib/jobNumbers');
 const { hideAdminTasksSql } = require('../lib/taskVisibility');
+const { parseSelectedMonths, createMonthlyJobs, takenMonthsFor } = require('../lib/recurringJobs');
 
 // Multer for diary attachments
 const diaryStorage = multer.diskStorage({
@@ -116,15 +117,40 @@ router.post('/', (req, res) => {
   const db = getDb();
   const b = req.body;
 
-  // Auto-generate J-XXXX job number
-  const jobNumber = generateJobNumber();
-
-  // Resolve client name from client_id
+  // Resolve client name from client_id first — used by both monthly-
+  // package and single-job branches.
   let clientName = b.client || '';
   if (b.client_id) {
     const cl = db.prepare('SELECT company_name FROM clients WHERE id = ?').get(b.client_id);
     if (cl) clientName = cl.company_name;
   }
+
+  // Monthly package mode — mint one job per ticked month (split) or
+  // a single multi-month job (combined). Defers to the shared helper.
+  const isMonthly = !!b.monthly_package;
+  const patternName = (b.recurring_pattern_name || 'Packages').toString().trim().slice(0, 80);
+  const selectedMonths = isMonthly ? parseSelectedMonths(b.monthly_months) : [];
+  const monthlyYear = parseInt(b.monthly_year, 10) || new Date().getFullYear();
+  if (isMonthly && selectedMonths.length) {
+    const mode = (b.monthly_mode === 'combined') ? 'combined' : 'split';
+    try {
+      const created = createMonthlyJobs({
+        db, clientName, clientId: b.client_id || null, body: b, patternName,
+        selectedMonths, monthlyYear, mode,
+        createdById: req.session.user && req.session.user.id,
+      });
+      const monthsLbl = selectedMonths.map(m => m.name).join(', ');
+      req.flash('success', `Created ${created.length} monthly job(s) — ${monthsLbl} ${monthlyYear} (${patternName}).`);
+      return res.redirect('/jobs');
+    } catch (err) {
+      console.error('[Jobs] monthly CREATE ERROR:', err.message);
+      req.flash('error', 'Failed to create monthly jobs: ' + err.message);
+      return res.redirect('/jobs');
+    }
+  }
+
+  // Single-job create (original flow)
+  const jobNumber = generateJobNumber();
   const jobName = `${jobNumber} | ${clientName} | ${b.suburb} | ${b.start_date}`;
 
   try {
@@ -588,6 +614,8 @@ router.post('/:id', (req, res) => {
   const jobName = `${existing.job_number} | ${clientName} | ${b.suburb} | ${b.start_date}`;
 
   try {
+    const isMonthly = !!b.recurring_monthly;
+    const patternName = (b.recurring_pattern_name || 'Packages').toString().trim().slice(0, 80);
     db.prepare(`
       UPDATE jobs SET job_name=?, client=?, client_id=?, site_address=?, suburb=?, status=?, stage=?, percent_complete=?, start_date=?, end_date=?,
         project_manager_id=?, ops_supervisor_id=?, planning_owner_id=?, marketing_owner_id=?, accounts_owner_id=?,
@@ -596,6 +624,7 @@ router.post('/:id', (req, res) => {
         contract_value=?, estimated_hours=?, crew_size=?, vehicles=?, rol_required=?, tmp_required=?, tgs_required=?, spa_required=?, council_approval=?, bus_approval=?,
         sharepoint_url=?, state=?,
         required_tcp_level=?, priority=?,
+        recurring_monthly=?, recurring_pattern_name=?,
         updated_at=CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
@@ -612,6 +641,7 @@ router.post('/:id', (req, res) => {
       b.sharepoint_url || '', b.state || '',
       b.required_tcp_level || '',
       b.priority || 'normal',
+      isMonthly ? 1 : 0, patternName,
       req.params.id
     );
     // Archive chat thread when job is completed/closed
@@ -623,7 +653,29 @@ router.post('/:id', (req, res) => {
       }
     }
 
-    req.flash('success', 'Job updated successfully.');
+    // If the user picked extra months on the edit form, mint sibling
+    // jobs for any that don't already exist (same client + pattern +
+    // year). Re-saving with the same months is a no-op.
+    const selectedMonths = isMonthly ? parseSelectedMonths(b.monthly_months) : [];
+    let mintedCount = 0;
+    if (isMonthly && selectedMonths.length) {
+      const year = parseInt(b.monthly_year, 10) || new Date().getFullYear();
+      const clientIdInt = b.client_id ? (parseInt(b.client_id, 10) || null) : null;
+      const taken = takenMonthsFor(db, clientIdInt, patternName, year);
+      const monthsToMint = selectedMonths.filter(m => !taken.has(m.index));
+      if (monthsToMint.length) {
+        const mode = (b.monthly_mode === 'combined') ? 'combined' : 'split';
+        const minted = createMonthlyJobs({
+          db, clientName, clientId: clientIdInt, body: b, patternName,
+          selectedMonths: monthsToMint, monthlyYear: year, mode,
+          createdById: req.session.user && req.session.user.id,
+        });
+        mintedCount = minted.length;
+      }
+    }
+
+    if (mintedCount > 0) req.flash('success', `Job updated · added ${mintedCount} new monthly job(s).`);
+    else req.flash('success', 'Job updated successfully.');
     res.redirect(`/jobs/${req.params.id}`);
   } catch (err) {
     req.flash('error', 'Failed to update job: ' + err.message);

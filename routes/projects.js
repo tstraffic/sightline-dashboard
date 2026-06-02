@@ -6,79 +6,7 @@ const { recalculateJobHealth, HEALTH_CALC_SQL } = require('../middleware/jobHeal
 const { logActivity } = require('../middleware/audit');
 const { ensureThreadForEntity, addMembersToThread, postSystemMessage, getThreadForEntity } = require('../lib/chat');
 const { generateJobNumber } = require('../lib/jobNumbers');
-const { MONTH_NAMES, monthlyJobName, combinedMonthsJobName, firstOfMonth, parseSelectedMonths } = require('../lib/recurringJobs');
-
-// Insert one or more jobs for a monthly-package selection. Used by
-// both POST /projects (initial create) and POST /projects/:id/add-months
-// (adding more months to an existing recurring set). Returns the array
-// of new {jobNumber, projectName, startIso}.
-function createMonthlyJobs(db, opts) {
-  const { clientName, clientId, body, patternName, selectedMonths, monthlyYear, mode } = opts;
-  const b = body || {};
-  const insertStmt = db.prepare(`
-    INSERT INTO jobs (job_number, job_name, project_name, client, client_id, site_address, suburb, status, stage, percent_complete, start_date, end_date, project_manager_id, ops_supervisor_id, planning_owner_id, marketing_owner_id, accounts_owner_id, health, accounts_status, division_tags, notes,
-      client_project_number, principal_contractor, traffic_supervisor_id,
-      contract_value, estimated_hours, crew_size, rol_required, tmp_required, sharepoint_url, state, required_tcp_level, priority,
-      recurring_monthly, recurring_pattern_name)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-  `);
-  const out = [];
-  const tx = db.transaction(() => {
-    if (mode === 'combined') {
-      // One job spanning the earliest → latest selected month.
-      const sorted = selectedMonths.slice().sort((a, b) => a.index - b.index);
-      const first = sorted[0], last = sorted[sorted.length - 1];
-      const startIso = firstOfMonth(monthlyYear, first.index);
-      const endIso   = new Date(Date.UTC(monthlyYear, last.index + 1, 0)).toISOString().slice(0, 10);
-      const projectName = combinedMonthsJobName(sorted, patternName);
-      const jobNumber = generateJobNumber();
-      const jobName = `${jobNumber} | ${clientName || ''} | ${b.suburb || ''} | ${startIso}`;
-      insertStmt.run(
-        jobNumber, jobName, projectName, clientName || '', clientId || null, b.site_address || '', b.suburb || '',
-        b.status || 'tender', b.stage || 'tender', 0,
-        startIso, endIso,
-        b.project_manager_id || null, b.ops_supervisor_id || null,
-        b.planning_owner_id || null, b.marketing_owner_id || null, b.accounts_owner_id || null,
-        b.health || 'green', b.accounts_status || 'na',
-        b.division_tags || '', b.notes || '',
-        b.client_project_number || '', b.principal_contractor || '', b.traffic_supervisor_id || null,
-        parseFloat(b.contract_value) || 0, parseFloat(b.estimated_hours) || 0, parseInt(b.crew_size) || 0,
-        b.rol_required ? 1 : 0, b.tmp_required ? 1 : 0, b.sharepoint_url || '', b.state || '',
-        b.required_tcp_level || '',
-        b.priority || 'normal',
-        patternName
-      );
-      out.push({ jobNumber, projectName, startIso });
-    } else {
-      // One job per ticked month.
-      for (const m of selectedMonths) {
-        const jobNumber = generateJobNumber();
-        const startIso = firstOfMonth(monthlyYear, m.index);
-        const endIso = new Date(Date.UTC(monthlyYear, m.index + 1, 0)).toISOString().slice(0, 10);
-        const projectName = monthlyJobName(m.name, patternName);
-        const jobName = `${jobNumber} | ${clientName || ''} | ${b.suburb || ''} | ${startIso}`;
-        insertStmt.run(
-          jobNumber, jobName, projectName, clientName || '', clientId || null, b.site_address || '', b.suburb || '',
-          b.status || 'tender', b.stage || 'tender', 0,
-          startIso, endIso,
-          b.project_manager_id || null, b.ops_supervisor_id || null,
-          b.planning_owner_id || null, b.marketing_owner_id || null, b.accounts_owner_id || null,
-          b.health || 'green', b.accounts_status || 'na',
-          b.division_tags || '', b.notes || '',
-          b.client_project_number || '', b.principal_contractor || '', b.traffic_supervisor_id || null,
-          parseFloat(b.contract_value) || 0, parseFloat(b.estimated_hours) || 0, parseInt(b.crew_size) || 0,
-          b.rol_required ? 1 : 0, b.tmp_required ? 1 : 0, b.sharepoint_url || '', b.state || '',
-          b.required_tcp_level || '',
-          b.priority || 'normal',
-          patternName
-        );
-        out.push({ jobNumber, projectName, startIso });
-      }
-    }
-  });
-  tx();
-  return out;
-}
+const { MONTH_NAMES, monthlyJobName, combinedMonthsJobName, firstOfMonth, parseSelectedMonths, createMonthlyJobs, takenMonthsFor } = require('../lib/recurringJobs');
 
 // List all projects (top-level jobs only, parent_project_id IS NULL)
 router.get('/', (req, res) => {
@@ -185,9 +113,10 @@ router.post('/', (req, res) => {
     //                     range or "Multiple months - <pattern>".
     const mode = (b.monthly_mode === 'combined') ? 'combined' : 'split';
     try {
-      const created = createMonthlyJobs(db, {
-        clientName, clientId: b.client_id || null, body: b, patternName,
+      const created = createMonthlyJobs({
+        db, clientName, clientId: b.client_id || null, body: b, patternName,
         selectedMonths, monthlyYear, mode,
+        createdById: req.session.user && req.session.user.id,
       });
       const monthsLbl = selectedMonths.map(m => m.name).join(', ');
       req.flash('success', `Created ${created.length} monthly job(s) — ${monthsLbl} ${monthlyYear} (${patternName}).`);
@@ -598,40 +527,15 @@ router.post('/:id', (req, res) => {
     let mintedCount = 0;
     if (isMonthly && selectedMonths.length) {
       const year = parseInt(b.monthly_year, 10) || new Date().getFullYear();
-      const yearPrefix = year + '-';
-      // Cast client_id to a real integer so SQLite type affinity matches.
-      // Forms POST strings; the column is INTEGER. Using strict equality
-      // after a cast avoids the cross-type comparison surprise that let
-      // duplicate siblings slip past the previous COALESCE-based check.
       const clientIdInt = b.client_id ? (parseInt(b.client_id, 10) || null) : null;
-      const patternLower = (patternName || '').toLowerCase();
-      const existingSiblings = (clientIdInt
-        ? db.prepare(`
-            SELECT start_date FROM jobs
-            WHERE recurring_monthly = 1
-              AND client_id = ?
-              AND LOWER(IFNULL(recurring_pattern_name, '')) = ?
-              AND start_date LIKE ?
-          `).all(clientIdInt, patternLower, yearPrefix + '%')
-        : db.prepare(`
-            SELECT start_date FROM jobs
-            WHERE recurring_monthly = 1
-              AND client_id IS NULL
-              AND LOWER(IFNULL(recurring_pattern_name, '')) = ?
-              AND start_date LIKE ?
-          `).all(patternLower, yearPrefix + '%')
-      );
-      const takenMonths = new Set();
-      for (const s of existingSiblings) {
-        const mm = parseInt((s.start_date || '').slice(5, 7), 10);
-        if (Number.isFinite(mm) && mm >= 1 && mm <= 12) takenMonths.add(mm - 1);
-      }
-      const monthsToMint = selectedMonths.filter(m => !takenMonths.has(m.index));
+      const taken = takenMonthsFor(db, clientIdInt, patternName, year);
+      const monthsToMint = selectedMonths.filter(m => !taken.has(m.index));
       if (monthsToMint.length) {
         const mode = (b.monthly_mode === 'combined') ? 'combined' : 'split';
-        const minted = createMonthlyJobs(db, {
-          clientName, clientId: clientIdInt, body: b, patternName,
+        const minted = createMonthlyJobs({
+          db, clientName, clientId: clientIdInt, body: b, patternName,
           selectedMonths: monthsToMint, monthlyYear: year, mode,
+          createdById: req.session.user && req.session.user.id,
         });
         mintedCount = minted.length;
       }
