@@ -1198,3 +1198,132 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
   .bk2-card-h3 { font-size: 16px; }
   .bk2-row { grid-template-columns: 100px 1fr; }
 }
+
+/* =============================================================
+   DARK-MODE OVERRIDES
+   The booking editor + create form use hardcoded white/grey
+   colours (not Tailwind classes) so the global .dark-glass
+   theme transformations don't touch them. These rules flip
+   the surfaces to dark-glass cards with light text so the
+   New Booking flow + tab content stay legible at night.
+   ============================================================= */
+
+/* Editor body + status row */
+body.dark-glass .bk2-edit-body { background: var(--atomis-base, #0F1115); }
+body.dark-glass .bk2-edit-statusrow {
+  background: rgba(255,255,255,0.04);
+  border-bottom-color: rgba(255,255,255,0.06);
+}
+body.dark-glass .bk2-edit-statuspill {
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.70);
+}
+body.dark-glass .bk2-edit-statuspill:hover { background: rgba(255,255,255,0.12); color: #fff; }
+
+body.dark-glass .bk2-edit-actbtn {
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.85);
+}
+body.dark-glass .bk2-edit-actbtn:hover:not(:disabled) { background: rgba(255,255,255,0.12); color: #fff; }
+body.dark-glass .bk2-edit-actbtn--create {
+  background: transparent;
+  border: 1.5px solid #10B981;
+  color: #34D399;
+}
+body.dark-glass .bk2-edit-actbtn--create:hover:not(:disabled) {
+  background: rgba(16,185,129,0.12);
+  color: #6EE7B7;
+}
+
+body.dark-glass .bk2-edit-foot {
+  background: rgba(255,255,255,0.04);
+  border-top-color: rgba(255,255,255,0.06);
+}
+body.dark-glass .bk2-edit-foot-info { color: rgba(255,255,255,0.55); }
+
+/* Edit-tab inactive titles need a bit more contrast in dark mode */
+body.dark-glass .bk2-edit-tab[aria-selected="true"] { background: #F9FAFB; color: #1F2937; }
+body.dark-glass .bk2-edit-tab[aria-selected="true"] svg { color: #1F2937; }
+
+/* Create form cards */
+body.dark-glass .bk2-create-card {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+  box-shadow: none;
+}
+body.dark-glass .bk2-create-head { color: #F59E0B; }
+body.dark-glass .bk2-create-head--summary { color: #F59E0B; }
+body.dark-glass .bk2-create-lbl { color: rgba(255,255,255,0.60); }
+body.dark-glass .bk2-create-field input,
+body.dark-glass .bk2-create-field select,
+body.dark-glass .bk2-create-field textarea {
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.92);
+  border-color: rgba(255,255,255,0.12);
+}
+body.dark-glass .bk2-create-field input::placeholder,
+body.dark-glass .bk2-create-field textarea::placeholder { color: rgba(255,255,255,0.35); }
+body.dark-glass .bk2-create-field--required input,
+body.dark-glass .bk2-create-field--required select,
+body.dark-glass .bk2-create-field--required textarea {
+  background: rgba(245,158,11,0.08);
+  border-color: rgba(245,158,11,0.40);
+  color: rgba(255,255,255,0.95);
+}
+body.dark-glass .bk2-create-field--required .bk2-create-lbl { color: #FBBF24; }
+body.dark-glass .bk2-create-toggle {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.85);
+}
+body.dark-glass .bk2-create-hint {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.55);
+}
+body.dark-glass .bk2-create-typecard {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.12);
+}
+body.dark-glass .bk2-create-typecard.is-active {
+  background: rgba(43,127,255,0.18);
+  border-color: #2B7FFF;
+}
+body.dark-glass .bk2-create-typename { color: rgba(255,255,255,0.92); }
+body.dark-glass .bk2-create-typesub  { color: rgba(255,255,255,0.55); }
+body.dark-glass .bk2-create-search {
+  background: rgba(245,158,11,0.10);
+  border-color: rgba(245,158,11,0.35);
+  color: rgba(255,255,255,0.92);
+}
+body.dark-glass .bk2-create-search:focus { background: rgba(255,255,255,0.06); border-color: #2B7FFF; }
+body.dark-glass .bk2-create-req {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.06);
+}
+body.dark-glass .bk2-create-req-name { color: rgba(255,255,255,0.80); }
+body.dark-glass .bk2-create-stepper {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.12);
+}
+body.dark-glass .bk2-create-stepper button { color: rgba(255,255,255,0.70); }
+body.dark-glass .bk2-create-stepper button:hover { background: rgba(255,255,255,0.08); color: #fff; }
+body.dark-glass .bk2-create-stepper input {
+  border-left-color: rgba(255,255,255,0.08);
+  border-right-color: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.95);
+}
+body.dark-glass .bk2-create-reqs-summary {
+  background: rgba(255,255,255,0.03);
+  border-top-color: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.55);
+}
+body.dark-glass .bk2-create-reqs-summary strong { color: rgba(255,255,255,0.95); }
+
+/* Editor placeholder cards (the "tell me what this does" tabs) */
+body.dark-glass .bk2-edit-placeholder {
+  background: rgba(255,255,255,0.03);
+  border-color: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.55);
+}
+body.dark-glass .bk2-edit-placeholder h3 { color: rgba(255,255,255,0.92); }

@@ -438,6 +438,33 @@
     .bk2-month-mode-title { font-size: 13px; font-weight: 600; color: #111827; }
     .bk2-month-mode-sub   { font-size: 11px; color: #6B7280; }
     .bk2-month-mode-sub code { background: #F3F4F6; padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, monospace; font-size: 10.5px; }
+
+    /* Dark-mode variants for the chip + mode surfaces. */
+    body.dark-glass .bk2-month-chip {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(255,255,255,0.10);
+      color: rgba(255,255,255,0.85);
+    }
+    body.dark-glass .bk2-month-chip:hover { background: rgba(255,255,255,0.08); }
+    body.dark-glass .bk2-month-chip.is-on,
+    body.dark-glass .bk2-month-chip:has(input:checked) {
+      background: rgba(43,127,255,0.20);
+      border-color: #2B7FFF;
+      color: #93C5FD;
+    }
+    body.dark-glass .bk2-month-mode {
+      background: rgba(255,255,255,0.04);
+      border-color: rgba(255,255,255,0.12);
+    }
+    body.dark-glass .bk2-month-mode:hover { background: rgba(255,255,255,0.08); }
+    body.dark-glass .bk2-month-mode.is-on,
+    body.dark-glass .bk2-month-mode:has(input:checked) {
+      background: rgba(43,127,255,0.18);
+      border-color: #2B7FFF;
+    }
+    body.dark-glass .bk2-month-mode-title { color: rgba(255,255,255,0.92); }
+    body.dark-glass .bk2-month-mode-sub { color: rgba(255,255,255,0.55); }
+    body.dark-glass .bk2-month-mode-sub code { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.85); }
   </style>
 
   <script>

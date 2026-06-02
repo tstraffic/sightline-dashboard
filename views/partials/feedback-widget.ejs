@@ -134,6 +134,37 @@
   .fb-status { margin: 4px 0 0; font-size: 12px; font-weight: 600; }
   .fb-status.is-ok { color: #047857; }
   .fb-status.is-err { color: #B91C1C; }
+
+  /* ─── Dark-mode overrides ───
+     The modal uses hardcoded colours (not Tailwind classes) so the
+     global .dark-glass theme transformations don't reach it. These
+     rules flip the surface to a dark glass card with light text so
+     the form is legible in night mode. */
+  body.dark-glass .fb-modal {
+    background: #1A1D24;
+    color: rgba(255,255,255,0.92);
+    border-color: rgba(255,255,255,0.10);
+  }
+  body.dark-glass .fb-modal-head {
+    border-bottom-color: rgba(255,255,255,0.08);
+  }
+  body.dark-glass .fb-modal-head h2 { color: rgba(255,255,255,0.92); }
+  body.dark-glass .fb-modal-x { color: rgba(255,255,255,0.60); }
+  body.dark-glass .fb-modal-x:hover { background: rgba(255,255,255,0.08); color: #fff; }
+  body.dark-glass .fb-label { color: rgba(255,255,255,0.75); }
+  body.dark-glass .fb-label input,
+  body.dark-glass .fb-label textarea {
+    background: rgba(255,255,255,0.04);
+    color: rgba(255,255,255,0.92);
+    border-color: rgba(255,255,255,0.12);
+  }
+  body.dark-glass .fb-label input::placeholder,
+  body.dark-glass .fb-label textarea::placeholder { color: rgba(255,255,255,0.40); }
+  body.dark-glass .fb-label input:focus,
+  body.dark-glass .fb-label textarea:focus { border-color: #2B7FFF; background: rgba(255,255,255,0.06); }
+  body.dark-glass .fb-hint { color: rgba(255,255,255,0.55); }
+  body.dark-glass .fb-btn--ghost { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.80); }
+  body.dark-glass .fb-btn--ghost:hover { background: rgba(255,255,255,0.12); color: #fff; }
 </style>
 
 <script>
