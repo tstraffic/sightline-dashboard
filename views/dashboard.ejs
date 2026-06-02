@@ -749,6 +749,58 @@
   <!-- Tab: Plans & Safety -->
   <% if (isPlanning || isOps) { %>
   <div data-tab-panel="plans-safety" class="hidden space-y-4">
+    <%
+      const pa = (typeof plansAttention !== 'undefined' && plansAttention) ? plansAttention : { upcoming: [], ctmps: [], rolAlerts: [] };
+      const qaChip = { pending: 'bg-gray-100 text-gray-600', in_qa: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700' };
+    %>
+
+    <!-- ROL special-condition alerts -->
+    <% if (pa.rolAlerts.length > 0) { %>
+    <div class="bg-red-50 border border-red-200 rounded-2xl p-4">
+      <h2 class="text-xs font-bold text-red-700 uppercase tracking-wider mb-2">ROL Condition Alerts</h2>
+      <ul class="space-y-1.5">
+        <% pa.rolAlerts.forEach(function(a){ %>
+          <li class="text-sm text-red-800 flex gap-2"><span class="font-semibold">!</span><span><a href="/plans/<%= a.plan_id %>" class="font-medium hover:underline"><%= a.plan_number %></a><%= a.job_number ? ' (' + a.job_number + ')' : '' %> — <%= a.text %></span></li>
+        <% }) %>
+      </ul>
+    </div>
+    <% } %>
+
+    <!-- Upcoming plan submissions / job dates + CTMP QA -->
+    <% if (pa.upcoming.length > 0 || pa.ctmps.length > 0) { %>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-white border border-gray-200 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xs font-bold text-gray-800 uppercase tracking-wider">Plans — Upcoming (14 days)</h2>
+          <a href="/plans" class="text-xs text-brand-600 hover:text-brand-500 font-medium">View all &rarr;</a>
+        </div>
+        <% if (pa.upcoming.length > 0) { %>
+          <ul class="divide-y divide-gray-100">
+            <% pa.upcoming.forEach(function(p){ %>
+              <li class="py-2 flex items-center justify-between text-sm">
+                <span><a href="/plans/<%= p.id %>" class="text-brand-600 hover:underline font-medium"><%= p.plan_number %></a> <span class="text-gray-400 text-xs"><%= (p.plan_types || '').split(',').join(', ') %></span></span>
+                <span class="text-gray-500 text-xs"><%= p.key_date ? formatDate(p.key_date) : '' %></span>
+              </li>
+            <% }) %>
+          </ul>
+        <% } else { %><p class="text-sm text-gray-400">Nothing due in the next 14 days.</p><% } %>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-2xl p-4">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2">CTMP — QA Status</h2>
+        <% if (pa.ctmps.length > 0) { %>
+          <ul class="divide-y divide-gray-100">
+            <% pa.ctmps.forEach(function(c){ %>
+              <li class="py-2 flex items-center justify-between text-sm">
+                <a href="/ctmps/<%= c.id %>" class="text-brand-600 hover:underline font-medium truncate mr-2"><%= c.title || c.ctmp_number %></a>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap <%= qaChip[c.qa_status] || 'bg-gray-100 text-gray-600' %>"><%= c.current_revision_label || 'Draft' %> · <%= (c.qa_status || 'pending').replace('_',' ') %></span>
+              </li>
+            <% }) %>
+          </ul>
+        <% } else { %><p class="text-sm text-gray-400">No CTMPs awaiting QA.</p><% } %>
+      </div>
+    </div>
+    <% } %>
+
     <% if (complianceUrgent.length > 0) { %>
     <div>
       <div class="flex items-center justify-between mb-2">

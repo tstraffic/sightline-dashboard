@@ -1,0 +1,301 @@
+<% locals.currentPage = 'plans' %>
+<%
+  const statusColors = {
+    draft: 'bg-gray-100 text-gray-700',
+    submitted: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+    under_review: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    approved: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
+    rejected: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+    expired: 'bg-orange-50 text-orange-700 ring-1 ring-orange-600/20'
+  };
+  const sc = statusColors[plan.status] || 'bg-gray-100 text-gray-700';
+  const isRol = planTypeList.includes('ROL');
+  const isCouncil = planTypeList.includes('Council Application');
+  const canExtend = isRol || isCouncil;
+%>
+
+<!-- Breadcrumb -->
+<div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
+  <a href="/plans" class="hover:text-gray-900 transition">Traffic Plans</a>
+  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+  <span class="text-gray-900"><%= plan.plan_number %></span>
+</div>
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+  <div>
+    <div class="flex items-center gap-3 flex-wrap">
+      <h1 class="text-2xl font-bold text-gray-900"><%= plan.plan_number %></h1>
+      <span class="px-2 py-0.5 rounded-full text-xs font-semibold <%= sc %>"><%= (plan.status || 'draft').replace('_',' ') %></span>
+      <% if (plan.is_final) { %><span class="px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-600 text-white">FINAL</span><% } %>
+    </div>
+    <p class="text-gray-500 text-sm mt-1">
+      <% if (plan.job_id) { %>
+        <a href="/jobs/<%= plan.job_id %>#plans" class="text-brand-600 hover:underline"><%= plan.job_number %></a>
+        <%= plan.project_name ? '— ' + plan.project_name : '' %>
+        <%= [plan.site_address, plan.suburb].filter(Boolean).length ? ' · ' + [plan.site_address, plan.suburb].filter(Boolean).join(', ') : '' %>
+      <% } else { %>No job linked<% } %>
+    </p>
+    <div class="flex flex-wrap gap-2 mt-2">
+      <% planTypeList.forEach(function(t) { %>
+        <span class="px-2 py-0.5 rounded-md text-xs font-medium bg-brand-50 text-brand-700 ring-1 ring-brand-600/20"><%= t %></span>
+      <% }) %>
+      <% if (isCouncil && plan.council_plan_type) { %>
+        <span class="px-2 py-0.5 rounded-md text-xs font-medium bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600/20"><%= plan.council_plan_type %></span>
+      <% } %>
+    </div>
+  </div>
+  <div class="flex items-center gap-2">
+    <a href="/plans/<%= plan.id %>/edit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">Edit</a>
+    <% if (!plan.is_final) { %>
+      <form method="POST" action="/plans/<%= plan.id %>/mark-final" class="inline">
+        <%- include('../partials/csrf') %>
+        <input type="hidden" name="return_to" value="/plans/<%= plan.id %>">
+        <button type="submit" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg transition">Mark Final</button>
+      </form>
+    <% } else { %>
+      <form method="POST" action="/plans/<%= plan.id %>/revoke-final" class="inline">
+        <%- include('../partials/csrf') %>
+        <input type="hidden" name="return_to" value="/plans/<%= plan.id %>">
+        <button type="submit" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition">Revoke Final</button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<!-- ROL special-condition alerts -->
+<% const alerts = rolConditions.filter(c => c.is_alert); %>
+<% if (alerts.length) { %>
+  <div class="bg-red-50 border border-red-200 rounded-xl p-4 mb-5">
+    <h2 class="text-xs font-bold text-red-700 uppercase tracking-widest mb-2 flex items-center gap-2">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      Conditions / restrictions — read before going to site
+    </h2>
+    <ul class="space-y-1.5">
+      <% alerts.forEach(function(c) { %>
+        <li class="text-sm text-red-800 flex gap-2"><span class="font-semibold">!</span><span><%= c.text %></span></li>
+      <% }) %>
+    </ul>
+  </div>
+<% } %>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+  <!-- LEFT: overview + dates -->
+  <div class="lg:col-span-2 space-y-5">
+    <!-- Key dates -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Key Dates & Details</h2>
+      <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
+        <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Client Requested</p><p class="text-gray-900"><%= plan.client_required_date ? formatDate(plan.client_required_date) : '—' %></p></div>
+        <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Submission</p><p class="text-gray-900"><%= plan.submitted_date ? formatDate(plan.submitted_date) : '—' %></p></div>
+        <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Job Date</p><p class="text-gray-900"><%= plan.job_date ? formatDate(plan.job_date) : '—' %></p></div>
+        <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Approval</p><p class="text-gray-900"><%= plan.approval_date ? formatDate(plan.approval_date) : '—' %></p></div>
+        <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Approved</p><p class="text-gray-900"><%= plan.approved_date ? formatDate(plan.approved_date) : '—' %></p></div>
+        <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Expiry</p><p class="text-gray-900"><%= plan.expiry_date ? formatDate(plan.expiry_date) : '—' %></p></div>
+        <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Designer</p><p class="text-gray-900"><%= plan.designer || '—' %></p></div>
+        <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Council</p><p class="text-gray-900"><%= plan.council || '—' %></p></div>
+        <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">TfNSW</p><p class="text-gray-900"><%= plan.tfnsw || '—' %></p></div>
+      </div>
+      <% if (plan.file_path || plan.file_link) { %>
+        <div class="mt-4 flex flex-wrap gap-3 text-sm">
+          <% if (plan.file_path) { %><a href="/<%= plan.file_path %>" target="_blank" class="text-brand-600 hover:underline">📄 <%= plan.file_original_name || 'Document' %></a><% } %>
+          <% if (plan.file_link) { %><a href="<%= plan.file_link %>" target="_blank" class="text-brand-600 hover:underline">🔗 External link</a><% } %>
+        </div>
+      <% } %>
+      <% if (plan.notes) { %><div class="mt-4"><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Notes</p><p class="text-sm text-gray-700 whitespace-pre-line"><%= plan.notes %></p></div><% } %>
+    </div>
+
+    <!-- ROL two-stage workflow -->
+    <% if (isRol) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">ROL — Two-Stage Workflow
+        <span class="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold <%= plan.rol_stage === 'approved' ? 'bg-emerald-100 text-emerald-700' : plan.rol_stage === 'applied' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600' %>"><%= (plan.rol_stage || 'none').toUpperCase() %></span>
+      </h2>
+
+      <!-- Auto-extract from PDF (Phase 2) -->
+      <div class="bg-brand-50 border border-brand-100 rounded-lg p-3 mb-4">
+        <p class="text-[11px] font-bold text-brand-700 uppercase tracking-widest mb-2">Auto-extract from PDF</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <form method="POST" action="/plans/<%= plan.id %>/rola/parse" enctype="multipart/form-data" class="flex items-center gap-2">
+            <%- include('../partials/csrf') %>
+            <input type="file" name="rola_file" accept=".pdf" required class="text-xs">
+            <button class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg whitespace-nowrap">Read ROLA</button>
+          </form>
+          <form method="POST" action="/plans/<%= plan.id %>/rol/parse" enctype="multipart/form-data" class="flex items-center gap-2">
+            <%- include('../partials/csrf') %>
+            <input type="file" name="rol_file" accept=".pdf" required class="text-xs">
+            <button class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg whitespace-nowrap">Read issued ROL</button>
+          </form>
+        </div>
+        <p class="text-[11px] text-brand-600/70 mt-1">Reads the licence/application number, date &amp; time range, shifts and conditions, then lets you review before saving.</p>
+      </div>
+
+      <!-- Stage 1: ROLA -->
+      <form method="POST" action="/plans/<%= plan.id %>/rola" enctype="multipart/form-data" class="border border-gray-100 rounded-lg p-3 mb-4">
+        <%- include('../partials/csrf') %>
+        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Stage 1 — Application (ROLA)</p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">ROLA App #</label><input name="rola_application_number" value="<%= plan.rola_application_number || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+          <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Applied From</label><input type="date" name="rol_summary_from" value="<%= plan.rol_summary_from || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+          <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Applied To</label><input type="date" name="rol_summary_to" value="<%= plan.rol_summary_to || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+          <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Time Window</label><input name="rol_time_window" value="<%= plan.rol_time_window || '' %>" placeholder="e.g. 20:00–05:00 nightly" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+          <div class="sm:col-span-2"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">ROLA PDF</label><input type="file" name="rola_file" accept=".pdf"></div>
+        </div>
+        <% if (plan.rola_file_path) { %><p class="text-xs text-gray-500 mt-1">Current: <a href="/<%= plan.rola_file_path %>" target="_blank" class="text-brand-600 hover:underline"><%= plan.rola_file_original_name || 'ROLA' %></a></p><% } %>
+        <button class="mt-3 px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg">Save ROLA</button>
+      </form>
+
+      <!-- Stage 2: issued ROL -->
+      <form method="POST" action="/plans/<%= plan.id %>/rol" enctype="multipart/form-data" class="border border-gray-100 rounded-lg p-3">
+        <%- include('../partials/csrf') %>
+        <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Stage 2 — Approval (issued ROL)</p>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">ROL #</label><input name="rol_actual_number" value="<%= plan.rol_actual_number || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+          <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Approved From</label><input type="date" name="rol_summary_from" value="<%= plan.rol_summary_from || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+          <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Approved To</label><input type="date" name="rol_summary_to" value="<%= plan.rol_summary_to || '' %>" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+        </div>
+        <div class="mt-3">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Conditions (one per line; prefix with "!" to surface as a dashboard alert)</label>
+          <textarea name="conditions" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"><% rolConditions.forEach(function(c){ %><%= (c.is_alert ? '!' : '') + c.text %>
+<% }) %></textarea>
+        </div>
+        <div class="mt-3"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Issued ROL PDF</label><input type="file" name="rol_file" accept=".pdf"></div>
+        <% if (plan.rol_file_path) { %><p class="text-xs text-gray-500 mt-1">Current: <a href="/<%= plan.rol_file_path %>" target="_blank" class="text-brand-600 hover:underline"><%= plan.rol_file_original_name || 'ROL' %></a></p><% } %>
+        <button class="mt-3 px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg">Save issued ROL</button>
+      </form>
+
+      <% if (rolShifts.length) { %>
+        <div class="mt-4">
+          <p class="text-[11px] font-bold text-gray-500 uppercase tracking-widest mb-2">Approved shifts (<%= rolShifts.length %>)</p>
+          <div class="max-h-48 overflow-y-auto border border-gray-100 rounded-lg">
+            <table class="w-full text-xs"><tbody>
+              <% rolShifts.forEach(function(s){ %>
+                <tr class="border-b border-gray-50"><td class="px-3 py-1.5"><%= s.start_date ? formatDateShort(s.start_date) : '' %> <%= s.start_time %></td><td class="px-3 py-1.5 text-gray-400">→</td><td class="px-3 py-1.5"><%= s.end_date ? formatDateShort(s.end_date) : '' %> <%= s.end_time %></td></tr>
+              <% }) %>
+            </tbody></table>
+          </div>
+        </div>
+      <% } %>
+    </div>
+    <% } %>
+
+    <!-- Fees -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Fees</h2>
+        <span class="text-sm font-semibold text-gray-900">Total: $<%= feesTotal.toFixed(2) %></span>
+      </div>
+      <% if (fees.length) { %>
+        <table class="w-full text-sm mb-4">
+          <thead><tr class="text-[10px] font-bold text-gray-400 uppercase tracking-widest text-left"><th class="pb-2">Description</th><th class="pb-2">Amount</th><th class="pb-2">Receipt</th><th class="pb-2"></th></tr></thead>
+          <tbody>
+            <% fees.forEach(function(f){ %>
+              <tr class="border-t border-gray-100">
+                <td class="py-2 text-gray-900"><%= f.description || '—' %></td>
+                <td class="py-2 text-gray-900">$<%= Number(f.amount||0).toFixed(2) %></td>
+                <td class="py-2"><% if (f.receipt_file_path) { %><a href="/<%= f.receipt_file_path %>" target="_blank" class="text-brand-600 hover:underline"><%= f.receipt_original_name || 'Receipt' %></a><% } else { %><span class="text-gray-400">—</span><% } %></td>
+                <td class="py-2 text-right"><form method="POST" action="/plans/<%= plan.id %>/fees/<%= f.id %>/delete" onsubmit="return confirm('Delete this fee?')"><%- include('../partials/csrf') %><button class="text-red-400 hover:text-red-600 text-xs">Delete</button></form></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      <% } else { %><p class="text-sm text-gray-400 mb-4">No fees recorded.</p><% } %>
+      <form method="POST" action="/plans/<%= plan.id %>/fees" enctype="multipart/form-data" class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end border-t border-gray-100 pt-4">
+        <%- include('../partials/csrf') %>
+        <div class="sm:col-span-2"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Description</label><input name="description" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="e.g. Council permit fee"></div>
+        <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Amount ($)</label><input type="number" step="0.01" name="amount" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+        <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Receipt</label><input type="file" name="receipt" accept=".pdf,.jpg,.jpeg,.png,.webp" class="text-xs"></div>
+        <div class="sm:col-span-4"><button class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg">Add Fee</button></div>
+      </form>
+    </div>
+
+    <!-- Extensions -->
+    <% if (canExtend) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Extensions</h2>
+      <% if (extensions.length) { %>
+        <ul class="space-y-2 mb-4">
+          <% extensions.forEach(function(e){ %>
+            <li class="flex items-center justify-between text-sm border-t border-gray-100 pt-2">
+              <span class="text-gray-900"><%= e.label || 'Extension' %><%= e.extended_to ? ' — extended to ' + formatDate(e.extended_to) : '' %><% if (e.reason) { %> <span class="text-gray-500">(<%= e.reason %>)</span><% } %><% if (e.file_path) { %> · <a href="/<%= e.file_path %>" target="_blank" class="text-brand-600 hover:underline"><%= e.file_original_name || 'file' %></a><% } %></span>
+              <form method="POST" action="/plans/<%= plan.id %>/extensions/<%= e.id %>/delete" onsubmit="return confirm('Delete this extension?')"><%- include('../partials/csrf') %><button class="text-red-400 hover:text-red-600 text-xs">Delete</button></form>
+            </li>
+          <% }) %>
+        </ul>
+      <% } else { %><p class="text-sm text-gray-400 mb-4">No extensions.</p><% } %>
+      <form method="POST" action="/plans/<%= plan.id %>/extensions" enctype="multipart/form-data" class="grid grid-cols-1 sm:grid-cols-4 gap-2 items-end border-t border-gray-100 pt-4">
+        <%- include('../partials/csrf') %>
+        <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Label</label><input name="label" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="Extension 1"></div>
+        <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Extended To</label><input type="date" name="extended_to" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+        <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Reason</label><input name="reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+        <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">File</label><input type="file" name="extension_file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="text-xs"></div>
+        <div class="sm:col-span-4"><button class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg">Add Extension</button></div>
+      </form>
+    </div>
+    <% } %>
+
+    <!-- CTMPs -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">CTMPs (linked)</h2>
+        <a href="/ctmps/new?plan_id=<%= plan.id %>" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg">New CTMP</a>
+      </div>
+      <% if (ctmps.length) { %>
+        <ul class="space-y-2">
+          <% ctmps.forEach(function(c){
+            const qaColors = { pending: 'bg-gray-100 text-gray-600', in_qa: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700' };
+            const qc = qaColors[c.qa_status] || 'bg-gray-100 text-gray-600';
+          %>
+            <li class="flex items-center justify-between text-sm border-t border-gray-100 pt-2">
+              <a href="/ctmps/<%= c.id %>" class="text-brand-600 hover:underline font-medium"><%= c.title || c.ctmp_number || ('CTMP #' + c.id) %></a>
+              <span class="flex items-center gap-2">
+                <span class="text-gray-500"><%= c.current_revision_label || 'Draft' %></span>
+                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold <%= qc %>"><%= (c.qa_status || 'pending').replace('_',' ') %></span>
+              </span>
+            </li>
+          <% }) %>
+        </ul>
+      <% } else { %><p class="text-sm text-gray-400">No CTMPs linked yet.</p><% } %>
+    </div>
+
+    <!-- Revision history -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Revision History</h2>
+      <% if (revisions.length) { %>
+        <ul class="space-y-2 mb-4">
+          <% revisions.forEach(function(r){ %>
+            <li class="flex items-center justify-between text-sm border-t border-gray-100 pt-2">
+              <span class="text-gray-900"><span class="font-semibold"><%= r.revision_label %></span> <% if (r.notes) { %><span class="text-gray-500">— <%= r.notes %></span><% } %></span>
+              <span class="text-gray-400 text-xs"><%= r.created_by_name || '' %> · <%= formatDateShort(r.created_at) %><% if (r.file_path) { %> · <a href="/<%= r.file_path %>" target="_blank" class="text-brand-600 hover:underline">file</a><% } %></span>
+            </li>
+          <% }) %>
+        </ul>
+      <% } else { %><p class="text-sm text-gray-400 mb-4">No revisions yet.</p><% } %>
+      <form method="POST" action="/plans/<%= plan.id %>/revisions" enctype="multipart/form-data" class="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end border-t border-gray-100 pt-4">
+        <%- include('../partials/csrf') %>
+        <input type="hidden" name="return_to" value="/plans/<%= plan.id %>">
+        <div class="sm:col-span-2"><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">Notes (what changed)</label><input name="notes" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"></div>
+        <div><label class="block text-[10px] font-bold text-gray-400 uppercase mb-1">File</label><input type="file" name="revision_file" accept=".pdf,.jpg,.jpeg,.png,.webp" class="text-xs"></div>
+        <div class="sm:col-span-3"><button class="px-4 py-1.5 bg-gray-700 hover:bg-gray-600 text-white text-xs font-semibold rounded-lg">Add Revision (auto Rev A→B→C)</button></div>
+      </form>
+    </div>
+  </div>
+
+  <!-- RIGHT: activity feed -->
+  <div class="space-y-5">
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Activity</h2>
+      <% if (activity.length) { %>
+        <ol class="space-y-3">
+          <% activity.forEach(function(a){ %>
+            <li class="text-sm">
+              <p class="text-gray-900"><span class="font-medium"><%= a.user_name || 'System' %></span> <span class="text-gray-500"><%= a.action %></span><% if (a.details) { %> — <%= a.details %><% } %></p>
+              <% if (a.before_value || a.after_value) { %><p class="text-xs text-gray-400"><%= a.before_value || '∅' %> → <%= a.after_value || '∅' %></p><% } %>
+              <p class="text-[11px] text-gray-400"><%= formatDateTime(a.created_at) %></p>
+            </li>
+          <% }) %>
+        </ol>
+      <% } else { %><p class="text-sm text-gray-400">No activity recorded yet.</p><% } %>
+    </div>
+  </div>
+</div>

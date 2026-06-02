@@ -32,6 +32,38 @@ router.get('/', (req, res) => {
   const myPlans = getMyPlans(db, user.id, today);
   const recentActivity = getRecentActivity(db);
 
+  // Plans Module dashboard data (spec §6/§7/§8): upcoming submissions / job
+  // dates, CTMP QA status chips, and surfaced ROL condition alerts. Wrapped
+  // so a query issue can never take down the dashboard.
+  let plansAttention = { upcoming: [], ctmps: [], rolAlerts: [] };
+  try {
+    const next14 = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+    plansAttention.upcoming = db.prepare(`
+      SELECT tp.id, tp.plan_number, tp.plan_types, tp.status, tp.job_date, tp.submitted_date,
+             tp.client_required_date, tp.rol_summary_from, j.job_number,
+             COALESCE(NULLIF(tp.job_date,''), NULLIF(tp.rol_summary_from,''), NULLIF(tp.client_required_date,'')) AS key_date
+      FROM traffic_plans tp LEFT JOIN jobs j ON tp.job_id = j.id
+      WHERE tp.status NOT IN ('rejected','expired')
+        AND COALESCE(NULLIF(tp.job_date,''), NULLIF(tp.rol_summary_from,''), NULLIF(tp.client_required_date,'')) IS NOT NULL
+        AND COALESCE(NULLIF(tp.job_date,''), NULLIF(tp.rol_summary_from,''), NULLIF(tp.client_required_date,'')) <= ?
+      ORDER BY key_date ASC LIMIT 8
+    `).all(next14);
+    plansAttention.ctmps = db.prepare(`
+      SELECT c.id, c.ctmp_number, c.title, c.current_revision_label, c.qa_status, c.plan_id, j.job_number
+      FROM ctmps c LEFT JOIN jobs j ON c.job_id = j.id
+      WHERE c.qa_status != 'approved'
+      ORDER BY c.updated_at DESC LIMIT 8
+    `).all();
+    plansAttention.rolAlerts = db.prepare(`
+      SELECT rc.text, tp.id AS plan_id, tp.plan_number, j.job_number
+      FROM rol_conditions rc
+      JOIN traffic_plans tp ON rc.plan_id = tp.id
+      LEFT JOIN jobs j ON tp.job_id = j.id
+      WHERE rc.is_alert = 1 AND tp.status NOT IN ('rejected','expired')
+      ORDER BY rc.id DESC LIMIT 8
+    `).all();
+  } catch (e) { console.error('[dashboard] plans widget failed:', e.message); }
+
   // Finance data (role-gated)
   const finance = canViewAccounts(user) ? getFinanceData(db) : { totalContractValue: 0, totalSpend: 0, accountsOverdue: 0, accountsDisputed: 0 };
 
@@ -192,6 +224,7 @@ router.get('/', (req, res) => {
     recentActivity,
     myTasks,
     myPlans,
+    plansAttention,
     tasksIAssigned,
     userRole: user.role,
     birthdaysToday,
