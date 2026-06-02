@@ -280,6 +280,11 @@ app.use((req, res, next) => {
 // Routes (auth is public, everything else requires login + permission)
 app.use('/', require('./routes/auth'));
 app.use('/profile', requireLogin, require('./routes/profile'));
+// /feedback — POST /submit is open to both portals (auth inside the route
+// based on session.user vs session.worker); GET / and admin actions are
+// gated inside the route too. Mounted before /dashboard so the bare
+// /feedback URL is unambiguous.
+app.use('/feedback', require('./routes/feedback'));
 app.use('/dashboard', requireLogin, requirePermission('dashboard'), require('./routes/dashboard'));
 app.use('/notes', requireLogin, requirePermission('notes'), require('./routes/notes'));
 app.use('/projects', requireLogin, requirePermission('projects'), require('./routes/projects'));

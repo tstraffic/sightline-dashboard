@@ -259,6 +259,13 @@
   </script>
   <% } %>
 
+  <!-- IT Feedback widget — bottom-right pill on every admin page.
+       Only renders when a user is signed in (worker portal has its
+       own subtler version in views/worker/layout.ejs). -->
+  <% if (typeof user !== 'undefined' && user) { %>
+    <%- include('partials/feedback-widget', { fbMode: 'admin' }) %>
+  <% } %>
+
   <!-- Global Lightbox overlay for images & documents -->
   <div id="lightbox-overlay" class="fixed inset-0 z-[9999] bg-black/90 hidden flex-col items-center justify-center" style="display:none;">
     <div class="absolute top-0 left-0 right-0 flex items-center justify-between px-4 py-3 bg-gradient-to-b from-black/60 to-transparent z-10">

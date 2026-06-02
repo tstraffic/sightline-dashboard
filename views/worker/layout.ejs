@@ -366,5 +366,12 @@
   <script src="/js/worker-submit-success.js?v=1"></script>
   <script src="/js/worker-offline-form.js?v=5"></script>
   <%- typeof script !== 'undefined' ? script : '' %>
+
+  <!-- IT Feedback widget — subtle + icon in the bottom-right that
+       expands into the same modal admins see. Only renders when a
+       worker is signed in. -->
+  <% if (typeof worker !== 'undefined' && worker) { %>
+    <%- include('../partials/feedback-widget', { fbMode: 'worker' }) %>
+  <% } %>
 </body>
 </html>

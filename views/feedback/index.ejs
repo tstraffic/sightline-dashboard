@@ -1,0 +1,130 @@
+<% locals.currentPage = 'feedback' %>
+<%
+  function fmtDateTime(s) {
+    if (!s) return '';
+    var d = new Date(s + (String(s).includes('T') ? '' : 'Z'));
+    if (isNaN(d)) return s;
+    return d.toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+  }
+  function statusPill(s) {
+    if (s === 'resolved')     return 'bg-emerald-50 text-emerald-700 ring-emerald-200';
+    if (s === 'in_progress')  return 'bg-amber-50 text-amber-700 ring-amber-200';
+    return 'bg-gray-100 text-gray-700 ring-gray-200';
+  }
+%>
+
+<div class="space-y-5">
+
+  <!-- Header -->
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <h1 class="text-2xl font-bold text-gray-900">IT Feedback</h1>
+      <p class="text-sm text-gray-500 mt-1">One-shot reports + suggestions from the admin dashboard and the worker portal.</p>
+    </div>
+  </div>
+
+  <!-- Source tabs -->
+  <div class="border-b border-gray-200 flex items-center gap-1">
+    <a href="/feedback?source=admin" class="px-4 py-2 -mb-px border-b-2 text-sm font-semibold inline-flex items-center gap-2 <%= source === 'admin' ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      Admin portal
+      <% if (counts.admin.n > 0) { %>
+        <span class="px-1.5 py-0.5 text-[10px] rounded-full <%= source === 'admin' ? 'bg-brand-50 text-brand-700' : 'bg-gray-100 text-gray-500' %>"><%= counts.admin.n %></span>
+        <% if (counts.admin.n_open > 0) { %>
+          <span class="px-1.5 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-800 font-bold"><%= counts.admin.n_open %> open</span>
+        <% } %>
+      <% } %>
+    </a>
+    <a href="/feedback?source=worker" class="px-4 py-2 -mb-px border-b-2 text-sm font-semibold inline-flex items-center gap-2 <%= source === 'worker' ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700' %>">
+      Worker portal
+      <% if (counts.worker.n > 0) { %>
+        <span class="px-1.5 py-0.5 text-[10px] rounded-full <%= source === 'worker' ? 'bg-brand-50 text-brand-700' : 'bg-gray-100 text-gray-500' %>"><%= counts.worker.n %></span>
+        <% if (counts.worker.n_open > 0) { %>
+          <span class="px-1.5 py-0.5 text-[10px] rounded-full bg-amber-100 text-amber-800 font-bold"><%= counts.worker.n_open %> open</span>
+        <% } %>
+      <% } %>
+    </a>
+  </div>
+
+  <!-- Status filter row -->
+  <div class="flex flex-wrap items-center gap-2 text-xs">
+    <span class="text-gray-400 font-semibold">Show:</span>
+    <% ['all', 'open', 'in_progress', 'resolved'].forEach(function (s) { %>
+      <a href="/feedback?source=<%= source %><%= s === 'all' ? '' : '&status=' + s %>"
+         class="px-2.5 py-1 rounded-full font-semibold transition <%= status === s ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200' %>">
+        <%= s === 'in_progress' ? 'In progress' : s.charAt(0).toUpperCase() + s.slice(1) %>
+      </a>
+    <% }); %>
+  </div>
+
+  <!-- List -->
+  <% if (!items.length) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center text-gray-500 text-sm">
+      No feedback in this tab yet.
+    </div>
+  <% } else { %>
+    <ul class="space-y-3">
+      <% items.forEach(function (f) { %>
+        <li class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+          <div class="px-4 py-3 flex items-start justify-between gap-3">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <h3 class="text-base font-semibold text-gray-900"><%= f.title %></h3>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ring-1 ring-inset <%= statusPill(f.status) %>">
+                  <%= (f.status || 'open').replace(/_/g, ' ') %>
+                </span>
+              </div>
+              <p class="text-xs text-gray-500 mt-1">
+                <span class="font-medium text-gray-700"><%= f.full_name || 'Unknown' %></span>
+                · <%= fmtDateTime(f.created_at) %>
+                <% if (f.page_url) { %>
+                  · <span class="inline-block text-gray-400">on</span>
+                  <code class="bg-gray-100 px-1.5 py-0.5 rounded text-[10px] font-mono text-gray-700"><%= f.page_url %></code>
+                <% } %>
+              </p>
+            </div>
+            <div class="flex items-center gap-1 flex-shrink-0">
+              <% if (f.status !== 'in_progress') { %>
+                <form method="POST" action="/feedback/<%= f.id %>/status" class="inline">
+                  <%- include('../partials/csrf') %>
+                  <input type="hidden" name="status" value="in_progress">
+                  <input type="hidden" name="source" value="<%= source %>">
+                  <button type="submit" class="px-2.5 py-1 text-[11px] font-semibold text-amber-700 bg-amber-50 hover:bg-amber-100 ring-1 ring-amber-200 rounded-md">Start</button>
+                </form>
+              <% } %>
+              <% if (f.status !== 'resolved') { %>
+                <form method="POST" action="/feedback/<%= f.id %>/status" class="inline">
+                  <%- include('../partials/csrf') %>
+                  <input type="hidden" name="status" value="resolved">
+                  <input type="hidden" name="source" value="<%= source %>">
+                  <button type="submit" class="px-2.5 py-1 text-[11px] font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200 rounded-md">Resolve</button>
+                </form>
+              <% } else { %>
+                <form method="POST" action="/feedback/<%= f.id %>/status" class="inline">
+                  <%- include('../partials/csrf') %>
+                  <input type="hidden" name="status" value="open">
+                  <input type="hidden" name="source" value="<%= source %>">
+                  <button type="submit" class="px-2.5 py-1 text-[11px] font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-md">Reopen</button>
+                </form>
+              <% } %>
+              <form method="POST" action="/feedback/<%= f.id %>/delete" class="inline" onsubmit="return confirm('Delete this feedback item? This cannot be undone.')">
+                <%- include('../partials/csrf') %>
+                <input type="hidden" name="source" value="<%= source %>">
+                <button type="submit" class="px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded-md">Delete</button>
+              </form>
+            </div>
+          </div>
+          <% if (f.comment) { %>
+            <div class="px-4 py-3 border-t border-gray-100 bg-gray-50/60">
+              <p class="text-sm text-gray-700 whitespace-pre-line"><%= f.comment %></p>
+            </div>
+          <% } %>
+          <% if (f.status === 'resolved' && f.resolver_name) { %>
+            <div class="px-4 py-2 border-t border-gray-100 bg-emerald-50/40 text-[11px] text-emerald-800">
+              Resolved by <strong><%= f.resolver_name %></strong> · <%= fmtDateTime(f.resolved_at) %>
+            </div>
+          <% } %>
+        </li>
+      <% }); %>
+    </ul>
+  <% } %>
+</div>

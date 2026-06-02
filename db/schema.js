@@ -11343,7 +11343,7 @@ function runMigrations(db) {
     }
   }
 
-// =============================================
+  // =============================================
   // Migration 241: Plans Module — unlock plan types + Council/Job dates
   //
   // The original traffic_plans.plan_type column is locked by
@@ -11589,6 +11589,50 @@ function runMigrations(db) {
       console.log('Migration 245 applied');
     } catch (e) {
       console.error('Migration 245 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 246: it_feedback
+  //
+  // Lightweight feedback channel — admins (and workers via the
+  // portal) hit a fixed-position button, type a title + comment,
+  // and it lands here. The admin-only IT Feedback page reads this
+  // table with two tabs (admin vs worker source).
+  //
+  // Source-of-author is stored as a string ('admin' | 'worker')
+  // plus the FK that makes sense for that source:
+  //   - admin   → user_id          (users.id)
+  //   - worker  → crew_member_id   (crew_members.id)
+  // full_name is cached so deletions of the originating user don't
+  // turn the feed into "Unknown · Unknown".
+  // =============================================
+  if (!isMigrationApplied.get(246)) {
+    console.log('Running migration 246: it_feedback');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS it_feedback (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          source TEXT NOT NULL CHECK (source IN ('admin', 'worker')),
+          user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          crew_member_id INTEGER REFERENCES crew_members(id) ON DELETE SET NULL,
+          full_name TEXT NOT NULL DEFAULT '',
+          title TEXT NOT NULL,
+          comment TEXT NOT NULL DEFAULT '',
+          page_url TEXT DEFAULT '',
+          user_agent TEXT DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved')),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          resolved_at DATETIME,
+          resolved_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_it_feedback_source ON it_feedback(source, created_at DESC);
+        CREATE INDEX IF NOT EXISTS idx_it_feedback_status ON it_feedback(status, created_at DESC);
+      `);
+      recordMigration.run(246, 'it_feedback table');
+      console.log('Migration 246 applied: it_feedback');
+    } catch (e) {
+      console.error('Migration 246 error:', e.message);
     }
   }
 
