@@ -409,19 +409,11 @@ function generateNotifications() {
       }
     }
 
-    // 11. Induction Overdue --> notify management
-    const inductionOverdue = db.prepare(`
-      SELECT cm.id, cm.full_name
-      FROM crew_members cm
-      WHERE cm.active = 1 AND cm.induction_status = 'pending'
-    `).all();
-
-    for (const cm of inductionOverdue) {
-      for (const u of mgmtUsers) {
-        const title = 'Induction Overdue: ' + cm.full_name;
-        insertAndTrack(u.id, 'induction_overdue', title, cm.full_name + ' has a pending induction.', '/crew/' + cm.id, null);
-      }
-    }
+    // 11. Induction Overdue — disabled per office request. The
+    //     7/3/1-day upcoming-induction reminders in
+    //     services/inductionReminders.js still fire; this just stops
+    //     the perpetual "X has a pending induction" pings once the
+    //     date is in the past.
 
     // 12. Over-budget jobs --> notify management
     const overBudgetJobs = db.prepare(`
