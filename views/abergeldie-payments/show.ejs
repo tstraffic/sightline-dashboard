@@ -1,6 +1,8 @@
 <% locals.currentPage = 'abergeldie-payments' %>
 <%
   function fmtDate(s) { if (!s) return ''; return new Date(s + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  const uteBasis = (sheet.ute_rate_basis === 'hourly') ? 'hourly' : 'shift';
+  const uteUnit = uteBasis === 'hourly' ? 'hr' : 'shift';
 %>
 
 <div class="space-y-5">
@@ -59,9 +61,16 @@
                 <input type="number" step="0.01" min="0" name="fee_per_hour" value="<%= (parseFloat(sheet.fee_per_hour) || 0).toFixed(2) %>" required class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm tabular-nums">
               </div>
               <div>
-                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Default ute rate ($/shift)</label>
+                <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Ute rate ($/<%= uteUnit %>)</label>
                 <input type="number" step="0.01" min="0" name="default_ute_rate_per_shift" value="<%= (parseFloat(sheet.default_ute_rate_per_shift) || 0).toFixed(2) %>" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm tabular-nums">
               </div>
+            </div>
+            <div>
+              <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1.5">Ute rate basis</label>
+              <select name="ute_rate_basis" class="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm">
+                <option value="shift" <%= uteBasis === 'shift' ? 'selected' : '' %>>Per shift / day (× shifts)</option>
+                <option value="hourly" <%= uteBasis === 'hourly' ? 'selected' : '' %>>Hourly (× booking hours)</option>
+              </select>
             </div>
             <p class="text-[11px] text-amber-700">Changing the rates re-runs the math on every line of that type.</p>
             <div>
@@ -97,7 +106,7 @@
       <p class="text-[10px] font-bold text-white/80 uppercase tracking-widest">Monthly Fee</p>
       <p class="text-2xl font-bold mt-1 tabular-nums">$<%= fmtMoney(grand.fee) %></p>
       <% if (grand.ute_count > 0) { %>
-        <p class="text-[10px] text-white/80 mt-0.5"><%= grand.shifts %> ute shifts · $<%= fmtMoney(grand.ute_fee) %></p>
+        <p class="text-[10px] text-white/80 mt-0.5"><%= uteBasis === 'hourly' ? fmtHours(grand.ute_hours) + ' ute hrs' : grand.shifts + ' ute shifts' %> · $<%= fmtMoney(grand.ute_fee) %></p>
       <% } %>
     </div>
   </div>
@@ -110,7 +119,10 @@
       <p class="text-sm font-semibold text-gray-900">Ute usage</p>
       <% if (grand.ute_count > 0) { %>
         <p class="text-xs text-gray-500 mt-0.5">
-          <%= grand.ute_count %> line<%= grand.ute_count !== 1 ? 's' : '' %> · <%= grand.shifts %> shift<%= grand.shifts !== 1 ? 's' : '' %> @ $<%= fmtMoney(sheet.default_ute_rate_per_shift) %>/shift = <span class="font-semibold text-emerald-700">$<%= fmtMoney(grand.ute_fee) %></span>
+          <%= grand.ute_count %> line<%= grand.ute_count !== 1 ? 's' : '' %> · <%= grand.shifts %> shift<%= grand.shifts !== 1 ? 's' : '' %> · <%= fmtHours(grand.ute_hours) %> hrs
+          @ $<%= fmtMoney(sheet.default_ute_rate_per_shift) %>/<%= uteUnit %>
+          (<%= uteBasis === 'hourly' ? 'hourly' : 'per shift' %>)
+          = <span class="font-semibold text-emerald-700">$<%= fmtMoney(grand.ute_fee) %></span>
         </p>
       <% } else { %>
         <p class="text-xs text-gray-500 mt-0.5">No ute lines yet — upload a Traffio Vehicle Job Report to add them.</p>
@@ -120,7 +132,11 @@
       <form method="POST" action="/finance/abergeldie/<%= sheet.id %>/upload-utes" enctype="multipart/form-data" class="flex items-center gap-2 flex-wrap">
         <%- include('../partials/csrf') %>
         <input type="text" name="only_rego" value="<%= (typeof uteOnlyRego !== 'undefined' && uteOnlyRego) ? uteOnlyRego : '' %>" class="w-28 px-2 py-1.5 text-sm uppercase border border-gray-300 rounded-md" placeholder="Rego (e.g. EUT88J)" title="Optional: only count this vehicle rego">
-        <input type="number" step="0.01" min="0" name="default_ute_rate_per_shift" value="<%= (parseFloat(sheet.default_ute_rate_per_shift) || 0).toFixed(2) %>" class="w-24 px-2 py-1.5 text-sm tabular-nums border border-gray-300 rounded-md" placeholder="$ / shift" title="Rate per shift to apply">
+        <select name="ute_rate_basis" class="px-2 py-1.5 text-sm border border-gray-300 rounded-md" title="How to bill the ute">
+          <option value="shift" <%= uteBasis === 'shift' ? 'selected' : '' %>>Per shift/day</option>
+          <option value="hourly" <%= uteBasis === 'hourly' ? 'selected' : '' %>>Hourly</option>
+        </select>
+        <input type="number" step="0.01" min="0" name="default_ute_rate_per_shift" value="<%= (parseFloat(sheet.default_ute_rate_per_shift) || 0).toFixed(2) %>" class="w-24 px-2 py-1.5 text-sm tabular-nums border border-gray-300 rounded-md" placeholder="$ / unit" title="Rate (per shift or per hour)">
         <input type="file" name="csv" accept=".csv" required class="block text-xs text-gray-700 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
         <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-md"><%= grand.ute_count > 0 ? 'Re-upload' : 'Upload utes CSV' %></button>
       </form>
@@ -214,12 +230,16 @@
                   <th class="px-3 py-2 text-left text-[10px] font-bold text-amber-700 uppercase tracking-widest">Plate</th>
                   <th class="px-2 py-2 text-left text-[10px] font-bold text-amber-700 uppercase tracking-widest">Driver</th>
                   <th class="px-2 py-2 text-right text-[10px] font-bold text-amber-700 uppercase tracking-widest">Shifts</th>
-                  <th class="px-2 py-2 text-right text-[10px] font-bold text-amber-700 uppercase tracking-widest">Rate / shift</th>
+                  <th class="px-2 py-2 text-right text-[10px] font-bold text-amber-700 uppercase tracking-widest">Hours</th>
+                  <th class="px-2 py-2 text-right text-[10px] font-bold text-amber-700 uppercase tracking-widest">Rate / <%= uteUnit %></th>
                   <th class="px-2 py-2 text-right text-[10px] font-bold text-amber-700 uppercase tracking-widest">Fee</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-amber-100">
-                <% g.ute_lines.forEach(l => { %>
+                <% g.ute_lines.forEach(l => {
+                     const rateField = uteBasis === 'hourly' ? 'fee_per_hour' : 'rate_per_shift';
+                     const rateVal = uteBasis === 'hourly' ? (parseFloat(l.fee_per_hour) || 0) : (parseFloat(l.rate_per_shift) || 0);
+                %>
                   <tr data-line-id="<%= l.id %>">
                     <td class="px-3 py-2">
                       <p class="font-mono font-semibold text-sm text-gray-900"><%= l.plate %></p>
@@ -230,9 +250,12 @@
                       <input type="number" step="1" min="0" value="<%= l.shift_count %>" data-line-id="<%= l.id %>" data-field="shift_count" class="ute-input w-16 px-2 py-1 text-sm text-right tabular-nums border border-amber-300 rounded-md focus:ring-2 focus:ring-amber-500 bg-white">
                     </td>
                     <td class="px-2 py-2 text-right">
+                      <input type="number" step="0.25" min="0" value="<%= (parseFloat(l.hours) || 0).toFixed(2) %>" data-line-id="<%= l.id %>" data-field="hours" class="ute-input w-20 px-2 py-1 text-sm text-right tabular-nums border <%= uteBasis === 'hourly' ? 'border-amber-300' : 'border-gray-200 bg-gray-50' %> rounded-md focus:ring-2 focus:ring-amber-500">
+                    </td>
+                    <td class="px-2 py-2 text-right">
                       <div class="inline-flex items-center gap-1">
                         <span class="text-xs text-gray-400">$</span>
-                        <input type="number" step="0.01" min="0" value="<%= (parseFloat(l.rate_per_shift) || 0).toFixed(2) %>" data-line-id="<%= l.id %>" data-field="rate_per_shift" class="ute-input w-20 px-2 py-1 text-sm text-right tabular-nums border border-amber-300 rounded-md focus:ring-2 focus:ring-amber-500 bg-white">
+                        <input type="number" step="0.01" min="0" value="<%= rateVal.toFixed(2) %>" data-line-id="<%= l.id %>" data-field="<%= rateField %>" class="ute-input w-20 px-2 py-1 text-sm text-right tabular-nums border border-amber-300 rounded-md focus:ring-2 focus:ring-amber-500 bg-white">
                       </div>
                     </td>
                     <td class="px-2 py-2 text-right text-sm font-semibold tabular-nums text-emerald-700" data-total>$<%= fmtMoney(l.fee_total) %></td>
@@ -243,6 +266,7 @@
                 <tr>
                   <td colspan="2" class="px-3 py-2 text-right text-[11px] font-bold text-amber-800 uppercase tracking-widest">Utes subtotal</td>
                   <td class="px-2 py-2 text-right text-sm font-bold tabular-nums text-gray-900"><%= g.total_shifts %></td>
+                  <td class="px-2 py-2 text-right text-sm font-bold tabular-nums text-gray-900"><%= fmtHours(g.total_ute_hours) %></td>
                   <td></td>
                   <td class="px-2 py-2 text-right text-sm font-bold tabular-nums text-emerald-700">$<%= fmtMoney(g.total_ute_fee) %></td>
                 </tr>
@@ -269,7 +293,7 @@
           · <%= fmtHours(grand.hours) %> hrs @ $<%= fmtMoney(sheet.fee_per_hour) %>/hr
           (<span class="font-semibold">$<%= fmtMoney(grand.worker_fee) %></span>)
           <% if (grand.ute_count > 0) { %>
-            + <%= grand.shifts %> ute shift<%= grand.shifts !== 1 ? 's' : '' %> @ $<%= fmtMoney(sheet.default_ute_rate_per_shift) %>/shift
+            + <%= uteBasis === 'hourly' ? fmtHours(grand.ute_hours) + ' ute hrs' : grand.shifts + ' ute shift' + (grand.shifts !== 1 ? 's' : '') %> @ $<%= fmtMoney(sheet.default_ute_rate_per_shift) %>/<%= uteUnit %>
             (<span class="font-semibold">$<%= fmtMoney(grand.ute_fee) %></span>)
           <% } %>
         </p>

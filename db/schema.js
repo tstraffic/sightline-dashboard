@@ -11737,6 +11737,21 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 249: Abergeldie ute rate basis — lets the ute import bill either
+  // per shift/day (× shift_count) or hourly (× booking hours). 'shift' keeps
+  // existing sheets behaving exactly as before.
+  // =============================================
+  if (!isMigrationApplied.get(249)) {
+    try {
+      try { db.exec("ALTER TABLE abergeldie_payment_sheets ADD COLUMN ute_rate_basis TEXT DEFAULT 'shift'"); } catch (e) { /* exists */ }
+      recordMigration.run(249, 'abergeldie_payment_sheets.ute_rate_basis (shift|hourly)');
+      console.log('Migration 249 applied');
+    } catch (e) {
+      console.error('Migration 249 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
