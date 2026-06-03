@@ -20,7 +20,11 @@
   const subHourlyRate = parseFloat((systemConfig && systemConfig.internal_hourly_rate) || 40) || 40;
   const subHours = parseFloat(sub.hours_spent) || 0;
   const subCharge = sub.charge_client ? (parseFloat(sub.charge_amount) || 0) : 0;
-  const subCouncil = sub.council_fee_paid ? (parseFloat(sub.council_fee_amount) || 0) : 0;
+  // Council cost now comes from the itemised Fees (compliance_fees); fall back
+  // to the legacy single council_fee_amount for rows created before fees existed.
+  const cFees = (typeof fees !== 'undefined' && fees) ? fees : [];
+  const feesTotal = cFees.reduce((s, f) => s + (parseFloat(f.amount) || 0), 0);
+  const subCouncil = feesTotal > 0 ? feesTotal : (sub.council_fee_paid ? (parseFloat(sub.council_fee_amount) || 0) : 0);
   const subLabour = subHours * subHourlyRate;
   const subCost = subLabour + subCouncil;
   const subProfit = subCharge - subCost;
@@ -207,13 +211,13 @@
             value="<%= sub.submitted_date || new Date().toISOString().slice(0, 10) %>"
             class="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
+        <% if (jobMandatory) { %>
         <div>
-          <label class="block text-xs font-medium text-gray-700 mb-1">Job start
-            <% if (jobMandatory) { %><span class="text-rose-500">*</span><% } %>
-          </label>
-          <input type="date" name="job_date" value="<%= sub.job_date || '' %>" <%= jobMandatory ? 'required' : '' %>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Job start <span class="text-rose-500">*</span></label>
+          <input type="date" name="job_date" value="<%= sub.job_date || '' %>" required
             class="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
+        <% } %>
         <% if (isROL) { %>
         <div>
           <label class="block text-xs font-medium text-gray-700 mb-1">Expiry date</label>
@@ -257,18 +261,7 @@
             class="ml-6 w-40 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400">
         </div>
 
-        <div class="sm:col-span-2">
-          <label class="inline-flex items-center text-xs font-medium text-gray-700 cursor-pointer mb-1">
-            <input type="checkbox" name="council_fee_paid" value="1" <%= sub.council_fee_paid ? 'checked' : '' %>
-              class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500 mr-2 charge-toggle"
-              data-target="council_fee_amount_<%= sub.id %>">
-            Council cost / fee
-          </label>
-          <input type="number" name="council_fee_amount" id="council_fee_amount_<%= sub.id %>" min="0" step="0.01" value="<%= sub.council_fee_amount || '' %>"
-            placeholder="Amount ($)"
-            <%= sub.council_fee_paid ? '' : 'disabled' %>
-            class="ml-6 w-40 px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400">
-        </div>
+        <p class="sm:col-span-2 text-[11px] text-gray-500">Council costs / fees are recorded in the <span class="font-medium">Fees</span> section below (with receipts).</p>
 
         <div class="sm:col-span-2 flex items-center justify-end">
           <button type="submit" class="px-3 py-1.5 text-xs font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-md">
@@ -281,14 +274,13 @@
 
   <%
     // ── Plans Module enhancements (council/ROL/CTMP) ──
-    const cFees = (typeof fees !== 'undefined' && fees) ? fees : [];
+    // cFees + feesTotal are defined at the top of this card (used by the P&L line).
     const cExt = (typeof extensions !== 'undefined' && extensions) ? extensions : [];
     const cShifts = (typeof rolShifts !== 'undefined' && rolShifts) ? rolShifts : [];
     const cConds = (typeof rolConditions !== 'undefined' && rolConditions) ? rolConditions : [];
     const isCouncilType = sub.item_type === 'council_permit';
     const isCtmpType = sub.item_type === 'tmp_approval';
     const isRolType = sub.item_type === 'rol' || sub.item_type === 'road_occupancy';
-    const feesTotal = cFees.reduce((s, f) => s + (parseFloat(f.amount) || 0), 0);
     const condAlerts = cConds.filter(c => c.is_alert);
     const qaCol = { pending: 'bg-gray-100 text-gray-600', in_qa: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700' };
   %>

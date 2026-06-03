@@ -551,8 +551,8 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
     const hoursSpent = hoursSpentParsed;
     const chargeClient = (req.body.charge_client === '1' || req.body.charge_client === 1 || req.body.charge_client === true || req.body.charge_client === 'on') ? 1 : 0;
     const chargeAmount = parseFloat(req.body.charge_amount) || 0;
-    const councilFeePaid = (req.body.council_fee_paid === '1' || req.body.council_fee_paid === 1 || req.body.council_fee_paid === true || req.body.council_fee_paid === 'on') ? 1 : 0;
-    const councilFeeAmount = parseFloat(req.body.council_fee_amount) || 0;
+    // Council cost/fee is no longer captured here — it's driven by the itemised
+    // Fees section (compliance_fees), which rolls up into council_fee_amount.
 
     const jobDate = req.body.job_date || sub.job_date || null;
     const councilPlanType = (req.body.council_plan_type !== undefined) ? req.body.council_plan_type : (sub.council_plan_type || '');
@@ -561,14 +561,12 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
       SET description = ?, status = 'submitted', submitted_date = ?, expiry_date = ?, notes = ?,
           hours_spent = ?,
           charge_client = ?, charge_amount = ?,
-          council_fee_paid = ?, council_fee_amount = ?,
           job_date = ?, council_plan_type = ?, client_request_date = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(desc, submittedDate, expiryDate, notes,
            hoursSpent,
            chargeClient, chargeAmount,
-           councilFeePaid, councilFeeAmount,
            jobDate, councilPlanType, clientRequestDate,
            sub.id);
 
@@ -679,6 +677,15 @@ router.post('/sub-plans/:subId/details', (req, res) => {
   res.redirect('/compliance/' + sub.parent_id + '/edit');
 });
 
+// Roll the itemised fees up into the legacy council_fee_amount/_paid columns
+// so the P&L, list view and invoice workflow (which all read council_fee_amount)
+// stay correct now that the single "Council cost / fee" input is gone.
+function rollupCouncilFee(db, complianceId) {
+  const total = db.prepare('SELECT COALESCE(SUM(amount),0) AS t FROM compliance_fees WHERE compliance_id = ?').get(complianceId).t || 0;
+  db.prepare('UPDATE compliance SET council_fee_amount = ?, council_fee_paid = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+    .run(total, total > 0 ? 1 : 0, complianceId);
+}
+
 // Itemised fees with receipts (spec §5).
 router.post('/sub-plans/:subId/fees', subPlanUpload.single('receipt'), (req, res) => {
   const db = getDb();
@@ -686,6 +693,7 @@ router.post('/sub-plans/:subId/fees', subPlanUpload.single('receipt'), (req, res
   if (!sub) { req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
   db.prepare("INSERT INTO compliance_fees (compliance_id, description, amount, receipt_file_path, receipt_original_name, created_by) VALUES (?,?,?,?,?,?)")
     .run(sub.id, req.body.description || '', parseFloat(req.body.amount) || 0, req.file ? subRel(sub, req.file) : '', req.file ? req.file.originalname : '', req.session.user.id);
+  rollupCouncilFee(db, sub.id);
   req.flash('success', 'Fee added.');
   res.redirect('/compliance/' + sub.parent_id + '/edit');
 });
@@ -695,6 +703,7 @@ router.post('/sub-plans/:subId/fees/:feeId/delete', (req, res) => {
   if (!sub) { req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
   const fee = db.prepare('SELECT * FROM compliance_fees WHERE id = ? AND compliance_id = ?').get(req.params.feeId, sub.id);
   if (fee) { unlinkRel(fee.receipt_file_path); db.prepare('DELETE FROM compliance_fees WHERE id = ?').run(fee.id); }
+  rollupCouncilFee(db, sub.id);
   res.redirect('/compliance/' + sub.parent_id + '/edit');
 });
 
