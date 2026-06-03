@@ -722,17 +722,19 @@ router.get('/abergeldie/:id/export.xlsx', requirePermission('abergeldie_payments
 
   // Group by project, split person/ute
   const groupsMap = new Map();
-  let grandHours = 0, grandWorkerFee = 0, grandShifts = 0, grandUteFee = 0;
+  let grandHours = 0, grandWorkerFee = 0, grandShifts = 0, grandUteFee = 0, grandUteHours = 0;
   for (const l of allLines) {
     const key = l.project_name || '(no project name)';
-    if (!groupsMap.has(key)) groupsMap.set(key, { project_name: key, person_lines: [], ute_lines: [], total_hours: 0, total_worker_fee: 0, total_shifts: 0, total_ute_fee: 0 });
+    if (!groupsMap.has(key)) groupsMap.set(key, { project_name: key, person_lines: [], ute_lines: [], total_hours: 0, total_worker_fee: 0, total_shifts: 0, total_ute_fee: 0, total_ute_hours: 0 });
     const g = groupsMap.get(key);
     if ((l.line_type || 'person') === 'ute') {
       g.ute_lines.push(l);
-      g.total_shifts  += parseInt(l.shift_count, 10) || 0;
-      g.total_ute_fee += parseFloat(l.fee_total) || 0;
-      grandShifts     += parseInt(l.shift_count, 10) || 0;
-      grandUteFee     += parseFloat(l.fee_total) || 0;
+      g.total_shifts    += parseInt(l.shift_count, 10) || 0;
+      g.total_ute_fee   += parseFloat(l.fee_total) || 0;
+      g.total_ute_hours += parseFloat(l.hours) || 0;
+      grandShifts       += parseInt(l.shift_count, 10) || 0;
+      grandUteFee       += parseFloat(l.fee_total) || 0;
+      grandUteHours     += parseFloat(l.hours) || 0;
     } else {
       g.person_lines.push(l);
       g.total_hours      += parseFloat(l.hours) || 0;
@@ -742,12 +744,13 @@ router.get('/abergeldie/:id/export.xlsx', requirePermission('abergeldie_payments
     }
   }
   const groups = Array.from(groupsMap.values()).sort((a, b) => a.project_name.localeCompare(b.project_name));
+  const uteBasis = (sheet.ute_rate_basis === 'hourly') ? 'hourly' : 'shift';
 
   const sheetXml = buildAbergeldieSheetXml({
-    sheet, groups,
+    sheet, groups, uteBasis,
     grand: {
       hours: round2(grandHours), worker_fee: round2(grandWorkerFee),
-      shifts: grandShifts, ute_fee: round2(grandUteFee),
+      shifts: grandShifts, ute_fee: round2(grandUteFee), ute_hours: round2(grandUteHours),
       fee: round2(grandWorkerFee + grandUteFee),
     },
   });
@@ -767,6 +770,133 @@ router.get('/abergeldie/:id/export.xlsx', requirePermission('abergeldie_payments
   archive.append(buildStyles(), { name: 'xl/styles.xml' });
   archive.append(sheetXml, { name: 'xl/worksheets/sheet1.xml' });
   archive.finalize();
+});
+
+// Shared grouping for exports: returns projects (workers + utes) + grand totals.
+function assembleSheetData(db, sheet) {
+  const allLines = db.prepare(`
+    SELECT * FROM abergeldie_payment_sheet_lines
+    WHERE sheet_id = ?
+    ORDER BY line_type ASC, project_name ASC, shift_date ASC, LOWER(full_name) ASC, plate ASC
+  `).all(sheet.id);
+  const groupsMap = new Map();
+  let grandHours = 0, grandWorkerFee = 0, grandShifts = 0, grandUteFee = 0, grandUteHours = 0;
+  for (const l of allLines) {
+    const key = l.project_name || '(no project name)';
+    if (!groupsMap.has(key)) groupsMap.set(key, { project_name: key, person_lines: [], ute_lines: [], total_hours: 0, total_worker_fee: 0, total_shifts: 0, total_ute_fee: 0, total_ute_hours: 0 });
+    const g = groupsMap.get(key);
+    if ((l.line_type || 'person') === 'ute') {
+      g.ute_lines.push(l);
+      g.total_shifts += parseInt(l.shift_count, 10) || 0;
+      g.total_ute_fee += parseFloat(l.fee_total) || 0;
+      g.total_ute_hours += parseFloat(l.hours) || 0;
+      grandShifts += parseInt(l.shift_count, 10) || 0;
+      grandUteFee += parseFloat(l.fee_total) || 0;
+      grandUteHours += parseFloat(l.hours) || 0;
+    } else {
+      g.person_lines.push(l);
+      g.total_hours += parseFloat(l.hours) || 0;
+      g.total_worker_fee += parseFloat(l.fee_total) || 0;
+      grandHours += parseFloat(l.hours) || 0;
+      grandWorkerFee += parseFloat(l.fee_total) || 0;
+    }
+  }
+  const groups = Array.from(groupsMap.values()).sort((a, b) => a.project_name.localeCompare(b.project_name));
+  return {
+    groups,
+    uteBasis: (sheet.ute_rate_basis === 'hourly') ? 'hourly' : 'shift',
+    grand: {
+      hours: round2(grandHours), worker_fee: round2(grandWorkerFee),
+      shifts: grandShifts, ute_fee: round2(grandUteFee), ute_hours: round2(grandUteHours),
+      fee: round2(grandWorkerFee + grandUteFee),
+    },
+  };
+}
+
+// ===========================================================================
+// GET /finance/abergeldie/:id/export.pdf — printable PDF for emailing, same
+// content as the xlsx (basis-aware ute columns).
+// ===========================================================================
+router.get('/abergeldie/:id/export.pdf', requirePermission('abergeldie_payments'), (req, res) => {
+  const db = getDb();
+  const sheet = db.prepare('SELECT * FROM abergeldie_payment_sheets WHERE id = ?').get(req.params.id);
+  if (!sheet) return res.status(404).send('Payment sheet not found');
+  const { groups, grand, uteBasis } = assembleSheetData(db, sheet);
+  const hourly = uteBasis === 'hourly';
+
+  const PDFDocument = require('pdfkit');
+  const doc = new PDFDocument({ size: 'A4', margin: 40 });
+  const filename = `${sheet.client_name || 'Abergeldie'}_${(sheet.label || periodLabel(sheet.period_start, sheet.period_end)).replace(/[^A-Za-z0-9._-]/g, '_')}.pdf`;
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  doc.pipe(res);
+
+  const LEFT = 40, RIGHT = 555; // A4 = 595pt wide, 40pt margins
+  const money = n => '$' + (parseFloat(n) || 0).toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const hrs = n => (Math.round((parseFloat(n) || 0) * 100) / 100).toFixed(2);
+  const ensure = (h) => { if (doc.y + h > 800) doc.addPage(); };
+  // Draw a row of [text, x, width, align] cells at the current y, advance y.
+  const row = (cells, opts = {}) => {
+    ensure(16);
+    const y = doc.y;
+    doc.font(opts.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(opts.size || 9).fillColor(opts.color || '#111');
+    cells.forEach(c => doc.text(String(c.t), c.x, y, { width: c.w, align: c.align || 'left' }));
+    doc.y = y + (opts.gap || 14);
+  };
+
+  doc.font('Helvetica-Bold').fontSize(15).fillColor('#111')
+    .text(sheet.label || `${sheet.client_name} Payment Sheet`, LEFT, 40);
+  doc.font('Helvetica').fontSize(9).fillColor('#555')
+    .text(`Period: ${sheet.period_start || ''} → ${sheet.period_end || ''}`, { continued: false });
+  doc.text(`Fee per hour: ${money(sheet.fee_per_hour)} · Ute / ${hourly ? 'hr' : 'shift'}: ${money(sheet.default_ute_rate_per_shift)} (${hourly ? 'hourly' : 'per shift'})`);
+  doc.moveDown(0.6);
+
+  groups.forEach(g => {
+    ensure(40);
+    doc.moveDown(0.3);
+    doc.font('Helvetica-Bold').fontSize(11).fillColor('#1D6AE5').text(g.project_name, LEFT, doc.y);
+    doc.moveDown(0.2);
+
+    if (g.person_lines.length > 0) {
+      row([{ t: 'Worker', x: LEFT, w: 230 }, { t: 'Hours', x: 300, w: 90, align: 'right' }, { t: 'Fee', x: 430, w: RIGHT - 430, align: 'right' }], { bold: true, color: '#555' });
+      g.person_lines.forEach(l => row([
+        { t: l.full_name || '', x: LEFT, w: 250 },
+        { t: hrs(l.hours), x: 300, w: 90, align: 'right' },
+        { t: money(l.fee_total), x: 430, w: RIGHT - 430, align: 'right' },
+      ]));
+      row([{ t: 'Workers subtotal', x: LEFT, w: 250 }, { t: hrs(g.total_hours), x: 300, w: 90, align: 'right' }, { t: money(g.total_worker_fee), x: 430, w: RIGHT - 430, align: 'right' }], { bold: true });
+    }
+
+    if (g.ute_lines.length > 0) {
+      doc.moveDown(0.2);
+      const qtyLabel = hourly ? 'Hours' : 'Shifts';
+      const rateLabel = hourly ? 'Rate / hr' : 'Rate / shift';
+      row([{ t: 'Plate', x: LEFT, w: 90 }, { t: 'Driver', x: 130, w: 150 }, { t: qtyLabel, x: 290, w: 60, align: 'right' }, { t: rateLabel, x: 360, w: 80, align: 'right' }, { t: 'Fee', x: 450, w: RIGHT - 450, align: 'right' }], { bold: true, color: '#555' });
+      g.ute_lines.forEach(l => row([
+        { t: l.plate || '', x: LEFT, w: 90 },
+        { t: l.driver_name || '', x: 130, w: 150 },
+        { t: hourly ? hrs(l.hours) : String(parseInt(l.shift_count, 10) || 0), x: 290, w: 60, align: 'right' },
+        { t: money(hourly ? l.fee_per_hour : l.rate_per_shift), x: 360, w: 80, align: 'right' },
+        { t: money(l.fee_total), x: 450, w: RIGHT - 450, align: 'right' },
+      ]));
+      row([{ t: 'Utes subtotal', x: LEFT, w: 160 }, { t: hourly ? hrs(g.total_ute_hours) : String(g.total_shifts), x: 290, w: 60, align: 'right' }, { t: '', x: 360, w: 80 }, { t: money(g.total_ute_fee), x: 450, w: RIGHT - 450, align: 'right' }], { bold: true });
+    }
+
+    if (g.person_lines.length > 0 && g.ute_lines.length > 0) {
+      row([{ t: 'Project total', x: LEFT, w: 360 }, { t: money(g.total_fee != null ? g.total_fee : (g.total_worker_fee + g.total_ute_fee)), x: 450, w: RIGHT - 450, align: 'right' }], { bold: true, color: '#1D6AE5' });
+    }
+  });
+
+  doc.moveDown(0.5);
+  ensure(24);
+  const ty = doc.y;
+  doc.rect(LEFT, ty - 2, RIGHT - LEFT, 22).fill('#1D6AE5');
+  doc.fillColor('#fff').font('Helvetica-Bold').fontSize(12);
+  doc.text('Sheet total', LEFT + 8, ty + 3, { width: 300 });
+  doc.text(money(grand.fee), 350, ty + 3, { width: RIGHT - 350 - 8, align: 'right' });
+  doc.fillColor('#111');
+
+  doc.end();
 });
 
 // ----- xlsx builders -------------------------------------------------------
@@ -856,7 +986,9 @@ function buildStyles() {
 </styleSheet>`;
 }
 
-function buildAbergeldieSheetXml({ sheet, groups, grand }) {
+function buildAbergeldieSheetXml({ sheet, groups, grand, uteBasis }) {
+  const hourly = uteBasis === 'hourly';
+  const uteUnit = hourly ? 'hr' : 'shift';
   const rows = [];
   let r = 0;
   // Style helpers
@@ -883,7 +1015,7 @@ function buildAbergeldieSheetXml({ sheet, groups, grand }) {
   rows.push(rowBuilder(r, [
     { v: `Period: ${sheet.period_start || ''} → ${sheet.period_end || ''}` },
     null, null,
-    { v: `Fee per hour: $${(parseFloat(sheet.fee_per_hour) || 0).toFixed(2)} · Ute / shift: $${(parseFloat(sheet.default_ute_rate_per_shift) || 0).toFixed(2)}` },
+    { v: `Fee per hour: $${(parseFloat(sheet.fee_per_hour) || 0).toFixed(2)} · Ute / ${uteUnit}: $${(parseFloat(sheet.default_ute_rate_per_shift) || 0).toFixed(2)}` },
   ]));
   r++; // blank
 
@@ -920,27 +1052,29 @@ function buildAbergeldieSheetXml({ sheet, groups, grand }) {
       ]));
     }
 
-    // Ute block
+    // Ute block — columns adapt to the rate basis. Hourly bills hours × rate,
+    // shift bills shifts × rate (so the rate column is never a misleading $0).
     if (g.ute_lines.length > 0) {
       r++;
       rows.push(rowBuilder(r, [
-        { v: 'Plate', s: 1 }, { v: 'Driver', s: 1 }, { v: 'Shifts', s: 1 },
-        { v: 'Rate / shift', s: 1 }, { v: 'Fee', s: 1 },
+        { v: 'Plate', s: 1 }, { v: 'Driver', s: 1 },
+        { v: hourly ? 'Hours' : 'Shifts', s: 1 },
+        { v: hourly ? 'Rate / hr' : 'Rate / shift', s: 1 }, { v: 'Fee', s: 1 },
       ]));
       g.ute_lines.forEach(l => {
         r++;
         rows.push(rowBuilder(r, [
           { v: l.plate || '' },
           { v: l.driver_name || '' },
-          { t: 'n', v: parseInt(l.shift_count, 10) || 0 },
-          { t: 'n', v: parseFloat(l.rate_per_shift) || 0, s: 2 },
+          hourly ? { t: 'n', v: round2(l.hours), s: 8 } : { t: 'n', v: parseInt(l.shift_count, 10) || 0 },
+          { t: 'n', v: hourly ? (parseFloat(l.fee_per_hour) || 0) : (parseFloat(l.rate_per_shift) || 0), s: 2 },
           { t: 'n', v: parseFloat(l.fee_total) || 0, s: 2 },
         ]));
       });
       r++;
       rows.push(rowBuilder(r, [
         { v: 'Utes subtotal', s: 4 }, { v: '', s: 4 },
-        { t: 'n', v: parseInt(g.total_shifts, 10) || 0, s: 4 },
+        hourly ? { t: 'n', v: round2(g.total_ute_hours), s: 9 } : { t: 'n', v: parseInt(g.total_shifts, 10) || 0, s: 4 },
         { v: '', s: 4 },
         { t: 'n', v: round2(g.total_ute_fee), s: 5 },
       ]));
