@@ -521,6 +521,12 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
     req.flash('error', 'Hours spent is required and must be greater than zero.');
     return res.redirect('/compliance/' + sub.parent_id + '/edit');
   }
+  // Job start is mandatory for ROL and Council Application sub-plans.
+  const jobMandatory = ['council_permit', 'rol', 'road_occupancy'].includes(sub.item_type);
+  if (jobMandatory && !/^\d{4}-\d{2}-\d{2}$/.test((req.body.job_date || '').trim())) {
+    req.flash('error', 'Job start date is required for ' + (sub.item_type === 'council_permit' ? 'Council' : 'ROL') + ' plans.');
+    return res.redirect('/compliance/' + sub.parent_id + '/edit');
+  }
   if (files.length === 0) {
     // No files attached AND no existing files = can't submit.
     const existingDocs = db.prepare('SELECT COUNT(*) as c FROM compliance_documents WHERE compliance_id = ?').get(sub.id).c;
@@ -537,7 +543,10 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
     });
 
     const submittedDate = submittedDateRaw;
-    const expiryDate = req.body.expiry_date || null;
+    // Expiry input only renders for ROL sub-plans; when it's absent, preserve
+    // any existing value rather than wiping it.
+    const expiryDate = (req.body.expiry_date !== undefined) ? (req.body.expiry_date || null) : (sub.expiry_date || null);
+    const clientRequestDate = req.body.client_request_date || sub.client_request_date || null;
     const notes = req.body.notes || sub.notes || '';
     const hoursSpent = hoursSpentParsed;
     const chargeClient = (req.body.charge_client === '1' || req.body.charge_client === 1 || req.body.charge_client === true || req.body.charge_client === 'on') ? 1 : 0;
@@ -553,14 +562,14 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
           hours_spent = ?,
           charge_client = ?, charge_amount = ?,
           council_fee_paid = ?, council_fee_amount = ?,
-          job_date = ?, council_plan_type = ?,
+          job_date = ?, council_plan_type = ?, client_request_date = ?,
           updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(desc, submittedDate, expiryDate, notes,
            hoursSpent,
            chargeClient, chargeAmount,
            councilFeePaid, councilFeeAmount,
-           jobDate, councilPlanType,
+           jobDate, councilPlanType, clientRequestDate,
            sub.id);
 
     planStatus.syncParentStatus(db, sub.parent_id);
@@ -663,8 +672,8 @@ router.post('/sub-plans/:subId/details', (req, res) => {
   const db = getDb();
   const sub = getSubPlan(db, req.params.subId);
   if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
-  db.prepare("UPDATE compliance SET job_date = ?, council_plan_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-    .run(req.body.job_date || null, req.body.council_plan_type || '', sub.id);
+  db.prepare("UPDATE compliance SET job_date = ?, council_plan_type = ?, client_request_date = COALESCE(?, client_request_date), updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(req.body.job_date || null, req.body.council_plan_type || '', req.body.client_request_date || null, sub.id);
   if (wantsJson(req)) return res.json({ success: true });
   req.flash('success', 'Details saved.');
   res.redirect('/compliance/' + sub.parent_id + '/edit');
