@@ -337,10 +337,15 @@ router.get('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, re
     g.total_hours = round2(g.total_hours);
   }
 
+  // Prefill the ute "only rego" box when every existing ute line is the same
+  // plate (so a re-upload keeps the same scope without retyping).
+  const utePlates = [...new Set(allLines.filter(l => l.line_type === 'ute' && l.plate).map(l => l.plate))];
+  const uteOnlyRego = utePlates.length === 1 ? utePlates[0] : '';
+
   res.render('abergeldie-payments/show', {
     title: sheet.label || 'Abergeldie Payment Sheet',
     currentPage: 'abergeldie-payments',
-    sheet, groups,
+    sheet, groups, uteOnlyRego,
     grand: {
       hours: round2(grandHours), worker_fee: round2(grandWorkerFee),
       shifts: grandShifts, ute_fee: round2(grandUteFee),
@@ -497,6 +502,8 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
     const ratePerShift = rateOverride !== undefined && rateOverride !== ''
       ? round2(rateOverride)
       : (parseFloat(sheet.default_ute_rate_per_shift) || 0);
+    // Optional: scope the import to a single vehicle rego (e.g. EUT88J).
+    const onlyRego = (req.body.only_rego || '').toUpperCase().replace(/\s+/g, '');
     if (ratePerShift < 0) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', 'Rate per shift must be 0 or more.');
@@ -528,6 +535,7 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
       if (!/abergeldie/i.test(client)) { dropped++; continue; }
       const plate = pick(row, ['vehicle_rego', 'Vehicle Rego', 'vehicle_registration', 'Vehicle Registration', 'rego', 'Rego', 'plate', 'Plate']).toUpperCase().replace(/\s+/g, '');
       if (!plate) { dropped++; continue; }
+      if (onlyRego && plate !== onlyRego) { dropped++; continue; }
       const friendly = pick(row, ['vehicle_friendly_name', 'Vehicle Friendly Name', 'vehicle_resource_name', 'Vehicle Resource Name', 'vehicle_name']);
       const driver = pick(row, ['driver_name', 'Driver Name', 'driver', 'Driver']) || '(no driver)';
       const project = pick(row, ['project_name', 'Project Name', 'project', 'Project']) || '(no project)';
@@ -543,7 +551,7 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
 
     if (groups.size === 0) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
-      req.flash('error', `No matching ute rows in the CSV (read ${rows.length}, skipped ${dropped}). Check that the file is a Traffio Vehicle Job Report for an Abergeldie project.`);
+      req.flash('error', `No matching ute rows in the CSV (read ${rows.length}, skipped ${dropped})${onlyRego ? ` for rego ${onlyRego}` : ''}. Check that the file is a Traffio Vehicle Job Report for an Abergeldie project${onlyRego ? `, and that ${onlyRego} appears in it` : ''}.`);
       return res.redirect('/finance/abergeldie/' + sheet.id);
     }
 
@@ -583,7 +591,7 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
       ip: req.ip,
     });
 
-    req.flash('success', `Imported ${kept} ute shifts → ${groups.size} line(s) @ $${ratePerShift}/shift.`);
+    req.flash('success', `Imported ${kept} ute shifts → ${groups.size} line(s) @ $${ratePerShift}/shift${onlyRego ? ` (rego ${onlyRego} only)` : ''}.`);
     res.redirect('/finance/abergeldie/' + sheet.id);
   });
 });
