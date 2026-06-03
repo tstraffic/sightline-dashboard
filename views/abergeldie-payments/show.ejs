@@ -119,7 +119,8 @@
     <div class="flex items-center gap-2">
       <form method="POST" action="/finance/abergeldie/<%= sheet.id %>/upload-utes" enctype="multipart/form-data" class="flex items-center gap-2 flex-wrap">
         <%- include('../partials/csrf') %>
-        <input type="number" step="0.01" min="0" name="default_rate_per_shift" value="<%= (parseFloat(sheet.default_ute_rate_per_shift) || 0).toFixed(2) %>" class="w-24 px-2 py-1.5 text-sm tabular-nums border border-gray-300 rounded-md" placeholder="$ / shift" title="Rate per shift to apply">
+        <input type="text" name="only_rego" value="<%= (typeof uteOnlyRego !== 'undefined' && uteOnlyRego) ? uteOnlyRego : '' %>" class="w-28 px-2 py-1.5 text-sm uppercase border border-gray-300 rounded-md" placeholder="Rego (e.g. EUT88J)" title="Optional: only count this vehicle rego">
+        <input type="number" step="0.01" min="0" name="default_ute_rate_per_shift" value="<%= (parseFloat(sheet.default_ute_rate_per_shift) || 0).toFixed(2) %>" class="w-24 px-2 py-1.5 text-sm tabular-nums border border-gray-300 rounded-md" placeholder="$ / shift" title="Rate per shift to apply">
         <input type="file" name="csv" accept=".csv" required class="block text-xs text-gray-700 file:mr-2 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
         <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-md"><%= grand.ute_count > 0 ? 'Re-upload' : 'Upload utes CSV' %></button>
       </form>
