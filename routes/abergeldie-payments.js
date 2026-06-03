@@ -299,7 +299,7 @@ router.get('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, re
   // worker shifts and ute rows together so Abergeldie sees the full charge
   // for that project on the email.
   const groupsMap = new Map();
-  let grandHours = 0, grandWorkerFee = 0, grandShifts = 0, grandUteFee = 0;
+  let grandHours = 0, grandWorkerFee = 0, grandShifts = 0, grandUteFee = 0, grandUteHours = 0;
   for (const l of allLines) {
     const key = l.project_name || '(no project name)';
     if (!groupsMap.has(key)) {
@@ -310,16 +310,18 @@ router.get('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, re
         person_lines: [],
         ute_lines: [],
         total_hours: 0, total_worker_fee: 0,
-        total_shifts: 0, total_ute_fee: 0,
+        total_shifts: 0, total_ute_fee: 0, total_ute_hours: 0,
       });
     }
     const g = groupsMap.get(key);
     if ((l.line_type || 'person') === 'ute') {
       g.ute_lines.push(l);
-      g.total_shifts   += parseInt(l.shift_count, 10) || 0;
-      g.total_ute_fee  += parseFloat(l.fee_total)    || 0;
-      grandShifts      += parseInt(l.shift_count, 10) || 0;
-      grandUteFee      += parseFloat(l.fee_total)    || 0;
+      g.total_shifts    += parseInt(l.shift_count, 10) || 0;
+      g.total_ute_fee   += parseFloat(l.fee_total)    || 0;
+      g.total_ute_hours += parseFloat(l.hours)        || 0;
+      grandShifts       += parseInt(l.shift_count, 10) || 0;
+      grandUteFee       += parseFloat(l.fee_total)    || 0;
+      grandUteHours     += parseFloat(l.hours)        || 0;
     } else {
       g.person_lines.push(l);
       g.total_hours       += parseFloat(l.hours)     || 0;
@@ -334,6 +336,7 @@ router.get('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, re
     g.total_fee = round2(g.total_worker_fee + g.total_ute_fee);
     g.total_worker_fee = round2(g.total_worker_fee);
     g.total_ute_fee = round2(g.total_ute_fee);
+    g.total_ute_hours = round2(g.total_ute_hours);
     g.total_hours = round2(g.total_hours);
   }
 
@@ -348,7 +351,7 @@ router.get('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, re
     sheet, groups, uteOnlyRego,
     grand: {
       hours: round2(grandHours), worker_fee: round2(grandWorkerFee),
-      shifts: grandShifts, ute_fee: round2(grandUteFee),
+      shifts: grandShifts, ute_fee: round2(grandUteFee), ute_hours: round2(grandUteHours),
       fee: round2(grandWorkerFee + grandUteFee),
       line_count: allLines.length, project_count: groups.length,
       ute_count: allLines.filter(l => l.line_type === 'ute').length,
@@ -395,15 +398,16 @@ router.post('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, r
     return res.redirect('/finance/abergeldie/' + sheet.id);
   }
 
+  const uteBasis = (req.body.ute_rate_basis === 'hourly') ? 'hourly' : (req.body.ute_rate_basis === 'shift' ? 'shift' : (sheet.ute_rate_basis || 'shift'));
   const feeChanged  = feePerHour !== parseFloat(sheet.fee_per_hour);
-  const uteRateChanged = uteRate !== parseFloat(sheet.default_ute_rate_per_shift);
+  const uteRateChanged = uteRate !== parseFloat(sheet.default_ute_rate_per_shift) || uteBasis !== (sheet.ute_rate_basis || 'shift');
 
   const tx = db.transaction(() => {
     db.prepare(`
       UPDATE abergeldie_payment_sheets
-      SET label = ?, period_start = ?, period_end = ?, fee_per_hour = ?, default_ute_rate_per_shift = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+      SET label = ?, period_start = ?, period_end = ?, fee_per_hour = ?, default_ute_rate_per_shift = ?, ute_rate_basis = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(label || sheet.label || '', periodStart, periodEnd, feePerHour, uteRate, notes, sheet.id);
+    `).run(label || sheet.label || '', periodStart, periodEnd, feePerHour, uteRate, uteBasis, notes, sheet.id);
 
     // Recalculate per-line fee on person lines if fee/hr changed
     if (feeChanged) {
@@ -414,14 +418,22 @@ router.post('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, r
         WHERE sheet_id = ? AND COALESCE(line_type, 'person') = 'person'
       `).run(feePerHour, feePerHour, sheet.id);
     }
-    // Recalculate ute lines if ute rate changed
+    // Recalculate ute lines if the rate or basis changed — hourly bills hours,
+    // shift bills shift_count.
     if (uteRateChanged) {
-      db.prepare(`
-        UPDATE abergeldie_payment_sheet_lines
-        SET rate_per_shift = ?,
-            fee_total = ROUND(shift_count * ?, 2)
-        WHERE sheet_id = ? AND COALESCE(line_type, 'person') = 'ute'
-      `).run(uteRate, uteRate, sheet.id);
+      if (uteBasis === 'hourly') {
+        db.prepare(`
+          UPDATE abergeldie_payment_sheet_lines
+          SET fee_per_hour = ?, rate_per_shift = 0, fee_total = ROUND(hours * ?, 2)
+          WHERE sheet_id = ? AND COALESCE(line_type, 'person') = 'ute'
+        `).run(uteRate, uteRate, sheet.id);
+      } else {
+        db.prepare(`
+          UPDATE abergeldie_payment_sheet_lines
+          SET rate_per_shift = ?, fee_per_hour = 0, fee_total = ROUND(shift_count * ?, 2)
+          WHERE sheet_id = ? AND COALESCE(line_type, 'person') = 'ute'
+        `).run(uteRate, uteRate, sheet.id);
+      }
     }
   });
   tx();
@@ -504,6 +516,8 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
       : (parseFloat(sheet.default_ute_rate_per_shift) || 0);
     // Optional: scope the import to a single vehicle rego (e.g. EUT88J).
     const onlyRego = (req.body.only_rego || '').toUpperCase().replace(/\s+/g, '');
+    // Rate basis: 'shift' (per shift/day) or 'hourly' (× booking hours).
+    const basis = (req.body.ute_rate_basis === 'hourly') ? 'hourly' : 'shift';
     if (ratePerShift < 0) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', 'Rate per shift must be 0 or more.');
@@ -541,11 +555,12 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
       const project = pick(row, ['project_name', 'Project Name', 'project', 'Project']) || '(no project)';
       const jobNumber = pick(row, ['job_number', 'Job Number', 'Job #']);
       const address = pick(row, ['street_address', 'Street Address', 'booking_address', 'address']);
+      const hrs = parseFloat(pick(row, ['hours', 'Hours', 'total_hours', 'Total Hours'])) || 0;
 
       const key = plate + '||' + driver + '||' + project;
       const existing = groups.get(key);
-      if (existing) existing.shift_count += 1;
-      else groups.set(key, { plate, driver_name: driver, project_name: project, vehicle_friendly_name: friendly, job_number: jobNumber, booking_address: address, shift_count: 1 });
+      if (existing) { existing.shift_count += 1; existing.hours += hrs; }
+      else groups.set(key, { plate, driver_name: driver, project_name: project, vehicle_friendly_name: friendly, job_number: jobNumber, booking_address: address, shift_count: 1, hours: hrs });
       kept++;
     }
 
@@ -564,23 +579,27 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
            plate, vehicle_friendly_name, driver_name,
            full_name, hours, fee_per_hour,
            shift_count, rate_per_shift, fee_total)
-        VALUES (?, 'ute', ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, ?)
+        VALUES (?, 'ute', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       for (const g of Array.from(groups.values()).sort((a, b) => a.project_name.localeCompare(b.project_name) || a.plate.localeCompare(b.plate))) {
-        const fee = round2(g.shift_count * ratePerShift);
+        const hrs = round2(g.hours);
+        // Hourly basis bills booking hours × rate; shift basis bills shifts × rate.
+        const fee = basis === 'hourly' ? round2(hrs * ratePerShift) : round2(g.shift_count * ratePerShift);
+        const feePerHour = basis === 'hourly' ? ratePerShift : 0;
+        const rateShift = basis === 'hourly' ? 0 : ratePerShift;
         // Reuse `full_name` for the driver too so existing UI bits that expect it don't break.
         insertLine.run(
           sheet.id, g.project_name, g.job_number, g.booking_address,
           g.plate, g.vehicle_friendly_name, g.driver_name,
           g.driver_name,
-          g.shift_count, ratePerShift, fee,
+          hrs, feePerHour, g.shift_count, rateShift, fee,
         );
       }
       db.prepare(`
         UPDATE abergeldie_payment_sheets
-        SET default_ute_rate_per_shift = ?, utes_csv_filename = ?, utes_uploaded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+        SET default_ute_rate_per_shift = ?, ute_rate_basis = ?, utes_csv_filename = ?, utes_uploaded_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(ratePerShift, path.basename(req.file.path), sheet.id);
+      `).run(ratePerShift, basis, path.basename(req.file.path), sheet.id);
     });
     tx();
 
@@ -615,12 +634,19 @@ router.post('/abergeldie/:id/lines/:lineId', requirePermission('abergeldie_payme
     return res.redirect('/finance/abergeldie/' + req.params.id);
   }
 
+  const sheetRow = db.prepare('SELECT ute_rate_basis FROM abergeldie_payment_sheets WHERE id = ?').get(req.params.id);
+  const basis = (sheetRow && sheetRow.ute_rate_basis === 'hourly') ? 'hourly' : 'shift';
+
   const updates = {};
   if (req.body.shift_count !== undefined)    updates.shift_count    = Math.max(0, parseInt(req.body.shift_count, 10) || 0);
+  if (req.body.hours !== undefined)          updates.hours          = Math.max(0, round2(req.body.hours));
   if (req.body.rate_per_shift !== undefined) updates.rate_per_shift = Math.max(0, round2(req.body.rate_per_shift));
+  if (req.body.fee_per_hour !== undefined)   updates.fee_per_hour   = Math.max(0, round2(req.body.fee_per_hour));
   const newCount = updates.shift_count    != null ? updates.shift_count    : (parseInt(line.shift_count, 10) || 0);
+  const newHours = updates.hours          != null ? updates.hours          : (parseFloat(line.hours) || 0);
   const newRate  = updates.rate_per_shift != null ? updates.rate_per_shift : (parseFloat(line.rate_per_shift) || 0);
-  updates.fee_total = round2(newCount * newRate);
+  const newFph   = updates.fee_per_hour   != null ? updates.fee_per_hour   : (parseFloat(line.fee_per_hour) || 0);
+  updates.fee_total = basis === 'hourly' ? round2(newHours * newFph) : round2(newCount * newRate);
 
   const cols = Object.keys(updates);
   const setSql = cols.map(c => `${c} = ?`).join(', ');
