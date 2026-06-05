@@ -362,9 +362,12 @@
                           <% if (blk.vehicle_slot.name && blk.vehicle_slot.registration) { %><span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8"><%= blk.vehicle_slot.registration %></span><% } %>
                         </div>
                       <% } else { %>
-                        <div class="bk2-veh-slot bk2-veh-slot--empty">
+                        <div class="bk2-veh-slot bk2-veh-slot--empty bk2-slot--drop bk2-slot--drop-vehicle"
+                             data-booking-id="<%= b.id %>"
+                             data-vehicle-role="ute"
+                             data-crew-ordinal="<%= blk.ordinal %>">
                           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14"/></svg>
-                          UTE slot · drop a vehicle here
+                          <span class="bk2-veh-slot-label">UTE slot · drop a vehicle here</span>
                         </div>
                       <% } %>
                       <% if (blk.addons && blk.addons.length) { %>
@@ -1953,12 +1956,17 @@
     var markHtml  = opts.ok
       ? '<span class="bk2-rp-mark bk2-rp-mark--yes" title="' + rpEsc(opts.okTitle || 'Available') + '">✓</span>'
       : '<span class="bk2-rp-mark bk2-rp-mark--no"  title="' + rpEsc(opts.notOkTitle || 'Not available') + '">✗</span>';
+    var extraAttrs = '';
+    if (opts.source) extraAttrs += ' data-resource-source="' + rpEsc(opts.source) + '"';
+    if (opts.rego)   extraAttrs += ' data-resource-rego="'   + rpEsc(opts.rego)   + '"';
+    if (opts.role)   extraAttrs += ' data-resource-role="'   + rpEsc(opts.role)   + '"';
     return (
       '<li class="bk2-rp-item ' + (opts.ok ? '' : 'is-unavailable') + '"' +
           ' draggable="true"' +
           ' data-resource-type="' + opts.type + '"' +
           ' data-resource-id="'   + opts.id   + '"' +
           ' data-resource-name="' + rpEsc(opts.name) + '"' +
+          extraAttrs +
           ' title="' + rpEsc(opts.tooltip || opts.name) + '">' +
         hoursHtml + iconHtml + nameHtml + badgeHtml + markHtml +
       '</li>'
@@ -2014,6 +2022,9 @@
         okTitle: 'Active in fleet',
         notOkTitle: v.status || 'Not active',
         tooltip: (v.name || '') + (rego ? ' · ' + rego : '') + (sub ? ' — ' + sub : ''),
+        source: v.source || 'equipment',
+        rego: rego,
+        role: (v.category || '').toLowerCase().indexOf('truck') !== -1 ? 'truck' : 'ute',
       });
     }).join('');
   }
@@ -2128,13 +2139,25 @@
     var row = e.target && e.target.closest && e.target.closest('.bk2-rp-item');
     if (!row) return;
     var type = row.getAttribute('data-resource-type');
-    if (type !== 'person') return; // vehicles + equipment not yet wired
+    if (type !== 'person' && type !== 'vehicle') return; // equipment-only rows not yet wired
     var id = row.getAttribute('data-resource-id');
     var name = row.getAttribute('data-resource-name') || '';
     if (!id) return;
     try {
       e.dataTransfer.effectAllowed = 'copy';
-      e.dataTransfer.setData('application/x-bk2-person', id);
+      if (type === 'person') {
+        e.dataTransfer.setData('application/x-bk2-person', id);
+      } else {
+        // Vehicle payload bundles id + source (fleet|equipment) + rego
+        // so the drop handler can POST the right field name and the
+        // optimistic-update can render the rego beneath the name.
+        var source = row.getAttribute('data-resource-source') || 'fleet';
+        var rego = row.getAttribute('data-resource-rego') || '';
+        var role = row.getAttribute('data-resource-role') || 'ute';
+        e.dataTransfer.setData('application/x-bk2-vehicle', JSON.stringify({
+          id: id, source: source, name: name, rego: rego, role: role,
+        }));
+      }
       e.dataTransfer.setData('text/plain', name);
     } catch (err) { /* old browsers */ }
     row.classList.add('is-dragging');
@@ -2172,6 +2195,57 @@
     e.stopPropagation();
     slot.classList.remove('is-drag-over');
 
+    var isVehicleSlot = slot.classList.contains('bk2-slot--drop-vehicle');
+    var bookingId = slot.getAttribute('data-booking-id');
+    if (!bookingId) return;
+
+    // ── VEHICLE DROP ──────────────────────────────────────────────
+    if (isVehicleSlot) {
+      var vehiclePayload = '';
+      try { vehiclePayload = e.dataTransfer.getData('application/x-bk2-vehicle') || ''; } catch (err) {}
+      if (!vehiclePayload) return; // person/equipment dropped here — ignore
+      var v;
+      try { v = JSON.parse(vehiclePayload); } catch (err) { return; }
+      if (!v || !v.id) return;
+
+      slot.classList.add('is-saving');
+      var vBody = new URLSearchParams();
+      // Fleet vehicles use fleet_vehicle_id; legacy equipment uses equipment_id.
+      if (v.source === 'fleet') vBody.append('fleet_vehicle_id', v.id);
+      else                      vBody.append('equipment_id',     v.id);
+      vBody.append('vehicle_role', slot.getAttribute('data-vehicle-role') || v.role || 'ute');
+      if (CSRF_TOKEN) vBody.append('_csrf', CSRF_TOKEN);
+
+      fetch('/bookings/' + encodeURIComponent(bookingId) + '/vehicles', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'X-CSRF-Token': CSRF_TOKEN || '',
+        },
+        body: vBody,
+        credentials: 'same-origin',
+      }).then(function (r) {
+        return r.json().catch(function () { return { ok: r.ok }; }).then(function (j) {
+          return { ok: r.ok, status: r.status, json: j };
+        });
+      }).then(function (result) {
+        slot.classList.remove('is-saving');
+        if (result.ok && (!result.json || result.json.ok !== false)) {
+          replaceVehicleSlot(slot, v);
+          flashAssigned(v.id);
+        } else {
+          var msg = (result.json && result.json.error) || ('Could not assign vehicle (HTTP ' + result.status + ')');
+          alert(msg);
+        }
+      }).catch(function () {
+        slot.classList.remove('is-saving');
+        alert('Could not assign vehicle — network error.');
+      });
+      return;
+    }
+
+    // ── PERSON DROP ───────────────────────────────────────────────
     var personId = '';
     try { personId = e.dataTransfer.getData('application/x-bk2-person') || ''; } catch (err) {}
     if (!personId) {
@@ -2185,12 +2259,10 @@
     }
     if (!personId) return;
 
-    var bookingId = slot.getAttribute('data-booking-id');
     var role = slot.getAttribute('data-role-on-site') || '';
-    if (!bookingId) return;
 
     // Optimistic UI — show a "saving" state on the slot while the
-    // request is in flight, then reload to pick up the new slot state.
+    // request is in flight, then patch the DOM in place on success.
     slot.classList.add('is-saving');
     var body = new URLSearchParams();
     body.append('crew_member_id', personId);
@@ -2229,6 +2301,30 @@
       alert('Could not assign worker — network error.');
     });
   });
+
+  // Replace the empty UTE slot with a filled vehicle slot in place.
+  // Each crew block carries exactly one vehicle slot, so we mutate
+  // the existing div rather than insert+remove.
+  function replaceVehicleSlot(emptySlot, v) {
+    var role = (slot => slot.getAttribute('data-vehicle-role') || v.role || 'ute')(emptySlot);
+    var tag = (role || 'ute').toUpperCase().slice(0, 3);
+    var name = v.name || v.rego || '(unnamed)';
+    emptySlot.className = 'bk2-veh-slot bk2-slot--just-added';
+    emptySlot.removeAttribute('data-booking-id');
+    emptySlot.removeAttribute('data-vehicle-role');
+    var html = '<span class="bk2-veh-tag">' + tag + '</span>' +
+               '<span class="bk2-veh-slot-name">' + escapeHtml(name) + '</span>';
+    if (v.name && v.rego) {
+      html += '<span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8">' + escapeHtml(v.rego) + '</span>';
+    }
+    emptySlot.innerHTML = html;
+    setTimeout(function () { emptySlot.classList.remove('bk2-slot--just-added'); }, 1200);
+  }
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
 
   // Build a `.bk2-slot--filled` row from a crew object and insert it
   // before the empty-slot div. Decrements the empty count; removes
