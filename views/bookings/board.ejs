@@ -346,11 +346,12 @@
                         <div class="bk2-slot bk2-slot--empty bk2-slot--drop"
                              data-booking-id="<%= b.id %>"
                              data-role-on-site="<%= blk.role || 'TC' %>"
-                             data-crew-ordinal="<%= blk.ordinal %>">
+                             data-crew-ordinal="<%= blk.ordinal %>"
+                             data-empty-count="<%= emptyWorkerCount %>">
                           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:0.6"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3M6 11a4 4 0 11-4 4 4 4 0 014-4zM14 16a6 6 0 00-12 0v2h12v-2z"/></svg>
-                          <%= emptyWorkerCount === 1
+                          <span class="bk2-slot-empty-label"><%= emptyWorkerCount === 1
                             ? ((blk.role || 'TC') + ' slot · drop a worker here')
-                            : (emptyWorkerCount + ' more ' + (blk.role || 'TC') + ' slots · drop workers here') %>
+                            : (emptyWorkerCount + ' more ' + (blk.role || 'TC') + ' slots · drop workers here') %></span>
                         </div>
                       <% } %>
 
@@ -2212,8 +2213,13 @@
     }).then(function (result) {
       slot.classList.remove('is-saving');
       if (result.ok && (!result.json || result.json.ok !== false)) {
-        // Reload to refresh the board with the new allocation.
-        location.reload();
+        // In-place DOM update — no page reload. Build a filled slot
+        // from the server-returned crew member and insert it above
+        // the empty slot, then decrement the empty counter (or
+        // remove the empty slot entirely when it hits zero).
+        var crew = (result.json && result.json.crew) || { id: personId, full_name: '', role: role };
+        insertFilledSlot(slot, crew);
+        flashAssigned(personId);
       } else {
         var msg = (result.json && result.json.error) || ('Could not assign worker (HTTP ' + result.status + ')');
         alert(msg);
@@ -2223,6 +2229,59 @@
       alert('Could not assign worker — network error.');
     });
   });
+
+  // Build a `.bk2-slot--filled` row from a crew object and insert it
+  // before the empty-slot div. Decrements the empty count; removes
+  // the empty slot when it hits zero.
+  function insertFilledSlot(emptySlot, crew) {
+    function initials(name) {
+      if (!name) return '?';
+      return name.split(/\s+/).map(function (n) { return n[0] || ''; }).join('').substring(0, 2).toUpperCase();
+    }
+    function roleAbbr(r) {
+      if (!r) return 'TC';
+      if (/team[_ ]?lead/i.test(r)) return 'TL';
+      if (/super/i.test(r))         return 'SUP';
+      if (/spotter/i.test(r))       return 'SP';
+      if (/hoist/i.test(r))         return 'HO';
+      return 'TC';
+    }
+    var slotRole = emptySlot.getAttribute('data-role-on-site') || crew.role || 'TC';
+    var filled = document.createElement('div');
+    filled.className = 'bk2-slot bk2-slot--filled bk2-slot--just-added';
+    filled.innerHTML =
+      '<span class="bk2-slot-avatar">' + initials(crew.full_name || '') + '</span>' +
+      '<span class="bk2-slot-role-tag">' + roleAbbr(slotRole) + '</span>' +
+      '<span class="bk2-slot-name">' + (crew.full_name || ('#' + crew.id)) + '</span>' +
+      ((crew.employment_status === 'reserved')
+        ? '<span class="bk2-warn bk2-warn--info">RES</span>'
+        : '');
+    emptySlot.parentNode.insertBefore(filled, emptySlot);
+    // Drop the just-added pulse after the animation finishes.
+    setTimeout(function () { filled.classList.remove('bk2-slot--just-added'); }, 1200);
+
+    var remaining = (parseInt(emptySlot.getAttribute('data-empty-count'), 10) || 1) - 1;
+    if (remaining <= 0) {
+      emptySlot.parentNode.removeChild(emptySlot);
+    } else {
+      emptySlot.setAttribute('data-empty-count', remaining);
+      var label = emptySlot.querySelector('.bk2-slot-empty-label');
+      if (label) {
+        label.textContent = remaining === 1
+          ? (slotRole + ' slot · drop a worker here')
+          : (remaining + ' more ' + slotRole + ' slots · drop workers here');
+      }
+    }
+  }
+
+  // Briefly mark the resource-panel row as "just assigned" so the
+  // planner gets visual confirmation without a page reload.
+  function flashAssigned(personId) {
+    var row = document.querySelector('.bk2-rp-item[data-resource-type="person"][data-resource-id="' + personId + '"]');
+    if (!row) return;
+    row.classList.add('is-just-assigned');
+    setTimeout(function () { row.classList.remove('is-just-assigned'); }, 1400);
+  }
 })();
 </script>
 
@@ -2245,5 +2304,19 @@
     background: #EFF6FF !important;
     border-color: #2B7FFF !important;
     color: #1D4ED8 !important;
+  }
+  /* Just-added slot — short fade-up + soft ring so the planner can
+     see the new allocation land on the card without a page reload. */
+  .bk2-slot--just-added { animation: bk2SlotIn 320ms cubic-bezier(0.16,1,0.3,1); }
+  @keyframes bk2SlotIn {
+    0%   { transform: translateY(-4px); opacity: 0; box-shadow: 0 0 0 0 rgba(43,127,255,0.0); }
+    60%  { transform: translateY(0);    opacity: 1; box-shadow: 0 0 0 4px rgba(43,127,255,0.18); }
+    100% { transform: translateY(0);    opacity: 1; box-shadow: 0 0 0 0 rgba(43,127,255,0.0); }
+  }
+  /* Resource-panel row pulse confirming the assign request landed. */
+  .bk2-rp-item.is-just-assigned { animation: bk2RpFlash 1400ms ease-out; }
+  @keyframes bk2RpFlash {
+    0%, 30% { background: rgba(34,197,94,0.18); }
+    100%    { background: transparent; }
   }
 </style>
