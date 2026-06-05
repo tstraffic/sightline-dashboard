@@ -11809,6 +11809,122 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 252: Traffio docket invoicing (Phase 2)
+  //
+  // Stage signed Traffio works dockets + their per-person worked hours, then
+  // assemble draft invoices (grouped per client/period) that finance reviews and
+  // approves before a QuickBooks push (Phase 3). Dockets are self-contained
+  // (carry client + hours), so invoicing is decoupled from booking reconciliation.
+  // =============================================
+  if (!isMigrationApplied.get(252)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS traffio_dockets (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          works_docket_id TEXT NOT NULL UNIQUE,
+          works_docket_number TEXT,
+          physical_number TEXT,
+          booking_id TEXT,
+          job_number TEXT,
+          project_id TEXT,
+          traffio_client_id TEXT,
+          client_name TEXT,
+          local_client_id INTEGER REFERENCES clients(id),
+          address TEXT,
+          billing_reference TEXT,
+          booking_start_time TEXT,
+          approx_booking_end_time TEXT,
+          signed_off INTEGER DEFAULT 0,
+          signed_off_at DATETIME,
+          signed_off_by_name TEXT,
+          is_deleted INTEGER DEFAULT 0,
+          invoice_id INTEGER REFERENCES invoices(id),
+          invoiced INTEGER DEFAULT 0,
+          raw_json TEXT DEFAULT '{}',
+          last_modified TEXT,
+          synced_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_traffio_dockets_client ON traffio_dockets(traffio_client_id, signed_off, invoiced);
+        CREATE INDEX IF NOT EXISTS idx_traffio_dockets_start ON traffio_dockets(booking_start_time);
+
+        CREATE TABLE IF NOT EXISTS traffio_docket_persons (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          works_docket_id TEXT NOT NULL,
+          person_id TEXT,
+          first_name TEXT,
+          last_name TEXT,
+          resource_name TEXT,
+          item_classification_name TEXT,
+          time_on TEXT,
+          time_off TEXT,
+          total_hours REAL DEFAULT 0,
+          break_time REAL DEFAULT 0,
+          travel_time REAL DEFAULT 0,
+          lafha TEXT,
+          general_allowance TEXT,
+          rain_allowance TEXT,
+          is_deleted INTEGER DEFAULT 0,
+          raw_json TEXT DEFAULT '{}',
+          UNIQUE(works_docket_id, person_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_traffio_docket_persons_docket ON traffio_docket_persons(works_docket_id);
+
+        CREATE TABLE IF NOT EXISTS invoices (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_number TEXT UNIQUE,
+          client_id INTEGER REFERENCES clients(id),
+          traffio_client_id TEXT,
+          client_name_snapshot TEXT,
+          status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','approved','pushed','void')),
+          source TEXT DEFAULT 'traffio',
+          period_start DATE,
+          period_end DATE,
+          docket_ref TEXT,
+          subtotal_ex_gst REAL DEFAULT 0,
+          gst REAL DEFAULT 0,
+          total_inc_gst REAL DEFAULT 0,
+          gst_rate REAL DEFAULT 0.10,
+          notes TEXT DEFAULT '',
+          qbo_invoice_id TEXT,
+          qbo_doc_number TEXT,
+          pushed_at DATETIME,
+          error_message TEXT DEFAULT '',
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          approved_by_id INTEGER REFERENCES users(id),
+          approved_at DATETIME,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_invoices_client ON invoices(client_id, status);
+        CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(status);
+
+        CREATE TABLE IF NOT EXISTS invoice_line_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          invoice_id INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+          sort_order INTEGER DEFAULT 0,
+          description TEXT DEFAULT '',
+          qty REAL DEFAULT 0,
+          unit TEXT DEFAULT 'hr',
+          unit_price REAL DEFAULT 0,
+          line_total REAL DEFAULT 0,
+          tax_code TEXT DEFAULT 'GST' CHECK(tax_code IN ('GST','FRE')),
+          source_type TEXT DEFAULT 'labour' CHECK(source_type IN ('labour','allowance','charge','manual','adjustment')),
+          shift_segment TEXT DEFAULT '',
+          source_works_docket_id TEXT,
+          source_person_id TEXT,
+          rate_flagged INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_invoice_lines_invoice ON invoice_line_items(invoice_id, sort_order);
+      `);
+      recordMigration.run(252, 'Traffio docket invoicing: traffio_dockets, traffio_docket_persons, invoices, invoice_line_items');
+      console.log('Migration 252 applied');
+    } catch (e) {
+      console.error('Migration 252 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
