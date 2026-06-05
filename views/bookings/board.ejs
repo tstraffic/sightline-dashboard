@@ -2405,23 +2405,26 @@
   //  + reflects the change back on the slot pills.
   // ==========================================================
   var openPop = null;
+  var openBackdrop = null;
+  var activeSlot = null;
   function closePopover() {
-    if (openPop && openPop.parentNode) openPop.parentNode.removeChild(openPop);
+    if (activeSlot) { activeSlot.classList.remove('is-active-pick'); activeSlot = null; }
+    if (openPop) {
+      openPop.classList.remove('is-open');
+      var popRef = openPop;
+      setTimeout(function () { if (popRef && popRef.parentNode) popRef.parentNode.removeChild(popRef); }, 220);
+    }
+    if (openBackdrop) {
+      openBackdrop.classList.remove('is-open');
+      var bdRef = openBackdrop;
+      setTimeout(function () { if (bdRef && bdRef.parentNode) bdRef.parentNode.removeChild(bdRef); }, 220);
+    }
     openPop = null;
-    document.removeEventListener('click', onDocClickAwayFromPop, true);
-    window.removeEventListener('scroll', closePopoverOnScroll, true);
-    window.removeEventListener('resize', closePopover);
+    openBackdrop = null;
+    document.removeEventListener('keydown', onPopKeyDown, true);
   }
-  function onDocClickAwayFromPop(e) {
-    if (!openPop) return;
-    if (openPop.contains(e.target)) return;
-    if (e.target.closest && e.target.closest('.bk2-slot--click')) return; // let the slot handler swap
-    closePopover();
-  }
-  function closePopoverOnScroll(e) {
-    // Don't close when scrolling INSIDE the popover (button row, etc.)
-    if (openPop && openPop.contains(e.target)) return;
-    closePopover();
+  function onPopKeyDown(e) {
+    if (e.key === 'Escape') { e.preventDefault(); closePopover(); }
   }
 
   function initialsFor(name) {
@@ -2429,11 +2432,9 @@
     return name.split(/\s+/).map(function (n) { return n[0] || ''; }).join('').substring(0, 2).toUpperCase();
   }
 
-  // Click handler — open the popover (delegated so it works on
+  // Click handler — open the side panel (delegated so it works on
   // slots that are dropped in after the initial render).
   document.addEventListener('click', function (e) {
-    // Ignore clicks on the slot's children that have their own
-    // semantics (none right now), and ignore drag-related cases.
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--click');
     if (!slot) return;
     // The slot lives inside the booking card <a> — stop the link
@@ -2444,7 +2445,9 @@
   });
 
   function openSlotPopover(slot) {
+    var wasSameSlot = (activeSlot === slot);
     closePopover();
+    if (wasSameSlot) return; // clicking the same person again toggles the panel closed
     var bookingId    = slot.getAttribute('data-booking-id');
     var bookingCrewId = slot.getAttribute('data-booking-crew-id');
     var crewMemberId = slot.getAttribute('data-crew-member-id');
@@ -2459,21 +2462,37 @@
       nb:  slot.getAttribute('data-flag-nb')     === '1',
     };
 
-    var pop = document.createElement('div');
+    // Pick up which booking card we're on so we can show context.
+    var cardEl = slot.closest('.bk2-card');
+    var bookingNumber = cardEl ? (cardEl.querySelector('.bk2-banner-meta') || {}).textContent || '' : '';
+    var subLabel = bookingNumber ? bookingNumber.trim() : 'On this shift';
+
+    var backdrop = document.createElement('div');
+    backdrop.className = 'bk2-pop-backdrop';
+
+    var pop = document.createElement('aside');
     pop.className = 'bk2-pop';
     pop.setAttribute('role', 'dialog');
+    pop.setAttribute('aria-label', 'Crew actions for ' + crewName);
     pop.innerHTML =
+      '<button type="button" class="bk2-pop-close" aria-label="Close" data-pop-action="close">' +
+        '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>' +
+      '</button>' +
       '<div class="bk2-pop-head">' +
         '<span class="bk2-pop-avatar">' + initialsFor(crewName) + '</span>' +
-        '<span class="bk2-pop-name" title="' + escapeHtml(crewName) + '">' + escapeHtml(crewName) + '</span>' +
+        '<div style="min-width:0;flex:1">' +
+          '<div class="bk2-pop-name" title="' + escapeHtml(crewName) + '">' + escapeHtml(crewName) + '</div>' +
+          '<div class="bk2-pop-sub">' + escapeHtml(subLabel) + '</div>' +
+        '</div>' +
       '</div>' +
+      '<div class="bk2-pop-section-label">Role on shift</div>' +
       '<div class="bk2-pop-grid">' +
+        popBtn('tl',  'TL',       '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11v2a2 2 0 002 2h1l5 3V6L6 9H5a2 2 0 00-2 2zm15-4v10c1.7 0 3-2.2 3-5s-1.3-5-3-5z"/></svg>', on.tl,  'tl') +
+        popBtn('fa',  'FA',       '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5a2 2 0 012-2h2a2 2 0 012 2v2h4a1 1 0 011 1v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8a1 1 0 011-1h4V5zm3 6v6m-3-3h6"/></svg>', on.fa,  'fa') +
+        popBtn('drv', 'Driver',   '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h2m10 0h2M12 5v2m0 10v2"/></svg>', on.drv, 'drv') +
+        popBtn('sts', 'STS',      '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><circle cx="12" cy="11" r="3"/></svg>', on.sts, 'sts') +
+        popBtn('nb',  'Non Bill', '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 4l16 16M12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2"/></svg>', on.nb,  'nb') +
         popBtn('profile', 'Profile', '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>', false) +
-        popBtn('tl',  'TL',     '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 11v2a2 2 0 002 2h1l5 3V6L6 9H5a2 2 0 00-2 2zm15-4v10c1.7 0 3-2.2 3-5s-1.3-5-3-5z"/></svg>', on.tl,  'tl') +
-        popBtn('fa',  'FA',     '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5a2 2 0 012-2h2a2 2 0 012 2v2h4a1 1 0 011 1v11a2 2 0 01-2 2H5a2 2 0 01-2-2V8a1 1 0 011-1h4V5zm3 6v6m-3-3h6"/></svg>', on.fa,  'fa') +
-        popBtn('drv', 'Driver', '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h2m10 0h2M12 5v2m0 10v2"/></svg>', on.drv, 'drv') +
-        popBtn('sts', 'STS',    '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><circle cx="12" cy="11" r="3"/></svg>', on.sts, 'sts') +
-        popBtn('nb',  'Non Bill','<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 4l16 16M12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2"/></svg>', on.nb,  'nb') +
       '</div>' +
       '<div class="bk2-pop-foot">' +
         '<button type="button" class="bk2-pop-remove" data-pop-action="remove">' +
@@ -2482,15 +2501,26 @@
         '</button>' +
       '</div>';
 
+    document.body.appendChild(backdrop);
     document.body.appendChild(pop);
-    positionPopover(pop, slot);
+    // Force a reflow so the slide-in transform takes effect on the next frame.
+    void pop.offsetWidth;
+    backdrop.classList.add('is-open');
+    pop.classList.add('is-open');
     openPop = pop;
+    openBackdrop = backdrop;
+    activeSlot = slot;
+    slot.classList.add('is-active-pick');
+
+    backdrop.addEventListener('click', closePopover);
+    document.addEventListener('keydown', onPopKeyDown, true);
 
     // Wire button clicks
     pop.addEventListener('click', function (e) {
       var btn = e.target.closest && e.target.closest('[data-pop-action]');
       if (!btn) return;
       var action = btn.getAttribute('data-pop-action');
+      if (action === 'close') { closePopover(); return; }
       if (action === 'profile') {
         if (crewMemberId) window.location.href = '/crew/' + encodeURIComponent(crewMemberId);
         return;
@@ -2503,10 +2533,6 @@
       // Flag toggles — tl/fa/sts/nb fire /flag, drv fires /driver
       toggleFlag(action, btn, slot, bookingId, bookingCrewId);
     });
-
-    document.addEventListener('click', onDocClickAwayFromPop, true);
-    window.addEventListener('scroll', closePopoverOnScroll, true);
-    window.addEventListener('resize', closePopover);
   }
 
   function popBtn(action, label, iconSvg, isOn, flagKey) {
@@ -2515,21 +2541,6 @@
            (flagKey ? ' data-flag="' + flagKey + '"' : '') + '>' +
              iconSvg + '<span>' + escapeHtml(label) + '</span>' +
            '</button>';
-  }
-
-  function positionPopover(pop, slot) {
-    var r = slot.getBoundingClientRect();
-    var popW = 250;   // estimated; pop will autosize after
-    var popH = 240;
-    var top = window.scrollY + r.bottom + 8;
-    var left = window.scrollX + r.right - popW;
-    if (left < window.scrollX + 8) left = window.scrollX + 8;
-    if (top + popH > window.scrollY + window.innerHeight) {
-      // Flip above the slot.
-      top = window.scrollY + r.top - popH - 8;
-    }
-    pop.style.left = left + 'px';
-    pop.style.top  = top + 'px';
   }
 
   function toggleFlag(action, btn, slot, bookingId, bookingCrewId) {
