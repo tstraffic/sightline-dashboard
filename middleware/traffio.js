@@ -42,17 +42,30 @@ function pick(obj, keys, fallback) {
   return fallback;
 }
 
-// Traffio exposes booking status as a numeric `booking_status_id` whose legend
-// isn't published. Until we have the id→label map we default everything to
-// 'confirmed' (and treat is_deleted as cancelled in the upsert). String values
-// are still honoured in case a future field carries them.
+// Traffio's numeric booking_status_id, mapped onto the dashboard's bookings
+// status CHECK values (migration 89). Legend confirmed via the live API
+// reference endpoint GET /v1_booking/booking_status. 11 (Part Invoiced) and
+// 12 (Invoiced) have no booking-status equivalent here — invoice state is
+// tracked by the invoices module — so they collapse to 'finalised'.
+const TRAFFIO_STATUS_BY_ID = {
+  '1': 'unconfirmed', '2': 'confirmed', '3': 'locked', '4': 'conflict',
+  '5': 'green_to_go', '6': 'cancelled', '7': 'complete', '8': 'client_booking',
+  '9': 'finalised', '10': 'late_cancellation', '11': 'finalised', '12': 'finalised',
+};
+
+/** Map a Traffio booking status (numeric id, or string) onto an allowed bookings status. */
 function mapBookingStatus(raw) {
-  const s = String(raw || '').toLowerCase().replace(/\s+/g, '_');
+  if (raw == null || raw === '') return 'confirmed';
+  const idKey = String(raw).trim();
+  if (TRAFFIO_STATUS_BY_ID[idKey]) return TRAFFIO_STATUS_BY_ID[idKey];
+  const s = idKey.toLowerCase().replace(/\s+/g, '_');
   const allowed = {
     confirmed: 'confirmed', unconfirmed: 'unconfirmed', pending: 'unconfirmed',
     cancelled: 'cancelled', canceled: 'cancelled', complete: 'complete',
     completed: 'complete', in_progress: 'in_progress', on_hold: 'on_hold',
-    green_to_go: 'green_to_go',
+    green_to_go: 'green_to_go', locked: 'locked', conflict: 'conflict',
+    finalised: 'finalised', finalized: 'finalised', client_booking: 'client_booking',
+    late_cancellation: 'late_cancellation',
   };
   return allowed[s] || 'confirmed';
 }
@@ -123,7 +136,7 @@ function upsertBookingFromTraffio(db, payload, jobId, userId) {
   const externalId = String(pick(payload, ['booking_id', 'id'], ''));
   const { start, end } = deriveDateTimes(payload);
   const isDeleted = payload.is_deleted === true || payload.is_deleted === 1 || payload.is_deleted === '1';
-  const status = isDeleted ? 'cancelled' : mapBookingStatus(pick(payload, ['booking_status', 'status', 'state']));
+  const status = isDeleted ? 'cancelled' : mapBookingStatus(pick(payload, ['booking_status_id', 'booking_status', 'status', 'state']));
   const title = pick(payload, ['booking_title', 'title', 'name', 'description'], `Traffio booking ${externalId}`);
   const siteAddress = pick(payload, ['booking_address', 'site_address', 'address', 'location'], '');
   const suburb = pick(payload, ['suburb'], '');
