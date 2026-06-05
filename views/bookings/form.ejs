@@ -166,8 +166,8 @@
         </select>
       </div>
       <div>
-        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Job / Project <span class="text-red-500">*</span></label>
-        <select name="job_id" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Job / Project</label>
+        <select name="job_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           <option value="">-- Select Job --</option>
           <% if (typeof jobs !== 'undefined' && jobs.length) { jobs.forEach(j => { %>
             <option value="<%= j.id %>" <%= isEdit && booking.job_id == j.id ? 'selected' : '' %>><%= j.job_number ? j.job_number + ' — ' : '' %><%= j.job_name %></option>
