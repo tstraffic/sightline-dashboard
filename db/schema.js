@@ -11977,6 +11977,27 @@ function runMigrations(db) {
     }
   }
 
+  // Per-shift crew flags — Team Leader, First Aid, Straight-to-Site,
+  // Non-Billable. Driver continues to be tracked via
+  // booking_vehicles.crew_member_id (one driver per vehicle). These
+  // four boolean flags are toggled per booking_crew row by the click-
+  // popover on the bookings board and surface on the worker shift-
+  // detail screen as little role badges.
+  if (!isMigrationApplied.get(255)) {
+    console.log('Running migration 255: booking_crew flag columns');
+    try {
+      const cols = db.prepare("PRAGMA table_info(booking_crew)").all().map(c => c.name);
+      if (!cols.includes('is_team_leader'))   db.exec("ALTER TABLE booking_crew ADD COLUMN is_team_leader INTEGER NOT NULL DEFAULT 0");
+      if (!cols.includes('is_first_aid'))     db.exec("ALTER TABLE booking_crew ADD COLUMN is_first_aid INTEGER NOT NULL DEFAULT 0");
+      if (!cols.includes('straight_to_site')) db.exec("ALTER TABLE booking_crew ADD COLUMN straight_to_site INTEGER NOT NULL DEFAULT 0");
+      if (!cols.includes('non_billable'))     db.exec("ALTER TABLE booking_crew ADD COLUMN non_billable INTEGER NOT NULL DEFAULT 0");
+      recordMigration.run(255, 'booking_crew flags: is_team_leader, is_first_aid, straight_to_site, non_billable');
+      console.log('Migration 255 applied');
+    } catch (e) {
+      console.error('Migration 255 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

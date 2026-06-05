@@ -483,12 +483,17 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       const slot = blk.worker_slots.find(s => !s.filled);
       if (slot) {
         slot.filled = true;
+        slot.booking_crew_id = c.booking_crew_id;
         slot.crew_member_id = c.crew_member_id;
         slot.name = c.full_name;
         slot.role = c.role_on_site || c.portal_role || c.role || 'traffic_controller';
         slot.employment_status = c.employment_status || 'active';
         slot.bc_status = c.bc_status || 'assigned';
         slot.warnings = c.warnings || [];
+        slot.is_team_leader   = !!c.is_team_leader;
+        slot.is_first_aid     = !!c.is_first_aid;
+        slot.straight_to_site = !!c.straight_to_site;
+        slot.non_billable     = !!c.non_billable;
         break;
       }
       workerIdx += 1;
@@ -513,7 +518,15 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
         name: v.vehicle_name,
         registration: v.registration,
         role: v.vehicle_role || 'ute',
+        driver_id: v.driver_id || null,
       };
+      // Mark whichever crew slot belongs to the driver. Used by the
+      // template + the popover so the Driver toggle reads as "on" for
+      // the right row.
+      if (v.driver_id) {
+        const driverSlot = blk.worker_slots.find(s => s.filled && s.crew_member_id == v.driver_id);
+        if (driverSlot) driverSlot.is_driver = true;
+      }
     }
   }
   // Stragglers (extra vehicles beyond what blocks needed) collect on the
@@ -574,7 +587,8 @@ router.get('/', (req, res) => {
   if (bookingIds.length) {
     const placeholders = bookingIds.map(() => '?').join(',');
     const crewRows = db.prepare(`
-      SELECT bc.booking_id, bc.crew_member_id, bc.status AS bc_status, bc.role_on_site,
+      SELECT bc.id AS booking_crew_id, bc.booking_id, bc.crew_member_id, bc.status AS bc_status, bc.role_on_site,
+        bc.is_team_leader, bc.is_first_aid, bc.straight_to_site, bc.non_billable,
         cm.full_name, cm.role, cm.portal_role,
         COALESCE(e.employment_status, 'active') AS employment_status
       FROM booking_crew bc
@@ -586,7 +600,7 @@ router.get('/', (req, res) => {
     for (const c of crewRows) (crewByBooking[c.booking_id] = crewByBooking[c.booking_id] || []).push(c);
 
     const vRows = db.prepare(`
-      SELECT id, booking_id, vehicle_name, registration, vehicle_role
+      SELECT id, booking_id, vehicle_name, registration, vehicle_role, crew_member_id AS driver_id
       FROM booking_vehicles WHERE booking_id IN (${placeholders})
       ORDER BY created_at
     `).all(...bookingIds);
@@ -1453,6 +1467,56 @@ router.post('/:id/crew', (req, res) => {
 });
 
 // Remove crew from booking + delete matching allocation
+// POST /:id/crew/:crewId/flag — Toggle a per-shift flag on a booking_crew
+// row. Supports: tl (Team Leader), fa (First Aid), sts (Straight-to-Site),
+// nb (Non-Billable). Driver is handled separately via the vehicles route
+// (it lives on booking_vehicles, not booking_crew). Returns the new value
+// so the popover can update its toggle state without a reload.
+router.post('/:id/crew/:crewId/flag', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const FLAG_COLS = { tl: 'is_team_leader', fa: 'is_first_aid', sts: 'straight_to_site', nb: 'non_billable' };
+  const flag = String(req.body.flag || '').toLowerCase();
+  const col = FLAG_COLS[flag];
+  if (!col) {
+    if (isJson) return res.status(400).json({ error: 'Unknown flag' });
+    req.flash('error', 'Unknown flag.'); return res.redirect('/bookings/' + req.params.id);
+  }
+  const row = db.prepare("SELECT id, " + col + " AS val FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, req.params.id);
+  if (!row) {
+    if (isJson) return res.status(404).json({ error: 'Crew row not found' });
+    req.flash('error', 'Crew row not found.'); return res.redirect('/bookings/' + req.params.id);
+  }
+  const next = row.val ? 0 : 1;
+  db.prepare("UPDATE booking_crew SET " + col + " = ? WHERE id = ?").run(next, req.params.crewId);
+  if (isJson) return res.json({ ok: true, flag: flag, value: next });
+  res.redirect('/bookings/' + req.params.id);
+});
+
+// POST /:id/crew/:crewId/driver — Mark this crew member as the driver
+// of the booking's first vehicle (the planner can refine vehicle choice
+// later from the booking detail). If they're already the driver, the
+// flag clears. Driver lives on booking_vehicles.crew_member_id.
+router.post('/:id/crew/:crewId/driver', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const crew = db.prepare("SELECT crew_member_id FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, req.params.id);
+  if (!crew) {
+    if (isJson) return res.status(404).json({ error: 'Crew row not found' });
+    req.flash('error', 'Crew row not found.'); return res.redirect('/bookings/' + req.params.id);
+  }
+  // Find a vehicle on this booking (the first one) to attach the driver to.
+  const veh = db.prepare("SELECT id, crew_member_id FROM booking_vehicles WHERE booking_id = ? ORDER BY id LIMIT 1").get(req.params.id);
+  if (!veh) {
+    if (isJson) return res.status(400).json({ error: 'No vehicle on this booking to drive.' });
+    req.flash('error', 'Add a vehicle first, then assign the driver.'); return res.redirect('/bookings/' + req.params.id);
+  }
+  const isCurrent = veh.crew_member_id == crew.crew_member_id;
+  db.prepare("UPDATE booking_vehicles SET crew_member_id = ? WHERE id = ?").run(isCurrent ? null : crew.crew_member_id, veh.id);
+  if (isJson) return res.json({ ok: true, value: isCurrent ? 0 : 1 });
+  res.redirect('/bookings/' + req.params.id);
+});
+
 router.post('/:id/crew/:crewId/remove', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');

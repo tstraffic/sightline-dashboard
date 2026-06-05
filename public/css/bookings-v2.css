@@ -776,16 +776,19 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 }
 :root[data-theme="light"] .bk2-addon { background: #fff; color: #374151; border: 1px solid #E5E7EB; }
 
-/* Footer tabs row on card */
+/* Footer tabs row on card. Wraps onto a second line on narrow cards
+   instead of clipping items (Forms/Open were being chopped off when
+   the card sat next to the resource panel). */
 .bk2-card-footer {
   border-top: 1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02);
   display: flex; align-items: stretch; padding: 0 6px;
+  flex-wrap: wrap; row-gap: 0;
 }
 .bk2-card-footer a, .bk2-card-footer span.bk2-card-footer-item {
   background: transparent; border: 0;
-  padding: 11px 14px; font-size: 12px; font-weight: 600; color: #94A3B8;
-  display: inline-flex; align-items: center; gap: 6px;
-  text-decoration: none;
+  padding: 10px 10px; font-size: 11.5px; font-weight: 600; color: #94A3B8;
+  display: inline-flex; align-items: center; gap: 5px;
+  text-decoration: none; white-space: nowrap;
 }
 .bk2-card-footer a:hover { color: #60A5FA; background: rgba(96,165,250,0.06); }
 .bk2-card-footer .bk2-tab-count {
@@ -1686,3 +1689,87 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 
 /* Pane padding feels more generous on light */
 :root[data-theme="light"] .bk2-edit-pane { padding: 22px 26px; }
+
+/* =============================================================
+   CREW SLOT — flag pills + click-popover affordances
+   ============================================================= */
+.bk2-flag {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 1px 6px; border-radius: 6px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.04em;
+  border: 1px solid transparent; line-height: 1.2;
+}
+.bk2-flag--tl  { background: rgba(124,58,237,0.18); color: #C4B5FD; border-color: rgba(124,58,237,0.30); }
+.bk2-flag--fa  { background: rgba(220,38,38,0.18);  color: #FCA5A5; border-color: rgba(220,38,38,0.30); }
+.bk2-flag--drv { background: rgba(245,158,11,0.20); color: #FCD34D; border-color: rgba(245,158,11,0.35); }
+.bk2-flag--sts { background: rgba(14,165,233,0.18); color: #7DD3FC; border-color: rgba(14,165,233,0.30); }
+.bk2-flag--nb  { background: rgba(100,116,139,0.20); color: #CBD5E1; border-color: rgba(100,116,139,0.30); }
+:root[data-theme="light"] .bk2-flag--tl  { background: #EDE9FE; color: #6D28D9; border-color: #DDD6FE; }
+:root[data-theme="light"] .bk2-flag--fa  { background: #FEE2E2; color: #B91C1C; border-color: #FECACA; }
+:root[data-theme="light"] .bk2-flag--drv { background: #FEF3C7; color: #B45309; border-color: #FDE68A; }
+:root[data-theme="light"] .bk2-flag--sts { background: #E0F2FE; color: #0369A1; border-color: #BAE6FD; }
+:root[data-theme="light"] .bk2-flag--nb  { background: #F1F5F9; color: #475569; border-color: #E2E8F0; }
+
+.bk2-slot--click { cursor: pointer; transition: background 100ms ease; }
+.bk2-slot--click:hover { background: rgba(255,255,255,0.07); }
+:root[data-theme="light"] .bk2-slot--click:hover { background: #E0E7FF; }
+.bk2-slot.is-driver { box-shadow: inset 3px 0 0 #F59E0B; }
+
+/* Click-popover ("crew action sheet") */
+.bk2-pop-backdrop { position: fixed; inset: 0; z-index: 90; }
+.bk2-pop {
+  position: absolute; z-index: 95;
+  min-width: 220px; padding: 6px;
+  background: #fff; color: #111827;
+  border: 1px solid #E5E7EB; border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(15,23,42,0.18), 0 2px 6px rgba(15,23,42,0.08);
+  display: grid; gap: 4px;
+}
+:root[data-theme="dark"] .bk2-pop {
+  background: #1A1D24; color: #F5F5F7;
+  border-color: rgba(255,255,255,0.10);
+  box-shadow: 0 14px 36px rgba(0,0,0,0.55), 0 2px 6px rgba(0,0,0,0.40);
+}
+.bk2-pop-head {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 10px 10px; border-bottom: 1px solid #F1F5F9; margin-bottom: 4px;
+}
+:root[data-theme="dark"] .bk2-pop-head { border-bottom-color: rgba(255,255,255,0.08); }
+.bk2-pop-avatar {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; border-radius: 9999px;
+  background: #1E40AF; color: #DBEAFE; font-weight: 700; font-size: 12px; flex-shrink: 0;
+}
+.bk2-pop-name { font-weight: 700; font-size: 13px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk2-pop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 2px; }
+.bk2-pop-btn {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 9px 6px;
+  background: #F1F5F9; color: #475569;
+  border: 1px solid transparent; border-radius: 9px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  cursor: pointer; transition: background 100ms ease, color 100ms ease, transform 60ms ease;
+}
+.bk2-pop-btn svg { width: 18px; height: 18px; }
+.bk2-pop-btn:hover { background: #E2E8F0; color: #0F172A; transform: translateY(-1px); }
+:root[data-theme="dark"] .bk2-pop-btn { background: rgba(255,255,255,0.05); color: #CBD5E1; border-color: rgba(255,255,255,0.06); }
+:root[data-theme="dark"] .bk2-pop-btn:hover { background: rgba(255,255,255,0.10); color: #fff; }
+
+.bk2-pop-btn.is-on { background: #2B7FFF; color: #fff; box-shadow: 0 2px 8px rgba(43,127,255,0.30); }
+.bk2-pop-btn.is-on--drv { background: #F59E0B; box-shadow: 0 2px 8px rgba(245,158,11,0.30); }
+.bk2-pop-btn.is-on--tl  { background: #7C3AED; box-shadow: 0 2px 8px rgba(124,58,237,0.30); }
+.bk2-pop-btn.is-on--fa  { background: #DC2626; box-shadow: 0 2px 8px rgba(220,38,38,0.30); }
+.bk2-pop-btn.is-on--sts { background: #0EA5E9; box-shadow: 0 2px 8px rgba(14,165,233,0.30); }
+.bk2-pop-btn.is-on--nb  { background: #475569; box-shadow: 0 2px 8px rgba(71,85,105,0.30); }
+
+.bk2-pop-foot { padding: 4px; border-top: 1px solid #F1F5F9; margin-top: 4px; }
+:root[data-theme="dark"] .bk2-pop-foot { border-top-color: rgba(255,255,255,0.08); }
+.bk2-pop-remove {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 9px; background: #FEE2E2; color: #B91C1C;
+  border: 0; border-radius: 9px; font-size: 12px; font-weight: 700; cursor: pointer;
+  transition: background 100ms ease;
+}
+.bk2-pop-remove:hover { background: #FECACA; }
+:root[data-theme="dark"] .bk2-pop-remove { background: rgba(220,38,38,0.18); color: #FCA5A5; }
+:root[data-theme="dark"] .bk2-pop-remove:hover { background: rgba(220,38,38,0.30); color: #fff; }

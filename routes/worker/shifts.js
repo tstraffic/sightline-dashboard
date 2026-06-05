@@ -180,6 +180,30 @@ router.get('/shifts/:id', async (req, res) => {
     return res.redirect('/w/shifts');
   }
 
+  // Per-shift flags set by the planner on the bookings board (TL, FA,
+  // STS, NB, Driver). Falls back to false on legacy DBs where the
+  // columns don't exist yet.
+  let shiftFlags = { is_team_leader: false, is_first_aid: false, straight_to_site: false, non_billable: false, is_driver: false };
+  if (allocation.booking_id) {
+    try {
+      const bc = db.prepare(`
+        SELECT is_team_leader, is_first_aid, straight_to_site, non_billable
+        FROM booking_crew WHERE booking_id = ? AND crew_member_id = ?
+      `).get(allocation.booking_id, worker.id);
+      if (bc) {
+        shiftFlags.is_team_leader   = !!bc.is_team_leader;
+        shiftFlags.is_first_aid     = !!bc.is_first_aid;
+        shiftFlags.straight_to_site = !!bc.straight_to_site;
+        shiftFlags.non_billable     = !!bc.non_billable;
+      }
+      const drv = db.prepare(`
+        SELECT 1 AS d FROM booking_vehicles
+        WHERE booking_id = ? AND crew_member_id = ? LIMIT 1
+      `).get(allocation.booking_id, worker.id);
+      shiftFlags.is_driver = !!drv;
+    } catch (e) { /* legacy DB — columns missing, leave defaults */ }
+  }
+
   const otherCrew = db.prepare(`
     SELECT ca.role_on_site, ca.shift_type, ca.start_time, ca.end_time, ca.status,
       cm.full_name, cm.phone, cm.role as crew_role
@@ -222,6 +246,7 @@ router.get('/shifts/:id', async (req, res) => {
     lastClock: lastClock || null,
     siteMap,
     siteAddressFull,
+    shiftFlags,
   });
 });
 
