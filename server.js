@@ -320,6 +320,7 @@ app.use('/documents', requireLogin, requirePermission('documents'), require('./r
 app.use('/activity', requireLogin, requirePermission('activity'), require('./routes/activity'));
 app.use('/budgets', requireLogin, requirePermission('budgets'), require('./routes/budgets'));
 app.use('/finance/pnl', requireLogin, require('./routes/finance-pnl'));
+app.use('/finance/invoicing', requireLogin, requirePermission('invoicing'), require('./routes/invoicing'));
 app.use('/timesheets', requireLogin, requirePermission('timesheets'), require('./routes/timesheets'));
 app.use('/crew', requireLogin, requirePermission('crew'), require('./routes/crew'));
 app.use('/bookings', requireLogin, requirePermission('bookings'), require('./routes/bookings'));

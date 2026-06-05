@@ -379,6 +379,12 @@
       <span class="flex-1">Abergeldie Payment Sheet</span>
     </a>
     <% } %>
+    <% if (canAccess(user, 'invoicing')) { %>
+    <a href="/finance/invoicing" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'invoicing' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 14h6m-6-4h6m-7 8l-2 2V6a2 2 0 012-2h8a2 2 0 012 2v14l-2-2-2 2-2-2-2 2-2-2z"/></svg>
+      <span class="flex-1">Invoicing</span>
+    </a>
+    <% } %>
     <% } %>
 
     <% if (canAccess(user, 'induction') || canAccess(user, 'hr_dashboard')) { %>
