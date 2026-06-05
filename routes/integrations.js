@@ -42,7 +42,17 @@ router.post('/:provider', (req, res) => {
     return res.redirect('/admin/integrations');
   }
 
-  const enabled = req.body.enabled === '1' || req.body.enabled === 'on';
+  // Checkbox fields are paired with a hidden `value="0"` input so a value is
+  // always sent. When the box is ticked the browser submits BOTH, which
+  // express (extended) parses into an array like ['0','1'] — so a plain
+  // `=== '1'` check never matched and the toggle never saved. Treat the
+  // field as on if any submitted value is truthy.
+  const checkboxOn = (v) => {
+    const vals = Array.isArray(v) ? v : [v];
+    return vals.some((x) => x === '1' || x === 'on' || x === 'true');
+  };
+
+  const enabled = checkboxOn(req.body.enabled);
   const configObj = {};
 
   // Provider-specific config fields
@@ -50,7 +60,7 @@ router.post('/:provider', (req, res) => {
     case 'traffio':
       configObj.api_url = (req.body.api_url || '').trim();
       configObj.api_key = (req.body.api_key || '').trim();
-      configObj.auto_sync = req.body.auto_sync === '1' || req.body.auto_sync === 'on';
+      configObj.auto_sync = checkboxOn(req.body.auto_sync);
       break;
     case 'quickbooks':
       configObj.client_id = (req.body.client_id || '').trim();
