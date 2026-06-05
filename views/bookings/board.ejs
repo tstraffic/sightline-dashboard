@@ -1331,12 +1331,23 @@
       if (document.querySelector('#bk2-editor').dataset.mode !== 'create') return;
       e.preventDefault();
       var fd = new FormData(createForm);
+      // Convert FormData → URLSearchParams so the request goes as
+      // application/x-www-form-urlencoded. Sending FormData directly
+      // makes fetch use multipart/form-data, which express.urlencoded()
+      // can't parse — req.body ends up empty and every field looks
+      // missing, which is exactly the "Missing: client, site address,
+      // date, start time" error users were seeing on fully-filled forms.
+      var body = new URLSearchParams();
+      fd.forEach(function (v, k) { body.append(k, typeof v === 'string' ? v : (v && v.name ? v.name : '')); });
       var btn = $('#bk2-edit-create');
       if (btn) { btn.disabled = true; btn.classList.add('is-saving'); }
       fetch('/bookings/quick', {
         method: 'POST',
-        headers: { 'Accept': 'application/json' },
-        body: fd,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body,
         credentials: 'same-origin',
       }).then(function (r) { return r.json().catch(function () { return {}; }); })
         .then(function (data) {
