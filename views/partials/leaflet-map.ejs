@@ -69,12 +69,12 @@
     background: #1A1D24;
     box-shadow: 0 1px 0 rgba(255,255,255,0.04);
   }
-  /* Lift the CARTO Dark Matter base from near-black to a legible
-     mid-grey so streets + labels are visible without being harsh on
-     the eyes. Filter is scoped to the tile pane so the marker and
-     UI overlays stay un-tinted. */
+  /* Dark mode: invert + hue-rotate the colourful Voyager base so the
+     canvas turns dark while the colour cues (green parks, blue water,
+     warm roads) are preserved. Filter is scoped to the tile pane so
+     the marker, zoom controls and popups stay un-tinted. */
   :root[data-theme="dark"] .atomis-map .leaflet-tile-pane {
-    filter: brightness(1.55) saturate(0.85) hue-rotate(-6deg);
+    filter: invert(0.92) hue-rotate(180deg) saturate(0.78) brightness(0.95);
   }
   /* Leaflet zoom controls — tighter, rounded, softer shadow */
   .atomis-map .leaflet-control-zoom {
@@ -187,33 +187,23 @@
 
     var map = L.map(el, { scrollWheelZoom: false, zoomControl: true, attributionControl: true }).setView(center, zoom);
 
-    // CARTO basemap — Positron for light, Dark Matter for dark. Free
-    // attribution-only license; high-DPI tiles via the _2x suffix so
-    // text stays crisp on retina screens.
-    var LIGHT_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
-    var DARK_URL  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    // CARTO Voyager — colourful but quiet (soft green parks, pale
+    // blue water, light beige roads). Same URL is used in both
+    // themes; dark mode applies a CSS filter on the tile pane that
+    // darkens the canvas while keeping the colour cues. Free with
+    // attribution; high-DPI tiles via {r} so text stays crisp.
+    var TILE_URL = 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png';
     var ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
 
-    function currentTheme() {
-      return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
-    }
-    function makeTileLayer(theme) {
-      return L.tileLayer(theme === 'dark' ? DARK_URL : LIGHT_URL, {
-        maxZoom: 20,
-        attribution: ATTRIB,
-        subdomains: 'abcd',
-        detectRetina: true,
-      });
-    }
+    var tileLayer = L.tileLayer(TILE_URL, {
+      maxZoom: 20,
+      attribution: ATTRIB,
+      subdomains: 'abcd',
+      detectRetina: true,
+    }).addTo(map);
 
-    var tileLayer = makeTileLayer(currentTheme()).addTo(map);
-
-    // Swap tiles when the user toggles theme — custom event is
-    // dispatched by views/layout.ejs:toggleAtomisTheme().
-    document.addEventListener('atomis:theme', function () {
-      try { tileLayer.remove(); } catch (e) {}
-      tileLayer = makeTileLayer(currentTheme()).addTo(map);
-    });
+    // No need to swap layers on theme toggle — the .atomis-map
+    // [data-theme=dark] CSS filter handles the visual switch.
 
     function pinIcon(color) {
       return L.divIcon({
