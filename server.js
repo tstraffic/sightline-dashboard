@@ -360,6 +360,7 @@ app.use('/opportunities', requireLogin, requirePermission('crm'), require('./rou
 app.use('/chat', requireLogin, require('./routes/chat'));
 app.use('/notifications', requireLogin, requirePermission('notifications'), require('./routes/notifications'));
 app.use('/admin/integrations', requireLogin, requirePermission('admin'), require('./routes/integrations'));
+app.use('/admin', requireLogin, requirePermission('admin'), require('./routes/admin-permissions'));
 app.use('/admin', requireLogin, requirePermission('admin'), require('./routes/admin'));
 app.use('/settings', requireLogin, requirePermission('settings'), require('./routes/settings'));
 app.use('/api/views', requireLogin, require('./routes/saved-views'));

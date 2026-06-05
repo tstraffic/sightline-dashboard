@@ -499,6 +499,10 @@
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l-1.5-1.5a3.5 3.5 0 00-5 5L8 12m3 5l1.5 1.5a3.5 3.5 0 005-5L19 12M9 15l6-6"/></svg>
       <span class="flex-1">Integrations</span>
     </a>
+    <a href="/admin/permissions" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'admin-permissions' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M12 3l8 4v5c0 5-3.5 9-8 10-4.5-1-8-5-8-10V7l8-4z"/></svg>
+      <span class="flex-1">Role Permissions</span>
+    </a>
     <% } %>
     <!-- IT Feedback inbox — admin only, last item in the sidebar. -->
     <% if (canAccess(user, 'admin') || user.role === 'admin') { %>

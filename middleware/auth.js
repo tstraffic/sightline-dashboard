@@ -161,14 +161,62 @@ const PERMISSIONS = {
   marketing:          ['admin', 'marketing'],
 };
 
+// ---- Role permission overrides ----
+// Admins can flip individual (role, permission) pairs via /admin/permissions.
+// The DB row wins over the PERMISSIONS default for that pair only; everything
+// else still uses the default map. Admin is always allowed (never blocked by
+// an override) so a misconfigured save can't lock everyone out.
+//
+// Cache is invalidated on every save (see refreshRolePermissionOverrides).
+let _rolePermissionOverrides = null; // Map<role, Map<permission, allowed:boolean>>
+
+function loadRolePermissionOverrides() {
+  try {
+    const { getDb } = require('../db/database');
+    const db = getDb();
+    const rows = db.prepare('SELECT role, permission, allowed FROM role_permissions').all();
+    const map = new Map();
+    for (const r of rows) {
+      if (!map.has(r.role)) map.set(r.role, new Map());
+      map.get(r.role).set(r.permission, !!r.allowed);
+    }
+    _rolePermissionOverrides = map;
+  } catch (e) {
+    // Table may not exist yet (first boot before migration 253) — fall back to
+    // an empty map so canAccess() just uses the hardcoded defaults.
+    _rolePermissionOverrides = new Map();
+  }
+  return _rolePermissionOverrides;
+}
+
+function refreshRolePermissionOverrides() {
+  _rolePermissionOverrides = null;
+  return loadRolePermissionOverrides();
+}
+
+function getRoleOverride(role, module) {
+  if (!_rolePermissionOverrides) loadRolePermissionOverrides();
+  const roleMap = _rolePermissionOverrides.get(role);
+  if (!roleMap) return undefined;
+  return roleMap.has(module) ? roleMap.get(module) : undefined;
+}
+
 // ---- Helpers ----
 
 /** Check if a user can access a given module (for templates / sidebar) */
 function canAccess(user, module) {
   if (!user || !user.role) return false;
+  const role = normaliseRole(user.role);
+  // Admin is never blocked by an override.
+  if (role === 'admin') {
+    const allowed = PERMISSIONS[module];
+    return Array.isArray(allowed) ? allowed.includes('admin') : false;
+  }
+  const override = getRoleOverride(role, module);
+  if (override !== undefined) return override;
   const allowed = PERMISSIONS[module];
   if (!allowed) return false; // unknown module = deny
-  return allowed.includes(normaliseRole(user.role));
+  return allowed.includes(role);
 }
 
 /** Express middleware: require permission for a module */
@@ -265,4 +313,4 @@ function canViewInternalCost(user) {
   return role === 'admin' || role === 'finance';
 }
 
-module.exports = { requireLogin, requireRole, requirePermission, requireAccountsAccess, canViewAccounts, canViewSensitiveHR, canViewInternalCost, canAccess, normaliseRole, PERMISSIONS };
+module.exports = { requireLogin, requireRole, requirePermission, requireAccountsAccess, canViewAccounts, canViewSensitiveHR, canViewInternalCost, canAccess, normaliseRole, PERMISSIONS, refreshRolePermissionOverrides };

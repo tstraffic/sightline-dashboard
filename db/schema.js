@@ -11925,6 +11925,31 @@ function runMigrations(db) {
     }
   }
 
+  // Per-role permission overrides — lets an admin toggle which sidebar
+  // modules each role can see, without redeploying. canAccess() consults
+  // this table first and falls back to the hardcoded PERMISSIONS map
+  // when no override row exists. Admin is always allowed.
+  if (!isMigrationApplied.get(253)) {
+    console.log('Running migration 253: role_permissions overrides');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS role_permissions (
+          role TEXT NOT NULL,
+          permission TEXT NOT NULL,
+          allowed INTEGER NOT NULL DEFAULT 1,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+          PRIMARY KEY (role, permission)
+        );
+        CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(role);
+      `);
+      recordMigration.run(253, 'role_permissions overrides table');
+      console.log('Migration 253 applied');
+    } catch (e) {
+      console.error('Migration 253 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
