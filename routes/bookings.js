@@ -495,13 +495,20 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
     }
   }
   // Fill vehicle slots in order across blocks (utes first), drop add-ons
-  // under the first block's vehicle for now.
+  // under the first block's vehicle for now. A row with empty name AND
+  // empty rego is treated as a placeholder (not filled) so the drop
+  // target still renders and the planner can complete it by dragging a
+  // vehicle from the resource panel. POST /:id/vehicles already detects
+  // and upgrades placeholder rows in place, so this doesn't create a
+  // duplicate booking_vehicles row.
   const vehicles = (vehicleRows || []).slice();
   for (const blk of blocks) {
     const v = vehicles.shift();
     if (v) {
+      const hasName = v.vehicle_name && String(v.vehicle_name).trim() !== '';
+      const hasRego = v.registration  && String(v.registration).trim()  !== '';
       blk.vehicle_slot = {
-        filled: true,
+        filled: hasName || hasRego,
         vehicle_id: v.id,
         name: v.vehicle_name,
         registration: v.registration,
