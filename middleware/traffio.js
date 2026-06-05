@@ -302,7 +302,31 @@ async function syncTraffioJobs(triggeredBy) {
   return stats;
 }
 
-// ---- Sync Crew / Workers ----
+// ---- Sync People → crew_members ----
+
+// Map a Traffio resource/role name onto the crew_members.role CHECK set.
+function mapCrewRole(raw) {
+  const s = String(raw || '').toLowerCase();
+  if (s.includes('leading') || s.includes('team leader')) return 'leading_hand';
+  if (s.includes('supervisor')) return 'supervisor';
+  if (s.includes('pilot')) return 'pilot_vehicle';
+  if (s.includes('spotter')) return 'spotter';
+  if (s.includes('labour')) return 'labourer';
+  return 'traffic_controller'; // most Traffio field people are TCs
+}
+
+// Resolve a Traffio person_id to a local crew_members id (via external_ref).
+function resolveCrewId(db, personId) {
+  if (personId == null || personId === '') return null;
+  const r = getInternalRef('traffio', 'crew', String(personId));
+  return r ? r.internal_id : null;
+}
+
+// ---- date/time helpers for "YYYY-MM-DD HH:mm:ss" Traffio stamps ----
+function datePart(dt) { const s = String(dt || ''); return s.split(/[ T]/)[0] || null; }
+function timePart(dt) { const p = String(dt || '').split(/[ T]/)[1] || ''; return p.slice(0, 5) || null; }
+function nightOrDay(timeStr) { const h = parseInt(String(timeStr || '').slice(0, 2), 10); return (isFinite(h) && (h < 6 || h >= 18)) ? 'night' : 'day'; }
+const isTruthy = (v) => v === '1' || v === 1 || v === true || String(v).toUpperCase() === 'YES';
 
 async function syncTraffioCrew(triggeredBy) {
   const db = getDb();
@@ -312,58 +336,49 @@ async function syncTraffioCrew(triggeredBy) {
 
   try {
     const client = getTraffioClient();
-    const response = await client.get('/api/v1/workers');
-    const workers = response.data.data || response.data || [];
+    const response = await client.get('/v1_person/person');
+    const people = Array.isArray(response.data) ? response.data : (response.data.data || []);
 
-    for (const w of workers) {
+    for (const p of people) {
       stats.processed++;
       try {
-        const externalId = String(w.id || w.worker_id);
-        const employeeId = w.employee_id || w.payroll_id || externalId;
+        const externalId = String(pick(p, ['person_id'], ''));
+        if (!externalId) { stats.failed++; continue; }
+        const fullName = [pick(p, ['preferred_name']) || pick(p, ['first_name'], ''), pick(p, ['last_name'], '')]
+          .filter(Boolean).join(' ').trim() || `Person ${externalId}`;
+        const employeeId = pick(p, ['employee_reference'], null) || `TRF-P-${externalId}`;
+        const role = mapCrewRole(pick(p, ['resource_name', 'person_category_title', 'person_job_title']));
+        const phone = pick(p, ['mobile'], '');
+        const email = pick(p, ['email'], '');
+        const licType = pick(p, ['driver_licence_type_name'], '');
+        const licExpiry = pick(p, ['person_driver_licence_expiry_date'], null);
+        const active = isTruthy(p.is_deleted) ? 0 : 1;
 
-        // Try to find by employee_id first
-        const existing = db.prepare('SELECT id FROM crew_members WHERE employee_id = ?').get(employeeId);
+        // Resolve existing: external_ref first, then by employee_reference, else create.
+        let crewId = null;
+        const ref = getInternalRef('traffio', 'crew', externalId);
+        if (ref) crewId = ref.internal_id;
+        if (!crewId && pick(p, ['employee_reference'], null)) {
+          const m = db.prepare('SELECT id FROM crew_members WHERE employee_id = ?').get(String(p.employee_reference));
+          if (m) crewId = m.id;
+        }
 
-        if (existing) {
-          db.prepare(`
-            UPDATE crew_members SET
-              full_name = COALESCE(?, full_name),
-              phone = COALESCE(?, phone),
-              email = COALESCE(?, email),
-              role = COALESCE(?, role),
-              licence_type = COALESCE(?, licence_type),
-              licence_expiry = COALESCE(?, licence_expiry)
-            WHERE id = ?
-          `).run(
-            w.name || w.full_name || null,
-            w.phone || w.mobile || null,
-            w.email || null,
-            w.role || w.position || null,
-            w.licence_type || w.license_class || null,
-            w.licence_expiry || w.license_expiry || null,
-            existing.id
-          );
-          setExternalRef('traffio', 'crew', existing.id, externalId, w);
+        if (crewId) {
+          db.prepare(`UPDATE crew_members SET full_name=?, phone=COALESCE(NULLIF(?,''),phone),
+            email=COALESCE(NULLIF(?,''),email), role=?, licence_type=COALESCE(NULLIF(?,''),licence_type),
+            licence_expiry=COALESCE(?,licence_expiry), active=? WHERE id=?`)
+            .run(fullName, phone, email, role, licType, licExpiry, active, crewId);
           stats.updated++;
         } else {
-          const result = db.prepare(`
-            INSERT INTO crew_members (full_name, employee_id, role, phone, email, licence_type, licence_expiry, active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 1)
-          `).run(
-            w.name || w.full_name || 'Unknown',
-            employeeId,
-            w.role || w.position || 'TC',
-            w.phone || w.mobile || '',
-            w.email || '',
-            w.licence_type || w.license_class || '',
-            w.licence_expiry || w.license_expiry || null
-          );
-          setExternalRef('traffio', 'crew', result.lastInsertRowid, externalId, w);
+          const result = db.prepare(`INSERT INTO crew_members (full_name, employee_id, role, phone, email, licence_type, licence_expiry, active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`).run(fullName, employeeId, role, phone, email, licType, licExpiry, active);
+          crewId = result.lastInsertRowid;
           stats.created++;
         }
+        setExternalRef('traffio', 'crew', crewId, externalId, p);
       } catch (err) {
         stats.failed++;
-        stats.errorDetails += `Worker ${w.id}: ${err.message}\n`;
+        stats.errorDetails += `Person ${p.person_id}: ${err.message}\n`;
       }
     }
 
@@ -577,6 +592,186 @@ async function syncTraffioDockets(triggeredBy, fromDate, toDate) {
   return stats;
 }
 
+// ---- Sync Booking Crew → crew_allocations (dashboard: Crew Today / Gaps / Unconfirmed) ----
+// Only creates allocations for bookings already synced locally WITH a job (job_id
+// is NOT NULL on crew_allocations). Unmatched/queued bookings are skipped until
+// reconciled — coverage grows as the reconciliation queue is worked.
+async function syncTraffioBookingCrew(triggeredBy, fromDate, toDate) {
+  const db = getDb();
+  updateSyncStatus('traffio', 'syncing');
+  const logId = startSyncLog('traffio', 'import', 'allocation', triggeredBy);
+  const stats = { processed: 0, created: 0, updated: 0, skipped: 0, failed: 0, errorDetails: '' };
+  try {
+    const client = getTraffioClient();
+    const pad = (d, end) => d ? (d.length <= 10 ? `${d} ${end ? '23:59:59' : '00:00:00'}` : d) : null;
+    const params = {};
+    if (fromDate) params.date_from = pad(fromDate, false);
+    if (toDate) params.date_to = pad(toDate, true);
+    const res = await client.get('/v1_booking/booking_person', { params });
+    const rows = Array.isArray(res.data) ? res.data : (res.data.data || []);
+    const sysUser = db.prepare("SELECT id FROM users WHERE role IN ('management','admin') ORDER BY id LIMIT 1").get();
+    const allocBy = sysUser ? sysUser.id : 1;
+
+    for (const bp of rows) {
+      stats.processed++;
+      try {
+        if (isTruthy(bp.is_deleted)) { stats.skipped++; continue; }
+        const bookingExtId = String(pick(bp, ['booking_id'], ''));
+        const bookingRef = bookingExtId ? getInternalRef('traffio', 'booking', bookingExtId) : null;
+        if (!bookingRef) { stats.skipped++; continue; }            // booking not synced locally yet
+        const booking = db.prepare('SELECT id, job_id FROM bookings WHERE id = ?').get(bookingRef.internal_id);
+        if (!booking || !booking.job_id) { stats.skipped++; continue; } // allocation needs a job
+        const crewId = resolveCrewId(db, pick(bp, ['person_id']));
+        if (!crewId) { stats.skipped++; continue; }
+
+        const allocDate = datePart(pick(bp, ['start_time'])) || datePart(pick(bp, ['booking_start_time']));
+        if (!allocDate) { stats.skipped++; continue; }
+        const startT = timePart(pick(bp, ['start_time'])) || '06:00';
+        const endT = timePart(pick(bp, ['end_time'])) || '14:30';
+        const shift = nightOrDay(startT);
+        const status = isTruthy(pick(bp, ['confirmed'])) ? 'confirmed' : 'allocated';
+        const role = isTruthy(bp.is_team_leader) ? 'leading_hand' : (isTruthy(bp.is_spotter) ? 'spotter' : '');
+
+        const extKey = `${bookingExtId}:${pick(bp, ['person_id'], '')}`;
+        const existing = getInternalRef('traffio', 'allocation', extKey);
+        if (existing) {
+          db.prepare(`UPDATE crew_allocations SET job_id=?, crew_member_id=?, allocation_date=?, start_time=?, end_time=?, shift_type=?, role_on_site=?, status=? WHERE id=?`)
+            .run(booking.job_id, crewId, allocDate, startT, endT, shift, role, status, existing.internal_id);
+          stats.updated++;
+        } else {
+          const r = db.prepare(`INSERT INTO crew_allocations (job_id, crew_member_id, allocation_date, start_time, end_time, shift_type, role_on_site, status, allocated_by_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(booking.job_id, crewId, allocDate, startT, endT, shift, role, status, allocBy);
+          setExternalRef('traffio', 'allocation', r.lastInsertRowid, extKey, bp);
+          stats.created++;
+        }
+      } catch (err) { stats.failed++; stats.errorDetails += `BP ${bp.booking_id}/${bp.person_id}: ${err.message}\n`; }
+    }
+    updateSyncStatus('traffio', 'success');
+  } catch (err) { stats.errorDetails = err.message; updateSyncStatus('traffio', 'error', err.message); }
+  completeSyncLog(logId, stats);
+  return stats;
+}
+
+// ---- Project staged docket hours → timesheets (dashboard: Hours 7d / Pending Timesheets) ----
+// Uses traffio_docket_persons (already imported by syncTraffioDockets); no API call.
+// Needs a resolvable local job (timesheets.job_id is NOT NULL).
+function syncTimesheetsFromDockets(triggeredBy) {
+  const db = getDb();
+  const logId = startSyncLog('traffio', 'import', 'timesheet', triggeredBy);
+  const stats = { processed: 0, created: 0, updated: 0, skipped: 0, failed: 0, errorDetails: '' };
+  try {
+    const sysUser = db.prepare("SELECT id FROM users WHERE role IN ('management','admin') ORDER BY id LIMIT 1").get();
+    const subBy = sysUser ? sysUser.id : 1;
+    const rows = db.prepare(`
+      SELECT p.works_docket_id, p.person_id, p.time_on, p.time_off, p.total_hours, p.break_time,
+             d.job_number, d.project_id
+      FROM traffio_docket_persons p
+      JOIN traffio_dockets d ON d.works_docket_id = p.works_docket_id
+      WHERE p.is_deleted = 0 AND d.is_deleted = 0 AND d.signed_off = 1
+    `).all();
+    for (const r of rows) {
+      stats.processed++;
+      try {
+        const crewId = resolveCrewId(db, r.person_id);
+        if (!crewId) { stats.skipped++; continue; }
+        let jobId = null;
+        if (r.project_id) { const jr = getInternalRef('traffio', 'job', String(r.project_id)); if (jr) jobId = jr.internal_id; }
+        if (!jobId && r.job_number) { const j = db.prepare('SELECT id FROM jobs WHERE job_number=? OR client_project_number=?').get(String(r.job_number), String(r.job_number)); if (j) jobId = j.id; }
+        if (!jobId) { stats.skipped++; continue; }
+        const workDate = datePart(r.time_on); if (!workDate) { stats.skipped++; continue; }
+        const startT = timePart(r.time_on) || '06:00';
+        const endT = timePart(r.time_off) || startT;
+        const shift = nightOrDay(startT);
+        const hours = Number(r.total_hours) || 0;
+        const breakMin = Math.round((Number(r.break_time) || 0) * 60);
+
+        const extKey = `${r.works_docket_id}:${r.person_id}`;
+        const existing = getInternalRef('traffio', 'timesheet', extKey);
+        if (existing) {
+          db.prepare(`UPDATE timesheets SET job_id=?, crew_member_id=?, work_date=?, start_time=?, end_time=?, break_minutes=?, total_hours=?, shift_type=? WHERE id=?`)
+            .run(jobId, crewId, workDate, startT, endT, breakMin, hours, shift, existing.internal_id);
+          stats.updated++;
+        } else {
+          const ins = db.prepare(`INSERT INTO timesheets (job_id, crew_member_id, work_date, start_time, end_time, break_minutes, total_hours, shift_type, approved, submitted_by_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?)`).run(jobId, crewId, workDate, startT, endT, breakMin, hours, shift, subBy);
+          setExternalRef('traffio', 'timesheet', ins.lastInsertRowid, extKey, { works_docket_id: r.works_docket_id, person_id: r.person_id });
+          stats.created++;
+        }
+      } catch (err) { stats.failed++; stats.errorDetails += `TS ${r.works_docket_id}/${r.person_id}: ${err.message}\n`; }
+    }
+    updateSyncStatus('traffio', 'success');
+  } catch (err) { stats.errorDetails = err.message; updateSyncStatus('traffio', 'error', err.message); }
+  completeSyncLog(logId, stats);
+  return stats;
+}
+
+// Map a Traffio form name onto the dashboard's safety_forms.form_type values.
+function mapFormType(name) {
+  const s = String(name || '').toLowerCase();
+  if (s.includes('vehicle pre')) return 'vehicle_prestart';
+  if (s.includes('post shift') || s.includes('post-shift')) return 'post_shift_vehicle';
+  if (s.includes('risk') || s.includes('toolbox')) return 'risk_toolbox';
+  if (s.includes('prestart declaration') || (s.includes('traffic controller') && s.includes('prestart'))) return 'tc_prestart';
+  if (s.includes('team leader')) return 'team_leader';
+  return null;
+}
+
+// ---- Sync completed Form submissions → safety_forms (dashboard: Checklist Register) ----
+async function syncTraffioForms(triggeredBy, fromDate, toDate) {
+  const db = getDb();
+  updateSyncStatus('traffio', 'syncing');
+  const logId = startSyncLog('traffio', 'import', 'form', triggeredBy);
+  const stats = { processed: 0, created: 0, updated: 0, skipped: 0, failed: 0, errorDetails: '' };
+  try {
+    const client = getTraffioClient();
+    const pad = (d, end) => d ? (d.length <= 10 ? `${d} ${end ? '23:59:59' : '00:00:00'}` : d) : null;
+    const params = {};
+    if (fromDate) params.date_from = pad(fromDate, false);
+    if (toDate) params.date_to = pad(toDate, true);
+    const res = await client.get('/v1_form/form_submission', { params });
+    const rows = Array.isArray(res.data) ? res.data : (res.data.data || []);
+    for (const f of rows) {
+      stats.processed++;
+      try {
+        if (isTruthy(f.is_deleted)) { stats.skipped++; continue; }
+        // A form counts as done when a submission exists with a submitted time
+        // (Traffio's "Open" state — author + timestamp). The form_submission_is_complete
+        // flag is an internal validation marker that's ~always 0 in practice.
+        const submittedAt = pick(f, ['form_submission_submitted_time'], null);
+        if (!submittedAt) { stats.skipped++; continue; }
+        const formType = mapFormType(pick(f, ['form_name']));
+        if (!formType) { stats.skipped++; continue; }                                 // not a register form
+        // Form submissions identify the submitter via created_by (= person_id),
+        // not the (empty) person_id field.
+        const crewId = resolveCrewId(db, pick(f, ['created_by', 'person_id']));
+        if (!crewId) { stats.skipped++; continue; }                                   // crew_member_id NOT NULL
+        let jobId = null;
+        const bExt = pick(f, ['booking_id'], null);
+        if (bExt != null) {
+          const br = getInternalRef('traffio', 'booking', String(bExt));
+          if (br) { const b = db.prepare('SELECT job_id FROM bookings WHERE id=?').get(br.internal_id); if (b) jobId = b.job_id; }
+        }
+        const extId = String(pick(f, ['form_submission_id'], ''));
+        const existing = getInternalRef('traffio', 'form_submission', extId);
+        if (existing) {
+          db.prepare(`UPDATE safety_forms SET crew_member_id=?, form_type=?, job_id=?, submitted_at=COALESCE(?,submitted_at) WHERE id=?`)
+            .run(crewId, formType, jobId, submittedAt, existing.internal_id);
+          stats.updated++;
+        } else {
+          const ins = db.prepare(`INSERT INTO safety_forms (crew_member_id, form_type, job_id, status, submitted_at, data)
+            VALUES (?, ?, ?, 'submitted', COALESCE(?, datetime('now')), ?)`)
+            .run(crewId, formType, jobId, submittedAt, JSON.stringify({ source: 'traffio', form_submission_id: extId, form_name: pick(f, ['form_name'], ''), author: pick(f, ['author'], '') }));
+          setExternalRef('traffio', 'form_submission', ins.lastInsertRowid, extId, { form_submission_id: extId });
+          stats.created++;
+        }
+      } catch (err) { stats.failed++; stats.errorDetails += `Form ${f.form_submission_id}: ${err.message}\n`; }
+    }
+    updateSyncStatus('traffio', 'success');
+  } catch (err) { stats.errorDetails = err.message; updateSyncStatus('traffio', 'error', err.message); }
+  completeSyncLog(logId, stats);
+  return stats;
+}
+
 // ---- Test Connection ----
 
 async function testTraffioConnection() {
@@ -594,6 +789,9 @@ module.exports = {
   syncTraffioCrew,
   syncTraffioBookings,
   syncTraffioDockets,
+  syncTraffioBookingCrew,
+  syncTimesheetsFromDockets,
+  syncTraffioForms,
   testTraffioConnection,
   // Reconciliation helpers (used by routes/traffio-imports.js)
   upsertBookingFromTraffio,
