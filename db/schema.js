@@ -11950,6 +11950,33 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 254: traffio_imports.event_date — the Traffio booking/docket date,
+  // so the reconciliation queue can sort most-recent-first (it was ordering by
+  // sync time, which is identical across a single sync → oldest-first by accident).
+  // Backfilled from the stored payload for existing rows.
+  // =============================================
+  if (!isMigrationApplied.get(254)) {
+    try {
+      try { db.exec("ALTER TABLE traffio_imports ADD COLUMN event_date TEXT"); } catch (e) { /* exists */ }
+      db.exec(`
+        UPDATE traffio_imports
+        SET event_date = COALESCE(
+          json_extract(proposed_json, '$.booking_start_time'),
+          json_extract(proposed_json, '$.date'),
+          json_extract(proposed_json, '$.start_datetime'),
+          json_extract(proposed_json, '$.starts_at')
+        )
+        WHERE event_date IS NULL AND proposed_json IS NOT NULL AND proposed_json != '{}';
+      `);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_traffio_imports_event ON traffio_imports(status, event_date);");
+      recordMigration.run(254, 'traffio_imports.event_date + backfill (queue sort by booking date)');
+      console.log('Migration 254 applied');
+    } catch (e) {
+      console.error('Migration 254 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
