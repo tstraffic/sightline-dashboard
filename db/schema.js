@@ -11752,6 +11752,22 @@ function runMigrations(db) {
     }
   }
 
+  // Service records: store an uploaded invoice file path so the planner
+  // can drag-drop the workshop invoice straight onto the service record.
+  // invoice_number stays free text for legacy entries.
+  if (!isMigrationApplied.get(250)) {
+    console.log('Running migration 250: service_records invoice file');
+    try {
+      const cols = db.prepare("PRAGMA table_info(service_records)").all().map(c => c.name);
+      if (!cols.includes('invoice_file_path')) db.exec("ALTER TABLE service_records ADD COLUMN invoice_file_path TEXT");
+      if (!cols.includes('invoice_file_name')) db.exec("ALTER TABLE service_records ADD COLUMN invoice_file_name TEXT");
+      recordMigration.run(250, 'service_records: invoice_file_path + invoice_file_name');
+      console.log('Migration 250 applied');
+    } catch (e) {
+      console.error('Migration 250 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

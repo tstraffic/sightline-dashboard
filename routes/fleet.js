@@ -1,8 +1,76 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
+const multer = require('multer');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { badgesFor, needsAction, todayISO } = require('../lib/fleetStatus');
+
+// Service-record invoice uploads — drag-drop PDFs / images of the
+// workshop invoice straight onto the service record. Stored under
+// uploads/fleet/vehicle_<id>/ so deleting a vehicle leaves a single
+// directory to clear out.
+const INVOICE_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'fleet');
+const invoiceStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(INVOICE_UPLOAD_DIR, 'vehicle_' + req.params.id);
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, Date.now() + '-' + Math.random().toString(36).substring(7) + ext);
+  }
+});
+const INVOICE_ALLOWED = /\.(pdf|png|jpg|jpeg|gif|webp|heic|tif|tiff)$/i;
+const invoiceUpload = multer({
+  storage: invoiceStorage,
+  limits: { fileSize: 15 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (INVOICE_ALLOWED.test(file.originalname)) cb(null, true);
+    else cb(new Error('Invoice must be a PDF or image.'), false);
+  },
+});
+
+// Heuristic linkage between a vehicle and free-text reports submitted by
+// crew (incidents + safety_forms equipment counts). Workers type the
+// rego or asset_id into the description, so we LIKE-match those values
+// across title/description/location. Returns empty arrays for vehicles
+// missing both identifiers (avoids a SQL match on '' which would return
+// every row).
+function lookupRelatedReports(db, vehicle) {
+  const tokens = [vehicle.rego, vehicle.asset_id, vehicle.fleet_id]
+    .map(s => (s == null ? '' : String(s).trim()))
+    .filter(t => t && t.length >= 2);
+  if (!tokens.length) return { incidents: [], equipmentChecks: [] };
+
+  const incidentParts = tokens.map(() => '(title LIKE ? OR description LIKE ? OR location LIKE ?)').join(' OR ');
+  const incidentParams = [];
+  tokens.forEach(t => { const wild = `%${t}%`; incidentParams.push(wild, wild, wild); });
+  const incidents = db.prepare(`
+    SELECT i.id, i.incident_number, i.incident_type, i.severity, i.title, i.description,
+           i.location, i.incident_date, i.investigation_status, i.created_at
+    FROM incidents i
+    WHERE ${incidentParts}
+    ORDER BY COALESCE(i.incident_date, i.created_at) DESC LIMIT 50
+  `).all(...incidentParams);
+
+  // Equipment counts live in safety_forms with form_type='equipment' and a
+  // JSON data blob; LIKE the raw JSON for the tokens.
+  const equipParts = tokens.map(() => 'data LIKE ?').join(' OR ');
+  const equipParams = tokens.map(t => `%${t}%`);
+  const equipmentChecks = db.prepare(`
+    SELECT sf.id, sf.form_type, sf.data, sf.status, sf.submitted_at, sf.created_at,
+           cm.full_name AS submitted_by
+    FROM safety_forms sf
+    LEFT JOIN crew_members cm ON cm.id = sf.crew_member_id
+    WHERE sf.form_type = 'equipment' AND (${equipParts})
+    ORDER BY COALESCE(sf.submitted_at, sf.created_at) DESC LIMIT 50
+  `).all(...equipParams);
+
+  return { incidents, equipmentChecks };
+}
 
 const SERVICE_TYPES = [
   'Major Service',
@@ -355,14 +423,44 @@ router.get('/:id', (req, res) => {
     ORDER BY COALESCE(service_date, '0000-00-00') DESC, id DESC
   `).all(vehicle.id);
 
+  const { incidents, equipmentChecks } = lookupRelatedReports(db, vehicle);
+  const initialTab = ['overview','service','incidents','equipment'].includes(req.query.tab) ? req.query.tab : 'overview';
+
   res.render('fleet/detail', {
     title: `${vehicle.asset_id} — ${vehicle.make || ''} ${vehicle.model || ''}`.trim(),
     currentPage: 'fleet',
     vehicle,
     services,
+    incidents,
+    equipmentChecks,
+    initialTab,
+    serviceTypes: SERVICE_TYPES,
     badges: badgesFor(vehicle),
     today: todayISO(),
   });
+});
+
+// ── DOWNLOAD invoice file for a service record ───────────────────────
+router.get('/:id/service/:sid/invoice', (req, res) => {
+  const db = getDb();
+  const record = db.prepare('SELECT invoice_file_path, invoice_file_name FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
+  if (!record || !record.invoice_file_path) { req.flash('error', 'Invoice file not found.'); return res.redirect('/fleet/' + req.params.id); }
+  const abs = path.resolve(record.invoice_file_path);
+  if (!abs.startsWith(path.resolve(INVOICE_UPLOAD_DIR))) { return res.status(403).send('Forbidden'); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'Invoice file missing on disk.'); return res.redirect('/fleet/' + req.params.id); }
+  res.download(abs, record.invoice_file_name || path.basename(abs));
+});
+
+// ── DELETE invoice file (keep the service record) ────────────────────
+router.post('/:id/service/:sid/invoice/delete', (req, res) => {
+  const db = getDb();
+  const record = db.prepare('SELECT id, invoice_file_path FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
+  if (record && record.invoice_file_path) {
+    try { if (fs.existsSync(record.invoice_file_path)) fs.unlinkSync(record.invoice_file_path); } catch (e) { /* ignore */ }
+    db.prepare('UPDATE service_records SET invoice_file_path = NULL, invoice_file_name = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.sid);
+    logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Invoice removed from #${req.params.sid}`, ip: req.ip });
+  }
+  res.redirect('/fleet/' + req.params.id + '?tab=service');
 });
 
 // ── EDIT VEHICLE FORM ────────────────────────────────────────────────
@@ -447,20 +545,22 @@ router.get('/:id/service/new', (req, res) => {
 });
 
 // ── CREATE SERVICE RECORD ────────────────────────────────────────────
-router.post('/:id/service', (req, res) => {
+router.post('/:id/service', invoiceUpload.single('invoice_file'), (req, res) => {
   const db = getDb();
   const vehicle = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
   if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
   const b = req.body;
   const serviceType = SERVICE_TYPES.includes(b.service_type) ? b.service_type : 'Other';
+  const file = req.file || null;
 
   const result = db.prepare(`
-    INSERT INTO service_records (vehicle_id, service_date, odometer_km, work_performed, service_type, performed_by, cost, invoice_number, notes)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO service_records (vehicle_id, service_date, odometer_km, work_performed, service_type, performed_by, cost, invoice_number, notes, invoice_file_path, invoice_file_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     vehicle.id, orNull(b.service_date), intOrNull(b.odometer_km),
     orNull(b.work_performed), serviceType, orNull(b.performed_by),
-    numOrNull(b.cost), orNull(b.invoice_number), orNull(b.notes)
+    numOrNull(b.cost), orNull(b.invoice_number), orNull(b.notes),
+    file ? file.path : null, file ? file.originalname : null
   );
   logActivity({
     user: req.session.user, action: 'create', entityType: 'service_record',
@@ -469,7 +569,7 @@ router.post('/:id/service', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', 'Service record added.');
-  res.redirect(`/fleet/${vehicle.id}`);
+  res.redirect(`/fleet/${vehicle.id}?tab=service`);
 });
 
 // ── EDIT SERVICE RECORD FORM ─────────────────────────────────────────
@@ -488,24 +588,44 @@ router.get('/:id/service/:sid/edit', (req, res) => {
 });
 
 // ── UPDATE SERVICE RECORD ────────────────────────────────────────────
-router.post('/:id/service/:sid', (req, res) => {
+router.post('/:id/service/:sid', invoiceUpload.single('invoice_file'), (req, res) => {
   const db = getDb();
-  const record = db.prepare('SELECT id FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
+  const record = db.prepare('SELECT id, invoice_file_path FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
   if (!record) { req.flash('error', 'Service record not found.'); return res.redirect(`/fleet/${req.params.id}`); }
   const b = req.body;
   const serviceType = SERVICE_TYPES.includes(b.service_type) ? b.service_type : 'Other';
-  db.prepare(`
-    UPDATE service_records SET service_date=?, odometer_km=?, work_performed=?, service_type=?, performed_by=?, cost=?, invoice_number=?, notes=?, updated_at=CURRENT_TIMESTAMP
-    WHERE id=?
-  `).run(
-    orNull(b.service_date), intOrNull(b.odometer_km), orNull(b.work_performed),
-    serviceType, orNull(b.performed_by), numOrNull(b.cost),
-    orNull(b.invoice_number), orNull(b.notes),
-    req.params.sid
-  );
+  const file = req.file || null;
+
+  // If a new file came in, drop the old one off disk so we don't leak.
+  if (file && record.invoice_file_path) {
+    try { if (fs.existsSync(record.invoice_file_path)) fs.unlinkSync(record.invoice_file_path); } catch (e) { /* ignore */ }
+  }
+
+  if (file) {
+    db.prepare(`
+      UPDATE service_records SET service_date=?, odometer_km=?, work_performed=?, service_type=?, performed_by=?, cost=?, invoice_number=?, notes=?, invoice_file_path=?, invoice_file_name=?, updated_at=CURRENT_TIMESTAMP
+      WHERE id=?
+    `).run(
+      orNull(b.service_date), intOrNull(b.odometer_km), orNull(b.work_performed),
+      serviceType, orNull(b.performed_by), numOrNull(b.cost),
+      orNull(b.invoice_number), orNull(b.notes),
+      file.path, file.originalname,
+      req.params.sid
+    );
+  } else {
+    db.prepare(`
+      UPDATE service_records SET service_date=?, odometer_km=?, work_performed=?, service_type=?, performed_by=?, cost=?, invoice_number=?, notes=?, updated_at=CURRENT_TIMESTAMP
+      WHERE id=?
+    `).run(
+      orNull(b.service_date), intOrNull(b.odometer_km), orNull(b.work_performed),
+      serviceType, orNull(b.performed_by), numOrNull(b.cost),
+      orNull(b.invoice_number), orNull(b.notes),
+      req.params.sid
+    );
+  }
   logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Service record #${req.params.sid}`, ip: req.ip });
   req.flash('success', 'Service record updated.');
-  res.redirect(`/fleet/${req.params.id}`);
+  res.redirect(`/fleet/${req.params.id}?tab=service`);
 });
 
 // ── DELETE SERVICE RECORD ────────────────────────────────────────────

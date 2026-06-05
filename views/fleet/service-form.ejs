@@ -13,7 +13,7 @@
 <h1 class="text-2xl font-bold text-gray-900 mb-1"><%= isEdit ? 'Edit Service Record' : 'New Service Record' %></h1>
 <p class="text-gray-500 text-sm mb-5">For <span class="font-semibold text-gray-700"><%= vehicle.asset_id %></span> <% if (vehicle.rego) { %>· <%= vehicle.rego %><% } %></p>
 
-<form method="POST" action="<%= isEdit ? `/fleet/${vehicle.id}/service/${record.id}` : `/fleet/${vehicle.id}/service` %>" class="space-y-5">
+<form method="POST" action="<%= isEdit ? `/fleet/${vehicle.id}/service/${record.id}` : `/fleet/${vehicle.id}/service` %>" enctype="multipart/form-data" class="space-y-5">
   <%- include('../partials/csrf') %>
 
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
@@ -55,6 +55,23 @@
       <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</label>
       <textarea name="notes" rows="2" placeholder="Data-quality flags, back-charges, follow-ups..."
         class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-y"><%= val('notes') %></textarea>
+    </div>
+    <div class="mt-4">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Invoice File (PDF / image, 15 MB max)</label>
+      <% if (isEdit && record.invoice_file_path) { %>
+        <div class="flex items-center justify-between gap-3 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg mb-2">
+          <a href="/fleet/<%= vehicle.id %>/service/<%= record.id %>/invoice" class="inline-flex items-center gap-2 text-emerald-700 hover:text-emerald-800 text-sm font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <%= record.invoice_file_name || 'Download invoice' %>
+          </a>
+          <form method="POST" action="/fleet/<%= vehicle.id %>/service/<%= record.id %>/invoice/delete" onsubmit="return confirm('Remove the attached invoice file?')">
+            <%- include('../partials/csrf') %>
+            <button type="submit" class="text-xs text-red-600 hover:text-red-700 underline">Remove</button>
+          </form>
+        </div>
+        <p class="text-[10px] text-gray-400 mb-1">Upload a new file below to replace the existing one.</p>
+      <% } %>
+      <input type="file" name="invoice_file" accept=".pdf,image/*" class="block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
     </div>
   </div>
 
