@@ -1,3 +1,19 @@
+<%
+  // Local 12-hour format helper. The same shape lives in
+  // worker/home.ejs and worker/jobs.ejs — duplicated here so this
+  // view doesn't pull in the bigger home helper bundle.
+  function fmtTime12(t) {
+    if (!t) return '';
+    var parts = String(t).split(':');
+    var h = parseInt(parts[0], 10);
+    var m = parts[1] || '00';
+    var am = h < 12;
+    h = h % 12; if (h === 0) h = 12;
+    return h + (m === '00' ? '' : ':' + m) + (am ? 'am' : 'pm');
+  }
+  var startTime12 = fmtTime12(typeof startTime !== 'undefined' ? startTime : '');
+  var endTime12   = fmtTime12(typeof endTime   !== 'undefined' ? endTime   : '');
+%>
 <div class="px-4 pt-3 pb-4 space-y-4">
   <!-- Back + Title -->
   <div class="flex items-center gap-3">
@@ -35,8 +51,8 @@
     <p class="text-base font-semibold"><%= booking.site_address || booking.suburb || 'Location TBC' %><%= booking.suburb && booking.state ? ', ' + booking.state : '' %></p>
     <p class="text-sm text-gray-400 mt-1">
       Your shift: <%= startDay %>, <%= startDate %> at
-      <% if (booking.depot_meeting_time) { %>Depot <%= booking.depot_meeting_time %><% } else { %><%= startTime %><% } %>
-      <% if (endTime) { %> &ndash; <%= endTime %> (approx)<% } %>
+      <% if (booking.depot_meeting_time) { %>Depot <%= fmtTime12(booking.depot_meeting_time) %><% } else { %><%= startTime12 %><% } %>
+      <% if (endTime) { %> – <%= endTime12 %> (approx)<% } %>
     </p>
   </div>
 
@@ -63,10 +79,10 @@
     <h3 class="text-xs font-bold uppercase tracking-wider" style="color:#10B981;">Details</h3>
     <div class="space-y-2">
       <% var details = [
-        ['Booking', (startTime || '') + ' &ndash; ' + (endTime || '') + ' (approx)'],
+        ['Booking', (startTime12 || '') + ' – ' + (endTime12 || '') + ' (approx)'],
         ['Booking #', booking.booking_number],
         ['Depot', booking.depot || '-'],
-        ['Depot Meeting', booking.depot_meeting_time || '-'],
+        ['Depot Meeting', booking.depot_meeting_time ? fmtTime12(booking.depot_meeting_time) : '-'],
         ['Client', booking.client_name || '-'],
         ['Site Address', (booking.site_address || '-') + (booking.suburb ? ', ' + booking.suburb : '')],
         ['Order #', booking.order_number || '-'],

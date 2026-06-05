@@ -822,15 +822,15 @@
             </label>
             <label class="bk2-create-field bk2-create-field--required">
               <span class="bk2-create-lbl">Date *</span>
-              <input type="date" name="start_date" value="<%= dateStr %>" required>
+              <input type="date" name="start_date" value="" required data-bk-autofill="start_date">
             </label>
             <label class="bk2-create-field bk2-create-field--required">
               <span class="bk2-create-lbl">Start time *</span>
-              <input type="time" name="start_time" value="06:00" required>
+              <input type="time" name="start_time" value="" required data-bk-autofill="start_time">
             </label>
             <label class="bk2-create-field">
               <span class="bk2-create-lbl">Approximate end time</span>
-              <input type="time" name="end_time" value="14:30">
+              <input type="time" name="end_time" value="" data-bk-autofill="end_time">
             </label>
             <label class="bk2-create-field">
               <span class="bk2-create-lbl">Depot meeting time</span>
@@ -2398,6 +2398,56 @@
       .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
+
+  // Smart prefill for the slide-over create form — start date / time
+  // render blank, and pre-fill with today's Sydney date + the next
+  // whole hour the first time the planner taps the field. End time
+  // gets the +8h treatment via the change handler below.
+  (function () {
+    var dateEl = document.querySelector('[data-bk-autofill="start_date"]');
+    var timeEl = document.querySelector('[data-bk-autofill="start_time"]');
+    var endEl  = document.querySelector('[data-bk-autofill="end_time"]');
+    if (!timeEl) return;
+    var endTouched = false;
+    if (endEl) endEl.addEventListener('input', function () { endTouched = true; });
+
+    function sydneyParts() {
+      return new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Australia/Sydney',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', hour12: false,
+      }).formatToParts(new Date()).reduce(function (a, p) { a[p.type] = p.value; return a; }, {});
+    }
+    function nextHour() {
+      var p = sydneyParts();
+      var d = new Date(p.year + '-' + p.month + '-' + p.day + 'T' + p.hour + ':00:00');
+      d.setHours(d.getHours() + 1);
+      var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+      return {
+        date: d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()),
+        time: pad(d.getHours()) + ':00',
+      };
+    }
+    function prefill() {
+      var n = nextHour();
+      if (dateEl && !dateEl.value) dateEl.value = n.date;
+      if (timeEl && !timeEl.value) timeEl.value = n.time;
+      applyEnd();
+    }
+    function applyEnd() {
+      if (endTouched || !endEl) return;
+      if (!timeEl.value) return;
+      var parts = timeEl.value.split(':');
+      var d = new Date((dateEl && dateEl.value ? dateEl.value : '1970-01-01') + 'T00:00:00');
+      d.setHours(parseInt(parts[0], 10) + 8, parseInt(parts[1] || '0', 10), 0, 0);
+      var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
+      endEl.value = pad(d.getHours()) + ':' + pad(d.getMinutes());
+    }
+    timeEl.addEventListener('focus', prefill, { once: true });
+    if (dateEl) dateEl.addEventListener('focus', prefill, { once: true });
+    timeEl.addEventListener('change', applyEnd);
+    if (dateEl) dateEl.addEventListener('change', applyEnd);
+  })();
 
   // Build a `.bk2-slot--filled` row from a crew object and insert it
   // before the empty-slot div. Decrements the empty count; removes
