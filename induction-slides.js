@@ -1039,6 +1039,14 @@ const tcTrainingSlides = [
       correctAnswer: 'b'
     }
   },
+  // ── Key contacts (closing slide before quiz results) ──
+  {
+    title: 'Who to Call',
+    subtitle: 'Two numbers — know which is which',
+    content: '<div style="max-width:52rem;margin:0 auto;"><div style="border-left:3px solid var(--ts-orange);padding:0.75rem 0 0.75rem 16px;margin-bottom:1.5rem;"><p style="color:var(--ts-orange);font-weight:600;font-size:1.1rem;">Call the right person for the right thing. Bookings, allocations, on-site issues → Taj. Pay, accounts, invoices → Saadat.</p></div><div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.25rem;"><div style="background:linear-gradient(135deg,#1d4ed8,#2563eb);color:white;border-radius:0.75rem;padding:1.5rem;"><p style="font-size:11px;opacity:0.85;letter-spacing:0.1em;">OPERATIONS · BOOKINGS · ALLOCATIONS</p><p style="font-weight:800;font-size:1.5rem;margin-top:0.6rem;">Taj</p><p style="font-weight:700;font-size:1.4rem;margin-top:0.5rem;font-family:ui-monospace,monospace;">0450 819 004</p><div style="margin-top:1rem;padding-top:0.9rem;border-top:1px solid rgba(255,255,255,0.25);"><p style="font-size:13px;opacity:0.95;font-weight:600;margin-bottom:0.35rem;">Call Taj for:</p><ul style="list-style:none;padding:0;margin:0;display:grid;gap:0.25rem;font-size:13px;opacity:0.92;"><li>· Shift bookings &amp; allocations</li><li>· Can\'t make a shift</li><li>· On-site issues during a shift</li><li>· Roster changes</li></ul></div></div><div style="background:linear-gradient(135deg,#15803d,#16a34a);color:white;border-radius:0.75rem;padding:1.5rem;"><p style="font-size:11px;opacity:0.85;letter-spacing:0.1em;">PAY · ACCOUNTS</p><p style="font-weight:800;font-size:1.5rem;margin-top:0.6rem;">Saadat</p><p style="font-weight:700;font-size:1.4rem;margin-top:0.5rem;font-family:ui-monospace,monospace;">0415 665 768</p><div style="margin-top:1rem;padding-top:0.9rem;border-top:1px solid rgba(255,255,255,0.25);"><p style="font-size:13px;opacity:0.95;font-weight:600;margin-bottom:0.35rem;">Call Saadat for:</p><ul style="list-style:none;padding:0;margin:0;display:grid;gap:0.25rem;font-size:13px;opacity:0.92;"><li>· Pay questions / missing pay</li><li>· Timesheet account queries</li><li>· Invoices &amp; reimbursements</li><li>· Tax / super / payment details</li></ul></div></div></div><div style="background:rgba(220,38,38,0.12);border:1px solid rgba(220,38,38,0.30);border-left:3px solid #dc2626;border-radius:0.75rem;padding:1rem 1.25rem;"><p style="color:#fca5a5;font-weight:700;font-size:14px;margin-bottom:0.25rem;">⚠ Don\'t call Saadat about bookings.</p><p style="color:rgba(255,255,255,0.78);font-size:13px;line-height:1.55;">Saadat handles pay and accounts only. All booking, allocation and scheduling questions go to <strong style="color:white;">Taj</strong>.</p></div></div>',
+    layout: 'content',
+    icon: ''
+  },
   // Quiz results
   {
     title: 'Quiz Results',
