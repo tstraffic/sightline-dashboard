@@ -20,7 +20,6 @@
     resolved:      'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
     closed:        'bg-gray-100 text-gray-600',
   };
-  const initialTab = typeof initialTab !== 'undefined' ? initialTab : 'overview';
   // Safely parse equipment-check JSON for previewing what the worker submitted.
   function parseFormData(raw) {
     if (!raw) return {};
@@ -423,7 +422,7 @@
     } catch (e) {}
   }
   tabs.forEach(function (t) { t.addEventListener('click', function () { show(t.getAttribute('data-v-tab')); }); });
-  show('<%= initialTab %>');
+  show('<%= typeof initialTab !== "undefined" ? initialTab : "overview" %>');
 
   // Drag-drop invoice file
   var drop = document.getElementById('invoiceDrop');

@@ -40,36 +40,46 @@ const invoiceUpload = multer({
 // missing both identifiers (avoids a SQL match on '' which would return
 // every row).
 function lookupRelatedReports(db, vehicle) {
+  const out = { incidents: [], equipmentChecks: [] };
   const tokens = [vehicle.rego, vehicle.asset_id, vehicle.fleet_id]
     .map(s => (s == null ? '' : String(s).trim()))
     .filter(t => t && t.length >= 2);
-  if (!tokens.length) return { incidents: [], equipmentChecks: [] };
+  if (!tokens.length) return out;
 
-  const incidentParts = tokens.map(() => '(title LIKE ? OR description LIKE ? OR location LIKE ?)').join(' OR ');
-  const incidentParams = [];
-  tokens.forEach(t => { const wild = `%${t}%`; incidentParams.push(wild, wild, wild); });
-  const incidents = db.prepare(`
-    SELECT i.id, i.incident_number, i.incident_type, i.severity, i.title, i.description,
-           i.location, i.incident_date, i.investigation_status, i.created_at
-    FROM incidents i
-    WHERE ${incidentParts}
-    ORDER BY COALESCE(i.incident_date, i.created_at) DESC LIMIT 50
-  `).all(...incidentParams);
+  // Incidents — only query if the table exists and has the columns we need.
+  try {
+    const incidentParts = tokens.map(() => '(title LIKE ? OR description LIKE ? OR COALESCE(location, \'\') LIKE ?)').join(' OR ');
+    const incidentParams = [];
+    tokens.forEach(t => { const wild = `%${t}%`; incidentParams.push(wild, wild, wild); });
+    out.incidents = db.prepare(`
+      SELECT i.id, i.incident_number, i.incident_type, i.severity, i.title, i.description,
+             i.location, i.incident_date, i.investigation_status, i.created_at
+      FROM incidents i
+      WHERE ${incidentParts}
+      ORDER BY COALESCE(i.incident_date, i.created_at) DESC LIMIT 50
+    `).all(...incidentParams);
+  } catch (e) {
+    console.warn('[fleet] incident lookup failed for vehicle', vehicle.id, ':', e.message);
+  }
 
   // Equipment counts live in safety_forms with form_type='equipment' and a
   // JSON data blob; LIKE the raw JSON for the tokens.
-  const equipParts = tokens.map(() => 'data LIKE ?').join(' OR ');
-  const equipParams = tokens.map(t => `%${t}%`);
-  const equipmentChecks = db.prepare(`
-    SELECT sf.id, sf.form_type, sf.data, sf.status, sf.submitted_at, sf.created_at,
-           cm.full_name AS submitted_by
-    FROM safety_forms sf
-    LEFT JOIN crew_members cm ON cm.id = sf.crew_member_id
-    WHERE sf.form_type = 'equipment' AND (${equipParts})
-    ORDER BY COALESCE(sf.submitted_at, sf.created_at) DESC LIMIT 50
-  `).all(...equipParams);
+  try {
+    const equipParts = tokens.map(() => 'data LIKE ?').join(' OR ');
+    const equipParams = tokens.map(t => `%${t}%`);
+    out.equipmentChecks = db.prepare(`
+      SELECT sf.id, sf.form_type, sf.data, sf.status, sf.submitted_at, sf.created_at,
+             cm.full_name AS submitted_by
+      FROM safety_forms sf
+      LEFT JOIN crew_members cm ON cm.id = sf.crew_member_id
+      WHERE sf.form_type = 'equipment' AND (${equipParts})
+      ORDER BY COALESCE(sf.submitted_at, sf.created_at) DESC LIMIT 50
+    `).all(...equipParams);
+  } catch (e) {
+    console.warn('[fleet] equipment lookup failed for vehicle', vehicle.id, ':', e.message);
+  }
 
-  return { incidents, equipmentChecks };
+  return out;
 }
 
 const SERVICE_TYPES = [
