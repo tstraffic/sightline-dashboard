@@ -9,6 +9,7 @@ const {
   getInternalRef,
   setExternalRef,
 } = require('./integrations');
+const { logActivity } = require('./audit');
 
 // ---- API Client ----
 
@@ -27,6 +28,161 @@ function getTraffioClient() {
     },
     timeout: 30000,
   });
+}
+
+// ---- Field helpers (tolerant of Traffio field-name drift) ----
+
+/** First non-empty value among candidate keys, else fallback. */
+function pick(obj, keys, fallback) {
+  if (!obj) return fallback;
+  for (const k of keys) {
+    const v = obj[k];
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return fallback;
+}
+
+/** Map a Traffio booking status onto a value allowed by the bookings CHECK. */
+function mapBookingStatus(raw) {
+  const s = String(raw || '').toLowerCase().replace(/\s+/g, '_');
+  const allowed = {
+    confirmed: 'confirmed', unconfirmed: 'unconfirmed', pending: 'unconfirmed',
+    cancelled: 'cancelled', canceled: 'cancelled', complete: 'complete',
+    completed: 'complete', in_progress: 'in_progress', on_hold: 'on_hold',
+    green_to_go: 'green_to_go',
+  };
+  return allowed[s] || 'confirmed';
+}
+
+/** Derive ISO-ish start/end datetimes from a Traffio booking payload. */
+function deriveDateTimes(payload) {
+  let start = pick(payload, ['start_datetime', 'starts_at', 'start_at', 'start']);
+  let end = pick(payload, ['end_datetime', 'ends_at', 'end_at', 'end']);
+  const date = pick(payload, ['date', 'booking_date', 'shift_date']);
+  if (!start && date) start = `${date}T${pick(payload, ['start_time'], '06:00')}`;
+  if (!end && date) end = `${date}T${pick(payload, ['end_time'], '14:30')}`;
+  return { start: start || null, end: end || start || null };
+}
+
+/** Human-readable one-liner for the reconciliation queue. */
+function summarizeBooking(payload) {
+  const ref = pick(payload, ['reference', 'booking_number', 'number', 'id'], '?');
+  const client = pick(payload, ['client_name', 'client', 'customer_name'], '');
+  const site = pick(payload, ['site_address', 'address', 'location'], '');
+  const date = pick(payload, ['date', 'start_datetime', 'starts_at', 'booking_date'], '');
+  return [`Ref ${ref}`, client, site, date].filter(Boolean).join(' · ');
+}
+
+/**
+ * Confident job match for a Traffio booking, or null. Strict on purpose:
+ * an existing external_ref mapping, or an exact job_number / client_project_number.
+ * Anything looser goes to the reconciliation queue rather than guessing.
+ */
+function findConfidentJobId(db, payload) {
+  const traffioJobId = pick(payload, ['job_id', 'jobId', 'project_id']);
+  if (traffioJobId != null) {
+    const ref = getInternalRef('traffio', 'job', String(traffioJobId));
+    if (ref) return ref.internal_id;
+  }
+  const jobRef = pick(payload, ['job_reference', 'job_number', 'reference', 'project_number']);
+  if (jobRef) {
+    const row = db.prepare('SELECT id FROM jobs WHERE job_number = ? OR client_project_number = ?')
+      .get(String(jobRef), String(jobRef));
+    if (row) return row.id;
+  }
+  return null;
+}
+
+/** Queue an ambiguous Traffio record for human reconciliation (idempotent; never resurrects a discarded/confirmed row). */
+function queueImport(db, recordType, payload) {
+  const externalId = String(pick(payload, ['id', 'booking_id', 'docket_id'], ''));
+  if (!externalId) return;
+  db.prepare(`
+    INSERT INTO traffio_imports (record_type, traffio_external_id, proposed_json, summary)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(record_type, traffio_external_id) DO UPDATE SET
+      proposed_json = excluded.proposed_json,
+      summary = excluded.summary,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE status = 'pending'
+  `).run(recordType, externalId, JSON.stringify(payload), summarizeBooking(payload));
+}
+
+/**
+ * Upsert a `bookings` row from a Traffio booking payload, linked to jobId
+ * (may be null on update — existing job_id is preserved). Records the
+ * external_ref mapping and resolves any matching pending reconciliation row.
+ * Used by both the confident sync path and the reconciliation confirm route.
+ * Returns the local booking id. Throws if no start datetime can be derived.
+ */
+function upsertBookingFromTraffio(db, payload, jobId, userId) {
+  const externalId = String(pick(payload, ['id', 'booking_id'], ''));
+  const { start, end } = deriveDateTimes(payload);
+  const status = mapBookingStatus(pick(payload, ['status', 'state']));
+  const title = pick(payload, ['title', 'name', 'description'], `Traffio booking ${externalId}`);
+  const siteAddress = pick(payload, ['site_address', 'address', 'location'], '');
+  const suburb = pick(payload, ['suburb'], '');
+  const state = pick(payload, ['state'], '');
+  const postcode = pick(payload, ['postcode', 'post_code'], '');
+  const billingCode = pick(payload, ['billing_code', 'order_number', 'po_number'], '');
+
+  // client_id: prefer the linked job's client, else a mapped Traffio client
+  let clientId = null;
+  if (jobId) {
+    const j = db.prepare('SELECT client_id FROM jobs WHERE id = ?').get(jobId);
+    if (j) clientId = j.client_id;
+  }
+  if (!clientId) {
+    const tClient = pick(payload, ['client_id', 'customer_id']);
+    if (tClient != null) {
+      const cr = getInternalRef('traffio', 'client', String(tClient));
+      if (cr) clientId = cr.internal_id;
+    }
+  }
+
+  const existing = externalId ? getInternalRef('traffio', 'booking', externalId) : null;
+  let bookingId;
+  if (existing) {
+    db.prepare(`
+      UPDATE bookings SET
+        job_id = COALESCE(?, job_id),
+        client_id = COALESCE(?, client_id),
+        title = ?,
+        status = ?,
+        start_datetime = COALESCE(?, start_datetime),
+        end_datetime = COALESCE(?, end_datetime),
+        site_address = COALESCE(NULLIF(?, ''), site_address),
+        suburb = COALESCE(NULLIF(?, ''), suburb),
+        state = COALESCE(NULLIF(?, ''), state),
+        postcode = COALESCE(NULLIF(?, ''), postcode),
+        billing_code = COALESCE(NULLIF(?, ''), billing_code),
+        source = 'traffio',
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(jobId || null, clientId || null, title, status, start, end,
+      siteAddress, suburb, state, postcode, billingCode, existing.internal_id);
+    bookingId = existing.internal_id;
+  } else {
+    if (!start) throw new Error('no start datetime');
+    const result = db.prepare(`
+      INSERT INTO bookings (booking_number, job_id, client_id, title, status, start_datetime, end_datetime,
+        site_address, suburb, state, postcode, billing_code, billable, source, created_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'traffio', ?)
+    `).run(`TRF-B-${externalId}`, jobId || null, clientId || null, title, status, start, end || start,
+      siteAddress, suburb, state, postcode, billingCode, userId || null);
+    bookingId = result.lastInsertRowid;
+  }
+
+  if (externalId) setExternalRef('traffio', 'booking', bookingId, externalId, payload);
+
+  // Resolve any pending reconciliation row for this Traffio booking
+  db.prepare(`
+    UPDATE traffio_imports SET status = 'confirmed', resulting_booking_id = ?,
+      matched_job_id = COALESCE(matched_job_id, ?), updated_at = CURRENT_TIMESTAMP
+    WHERE record_type = 'booking' AND traffio_external_id = ? AND status = 'pending'
+  `).run(bookingId, jobId || null, externalId);
+
+  return bookingId;
 }
 
 // ---- Sync Jobs ----
@@ -188,13 +344,16 @@ async function syncTraffioCrew(triggeredBy) {
   return stats;
 }
 
-// ---- Sync Bookings → Allocations ----
+// ---- Sync Bookings → bookings table (with reconciliation gate) ----
 
+// A Traffio "booking" is a job/shift at a site. Confident job matches upsert a
+// `bookings` row directly; ambiguous ones are parked in `traffio_imports` for a
+// human to map to an existing job (or create one) before a booking is created.
 async function syncTraffioBookings(triggeredBy, fromDate, toDate) {
   const db = getDb();
   updateSyncStatus('traffio', 'syncing');
-  const logId = startSyncLog('traffio', 'import', 'allocation', triggeredBy);
-  const stats = { processed: 0, created: 0, updated: 0, failed: 0, errorDetails: '' };
+  const logId = startSyncLog('traffio', 'import', 'booking', triggeredBy);
+  const stats = { processed: 0, created: 0, updated: 0, queued: 0, failed: 0, errorDetails: '' };
 
   try {
     const client = getTraffioClient();
@@ -205,80 +364,33 @@ async function syncTraffioBookings(triggeredBy, fromDate, toDate) {
     const response = await client.get('/api/v1/bookings', { params });
     const bookings = response.data.data || response.data || [];
 
-    // Get the system user (admin) for allocated_by_id
     const systemUser = db.prepare("SELECT id FROM users WHERE role = 'management' LIMIT 1").get();
-    const allocatedById = systemUser ? systemUser.id : 1;
+    const userId = systemUser ? systemUser.id : 1;
 
     for (const b of bookings) {
       stats.processed++;
       try {
-        const externalId = String(b.id || b.booking_id);
+        const externalId = String(b.id || b.booking_id || '');
+        const existing = externalId ? getInternalRef('traffio', 'booking', externalId) : null;
 
-        // Resolve the job
-        let jobId = null;
-        if (b.job_id || b.job_reference) {
-          const jobRef = getInternalRef('traffio', 'job', String(b.job_id || ''));
-          if (jobRef) {
-            jobId = jobRef.internal_id;
-          } else {
-            // Try to match by job number
-            const jobByNum = db.prepare('SELECT id FROM jobs WHERE job_number = ? OR client_project_number = ?')
-              .get(b.job_reference || '', b.job_reference || '');
-            if (jobByNum) jobId = jobByNum.id;
-          }
-        }
-        if (!jobId) {
-          stats.failed++;
-          stats.errorDetails += `Booking ${externalId}: No matching job found\n`;
-          continue;
-        }
-
-        // Resolve the crew member
-        let crewId = null;
-        if (b.worker_id || b.employee_id) {
-          const crewRef = getInternalRef('traffio', 'crew', String(b.worker_id || ''));
-          if (crewRef) {
-            crewId = crewRef.internal_id;
-          } else {
-            const crewByEmpId = db.prepare('SELECT id FROM crew_members WHERE employee_id = ?')
-              .get(b.employee_id || String(b.worker_id || ''));
-            if (crewByEmpId) crewId = crewByEmpId.id;
-          }
-        }
-        if (!crewId) {
-          stats.failed++;
-          stats.errorDetails += `Booking ${externalId}: No matching crew member found\n`;
-          continue;
-        }
-
-        // Check if allocation already mapped
-        const existingRef = getInternalRef('traffio', 'allocation', externalId);
-        const allocDate = b.date || b.booking_date || new Date().toISOString().split('T')[0];
-        const startTime = b.start_time || '06:00';
-        const endTime = b.end_time || '14:30';
-        const shiftType = b.shift_type || 'day';
-
-        if (existingRef) {
-          db.prepare(`
-            UPDATE crew_allocations SET
-              job_id = ?, crew_member_id = ?, allocation_date = ?,
-              start_time = ?, end_time = ?, shift_type = ?,
-              role_on_site = ?, status = ?
-            WHERE id = ?
-          `).run(jobId, crewId, allocDate, startTime, endTime, shiftType,
-            b.role || '', b.status === 'confirmed' ? 'confirmed' : 'allocated',
-            existingRef.internal_id);
-          setExternalRef('traffio', 'allocation', existingRef.internal_id, externalId, b);
+        if (existing) {
+          // Already mapped — refresh it (preserve its existing job link if no confident match)
+          upsertBookingFromTraffio(db, b, findConfidentJobId(db, b), userId);
           stats.updated++;
         } else {
-          const result = db.prepare(`
-            INSERT INTO crew_allocations (job_id, crew_member_id, allocation_date, start_time, end_time, shift_type, role_on_site, status, allocated_by_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(jobId, crewId, allocDate, startTime, endTime, shiftType,
-            b.role || '', b.status === 'confirmed' ? 'confirmed' : 'allocated',
-            allocatedById);
-          setExternalRef('traffio', 'allocation', result.lastInsertRowid, externalId, b);
-          stats.created++;
+          const jobId = findConfidentJobId(db, b);
+          if (jobId) {
+            const newId = upsertBookingFromTraffio(db, b, jobId, userId);
+            logActivity({
+              action: 'create', entityType: 'booking', entityId: newId,
+              entityLabel: summarizeBooking(b), jobId,
+              details: 'Imported from Traffio',
+            });
+            stats.created++;
+          } else {
+            queueImport(db, 'booking', b);
+            stats.queued++;
+          }
         }
       } catch (err) {
         stats.failed++;
@@ -309,4 +421,8 @@ module.exports = {
   syncTraffioCrew,
   syncTraffioBookings,
   testTraffioConnection,
+  // Reconciliation helpers (used by routes/traffio-imports.js)
+  upsertBookingFromTraffio,
+  findConfidentJobId,
+  summarizeBooking,
 };
