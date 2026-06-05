@@ -66,8 +66,15 @@
   }
   :root[data-theme="dark"] .atomis-map {
     border-color: rgba(255,255,255,0.08);
-    background: #0F1115;
+    background: #1A1D24;
     box-shadow: 0 1px 0 rgba(255,255,255,0.04);
+  }
+  /* Lift the CARTO Dark Matter base from near-black to a legible
+     mid-grey so streets + labels are visible without being harsh on
+     the eyes. Filter is scoped to the tile pane so the marker and
+     UI overlays stay un-tinted. */
+  :root[data-theme="dark"] .atomis-map .leaflet-tile-pane {
+    filter: brightness(1.55) saturate(0.85) hue-rotate(-6deg);
   }
   /* Leaflet zoom controls — tighter, rounded, softer shadow */
   .atomis-map .leaflet-control-zoom {
