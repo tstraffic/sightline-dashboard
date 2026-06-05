@@ -42,7 +42,10 @@ function pick(obj, keys, fallback) {
   return fallback;
 }
 
-/** Map a Traffio booking status onto a value allowed by the bookings CHECK. */
+// Traffio exposes booking status as a numeric `booking_status_id` whose legend
+// isn't published. Until we have the id→label map we default everything to
+// 'confirmed' (and treat is_deleted as cancelled in the upsert). String values
+// are still honoured in case a future field carries them.
 function mapBookingStatus(raw) {
   const s = String(raw || '').toLowerCase().replace(/\s+/g, '_');
   const allowed = {
@@ -54,37 +57,38 @@ function mapBookingStatus(raw) {
   return allowed[s] || 'confirmed';
 }
 
-/** Derive ISO-ish start/end datetimes from a Traffio booking payload. */
+/** Derive start/end datetimes ("YYYY-MM-DD HH:mm:ss") from a Traffio booking. */
 function deriveDateTimes(payload) {
-  let start = pick(payload, ['start_datetime', 'starts_at', 'start_at', 'start']);
-  let end = pick(payload, ['end_datetime', 'ends_at', 'end_at', 'end']);
+  let start = pick(payload, ['booking_start_time', 'start_datetime', 'starts_at', 'start_at', 'start']);
+  let end = pick(payload, ['approx_booking_end_time', 'end_datetime', 'ends_at', 'end_at', 'end']);
   const date = pick(payload, ['date', 'booking_date', 'shift_date']);
-  if (!start && date) start = `${date}T${pick(payload, ['start_time'], '06:00')}`;
-  if (!end && date) end = `${date}T${pick(payload, ['end_time'], '14:30')}`;
+  if (!start && date) start = `${date} ${pick(payload, ['start_time'], '06:00:00')}`;
+  if (!end && date) end = `${date} ${pick(payload, ['end_time'], '14:30:00')}`;
   return { start: start || null, end: end || start || null };
 }
 
 /** Human-readable one-liner for the reconciliation queue. */
 function summarizeBooking(payload) {
-  const ref = pick(payload, ['reference', 'booking_number', 'number', 'id'], '?');
-  const client = pick(payload, ['client_name', 'client', 'customer_name'], '');
-  const site = pick(payload, ['site_address', 'address', 'location'], '');
-  const date = pick(payload, ['date', 'start_datetime', 'starts_at', 'booking_date'], '');
-  return [`Ref ${ref}`, client, site, date].filter(Boolean).join(' · ');
+  const ref = pick(payload, ['job_number', 'booking_id', 'reference', 'number', 'id'], '?');
+  const title = pick(payload, ['booking_title', 'title', 'name'], '');
+  const site = pick(payload, ['booking_address', 'site_address', 'address', 'location'], '');
+  const date = pick(payload, ['booking_start_time', 'date', 'start_datetime', 'starts_at'], '');
+  return [`Job ${ref}`, title, site, date].filter(Boolean).join(' · ');
 }
 
 /**
  * Confident job match for a Traffio booking, or null. Strict on purpose:
- * an existing external_ref mapping, or an exact job_number / client_project_number.
- * Anything looser goes to the reconciliation queue rather than guessing.
+ * an existing external_ref mapping (keyed on Traffio's project_id — recorded
+ * once a booking for that project is reconciled), or an exact job_number /
+ * client_project_number. Anything looser goes to the reconciliation queue.
  */
 function findConfidentJobId(db, payload) {
-  const traffioJobId = pick(payload, ['job_id', 'jobId', 'project_id']);
-  if (traffioJobId != null) {
-    const ref = getInternalRef('traffio', 'job', String(traffioJobId));
+  const projectId = pick(payload, ['project_id', 'job_id', 'jobId']);
+  if (projectId != null) {
+    const ref = getInternalRef('traffio', 'job', String(projectId));
     if (ref) return ref.internal_id;
   }
-  const jobRef = pick(payload, ['job_reference', 'job_number', 'reference', 'project_number']);
+  const jobRef = pick(payload, ['job_number', 'parent_job_number', 'job_reference', 'reference', 'project_number']);
   if (jobRef) {
     const row = db.prepare('SELECT id FROM jobs WHERE job_number = ? OR client_project_number = ?')
       .get(String(jobRef), String(jobRef));
@@ -116,15 +120,18 @@ function queueImport(db, recordType, payload) {
  * Returns the local booking id. Throws if no start datetime can be derived.
  */
 function upsertBookingFromTraffio(db, payload, jobId, userId) {
-  const externalId = String(pick(payload, ['id', 'booking_id'], ''));
+  const externalId = String(pick(payload, ['booking_id', 'id'], ''));
   const { start, end } = deriveDateTimes(payload);
-  const status = mapBookingStatus(pick(payload, ['status', 'state']));
-  const title = pick(payload, ['title', 'name', 'description'], `Traffio booking ${externalId}`);
-  const siteAddress = pick(payload, ['site_address', 'address', 'location'], '');
+  const isDeleted = payload.is_deleted === true || payload.is_deleted === 1 || payload.is_deleted === '1';
+  const status = isDeleted ? 'cancelled' : mapBookingStatus(pick(payload, ['booking_status', 'status', 'state']));
+  const title = pick(payload, ['booking_title', 'title', 'name', 'description'], `Traffio booking ${externalId}`);
+  const siteAddress = pick(payload, ['booking_address', 'site_address', 'address', 'location'], '');
   const suburb = pick(payload, ['suburb'], '');
   const state = pick(payload, ['state'], '');
   const postcode = pick(payload, ['postcode', 'post_code'], '');
-  const billingCode = pick(payload, ['billing_code', 'order_number', 'po_number'], '');
+  const billingCode = pick(payload, ['client_billing_code', 'client_order_number', 'billing_code', 'order_number', 'po_number'], '');
+  const lat = pick(payload, ['booking_lat', 'latitude', 'lat']);
+  const lng = pick(payload, ['booking_lng', 'longitude', 'lng']);
 
   // client_id: prefer the linked job's client, else a mapped Traffio client
   let clientId = null;
@@ -156,24 +163,37 @@ function upsertBookingFromTraffio(db, payload, jobId, userId) {
         state = COALESCE(NULLIF(?, ''), state),
         postcode = COALESCE(NULLIF(?, ''), postcode),
         billing_code = COALESCE(NULLIF(?, ''), billing_code),
+        latitude = COALESCE(?, latitude),
+        longitude = COALESCE(?, longitude),
         source = 'traffio',
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(jobId || null, clientId || null, title, status, start, end,
-      siteAddress, suburb, state, postcode, billingCode, existing.internal_id);
+      siteAddress, suburb, state, postcode, billingCode,
+      lat != null ? Number(lat) : null, lng != null ? Number(lng) : null, existing.internal_id);
     bookingId = existing.internal_id;
   } else {
     if (!start) throw new Error('no start datetime');
     const result = db.prepare(`
       INSERT INTO bookings (booking_number, job_id, client_id, title, status, start_datetime, end_datetime,
-        site_address, suburb, state, postcode, billing_code, billable, source, created_by_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'traffio', ?)
+        site_address, suburb, state, postcode, billing_code, latitude, longitude, billable, source, created_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 'traffio', ?)
     `).run(`TRF-B-${externalId}`, jobId || null, clientId || null, title, status, start, end || start,
-      siteAddress, suburb, state, postcode, billingCode, userId || null);
+      siteAddress, suburb, state, postcode, billingCode,
+      lat != null ? Number(lat) : null, lng != null ? Number(lng) : null, userId || null);
     bookingId = result.lastInsertRowid;
   }
 
   if (externalId) setExternalRef('traffio', 'booking', bookingId, externalId, payload);
+
+  // Teach confident matching: map this Traffio project to the chosen job so
+  // future bookings for the same project auto-link instead of queueing.
+  if (jobId) {
+    const projectId = pick(payload, ['project_id', 'job_id', 'jobId']);
+    if (projectId != null && !getInternalRef('traffio', 'job', String(projectId))) {
+      setExternalRef('traffio', 'job', jobId, String(projectId), { source: 'booking_reconcile' });
+    }
+  }
 
   // Resolve any pending reconciliation row for this Traffio booking
   db.prepare(`
@@ -357,12 +377,16 @@ async function syncTraffioBookings(triggeredBy, fromDate, toDate) {
 
   try {
     const client = getTraffioClient();
+    // Traffio wants "YYYY-MM-DD HH:mm:ss"; pad date-only inputs to a full day.
+    const pad = (d, end) => d ? (d.length <= 10 ? `${d} ${end ? '23:59:59' : '00:00:00'}` : d) : null;
     const params = {};
-    if (fromDate) params.from_date = fromDate;
-    if (toDate) params.to_date = toDate;
+    const df = pad(fromDate, false);
+    const dt = pad(toDate, true);
+    if (df) params.date_from = df;
+    if (dt) params.date_to = dt;
 
-    const response = await client.get('/api/v1/bookings', { params });
-    const bookings = response.data.data || response.data || [];
+    const response = await client.get('/v1_booking/booking', { params });
+    const bookings = Array.isArray(response.data) ? response.data : (response.data.data || []);
 
     const systemUser = db.prepare("SELECT id FROM users WHERE role = 'management' LIMIT 1").get();
     const userId = systemUser ? systemUser.id : 1;
@@ -412,8 +436,12 @@ async function syncTraffioBookings(triggeredBy, fromDate, toDate) {
 
 async function testTraffioConnection() {
   const client = getTraffioClient();
-  const response = await client.get('/api/v1/ping');
-  return { status: response.status, data: response.data };
+  const today = new Date().toISOString().split('T')[0];
+  const response = await client.get('/v1_booking/booking', {
+    params: { date_from: `${today} 00:00:00`, date_to: `${today} 23:59:59` },
+  });
+  const rows = Array.isArray(response.data) ? response.data : (response.data.data || []);
+  return { status: response.status, data: { bookings_today: rows.length } };
 }
 
 module.exports = {
