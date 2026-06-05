@@ -33,7 +33,8 @@ router.get('/', requirePermission(PERM), (req, res) => {
     LEFT JOIN jobs cj ON cj.id = ti.created_job_id
     LEFT JOIN users u ON u.id = ti.reviewed_by_id
     WHERE ${where.join(' AND ')}
-    ORDER BY CASE ti.status WHEN 'pending' THEN 0 ELSE 1 END, ti.created_at DESC
+    ORDER BY CASE ti.status WHEN 'pending' THEN 0 ELSE 1 END,
+             ti.event_date IS NULL, ti.event_date DESC, ti.created_at DESC
     LIMIT 300
   `).all(...params);
 
