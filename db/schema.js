@@ -11768,6 +11768,47 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 251: Traffio sync — reconciliation queue
+  //
+  // Lets the dashboard mirror Traffio bookings/dockets. Records that confidently
+  // match an existing job auto-link (mapping kept in external_refs); ambiguous
+  // ones land in `traffio_imports` (status='pending') for a human to map to an
+  // existing job or create a new one before a booking is created. `bookings.source`
+  // flags Traffio-originated rows in the live feed.
+  // =============================================
+  if (!isMigrationApplied.get(251)) {
+    try {
+      const addCol = (table, col, type) => { try { db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${type}`); } catch (e) { /* exists */ } };
+      addCol('bookings', 'source', "TEXT DEFAULT 'manual'");
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS traffio_imports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          record_type TEXT NOT NULL DEFAULT 'booking' CHECK(record_type IN ('booking','docket')),
+          traffio_external_id TEXT NOT NULL,
+          proposed_json TEXT DEFAULT '{}',
+          summary TEXT DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','confirmed','discarded')),
+          matched_job_id INTEGER REFERENCES jobs(id),
+          created_job_id INTEGER REFERENCES jobs(id),
+          resulting_booking_id INTEGER REFERENCES bookings(id),
+          reviewed_by_id INTEGER REFERENCES users(id),
+          reviewed_at DATETIME,
+          notes TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(record_type, traffio_external_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_traffio_imports_status ON traffio_imports(status, record_type);
+      `);
+      recordMigration.run(251, 'traffio_imports reconciliation queue + bookings.source');
+      console.log('Migration 251 applied');
+    } catch (e) {
+      console.error('Migration 251 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

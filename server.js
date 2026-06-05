@@ -323,6 +323,7 @@ app.use('/finance/pnl', requireLogin, require('./routes/finance-pnl'));
 app.use('/timesheets', requireLogin, requirePermission('timesheets'), require('./routes/timesheets'));
 app.use('/crew', requireLogin, requirePermission('crew'), require('./routes/crew'));
 app.use('/bookings', requireLogin, requirePermission('bookings'), require('./routes/bookings'));
+app.use('/traffio-imports', requireLogin, requirePermission('traffio_imports'), require('./routes/traffio-imports'));
 app.use('/allocations', requireLogin, requirePermission('allocations'), require('./routes/allocations'));
 app.use('/schedule', requireLogin, requirePermission('schedule'), require('./routes/schedule'));
 app.use('/equipment/hire-dockets', requireLogin, requirePermission('equipment'), require('./routes/equipmentHireDockets'));
@@ -495,4 +496,22 @@ app.listen(PORT, () => {
       sendInductionReminders().catch(e => console.error('[cron] induction-reminder error:', e.message));
     }
   }, 15 * 60 * 1000);
+
+  // Traffio booking sync — polls every 5 min when the integration is enabled
+  // AND auto_sync is turned on in /admin/integrations (a manual "Sync now" is
+  // always available there regardless). Confident job matches become bookings;
+  // ambiguous ones queue at /traffio-imports for reconciliation. Non-fatal.
+  setInterval(() => {
+    try {
+      const { getIntegrationConfig } = require('./middleware/integrations');
+      const ic = getIntegrationConfig('traffio');
+      if (!ic.enabled || !ic.config.auto_sync) return;
+      const { syncTraffioBookings } = require('./middleware/traffio');
+      const today = new Date().toISOString().split('T')[0];
+      const from = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+      Promise.resolve(syncTraffioBookings('scheduled', from, today))
+        .then(s => { if (s && (s.created || s.queued)) console.log(`[traffio] sync: ${s.created} created, ${s.queued} queued, ${s.updated} updated`); })
+        .catch(e => console.error('[cron] traffio sync error:', e.message));
+    } catch (e) { console.error('[cron] traffio sync error:', e.message); }
+  }, 5 * 60 * 1000);
 });

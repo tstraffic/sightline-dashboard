@@ -48,6 +48,9 @@ const PERMISSIONS = {
   timesheets:    ['admin', 'operations', 'finance'],
   crew:          ['admin', 'operations'],
   allocations:   ['admin', 'operations'],
+  // Traffio reconciliation queue — ops/management map ambiguous Traffio
+  // bookings/dockets to a job (or create one) before they become bookings.
+  traffio_imports: ['admin', 'operations', 'management'],
   schedule:      ['admin', 'operations'],
   equipment:     ['admin', 'operations'],
   fleet:         ['admin', 'operations'],
