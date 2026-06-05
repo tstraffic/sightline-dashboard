@@ -68,6 +68,28 @@
     <% } %>
   </div>
 
+  <!-- Site Map — Leaflet pin of the geocoded site. Renders only when
+       we have coords (either from the booking's stored lat/lng or a
+       live geocode of the address text). -->
+  <% if (typeof siteMap !== 'undefined' && siteMap) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide">Site Map</h3>
+        <% if (siteMap.source) { %>
+          <span class="text-[10px] text-gray-400"><%= siteMap.source === 'google' ? 'Street-level' : (siteMap.source === 'booking' ? 'From booking' : 'Approx.') %></span>
+        <% } %>
+      </div>
+      <%- include('../partials/leaflet-map', {
+        mapId: 'shift-site-map-' + allocation.id,
+        lat: siteMap.lat,
+        lng: siteMap.lng,
+        zoom: 16,
+        height: '260px',
+        address: typeof siteAddressFull !== 'undefined' ? siteAddressFull : (allocation.site_address + (allocation.suburb ? ', ' + allocation.suburb : ''))
+      }) %>
+    </div>
+  <% } %>
+
   <!-- Supervisor -->
   <% if (allocation.supervisor_name) { %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">

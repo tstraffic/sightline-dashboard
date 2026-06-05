@@ -25,8 +25,16 @@
  */
 const { getDb } = require('../db/database');
 const { geocodeAddress: geocodeOpenMeteo } = require('./homeContext');
+const { getConfig } = require('../middleware/settings');
 
-const GOOGLE_KEY = process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_GEOCODING_API_KEY || '';
+// Resolve the active key on every call so an admin can paste a key into
+// /admin/integrations (writes to system_config) and have it pick up
+// without a redeploy. Env vars still win if both are set.
+function getGoogleKey() {
+  return process.env.GOOGLE_MAPS_API_KEY
+      || process.env.GOOGLE_GEOCODING_API_KEY
+      || getConfig('google_maps_api_key', '');
+}
 
 // Cache geocode results in-memory for 24h to avoid re-billing for
 // identical addresses across the same process lifetime.
@@ -41,8 +49,9 @@ function buildQuery(b) {
 }
 
 async function geocodeWithGoogle(q) {
-  if (!GOOGLE_KEY) return null;
-  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q)}&region=au&key=${GOOGLE_KEY}`;
+  const key = getGoogleKey();
+  if (!key) return null;
+  const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q)}&region=au&key=${key}`;
   const res = await fetch(url);
   if (!res.ok) {
     console.warn('[bookingGeocode] Google API HTTP', res.status);
@@ -74,23 +83,25 @@ async function geocodeWithOpenMeteo(q) {
 
 async function geocodeQuery(q) {
   if (!q) return null;
-  const key = `q:${q.toLowerCase()}`;
-  const cached = cache.get(key);
+  const googleKey = getGoogleKey();
+  const cacheKey = `q:${q.toLowerCase()}`;
+  const cached = cache.get(cacheKey);
   if (cached && cached.expires > Date.now()) return cached.data;
 
   let result = null;
-  if (GOOGLE_KEY) {
+  if (googleKey) {
     try { result = await geocodeWithGoogle(q); } catch (e) { console.warn('[bookingGeocode] google error:', e.message); }
   }
   if (!result) {
     try { result = await geocodeWithOpenMeteo(q); } catch (e) { console.warn('[bookingGeocode] open-meteo error:', e.message); }
   }
-  if (result) cache.set(key, { expires: Date.now() + CACHE_TTL_MS, data: result });
+  if (result) cache.set(cacheKey, { expires: Date.now() + CACHE_TTL_MS, data: result });
   return result;
 }
 
 async function geocodeBookingIfNeeded(bookingId, opts = {}) {
   try {
+    const googleKey = getGoogleKey();
     const db = getDb();
     const b = db.prepare(`
       SELECT id, site_address, suburb, state, postcode, latitude, longitude,
@@ -113,7 +124,7 @@ async function geocodeBookingIfNeeded(bookingId, opts = {}) {
 
     // Skip if no Google key configured AND we already have any coords AND
     // the address text hasn't changed — preserves the original behaviour.
-    if (!GOOGLE_KEY && hasCoords && queryUnchanged && !force) return null;
+    if (!googleKey && hasCoords && queryUnchanged && !force) return null;
 
     const geo = await geocodeQuery(q);
     if (!geo) return null;
@@ -136,6 +147,7 @@ async function geocodeBookingIfNeeded(bookingId, opts = {}) {
 // run repeatedly — rows already on Google with an unchanged query are
 // skipped.
 async function geocodeBackfill({ limit = 500, onlyMissing = false } = {}) {
+  const googleKey = getGoogleKey();
   const db = getDb();
   const sql = onlyMissing
     ? 'SELECT id FROM bookings WHERE latitude IS NULL OR longitude IS NULL ORDER BY id DESC LIMIT ?'
@@ -148,7 +160,7 @@ async function geocodeBackfill({ limit = 500, onlyMissing = false } = {}) {
     // small delay so we don't blow Google QPS limits
     await new Promise(r => setTimeout(r, 25));
   }
-  return { scanned: rows.length, upgraded, failed, provider: GOOGLE_KEY ? 'google' : 'open_meteo' };
+  return { scanned: rows.length, upgraded, failed, provider: googleKey ? 'google' : 'open_meteo' };
 }
 
 module.exports = { geocodeBookingIfNeeded, geocodeBackfill, geocodeQuery, buildQuery };

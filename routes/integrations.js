@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
+const { getConfig, reloadSettings } = require('../middleware/settings');
 const {
   getIntegrationConfig,
   saveIntegrationConfig,
@@ -25,12 +26,49 @@ router.get('/', (req, res) => {
   }
   const syncLogs = getRecentSyncLogs(25);
 
+  // Google Maps API key — read from system_config so the value persists
+  // across deploys. If an env var is set, it WINS over the DB and we
+  // disable the input to prevent accidental drift between the two.
+  const envOverride = !!(process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_GEOCODING_API_KEY);
+  const googleMapsKey = envOverride
+    ? (process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_GEOCODING_API_KEY)
+    : getConfig('google_maps_api_key', '');
+
   res.render('admin/integrations', {
     title: 'Integrations',
     currentPage: 'integrations',
     configs,
     syncLogs,
+    googleMapsKey,
+    googleMapsEnvOverride: envOverride,
   });
+});
+
+// POST /admin/integrations/google-maps — Save Google Maps API key into
+// system_config. The key drives both /bookings address geocoding and
+// the worker site map. Empty value clears the row.
+router.post('/google-maps', (req, res) => {
+  const db = getDb();
+  const raw = (req.body.api_key || '').trim();
+
+  db.prepare(`
+    INSERT INTO system_config (config_key, config_value, config_type, description, updated_at, updated_by_id)
+    VALUES ('google_maps_api_key', ?, 'string', 'Google Maps API key for Geocoding + Maps JS', CURRENT_TIMESTAMP, ?)
+    ON CONFLICT(config_key) DO UPDATE SET config_value = excluded.config_value, updated_at = CURRENT_TIMESTAMP, updated_by_id = excluded.updated_by_id
+  `).run(raw, req.session.user.id);
+
+  reloadSettings();
+
+  logActivity({
+    user: req.session.user,
+    action: 'update',
+    entityType: 'integration',
+    entityLabel: 'google_maps',
+    details: raw ? 'Google Maps API key updated' : 'Google Maps API key cleared',
+    ip: req.ip,
+  });
+  req.flash('success', raw ? 'Google Maps key saved.' : 'Google Maps key cleared.');
+  res.redirect('/admin/integrations');
 });
 
 // POST /admin/integrations/:provider — Save config

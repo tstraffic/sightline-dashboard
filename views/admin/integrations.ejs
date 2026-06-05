@@ -274,6 +274,48 @@
     </form>
   </div>
 
+  <!-- ======= GOOGLE MAPS ======= -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
+          <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </div>
+        <div>
+          <h3 class="text-gray-900 font-semibold">Google Maps</h3>
+          <p class="text-gray-400 text-xs">Street-level geocoding for booking pins + worker site map</p>
+        </div>
+      </div>
+      <% if (googleMapsKey) { %>
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20">Key set</span>
+      <% } else { %>
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No key</span>
+      <% } %>
+    </div>
+    <form method="POST" action="/admin/integrations/google-maps" class="p-5 space-y-4">
+      <%- include('../partials/csrf') %>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">
+        <p>Provides street-level lat/lng so booking pins land on the actual driveway instead of the suburb centroid. Same key powers the worker shift detail "Site Map". Without a key, geocoding falls back to Open-Meteo (suburb-level only).</p>
+        <p class="mt-2 text-xs text-gray-500">Get a key at <a href="https://console.cloud.google.com/apis/library/geocoding-backend.googleapis.com" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700 underline">console.cloud.google.com</a> → enable the Geocoding API → restrict to that API only. Free $200/mo credit ≈ 40k geocodes.</p>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Google Maps API key</label>
+        <input type="password" name="api_key" value="<%= googleMapsKey || '' %>" placeholder="AIza..." autocomplete="off"
+          <%= googleMapsEnvOverride ? 'readonly' : '' %>
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 <%= googleMapsEnvOverride ? 'bg-gray-50 cursor-not-allowed' : '' %>">
+        <% if (googleMapsEnvOverride) { %>
+          <p class="mt-1 text-xs text-amber-600">An environment variable (<code class="font-mono">GOOGLE_MAPS_API_KEY</code>) is set and overrides this field. Unset it on Railway to manage the key from here instead.</p>
+        <% } else { %>
+          <p class="mt-1 text-xs text-gray-400">Saved in <code class="font-mono">system_config</code>. Persists across deploys. Leave blank to clear.</p>
+        <% } %>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="submit" <%= googleMapsEnvOverride ? 'disabled' : '' %>
+          class="px-4 py-2 bg-brand-600 hover:bg-brand-500 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors">Save</button>
+      </div>
+    </form>
+  </div>
+
 </div>
 
 <!-- Sync Log -->

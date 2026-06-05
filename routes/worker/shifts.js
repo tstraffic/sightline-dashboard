@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../../db/database');
+const { geocodeQuery } = require('../../services/bookingGeocode');
 
 // GET /w/shifts — Week-paginated shift list (Mon → Sun).
 // `?week=YYYY-MM-DD` jumps to the week containing that ISO date. Without
@@ -143,17 +144,34 @@ router.get('/shifts', (req, res) => {
 });
 
 // GET /w/shifts/:id — Shift detail
-router.get('/shifts/:id', (req, res) => {
+router.get('/shifts/:id', async (req, res) => {
   const db = getDb();
   const worker = req.session.worker;
 
+  // LEFT JOIN bookings so booking-only allocations (no job_id) still
+  // resolve, and so we can pick up the booking's lat/lng for the
+  // Site Map card without a second query.
   const allocation = db.prepare(`
-    SELECT ca.*, j.job_number, j.job_name, j.client, j.site_address, j.suburb, j.status as job_status,
-      j.notes as job_notes, j.start_date as job_start, j.end_date as job_end,
-      u.full_name as supervisor_name, u.email as supervisor_email
+    SELECT ca.*,
+      COALESCE(j.job_number, b.booking_number)   AS job_number,
+      COALESCE(j.job_name,   b.title)            AS job_name,
+      COALESCE(j.client,     b.title)            AS client,
+      COALESCE(j.site_address, b.site_address)   AS site_address,
+      COALESCE(j.suburb,     b.suburb)           AS suburb,
+      j.status     AS job_status,
+      j.notes      AS job_notes,
+      j.start_date AS job_start,
+      j.end_date   AS job_end,
+      b.latitude   AS booking_lat,
+      b.longitude  AS booking_lng,
+      b.state      AS booking_state,
+      b.postcode   AS booking_postcode,
+      u.full_name  AS supervisor_name,
+      u.email      AS supervisor_email
     FROM crew_allocations ca
-    JOIN jobs j ON ca.job_id = j.id
-    LEFT JOIN users u ON j.ops_supervisor_id = u.id
+    LEFT JOIN jobs j     ON ca.job_id     = j.id
+    LEFT JOIN bookings b ON ca.booking_id = b.id
+    LEFT JOIN users u    ON j.ops_supervisor_id = u.id
     WHERE ca.id = ? AND ca.crew_member_id = ?
   `).get(req.params.id, worker.id);
 
@@ -176,12 +194,34 @@ router.get('/shifts/:id', (req, res) => {
     SELECT * FROM clock_events WHERE crew_member_id = ? AND allocation_id = ? ORDER BY event_time DESC LIMIT 1
   `).get(worker.id, allocation.id);
 
+  // Site Map data — prefer the booking's stored coords (already geocoded
+  // by services/bookingGeocode); fall back to a live geocode of the
+  // address text so workers still see a pin even on alloc-only shifts.
+  let siteMap = null;
+  if (allocation.booking_lat != null && allocation.booking_lng != null) {
+    siteMap = { lat: allocation.booking_lat, lng: allocation.booking_lng, source: 'booking' };
+  } else if (allocation.site_address) {
+    try {
+      const parts = [allocation.site_address, allocation.suburb, allocation.booking_state, allocation.booking_postcode, 'Australia']
+        .map(s => (s == null ? '' : String(s).trim()))
+        .filter(Boolean);
+      const geo = await geocodeQuery(parts.join(', '));
+      if (geo && geo.lat != null && geo.lng != null) {
+        siteMap = { lat: geo.lat, lng: geo.lng, source: geo.source || 'live' };
+      }
+    } catch (e) { /* best-effort; map just won't render */ }
+  }
+  const siteAddressFull = [allocation.site_address, allocation.suburb, allocation.booking_state, allocation.booking_postcode]
+    .filter(Boolean).join(', ');
+
   res.render('worker/shift-detail', {
     title: allocation.job_name || allocation.job_number,
     currentPage: 'shifts',
     allocation,
     otherCrew,
     lastClock: lastClock || null,
+    siteMap,
+    siteAddressFull,
   });
 });
 
