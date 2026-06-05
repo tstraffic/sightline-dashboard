@@ -26,7 +26,7 @@ router.get('/', (req, res) => {
 
   res.render('admin/integrations', {
     title: 'Integrations',
-    currentPage: 'admin',
+    currentPage: 'integrations',
     configs,
     syncLogs,
   });
@@ -49,6 +49,7 @@ router.post('/:provider', (req, res) => {
     case 'traffio':
       configObj.api_url = (req.body.api_url || '').trim();
       configObj.api_key = (req.body.api_key || '').trim();
+      configObj.auto_sync = req.body.auto_sync === '1' || req.body.auto_sync === 'on';
       break;
     case 'quickbooks':
       configObj.client_id = (req.body.client_id || '').trim();
@@ -145,7 +146,7 @@ router.post('/:provider/sync', async (req, res) => {
       const fromDate = req.body.from_date || '';
       const toDate = req.body.to_date || '';
       const bookingStats = await syncTraffioBookings('manual', fromDate, toDate);
-      results.push(`Bookings: ${bookingStats.created} created, ${bookingStats.updated} updated, ${bookingStats.failed} failed`);
+      results.push(`Bookings: ${bookingStats.created} created, ${bookingStats.updated} updated, ${bookingStats.queued} queued for review, ${bookingStats.failed} failed`);
     }
 
     logActivity({

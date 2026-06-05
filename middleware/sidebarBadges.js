@@ -72,6 +72,9 @@ function sidebarBadges(req, res, next) {
       // Pending leave requests waiting on an approver decision.
       leavePending: safeCount(db, "SELECT COUNT(*) as c FROM employee_leave WHERE status = 'pending'"),
 
+      // Traffio imports awaiting reconciliation (ambiguous bookings/dockets).
+      traffioPending: safeCount(db, "SELECT COUNT(*) as c FROM traffio_imports WHERE status = 'pending'"),
+
       // Crew — expiring certs within 30 days
       crew: safeCount(db, `
         SELECT COUNT(*) as c FROM crew_members WHERE active = 1 AND (

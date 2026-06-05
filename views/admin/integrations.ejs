@@ -56,6 +56,12 @@
           class="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-brand-500">
         <label for="traffio_enabled" class="text-sm text-gray-600">Enable Traffio sync</label>
       </div>
+      <div class="flex items-center gap-2">
+        <input type="hidden" name="auto_sync" value="0">
+        <input type="checkbox" name="auto_sync" value="1" id="traffio_auto_sync" <%= configs.traffio.config.auto_sync ? 'checked' : '' %>
+          class="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-brand-500">
+        <label for="traffio_auto_sync" class="text-sm text-gray-600">Auto-sync bookings every 5 min (ambiguous ones queue for review)</label>
+      </div>
       <% if (configs.traffio.last_sync_at) { %>
         <p class="text-xs text-gray-400">Last sync: <%= configs.traffio.last_sync_at %></p>
       <% } %>

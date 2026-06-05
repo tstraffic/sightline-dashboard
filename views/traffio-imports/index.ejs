@@ -1,0 +1,65 @@
+<% locals.currentPage = 'traffio-imports' %>
+<meta name="color-scheme" content="light only">
+
+<%
+  function fmtWhen(iso) {
+    if (!iso) return '';
+    const d = new Date((iso || '').replace(' ', 'T') + (String(iso).includes('T') ? '' : 'Z'));
+    if (isNaN(d)) return iso;
+    return d.toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  }
+  function statusPill(s) {
+    if (s === 'pending')   return 'bg-amber-50 text-amber-700 ring-amber-600/20';
+    if (s === 'confirmed') return 'bg-emerald-50 text-emerald-700 ring-emerald-600/20';
+    return 'bg-gray-100 text-gray-500 ring-gray-500/15';
+  }
+%>
+
+<div class="max-w-5xl mx-auto px-4 py-6">
+  <div class="flex items-center justify-between mb-1">
+    <h1 class="text-xl font-bold text-gray-900">Traffio Reconciliation</h1>
+  </div>
+  <p class="text-sm text-gray-500 mb-5">
+    Traffio records that couldn't be confidently matched to a job. Map each one to an existing
+    job or create a new one — confirming creates the booking in the dashboard.
+  </p>
+
+  <!-- status chips -->
+  <div class="flex flex-wrap gap-2 mb-4">
+    <% const chips = [['pending','Pending',counts.pending],['confirmed','Confirmed',counts.confirmed],['discarded','Discarded',counts.discarded],['all','All','']]; %>
+    <% chips.forEach(function(c){ %>
+      <a href="/traffio-imports?status=<%= c[0] %>"
+         class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold ring-1 ring-inset <%= status === c[0] ? 'bg-brand-600 text-white ring-brand-600' : 'bg-white text-gray-600 ring-gray-200 hover:bg-gray-50' %>">
+        <%= c[1] %><% if (c[2] !== '') { %><span class="<%= status === c[0] ? 'text-white/80' : 'text-gray-400' %>"><%= c[2] %></span><% } %>
+      </a>
+    <% }); %>
+  </div>
+
+  <% if (!rows.length) { %>
+    <div class="bg-white border border-gray-200 rounded-xl p-10 text-center text-gray-400 text-sm">
+      Nothing here. <%= status === 'pending' ? 'No Traffio records are waiting for reconciliation.' : 'No records with this status.' %>
+    </div>
+  <% } else { %>
+    <div class="bg-white border border-gray-200 rounded-xl divide-y divide-gray-100">
+      <% rows.forEach(function(r){ %>
+        <div class="flex items-center gap-3 px-4 py-3">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide ring-1 ring-inset <%= statusPill(r.status) %>"><%= r.status %></span>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold uppercase tracking-wide bg-gray-100 text-gray-500"><%= r.record_type %></span>
+          <div class="min-w-0 flex-1">
+            <div class="text-sm font-medium text-gray-900 truncate"><%= r.summary || ('Traffio ' + r.record_type + ' ' + r.traffio_external_id) %></div>
+            <div class="text-xs text-gray-400">
+              <%= fmtWhen(r.created_at) %>
+              <% if (r.status === 'confirmed') { %> · → job <%= r.matched_job_number || r.created_job_number || '?' %><% } %>
+              <% if (r.reviewer_name) { %> · by <%= r.reviewer_name %><% } %>
+            </div>
+          </div>
+          <% if (r.status === 'pending') { %>
+            <a href="/traffio-imports/<%= r.id %>" class="shrink-0 inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold bg-brand-600 text-white hover:bg-brand-700">Reconcile</a>
+          <% } else { %>
+            <a href="/traffio-imports/<%= r.id %>" class="shrink-0 inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold text-gray-500 hover:bg-gray-50">View</a>
+          <% } %>
+        </div>
+      <% }); %>
+    </div>
+  <% } %>
+</div>
