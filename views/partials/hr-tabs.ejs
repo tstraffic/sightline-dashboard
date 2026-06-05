@@ -1,0 +1,39 @@
+<%
+// HR section tabs — sub-nav for the HR Dashboard area. Currently surfaces
+// the Overview (/hr) and the Licences & Expiries (/hr/competencies) sub-page,
+// since those two share workforce-compliance signals (alerts, expiries,
+// licence health). Each view renders this partial right under its <h1>.
+var hrCurrent = (typeof currentPage !== 'undefined') ? currentPage : '';
+%>
+<nav class="hr-tabs flex items-center gap-1 border-b border-gray-200 -mt-1 mb-4 overflow-x-auto" aria-label="HR sections">
+  <a href="/hr" class="hr-tab <%= hrCurrent === 'hr-dashboard' ? 'is-active' : '' %>">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+    Overview
+  </a>
+  <% if (typeof canAccess !== 'function' || canAccess(user, 'hr_competencies')) { %>
+  <a href="/hr/competencies" class="hr-tab <%= hrCurrent === 'hr-competencies' ? 'is-active' : '' %>">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
+    Licences &amp; Expiries
+  </a>
+  <% } %>
+</nav>
+
+<style>
+  .hr-tab {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 9px 14px;
+    font-size: 13px; font-weight: 600; color: #6B7280;
+    border-bottom: 2px solid transparent;
+    text-decoration: none;
+    transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
+    border-radius: 6px 6px 0 0;
+    white-space: nowrap;
+  }
+  .hr-tab:hover { color: #1F2937; background: #F9FAFB; }
+  .hr-tab.is-active { color: #2B7FFF; border-bottom-color: #2B7FFF; }
+  .hr-tab svg { flex-shrink: 0; }
+  :root[data-theme="dark"] .hr-tabs { border-bottom-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] .hr-tab { color: rgba(255,255,255,0.6); }
+  :root[data-theme="dark"] .hr-tab:hover { color: #fff; background: rgba(255,255,255,0.04); }
+  :root[data-theme="dark"] .hr-tab.is-active { color: #60A5FA; border-bottom-color: #60A5FA; }
+</style>
