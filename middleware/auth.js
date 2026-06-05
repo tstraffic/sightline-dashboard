@@ -120,6 +120,7 @@ const PERMISSIONS = {
   // (they just see one item in it).
   finance:       ['admin', 'finance', 'accounts'],
   payroll:       ['admin', 'finance', 'accounts'],   // pay runs list + management runs
+  invoicing:     ['admin', 'finance', 'accounts'],   // Traffio docket → QuickBooks invoicing
   payslips:      ['admin', 'finance', 'accounts'],   // payslips list (alias for clarity)
   abergeldie_payments: ['admin', 'finance', 'accounts'], // client payment sheet
   budgets:       ['admin', 'finance'],

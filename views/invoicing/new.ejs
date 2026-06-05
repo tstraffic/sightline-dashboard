@@ -1,0 +1,61 @@
+<% locals.currentPage = 'invoicing' %>
+<meta name="color-scheme" content="light only">
+
+<div class="max-w-3xl mx-auto px-4 py-6">
+  <a href="/finance/invoicing" class="text-sm text-gray-400 hover:text-gray-600">&larr; Back to invoices</a>
+  <h1 class="text-xl font-bold text-gray-900 mt-2 mb-1">Assemble draft invoices</h1>
+  <p class="text-sm text-gray-500 mb-5">Pick a period to preview signed, not-yet-invoiced dockets grouped by client. Assembling creates one draft invoice per client.</p>
+
+  <!-- Period picker (reloads the preview) -->
+  <form method="GET" action="/finance/invoicing/new" class="bg-white border border-gray-200 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3">
+    <div>
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Period start</label>
+      <input type="date" name="period_start" value="<%= periodStart %>" class="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+    </div>
+    <div>
+      <label class="block text-xs font-semibold text-gray-500 mb-1">Period end</label>
+      <input type="date" name="period_end" value="<%= periodEnd %>" class="rounded-lg border border-gray-300 px-3 py-2 text-sm">
+    </div>
+    <button type="submit" class="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200">Preview</button>
+  </form>
+
+  <div class="bg-white border border-gray-200 rounded-xl p-4">
+    <div class="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
+      <%= totalDockets %> signed docket<%= totalDockets === 1 ? '' : 's' %> ready · <%= clients.length %> client<%= clients.length === 1 ? '' : 's' %>
+    </div>
+
+    <% if (!clients.length) { %>
+      <p class="text-sm text-gray-400 py-6 text-center">No signed, un-invoiced dockets in this period. Sync dockets from Admin → Integrations → Traffio first.</p>
+    <% } else { %>
+      <table class="w-full text-sm mb-4">
+        <thead><tr class="text-left text-gray-400 text-xs uppercase tracking-wide">
+          <th class="py-1">Client</th><th class="py-1 text-right">Dockets</th>
+        </tr></thead>
+        <tbody>
+          <% clients.forEach(function(c){ %>
+            <tr class="border-t border-gray-50">
+              <td class="py-2 text-gray-900"><%= c.client_name || ('Client ' + c.traffio_client_id) %></td>
+              <td class="py-2 text-right text-gray-600"><%= c.docket_count %></td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+
+      <form method="POST" action="/finance/invoicing/assemble" class="flex flex-wrap items-end gap-3 pt-3 border-t border-gray-100">
+        <%- include('../partials/csrf') %>
+        <input type="hidden" name="period_start" value="<%= periodStart %>">
+        <input type="hidden" name="period_end" value="<%= periodEnd %>">
+        <div class="flex-1 min-w-[200px]">
+          <label class="block text-xs font-semibold text-gray-500 mb-1">Client</label>
+          <select name="traffio_client_id" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+            <option value="">All clients (one invoice each)</option>
+            <% clients.forEach(function(c){ %>
+              <option value="<%= c.traffio_client_id %>"><%= c.client_name || ('Client ' + c.traffio_client_id) %> (<%= c.docket_count %>)</option>
+            <% }); %>
+          </select>
+        </div>
+        <button type="submit" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Create draft invoices</button>
+      </form>
+    <% } %>
+  </div>
+</div>

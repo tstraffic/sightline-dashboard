@@ -12,6 +12,7 @@ const {
   syncTraffioJobs,
   syncTraffioCrew,
   syncTraffioBookings,
+  syncTraffioDockets,
   testTraffioConnection,
 } = require('../middleware/traffio');
 
@@ -147,6 +148,12 @@ router.post('/:provider/sync', async (req, res) => {
       const toDate = req.body.to_date || '';
       const bookingStats = await syncTraffioBookings('manual', fromDate, toDate);
       results.push(`Bookings: ${bookingStats.created} created, ${bookingStats.updated} updated, ${bookingStats.queued} queued for review, ${bookingStats.failed} failed`);
+    }
+    if (syncType === 'all' || syncType === 'dockets') {
+      const fromDate = req.body.from_date || '';
+      const toDate = req.body.to_date || '';
+      const docketStats = await syncTraffioDockets('manual', fromDate, toDate);
+      results.push(`Dockets: ${docketStats.created} dockets, ${docketStats.updated} person-lines, ${docketStats.failed} failed`);
     }
 
     logActivity({

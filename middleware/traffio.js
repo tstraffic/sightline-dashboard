@@ -445,6 +445,138 @@ async function syncTraffioBookings(triggeredBy, fromDate, toDate) {
   return stats;
 }
 
+// ---- Sync Works Dockets (billable hours, for invoicing) ----
+
+// Imports signed works dockets + their per-person worked hours into the
+// traffio_dockets / traffio_docket_persons staging tables. Dockets carry their
+// own client + hours, so this is independent of booking reconciliation. The
+// invoicing module assembles drafts from the signed, not-yet-invoiced rows.
+async function syncTraffioDockets(triggeredBy, fromDate, toDate) {
+  const db = getDb();
+  updateSyncStatus('traffio', 'syncing');
+  const logId = startSyncLog('traffio', 'import', 'docket', triggeredBy);
+  const stats = { processed: 0, created: 0, updated: 0, failed: 0, errorDetails: '' };
+  const truthy = (v) => v === '1' || v === 1 || v === true;
+  const num = (v) => { const n = parseFloat(v); return isNaN(n) ? 0 : n; };
+
+  try {
+    const client = getTraffioClient();
+    const pad = (d, end) => d ? (d.length <= 10 ? `${d} ${end ? '23:59:59' : '00:00:00'}` : d) : null;
+    const params = {};
+    const df = pad(fromDate, false);
+    const dt = pad(toDate, true);
+    if (df) params.date_from = df;
+    if (dt) params.date_to = dt;
+
+    // 1) Dockets
+    const dRes = await client.get('/v1_works_docket/works_docket', { params });
+    const dockets = Array.isArray(dRes.data) ? dRes.data : (dRes.data.data || []);
+    const upsertDocket = db.prepare(`
+      INSERT INTO traffio_dockets (works_docket_id, works_docket_number, physical_number, booking_id, job_number,
+        project_id, traffio_client_id, client_name, local_client_id, address, billing_reference,
+        booking_start_time, approx_booking_end_time, signed_off, signed_off_at, signed_off_by_name,
+        is_deleted, raw_json, last_modified, synced_at)
+      VALUES (@wid,@num,@phys,@bid,@job,@proj,@cid,@cname,@lcid,@addr,@bill,@start,@end,@signed,@signedat,@signedby,@del,@raw,@lm,CURRENT_TIMESTAMP)
+      ON CONFLICT(works_docket_id) DO UPDATE SET
+        works_docket_number=excluded.works_docket_number, physical_number=excluded.physical_number,
+        booking_id=excluded.booking_id, job_number=excluded.job_number, project_id=excluded.project_id,
+        traffio_client_id=excluded.traffio_client_id, client_name=excluded.client_name,
+        local_client_id=COALESCE(traffio_dockets.local_client_id, excluded.local_client_id),
+        address=excluded.address, billing_reference=excluded.billing_reference,
+        booking_start_time=excluded.booking_start_time, approx_booking_end_time=excluded.approx_booking_end_time,
+        signed_off=excluded.signed_off, signed_off_at=excluded.signed_off_at, signed_off_by_name=excluded.signed_off_by_name,
+        is_deleted=excluded.is_deleted, raw_json=excluded.raw_json, last_modified=excluded.last_modified,
+        synced_at=CURRENT_TIMESTAMP
+    `);
+    for (const d of dockets) {
+      stats.processed++;
+      try {
+        const tClientId = pick(d, ['client_id'], null);
+        let localClientId = null;
+        if (tClientId != null) {
+          const cr = getInternalRef('traffio', 'client', String(tClientId));
+          if (cr) localClientId = cr.internal_id;
+        }
+        if (!localClientId) {
+          const cname = pick(d, ['client_name'], '');
+          if (cname) { const c = db.prepare('SELECT id FROM clients WHERE company_name = ?').get(cname); if (c) localClientId = c.id; }
+        }
+        upsertDocket.run({
+          wid: String(pick(d, ['works_docket_id'], '')),
+          num: pick(d, ['works_docket_number'], null),
+          phys: pick(d, ['works_docket_physical_number'], null),
+          bid: pick(d, ['booking_id'], null) != null ? String(pick(d, ['booking_id'])) : null,
+          job: pick(d, ['job_number'], null),
+          proj: pick(d, ['project_id'], null) != null ? String(pick(d, ['project_id'])) : null,
+          cid: tClientId != null ? String(tClientId) : null,
+          cname: pick(d, ['client_name'], null),
+          lcid: localClientId,
+          addr: pick(d, ['works_docket_address'], null),
+          bill: pick(d, ['works_docket_client_billing_reference'], null),
+          start: pick(d, ['booking_start_time'], null),
+          end: pick(d, ['approx_booking_end_time'], null),
+          signed: truthy(d.signed_off) ? 1 : 0,
+          signedat: pick(d, ['signed_off_at'], null),
+          signedby: pick(d, ['signed_off_by_name'], null),
+          del: truthy(d.is_deleted) ? 1 : 0,
+          raw: JSON.stringify(d),
+          lm: pick(d, ['last_modified'], null),
+        });
+        stats.created++;
+      } catch (err) {
+        stats.failed++;
+        stats.errorDetails += `Docket ${d.works_docket_id}: ${err.message}\n`;
+      }
+    }
+
+    // 2) Per-person worked hours
+    const pRes = await client.get('/v1_works_docket/works_docket_person', { params });
+    const persons = Array.isArray(pRes.data) ? pRes.data : (pRes.data.data || []);
+    const upsertPerson = db.prepare(`
+      INSERT INTO traffio_docket_persons (works_docket_id, person_id, first_name, last_name, resource_name,
+        item_classification_name, time_on, time_off, total_hours, break_time, travel_time,
+        lafha, general_allowance, rain_allowance, is_deleted, raw_json)
+      VALUES (@wid,@pid,@fn,@ln,@res,@cls,@on,@off,@hrs,@brk,@trv,@laf,@gen,@rain,@del,@raw)
+      ON CONFLICT(works_docket_id, person_id) DO UPDATE SET
+        first_name=excluded.first_name, last_name=excluded.last_name, resource_name=excluded.resource_name,
+        item_classification_name=excluded.item_classification_name, time_on=excluded.time_on, time_off=excluded.time_off,
+        total_hours=excluded.total_hours, break_time=excluded.break_time, travel_time=excluded.travel_time,
+        lafha=excluded.lafha, general_allowance=excluded.general_allowance, rain_allowance=excluded.rain_allowance,
+        is_deleted=excluded.is_deleted, raw_json=excluded.raw_json
+    `);
+    for (const p of persons) {
+      try {
+        upsertPerson.run({
+          wid: String(pick(p, ['works_docket_id'], '')),
+          pid: pick(p, ['person_id'], null) != null ? String(pick(p, ['person_id'])) : null,
+          fn: pick(p, ['first_name'], null), ln: pick(p, ['last_name'], null),
+          res: pick(p, ['resource_name'], null), cls: pick(p, ['item_classification_name'], null),
+          on: pick(p, ['works_docket_time_on'], null), off: pick(p, ['works_docket_time_off'], null),
+          hrs: num(pick(p, ['total_hours'], 0)),
+          brk: num(pick(p, ['works_docket_person_break_time'], 0)),
+          trv: num(pick(p, ['works_docket_person_travel_time'], 0)),
+          laf: pick(p, ['works_docket_person_lafha'], null),
+          gen: pick(p, ['works_docket_person_general_allowance'], null),
+          rain: pick(p, ['works_docket_person_rain_allowance'], null),
+          del: truthy(p.is_deleted) ? 1 : 0,
+          raw: JSON.stringify(p),
+        });
+      } catch (err) {
+        stats.errorDetails += `Person ${p.person_id}@${p.works_docket_id}: ${err.message}\n`;
+      }
+    }
+    stats.updated = persons.length; // person-line rows imported
+
+    updateSyncStatus('traffio', 'success');
+  } catch (err) {
+    stats.errorDetails = err.message;
+    updateSyncStatus('traffio', 'error', err.message);
+  }
+
+  completeSyncLog(logId, stats);
+  return stats;
+}
+
 // ---- Test Connection ----
 
 async function testTraffioConnection() {
@@ -461,6 +593,7 @@ module.exports = {
   syncTraffioJobs,
   syncTraffioCrew,
   syncTraffioBookings,
+  syncTraffioDockets,
   testTraffioConnection,
   // Reconciliation helpers (used by routes/traffio-imports.js)
   upsertBookingFromTraffio,
