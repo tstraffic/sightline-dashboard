@@ -343,7 +343,10 @@
                         <% } %>
                       <% }); %>
                       <% if (emptyWorkerCount > 0) { %>
-                        <div class="bk2-slot bk2-slot--empty">
+                        <div class="bk2-slot bk2-slot--empty bk2-slot--drop"
+                             data-booking-id="<%= b.id %>"
+                             data-role-on-site="<%= blk.role || 'TC' %>"
+                             data-crew-ordinal="<%= blk.ordinal %>">
                           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:0.6"><path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3M6 11a4 4 0 11-4 4 4 4 0 014-4zM14 16a6 6 0 00-12 0v2h12v-2z"/></svg>
                           <%= emptyWorkerCount === 1
                             ? ((blk.role || 'TC') + ' slot · drop a worker here')
@@ -2107,5 +2110,140 @@
 
     rpLoad();
   }
+
+  // ==========================================================
+  //  DRAG & DROP — drag a worker row from the resource panel
+  //  onto an empty crew slot on a booking card to assign them.
+  //  POSTs to /bookings/:id/crew (existing endpoint) and reloads
+  //  the board on success.
+  // ==========================================================
+  var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+  var CSRF_TOKEN = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+  // dragstart on resource-panel rows. Captures the worker id +
+  // name into dataTransfer (multiple types so any drop target
+  // can read it, and so we have a text/plain fallback).
+  document.addEventListener('dragstart', function (e) {
+    var row = e.target && e.target.closest && e.target.closest('.bk2-rp-item');
+    if (!row) return;
+    var type = row.getAttribute('data-resource-type');
+    if (type !== 'person') return; // vehicles + equipment not yet wired
+    var id = row.getAttribute('data-resource-id');
+    var name = row.getAttribute('data-resource-name') || '';
+    if (!id) return;
+    try {
+      e.dataTransfer.effectAllowed = 'copy';
+      e.dataTransfer.setData('application/x-bk2-person', id);
+      e.dataTransfer.setData('text/plain', name);
+    } catch (err) { /* old browsers */ }
+    row.classList.add('is-dragging');
+  });
+  document.addEventListener('dragend', function (e) {
+    var row = e.target && e.target.closest && e.target.closest('.bk2-rp-item');
+    if (row) row.classList.remove('is-dragging');
+    // Remove any leftover drag-over highlights
+    document.querySelectorAll('.bk2-slot--drop.is-drag-over').forEach(function (el) {
+      el.classList.remove('is-drag-over');
+    });
+  });
+
+  // dragover/dragenter on empty slots — must preventDefault to mark
+  // the slot as a valid drop target (browser default is to refuse).
+  document.addEventListener('dragover', function (e) {
+    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
+    if (!slot) return;
+    e.preventDefault();
+    e.stopPropagation();
+    try { e.dataTransfer.dropEffect = 'copy'; } catch (err) {}
+    slot.classList.add('is-drag-over');
+  });
+  document.addEventListener('dragleave', function (e) {
+    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
+    if (!slot) return;
+    // Only un-highlight when leaving the slot entirely.
+    if (!slot.contains(e.relatedTarget)) slot.classList.remove('is-drag-over');
+  });
+
+  document.addEventListener('drop', function (e) {
+    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
+    if (!slot) return;
+    e.preventDefault();
+    e.stopPropagation();
+    slot.classList.remove('is-drag-over');
+
+    var personId = '';
+    try { personId = e.dataTransfer.getData('application/x-bk2-person') || ''; } catch (err) {}
+    if (!personId) {
+      // Some browsers (Safari) only expose text/plain for unknown types
+      try {
+        var fallback = e.dataTransfer.getData('text/plain') || '';
+        // Only accept fallback if it's a numeric id (resource rows set
+        // text/plain to the name, not the id, so this is rare).
+        if (/^\d+$/.test(fallback)) personId = fallback;
+      } catch (err) {}
+    }
+    if (!personId) return;
+
+    var bookingId = slot.getAttribute('data-booking-id');
+    var role = slot.getAttribute('data-role-on-site') || '';
+    if (!bookingId) return;
+
+    // Optimistic UI — show a "saving" state on the slot while the
+    // request is in flight, then reload to pick up the new slot state.
+    slot.classList.add('is-saving');
+    var body = new URLSearchParams();
+    body.append('crew_member_id', personId);
+    body.append('role_on_site', role);
+    if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
+
+    fetch('/bookings/' + encodeURIComponent(bookingId) + '/crew', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRF-Token': CSRF_TOKEN || '',
+      },
+      body: body,
+      credentials: 'same-origin',
+    }).then(function (r) {
+      return r.json().catch(function () { return { ok: r.ok }; }).then(function (j) {
+        return { ok: r.ok, status: r.status, json: j };
+      });
+    }).then(function (result) {
+      slot.classList.remove('is-saving');
+      if (result.ok && (!result.json || result.json.ok !== false)) {
+        // Reload to refresh the board with the new allocation.
+        location.reload();
+      } else {
+        var msg = (result.json && result.json.error) || ('Could not assign worker (HTTP ' + result.status + ')');
+        alert(msg);
+      }
+    }).catch(function () {
+      slot.classList.remove('is-saving');
+      alert('Could not assign worker — network error.');
+    });
+  });
 })();
 </script>
+
+<style>
+  /* Drag-drop visual states — slot lights up brand-blue when a
+     worker row is over it, dims while the assign request is in
+     flight, and the source row gets a subtle ghost effect. */
+  .bk2-rp-item.is-dragging { opacity: 0.5; }
+  .bk2-slot--drop { transition: border-color 120ms ease, background 120ms ease, color 120ms ease; }
+  .bk2-slot--drop.is-drag-over {
+    border-color: #2B7FFF !important;
+    background: rgba(43,127,255,0.10) !important;
+    color: #2B7FFF !important;
+  }
+  .bk2-slot--drop.is-saving {
+    opacity: 0.55;
+    cursor: progress;
+  }
+  :root[data-theme="light"] body.dark-glass .bk2-slot--drop.is-drag-over {
+    background: #EFF6FF !important;
+    border-color: #2B7FFF !important;
+    color: #1D4ED8 !important;
+  }
+</style>
