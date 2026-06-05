@@ -14,9 +14,10 @@
       address   — optional address string used to build a Google/Apple
                   Maps direction link below the map.
 
-    Loads Leaflet 1.9 from unpkg + OpenStreetMap tiles. CSS/JS are
-    loaded once per page even if the partial is included multiple
-    times, via a guard on window.L.
+    Loads Leaflet 1.9 from unpkg + CARTO basemaps (Positron in light,
+    Dark Matter in dark) so the map stays visually quiet and matches
+    the rest of the dashboard. CSS/JS are loaded once per page even if
+    the partial is included multiple times.
   */
   var _mapId    = (typeof mapId    !== 'undefined' && mapId)    ? mapId    : ('leaflet-map-' + Math.random().toString(36).slice(2, 8));
   var _zoom     = (typeof zoom     !== 'undefined' && zoom)     ? zoom     : 15;
@@ -30,7 +31,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
-<div id="<%= _mapId %>" style="height: <%= _height %>; width: 100%; border-radius: 12px; overflow: hidden; border: 1px solid #E5E7EB; z-index: 0;" role="img" aria-label="Map"></div>
+<div id="<%= _mapId %>" class="atomis-map" style="height: <%= _height %>;" role="img" aria-label="Map"></div>
 
 <% if (_address || (_lat && _lng)) { %>
   <%
@@ -48,6 +49,111 @@
     </a>
   </div>
 <% } %>
+
+<style>
+  /* Atomis map shell — softer rounded corners, subtle shadow, theme-
+     aware border. The dashed grid + thick borders from raw Leaflet
+     are replaced with a quieter container that matches the rest of
+     the cards on the page. */
+  .atomis-map {
+    width: 100%;
+    border-radius: 14px;
+    overflow: hidden;
+    border: 1px solid #E5E7EB;
+    background: #F1F5F9;
+    box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+    z-index: 0;
+  }
+  :root[data-theme="dark"] .atomis-map {
+    border-color: rgba(255,255,255,0.08);
+    background: #0F1115;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04);
+  }
+  /* Leaflet zoom controls — tighter, rounded, softer shadow */
+  .atomis-map .leaflet-control-zoom {
+    border: 0 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 2px 8px rgba(15,23,42,0.12) !important;
+    overflow: hidden;
+    margin: 12px !important;
+  }
+  .atomis-map .leaflet-control-zoom a {
+    width: 30px !important;
+    height: 30px !important;
+    line-height: 30px !important;
+    background: #fff !important;
+    color: #475569 !important;
+    font-weight: 600;
+    border-bottom: 1px solid #F1F5F9 !important;
+    transition: background 120ms ease, color 120ms ease;
+  }
+  .atomis-map .leaflet-control-zoom a:last-child { border-bottom: 0 !important; }
+  .atomis-map .leaflet-control-zoom a:hover { background: #F8FAFC !important; color: #0F172A !important; }
+  :root[data-theme="dark"] .atomis-map .leaflet-control-zoom { box-shadow: 0 2px 8px rgba(0,0,0,0.5) !important; }
+  :root[data-theme="dark"] .atomis-map .leaflet-control-zoom a {
+    background: #1A1D24 !important;
+    color: rgba(255,255,255,0.78) !important;
+    border-bottom-color: rgba(255,255,255,0.06) !important;
+  }
+  :root[data-theme="dark"] .atomis-map .leaflet-control-zoom a:hover {
+    background: #22262F !important;
+    color: #fff !important;
+  }
+  /* Attribution — quieter and pinned to the corner */
+  .atomis-map .leaflet-control-attribution {
+    background: rgba(255,255,255,0.85) !important;
+    color: #64748B !important;
+    font-size: 10px !important;
+    padding: 1px 6px !important;
+    border-radius: 6px 0 0 0;
+  }
+  .atomis-map .leaflet-control-attribution a { color: #2B7FFF !important; }
+  :root[data-theme="dark"] .atomis-map .leaflet-control-attribution {
+    background: rgba(15,17,21,0.85) !important;
+    color: rgba(255,255,255,0.55) !important;
+  }
+  :root[data-theme="dark"] .atomis-map .leaflet-control-attribution a { color: #60A5FA !important; }
+  /* Popup polish */
+  .atomis-map .leaflet-popup-content-wrapper {
+    border-radius: 10px !important;
+    box-shadow: 0 6px 20px rgba(15,23,42,0.18) !important;
+    border: 1px solid rgba(15,23,42,0.06);
+  }
+  .atomis-map .leaflet-popup-content { margin: 10px 14px !important; font-size: 12px; }
+  :root[data-theme="dark"] .atomis-map .leaflet-popup-content-wrapper {
+    background: #1A1D24 !important; color: #F5F5F7 !important;
+    border-color: rgba(255,255,255,0.08);
+  }
+  :root[data-theme="dark"] .atomis-map .leaflet-popup-tip {
+    background: #1A1D24 !important;
+  }
+  /* Custom dot marker — brand-colored circle with a soft halo */
+  .atomis-pin {
+    position: relative;
+    width: 22px; height: 22px;
+  }
+  .atomis-pin::before {
+    content: '';
+    position: absolute; inset: -6px;
+    border-radius: 9999px;
+    background: rgba(43,127,255,0.18);
+    animation: atomis-pin-pulse 2.4s ease-out infinite;
+  }
+  .atomis-pin::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 9999px;
+    background: var(--pin-c, #2B7FFF);
+    border: 3px solid #fff;
+    box-shadow: 0 2px 6px rgba(15,23,42,0.25);
+  }
+  :root[data-theme="dark"] .atomis-pin::after { border-color: #0F1115; box-shadow: 0 2px 8px rgba(0,0,0,0.6); }
+  @keyframes atomis-pin-pulse {
+    0%   { transform: scale(0.7); opacity: 0.9; }
+    70%  { transform: scale(1.4); opacity: 0;   }
+    100% { transform: scale(1.4); opacity: 0;   }
+  }
+</style>
 
 <script>
 (function () {
@@ -72,19 +178,53 @@
       zoom = 10;
     }
 
-    var map = L.map(el, { scrollWheelZoom: false }).setView(center, zoom);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-    }).addTo(map);
+    var map = L.map(el, { scrollWheelZoom: false, zoomControl: true, attributionControl: true }).setView(center, zoom);
+
+    // CARTO basemap — Positron for light, Dark Matter for dark. Free
+    // attribution-only license; high-DPI tiles via the _2x suffix so
+    // text stays crisp on retina screens.
+    var LIGHT_URL = 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png';
+    var DARK_URL  = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png';
+    var ATTRIB = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';
+
+    function currentTheme() {
+      return document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'light';
+    }
+    function makeTileLayer(theme) {
+      return L.tileLayer(theme === 'dark' ? DARK_URL : LIGHT_URL, {
+        maxZoom: 20,
+        attribution: ATTRIB,
+        subdomains: 'abcd',
+        detectRetina: true,
+      });
+    }
+
+    var tileLayer = makeTileLayer(currentTheme()).addTo(map);
+
+    // Swap tiles when the user toggles theme — custom event is
+    // dispatched by views/layout.ejs:toggleAtomisTheme().
+    document.addEventListener('atomis:theme', function () {
+      try { tileLayer.remove(); } catch (e) {}
+      tileLayer = makeTileLayer(currentTheme()).addTo(map);
+    });
+
+    function pinIcon(color) {
+      return L.divIcon({
+        className: '',
+        html: '<div class="atomis-pin" style="--pin-c:' + (color || '#2B7FFF') + ';"></div>',
+        iconSize: [22, 22],
+        iconAnchor: [11, 11],
+        popupAnchor: [0, -12],
+      });
+    }
 
     if (markers.length > 0) {
       var bounds = [];
       markers.forEach(function (m) {
         if (m.lat == null || m.lng == null) return;
-        var marker = L.marker([m.lat, m.lng]);
+        var marker = L.marker([m.lat, m.lng], { icon: pinIcon(m.color) });
         var html = '';
-        if (m.label) html += '<div style="font-weight:700;color:#0F172A;">' + m.label + '</div>';
+        if (m.label) html += '<div style="font-weight:700;">' + m.label + '</div>';
         if (m.href)  html += '<a href="' + m.href + '" style="color:#2B7FFF;font-size:12px;font-weight:600;">Open ›</a>';
         if (html) marker.bindPopup(html);
         marker.addTo(map);
@@ -94,7 +234,7 @@
         try { map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14 }); } catch (e) {}
       }
     } else if (lat != null && lng != null) {
-      L.marker([lat, lng]).addTo(map);
+      L.marker([lat, lng], { icon: pinIcon() }).addTo(map);
     }
 
     // Re-flow if the container size changes (sidebar collapse, tab
