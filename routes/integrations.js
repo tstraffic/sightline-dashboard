@@ -13,6 +13,9 @@ const {
   syncTraffioCrew,
   syncTraffioBookings,
   syncTraffioDockets,
+  syncTraffioBookingCrew,
+  syncTimesheetsFromDockets,
+  syncTraffioForms,
   testTraffioConnection,
 } = require('../middleware/traffio');
 
@@ -164,6 +167,18 @@ router.post('/:provider/sync', async (req, res) => {
       const toDate = req.body.to_date || '';
       const docketStats = await syncTraffioDockets('manual', fromDate, toDate);
       results.push(`Dockets: ${docketStats.created} dockets, ${docketStats.updated} person-lines, ${docketStats.failed} failed`);
+    }
+    if (syncType === 'all' || syncType === 'booking_crew') {
+      const s = await syncTraffioBookingCrew('manual', req.body.from_date || '', req.body.to_date || '');
+      results.push(`Crew allocations: ${s.created} created, ${s.updated} updated, ${s.skipped} skipped (no local job/crew), ${s.failed} failed`);
+    }
+    if (syncType === 'all' || syncType === 'timesheets') {
+      const s = syncTimesheetsFromDockets('manual');
+      results.push(`Timesheets: ${s.created} created, ${s.updated} updated, ${s.skipped} skipped, ${s.failed} failed`);
+    }
+    if (syncType === 'all' || syncType === 'forms') {
+      const s = await syncTraffioForms('manual', req.body.from_date || '', req.body.to_date || '');
+      results.push(`Forms: ${s.created} created, ${s.updated} updated, ${s.skipped} skipped, ${s.failed} failed`);
     }
 
     logActivity({
