@@ -136,7 +136,7 @@ app.use(flash());
 // All formatters delegate to lib/sydney.js so DST is handled automatically
 // (Australia/Sydney via Intl) and plain DATE columns aren't shifted across
 // midnight by tz conversion.
-const { formatDateAU, formatDateShortAU, formatDateTimeAU, formatTimeAU } = require('./lib/sydney');
+const { formatDateAU, formatDateShortAU, formatDateTimeAU, formatTimeAU, parseAsSydney } = require('./lib/sydney');
 
 // Flash messages + permission helper available in all templates
 app.use((req, res, next) => {
@@ -149,6 +149,7 @@ app.use((req, res, next) => {
   res.locals.formatDateShort = formatDateShortAU;
   res.locals.formatDateTime = formatDateTimeAU;
   res.locals.formatTime = formatTimeAU;
+  res.locals.parseAsSydney = parseAsSydney;
   next();
 });
 

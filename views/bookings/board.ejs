@@ -10,7 +10,12 @@
   // ============================================================
   function fmtTime(iso) {
     if (!iso) return '';
-    return new Date(iso).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Australia/Sydney' }).toLowerCase().replace(' ', '');
+    // parseAsSydney handles naive booking datetimes (`YYYY-MM-DDTHH:MM:SS`)
+    // by interpreting them as Sydney-local instead of UTC. Without this,
+    // SSR on Railway (UTC) shifted the displayed time by 10–11 hours.
+    var d = parseAsSydney(iso);
+    if (!d) return '';
+    return d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Australia/Sydney' }).toLowerCase().replace(' ', '');
   }
   function initials(name) {
     if (!name) return '?';

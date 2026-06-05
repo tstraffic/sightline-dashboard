@@ -1,8 +1,12 @@
 <% locals.currentPage = 'bookings' %>
 <%
   const b = booking;
-  const start = new Date(b.startDateTime);
-  const end = new Date(b.endDateTime);
+  // parseAsSydney handles naive booking datetimes ('YYYY-MM-DDTHH:MM:SS')
+  // by interpreting them as Sydney-local. Without it, SSR on Railway
+  // (UTC) shifted the displayed start/end times by 10-11 hours and
+  // ended up showing the END before the START.
+  const start = parseAsSydney(b.startDateTime) || new Date(b.startDateTime);
+  const end   = parseAsSydney(b.endDateTime)   || new Date(b.endDateTime);
   // All booking date/time displays are pinned to Sydney via these opts so
   // server (UTC) and user (Sydney) both render the same wall-clock time.
   const timeOpts = { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit', hour12: true };
