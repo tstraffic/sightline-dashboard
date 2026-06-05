@@ -11998,6 +11998,35 @@ function runMigrations(db) {
     }
   }
 
+  // Crew-to-vehicle assignment — which vehicle each crew member is
+  // riding in / driving. NULL = on the booking but not in any
+  // vehicle (e.g. straight-to-site walking). Drives the bookings-
+  // board drag-drop of workers between utes. Backfilled to the
+  // first vehicle of each booking so existing rows continue to
+  // render "in the ute" by default.
+  if (!isMigrationApplied.get(256)) {
+    console.log('Running migration 256: booking_crew.assigned_vehicle_id');
+    try {
+      const cols = db.prepare("PRAGMA table_info(booking_crew)").all().map(c => c.name);
+      if (!cols.includes('assigned_vehicle_id')) {
+        // Soft FK — booking_vehicles row may be deleted while crew lingers.
+        db.exec("ALTER TABLE booking_crew ADD COLUMN assigned_vehicle_id INTEGER REFERENCES booking_vehicles(id) ON DELETE SET NULL");
+      }
+      db.exec(`
+        UPDATE booking_crew
+        SET assigned_vehicle_id = (
+          SELECT MIN(bv.id) FROM booking_vehicles bv WHERE bv.booking_id = booking_crew.booking_id
+        )
+        WHERE assigned_vehicle_id IS NULL
+          AND EXISTS (SELECT 1 FROM booking_vehicles bv2 WHERE bv2.booking_id = booking_crew.booking_id);
+      `);
+      recordMigration.run(256, 'booking_crew.assigned_vehicle_id + backfill to first vehicle');
+      console.log('Migration 256 applied');
+    } catch (e) {
+      console.error('Migration 256 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

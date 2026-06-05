@@ -475,37 +475,12 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       addons: [],
     });
   }
-  // Fill worker slots in assignment order across blocks.
-  let workerIdx = 0;
-  for (const c of (crewRows || [])) {
-    while (workerIdx < blocks.length) {
-      const blk = blocks[workerIdx];
-      const slot = blk.worker_slots.find(s => !s.filled);
-      if (slot) {
-        slot.filled = true;
-        slot.booking_crew_id = c.booking_crew_id;
-        slot.crew_member_id = c.crew_member_id;
-        slot.name = c.full_name;
-        slot.role = c.role_on_site || c.portal_role || c.role || 'traffic_controller';
-        slot.employment_status = c.employment_status || 'active';
-        slot.bc_status = c.bc_status || 'assigned';
-        slot.warnings = c.warnings || [];
-        slot.is_team_leader   = !!c.is_team_leader;
-        slot.is_first_aid     = !!c.is_first_aid;
-        slot.straight_to_site = !!c.straight_to_site;
-        slot.non_billable     = !!c.non_billable;
-        break;
-      }
-      workerIdx += 1;
-    }
-  }
-  // Fill vehicle slots in order across blocks (utes first), drop add-ons
-  // under the first block's vehicle for now. A row with empty name AND
-  // empty rego is treated as a placeholder (not filled) so the drop
-  // target still renders and the planner can complete it by dragging a
-  // vehicle from the resource panel. POST /:id/vehicles already detects
-  // and upgrades placeholder rows in place, so this doesn't create a
-  // duplicate booking_vehicles row.
+
+  // Assign vehicles to blocks FIRST so blocks know their vehicle_id
+  // before we slot workers in. A row with empty name AND empty rego
+  // is treated as a placeholder (not filled) so the drop target still
+  // renders and the planner can complete it by dragging a vehicle
+  // from the resource panel.
   const vehicles = (vehicleRows || []).slice();
   for (const blk of blocks) {
     const v = vehicles.shift();
@@ -520,15 +495,85 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
         role: v.vehicle_role || 'ute',
         driver_id: v.driver_id || null,
       };
-      // Mark whichever crew slot belongs to the driver. Used by the
-      // template + the popover so the Driver toggle reads as "on" for
-      // the right row.
-      if (v.driver_id) {
-        const driverSlot = blk.worker_slots.find(s => s.filled && s.crew_member_id == v.driver_id);
-        if (driverSlot) driverSlot.is_driver = true;
-      }
     }
   }
+
+  // Look-up: vehicle_id → block (used to place workers under the
+  // ute they were dragged onto).
+  const blockByVehicle = new Map();
+  for (const blk of blocks) {
+    if (blk.vehicle_slot.vehicle_id) blockByVehicle.set(blk.vehicle_slot.vehicle_id, blk);
+  }
+
+  function fillSlot(slot, c) {
+    slot.filled = true;
+    slot.booking_crew_id = c.booking_crew_id;
+    slot.crew_member_id = c.crew_member_id;
+    slot.name = c.full_name;
+    slot.role = c.role_on_site || c.portal_role || c.role || 'traffic_controller';
+    slot.employment_status = c.employment_status || 'active';
+    slot.bc_status = c.bc_status || 'assigned';
+    slot.warnings = c.warnings || [];
+    slot.is_team_leader   = !!c.is_team_leader;
+    slot.is_first_aid     = !!c.is_first_aid;
+    slot.straight_to_site = !!c.straight_to_site;
+    slot.non_billable     = !!c.non_billable;
+    slot.assigned_vehicle_id = c.assigned_vehicle_id || null;
+  }
+
+  // Two-pass worker placement:
+  //   pass 1 — workers with assigned_vehicle_id matching a block's
+  //            vehicle go into that block's first empty slot.
+  //   pass 2 — remaining workers (no assignment OR vehicle no longer
+  //            present) fill remaining slots in order. Truly
+  //            unassigned crew that couldn't fit anywhere collect
+  //            into the unassigned pool.
+  const unassigned = [];
+  const remaining = [];
+  for (const c of (crewRows || [])) {
+    if (c.assigned_vehicle_id && blockByVehicle.has(c.assigned_vehicle_id)) {
+      const blk = blockByVehicle.get(c.assigned_vehicle_id);
+      const slot = blk.worker_slots.find(s => !s.filled);
+      if (slot) { fillSlot(slot, c); continue; }
+      // overflow — fall through
+    }
+    if (c.assigned_vehicle_id == null) {
+      // Workers explicitly with no vehicle assignment. If the booking
+      // has any vehicles, they go to the "Unassigned" pool. If the
+      // booking has NO vehicles, they go into block slots in order.
+      if (blockByVehicle.size > 0) { unassigned.push(c); continue; }
+    }
+    remaining.push(c);
+  }
+  let workerIdx = 0;
+  for (const c of remaining) {
+    while (workerIdx < blocks.length) {
+      const blk = blocks[workerIdx];
+      const slot = blk.worker_slots.find(s => !s.filled);
+      if (slot) { fillSlot(slot, c); break; }
+      workerIdx += 1;
+    }
+    if (workerIdx >= blocks.length) unassigned.push(c);
+  }
+
+  // Mark whichever crew slot belongs to the driver of each vehicle.
+  for (const blk of blocks) {
+    const v = blk.vehicle_slot;
+    if (v && v.driver_id) {
+      const driverSlot = blk.worker_slots.find(s => s.filled && s.crew_member_id == v.driver_id);
+      if (driverSlot) driverSlot.is_driver = true;
+    }
+  }
+
+  // Attach unassigned pool to the blocks array so the caller can read
+  // it via `crew_blocks.unassigned`. Keeps the return type backwards-
+  // compatible (still an array) without forcing every caller to use
+  // an object shape.
+  blocks.unassigned = unassigned.map(c => {
+    const slot = { filled: true };
+    fillSlot(slot, c);
+    return slot;
+  });
   // Stragglers (extra vehicles beyond what blocks needed) collect on the
   // first block as "extras" — render them at the bottom of that block.
   if (vehicles.length && blocks.length) {
@@ -588,7 +633,7 @@ router.get('/', (req, res) => {
     const placeholders = bookingIds.map(() => '?').join(',');
     const crewRows = db.prepare(`
       SELECT bc.id AS booking_crew_id, bc.booking_id, bc.crew_member_id, bc.status AS bc_status, bc.role_on_site,
-        bc.is_team_leader, bc.is_first_aid, bc.straight_to_site, bc.non_billable,
+        bc.is_team_leader, bc.is_first_aid, bc.straight_to_site, bc.non_billable, bc.assigned_vehicle_id,
         cm.full_name, cm.role, cm.portal_role,
         COALESCE(e.employment_status, 'active') AS employment_status
       FROM booking_crew bc
@@ -1438,7 +1483,13 @@ router.post('/:id/crew', (req, res) => {
     }
   }
 
-  db.prepare("INSERT INTO booking_crew (booking_id, crew_member_id, role_on_site, status) VALUES (?, ?, ?, 'assigned')").run(req.params.id, crew_member_id, role_on_site || '');
+  // Auto-assign to the booking's first vehicle so new crew render "in the
+  // ute" by default. The planner can drag them out via the bookings board
+  // if they're actually not riding in it.
+  const defaultVehicle = db.prepare("SELECT id FROM booking_vehicles WHERE booking_id = ? ORDER BY id LIMIT 1").get(req.params.id);
+  const defaultVehicleId = defaultVehicle ? defaultVehicle.id : null;
+  db.prepare("INSERT INTO booking_crew (booking_id, crew_member_id, role_on_site, status, assigned_vehicle_id) VALUES (?, ?, ?, 'assigned', ?)")
+    .run(req.params.id, crew_member_id, role_on_site || '', defaultVehicleId);
 
   // Auto-create crew_allocation so the worker sees this in their portal
   if (thisBooking && thisBooking.start_datetime) {
@@ -1490,6 +1541,37 @@ router.post('/:id/crew/:crewId/flag', (req, res) => {
   const next = row.val ? 0 : 1;
   db.prepare("UPDATE booking_crew SET " + col + " = ? WHERE id = ?").run(next, req.params.crewId);
   if (isJson) return res.json({ ok: true, flag: flag, value: next });
+  res.redirect('/bookings/' + req.params.id);
+});
+
+// POST /:id/crew/:crewId/assign-vehicle — Set (or clear with empty)
+// booking_crew.assigned_vehicle_id. Used by the bookings-board drag-drop
+// when a worker is dropped onto a vehicle slot (assign) or into the
+// crew block's "unassigned" zone (clear).
+router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const row = db.prepare("SELECT id FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, req.params.id);
+  if (!row) {
+    if (isJson) return res.status(404).json({ error: 'Crew row not found' });
+    req.flash('error', 'Crew row not found.'); return res.redirect('/bookings/' + req.params.id);
+  }
+  const raw = req.body.vehicle_id;
+  let vehicleId = null;
+  if (raw !== undefined && raw !== '' && raw !== null && raw !== '0') {
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      // Verify the vehicle belongs to this booking.
+      const ok = db.prepare("SELECT 1 FROM booking_vehicles WHERE id = ? AND booking_id = ?").get(parsed, req.params.id);
+      if (!ok) {
+        if (isJson) return res.status(400).json({ error: "Vehicle isn't on this booking" });
+        req.flash('error', 'Vehicle is not on this booking.'); return res.redirect('/bookings/' + req.params.id);
+      }
+      vehicleId = parsed;
+    }
+  }
+  db.prepare("UPDATE booking_crew SET assigned_vehicle_id = ? WHERE id = ?").run(vehicleId, req.params.crewId);
+  if (isJson) return res.json({ ok: true, assigned_vehicle_id: vehicleId });
   res.redirect('/bookings/' + req.params.id);
 });
 

@@ -320,9 +320,14 @@
                       </div>
 
                       <!-- Vehicle slot rendered FIRST so workers visually sit
-                           "under" the ute they're riding in. -->
+                           "under" the ute they're riding in. The filled
+                           vehicle slot is ALSO a drop target for workers —
+                           dropping a worker on it sets their
+                           assigned_vehicle_id, moving them under that ute. -->
                       <% if (hasVehicle) { %>
-                        <div class="bk2-veh-slot">
+                        <div class="bk2-veh-slot bk2-slot--drop bk2-slot--drop-veh-assign"
+                             data-booking-id="<%= b.id %>"
+                             data-vehicle-id="<%= blk.vehicle_slot.vehicle_id %>">
                           <span class="bk2-veh-tag"><%= (blk.vehicle_slot.role || 'ute').toUpperCase().slice(0,3) %></span>
                           <span class="bk2-veh-slot-name"><%= blk.vehicle_slot.name || blk.vehicle_slot.registration || '(unnamed)' %></span>
                           <% if (blk.vehicle_slot.name && blk.vehicle_slot.registration) { %><span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8"><%= blk.vehicle_slot.registration %></span><% } %>
@@ -340,10 +345,13 @@
                       <% blk.worker_slots.forEach(function (slot) { %>
                         <% if (slot.filled) { %>
                           <div class="bk2-slot bk2-slot--filled bk2-slot--click<%= slot.is_driver ? ' is-driver' : '' %>"
+                               draggable="true"
+                               data-bk-crew-drag="1"
                                data-booking-id="<%= b.id %>"
                                data-booking-crew-id="<%= slot.booking_crew_id || '' %>"
                                data-crew-member-id="<%= slot.crew_member_id %>"
                                data-crew-name="<%= slot.name %>"
+                               data-assigned-vehicle-id="<%= slot.assigned_vehicle_id || '' %>"
                                data-flag-tl="<%= slot.is_team_leader ? '1' : '0' %>"
                                data-flag-fa="<%= slot.is_first_aid ? '1' : '0' %>"
                                data-flag-sts="<%= slot.straight_to_site ? '1' : '0' %>"
@@ -408,6 +416,48 @@
                       <% } %>
                     </div>
                   <% }); %>
+
+                  <!-- "Unassigned" pool — crew on the booking but not
+                       riding in any vehicle. Visible only when at
+                       least one worker has been explicitly dropped
+                       here; also acts as a drop target so the planner
+                       can drag a worker off a UTE. -->
+                  <%
+                    var unassigned = (b.crew_blocks && b.crew_blocks.unassigned) || [];
+                    var showUnassignedPool = unassigned.length > 0 || (b.crew_blocks || []).some(function (blk) { return blk.vehicle_slot && blk.vehicle_slot.vehicle_id; });
+                  %>
+                  <% if (showUnassignedPool) { %>
+                    <div class="bk2-unassigned bk2-slot--drop bk2-slot--drop-unassign"
+                         data-booking-id="<%= b.id %>">
+                      <div class="bk2-unassigned-head">
+                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                        <span><%= unassigned.length ? 'Not in any vehicle' : 'Drop here to take off the ute' %></span>
+                      </div>
+                      <% unassigned.forEach(function (slot) { %>
+                        <div class="bk2-slot bk2-slot--filled bk2-slot--click bk2-slot--unassigned"
+                             draggable="true"
+                             data-bk-crew-drag="1"
+                             data-booking-id="<%= b.id %>"
+                             data-booking-crew-id="<%= slot.booking_crew_id || '' %>"
+                             data-crew-member-id="<%= slot.crew_member_id %>"
+                             data-crew-name="<%= slot.name %>"
+                             data-assigned-vehicle-id=""
+                             data-flag-tl="<%= slot.is_team_leader ? '1' : '0' %>"
+                             data-flag-fa="<%= slot.is_first_aid ? '1' : '0' %>"
+                             data-flag-sts="<%= slot.straight_to_site ? '1' : '0' %>"
+                             data-flag-nb="<%= slot.non_billable ? '1' : '0' %>"
+                             data-flag-driver="0">
+                          <span class="bk2-slot-avatar"><%= initials(slot.name) %></span>
+                          <span class="bk2-slot-role-tag"><%= roleAbbr(slot.role) %></span>
+                          <span class="bk2-slot-name"><%= slot.name %></span>
+                          <% if (slot.is_team_leader)   { %><span class="bk2-flag bk2-flag--tl"  title="Team Leader">TL</span><% } %>
+                          <% if (slot.is_first_aid)     { %><span class="bk2-flag bk2-flag--fa"  title="First Aid">FA</span><% } %>
+                          <% if (slot.straight_to_site) { %><span class="bk2-flag bk2-flag--sts" title="Straight to Site">STS</span><% } %>
+                          <% if (slot.non_billable)     { %><span class="bk2-flag bk2-flag--nb"  title="Non-Billable">NB</span><% } %>
+                        </div>
+                      <% }); %>
+                    </div>
+                  <% } %>
                 </div>
               <% } %>
 
@@ -2647,6 +2697,102 @@
           alert((j && j.error) || 'Could not remove.');
         }
       }).catch(function () { alert('Could not remove — network error.'); });
+  }
+
+  // ==========================================================
+  //  CREW SLOT DRAG — pick up a filled worker slot and drop it
+  //  onto a vehicle (assign to that ute) or onto the
+  //  "Unassigned" zone (clear assignment). Different MIME type
+  //  from the resource-panel drag so the two drop handlers
+  //  don't get confused.
+  // ==========================================================
+  document.addEventListener('dragstart', function (e) {
+    var src = e.target && e.target.closest && e.target.closest('[data-bk-crew-drag="1"]');
+    if (!src) return;
+    var bookingCrewId = src.getAttribute('data-booking-crew-id');
+    var bookingId     = src.getAttribute('data-booking-id');
+    var crewName      = src.getAttribute('data-crew-name') || '';
+    if (!bookingCrewId || !bookingId) return;
+    try {
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('application/x-bk2-crew-move', JSON.stringify({
+        booking_id: bookingId,
+        booking_crew_id: bookingCrewId,
+        crew_name: crewName,
+      }));
+      e.dataTransfer.setData('text/plain', crewName);
+    } catch (err) {}
+    src.classList.add('is-dragging');
+  });
+  document.addEventListener('dragend', function (e) {
+    var src = e.target && e.target.closest && e.target.closest('[data-bk-crew-drag="1"]');
+    if (src) src.classList.remove('is-dragging');
+  });
+
+  // Dragover/leave/drop for the two new crew-targeted zones (vehicle
+  // assignment + unassigned pool). These share the existing
+  // .bk2-slot--drop highlight machinery from the resource-panel drop.
+  document.addEventListener('dragover', function (e) {
+    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop-veh-assign, .bk2-slot--drop-unassign');
+    if (!slot) return;
+    // Only highlight if the active drag is a crew-move (not a person
+    // from the resource panel and not a vehicle).
+    var types = e.dataTransfer && e.dataTransfer.types;
+    if (types && types.length && Array.prototype.indexOf.call(types, 'application/x-bk2-crew-move') === -1) return;
+    e.preventDefault();
+    e.stopPropagation();
+    try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
+    slot.classList.add('is-drag-over');
+  });
+  document.addEventListener('drop', function (e) {
+    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop-veh-assign, .bk2-slot--drop-unassign');
+    if (!slot) return;
+    var payloadStr = '';
+    try { payloadStr = e.dataTransfer.getData('application/x-bk2-crew-move') || ''; } catch (err) {}
+    if (!payloadStr) return; // not a crew-move drag — let the resource-panel handler take it
+    e.preventDefault();
+    e.stopPropagation();
+    slot.classList.remove('is-drag-over');
+    var payload;
+    try { payload = JSON.parse(payloadStr); } catch (err) { return; }
+    if (!payload || !payload.booking_crew_id || !payload.booking_id) return;
+    // Server expects the drop's booking to match the worker's booking
+    // (we don't support cross-booking moves yet).
+    var slotBookingId = slot.getAttribute('data-booking-id');
+    if (slotBookingId && slotBookingId !== payload.booking_id) {
+      alert('Workers can only be reassigned within the same booking.');
+      return;
+    }
+    var isAssign = slot.classList.contains('bk2-slot--drop-veh-assign');
+    var vehicleId = isAssign ? slot.getAttribute('data-vehicle-id') : '';
+    assignCrewToVehicle(payload, vehicleId);
+  });
+
+  function assignCrewToVehicle(payload, vehicleId) {
+    var body = new URLSearchParams();
+    if (vehicleId) body.append('vehicle_id', vehicleId);
+    if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
+    fetch('/bookings/' + encodeURIComponent(payload.booking_id) + '/crew/' + encodeURIComponent(payload.booking_crew_id) + '/assign-vehicle', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRF-Token': CSRF_TOKEN || '',
+      },
+      body: body,
+      credentials: 'same-origin',
+    }).then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }).then(function (j) { return { ok: r.ok, json: j }; }); })
+      .then(function (result) {
+        if (!result.ok || !result.json || result.json.ok === false) {
+          alert((result.json && result.json.error) || 'Could not move that worker.');
+          return;
+        }
+        // Soft reload to re-derive the layout. Could optimistically move
+        // the DOM node, but the group order + unassigned-pool visibility
+        // is non-trivial to mirror client-side; refresh is simpler and
+        // the network round-trip already happened.
+        location.reload();
+      }).catch(function () { alert('Could not move that worker — network error.'); });
   }
 })();
 </script>

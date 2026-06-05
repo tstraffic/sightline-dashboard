@@ -1827,3 +1827,49 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-pop-remove:hover { background: #FECACA; }
 :root[data-theme="dark"] .bk2-pop-remove { background: rgba(220,38,38,0.18); color: #FCA5A5; }
 :root[data-theme="dark"] .bk2-pop-remove:hover { background: rgba(220,38,38,0.30); color: #fff; }
+
+/* ============================================================
+   CREW DRAG-DROP — workers between vehicles + unassigned pool
+   ============================================================ */
+.bk2-slot[draggable="true"] { cursor: grab; }
+.bk2-slot[draggable="true"]:active { cursor: grabbing; }
+.bk2-slot.is-dragging { opacity: 0.45; transform: scale(0.98); }
+
+/* Filled vehicle slot doubles as a drop target — show a subtle
+   amber outline so the planner knows they can drop a worker on it. */
+.bk2-slot--drop-veh-assign { cursor: copy; }
+.bk2-slot--drop-veh-assign.is-drag-over {
+  outline: 2px dashed #F59E0B !important;
+  outline-offset: -2px;
+  background: rgba(245,158,11,0.15) !important;
+}
+
+/* Unassigned pool — a small dashed-border zone below the crews. */
+.bk2-unassigned {
+  margin-top: 8px;
+  padding: 8px 10px 6px;
+  border: 1.5px dashed rgba(255,255,255,0.12);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+}
+:root[data-theme="light"] .bk2-unassigned {
+  border-color: #CBD5E1;
+  background: #F8FAFC;
+}
+.bk2-unassigned-head {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase; color: #94A3B8;
+  margin-bottom: 6px;
+}
+:root[data-theme="light"] .bk2-unassigned-head { color: #64748B; }
+.bk2-unassigned.is-drag-over {
+  border-color: #2B7FFF !important;
+  background: rgba(43,127,255,0.10) !important;
+}
+:root[data-theme="light"] .bk2-unassigned.is-drag-over {
+  background: #EFF6FF !important;
+}
+.bk2-slot--unassigned {
+  opacity: 0.92;
+}
