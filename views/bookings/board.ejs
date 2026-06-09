@@ -274,6 +274,7 @@
                 <span><%= statusLabel(b.status) %></span>
                 <% if (b.is_emergency) { %><span class="bk2-tag">EMERGENCY</span><% } %>
                 <% if (b.is_callout) { %><span class="bk2-tag">CALLOUT</span><% } %>
+                <% if (b.source === 'traffio') { %><span class="bk2-tag">TRAFFIO</span><% } %>
               </span>
               <span class="bk2-banner-meta">
                 #<%= b.booking_number || b.id %>

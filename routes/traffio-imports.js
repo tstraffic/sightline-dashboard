@@ -125,7 +125,7 @@ router.post('/project/:projectId/confirm', requirePermission(PERM), (req, res) =
   const db = getDb();
   const projectId = String(req.params.projectId);
   const mode = req.body.mode === 'new' ? 'new' : 'existing';
-  const shifts = db.prepare(`
+  let shifts = db.prepare(`
     SELECT * FROM traffio_imports WHERE status = 'pending' AND project_id = ?
     ORDER BY event_date IS NULL, event_date ASC
   `).all(projectId);
@@ -134,7 +134,21 @@ router.post('/project/:projectId/confirm', requirePermission(PERM), (req, res) =
     return res.redirect('/traffio-imports');
   }
 
+  // Restrict to the shifts the user ticked on the reconcile screen. The
+  // checkboxes post `shift_ids` — one value (string) or many (array). Absent
+  // means an old form / no JS, so fall back to all pending shifts.
+  const rawIds = req.body.shift_ids;
+  if (rawIds != null) {
+    const wanted = new Set((Array.isArray(rawIds) ? rawIds : [rawIds]).map(String));
+    shifts = shifts.filter(s => wanted.has(String(s.id)));
+    if (!shifts.length) {
+      req.flash('error', 'Select at least one shift to reconcile.');
+      return res.redirect('/traffio-imports/project/' + encodeURIComponent(projectId));
+    }
+  }
+
   let done = 0;
+  let mappedJobId = null;
   try {
     const tx = db.transaction(() => {
       let jobId;
@@ -183,6 +197,7 @@ router.post('/project/:projectId/confirm', requirePermission(PERM), (req, res) =
         upd.run(mode === 'existing' ? jobId : null, createdJobId, req.session.user.id, s.id);
         done++;
       }
+      mappedJobId = jobId;
     });
     tx();
 
@@ -192,12 +207,15 @@ router.post('/project/:projectId/confirm', requirePermission(PERM), (req, res) =
       details: `Reconciled ${done} shift(s) of Traffio project ${projectId} → ${mode === 'new' ? 'new job' : 'existing job'}`,
       ip: req.ip,
     });
-    req.flash('success', `Reconciled ${done} shift${done === 1 ? '' : 's'} for the project. Future shifts of this project will now auto-match.`);
+    req.flash('success', `Reconciled ${done} shift${done === 1 ? '' : 's'} for the project — bookings created on the job below. Future shifts of this project will now auto-match.`);
   } catch (err) {
     req.flash('error', err.message || 'Could not reconcile this project.');
     return res.redirect('/traffio-imports/project/' + encodeURIComponent(projectId));
   }
 
+  // Land on the job we just mapped to, on its Bookings tab, so the user sees
+  // the bookings they created (the reconciliation queue hid them otherwise).
+  if (mappedJobId) return res.redirect('/jobs/' + mappedJobId + '#bookings');
   res.redirect('/traffio-imports');
 });
 

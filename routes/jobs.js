@@ -327,6 +327,23 @@ router.get('/:id', (req, res) => {
     WHERE ts.job_id = ? ORDER BY ts.work_date DESC LIMIT 50
   `).all(job.id);
 
+  // Bookings (shifts) for this job — all dates. Surfaces Traffio-reconciled
+  // bookings (and any created manually against the job), which otherwise only
+  // show on the single-day board. Defensive: bookings table may be absent on
+  // a stale deploy.
+  let bookings = [];
+  try {
+    bookings = db.prepare(`
+      SELECT b.id, b.booking_number, b.title, b.status, b.start_datetime, b.end_datetime,
+        b.site_address, b.suburb, b.source,
+        (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id) AS crew_count
+      FROM bookings b
+      WHERE b.job_id = ? AND b.deleted_at IS NULL
+      ORDER BY b.start_datetime DESC
+      LIMIT 500
+    `).all(job.id);
+  } catch (e) { /* bookings table missing on stale deploy */ }
+
   // Budget for this job
   let budget = db.prepare(`SELECT * FROM job_budgets WHERE job_id = ?`).get(job.id);
   // Auto-create budget if none exists
@@ -579,7 +596,7 @@ router.get('/:id', (req, res) => {
   res.render('jobs/show', {
     title: job.job_number,
     job, tasks, complianceItems, subPlansByParent, complianceDocs, deliveryDocs, accountsDocs,
-    incidents, contacts, timesheets, budget, costEntries, totalSpend,
+    incidents, contacts, timesheets, bookings, budget, costEntries, totalSpend,
     complianceCosts, equipmentCosts,
     equipmentAssignments, hireDockets, trafficPlans, chatThreadId, diaryEntries, tgsPlans,
     complianceTgsItems, allUsers, diaryAttachments, chatMembers,
