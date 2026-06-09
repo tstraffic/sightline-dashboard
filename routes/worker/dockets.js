@@ -2,6 +2,15 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday } = require('../../lib/sydney');
+const { resolveShift, getCurrentDocket, getDocketCrew, completeShift, calcHours } = require('../../lib/shiftDocket');
+
+// Build the worker-facing sign URL for a resolved shift.
+function shiftUrl(shift) {
+  if (!shift) return '/w/dockets';
+  return shift.type === 'booking'
+    ? '/w/dockets/shift/' + shift.bookingId
+    : '/w/dockets/shift/job/' + shift.jobId + '/' + shift.shiftDate;
+}
 
 // GET /w/dockets — My Dockets
 router.get('/dockets', (req, res) => {
@@ -11,17 +20,23 @@ router.get('/dockets', (req, res) => {
   // Past dockets — LEFT JOIN jobs so booking-only allocations still show.
   // For those rows we COALESCE the booking title/number into client/job_number
   // so the UI doesn't render blanks.
+  // Recent shift dockets this worker is part of — as the signer, the legacy
+  // owner, or a named crew member. Only 'current' (non-superseded) headers.
   const dockets = db.prepare(`
-    SELECT ds.*, ca.allocation_date, ca.job_id,
+    SELECT ds.*,
+           COALESCE(ds.shift_date, ca.allocation_date) AS allocation_date,
            COALESCE(j.job_number, b.booking_number) AS job_number,
-           COALESCE(j.client, b.title) AS client
+           COALESCE(j.client, b.title) AS client,
+           (SELECT COUNT(*) FROM docket_crew dc WHERE dc.docket_id = ds.id) AS crew_count
     FROM docket_signatures ds
     LEFT JOIN crew_allocations ca ON ds.allocation_id = ca.id
-    LEFT JOIN jobs j ON ca.job_id = j.id
-    LEFT JOIN bookings b ON ca.booking_id = b.id
-    WHERE ds.crew_member_id = ?
+    LEFT JOIN bookings b ON COALESCE(ds.booking_id, ca.booking_id) = b.id
+    LEFT JOIN jobs j ON COALESCE(ds.shift_job_id, ca.job_id) = j.id
+    WHERE COALESCE(ds.status,'current') = 'current'
+      AND (ds.signed_by_crew_id = ? OR ds.crew_member_id = ?
+           OR EXISTS (SELECT 1 FROM docket_crew dc WHERE dc.docket_id = ds.id AND dc.crew_member_id = ?))
     ORDER BY ds.signed_at DESC LIMIT 30
-  `).all(worker.id);
+  `).all(worker.id, worker.id, worker.id);
 
   const today = sydneyToday();
 
@@ -75,207 +90,223 @@ router.get('/dockets', (req, res) => {
 
   const allTodayShifts = todaysShifts.concat(bookingFallback);
 
-  // Which of today's allocations are already signed?
-  const signedAllocIds = new Set(dockets.filter(d => d.allocation_date === today).map(d => d.allocation_id));
-  const unsignedShifts = allTodayShifts.filter(s => s.source === 'booking' || !signedAllocIds.has(s.id));
-  const signedShifts   = allTodayShifts.filter(s => s.source === 'allocation' && signedAllocIds.has(s.id));
+  // One docket per shift now: resolve each of today's shifts to its shift key,
+  // attach the sign URL, and mark it signed if a current shift docket exists.
+  // De-dupe so multiple allocations on the same booking collapse to one row.
+  const seenKeys = new Set();
+  const decorated = [];
+  for (const s of allTodayShifts) {
+    const shift = s.booking_id
+      ? resolveShift(db, { bookingId: s.booking_id })
+      : resolveShift(db, { allocationId: s.id });
+    const key = shift
+      ? (shift.type === 'booking' ? 'b' + shift.bookingId : 'j' + shift.jobId + '|' + shift.shiftDate)
+      : 'a' + s.id;
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    const current = shift ? getCurrentDocket(db, shift) : null;
+    decorated.push({ ...s, href: shift ? shiftUrl(shift) : ('/w/dockets/sign/' + s.id), signed: !!current });
+  }
+  const unsignedShifts = decorated.filter(s => !s.signed);
+  const signedShifts   = decorated.filter(s => s.signed);
 
   res.render('worker/dockets', {
     title: 'Dockets',
     currentPage: 'forms',
     dockets,
-    todaysShifts: allTodayShifts,
+    todaysShifts: decorated,
     unsignedShifts,
     signedShifts,
     today,
   });
 });
 
-// GET /w/dockets/sign/:allocationId — Sign a docket
-router.get('/dockets/sign/:allocationId', (req, res) => {
+// ===========================================================================
+// Shift dockets — one docket per shift, covering the whole crew.
+// ===========================================================================
+
+// Render the sign page (editable form) or, if already signed, a read-only
+// locked view. One docket per shift can't be re-done from the portal.
+function renderShiftSign(req, res, shift) {
   const db = getDb();
-  const worker = req.session.worker;
+  const current = getCurrentDocket(db, shift);
+  const backUrl = shift.type === 'booking' ? ('/w/booking-shift/' + shift.bookingId + '?tab=forms') : '/w/dockets';
 
-  // LEFT JOIN both jobs and bookings — for booking-only allocations
-  // (job_id IS NULL) we COALESCE the booking title/number/address into
-  // the same fields the docket UI expects.
-  const allocation = db.prepare(`
-    SELECT ca.*,
-           COALESCE(j.job_number, b.booking_number) AS job_number,
-           COALESCE(j.job_name,   b.title)          AS job_name,
-           COALESCE(j.client,     b.title)          AS client,
-           COALESCE(j.site_address, b.site_address) AS site_address,
-           COALESCE(j.suburb,     b.suburb)         AS suburb
-    FROM crew_allocations ca
-    LEFT JOIN jobs j     ON ca.job_id = j.id
-    LEFT JOIN bookings b ON ca.booking_id = b.id
-    WHERE ca.id = ? AND ca.crew_member_id = ?
-  `).get(req.params.allocationId, worker.id);
-
-  if (!allocation) {
-    req.flash('error', 'Allocation not found.');
-    return res.redirect('/w/dockets');
-  }
-
-  // T&S crews don't use clock in/out — the docket itself is the source of
-  // truth for shift hours. Default prefill is the rostered start/end and a
-  // sensible 30-minute break which the worker can edit.
-  const prefillStart = allocation.start_time || '';
-  const prefillFinish = allocation.end_time || '';
-  const prefillBreakMinutes = 30;
-
-  res.render('worker/docket-sign', {
-    title: 'Sign Docket',
-    currentPage: 'forms',
-    allocation,
-    prefillStart,
-    prefillFinish,
-    prefillBreakMinutes,
-  });
-});
-
-// POST /w/dockets/sign/:allocationId — Submit signed docket
-router.post('/dockets/sign/:allocationId', (req, res) => {
-  const db = getDb();
-  const worker = req.session.worker;
-  const {
-    docket_type, client_name, signature_data, client_signature, client_signed_name,
-    notes, start_on_site, finish_on_site, break_minutes, travel_hours,
-    no_client_on_site, no_client_reason
-  } = req.body;
-  // Checkbox: present in body when ticked. Treat anything truthy as yes.
-  const noClient = no_client_on_site === '1' || no_client_on_site === 'on' || no_client_on_site === true;
-
-  const allocation = db.prepare('SELECT * FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(req.params.allocationId, worker.id);
-  if (!allocation) {
-    req.flash('error', 'Allocation not found.');
-    return res.redirect('/w/dockets');
-  }
-
-  // Server-side enforcement of the same required fields the UI flags. We
-  // can't trust the client alone — direct POSTs (or stale tabs) could skip
-  // validation. Bounce the worker back with an error message if anything
-  // mandatory is missing.
-  const missing = [];
-  if (!start_on_site)            missing.push('start time');
-  if (!finish_on_site)           missing.push('finish time');
-  if (!signature_data)           missing.push('your signature');
-  if (!noClient && !client_signature) missing.push('client signature (or tick "no client on site")');
-  if (missing.length) {
-    req.flash('error', 'Missing: ' + missing.join(', ') + '.');
-    return res.redirect('/w/dockets/sign/' + req.params.allocationId);
-  }
-
-  // Docket gating — two layers, matching the worker UI's split:
-  //
-  //   - REQUIRED: Risk Assessment & Toolbox + Team Leader Checklist must
-  //     both be filed before the docket can be signed. These run for
-  //     every shift regardless of role / vehicle.
-  //   - RECOMMENDED: Vehicle Pre-Start, TC Prestart Declaration, Post-
-  //     Shift Vehicle Checklist. Missing one of these triggers a
-  //     warning and bounces the worker back to /w/jobs/:id?tab=forms.
-  //     After two warnings the docket saves anyway so a stuck worker
-  //     (e.g. no vehicle on shift) isn't permanently blocked. The
-  //     session counter resets on a successful sign.
-  const REQUIRED_TYPES = ['risk_toolbox','team_leader'];
-  const RECOMMENDED_TYPES = ['vehicle_prestart','tc_prestart','post_shift_vehicle'];
-  const ALL_TYPES = [...REQUIRED_TYPES, ...RECOMMENDED_TYPES];
-  const FRIENDLY = {
-    vehicle_prestart: 'Vehicle Pre-Start',
-    risk_toolbox: 'Risk Assessment & Toolbox',
-    tc_prestart: 'TC Prestart Declaration',
-    team_leader: 'Team Leader Checklist',
-    post_shift_vehicle: 'Post-Shift Vehicle Checklist',
-  };
-  const submittedTypes = db.prepare(`
-    SELECT DISTINCT form_type FROM safety_forms
-    WHERE crew_member_id = ? AND allocation_id = ? AND form_type IN (${ALL_TYPES.map(() => '?').join(',')})
-  `).all(worker.id, allocation.id, ...ALL_TYPES).map(r => r.form_type);
-
-  const missingRequired = REQUIRED_TYPES.filter(t => !submittedTypes.includes(t));
-  if (missingRequired.length) {
-    req.flash('error',
-      'You can\'t sign the docket yet — these are required first: ' +
-      missingRequired.map(m => FRIENDLY[m]).join(', ') + '.');
-    return res.redirect('/w/jobs/' + allocation.id + '?tab=forms');
-  }
-
-  const missingRecommended = RECOMMENDED_TYPES.filter(t => !submittedTypes.includes(t));
-  if (missingRecommended.length) {
-    req.session.docketWarnings = req.session.docketWarnings || {};
-    const key = String(allocation.id);
-    const seen = req.session.docketWarnings[key] || 0;
-    if (seen < 2) {
-      req.session.docketWarnings[key] = seen + 1;
-      const left = 2 - seen;
-      req.flash('error',
-        'Heads up — these recommended checklists are missing: ' +
-        missingRecommended.map(m => FRIENDLY[m]).join(', ') + '. ' +
-        (left === 1
-          ? 'Tap "Sign & Submit" once more and the docket will save anyway.'
-          : `Tap "Sign & Submit" ${left} more times to confirm you don\'t need them, or fill them in now.`));
-      return res.redirect('/w/jobs/' + allocation.id + '?tab=forms');
-    }
-    console.warn('[dockets] forced-through with missing recommended', {
-      worker: worker.id, allocation: allocation.id, missing: missingRecommended,
+  if (current) {
+    const signer = current.signed_by_crew_id || current.crew_member_id
+      ? db.prepare('SELECT full_name FROM crew_members WHERE id = ?').get(current.signed_by_crew_id || current.crew_member_id)
+      : null;
+    return res.render('worker/docket-sign', {
+      title: 'Docket', currentPage: 'forms', shift, backUrl,
+      locked: true,
+      signActionUrl: shiftUrl(shift),
+      prefillStart: '', prefillFinish: '', prefillBreakMinutes: 30,
+      lockedDocket: {
+        signed_at: current.signed_at,
+        signed_by_name: signer ? signer.full_name : '',
+        client_name: current.client_name,
+        client_signed_name: current.client_signed_name,
+        no_client_on_site: current.no_client_on_site,
+        no_client_reason: current.no_client_reason,
+        signature_data: current.signature_data,
+        client_signature: current.client_signature,
+        notes: current.notes,
+        crew: getDocketCrew(db, current),
+      },
     });
   }
-  if (req.session.docketWarnings) delete req.session.docketWarnings[String(allocation.id)];
 
-  // Calculate total hours
-  let totalHours = 0;
-  if (start_on_site && finish_on_site) {
-    const [sh, sm] = start_on_site.split(':').map(Number);
-    const [fh, fm] = finish_on_site.split(':').map(Number);
-    const startMin = sh * 60 + sm;
-    const finishMin = fh * 60 + fm;
-    const workedMin = finishMin > startMin ? finishMin - startMin : (1440 - startMin) + finishMin;
-    const breakMin = parseInt(break_minutes) || 0;
-    totalHours = Math.max(0, (workedMin - breakMin) / 60);
-    totalHours = Math.round(totalHours * 100) / 100;
+  res.render('worker/docket-sign', {
+    title: 'Sign Docket', currentPage: 'forms', shift, backUrl,
+    locked: false, lockedDocket: null,
+    signActionUrl: shiftUrl(shift),
+    prefillStart: shift.startTime || '', prefillFinish: shift.endTime || '', prefillBreakMinutes: 30,
+  });
+}
+
+// The signing worker's own allocation for this shift (used for Job-Pack gating).
+function getSignerAllocation(db, workerId, shift) {
+  if (shift.type === 'booking') {
+    return db.prepare('SELECT * FROM crew_allocations WHERE booking_id = ? AND crew_member_id = ?').get(shift.bookingId, workerId);
+  }
+  return db.prepare('SELECT * FROM crew_allocations WHERE job_id = ? AND allocation_date = ? AND crew_member_id = ?').get(shift.jobId, shift.shiftDate, workerId);
+}
+
+function submitShiftDocket(req, res, shift) {
+  const db = getDb();
+  const worker = req.session.worker;
+  const backRedirect = shiftUrl(shift);
+
+  // Lock: never allow a second docket for the same shift from the portal.
+  if (getCurrentDocket(db, shift)) {
+    req.flash('error', 'This shift docket has already been signed.');
+    return res.redirect(backRedirect);
   }
 
-  // When the worker flagged "no client on site", clear any client signature data
-  // that might have been buffered on the form before the toggle was flipped, so
-  // we don't store a half-captured client signature alongside the no-client flag.
-  const finalClientSig = noClient ? null : (client_signature || null);
-  const finalClientName = noClient ? null : (client_signed_name || null);
-  const finalClientSignedAt = noClient ? null : (client_signature ? new Date().toISOString() : null);
+  const b = req.body;
+  const noClient = b.no_client_on_site === '1' || b.no_client_on_site === 'on' || b.no_client_on_site === true;
+  const crewInput = b.crew || {};
 
-  db.prepare(`
-    INSERT INTO docket_signatures (
-      allocation_id, crew_member_id, docket_type, client_name, signature_data,
-      client_signature, client_signed_name, client_signed_at,
-      notes, start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
-      no_client_on_site, no_client_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    allocation.id,
-    worker.id,
-    docket_type || 'daily_docket',
-    client_name || null,
-    signature_data || null,
-    finalClientSig,
-    finalClientName,
-    finalClientSignedAt,
-    notes || null,
-    start_on_site || null,
-    finish_on_site || null,
-    parseInt(break_minutes) || 0,
-    parseFloat(travel_hours) || 0,
-    totalHours,
-    noClient ? 1 : 0,
-    noClient ? (no_client_reason || '').trim() : ''
-  );
-
-  req.flash('success', 'Docket signed successfully.');
-
-  // Redirect back to job detail docket tab if came from there
-  const referer = req.get('Referer') || '';
-  if (referer.includes('/w/jobs/')) {
-    return res.redirect('/w/jobs/' + allocation.id + '?tab=docket');
+  // Build per-crew lines from the SHIFT crew (server-side source of truth),
+  // reading hours from the submitted form. Each crew member needs start+finish.
+  const lines = [];
+  const missingCrew = [];
+  for (const c of shift.crew) {
+    const row = crewInput['cm' + c.crew_member_id] || {};
+    const start = (row.start_on_site || '').trim();
+    const finish = (row.finish_on_site || '').trim();
+    if (!start || !finish) { missingCrew.push(c.name); continue; }
+    const breakMin = parseInt(row.break_minutes, 10) || 0;
+    const travel = parseFloat(row.travel_hours) || 0;
+    lines.push({
+      crew_member_id: c.crew_member_id, allocation_id: c.allocation_id, booking_crew_id: c.booking_crew_id,
+      name: c.name, role: c.role,
+      start_on_site: start, finish_on_site: finish, break_minutes: breakMin, travel_hours: travel,
+      total_hours: calcHours(start, finish, breakMin, travel),
+    });
   }
-  res.redirect('/w/dockets');
+
+  const missing = [];
+  if (!shift.crew.length) missing.push('crew on this shift');
+  if (missingCrew.length) missing.push('start/finish for ' + missingCrew.join(', '));
+  if (!b.signature_data) missing.push('your signature');
+  if (!noClient && !b.client_signature) missing.push('client signature (or tick "no client on site")');
+  if (missing.length) {
+    req.flash('error', 'Missing: ' + missing.join('; ') + '.');
+    return res.redirect(backRedirect);
+  }
+
+  // Job-Pack gating — preserve the existing "required: risk_toolbox +
+  // team_leader" rule, evaluated against the signing worker's allocation when
+  // one exists (booking shifts may not have lazily created it).
+  const signerAlloc = getSignerAllocation(db, worker.id, shift);
+  if (signerAlloc) {
+    const FRIENDLY = { risk_toolbox: 'Risk Assessment & Toolbox', team_leader: 'Team Leader Checklist' };
+    const submitted = db.prepare(`
+      SELECT DISTINCT form_type FROM safety_forms
+      WHERE crew_member_id = ? AND allocation_id = ? AND form_type IN ('risk_toolbox','team_leader')
+    `).all(worker.id, signerAlloc.id).map(r => r.form_type);
+    const missingRequired = ['risk_toolbox','team_leader'].filter(t => !submitted.includes(t));
+    if (missingRequired.length) {
+      req.flash('error', "You can't sign the docket yet — these are required first: " + missingRequired.map(m => FRIENDLY[m]).join(', ') + '.');
+      return res.redirect('/w/jobs/' + signerAlloc.id + '?tab=forms');
+    }
+  }
+
+  const finalClientSig = noClient ? null : (b.client_signature || null);
+  const finalClientName = noClient ? null : (b.client_signed_name || null);
+  const finalClientSignedAt = noClient ? null : (b.client_signature ? new Date().toISOString() : null);
+  const totalHours = Math.round(lines.reduce((s, l) => s + l.total_hours, 0) * 100) / 100;
+  const first = lines[0] || {};
+
+  const tx = db.transaction(() => {
+    const header = db.prepare(`
+      INSERT INTO docket_signatures (
+        allocation_id, crew_member_id, signed_by_crew_id, docket_type, client_name, signature_data,
+        client_signature, client_signed_name, client_signed_at, notes,
+        start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
+        no_client_on_site, no_client_reason,
+        status, version, source, booking_id, shift_job_id, shift_date, updated_at
+      ) VALUES (?, ?, ?, 'daily_docket', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'current', 1, 'worker', ?, ?, ?, datetime('now'))
+    `).run(
+      signerAlloc ? signerAlloc.id : null,
+      worker.id, worker.id,
+      b.client_name || null, b.signature_data || null,
+      finalClientSig, finalClientName, finalClientSignedAt, b.notes || null,
+      first.start_on_site || null, first.finish_on_site || null,
+      first.break_minutes || 0, first.travel_hours || 0, totalHours,
+      noClient ? 1 : 0, noClient ? (b.no_client_reason || '').trim() : '',
+      shift.bookingId, shift.jobId, shift.shiftDate
+    );
+    const docketId = header.lastInsertRowid;
+    const insLine = db.prepare(`
+      INSERT INTO docket_crew (docket_id, crew_member_id, allocation_id, booking_crew_id, name_snapshot, role_snapshot,
+        start_on_site, finish_on_site, break_minutes, travel_hours, total_hours)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    for (const l of lines) insLine.run(docketId, l.crew_member_id, l.allocation_id, l.booking_crew_id, l.name, l.role, l.start_on_site, l.finish_on_site, l.break_minutes, l.travel_hours, l.total_hours);
+    completeShift(db, shift);
+  });
+  tx();
+
+  req.flash('success', 'Docket signed — shift marked complete.');
+  res.redirect(backRedirect);
+}
+
+// Legacy per-person links resolve to the shift docket and redirect.
+router.get('/dockets/sign/:allocationId', (req, res) => {
+  const shift = resolveShift(getDb(), { allocationId: req.params.allocationId });
+  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  res.redirect(shiftUrl(shift));
+});
+router.post('/dockets/sign/:allocationId', (req, res) => {
+  const shift = resolveShift(getDb(), { allocationId: req.params.allocationId });
+  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  submitShiftDocket(req, res, shift);
+});
+
+// Job + date shift (no booking) — registered before the booking route.
+router.get('/dockets/shift/job/:jobId/:date', (req, res) => {
+  const shift = resolveShift(getDb(), { jobId: req.params.jobId, date: req.params.date });
+  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  renderShiftSign(req, res, shift);
+});
+router.post('/dockets/shift/job/:jobId/:date', (req, res) => {
+  const shift = resolveShift(getDb(), { jobId: req.params.jobId, date: req.params.date });
+  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  submitShiftDocket(req, res, shift);
+});
+
+// Booking shift.
+router.get('/dockets/shift/:bookingId', (req, res) => {
+  const shift = resolveShift(getDb(), { bookingId: req.params.bookingId });
+  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  renderShiftSign(req, res, shift);
+});
+router.post('/dockets/shift/:bookingId', (req, res) => {
+  const shift = resolveShift(getDb(), { bookingId: req.params.bookingId });
+  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  submitShiftDocket(req, res, shift);
 });
 
 module.exports = router;

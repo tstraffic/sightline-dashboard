@@ -304,7 +304,7 @@
          so a worker who tapped a checklist (which can swap their entry
          point between job-detail and booking-detail via the lazy-alloc
          redirect) sees the exact same UI on the way back in. -->
-    <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, docket: typeof docket !== 'undefined' ? docket : null }) %>
+    <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null }) %>
 
     <!-- Reporting -->
     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
@@ -430,18 +430,17 @@
         <p class="text-gray-500 font-medium text-sm">No docket signed yet</p>
         <p class="text-gray-400 text-xs mt-1">Sign off at the end of your shift</p>
         <% if (isToday || isFuture) { %>
-          <a href="/w/dockets/sign/<%= allocation.id %>" class="inline-block mt-4 px-6 py-3 bg-brand-600 text-white rounded-xl font-semibold text-sm active:bg-brand-700 transition" style="min-height:44px;">
+          <a href="<%= typeof docketSignUrl !== 'undefined' ? docketSignUrl : ('/w/dockets/sign/' + allocation.id) %>" class="inline-block mt-4 px-6 py-3 bg-brand-600 text-white rounded-xl font-semibold text-sm active:bg-brand-700 transition" style="min-height:44px;">
             Sign Docket
           </a>
         <% } %>
       </div>
     <% } %>
 
-    <% if (!docket && (isToday || isFuture)) { %>
-    <% } else if (docket && (isToday || isFuture)) { %>
-      <!-- Option to sign another docket -->
+    <% if (docket) { %>
+      <!-- One docket per shift — already signed, view-only. -->
       <div class="text-center">
-        <a href="/w/dockets/sign/<%= allocation.id %>" class="text-sm text-brand-600 font-medium">Sign another docket &rarr;</a>
+        <a href="<%= typeof docketSignUrl !== 'undefined' ? docketSignUrl : ('/w/dockets/sign/' + allocation.id) %>" class="text-sm text-brand-600 font-medium">View full docket &amp; crew hours &rarr;</a>
       </div>
     <% } %>
   </div>

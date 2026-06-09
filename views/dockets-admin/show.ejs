@@ -14,18 +14,40 @@
 %>
 
 <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
-  <div>
-    <a href="/dockets" class="text-sm text-brand-600 font-medium inline-flex items-center gap-1">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-      Back to dockets
-    </a>
-    <h1 class="mt-1 text-2xl font-bold text-gray-900">
-      Docket — <%= docket.crew_name || ('#' + docket.crew_member_id) %>
-    </h1>
-    <p class="text-sm text-gray-500">
-      Signed <%= new Date(docket.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', weekday:'short', day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) %>
-      <% if (docket.docket_type) { %> · <%= docket.docket_type.replace(/_/g, ' ') %><% } %>
-    </p>
+  <% var dstatus = docket.status || 'current'; %>
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <a href="/dockets" class="text-sm text-brand-600 font-medium inline-flex items-center gap-1">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back to dockets
+      </a>
+      <h1 class="mt-1 text-2xl font-bold text-gray-900 flex items-center gap-2 flex-wrap">
+        Docket — <%= docket.crew_name || ('#' + docket.crew_member_id) %>
+        <% if (dstatus === 'superseded') { %>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-500">Superseded (locked)</span>
+        <% } else if (docket.version && docket.version > 1) { %>
+          <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-blue-50 text-blue-700 ring-1 ring-blue-600/10">Adjustment · v<%= docket.version %></span>
+        <% } %>
+      </h1>
+      <p class="text-sm text-gray-500">
+        Signed <%= new Date(docket.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', weekday:'short', day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) %>
+        <% if (docket.docket_type) { %> · <%= docket.docket_type.replace(/_/g, ' ') %><% } %>
+        <% if (docket.source === 'admin') { %> · office adjustment<% } %>
+      </p>
+      <% if (parent) { %><p class="text-xs text-gray-500 mt-1">Adjusts <a href="/dockets/<%= parent.id %>" class="text-brand-700 hover:underline">docket #<%= parent.id %> (v<%= parent.version || 1 %>)</a></p><% } %>
+      <% if (child) { %><p class="text-xs text-gray-500 mt-1">Superseded by <a href="/dockets/<%= child.id %>" class="text-brand-700 hover:underline">docket #<%= child.id %> (v<%= child.version || 1 %>)</a></p><% } %>
+    </div>
+    <div class="flex items-center gap-2">
+      <% if (dstatus === 'current' && docket.source === 'admin') { %>
+        <a href="/dockets/<%= docket.id %>/edit" class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50">Edit</a>
+      <% } %>
+      <% if (dstatus === 'current') { %>
+        <form method="POST" action="/dockets/<%= docket.id %>/adjust" onsubmit="return confirm('Create an adjustment? This makes a new editable docket and marks the current one as superseded (kept for audit).');">
+          <%- include('../partials/csrf') %>
+          <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700">Adjust</button>
+        </form>
+      <% } %>
+    </div>
   </div>
 
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 grid grid-cols-1 sm:grid-cols-3 gap-4 text-sm">
@@ -51,16 +73,37 @@
     </div>
   </div>
 
-  <!-- Hours block -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-    <h2 class="text-sm font-semibold text-gray-900 mb-3">Hours</h2>
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-      <div><p class="text-[11px] text-gray-500 uppercase tracking-wide">Start on site</p><p class="font-medium text-gray-900"><%= docket.start_on_site || '—' %></p></div>
-      <div><p class="text-[11px] text-gray-500 uppercase tracking-wide">Finish on site</p><p class="font-medium text-gray-900"><%= docket.finish_on_site || '—' %></p></div>
-      <div><p class="text-[11px] text-gray-500 uppercase tracking-wide">Break (min)</p><p class="font-medium text-gray-900"><%= docket.break_minutes || 0 %></p></div>
-      <div><p class="text-[11px] text-gray-500 uppercase tracking-wide">Travel (h)</p><p class="font-medium text-gray-900"><%= docket.travel_hours || 0 %></p></div>
+  <!-- Crew & hours -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="flex items-baseline justify-between px-5 pt-4">
+      <h2 class="text-sm font-semibold text-gray-900">Crew &amp; hours</h2>
+      <% var manHours = crewLines.reduce(function(s,c){ return s + (c.total_hours||0); }, 0); %>
+      <span class="text-xs text-gray-500"><%= crewLines.length %> crew · <%= (Math.round(manHours*100)/100) %> man-hours</span>
     </div>
-    <div class="mt-3 inline-flex items-center px-3 py-1 rounded bg-brand-50 text-brand-800 text-xs font-bold">Total <%= docket.total_hours || 0 %> h</div>
+    <table class="w-full text-sm mt-2">
+      <thead class="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        <tr>
+          <th class="text-left px-5 py-2">Crew member</th>
+          <th class="text-left px-3 py-2">Start</th>
+          <th class="text-left px-3 py-2">Finish</th>
+          <th class="text-right px-3 py-2 hidden sm:table-cell">Break</th>
+          <th class="text-right px-3 py-2 hidden sm:table-cell">Travel</th>
+          <th class="text-right px-5 py-2">Total</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        <% crewLines.forEach(function (c) { %>
+          <tr>
+            <td class="px-5 py-2 font-medium text-gray-900"><%= c.name %><% if (c.role) { %> <span class="text-xs text-gray-400"><%= c.role %></span><% } %></td>
+            <td class="px-3 py-2 text-gray-700"><%= c.start_on_site || '—' %></td>
+            <td class="px-3 py-2 text-gray-700"><%= c.finish_on_site || '—' %></td>
+            <td class="px-3 py-2 text-right text-gray-700 hidden sm:table-cell"><%= c.break_minutes || 0 %>m</td>
+            <td class="px-3 py-2 text-right text-gray-700 hidden sm:table-cell"><%= c.travel_hours || 0 %>h</td>
+            <td class="px-5 py-2 text-right font-semibold text-gray-900 tabular-nums"><%= c.total_hours || 0 %>h</td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table>
   </div>
 
   <!-- Client + signatures -->

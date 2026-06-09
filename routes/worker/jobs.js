@@ -2,6 +2,16 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday, TZ: SYD_TZ } = require('../../lib/sydney');
+const { resolveShift, getCurrentDocket } = require('../../lib/shiftDocket');
+
+// Worker-facing sign/view URL for the shift an allocation belongs to.
+function docketUrlForAllocation(db, allocationId) {
+  const shift = resolveShift(db, { allocationId });
+  if (!shift) return '/w/dockets/sign/' + allocationId;
+  return shift.type === 'booking'
+    ? '/w/dockets/shift/' + shift.bookingId
+    : '/w/dockets/shift/job/' + shift.jobId + '/' + shift.shiftDate;
+}
 
 // GET /w/shifts — Alias, redirect to /w/jobs (preserving query params)
 router.get('/shifts', (req, res) => {
@@ -435,18 +445,18 @@ router.get('/jobs/:id', (req, res) => {
     return new Date(b.uploaded_at).getTime() - new Date(a.uploaded_at).getTime();
   });
 
-  // Get docket for this allocation
-  const docket = db.prepare(`
-    SELECT * FROM docket_signatures
-    WHERE crew_member_id = ? AND allocation_id = ?
-    ORDER BY signed_at DESC LIMIT 1
-  `).get(worker.id, allocation.id);
+  // Docket is per-shift now: load the current shift docket (covers the whole
+  // crew) for the shift this allocation belongs to.
+  const _shift = resolveShift(db, { allocationId: allocation.id });
+  const docket = _shift ? getCurrentDocket(db, _shift) : null;
+  const docketSignUrl = docketUrlForAllocation(db, allocation.id);
 
   res.render('worker/job-detail', {
     title: allocation.job_name || allocation.job_number,
     currentPage: 'shifts',
     tab,
     allocation,
+    docketSignUrl,
     otherCrew,
     supervisorPhone,
     formStatus,
@@ -669,10 +679,8 @@ router.get('/booking-shift/:bookingId', (req, res) => {
       const hit = subs.find(s => s.form_type === t);
       formStatus[t] = hit ? { id: hit.id, submitted_at: hit.submitted_at } : null;
     }
-    docket = db.prepare(`
-      SELECT id, signed_at, total_hours FROM docket_signatures
-      WHERE crew_member_id = ? AND allocation_id = ? ORDER BY signed_at DESC LIMIT 1
-    `).get(worker.id, allocation.id);
+    const _shiftD = resolveShift(db, { allocationId: allocation.id });
+    docket = _shiftD ? getCurrentDocket(db, _shiftD) : null;
 
     // Site documents — same shape as the allocation detail page so the view
     // can reuse the rendering. Job-level docs + booking-level docs merged
@@ -763,6 +771,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
     myStatus: myAssignment.status,
     startDay, startDate, startTime, endTime,
     allocation, formStatus, docket, jobDocuments,
+    docketSignUrl: '/w/dockets/shift/' + booking.id,
     myTasks, teamTasks,
   });
 });

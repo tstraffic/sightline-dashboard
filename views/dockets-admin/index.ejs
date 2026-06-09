@@ -33,9 +33,21 @@
       <input type="checkbox" name="no_client" value="1" <%= noClient ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-brand-600">
       No client on site
     </label>
+    <input type="hidden" name="show" value="<%= show %>">
     <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700">Apply</button>
-    <% if (search || since || docketType || noClient) { %><a href="/dockets" class="text-sm text-gray-500 hover:text-gray-700 ml-1">Clear</a><% } %>
+    <% if (search || since || docketType || noClient) { %><a href="/dockets?show=<%= show %>" class="text-sm text-gray-500 hover:text-gray-700 ml-1">Clear</a><% } %>
   </form>
+
+  <% function showLink(v, label) {
+       var q = new URLSearchParams({ q: search, since: since, docket_type: docketType, no_client: noClient ? '1' : '', show: v });
+       return '<a href="/dockets?' + q.toString() + '" class="px-3 py-1 rounded-full text-xs font-semibold ' +
+         (show === v ? 'bg-brand-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200') + '">' + label + '</a>';
+  } %>
+  <div class="flex items-center gap-2">
+    <%- showLink('current', 'Current') %>
+    <%- showLink('superseded', 'Superseded') %>
+    <%- showLink('all', 'All') %>
+  </div>
 
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
     <% if (rows.length === 0) { %>
@@ -45,10 +57,11 @@
         <thead class="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wide">
           <tr>
             <th class="text-left px-5 py-2.5">Signed</th>
-            <th class="text-left px-3 py-2.5">Worker</th>
+            <th class="text-left px-3 py-2.5">Signed by</th>
             <th class="text-left px-3 py-2.5 hidden md:table-cell">Job</th>
             <th class="text-left px-3 py-2.5 hidden sm:table-cell">Client rep</th>
-            <th class="text-right px-3 py-2.5 hidden sm:table-cell">Hours</th>
+            <th class="text-center px-3 py-2.5 hidden lg:table-cell">Crew</th>
+            <th class="text-right px-3 py-2.5 hidden sm:table-cell">Man-hrs</th>
             <th class="text-center px-3 py-2.5 hidden sm:table-cell">Sigs</th>
             <th class="text-right px-5 py-2.5"></th>
           </tr>
@@ -57,10 +70,17 @@
           <% rows.forEach(function (r) { %>
             <tr class="hover:bg-gray-50">
               <td class="px-5 py-2.5 text-gray-600 whitespace-nowrap"><%= new Date(r.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></td>
-              <td class="px-3 py-2.5 font-medium text-gray-900"><%= r.crew_name || '#' + r.crew_member_id %></td>
+              <td class="px-3 py-2.5 font-medium text-gray-900">
+                <%= r.crew_name || '#' + r.crew_member_id %>
+                <% if (r.status === 'superseded') { %>
+                  <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">Superseded</span>
+                <% } else if (r.version && r.version > 1) { %>
+                  <span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 ring-1 ring-blue-600/10">Adjusted v<%= r.version %></span>
+                <% } %>
+              </td>
               <td class="px-3 py-2.5 text-gray-700 hidden md:table-cell">
                 <% if (r.job_number) { %>
-                  <a href="/jobs/<%= r.job_id %>" class="font-medium text-brand-700 hover:underline"><%= r.job_number %></a>
+                  <% if (r.job_id) { %><a href="/jobs/<%= r.job_id %>" class="font-medium text-brand-700 hover:underline"><%= r.job_number %></a><% } else { %><span class="font-medium text-gray-700"><%= r.job_number %></span><% } %>
                   <% if (r.job_client) { %><span class="text-gray-500">— <%= r.job_client %></span><% } %>
                 <% } else { %><span class="text-gray-400">—</span><% } %>
               </td>
@@ -69,7 +89,8 @@
                   <span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-semibold bg-amber-50 text-amber-700 ring-1 ring-amber-600/10">No client on site</span>
                 <% } else { %><span class="text-gray-700"><%= r.client_name || '—' %></span><% } %>
               </td>
-              <td class="px-3 py-2.5 text-right text-gray-700 hidden sm:table-cell tabular-nums"><%= r.total_hours ? r.total_hours.toFixed ? r.total_hours.toFixed(2) : r.total_hours : '—' %></td>
+              <td class="px-3 py-2.5 text-center text-gray-700 hidden lg:table-cell tabular-nums"><%= r.crew_count || 1 %></td>
+              <td class="px-3 py-2.5 text-right text-gray-700 hidden sm:table-cell tabular-nums"><% var mh = (r.man_hours != null ? r.man_hours : r.total_hours); %><%= mh ? (mh.toFixed ? mh.toFixed(2) : mh) : '—' %></td>
               <td class="px-3 py-2.5 text-center hidden sm:table-cell">
                 <span class="inline-flex items-center gap-0.5 text-[11px]">
                   <span class="<%= r.has_worker_sig ? 'text-emerald-600' : 'text-gray-300' %>" title="Worker signature">W</span>

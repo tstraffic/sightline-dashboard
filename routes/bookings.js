@@ -1225,14 +1225,17 @@ router.get('/:id', (req, res) => {
       const byCrew = {};
       for (const s of subs) (byCrew[s.crew_member_id] = byCrew[s.crew_member_id] || []).push(s);
 
-      // Also pull the docket signed for each (worker, allocation) pair.
-      const dockets = allocations.length ? db.prepare(`
-        SELECT id, crew_member_id, allocation_id, signed_at
-        FROM docket_signatures
-        WHERE allocation_id IN (${allocations.map(() => '?').join(',')})
-      `).all(...allocations.map(a => a.id)) : [];
-      const docketByCrew = {};
-      for (const d of dockets) docketByCrew[d.crew_member_id] = d;
+      // One docket per shift now: find the current shift docket for this
+      // booking; every crew member it covers shares it.
+      const shiftDocket = db.prepare(`
+        SELECT id, signed_at FROM docket_signatures
+        WHERE booking_id = ? AND COALESCE(status,'current') = 'current'
+        ORDER BY id DESC LIMIT 1
+      `).get(booking.id);
+      let docketCrewIds = new Set();
+      if (shiftDocket) {
+        docketCrewIds = new Set(db.prepare('SELECT crew_member_id FROM docket_crew WHERE docket_id = ?').all(shiftDocket.id).map(r => r.crew_member_id));
+      }
 
       jobPackGrid = (booking.crew || []).map(c => {
         const submissions = byCrew[c.crew_member_id] || [];
@@ -1241,12 +1244,15 @@ router.get('/:id', (req, res) => {
           const hit = submissions.find(s => s.form_type === t);
           formStatus[t] = hit ? { id: hit.id, submitted_at: hit.submitted_at } : null;
         }
+        // Covered if on the docket's crew lines (or, for legacy dockets with no
+        // lines, treat all crew as covered).
+        const covered = shiftDocket && (docketCrewIds.size === 0 || docketCrewIds.has(c.crew_member_id));
         return {
           crew_member_id: c.crew_member_id,
           name: c.full_name || ('#' + c.crew_member_id),
           role: c.role_on_site || c.crew_role || '',
           forms: formStatus,
-          docket: docketByCrew[c.crew_member_id] || null,
+          docket: covered ? shiftDocket : null,
           submitted_count: JP_TYPES.filter(t => formStatus[t]).length,
         };
       });
