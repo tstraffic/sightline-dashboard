@@ -20,20 +20,29 @@
     reduced = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
   } catch (e) {}
 
-  var MIN_DIST = 6;   // px between particle emissions
+  var MIN_DIST = 16;  // px between particle emissions — sparser = calmer
   var TRAIL_COLOR = '#60A5FA';
 
   function emitTrail(canvas, clientX, clientY) {
-    if (!window.WorkerParticles || !window.WorkerParticles.tapBurst) return;
-    // Single small particle per emission rather than a burst — gives a
-    // genuine trail effect, not little explosions every few pixels.
+    if (!window.WorkerParticles || !window.WorkerParticles.spawn) return;
+    // ONE tiny, soft, slow-drifting dot per emission (not tapBurst's 3-5
+    // particle burst). Small + low-opacity + short-lived so a signature
+    // leaves a gentle, clean trail rather than a shower of sparks.
     var color = canvas.getAttribute('data-particle-color') || TRAIL_COLOR;
-    // tapBurst always spawns 3-5; for a trail we want 1, so we go direct
-    // through the shared API used by tapBurst's underlying logic via
-    // celebrate-style synthetic params. Cleaner: just call tapBurst with
-    // a small radius and accept it emits 3-5. We compensate by raising
-    // MIN_DIST so the trail is sparser.
-    window.WorkerParticles.tapBurst(clientX, clientY, color);
+    var angle = Math.random() * Math.PI * 2;
+    var speed = 8 + Math.random() * 14;   // barely moves
+    window.WorkerParticles.spawn({
+      x: clientX, y: clientY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 12,   // faint upward drift
+      gravity: 60,
+      drag: 0.9,
+      maxLife: 0.4 + Math.random() * 0.25,
+      size: 1.4 + Math.random() * 0.8,
+      color: color,
+      alpha: 0.55,
+      shape: 'circle',
+    });
   }
 
   function injectShimmerCss() {
