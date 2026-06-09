@@ -2402,9 +2402,14 @@
   }
 
   // Smart prefill for the slide-over create form — start date / time
-  // render blank, and pre-fill with today's Sydney date + the next
-  // whole hour the first time the planner taps the field. End time
-  // gets the +8h treatment via the change handler below.
+  // render blank until the planner taps the field. What we pre-fill
+  // depends on which day the bookings board is showing:
+  //   · viewing TODAY → Sydney today + the next whole hour (e.g. 3:24pm
+  //     → 4:00pm). Useful when the planner is creating a same-day
+  //     booking and just wants the soonest sensible slot.
+  //   · viewing ANY OTHER DAY → that day + 06:00. Most field shifts
+  //     start at 6am, so this skips the typing for the common case.
+  // End time gets the +8h treatment via the change handler below.
   (function () {
     var dateEl = document.querySelector('[data-bk-autofill="start_date"]');
     var timeEl = document.querySelector('[data-bk-autofill="start_time"]');
@@ -2420,7 +2425,11 @@
         hour: '2-digit', minute: '2-digit', hour12: false,
       }).formatToParts(new Date()).reduce(function (a, p) { a[p.type] = p.value; return a; }, {});
     }
-    function nextHour() {
+    function sydneyToday() {
+      var p = sydneyParts();
+      return p.year + '-' + p.month + '-' + p.day;
+    }
+    function nextHourToday() {
       var p = sydneyParts();
       var d = new Date(p.year + '-' + p.month + '-' + p.day + 'T' + p.hour + ':00:00');
       d.setHours(d.getHours() + 1);
@@ -2430,8 +2439,19 @@
         time: pad(d.getHours()) + ':00',
       };
     }
+    function prefillFor() {
+      var viewedDate = (window.BK2_DATA && window.BK2_DATA.dateStr) || sydneyToday();
+      if (viewedDate === sydneyToday()) {
+        // Same-day booking — use the next whole hour.
+        return nextHourToday();
+      }
+      // Past or future day — use the day the planner is currently on,
+      // with the standard 6am start. End-time auto-fills to 2pm via
+      // the +8h listener.
+      return { date: viewedDate, time: '06:00' };
+    }
     function prefill() {
-      var n = nextHour();
+      var n = prefillFor();
       if (dateEl && !dateEl.value) dateEl.value = n.date;
       if (timeEl && !timeEl.value) timeEl.value = n.time;
       applyEnd();

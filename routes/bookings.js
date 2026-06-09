@@ -607,7 +607,11 @@ router.get('/', (req, res) => {
   const openBookingId = req.query.b || ''; // for slide-over deep-link
 
   // Filtered, date-sorted list — single column, no status grouping.
-  let where = "DATE(b.start_datetime) = ? AND b.status NOT IN ('cancelled','late_cancellation') AND (b.deleted_at IS NULL)";
+  // Show bookings in every status (incl. cancelled / complete / finalised)
+  // so the planner can revisit historical bookings and shuffle the
+  // crew/vehicle assignments after the fact. Only deleted rows are
+  // hidden. Explicit ?status= filtering still works via the chip.
+  let where = "DATE(b.start_datetime) = ? AND (b.deleted_at IS NULL)";
   const params = [dateStr];
   if (filterDepot) { where += ' AND b.depot = ?'; params.push(filterDepot); }
   if (filterStatus) { where += ' AND b.status = ?'; params.push(filterStatus); }
