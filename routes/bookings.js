@@ -27,7 +27,17 @@ const fileFilter = (req, file, cb) => {
 };
 const uploadDoc = multer({ storage: bookingStorage, limits: { fileSize: 50 * 1024 * 1024 }, fileFilter });
 
-const DEPOTS = ['Villawood', 'Penrith', 'Campbelltown', 'Parramatta'];
+// Depot names — pulled from the depots table (migration 257). Wrapped
+// in a function so an edit on /fleet/depots takes effect on the next
+// request without restarting the server. Falls back to the original
+// four-name list if the table doesn't exist yet (legacy DB).
+function getDepots() {
+  try {
+    const rows = getDb().prepare("SELECT name FROM depots WHERE active = 1 ORDER BY sort_order, name").all();
+    if (rows.length) return rows.map(r => r.name);
+  } catch (e) { /* table not migrated yet */ }
+  return ['Villawood', 'Penrith', 'Campbelltown', 'Parramatta'];
+}
 const VALID_STATUSES = ['client_booking', 'unconfirmed', 'confirmed', 'locked', 'conflict', 'green_to_go', 'in_progress', 'complete', 'finalised', 'cancelled', 'late_cancellation', 'on_hold'];
 
 // (Beta flag retired — the day board is now /bookings for everyone.)
@@ -285,7 +295,7 @@ router.get('/classic', (req, res) => {
   let contacts = []; try { contacts = db.prepare("SELECT id, full_name, company_id FROM client_contacts ORDER BY full_name").all(); } catch (e) {}
   let crewForSelect = []; try { crewForSelect = db.prepare("SELECT id, full_name, role, portal_role FROM crew_members WHERE active = 1 ORDER BY full_name").all(); } catch (e) {}
 
-  res.render('bookings/index', { title: 'Bookings (classic)', bookings, stats, depots: DEPOTS, currentView: view, currentDate: dateStr, currentDepot: depot, currentStatus: status, currentSearch: search, currentDeleted: deletedFilter, user: req.session.user, jobs, clients, supervisors, contacts, crewForSelect, v2Enabled: false });
+  res.render('bookings/index', { title: 'Bookings (classic)', bookings, stats, depots: getDepots(), currentView: view, currentDate: dateStr, currentDepot: depot, currentStatus: status, currentSearch: search, currentDeleted: deletedFilter, user: req.session.user, jobs, clients, supervisors, contacts, crewForSelect, v2Enabled: false });
 });
 
 // GET /new
@@ -297,7 +307,7 @@ router.get('/new', (req, res) => {
     let supervisors = []; try { supervisors = db.prepare("SELECT id, full_name FROM crew_members WHERE active = 1 ORDER BY full_name").all(); } catch (e) {}
     let contacts = []; try { contacts = db.prepare("SELECT id, full_name, company_id FROM client_contacts ORDER BY full_name").all(); } catch (e) {}
     let crewForSelect = []; try { crewForSelect = db.prepare("SELECT id, full_name, role, portal_role FROM crew_members WHERE active = 1 ORDER BY full_name").all(); } catch (e) {}
-    res.render('bookings/form', { title: 'New Booking', booking: null, jobs, clients, supervisors, contacts, crewForSelect, depots: DEPOTS, user: req.session.user });
+    res.render('bookings/form', { title: 'New Booking', booking: null, jobs, clients, supervisors, contacts, crewForSelect, depots: getDepots(), user: req.session.user });
   } catch (err) {
     console.error('Bookings /new error:', err);
     req.flash('error', 'Failed to load form: ' + err.message);
@@ -716,7 +726,7 @@ router.get('/', (req, res) => {
     dayLabel: d.toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' }),
     clients,
     jobs,
-    depots: DEPOTS,
+    depots: getDepots(),
     statuses: VALID_STATUSES,
     addons: QUICK_ADDONS,
     filters: { depot: filterDepot, status: filterStatus, q: req.query.q || '' },
@@ -1299,7 +1309,7 @@ router.get('/:id/edit', (req, res) => {
   res.render('bookings/form', {
     title: 'Edit Booking ' + booking.booking_number,
     booking, jobs, clients, supervisors, contacts, crewForSelect,
-    depots: DEPOTS, user: req.session.user,
+    depots: getDepots(), user: req.session.user,
     bookingDocuments,
   });
 });

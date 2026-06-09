@@ -12059,6 +12059,44 @@ function runMigrations(db) {
     }
   }
 
+  // Depots table — replaces the hardcoded DEPOTS array in routes/bookings.js
+  // so an admin can add/rename/retire a depot from the Fleet section
+  // without redeploying. Seeded with the original four names so existing
+  // bookings (which reference depots by string) still resolve.
+  if (!isMigrationApplied.get(258)) {
+    console.log('Running migration 258: depots table');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS depots (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL UNIQUE,
+          address TEXT DEFAULT '',
+          suburb TEXT DEFAULT '',
+          state TEXT DEFAULT '',
+          postcode TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          active INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_depots_active ON depots(active, sort_order);
+      `);
+      // Seed only if empty so re-runs don't clobber edits.
+      const c = db.prepare("SELECT COUNT(*) AS n FROM depots").get();
+      if (!c.n) {
+        const ins = db.prepare("INSERT INTO depots (name, sort_order) VALUES (?, ?)");
+        ['Villawood', 'Penrith', 'Campbelltown', 'Parramatta'].forEach(function (name, i) {
+          ins.run(name, i);
+        });
+      }
+      recordMigration.run(258, 'depots table + seed Villawood/Penrith/Campbelltown/Parramatta');
+      console.log('Migration 258 applied');
+    } catch (e) {
+      console.error('Migration 258 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -1,0 +1,144 @@
+<% locals.currentPage = 'fleet' %>
+
+<!-- Breadcrumb -->
+<div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
+  <a href="/fleet" class="hover:text-gray-900 transition">Fleet Register</a>
+  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+  <span class="text-gray-900">Depots</span>
+</div>
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Depots</h1>
+    <p class="text-gray-500 text-sm mt-0.5">Manage the depot list shown when creating a booking. Active depots appear in the picker; inactive ones are hidden but kept on file.</p>
+  </div>
+</div>
+
+<!-- Add form -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-5">
+  <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Add a depot</h2>
+  <form method="POST" action="/fleet/depots" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+    <%- include('../partials/csrf') %>
+    <div class="sm:col-span-2 lg:col-span-1">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Name <span class="text-red-500">*</span></label>
+      <input type="text" name="name" required placeholder="e.g. Villawood" maxlength="80"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Suburb</label>
+      <input type="text" name="suburb" placeholder="Optional" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">State</label>
+      <input type="text" name="state" placeholder="NSW" maxlength="3" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm uppercase">
+    </div>
+    <div class="sm:col-span-2 lg:col-span-2">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Street address</label>
+      <input type="text" name="address" placeholder="Optional" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Postcode</label>
+      <input type="text" name="postcode" placeholder="2163" maxlength="6" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+    </div>
+    <div class="sm:col-span-2 lg:col-span-3">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</label>
+      <input type="text" name="notes" placeholder="Optional — e.g. gate code, parking instructions" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+    </div>
+    <div class="sm:col-span-2 lg:col-span-3 flex items-center justify-end">
+      <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">+ Add Depot</button>
+    </div>
+  </form>
+</div>
+
+<!-- List -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">All Depots</h2>
+    <span class="text-xs text-gray-500"><%= depots.length %> total · <%= depots.filter(d => d.active).length %> active</span>
+  </div>
+  <% if (depots.length === 0) { %>
+    <div class="p-8 text-center text-sm text-gray-500">
+      <p class="font-medium text-gray-700">No depots yet</p>
+      <p class="text-xs text-gray-500 mt-1">Add your first depot using the form above. It will then appear in the booking-form picker.</p>
+    </div>
+  <% } else { %>
+    <ul class="divide-y divide-gray-100">
+      <% depots.forEach(function (d) { %>
+        <% const inUse = usage[d.name] || 0; %>
+        <li class="px-4 py-3">
+          <form method="POST" action="/fleet/depots/<%= d.id %>" class="grid grid-cols-1 sm:grid-cols-12 gap-3 items-center">
+            <%- include('../partials/csrf') %>
+            <div class="sm:col-span-3">
+              <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Name</label>
+              <input type="text" name="name" value="<%= d.name %>" required maxlength="80"
+                class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm font-medium">
+            </div>
+            <div class="sm:col-span-2">
+              <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Suburb</label>
+              <input type="text" name="suburb" value="<%= d.suburb || '' %>"
+                class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div class="sm:col-span-1">
+              <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">State</label>
+              <input type="text" name="state" value="<%= d.state || '' %>" maxlength="3"
+                class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm uppercase">
+            </div>
+            <div class="sm:col-span-3">
+              <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Address</label>
+              <input type="text" name="address" value="<%= d.address || '' %>"
+                class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div class="sm:col-span-1">
+              <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">P/code</label>
+              <input type="text" name="postcode" value="<%= d.postcode || '' %>" maxlength="6"
+                class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+            </div>
+            <div class="sm:col-span-2 flex items-end justify-end gap-2">
+              <input type="hidden" name="active" value="0">
+              <label class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-700 mb-2">
+                <input type="checkbox" name="active" value="1" <%= d.active ? 'checked' : '' %>
+                  class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+                Active
+              </label>
+              <button type="submit" class="mb-1 px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg">Save</button>
+            </div>
+
+            <% if (d.notes) { %>
+              <div class="sm:col-span-12 -mt-1">
+                <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Notes</label>
+                <input type="text" name="notes" value="<%= d.notes %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm">
+              </div>
+            <% } else { %>
+              <input type="hidden" name="notes" value="">
+            <% } %>
+          </form>
+
+          <div class="flex items-center justify-between mt-2 pt-2 border-t border-gray-100">
+            <p class="text-[11px] text-gray-500">
+              <% if (inUse > 0) { %>
+                <span class="font-semibold text-gray-700"><%= inUse %></span> active booking<%= inUse === 1 ? '' : 's' %> use<%= inUse === 1 ? 's' : '' %> this depot
+              <% } else { %>
+                <span class="text-gray-400">No bookings use this depot</span>
+              <% } %>
+              <% if (!d.active) { %>
+                · <span class="text-amber-600 font-medium">Hidden from picker</span>
+              <% } %>
+            </p>
+            <form method="POST" action="/fleet/depots/<%= d.id %>/delete"
+              onsubmit="return confirm('Delete depot &quot;<%= d.name %>&quot;? This cannot be undone.');">
+              <%- include('../partials/csrf') %>
+              <button type="submit" class="text-xs text-red-600 hover:text-red-700 font-medium" <%= inUse > 0 ? 'disabled title="Untick Active to retire instead, or move the bookings off this depot first."' : '' %>>
+                <% if (inUse > 0) { %>
+                  <span class="text-gray-300 cursor-not-allowed">Delete (in use)</span>
+                <% } else { %>
+                  Delete
+                <% } %>
+              </button>
+            </form>
+          </div>
+        </li>
+      <% }); %>
+    </ul>
+  <% } %>
+</div>

@@ -115,6 +115,109 @@ const numOrNull = v => {
   return Number.isFinite(n) ? n : null;
 };
 
+// ── DEPOTS — list + CRUD ─────────────────────────────────────────────
+// Manages the depot list referenced when picking a booking depot.
+// Stored in the `depots` table (migration 257). getDepots() in
+// routes/bookings.js reads the same table, so an edit here is visible
+// to the next /bookings page render with no restart.
+router.get('/depots', (req, res) => {
+  const db = getDb();
+  const depots = db.prepare("SELECT id, name, address, suburb, state, postcode, notes, active, sort_order FROM depots ORDER BY sort_order, name").all();
+  // Count bookings per depot so the planner can see usage before deleting.
+  const usage = {};
+  try {
+    const rows = db.prepare("SELECT depot, COUNT(*) AS n FROM bookings WHERE deleted_at IS NULL AND depot IS NOT NULL AND depot != '' GROUP BY depot").all();
+    rows.forEach(r => { usage[r.depot] = r.n; });
+  } catch (e) { /* depot col may not exist on legacy DB */ }
+  res.render('fleet/depots', {
+    title: 'Depots',
+    currentPage: 'fleet',
+    depots,
+    usage,
+  });
+});
+
+router.post('/depots', (req, res) => {
+  const db = getDb();
+  const name = (req.body.name || '').trim();
+  if (!name) { req.flash('error', 'Depot name is required.'); return res.redirect('/fleet/depots'); }
+  // Get next sort_order
+  const maxSort = db.prepare("SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM depots").get();
+  try {
+    db.prepare(`
+      INSERT INTO depots (name, address, suburb, state, postcode, notes, active, sort_order, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run(
+      name,
+      (req.body.address || '').trim(),
+      (req.body.suburb || '').trim(),
+      (req.body.state || '').trim(),
+      (req.body.postcode || '').trim(),
+      (req.body.notes || '').trim(),
+      maxSort.n
+    );
+    logActivity({ user: req.session.user, action: 'create', entityType: 'depot', entityLabel: name, ip: req.ip });
+    req.flash('success', `Depot "${name}" added.`);
+  } catch (e) {
+    if (/UNIQUE/i.test(e.message)) req.flash('error', `A depot named "${name}" already exists.`);
+    else req.flash('error', 'Could not add depot: ' + e.message);
+  }
+  res.redirect('/fleet/depots');
+});
+
+router.post('/depots/:id', (req, res) => {
+  const db = getDb();
+  const existing = db.prepare("SELECT id, name FROM depots WHERE id = ?").get(req.params.id);
+  if (!existing) { req.flash('error', 'Depot not found.'); return res.redirect('/fleet/depots'); }
+  const newName = (req.body.name || '').trim();
+  if (!newName) { req.flash('error', 'Depot name is required.'); return res.redirect('/fleet/depots'); }
+  const active = req.body.active === '1' || req.body.active === 'on' || req.body.active === 'true' ? 1 : 0;
+  try {
+    db.prepare(`
+      UPDATE depots SET name=?, address=?, suburb=?, state=?, postcode=?, notes=?, active=?, updated_at=CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      newName,
+      (req.body.address || '').trim(),
+      (req.body.suburb || '').trim(),
+      (req.body.state || '').trim(),
+      (req.body.postcode || '').trim(),
+      (req.body.notes || '').trim(),
+      active,
+      req.params.id
+    );
+    // If the depot was renamed, also rename the depot field on every
+    // existing booking so the dropdown selection still matches.
+    if (newName !== existing.name) {
+      try { db.prepare("UPDATE bookings SET depot = ? WHERE depot = ?").run(newName, existing.name); } catch (e) {}
+    }
+    logActivity({ user: req.session.user, action: 'update', entityType: 'depot', entityId: req.params.id, entityLabel: newName, ip: req.ip });
+    req.flash('success', `Depot updated.`);
+  } catch (e) {
+    if (/UNIQUE/i.test(e.message)) req.flash('error', `A depot named "${newName}" already exists.`);
+    else req.flash('error', 'Could not update depot: ' + e.message);
+  }
+  res.redirect('/fleet/depots');
+});
+
+router.post('/depots/:id/delete', (req, res) => {
+  const db = getDb();
+  const depot = db.prepare("SELECT id, name FROM depots WHERE id = ?").get(req.params.id);
+  if (!depot) { req.flash('error', 'Depot not found.'); return res.redirect('/fleet/depots'); }
+  // Block delete if any bookings still reference it — soft-deactivate
+  // is the planner-safe path.
+  let inUse = 0;
+  try { inUse = db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE depot = ? AND deleted_at IS NULL").get(depot.name).n; } catch (e) {}
+  if (inUse > 0) {
+    req.flash('error', `Cannot delete "${depot.name}" — still used by ${inUse} booking${inUse === 1 ? '' : 's'}. Untick "Active" to retire it without deleting.`);
+    return res.redirect('/fleet/depots');
+  }
+  db.prepare("DELETE FROM depots WHERE id = ?").run(req.params.id);
+  logActivity({ user: req.session.user, action: 'delete', entityType: 'depot', entityId: req.params.id, entityLabel: depot.name, ip: req.ip });
+  req.flash('success', `Depot "${depot.name}" deleted.`);
+  res.redirect('/fleet/depots');
+});
+
 // ── FLEET REGISTER (list) ────────────────────────────────────────────
 router.get('/', (req, res) => {
   const db = getDb();
