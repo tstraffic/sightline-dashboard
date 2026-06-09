@@ -12097,6 +12097,32 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 259: project grouping on the Traffio reconciliation queue.
+  // A Traffio "project" (project_id) groups many repeat shifts; one project can be
+  // hundreds of queued bookings. Surface project_id/project_name on traffio_imports
+  // (indexed) so the queue can group by project and reconcile every pending shift of a
+  // project in one action, instead of one-by-one. Backfills existing rows from the
+  // stored proposed_json.
+  if (!isMigrationApplied.get(259)) {
+    console.log('Running migration 259: traffio_imports project grouping');
+    try {
+      const cols = db.prepare("PRAGMA table_info(traffio_imports)").all().map(c => c.name);
+      if (!cols.includes('project_id')) db.exec("ALTER TABLE traffio_imports ADD COLUMN project_id TEXT");
+      if (!cols.includes('project_name')) db.exec("ALTER TABLE traffio_imports ADD COLUMN project_name TEXT");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_traffio_imports_status_project ON traffio_imports(status, project_id)");
+      db.exec(`
+        UPDATE traffio_imports
+        SET project_id = json_extract(proposed_json, '$.project_id'),
+            project_name = COALESCE(json_extract(proposed_json, '$.project_name'), json_extract(proposed_json, '$.project_title'))
+        WHERE project_id IS NULL
+      `);
+      recordMigration.run(259, 'traffio_imports.project_id/project_name + index + backfill');
+      console.log('Migration 259 applied');
+    } catch (e) {
+      console.error('Migration 259 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

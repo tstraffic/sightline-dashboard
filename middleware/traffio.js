@@ -115,16 +115,22 @@ function queueImport(db, recordType, payload) {
   const externalId = String(pick(payload, ['id', 'booking_id', 'docket_id'], ''));
   if (!externalId) return;
   const eventDate = pick(payload, ['booking_start_time', 'date', 'start_datetime', 'starts_at'], null);
+  // project_id groups repeat shifts so the queue can reconcile a whole project at once.
+  const projectId = pick(payload, ['project_id'], null);
+  const projectName = pick(payload, ['project_name', 'project_title'], null);
   db.prepare(`
-    INSERT INTO traffio_imports (record_type, traffio_external_id, proposed_json, summary, event_date)
-    VALUES (?, ?, ?, ?, ?)
+    INSERT INTO traffio_imports (record_type, traffio_external_id, proposed_json, summary, event_date, project_id, project_name)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(record_type, traffio_external_id) DO UPDATE SET
       proposed_json = excluded.proposed_json,
       summary = excluded.summary,
       event_date = excluded.event_date,
+      project_id = excluded.project_id,
+      project_name = excluded.project_name,
       updated_at = CURRENT_TIMESTAMP
     WHERE status = 'pending'
-  `).run(recordType, externalId, JSON.stringify(payload), summarizeBooking(payload), eventDate);
+  `).run(recordType, externalId, JSON.stringify(payload), summarizeBooking(payload), eventDate,
+    projectId != null ? String(projectId) : null, projectName != null ? String(projectName) : null);
 }
 
 /**

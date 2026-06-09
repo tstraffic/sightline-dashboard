@@ -1,0 +1,94 @@
+<% locals.currentPage = 'traffio-imports' %>
+<meta name="color-scheme" content="light only">
+
+<%
+  function fmtDay(iso) {
+    if (!iso) return '';
+    const d = new Date((iso || '').replace(' ', 'T') + (String(iso).includes('T') ? '' : 'Z'));
+    if (isNaN(d)) return String(iso).slice(0, 16);
+    return d.toLocaleString('en-AU', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+  const label = projectName || first.booking_title || first.title || ('Project ' + projectId);
+  const client = first.client_name || first.client || first.customer_name || '';
+  const site = first.booking_address || first.site_address || first.address || first.location || '';
+%>
+
+<div class="max-w-3xl mx-auto px-4 py-6">
+  <a href="/traffio-imports" class="text-sm text-gray-400 hover:text-gray-600">&larr; Back to queue</a>
+  <h1 class="text-xl font-bold text-gray-900 mt-2 mb-1">Reconcile project</h1>
+  <p class="text-sm text-gray-500 mb-5">
+    <span class="font-medium text-gray-700"><%= label %></span>
+    · <%= shifts.length %> pending shift<%= shifts.length === 1 ? '' : 's' %>
+    <% if (site) { %> · <%= site %><% } %>
+  </p>
+
+  <% if (suggestedJob) { %>
+    <div class="mb-5 rounded-lg bg-emerald-50 border border-emerald-200 px-4 py-3 text-sm text-emerald-800">
+      This project was previously mapped to job <strong><%= suggestedJob.job_number %> — <%= suggestedJob.job_name %></strong>.
+      It's pre-selected below.
+    </div>
+  <% } %>
+
+  <!-- Job picker -->
+  <form method="POST" action="/traffio-imports/project/<%= encodeURIComponent(projectId) %>/confirm" class="bg-white border border-gray-200 rounded-xl p-4 mb-5">
+    <%- include('../partials/csrf') %>
+    <div class="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">Map all <%= shifts.length %> shifts to a job</div>
+
+    <label class="flex items-start gap-2 mb-3 cursor-pointer">
+      <input type="radio" name="mode" value="existing" checked class="mt-1" onchange="ti_toggle()">
+      <div class="flex-1">
+        <div class="text-sm font-medium text-gray-900">Existing job</div>
+        <select name="job_id" id="ti_job_id" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <option value="">— select a job —</option>
+          <% jobs.forEach(function(j){ %>
+            <option value="<%= j.id %>" <%= (suggestedJob && suggestedJob.id === j.id) ? 'selected' : '' %>><%= j.job_number %> — <%= j.job_name %><%= j.client ? ' (' + j.client + ')' : '' %></option>
+          <% }); %>
+        </select>
+      </div>
+    </label>
+
+    <label class="flex items-start gap-2 mb-2 cursor-pointer">
+      <input type="radio" name="mode" value="new" class="mt-1" onchange="ti_toggle()">
+      <div class="flex-1">
+        <div class="text-sm font-medium text-gray-900">Create a new job</div>
+        <div id="ti_new" class="mt-2 space-y-2 hidden">
+          <input type="text" name="job_name" placeholder="Job name" value="<%= label %>" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <input type="text" name="client" placeholder="Client" value="<%= client %>" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+          <input type="text" name="job_number" placeholder="Job number (optional — auto if blank)" class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+        </div>
+      </div>
+    </label>
+
+    <div class="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100">
+      <button type="submit" class="inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">
+        Confirm &amp; create <%= shifts.length %> booking<%= shifts.length === 1 ? '' : 's' %>
+      </button>
+    </div>
+  </form>
+
+  <!-- Shifts in this project -->
+  <div class="bg-white border border-gray-200 rounded-xl">
+    <div class="px-4 py-3 border-b border-gray-100 text-xs font-bold uppercase tracking-wide text-gray-400">
+      Shifts in this project
+    </div>
+    <div class="divide-y divide-gray-100">
+      <% shifts.forEach(function(s){ %>
+        <div class="flex items-center gap-3 px-4 py-2.5">
+          <div class="min-w-0 flex-1">
+            <div class="text-sm text-gray-800 truncate"><%= s.summary || ('Traffio booking ' + s.traffio_external_id) %></div>
+          </div>
+          <div class="shrink-0 text-xs text-gray-400"><%= fmtDay(s.event_date) %></div>
+        </div>
+      <% }); %>
+    </div>
+  </div>
+</div>
+
+<script>
+  function ti_toggle() {
+    var isNew = document.querySelector('input[name="mode"]:checked').value === 'new';
+    document.getElementById('ti_new').classList.toggle('hidden', !isNew);
+    var sel = document.getElementById('ti_job_id');
+    if (sel) sel.disabled = isNew;
+  }
+</script>
