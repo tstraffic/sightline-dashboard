@@ -1590,7 +1590,7 @@ router.post('/:id/crew/:crewId/flag', (req, res) => {
 router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  const row = db.prepare("SELECT id FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, req.params.id);
+  const row = db.prepare("SELECT id, crew_member_id, assigned_vehicle_id FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, req.params.id);
   if (!row) {
     if (isJson) return res.status(404).json({ error: 'Crew row not found' });
     req.flash('error', 'Crew row not found.'); return res.redirect('/bookings/' + req.params.id);
@@ -1610,6 +1610,16 @@ router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
     }
   }
   db.prepare("UPDATE booking_crew SET assigned_vehicle_id = ? WHERE id = ?").run(vehicleId, req.params.crewId);
+
+  // If the worker just left a vehicle they were driving, clear the
+  // driver pointer on that vehicle so the data doesn't drift —
+  // booking_vehicles.crew_member_id should always point at someone
+  // who's actually IN the vehicle.
+  if (row.assigned_vehicle_id != null && row.assigned_vehicle_id !== vehicleId) {
+    db.prepare("UPDATE booking_vehicles SET crew_member_id = NULL WHERE id = ? AND crew_member_id = ?")
+      .run(row.assigned_vehicle_id, row.crew_member_id);
+  }
+
   if (isJson) return res.json({ ok: true, assigned_vehicle_id: vehicleId });
   res.redirect('/bookings/' + req.params.id);
 });

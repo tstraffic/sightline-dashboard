@@ -2969,15 +2969,146 @@
           alert((result.json && result.json.error) || ('Could not move that worker (HTTP ' + result.status + ').'));
           return;
         }
-        // Soft reload to re-derive the layout. Could optimistically move
-        // the DOM node, but the group order + unassigned-pool visibility
-        // is non-trivial to mirror client-side; refresh is simpler and
-        // the network round-trip already happened.
-        location.reload();
+        // In-place DOM relocation — keeps scroll position, the
+        // resource panel scroll, the slide-over editor state, and
+        // any other open card popovers untouched.
+        relocateCrewSlot(payload, vehicleId);
       }).catch(function (err) {
         console.warn('[bk2 assignCrewToVehicle] fetch failed', err);
         alert('Could not move that worker — network error.');
       });
+  }
+
+  // Move a filled crew slot DOM node between containers (crew block ↔
+  // unassigned pool) without reloading the page. Reconciles the empty
+  // placeholder count on both sides + updates the worker's data attrs
+  // + clears stale driver/flag state when leaving a vehicle.
+  function relocateCrewSlot(payload, newVehicleId) {
+    var bookingCrewId = String(payload.booking_crew_id);
+    var slot = document.querySelector('.bk2-slot--filled[data-booking-crew-id="' + bookingCrewId + '"]');
+    if (!slot) { console.warn('[bk2 relocate] slot not found, falling back to reload'); location.reload(); return; }
+
+    var card = slot.closest('.bk2-card');
+    if (!card) { location.reload(); return; }
+
+    var sourceBlock      = slot.closest('.bk2-crew');
+    var sourceUnassigned = slot.closest('.bk2-unassigned');
+
+    var destBlock = null;
+    var destUnassigned = null;
+    if (newVehicleId) {
+      var destVehSlot = card.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id="' + String(newVehicleId) + '"]');
+      destBlock = destVehSlot ? destVehSlot.closest('.bk2-crew') : null;
+    } else {
+      destUnassigned = card.querySelector('.bk2-unassigned');
+    }
+    if (!destBlock && !destUnassigned) { location.reload(); return; }
+
+    // ── Detach the slot from its current parent ─────────────────
+    var parentBefore = slot.parentNode;
+    slot.remove();
+
+    // ── Update slot data + classes ──────────────────────────────
+    if (newVehicleId) {
+      slot.setAttribute('data-assigned-vehicle-id', String(newVehicleId));
+      slot.classList.remove('bk2-slot--unassigned');
+    } else {
+      slot.setAttribute('data-assigned-vehicle-id', '');
+      slot.classList.add('bk2-slot--unassigned');
+    }
+    // Always clear driver state — the server cleared the dangling
+    // booking_vehicles.crew_member_id pointer, so the DRV pill no
+    // longer applies after a move. The planner can re-tag via the
+    // popover if needed.
+    slot.classList.remove('is-driver');
+    slot.setAttribute('data-flag-driver', '0');
+    var drvPill = slot.querySelector('.bk2-flag--drv');
+    if (drvPill) drvPill.remove();
+
+    // ── Insert into destination ─────────────────────────────────
+    if (destBlock) {
+      var emptyPh = destBlock.querySelector('.bk2-slot--empty.bk2-slot--drop');
+      var addons  = destBlock.querySelector('.bk2-addons');
+      var anchor  = emptyPh || addons || null;
+      if (anchor) destBlock.insertBefore(slot, anchor);
+      else        destBlock.appendChild(slot);
+      // Decrement empty placeholder in destination (if any)
+      if (emptyPh) {
+        var c = (parseInt(emptyPh.getAttribute('data-empty-count'), 10) || 0) - 1;
+        if (c <= 0) {
+          emptyPh.remove();
+        } else {
+          emptyPh.setAttribute('data-empty-count', c);
+          relabelEmptyPlaceholder(emptyPh, c);
+        }
+      }
+    } else if (destUnassigned) {
+      destUnassigned.appendChild(slot);
+      var destHead = destUnassigned.querySelector('.bk2-unassigned-head span');
+      if (destHead) destHead.textContent = 'Not in any vehicle';
+    }
+
+    // ── Reconcile source ────────────────────────────────────────
+    // If the source was a crew block, add or bump an empty placeholder
+    // to reflect the now-vacant slot. (If the source was the unassigned
+    // pool, just update its header if it's now empty.)
+    if (sourceBlock && sourceBlock !== destBlock) {
+      var srcEmpty = sourceBlock.querySelector('.bk2-slot--empty.bk2-slot--drop');
+      if (srcEmpty) {
+        var nc = (parseInt(srcEmpty.getAttribute('data-empty-count'), 10) || 0) + 1;
+        srcEmpty.setAttribute('data-empty-count', nc);
+        relabelEmptyPlaceholder(srcEmpty, nc);
+      } else {
+        // Build a fresh placeholder. Recover role + booking_id +
+        // ordinal from the surrounding DOM.
+        var bookingId = card.getAttribute('data-booking-id') || '';
+        var role = 'TC';
+        var sizeChip = sourceBlock.querySelector('.bk2-crew-size');
+        if (sizeChip) {
+          var m = sizeChip.textContent.match(/·\s*(\S+)/);
+          if (m) role = m[1].trim();
+        }
+        var ordinal = '';
+        var lbl = sourceBlock.querySelector('.bk2-crew-label');
+        if (lbl) { var n = lbl.textContent.match(/(\d+)/); if (n) ordinal = n[1]; }
+        var newPh = document.createElement('div');
+        newPh.className = 'bk2-slot bk2-slot--empty bk2-slot--drop';
+        newPh.setAttribute('data-booking-id', bookingId);
+        newPh.setAttribute('data-role-on-site', role);
+        newPh.setAttribute('data-crew-ordinal', ordinal);
+        newPh.setAttribute('data-empty-count', '1');
+        newPh.innerHTML =
+          '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="opacity:0.6">' +
+            '<path stroke-linecap="round" stroke-linejoin="round" d="M18 9v3m0 0v3m0-3h3m-3 0h-3M6 11a4 4 0 11-4 4 4 4 0 014-4zM14 16a6 6 0 00-12 0v2h12v-2z"/>' +
+          '</svg>' +
+          '<span class="bk2-slot-empty-label">' + role + ' slot · drop a worker here</span>';
+        var srcAddons = sourceBlock.querySelector('.bk2-addons');
+        if (srcAddons) sourceBlock.insertBefore(newPh, srcAddons);
+        else           sourceBlock.appendChild(newPh);
+      }
+    }
+    if (sourceUnassigned && sourceUnassigned !== destUnassigned) {
+      var stillThere = sourceUnassigned.querySelectorAll('[data-bk-crew-drag="1"]').length;
+      var srcHead = sourceUnassigned.querySelector('.bk2-unassigned-head span');
+      if (srcHead && stillThere === 0) srcHead.textContent = 'Drop here to take off the ute';
+    }
+
+    // ── Flourish ────────────────────────────────────────────────
+    slot.classList.add('bk2-slot--just-added');
+    setTimeout(function () { slot.classList.remove('bk2-slot--just-added'); }, 600);
+    flashAssigned(slot.getAttribute('data-crew-member-id'));
+  }
+
+  // Update the "N more TC slots · drop workers here" / "TC slot · drop
+  // a worker here" label on an empty placeholder based on its remaining
+  // count.
+  function relabelEmptyPlaceholder(ph, count) {
+    var label = ph.querySelector('.bk2-slot-empty-label');
+    if (!label) return;
+    var role = ph.getAttribute('data-role-on-site') || 'TC';
+    label.textContent = count === 1
+      ? (role + ' slot · drop a worker here')
+      : (count + ' more ' + role + ' slots · drop workers here');
   }
 
   // ==========================================================
