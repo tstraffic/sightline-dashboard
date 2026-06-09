@@ -2310,13 +2310,19 @@
 
   document.addEventListener('drop', function (e) {
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
-    if (!slot) return;
+    if (!slot) {
+      console.debug('[bk2 drop] no .bk2-slot--drop ancestor for target', e.target);
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     slot.classList.remove('is-drag-over');
 
     var bookingId = slot.getAttribute('data-booking-id');
-    if (!bookingId) return;
+    if (!bookingId) {
+      console.warn('[bk2 drop] slot has no data-booking-id', slot);
+      return;
+    }
 
     // Read every payload we might receive. Whichever the source set
     // determines the action — crew-move ALWAYS wins because it can
@@ -2327,23 +2333,35 @@
     try { crewMovePayload = e.dataTransfer.getData('application/x-bk2-crew-move') || ''; } catch (err) {}
     try { personId        = e.dataTransfer.getData('application/x-bk2-person')   || ''; } catch (err) {}
     try { vehiclePayload  = e.dataTransfer.getData('application/x-bk2-vehicle')  || ''; } catch (err) {}
+    console.debug('[bk2 drop]', {
+      slotClasses: slot.className,
+      bookingId: bookingId,
+      vehicleId: slot.getAttribute('data-vehicle-id'),
+      hasCrewMove: !!crewMovePayload,
+      hasPerson:   !!personId,
+      hasVehicle:  !!vehiclePayload,
+    });
 
     // ── CREW MOVE (existing worker → vehicle, or → unassigned pool) ──
     if (crewMovePayload) {
       if (!slot.classList.contains('bk2-slot--drop-veh-assign') &&
           !slot.classList.contains('bk2-slot--drop-unassign')) {
-        // Crew-move drag dropped on a non-crew-move target — ignore.
+        console.debug('[bk2 drop] crew-move dropped on non-crew-move target — ignoring');
         return;
       }
       var payload;
-      try { payload = JSON.parse(crewMovePayload); } catch (err) { return; }
-      if (!payload || !payload.booking_crew_id || !payload.booking_id) return;
-      if (payload.booking_id !== bookingId) {
+      try { payload = JSON.parse(crewMovePayload); } catch (err) { console.warn('[bk2 drop] crew payload JSON parse failed', err); return; }
+      if (!payload || !payload.booking_crew_id || !payload.booking_id) {
+        console.warn('[bk2 drop] crew payload missing required fields', payload);
+        return;
+      }
+      if (String(payload.booking_id) !== String(bookingId)) {
         alert('Workers can only be reassigned within the same booking.');
         return;
       }
       var isAssign = slot.classList.contains('bk2-slot--drop-veh-assign');
       var vehicleId = isAssign ? (slot.getAttribute('data-vehicle-id') || '') : '';
+      console.debug('[bk2 drop] crew-move → assignCrewToVehicle', { booking_crew_id: payload.booking_crew_id, vehicleId: vehicleId, isAssign: isAssign });
       assignCrewToVehicle(payload, vehicleId);
       return;
     }
@@ -2854,7 +2872,11 @@
     var bookingCrewId = src.getAttribute('data-booking-crew-id');
     var bookingId     = src.getAttribute('data-booking-id');
     var crewName      = src.getAttribute('data-crew-name') || '';
-    if (!bookingCrewId || !bookingId) return;
+    console.debug('[bk2 dragstart] crew', { bookingId: bookingId, bookingCrewId: bookingCrewId, name: crewName, src: src });
+    if (!bookingCrewId || !bookingId) {
+      console.warn('[bk2 dragstart] missing data-booking-crew-id or data-booking-id — aborting drag');
+      return;
+    }
     try {
       e.dataTransfer.effectAllowed = 'move';
       e.dataTransfer.setData('application/x-bk2-crew-move', JSON.stringify({
@@ -2863,7 +2885,7 @@
         crew_name: crewName,
       }));
       e.dataTransfer.setData('text/plain', crewName);
-    } catch (err) {}
+    } catch (err) { console.warn('[bk2 dragstart] setData failed', err); }
     src.classList.add('is-dragging');
   });
   document.addEventListener('dragend', function (e) {
@@ -2880,7 +2902,9 @@
     var body = new URLSearchParams();
     if (vehicleId) body.append('vehicle_id', vehicleId);
     if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
-    fetch('/bookings/' + encodeURIComponent(payload.booking_id) + '/crew/' + encodeURIComponent(payload.booking_crew_id) + '/assign-vehicle', {
+    var url = '/bookings/' + encodeURIComponent(payload.booking_id) + '/crew/' + encodeURIComponent(payload.booking_crew_id) + '/assign-vehicle';
+    console.debug('[bk2 assignCrewToVehicle] POST', url, 'vehicle_id=' + vehicleId);
+    fetch(url, {
       method: 'POST',
       headers: {
         'Accept': 'application/json',
@@ -2889,10 +2913,17 @@
       },
       body: body,
       credentials: 'same-origin',
-    }).then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }).then(function (j) { return { ok: r.ok, json: j }; }); })
+    }).then(function (r) {
+      return r.text().then(function (text) {
+        var json = null;
+        try { json = JSON.parse(text); } catch (e) {}
+        return { ok: r.ok, status: r.status, json: json, text: text };
+      });
+    })
       .then(function (result) {
+        console.debug('[bk2 assignCrewToVehicle] response', result);
         if (!result.ok || !result.json || result.json.ok === false) {
-          alert((result.json && result.json.error) || 'Could not move that worker.');
+          alert((result.json && result.json.error) || ('Could not move that worker (HTTP ' + result.status + ').'));
           return;
         }
         // Soft reload to re-derive the layout. Could optimistically move
@@ -2900,7 +2931,10 @@
         // is non-trivial to mirror client-side; refresh is simpler and
         // the network round-trip already happened.
         location.reload();
-      }).catch(function () { alert('Could not move that worker — network error.'); });
+      }).catch(function (err) {
+        console.warn('[bk2 assignCrewToVehicle] fetch failed', err);
+        alert('Could not move that worker — network error.');
+      });
   }
 
   // ==========================================================
