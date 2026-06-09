@@ -59,7 +59,10 @@
       if (window.WorkerParticles) {
         var origin = { x: window.innerWidth / 2, y: window.innerHeight * 0.40 };
         window.WorkerParticles.celebrate({
-          type: 'success', origin: origin, intensity: 1.0, functional: true,
+          // Deliberately gentle: a small, soft confetti puff behind the
+          // tick rather than a full celebration burst. Signing a document
+          // happens often, so the feedback should feel subtle and clean.
+          type: 'success', origin: origin, intensity: 0.35, functional: true,
         });
       }
     } catch (e) {}

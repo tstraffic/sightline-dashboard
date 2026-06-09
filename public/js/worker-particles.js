@@ -263,9 +263,8 @@
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
         ctx.fill();
       } else if (p.shape === 'rect') {
-        // confetti strip: thin rotated rectangle. End-of-life fade.
-        var fr = p.life / p.maxLife;
-        ctx.globalAlpha = p.alpha * (1 - Math.max(0, fr - 0.7) / 0.3);
+        // confetti strip: thin rotated rectangle. Smooth in/out fade.
+        ctx.globalAlpha = confettiEnv(p);
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.angle);
@@ -274,8 +273,7 @@
         // advance spin (re-uses vAngle as rad/s)
         p.angle += p.vAngle * dt;
       } else if (p.shape === 'triangle') {
-        var ft = p.life / p.maxLife;
-        ctx.globalAlpha = p.alpha * (1 - Math.max(0, ft - 0.7) / 0.3);
+        ctx.globalAlpha = confettiEnv(p);
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.angle);
@@ -289,8 +287,7 @@
         p.angle += p.vAngle * dt;
       } else if (p.shape === 'hardhat') {
         // Tiny stylised hard-hat: rounded top + brim rectangle.
-        var fh = p.life / p.maxLife;
-        ctx.globalAlpha = p.alpha * (1 - Math.max(0, fh - 0.7) / 0.3);
+        ctx.globalAlpha = confettiEnv(p);
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.angle);
@@ -306,8 +303,7 @@
         p.angle += p.vAngle * dt;
       } else if (p.shape === 'vest') {
         // High-vis vest silhouette: rounded rect with reflective stripe.
-        var fv = p.life / p.maxLife;
-        ctx.globalAlpha = p.alpha * (1 - Math.max(0, fv - 0.7) / 0.3);
+        ctx.globalAlpha = confettiEnv(p);
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.angle);
@@ -375,22 +371,34 @@
   var SHAPES = ['rect', 'circle', 'triangle', 'hardhat', 'vest'];
 
   function spawnConfetti(p, origin, palette) {
-    var angle = (-Math.PI / 2) + (Math.random() - 0.5) * (Math.PI * 0.95);
-    var speed = 280 + Math.random() * 260;
+    // Gentle, smooth puff: a tighter upward cone, slower launch and softer
+    // gravity so pieces drift rather than explode + plummet. Smaller, less
+    // spin, and a fade-in/out envelope (see confettiEnv) for a clean feel.
+    var angle = (-Math.PI / 2) + (Math.random() - 0.5) * (Math.PI * 0.65);
+    var speed = 150 + Math.random() * 150;
     p.x = origin.x;
     p.y = origin.y;
     p.vx = Math.cos(angle) * speed;
     p.vy = Math.sin(angle) * speed;
-    p.gravity = 720;             // px/s^2 — confetti falls reasonably fast
-    p.drag = 0.985;              // mild air resistance per frame
+    p.gravity = 480;             // px/s^2 — softer, floatier fall
+    p.drag = 0.97;               // a touch more air resistance = smoother
     p.life = 0;
-    p.maxLife = 1.6 + Math.random() * 1.4;
-    p.size = 6 + Math.random() * 5;
+    p.maxLife = 1.5 + Math.random() * 1.1;
+    p.size = 4 + Math.random() * 3.5;
     p.color = palette[(Math.random() * palette.length) | 0];
     p.alpha = 1;
     p.shape = SHAPES[(Math.random() * SHAPES.length) | 0];
     p.angle = Math.random() * Math.PI * 2;
-    p.vAngle = (Math.random() - 0.5) * 9; // rad/s spin
+    p.vAngle = (Math.random() - 0.5) * 5; // rad/s spin — calmer rotation
+  }
+
+  // Smooth alpha envelope for confetti shapes: quick ease-in so pieces
+  // don't pop at full opacity, gentle ease-out over the final third.
+  function confettiEnv(p) {
+    var fr = p.life / p.maxLife;
+    var fin = Math.min(1, p.life / 0.12);          // ~120ms fade-in
+    var fout = 1 - Math.max(0, fr - 0.65) / 0.35;  // ease-out last 35%
+    return p.alpha * fin * Math.max(0, fout);
   }
 
   function celebrate(opts) {
