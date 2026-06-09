@@ -198,6 +198,28 @@ router.post('/abergeldie', requirePermission('abergeldie_payments'), (req, res) 
     const labelInput = String(req.body.label || '').trim();
     const notes = String(req.body.notes || '').trim();
 
+    // Optional manual period override + ute defaults (same questions as the
+    // edit box). Both dates must be supplied together and well-formed to take
+    // effect; otherwise we fall back to inferring the period from the CSV.
+    const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+    const periodStartInput = String(req.body.period_start || '').trim();
+    const periodEndInput   = String(req.body.period_end || '').trim();
+    const hasManualPeriod  = dateRe.test(periodStartInput) && dateRe.test(periodEndInput);
+    if (hasManualPeriod && periodEndInput < periodStartInput) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+      req.flash('error', 'Period end must be on or after period start.');
+      return res.redirect('/finance/abergeldie/new');
+    }
+    const uteRate = req.body.default_ute_rate_per_shift !== undefined && req.body.default_ute_rate_per_shift !== ''
+      ? round2(req.body.default_ute_rate_per_shift)
+      : 0;
+    if (uteRate < 0) {
+      try { fs.unlinkSync(req.file.path); } catch (e) {}
+      req.flash('error', 'Ute rate must be 0 or more.');
+      return res.redirect('/finance/abergeldie/new');
+    }
+    const uteBasis = (req.body.ute_rate_basis === 'hourly') ? 'hourly' : 'shift';
+
     let raw;
     try { raw = fs.readFileSync(req.file.path, 'utf8'); }
     catch (e) {
@@ -223,18 +245,20 @@ router.post('/abergeldie', requirePermission('abergeldie_payments'), (req, res) 
       return res.redirect('/finance/abergeldie/new');
     }
 
-    const period = inferPeriod(matchingShifts);
+    const period = hasManualPeriod
+      ? { period_start: periodStartInput, period_end: periodEndInput }
+      : inferPeriod(matchingShifts);
     const label = labelInput || (`${targetClient} — ` + periodLabel(period.period_start, period.period_end));
 
     let sheetId;
     const tx = db.transaction(() => {
       const r = db.prepare(`
         INSERT INTO abergeldie_payment_sheets
-          (client_name, period_start, period_end, label, csv_filename, fee_per_hour, notes, created_by_id)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          (client_name, period_start, period_end, label, csv_filename, fee_per_hour, default_ute_rate_per_shift, ute_rate_basis, notes, created_by_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         targetClient, period.period_start, period.period_end, label,
-        path.basename(req.file.path), feePerHour, notes,
+        path.basename(req.file.path), feePerHour, uteRate, uteBasis, notes,
         req.session.user.id,
       );
       sheetId = r.lastInsertRowid;
