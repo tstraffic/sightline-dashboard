@@ -2288,42 +2288,61 @@
   // Type filtering happens in the drop handler (it has access to the
   // actual payload via getData; dragover only sees the list of types).
   document.addEventListener('dragover', function (e) {
+    var t = e.dataTransfer && e.dataTransfer.types;
+    var has = function (name) { return t && Array.prototype.indexOf.call(t, name) !== -1; };
+    var isCrewMove = has('application/x-bk2-crew-move');
+
+    // Crew-move drag: accept ANYWHERE inside a .bk2-crew block that
+    // has a vehicle, OR inside the unassigned pool. Highlights either
+    // the precise vehicle chip (.bk2-slot--drop-veh-assign) or the
+    // crew block (.bk2-crew) so the planner can see exactly what the
+    // drop is targeting.
+    if (isCrewMove) {
+      var unassignZone = e.target.closest && e.target.closest('.bk2-slot--drop-unassign');
+      var crewBlock    = e.target.closest && e.target.closest('.bk2-crew');
+      var crewBlockHasVehicle = crewBlock && crewBlock.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
+      if (unassignZone || crewBlockHasVehicle) {
+        e.preventDefault();
+        e.stopPropagation();
+        try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
+        // Highlight: vehicle chip if cursor is on it, else the whole
+        // block, else the unassigned pool.
+        var vehChip = e.target.closest && e.target.closest('.bk2-slot--drop-veh-assign');
+        if (vehChip) {
+          vehChip.classList.add('is-drag-over');
+        } else if (unassignZone) {
+          unassignZone.classList.add('is-drag-over');
+        } else if (crewBlock) {
+          crewBlock.classList.add('is-drag-over');
+        }
+        return;
+      }
+      // Crew-move drag over something irrelevant — let the cursor
+      // show "no drop" by NOT calling preventDefault.
+      return;
+    }
+
+    // Non-crew-move drags use the simple drop-class match (resource
+    // panel → empty crew/UTE slot).
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
     if (!slot) return;
     e.preventDefault();
     e.stopPropagation();
-    try {
-      var t = e.dataTransfer && e.dataTransfer.types;
-      var has = function (name) { return t && Array.prototype.indexOf.call(t, name) !== -1; };
-      // crew-move on a vehicle / unassign target = move; otherwise copy.
-      if (has('application/x-bk2-crew-move')) e.dataTransfer.dropEffect = 'move';
-      else                                    e.dataTransfer.dropEffect = 'copy';
-    } catch (err) {}
+    try { e.dataTransfer.dropEffect = 'copy'; } catch (err) {}
     slot.classList.add('is-drag-over');
   });
   document.addEventListener('dragleave', function (e) {
-    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
-    if (!slot) return;
-    // Only un-highlight when leaving the slot entirely.
-    if (!slot.contains(e.relatedTarget)) slot.classList.remove('is-drag-over');
+    // Clear any of the three possible highlight roots if we've left
+    // them entirely (relatedTarget is outside the element).
+    var rootSelectors = ['.bk2-slot--drop.is-drag-over', '.bk2-crew.is-drag-over'];
+    rootSelectors.forEach(function (sel) {
+      var el = e.target.closest && e.target.closest(sel);
+      if (!el) return;
+      if (!el.contains(e.relatedTarget)) el.classList.remove('is-drag-over');
+    });
   });
 
   document.addEventListener('drop', function (e) {
-    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
-    if (!slot) {
-      console.debug('[bk2 drop] no .bk2-slot--drop ancestor for target', e.target);
-      return;
-    }
-    e.preventDefault();
-    e.stopPropagation();
-    slot.classList.remove('is-drag-over');
-
-    var bookingId = slot.getAttribute('data-booking-id');
-    if (!bookingId) {
-      console.warn('[bk2 drop] slot has no data-booking-id', slot);
-      return;
-    }
-
     // Read every payload we might receive. Whichever the source set
     // determines the action — crew-move ALWAYS wins because it can
     // only come from a worker slot drag (most specific intent).
@@ -2333,38 +2352,62 @@
     try { crewMovePayload = e.dataTransfer.getData('application/x-bk2-crew-move') || ''; } catch (err) {}
     try { personId        = e.dataTransfer.getData('application/x-bk2-person')   || ''; } catch (err) {}
     try { vehiclePayload  = e.dataTransfer.getData('application/x-bk2-vehicle')  || ''; } catch (err) {}
-    console.debug('[bk2 drop]', {
-      slotClasses: slot.className,
-      bookingId: bookingId,
-      vehicleId: slot.getAttribute('data-vehicle-id'),
-      hasCrewMove: !!crewMovePayload,
-      hasPerson:   !!personId,
-      hasVehicle:  !!vehiclePayload,
-    });
 
     // ── CREW MOVE (existing worker → vehicle, or → unassigned pool) ──
+    // Resolved against the crew BLOCK rather than just the precise
+    // element under the cursor — drop anywhere inside a .bk2-crew
+    // that has a vehicle = "in that ute". This matches what planners
+    // expect when they aim for the worker rows under the ute and
+    // miss the ute chip itself.
     if (crewMovePayload) {
-      if (!slot.classList.contains('bk2-slot--drop-veh-assign') &&
-          !slot.classList.contains('bk2-slot--drop-unassign')) {
-        console.debug('[bk2 drop] crew-move dropped on non-crew-move target — ignoring');
+      var unassignZone = e.target.closest && e.target.closest('.bk2-slot--drop-unassign');
+      var crewBlock    = e.target.closest && e.target.closest('.bk2-crew');
+      var vehSlotInBlock = crewBlock ? crewBlock.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]') : null;
+      // If we landed inside the unassigned pool, prefer that intent.
+      // Otherwise, if there's a crew block with a vehicle anywhere on
+      // our drop path, use it.
+      var target = unassignZone || vehSlotInBlock;
+      if (!target) {
+        console.debug('[bk2 drop] crew-move dropped outside any crew-move target — ignoring');
         return;
       }
+      e.preventDefault();
+      e.stopPropagation();
+      // Clear any drag-over highlights left around.
+      document.querySelectorAll('.bk2-slot--drop.is-drag-over, .bk2-crew.is-drag-over').forEach(function (el) {
+        el.classList.remove('is-drag-over');
+      });
       var payload;
-      try { payload = JSON.parse(crewMovePayload); } catch (err) { console.warn('[bk2 drop] crew payload JSON parse failed', err); return; }
+      try { payload = JSON.parse(crewMovePayload); } catch (err) { console.warn('[bk2 drop] crew payload parse failed', err); return; }
       if (!payload || !payload.booking_crew_id || !payload.booking_id) {
-        console.warn('[bk2 drop] crew payload missing required fields', payload);
+        console.warn('[bk2 drop] crew payload missing fields', payload);
         return;
       }
-      if (String(payload.booking_id) !== String(bookingId)) {
+      // Same-booking check — pick the booking id from whichever
+      // target we matched.
+      var targetBookingId = target.getAttribute('data-booking-id') ||
+                            (crewBlock && crewBlock.closest('[data-booking-id]') &&
+                             crewBlock.closest('[data-booking-id]').getAttribute('data-booking-id'));
+      if (targetBookingId && String(payload.booking_id) !== String(targetBookingId)) {
         alert('Workers can only be reassigned within the same booking.');
         return;
       }
-      var isAssign = slot.classList.contains('bk2-slot--drop-veh-assign');
-      var vehicleId = isAssign ? (slot.getAttribute('data-vehicle-id') || '') : '';
-      console.debug('[bk2 drop] crew-move → assignCrewToVehicle', { booking_crew_id: payload.booking_crew_id, vehicleId: vehicleId, isAssign: isAssign });
+      var isAssign = !unassignZone;
+      var vehicleId = isAssign ? (vehSlotInBlock.getAttribute('data-vehicle-id') || '') : '';
+      console.debug('[bk2 drop] crew-move →', { isAssign: isAssign, vehicleId: vehicleId, booking_crew_id: payload.booking_crew_id });
       assignCrewToVehicle(payload, vehicleId);
       return;
     }
+
+    // Non-crew-move drag — must land on a .bk2-slot--drop target.
+    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
+    if (!slot) return;
+    e.preventDefault();
+    e.stopPropagation();
+    slot.classList.remove('is-drag-over');
+
+    var bookingId = slot.getAttribute('data-booking-id');
+    if (!bookingId) return;
 
     // ── VEHICLE DROP (resource panel → empty UTE slot) ──
     if (vehiclePayload && slot.classList.contains('bk2-slot--drop-vehicle')) {
