@@ -12027,6 +12027,38 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 257: Repair dangling FK on docket_time_entries.
+  // Migration 93 rebuilt booking_dockets via a temporary "_booking_dockets_fix93"
+  // table. SQLite's ALTER TABLE ... RENAME rewrote docket_time_entries' foreign key
+  // to point at that temp table, which migration 93 then dropped — leaving a dangling
+  // reference that makes EVERY insert into docket_time_entries fail with
+  // "no such table: main._booking_dockets_fix93" (breaks docket time tracking, incl.
+  // the Traffio docket mirror). Rebuild the table with the correct FK if the broken
+  // reference is present. Idempotent + no-op on fresh DBs.
+  if (!isMigrationApplied.get(257)) {
+    console.log('Running migration 257: repair docket_time_entries FK');
+    try {
+      const info = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='docket_time_entries'").get();
+      if (info && info.sql.includes('_booking_dockets_fix93')) {
+        db.pragma('foreign_keys = OFF');
+        const fixedSql = info.sql.replace(/"?_booking_dockets_fix93"?/g, 'booking_dockets');
+        db.exec('ALTER TABLE docket_time_entries RENAME TO _dte_fix257');
+        db.exec(fixedSql);
+        const cols = db.prepare('PRAGMA table_info(docket_time_entries)').all().map(c => c.name).join(', ');
+        db.exec(`INSERT INTO docket_time_entries (${cols}) SELECT ${cols} FROM _dte_fix257`);
+        db.exec('DROP TABLE _dte_fix257');
+        db.pragma('foreign_keys = ON');
+        console.log('Migration 257: docket_time_entries FK repaired');
+      } else {
+        console.log('Migration 257: no dangling FK, nothing to repair');
+      }
+      recordMigration.run(257, 'Repair dangling FK on docket_time_entries (_booking_dockets_fix93)');
+      console.log('Migration 257 applied');
+    } catch (e) {
+      console.error('Migration 257 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

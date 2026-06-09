@@ -16,6 +16,7 @@ const {
   syncTraffioDockets,
   syncTraffioBookingCrew,
   syncTimesheetsFromDockets,
+  mirrorTraffioDocketsToBookings,
   syncTraffioForms,
   testTraffioConnection,
 } = require('../middleware/traffio');
@@ -205,6 +206,8 @@ router.post('/:provider/sync', async (req, res) => {
       const toDate = req.body.to_date || '';
       const docketStats = await syncTraffioDockets('manual', fromDate, toDate);
       results.push(`Dockets: ${docketStats.created} dockets, ${docketStats.updated} person-lines, ${docketStats.failed} failed`);
+      const mirrorStats = mirrorTraffioDocketsToBookings('manual');
+      results.push(`Booking dockets: ${mirrorStats.created} created, ${mirrorStats.updated} updated, ${mirrorStats.skipped} skipped (no local booking)`);
     }
     if (syncType === 'all' || syncType === 'booking_crew') {
       const s = await syncTraffioBookingCrew('manual', req.body.from_date || '', req.body.to_date || '');

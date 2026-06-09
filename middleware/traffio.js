@@ -707,6 +707,100 @@ function syncTimesheetsFromDockets(triggeredBy) {
   return stats;
 }
 
+// ---- Mirror staged Traffio dockets → native booking_dockets + docket_time_entries ----
+// The booking "Dockets" tab (views/bookings/show.ejs) reads the dashboard's own
+// booking_dockets, NOT the traffio_dockets staging tables that feed invoicing — so a
+// reconciled booking showed "Dockets (0)" even when Traffio had a signed docket for it.
+// This mirrors each staged docket (and its per-person worked hours) into the native
+// tables so they render natively, read-only. Only dockets whose Traffio booking resolves
+// to a local booking are mirrored (booking_dockets.booking_id is NOT NULL); the rest are
+// skipped until the booking is reconciled. Reads the staging tables already populated by
+// syncTraffioDockets — no API call. Idempotent via external_refs.
+function mirrorTraffioDocketsToBookings(triggeredBy) {
+  const db = getDb();
+  const logId = startSyncLog('traffio', 'import', 'booking_docket', triggeredBy);
+  const stats = { processed: 0, created: 0, updated: 0, skipped: 0, failed: 0, errorDetails: '' };
+  try {
+    const sysUser = db.prepare("SELECT id FROM users WHERE role IN ('management','admin') ORDER BY id LIMIT 1").get();
+    const createdBy = sysUser ? sysUser.id : 1;
+    const dockets = db.prepare(`
+      SELECT works_docket_id, works_docket_number, physical_number, booking_id,
+             address, billing_reference, signed_off
+      FROM traffio_dockets WHERE is_deleted = 0
+    `).all();
+    const insDocket = db.prepare(`
+      INSERT INTO booking_dockets (booking_id, docket_number, status, physical_docket_number,
+        client_billing_ref, site_address, created_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `);
+    const updDocket = db.prepare(`
+      UPDATE booking_dockets SET status=?, physical_docket_number=?, client_billing_ref=?,
+        site_address=?, updated_at=CURRENT_TIMESTAMP WHERE id=?
+    `);
+    const personsFor = db.prepare(`
+      SELECT person_id, time_on, time_off, total_hours, break_time, travel_time, lafha
+      FROM traffio_docket_persons WHERE works_docket_id = ? AND is_deleted = 0
+    `);
+    const insTime = db.prepare(`
+      INSERT INTO docket_time_entries (docket_id, crew_member_id, start_on_site, finish_on_site,
+        first_break, travel, lafha, total_hours)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const updTime = db.prepare(`
+      UPDATE docket_time_entries SET docket_id=?, crew_member_id=?, start_on_site=?, finish_on_site=?,
+        first_break=?, travel=?, lafha=?, total_hours=? WHERE id=?
+    `);
+
+    for (const d of dockets) {
+      stats.processed++;
+      try {
+        if (d.booking_id == null) { stats.skipped++; continue; }
+        const bRef = getInternalRef('traffio', 'booking', String(d.booking_id));
+        if (!bRef) { stats.skipped++; continue; }                 // booking not reconciled locally yet
+        const localBookingId = bRef.internal_id;
+        const status = isTruthy(d.signed_off) ? 'signed' : 'draft';
+        const physical = d.physical_number != null ? String(d.physical_number) : '';
+
+        const existing = getInternalRef('traffio', 'booking_docket', String(d.works_docket_id));
+        let docketId;
+        if (existing) {
+          docketId = existing.internal_id;
+          updDocket.run(status, physical, d.billing_reference || '', d.address || '', docketId);
+          stats.updated++;
+        } else {
+          const docketNumber = `TRAF-${d.works_docket_id}`;
+          const r = insDocket.run(localBookingId, docketNumber, status, physical,
+            d.billing_reference || '', d.address || '', createdBy);
+          docketId = r.lastInsertRowid;
+          setExternalRef('traffio', 'booking_docket', docketId, String(d.works_docket_id), { works_docket_id: d.works_docket_id });
+          stats.created++;
+        }
+
+        // Per-person worked hours → docket_time_entries (crew_member_id NOT NULL → skip unresolved)
+        for (const p of personsFor.all(d.works_docket_id)) {
+          const crewId = resolveCrewId(db, p.person_id);
+          if (!crewId) continue;
+          const firstBreak = Number(p.break_time) || 0;
+          const travel = Number(p.travel_time) || 0;
+          const lafha = isTruthy(p.lafha) ? 1 : 0;
+          const hours = Number(p.total_hours) || 0;
+          const extKey = `${d.works_docket_id}:${p.person_id}`;
+          const exTime = getInternalRef('traffio', 'docket_time', extKey);
+          if (exTime) {
+            updTime.run(docketId, crewId, p.time_on, p.time_off, firstBreak, travel, lafha, hours, exTime.internal_id);
+          } else {
+            const tr = insTime.run(docketId, crewId, p.time_on, p.time_off, firstBreak, travel, lafha, hours);
+            setExternalRef('traffio', 'docket_time', tr.lastInsertRowid, extKey, { works_docket_id: d.works_docket_id, person_id: p.person_id });
+          }
+        }
+      } catch (err) { stats.failed++; stats.errorDetails += `Mirror docket ${d.works_docket_id}: ${err.message}\n`; }
+    }
+    updateSyncStatus('traffio', 'success');
+  } catch (err) { stats.errorDetails = err.message; updateSyncStatus('traffio', 'error', err.message); }
+  completeSyncLog(logId, stats);
+  return stats;
+}
+
 // Map a Traffio form name onto the dashboard's safety_forms.form_type values.
 function mapFormType(name) {
   const s = String(name || '').toLowerCase();
@@ -793,6 +887,7 @@ module.exports = {
   syncTraffioDockets,
   syncTraffioBookingCrew,
   syncTimesheetsFromDockets,
+  mirrorTraffioDocketsToBookings,
   syncTraffioForms,
   testTraffioConnection,
   // Reconciliation helpers (used by routes/traffio-imports.js)
