@@ -69,13 +69,30 @@ function syncTCCrewVehicles(db, bookingId) {
 }
 
 function generateBookingNumber(db) {
-  const last = db.prepare("SELECT booking_number FROM bookings ORDER BY id DESC LIMIT 1").get();
-  let nextNum = 1;
-  if (last && last.booking_number) {
-    const num = parseInt(last.booking_number.replace('BK-', ''), 10);
-    if (!isNaN(num)) nextNum = num + 1;
+  // Find the highest BK-NNNN already used. Other booking_number
+  // formats (e.g. "TRF-B-12345" from the Traffio sync) have their own
+  // namespace and are ignored. The previous version of this function
+  // looked at the booking_number of the row with the highest `id` and
+  // incremented — fine until a Traffio import landed last, at which
+  // point parseInt("TRF-B-12345".replace("BK-","")) → NaN, the fallback
+  // returned "BK-0001", and we hit a UNIQUE constraint failure.
+  const row = db.prepare(`
+    SELECT MAX(CAST(SUBSTR(booking_number, 4) AS INTEGER)) AS maxNum
+    FROM bookings
+    WHERE booking_number LIKE 'BK-%'
+      AND SUBSTR(booking_number, 4) GLOB '[0-9]*'
+  `).get();
+  let next = (row && Number.isFinite(row.maxNum) ? row.maxNum : 0) + 1;
+  // Self-heal: if the candidate is somehow still taken (race, corrupt
+  // numbering, manual SQL fiddling), step forward until we find a free
+  // slot. Bounded to keep accidental gaps from running away.
+  const check = db.prepare("SELECT 1 AS x FROM bookings WHERE booking_number = ?");
+  for (let i = 0; i < 10000; i++) {
+    const candidate = 'BK-' + String(next).padStart(4, '0');
+    if (!check.get(candidate)) return candidate;
+    next++;
   }
-  return 'BK-' + String(nextNum).padStart(4, '0');
+  throw new Error('No free booking number after 10000 attempts');
 }
 
 function transformBooking(db, row) {
