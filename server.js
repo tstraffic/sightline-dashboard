@@ -500,21 +500,32 @@ app.listen(PORT, () => {
     }
   }, 15 * 60 * 1000);
 
-  // Traffio booking sync — polls every 5 min when the integration is enabled
-  // AND auto_sync is turned on in /admin/integrations (a manual "Sync now" is
-  // always available there regardless). Confident job matches become bookings;
-  // ambiguous ones queue at /traffio-imports for reconciliation. Non-fatal.
-  setInterval(() => {
+  // Traffio sync — polls every 5 min when the integration is enabled AND
+  // auto_sync is turned on in /admin/integrations (a manual "Sync now" is
+  // always available there regardless). Runs in order so each step builds on
+  // the last: bookings first (confident job matches become bookings; ambiguous
+  // ones queue at /traffio-imports for reconciliation), then signed works
+  // dockets into the staging tables, then mirror those into native
+  // booking_dockets so a docket submitted on Traffio shows on the booking's
+  // Dockets tab without a manual sync. The mirror only fills dockets whose
+  // booking is already reconciled locally; the rest wait until it is. Non-fatal.
+  setInterval(async () => {
     try {
       const { getIntegrationConfig } = require('./middleware/integrations');
       const ic = getIntegrationConfig('traffio');
       if (!ic.enabled || !ic.config.auto_sync) return;
-      const { syncTraffioBookings } = require('./middleware/traffio');
+      const { syncTraffioBookings, syncTraffioDockets, mirrorTraffioDocketsToBookings } = require('./middleware/traffio');
       const today = new Date().toISOString().split('T')[0];
       const from = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-      Promise.resolve(syncTraffioBookings('scheduled', from, today))
-        .then(s => { if (s && (s.created || s.queued)) console.log(`[traffio] sync: ${s.created} created, ${s.queued} queued, ${s.updated} updated`); })
-        .catch(e => console.error('[cron] traffio sync error:', e.message));
+
+      const b = await syncTraffioBookings('scheduled', from, today);
+      if (b && (b.created || b.queued)) console.log(`[traffio] bookings: ${b.created} created, ${b.queued} queued, ${b.updated} updated`);
+
+      const d = await syncTraffioDockets('scheduled', from, today);
+      if (d && (d.created || d.updated)) console.log(`[traffio] dockets: ${d.created} dockets, ${d.updated} person-lines`);
+
+      const m = mirrorTraffioDocketsToBookings('scheduled');
+      if (m && (m.created || m.updated)) console.log(`[traffio] booking dockets: ${m.created} created, ${m.updated} updated, ${m.skipped} skipped (no local booking)`);
     } catch (e) { console.error('[cron] traffio sync error:', e.message); }
   }, 5 * 60 * 1000);
 });

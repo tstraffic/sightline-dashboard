@@ -636,7 +636,7 @@ router.get('/', (req, res) => {
   const rows = db.prepare(`
     SELECT b.id, b.booking_number, b.title, b.status, b.start_datetime, b.end_datetime,
       b.site_address, b.suburb, b.state, b.postcode, b.depot, b.is_emergency, b.is_callout,
-      b.order_number, b.location_notes, b.latitude, b.longitude,
+      b.order_number, b.location_notes, b.latitude, b.longitude, b.source,
       j.job_name, j.job_number, c.company_name AS client_name,
       cm_req.full_name AS requester_name, cm_plan.full_name AS planner_name,
       (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id) AS crew_count,
