@@ -12123,6 +12123,58 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 260: Shift dockets — turn docket_signatures into a per-shift
+  // docket "header" (one docket covers the whole crew) + a docket_crew lines
+  // table (one row per crew member's hours). Adds lifecycle columns so a
+  // submitted docket can be locked and an admin "adjustment" can supersede it
+  // with a new docket. Legacy per-person rows have status NULL (treated as
+  // 'current') and no docket_crew rows (rendered via a single-line fallback).
+  if (!isMigrationApplied.get(260)) {
+    console.log('Running migration 260: shift dockets (header cols + docket_crew)');
+    try {
+      const cols = db.prepare("PRAGMA table_info(docket_signatures)").all().map(c => c.name);
+      const addCol = (name, ddl) => { if (!cols.includes(name)) db.exec("ALTER TABLE docket_signatures ADD COLUMN " + ddl); };
+      addCol('status',            "status TEXT DEFAULT 'current'");      // 'current' | 'superseded' (NULL legacy = current)
+      addCol('parent_docket_id',  "parent_docket_id INTEGER");           // the docket this one supersedes
+      addCol('superseded_by_id',  "superseded_by_id INTEGER");           // the docket that supersedes this one
+      addCol('version',           "version INTEGER DEFAULT 1");
+      addCol('source',            "source TEXT DEFAULT 'worker'");       // 'worker' | 'admin'
+      addCol('created_by_user_id',"created_by_user_id INTEGER");         // admin who made an adjustment
+      addCol('booking_id',        "booking_id INTEGER");                 // shift key (denormalized)
+      addCol('shift_job_id',      "shift_job_id INTEGER");               // shift key (denormalized; avoids clashing w/ any future job_id)
+      addCol('shift_date',        "shift_date TEXT");                    // YYYY-MM-DD
+      addCol('signed_by_crew_id', "signed_by_crew_id INTEGER");          // crew member who filled/signed (the lead)
+      addCol('updated_at',        "updated_at DATETIME");
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS docket_crew (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          docket_id INTEGER NOT NULL REFERENCES docket_signatures(id) ON DELETE CASCADE,
+          crew_member_id INTEGER REFERENCES crew_members(id),
+          allocation_id INTEGER REFERENCES crew_allocations(id),
+          booking_crew_id INTEGER REFERENCES booking_crew(id),
+          name_snapshot TEXT DEFAULT '',
+          role_snapshot TEXT DEFAULT '',
+          start_on_site TEXT DEFAULT '',
+          finish_on_site TEXT DEFAULT '',
+          break_minutes INTEGER DEFAULT 0,
+          travel_hours REAL DEFAULT 0,
+          total_hours REAL DEFAULT 0,
+          created_at DATETIME DEFAULT (datetime('now'))
+        )
+      `);
+      db.exec("CREATE INDEX IF NOT EXISTS idx_docket_crew_docket ON docket_crew(docket_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_docket_sig_shift ON docket_signatures(booking_id, shift_job_id, shift_date)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_docket_sig_parent ON docket_signatures(parent_docket_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_docket_sig_status ON docket_signatures(status)");
+
+      recordMigration.run(260, 'shift dockets: docket_signatures header cols + docket_crew lines table');
+      console.log('Migration 260 applied');
+    } catch (e) {
+      console.error('Migration 260 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

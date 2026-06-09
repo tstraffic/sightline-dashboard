@@ -324,6 +324,6 @@
 
   <!-- FORMS TAB &mdash; shared partial keeps this 1:1 with views/worker/job-detail.ejs -->
   <% if (tab === 'forms') { %>
-    <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, docket: typeof docket !== 'undefined' ? docket : null }) %>
+    <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null }) %>
   <% } %>
 </div>

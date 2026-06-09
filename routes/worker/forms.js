@@ -7,6 +7,7 @@ const sharp = require('sharp');
 const { getDb } = require('../../db/database');
 const { notifySubmission } = require('../../services/jobPackNotify');
 const { sydneyToday } = require('../../lib/sydney');
+const { resolveShift, getCurrentDocket } = require('../../lib/shiftDocket');
 
 // Fire-and-forget email-the-PDF-to-ops on every Job-Pack submission.
 // The email send happens off the request path so a slow / failed Resend
@@ -102,18 +103,14 @@ router.get('/forms', (req, res) => {
     WHERE crew_member_id = ? AND date(created_at) = ?
   `).all(worker.id, today);
 
-  // Get today's dockets
-  const todaysDockets = db.prepare(`
-    SELECT allocation_id
-    FROM docket_signatures
-    WHERE crew_member_id = ? AND date(signed_at) = ?
-  `).all(worker.id, today);
-
-  // Build status per shift
+  // Build status per shift. Dockets are now per-shift (one docket covers the
+  // whole crew), so "has docket" = a current shift docket exists for the shift
+  // this allocation belongs to.
   const shiftStatus = todaysShifts.map(s => {
     const hasPrestart = todaysForms.some(f => f.form_type === 'prestart' && (f.allocation_id === s.id || f.allocation_id === null));
     const hasTake5 = todaysForms.some(f => f.form_type === 'take5' && (f.allocation_id === s.id || f.allocation_id === null));
-    const hasDocket = todaysDockets.some(d => d.allocation_id === s.id);
+    const shift = resolveShift(db, { allocationId: s.id });
+    const hasDocket = shift ? !!getCurrentDocket(db, shift) : false;
     return { ...s, hasPrestart, hasTake5, hasDocket };
   });
 

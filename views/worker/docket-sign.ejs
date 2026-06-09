@@ -1,9 +1,6 @@
 <meta name="color-scheme" content="light only">
 
 <style>
-  /* Dark-theme docket page that actually reads. The previous version used
-     light-theme cards inside the dark worker layout, so labels disappeared
-     into the bg and the inputs rendered as solid white slabs. */
   .ds-wrap   { padding: 0.5rem; padding-bottom: 6rem; }
   .ds-back   { display: inline-flex; align-items: center; gap: 4px; color: #10B981; font-size: 0.85rem; font-weight: 600; }
   .ds-h1     { font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: -0.01em; margin-top: 0.25rem; }
@@ -27,16 +24,12 @@
   .ds-summary-meta   { font-size: 0.72rem; color: rgba(255,255,255,0.55); margin-top: 2px; }
   .ds-summary-date   { font-size: 0.72rem; font-weight: 600; color: rgba(255,255,255,0.55); }
 
-  /* Form labels + helper text, in colors that read on the dark card */
   .ds-label   { display: block; font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.65); margin-bottom: 4px; letter-spacing: 0.02em; }
   .ds-label .req { color: #FCA5A5; margin-left: 2px; }
   .ds-help    { font-size: 0.7rem; color: rgba(255,255,255,0.45); margin-top: 4px; }
   .ds-error-text { font-size: 0.72rem; font-weight: 600; color: #FCA5A5; margin-top: 4px; display: none; }
   .ds-error-text.show { display: block; }
 
-  /* Inputs &mdash; solid light fill so iOS doesn't dark-mode-invert them; text
-     and placeholders explicit for the same reason. color-scheme:light only
-     also keeps the native time pickers light. */
   .ds-input, .ds-select, .ds-textarea {
     width: 100%;
     background: #fff;
@@ -62,24 +55,38 @@
   .ds-textarea { resize: none; min-height: 64px; }
   .ds-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 
-  /* Total-hours pill inside the Time card */
-  .ds-total {
-    margin-top: 12px;
-    padding: 12px 14px;
+  /* Per-crew docket rows */
+  .ds-crew {
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.10);
     border-radius: 12px;
+    padding: 12px;
+    margin-top: 10px;
+  }
+  .ds-crew-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
+  .ds-crew-name { font-size: 0.92rem; font-weight: 700; color: #fff; }
+  .ds-crew-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ds-chip { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
+  .ds-chip-tl { background: rgba(252,211,77,0.15); color: #FCD34D; border: 1px solid rgba(252,211,77,0.3); }
+  .ds-chip-role { background: rgba(96,165,250,0.12); color: #93C5FD; border: 1px solid rgba(96,165,250,0.25); }
+  .ds-crew-total { font-size: 0.75rem; font-weight: 700; color: #34D399; white-space: nowrap; }
+  .ds-mini-label { display:block; font-size: 0.6rem; font-weight: 700; color: rgba(255,255,255,0.5); margin-bottom: 3px; letter-spacing: 0.04em; text-transform: uppercase; }
+  .ds-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
+  .ds-grid-4 .ds-input { padding: 9px 8px; font-size: 0.85rem; }
+
+  .ds-total {
+    margin-top: 12px; padding: 12px 14px; border-radius: 12px;
     background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.1));
     border: 1px solid rgba(16,185,129,0.35);
     display: flex; align-items: center; justify-content: space-between;
   }
   .ds-total-label { font-size: 0.78rem; font-weight: 600; color: rgba(255,255,255,0.85); letter-spacing: 0.02em; }
-  .ds-total-value { font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: -0.02em; tabular-nums: 1; font-variant-numeric: tabular-nums; }
+  .ds-total-value { font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 
-  /* "No client on site" toggle */
   .ds-toggle { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; cursor: pointer; }
   .ds-toggle input { width: 18px; height: 18px; accent-color: #10B981; }
   .ds-toggle span  { font-size: 0.85rem; color: rgba(255,255,255,0.85); font-weight: 500; }
 
-  /* Signature pads &mdash; light surface, dashed border, with a "required" hint */
   .ds-sig-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .ds-sig-clear {
     font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,0.65);
@@ -87,21 +94,16 @@
     padding: 4px 10px; border-radius: 6px;
   }
   .ds-sig-pad {
-    border: 2px dashed rgba(255,255,255,0.18);
-    border-radius: 12px;
-    background: #F8FAFC;
-    height: 160px;
-    position: relative;
-    overflow: hidden;
+    border: 2px dashed rgba(255,255,255,0.18); border-radius: 12px;
+    background: #F8FAFC; height: 160px; position: relative; overflow: hidden;
   }
   .ds-sig-pad.ds-error { border-color: #F87171; background: #FEF2F2; }
   .ds-sig-pad canvas { width: 100%; height: 100%; touch-action: none; display: block; }
   .ds-sig-pad.signed { border-style: solid; border-color: rgba(16,185,129,0.45); background: #F0FDF4; }
   .ds-sig-hint { font-size: 0.68rem; color: rgba(255,255,255,0.4); text-align: center; margin-top: 6px; }
   .ds-sig-hint.signed { color: #34D399; font-weight: 600; }
+  .ds-sig-img { width: 100%; height: 130px; object-fit: contain; background: #fff; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); }
 
-  /* Submit button &mdash; sticks to the bottom of the viewport so it's reachable
-     while signing on a phone. Larger, clearer, with disabled-state styling. */
   .ds-submit-bar {
     position: sticky; bottom: 0;
     background: linear-gradient(180deg, transparent, rgba(10,22,40,0.95) 35%);
@@ -109,162 +111,220 @@
     margin-top: 16px;
   }
   .ds-submit {
-    width: 100%;
-    padding: 16px;
-    border-radius: 14px;
-    font-size: 1rem; font-weight: 700; letter-spacing: 0.01em;
-    color: #fff;
-    background: linear-gradient(135deg, #10B981, #059669);
-    border: none;
-    box-shadow: 0 8px 24px rgba(5,150,105,0.45);
-    cursor: pointer;
-    display: flex; align-items: center; justify-content: center; gap: 8px;
-    min-height: 56px;
+    width: 100%; padding: 16px; border-radius: 14px;
+    font-size: 1rem; font-weight: 700; letter-spacing: 0.01em; color: #fff;
+    background: linear-gradient(135deg, #10B981, #059669); border: none;
+    box-shadow: 0 8px 24px rgba(5,150,105,0.45); cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px;
   }
   .ds-submit:active { transform: scale(0.99); }
-  .ds-submit-summary {
-    text-align: center; font-size: 0.72rem; color: rgba(255,255,255,0.5); margin-top: 8px;
+  .ds-submit-summary { text-align: center; font-size: 0.72rem; color: rgba(255,255,255,0.5); margin-top: 8px; }
+
+  /* Locked / signed read-only */
+  .ds-locked-banner {
+    display: flex; align-items: center; gap: 10px;
+    background: linear-gradient(135deg, rgba(16,185,129,0.16), rgba(16,185,129,0.06));
+    border: 1px solid rgba(16,185,129,0.35); border-radius: 12px; padding: 12px 14px; margin-top: 12px;
   }
+  .ds-locked-banner .t { font-size: 0.9rem; font-weight: 700; color: #fff; }
+  .ds-locked-banner .s { font-size: 0.72rem; color: rgba(255,255,255,0.6); margin-top: 1px; }
+  .ds-ro-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .ds-ro-row:last-child { border-bottom: none; }
+  .ds-ro-name { font-size: 0.86rem; font-weight: 600; color: #fff; }
+  .ds-ro-times { font-size: 0.72rem; color: rgba(255,255,255,0.55); }
+  .ds-ro-hours { font-size: 0.86rem; font-weight: 700; color: #34D399; }
 </style>
 
 <div class="ds-wrap">
-  <a href="/w/jobs/<%= allocation.id %>?tab=docket" class="ds-back">
+  <a href="<%= backUrl %>" class="ds-back">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
     Back
   </a>
 
-  <h1 class="ds-h1">Sign Docket</h1>
+  <h1 class="ds-h1"><%= locked ? 'Docket' : 'Sign Docket' %></h1>
 
-  <!-- Job summary -->
+  <!-- Shift summary -->
   <div class="ds-card ds-summary">
     <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
       <div style="min-width:0;">
-        <p class="ds-summary-client"><%= allocation.client %></p>
+        <p class="ds-summary-client"><%= shift.site.client || shift.site.name || 'Shift' %></p>
         <p class="ds-summary-meta">
-          <%= allocation.job_number %><% if (allocation.site_address || allocation.suburb) { %> &middot; <%= allocation.site_address || allocation.suburb %><% } %>
+          <%= shift.site.number %><% if (shift.site.address || shift.site.suburb) { %> &middot; <%= shift.site.address || shift.site.suburb %><% } %>
         </p>
       </div>
       <span class="ds-summary-date">
-        <%= new Date(allocation.allocation_date + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short', day: 'numeric', month: 'short' }) %>
+        <%= shift.shiftDate ? new Date(shift.shiftDate + 'T00:00:00').toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short', day: 'numeric', month: 'short' }) : '' %>
       </span>
     </div>
   </div>
 
-  <form method="POST" action="/w/dockets/sign/<%= allocation.id %>" id="docket-form" novalidate>
-    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-    <!-- All dockets are daily &mdash; type is fixed on the server side. -->
-    <input type="hidden" name="docket_type" value="daily_docket">
-
-    <!-- Time & Hours -->
-    <div class="ds-card">
-      <p class="ds-card-title">Time &amp; Hours</p>
-
-      <div class="ds-grid-2">
-        <div>
-          <label class="ds-label" for="time-start">Start on site<span class="req">*</span></label>
-          <input type="time" name="start_on_site" id="time-start" required
-            value="<%= typeof prefillStart !== 'undefined' ? prefillStart : (allocation.start_time || '') %>"
-            class="ds-input">
-          <p class="ds-error-text" id="err-start">Start time is required.</p>
-        </div>
-        <div>
-          <label class="ds-label" for="time-finish">Finish on site<span class="req">*</span></label>
-          <input type="time" name="finish_on_site" id="time-finish" required
-            value="<%= typeof prefillFinish !== 'undefined' ? prefillFinish : (allocation.end_time || '') %>"
-            class="ds-input">
-          <p class="ds-error-text" id="err-finish">Finish time is required.</p>
-        </div>
-      </div>
-      <p class="ds-help">Prefilled from your rostered start/finish &mdash; edit if the actual times differed.</p>
-
-      <div class="ds-grid-2" style="margin-top:14px;">
-        <div>
-          <label class="ds-label" for="time-break">Break (minutes)</label>
-          <input type="number" name="break_minutes" id="time-break" min="0" max="120" step="5"
-            value="<%= typeof prefillBreakMinutes !== 'undefined' ? prefillBreakMinutes : 30 %>"
-            class="ds-input" inputmode="numeric">
-        </div>
-        <div>
-          <label class="ds-label" for="time-travel">Travel (hours)</label>
-          <input type="number" name="travel_hours" id="time-travel" min="0" max="8" step="0.25" value="0"
-            class="ds-input" inputmode="decimal">
-        </div>
-      </div>
-
-      <div class="ds-total">
-        <span class="ds-total-label">Total hours</span>
-        <span class="ds-total-value" id="total-hours">0.00</span>
+  <% if (locked) { %>
+    <!-- ============ LOCKED / SIGNED (read-only) ============ -->
+    <div class="ds-locked-banner">
+      <svg class="w-6 h-6" style="color:#34D399;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <div>
+        <p class="t">Docket signed</p>
+        <p class="s">
+          <% if (lockedDocket.signed_by_name) { %>by <%= lockedDocket.signed_by_name %> &middot; <% } %>
+          <%= lockedDocket.signed_at ? new Date(lockedDocket.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '' %>
+        </p>
       </div>
     </div>
 
-    <!-- Client -->
+    <div class="ds-card">
+      <p class="ds-card-title">Crew &amp; Hours</p>
+      <% lockedDocket.crew.forEach(function(c) { %>
+        <div class="ds-ro-row">
+          <div style="min-width:0;">
+            <p class="ds-ro-name"><%= c.name %></p>
+            <p class="ds-ro-times"><%= c.start_on_site || '—' %>&ndash;<%= c.finish_on_site || '—' %><% if (c.break_minutes) { %> &middot; <%= c.break_minutes %>m break<% } %><% if (c.travel_hours) { %> &middot; <%= c.travel_hours %>h travel<% } %></p>
+          </div>
+          <span class="ds-ro-hours"><%= (c.total_hours || 0) %>h</span>
+        </div>
+      <% }); %>
+    </div>
+
     <div class="ds-card">
       <p class="ds-card-title">Client representative</p>
-      <input type="text" name="client_name" id="client-name-input"
-        placeholder="Name of the person signing off"
-        class="ds-input">
+      <% if (lockedDocket.no_client_on_site) { %>
+        <p style="color:rgba(255,255,255,0.7);font-size:0.85rem;">No client on site<% if (lockedDocket.no_client_reason) { %> &mdash; <%= lockedDocket.no_client_reason %><% } %></p>
+      <% } else { %>
+        <p style="color:#fff;font-size:0.9rem;font-weight:600;"><%= lockedDocket.client_name || lockedDocket.client_signed_name || '—' %></p>
+      <% } %>
+    </div>
 
-      <label class="ds-toggle">
-        <input type="checkbox" name="no_client_on_site" value="1" id="no-client-toggle">
-        <span>No client on site</span>
-      </label>
-
-      <div id="no-client-reason-wrap" style="margin-top:10px; display:none;">
-        <label class="ds-label" for="no-client-reason">Reason</label>
-        <textarea name="no_client_reason" id="no-client-reason" rows="2"
-          placeholder="e.g. Client off site / not available to sign"
-          class="ds-textarea"></textarea>
+    <div class="ds-grid-2">
+      <div class="ds-card" style="margin-top:12px;">
+        <p class="ds-card-title">Worker signature</p>
+        <% if (lockedDocket.signature_data) { %><img class="ds-sig-img" src="<%= lockedDocket.signature_data %>" alt="Worker signature"><% } else { %><p style="color:rgba(255,255,255,0.4);font-size:0.8rem;">—</p><% } %>
+      </div>
+      <div class="ds-card" style="margin-top:12px;">
+        <p class="ds-card-title">Client signature</p>
+        <% if (lockedDocket.client_signature) { %><img class="ds-sig-img" src="<%= lockedDocket.client_signature %>" alt="Client signature"><% } else { %><p style="color:rgba(255,255,255,0.4);font-size:0.8rem;">—</p><% } %>
       </div>
     </div>
 
-    <!-- Worker signature -->
-    <div class="ds-card">
-      <div class="ds-sig-head">
-        <p class="ds-card-title" style="margin-bottom:0;">Worker signature<span class="req" style="color:#FCA5A5;">*</span></p>
-        <button type="button" onclick="clearSig('worker')" class="ds-sig-clear">Clear</button>
-      </div>
-      <div class="ds-sig-pad" id="worker-sig-pad">
-        <canvas id="worker-sig-canvas" data-particle-trail></canvas>
-      </div>
-      <input type="hidden" name="signature_data" id="worker-sig-data">
-      <p class="ds-sig-hint" id="worker-sig-hint">Sign above with your finger</p>
-      <p class="ds-error-text" id="err-worker-sig">Your signature is required.</p>
-    </div>
+    <% if (lockedDocket.notes) { %>
+      <div class="ds-card"><p class="ds-card-title">Notes</p><p style="color:rgba(255,255,255,0.8);font-size:0.86rem;white-space:pre-wrap;"><%= lockedDocket.notes %></p></div>
+    <% } %>
 
-    <!-- Client signature (hidden when "no client on site" is ticked) -->
-    <div class="ds-card" id="client-sig-block">
-      <div class="ds-sig-head">
-        <p class="ds-card-title" style="margin-bottom:0;">Client signature<span class="req" style="color:#FCA5A5;">*</span></p>
-        <button type="button" onclick="clearSig('client')" class="ds-sig-clear">Clear</button>
-      </div>
-      <input type="text" name="client_signed_name" id="client-printed-name"
-        placeholder="Client printed name"
-        class="ds-input" style="margin-bottom:10px;">
-      <div class="ds-sig-pad" id="client-sig-pad">
-        <canvas id="client-sig-canvas" data-particle-trail></canvas>
-      </div>
-      <input type="hidden" name="client_signature" id="client-sig-data">
-      <p class="ds-sig-hint" id="client-sig-hint">Client signs above</p>
-      <p class="ds-error-text" id="err-client-sig">Client signature is required (or tick "No client on site").</p>
-    </div>
+    <p class="ds-submit-summary" style="margin-top:16px;">This docket has been submitted and can't be changed here. Contact the office if it needs adjusting.</p>
 
-    <!-- Notes -->
-    <div class="ds-card">
-      <p class="ds-card-title">Notes (optional)</p>
-      <textarea name="notes" rows="2" placeholder="Anything worth flagging&hellip;" class="ds-textarea"></textarea>
-    </div>
+  <% } else { %>
+    <!-- ============ EDITABLE MULTI-CREW FORM ============ -->
+    <form method="POST" action="<%= signActionUrl %>" id="docket-form" novalidate>
+      <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+      <input type="hidden" name="docket_type" value="daily_docket">
 
-    <!-- Sticky submit -->
-    <div class="ds-submit-bar">
-      <button type="submit" class="ds-submit" id="ds-submit-btn">
-        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-        Sign &amp; Submit Docket
-      </button>
-      <p class="ds-submit-summary" id="ds-submit-summary">Start, finish, your signature and a client signature are required.</p>
-    </div>
-  </form>
+      <!-- Crew & hours -->
+      <div class="ds-card">
+        <p class="ds-card-title">Crew &amp; Hours</p>
+        <% if (!shift.crew.length) { %>
+          <p style="color:rgba(255,255,255,0.6);font-size:0.85rem;">No crew assigned to this shift yet.</p>
+        <% } %>
+        <% shift.crew.forEach(function(c, i) {
+             var cid = c.crew_member_id;
+             // Prefix the key with "cm" so qs always parses crew as an object
+             // keyed by crew id (numeric keys <=20 would become array indices).
+             var base = 'crew[cm' + cid + ']';
+        %>
+          <div class="ds-crew" data-crew-row data-cid="<%= cid %>">
+            <div class="ds-crew-head">
+              <div style="min-width:0;">
+                <p class="ds-crew-name"><%= c.name %></p>
+                <div class="ds-crew-badges">
+                  <% if (c.is_team_leader) { %><span class="ds-chip ds-chip-tl">Team Leader</span><% } %>
+                  <% if (c.role) { %><span class="ds-chip ds-chip-role"><%= c.role %></span><% } %>
+                </div>
+              </div>
+              <span class="ds-crew-total">Total <span data-row-total>0.00</span>h</span>
+            </div>
+            <div class="ds-grid-4">
+              <div>
+                <label class="ds-mini-label">Start</label>
+                <input type="time" name="<%= base %>[start_on_site]" class="ds-input" data-f="start" value="<%= prefillStart %>">
+              </div>
+              <div>
+                <label class="ds-mini-label">Finish</label>
+                <input type="time" name="<%= base %>[finish_on_site]" class="ds-input" data-f="finish" value="<%= prefillFinish %>">
+              </div>
+              <div>
+                <label class="ds-mini-label">Break</label>
+                <input type="number" name="<%= base %>[break_minutes]" class="ds-input" data-f="break" min="0" max="180" step="5" value="<%= prefillBreakMinutes %>" inputmode="numeric">
+              </div>
+              <div>
+                <label class="ds-mini-label">Travel</label>
+                <input type="number" name="<%= base %>[travel_hours]" class="ds-input" data-f="travel" min="0" max="8" step="0.25" value="0" inputmode="decimal">
+              </div>
+            </div>
+            <p class="ds-error-text" data-row-err>Start and finish are required for <%= c.name %>.</p>
+          </div>
+        <% }); %>
+
+        <div class="ds-total">
+          <span class="ds-total-label">Total man-hours</span>
+          <span class="ds-total-value" id="grand-total">0.00</span>
+        </div>
+      </div>
+
+      <!-- Client -->
+      <div class="ds-card">
+        <p class="ds-card-title">Client representative</p>
+        <input type="text" name="client_name" id="client-name-input" placeholder="Name of the person signing off" class="ds-input">
+        <label class="ds-toggle">
+          <input type="checkbox" name="no_client_on_site" value="1" id="no-client-toggle">
+          <span>No client on site</span>
+        </label>
+        <div id="no-client-reason-wrap" style="margin-top:10px; display:none;">
+          <label class="ds-label" for="no-client-reason">Reason</label>
+          <textarea name="no_client_reason" id="no-client-reason" rows="2" placeholder="e.g. Client off site / not available to sign" class="ds-textarea"></textarea>
+        </div>
+      </div>
+
+      <!-- Worker (lead) signature -->
+      <div class="ds-card">
+        <div class="ds-sig-head">
+          <p class="ds-card-title" style="margin-bottom:0;">Your signature<span class="req" style="color:#FCA5A5;">*</span></p>
+          <button type="button" onclick="clearSig('worker')" class="ds-sig-clear">Clear</button>
+        </div>
+        <div class="ds-sig-pad" id="worker-sig-pad"><canvas id="worker-sig-canvas" data-particle-trail></canvas></div>
+        <input type="hidden" name="signature_data" id="worker-sig-data">
+        <p class="ds-sig-hint" id="worker-sig-hint">Sign above with your finger</p>
+        <p class="ds-error-text" id="err-worker-sig">Your signature is required.</p>
+      </div>
+
+      <!-- Client signature -->
+      <div class="ds-card" id="client-sig-block">
+        <div class="ds-sig-head">
+          <p class="ds-card-title" style="margin-bottom:0;">Client signature<span class="req" style="color:#FCA5A5;">*</span></p>
+          <button type="button" onclick="clearSig('client')" class="ds-sig-clear">Clear</button>
+        </div>
+        <input type="text" name="client_signed_name" id="client-printed-name" placeholder="Client printed name" class="ds-input" style="margin-bottom:10px;">
+        <div class="ds-sig-pad" id="client-sig-pad"><canvas id="client-sig-canvas" data-particle-trail></canvas></div>
+        <input type="hidden" name="client_signature" id="client-sig-data">
+        <p class="ds-sig-hint" id="client-sig-hint">Client signs above</p>
+        <p class="ds-error-text" id="err-client-sig">Client signature is required (or tick "No client on site").</p>
+      </div>
+
+      <!-- Notes -->
+      <div class="ds-card">
+        <p class="ds-card-title">Notes (optional)</p>
+        <textarea name="notes" rows="2" placeholder="Anything worth flagging&hellip;" class="ds-textarea"></textarea>
+      </div>
+
+      <!-- Sticky submit -->
+      <div class="ds-submit-bar">
+        <button type="submit" class="ds-submit" id="ds-submit-btn">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          Sign &amp; Submit Docket
+        </button>
+        <p class="ds-submit-summary">One docket for the whole crew. Your signature and a client signature (or "no client") are required.</p>
+      </div>
+    </form>
+  <% } %>
 </div>
 
+<% if (!locked) { %>
 <script>
 // ===== Signature pad =====
 function setupSigPad(canvasId, padId) {
@@ -273,107 +333,60 @@ function setupSigPad(canvasId, padId) {
   var ctx = canvas.getContext('2d');
   var drawing = false;
   var hasDrawn = false;
-
   function resize() {
     var rect = canvas.parentElement.getBoundingClientRect();
     var data = hasDrawn ? canvas.toDataURL() : null;
-    canvas.width = rect.width;
-    canvas.height = rect.height;
-    ctx.strokeStyle = '#0F172A';
-    ctx.lineWidth = 2.4;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    if (data && hasDrawn) {
-      var img = new Image();
-      img.onload = function() { ctx.drawImage(img, 0, 0); };
-      img.src = data;
-    }
+    canvas.width = rect.width; canvas.height = rect.height;
+    ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (data && hasDrawn) { var img = new Image(); img.onload = function() { ctx.drawImage(img, 0, 0); }; img.src = data; }
   }
   resize();
   window.addEventListener('resize', resize);
-
-  function getPos(e) {
-    var rect = canvas.getBoundingClientRect();
-    return { x: (e.clientX - rect.left), y: (e.clientY - rect.top) };
-  }
-
-  canvas.addEventListener('pointerdown', function(e) {
-    drawing = true; hasDrawn = true;
-    pad.classList.add('signed'); pad.classList.remove('ds-error');
-    var p = getPos(e);
-    ctx.beginPath(); ctx.moveTo(p.x, p.y);
-    e.preventDefault();
-  });
-  canvas.addEventListener('pointermove', function(e) {
-    if (!drawing) return;
-    var p = getPos(e);
-    ctx.lineTo(p.x, p.y); ctx.stroke();
-    e.preventDefault();
-  });
-  canvas.addEventListener('pointerup',    function() { drawing = false; });
+  function getPos(e) { var rect = canvas.getBoundingClientRect(); return { x: (e.clientX - rect.left), y: (e.clientY - rect.top) }; }
+  canvas.addEventListener('pointerdown', function(e) { drawing = true; hasDrawn = true; pad.classList.add('signed'); pad.classList.remove('ds-error'); var p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); });
+  canvas.addEventListener('pointermove', function(e) { if (!drawing) return; var p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); });
+  canvas.addEventListener('pointerup', function() { drawing = false; });
   canvas.addEventListener('pointerleave', function() { drawing = false; });
-
   return {
-    clear: function() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      hasDrawn = false; pad.classList.remove('signed');
-    },
+    clear: function() { ctx.clearRect(0, 0, canvas.width, canvas.height); hasDrawn = false; pad.classList.remove('signed'); },
     getData: function() { return hasDrawn ? canvas.toDataURL('image/png') : ''; },
     hasDrawn: function() { return hasDrawn; },
   };
 }
-
 var workerPad = setupSigPad('worker-sig-canvas', 'worker-sig-pad');
 var clientPad = setupSigPad('client-sig-canvas', 'client-sig-pad');
-
 function clearSig(which) {
-  if (which === 'worker') {
-    workerPad.clear();
-    document.getElementById('worker-sig-hint').classList.remove('signed');
-    document.getElementById('worker-sig-hint').textContent = 'Sign above with your finger';
-  } else {
-    clientPad.clear();
-    document.getElementById('client-sig-hint').classList.remove('signed');
-    document.getElementById('client-sig-hint').textContent = 'Client signs above';
-  }
+  if (which === 'worker') { workerPad.clear(); var h = document.getElementById('worker-sig-hint'); h.classList.remove('signed'); h.textContent = 'Sign above with your finger'; }
+  else { clientPad.clear(); var h2 = document.getElementById('client-sig-hint'); h2.classList.remove('signed'); h2.textContent = 'Client signs above'; }
 }
+document.getElementById('worker-sig-canvas').addEventListener('pointerup', function() { if (workerPad.hasDrawn()) { var h = document.getElementById('worker-sig-hint'); h.classList.add('signed'); h.textContent = '✓ Signed'; } });
+document.getElementById('client-sig-canvas').addEventListener('pointerup', function() { if (clientPad.hasDrawn()) { var h = document.getElementById('client-sig-hint'); h.classList.add('signed'); h.textContent = '✓ Signed'; } });
 
-// Mark signature as "signed" visually as soon as the worker lifts the pen
-document.getElementById('worker-sig-canvas').addEventListener('pointerup', function() {
-  if (workerPad.hasDrawn()) {
-    var h = document.getElementById('worker-sig-hint');
-    h.classList.add('signed'); h.textContent = '✓ Signed';
-  }
-});
-document.getElementById('client-sig-canvas').addEventListener('pointerup', function() {
-  if (clientPad.hasDrawn()) {
-    var h = document.getElementById('client-sig-hint');
-    h.classList.add('signed'); h.textContent = '✓ Signed';
-  }
-});
-
-// ===== Time totals =====
-function calcTotal() {
-  var start = document.getElementById('time-start').value;
-  var finish = document.getElementById('time-finish').value;
-  var breakMin = parseInt(document.getElementById('time-break').value) || 0;
-  var travel = parseFloat(document.getElementById('time-travel').value) || 0;
-  var el = document.getElementById('total-hours');
-  if (!start || !finish) { el.textContent = '0.00'; return; }
-  var sp = start.split(':').map(Number);
-  var fp = finish.split(':').map(Number);
-  var startMin = sp[0] * 60 + sp[1];
-  var finishMin = fp[0] * 60 + fp[1];
+// ===== Per-crew + grand totals =====
+function rowTotal(row) {
+  var start = row.querySelector('[data-f="start"]').value;
+  var finish = row.querySelector('[data-f="finish"]').value;
+  var breakMin = parseInt(row.querySelector('[data-f="break"]').value) || 0;
+  var travel = parseFloat(row.querySelector('[data-f="travel"]').value) || 0;
+  if (!start || !finish) return 0;
+  var sp = start.split(':').map(Number), fp = finish.split(':').map(Number);
+  var startMin = sp[0] * 60 + sp[1], finishMin = fp[0] * 60 + fp[1];
   var worked = finishMin > startMin ? finishMin - startMin : (1440 - startMin) + finishMin;
-  var total = Math.max(0, (worked - breakMin) / 60) + travel;
-  el.textContent = total.toFixed(2);
+  return Math.max(0, (worked - breakMin) / 60) + travel;
 }
-['time-start','time-finish','time-break','time-travel'].forEach(function(id) {
-  var el = document.getElementById(id);
-  if (el) el.addEventListener('input', calcTotal);
-  if (el) el.addEventListener('change', calcTotal);
+function recalc() {
+  var grand = 0;
+  document.querySelectorAll('[data-crew-row]').forEach(function(row) {
+    var t = rowTotal(row);
+    row.querySelector('[data-row-total]').textContent = t.toFixed(2);
+    grand += t;
+  });
+  document.getElementById('grand-total').textContent = grand.toFixed(2);
+}
+document.querySelectorAll('[data-crew-row] input').forEach(function(el) {
+  el.addEventListener('input', recalc); el.addEventListener('change', recalc);
 });
-calcTotal();
+recalc();
 
 // ===== "No client on site" toggle =====
 (function () {
@@ -384,62 +397,43 @@ calcTotal();
   if (!toggle) return;
   function sync() {
     if (toggle.checked) {
-      sigBlock.style.display = 'none';
-      reasonWrap.style.display = 'block';
-      if (clientNameInput) clientNameInput.value = '';
-      clearSig('client');
-      var n = document.getElementById('client-printed-name');
-      if (n) n.value = '';
-    } else {
-      sigBlock.style.display = '';
-      reasonWrap.style.display = 'none';
-    }
+      sigBlock.style.display = 'none'; reasonWrap.style.display = 'block';
+      if (clientNameInput) clientNameInput.value = ''; clearSig('client');
+      var n = document.getElementById('client-printed-name'); if (n) n.value = '';
+    } else { sigBlock.style.display = ''; reasonWrap.style.display = 'none'; }
   }
-  toggle.addEventListener('change', sync);
-  sync();
+  toggle.addEventListener('change', sync); sync();
 })();
 
 // ===== Submit validation =====
 document.getElementById('docket-form').addEventListener('submit', function (e) {
   var ok = true;
-  function setErr(id, errId, bad) {
-    var el = document.getElementById(id);
-    var err = document.getElementById(errId);
-    if (bad) { el.classList.add('ds-error'); if (err) err.classList.add('show'); ok = false; }
-    else     { el.classList.remove('ds-error'); if (err) err.classList.remove('show'); }
-  }
+  // Each crew row needs start + finish.
+  document.querySelectorAll('[data-crew-row]').forEach(function(row) {
+    var start = row.querySelector('[data-f="start"]').value;
+    var finish = row.querySelector('[data-f="finish"]').value;
+    var err = row.querySelector('[data-row-err]');
+    var bad = !start || !finish;
+    if (bad) { ok = false; err.classList.add('show'); row.querySelector('[data-f="start"]').classList.toggle('ds-error', !start); row.querySelector('[data-f="finish"]').classList.toggle('ds-error', !finish); }
+    else { err.classList.remove('show'); row.querySelector('[data-f="start"]').classList.remove('ds-error'); row.querySelector('[data-f="finish"]').classList.remove('ds-error'); }
+  });
   function setSigErr(padId, errId, bad) {
-    var pad = document.getElementById(padId);
-    var err = document.getElementById(errId);
+    var pad = document.getElementById(padId), err = document.getElementById(errId);
     if (bad) { pad.classList.add('ds-error'); if (err) err.classList.add('show'); ok = false; }
-    else     { pad.classList.remove('ds-error'); if (err) err.classList.remove('show'); }
+    else { pad.classList.remove('ds-error'); if (err) err.classList.remove('show'); }
   }
-
-  var start  = document.getElementById('time-start').value;
-  var finish = document.getElementById('time-finish').value;
-  setErr('time-start',  'err-start',  !start);
-  setErr('time-finish', 'err-finish', !finish);
-
   setSigErr('worker-sig-pad', 'err-worker-sig', !workerPad.hasDrawn());
-
   var noClient = document.getElementById('no-client-toggle').checked;
-  if (!noClient) {
-    setSigErr('client-sig-pad', 'err-client-sig', !clientPad.hasDrawn());
-  } else {
-    setSigErr('client-sig-pad', 'err-client-sig', false);
-  }
+  setSigErr('client-sig-pad', 'err-client-sig', !noClient && !clientPad.hasDrawn());
 
   if (!ok) {
     e.preventDefault();
-    // Scroll to the first error so the worker sees what's missing.
     var firstErr = document.querySelector('.ds-error, .ds-error-text.show');
     if (firstErr) firstErr.scrollIntoView({ behavior: 'smooth', block: 'center' });
     return;
   }
-
-  // Stamp the signature data into the hidden inputs just before the
-  // form actually submits so the latest pen strokes are captured.
   document.getElementById('worker-sig-data').value = workerPad.getData();
   document.getElementById('client-sig-data').value = noClient ? '' : clientPad.getData();
 });
 </script>
+<% } %>
