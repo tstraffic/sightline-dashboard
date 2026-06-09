@@ -91,6 +91,49 @@ router.post('/', (req, res) => {
 });
 
 // ============================================
+// QUICK-CREATE CONTACT (JSON) — used by the booking form's
+// "+ Add contact" button. Creates a contact tied to a client
+// company and returns it so the caller can select it inline.
+// ============================================
+router.post('/api/quick-create', (req, res) => {
+  try {
+    const db = getDb();
+    const company_id = parseInt(req.body.company_id, 10);
+    const full_name = (req.body.full_name || '').trim();
+    const position = (req.body.position || '').trim();
+    const phone = (req.body.phone || '').trim();
+    const email = (req.body.email || '').trim();
+
+    if (!company_id) return res.status(400).json({ error: 'Select a client before adding a contact.' });
+    if (!full_name) return res.status(400).json({ error: 'Contact name is required.' });
+
+    const company = db.prepare('SELECT company_name FROM clients WHERE id = ?').get(company_id);
+    if (!company) return res.status(400).json({ error: 'That client no longer exists.' });
+
+    const result = db.prepare(`
+      INSERT INTO client_contacts (company_id, contact_type, company, full_name, position, phone, email)
+      VALUES (?, 'client', ?, ?, ?, ?, ?)
+    `).run(company_id, company.company_name, full_name, position, phone, email);
+
+    const id = result.lastInsertRowid;
+
+    logActivity({
+      user: req.session.user,
+      action: 'create',
+      entityType: 'contact',
+      entityId: id,
+      entityLabel: `${full_name} (${company.company_name})`,
+      ip: req.ip
+    });
+
+    res.json({ success: true, contact: { id, full_name, position, phone, email, company_id } });
+  } catch (err) {
+    console.error('Contact quick-create error:', err);
+    res.status(500).json({ error: 'Failed to save contact: ' + err.message });
+  }
+});
+
+// ============================================
 // COMMUNICATION LOG (must be before /:id routes)
 // ============================================
 router.get('/comms', (req, res) => {
