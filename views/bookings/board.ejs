@@ -1297,6 +1297,26 @@
     if (!ed || !bd) return;
     setEditorMode('create');
     var title = $('#bk2-edit-title'); if (title) title.textContent = 'New Booking';
+    // Reset the create form so reopening doesn't carry over stale
+    // values from a previous session (e.g. dates pre-filled when
+    // viewing an older day, then the planner navigated to Today and
+    // opened New Booking again — the date should reset, not stick).
+    var form = $('#bk2-edit-form');
+    if (form) {
+      try { form.reset(); } catch (e) {}
+      // Also blow out any hidden inputs the autocomplete picker
+      // populates (lat/lng/suburb/state/postcode) — form.reset() only
+      // restores to the value attribute, but those start blank and
+      // get filled in via JS, so reset doesn't clear them.
+      ['latitude','longitude','suburb','state','postcode'].forEach(function (n) {
+        var el = form.querySelector('[name="' + n + '"]');
+        if (el) el.value = '';
+      });
+    }
+    // Re-arm the focus-prefill listeners so the next tap picks the
+    // correct day-aware default (handlers were `once: true` so they
+    // detached after the first prefill).
+    if (typeof rearmCreatePrefill === 'function') rearmCreatePrefill();
     bd.hidden = false; ed.hidden = false;
     requestAnimationFrame(function () {
       bd.classList.add('is-open'); ed.classList.add('is-open');
@@ -1431,26 +1451,42 @@
         },
         body: body,
         credentials: 'same-origin',
-      }).then(function (r) { return r.json().catch(function () { return {}; }); })
-        .then(function (data) {
-          if (data && data.ok) {
-            // Switch to edit mode for the brand-new booking — keep the
-            // slide-over open so the planner can keep editing.
-            var title = $('#bk2-edit-title');
-            if (title) title.textContent = '#' + (data.booking_number || data.id) + ' · ' +
-              ((fd.get('client_name') || '') + (fd.get('site_label') ? ' · ' + fd.get('site_label') : '')).trim();
-            setEditorMode('edit');
-            // Update the board — easiest is a soft reload so the new card appears.
-            // To preserve the slide-over state in the future we'd do AJAX append.
-            setTimeout(function () { location.reload(); }, 600);
-          } else {
-            alert((data && data.error) || 'Could not create the booking.');
-            if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
-          }
-        }).catch(function () {
-          alert('Could not create the booking — network error.');
-          if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+      }).then(function (r) {
+        // Capture status + raw text so we can show useful diagnostics
+        // when the server returns a non-JSON 500 page (e.g. unhandled
+        // exception in the route).
+        return r.text().then(function (text) {
+          var data = {};
+          try { data = JSON.parse(text); } catch (e) { /* not JSON */ }
+          return { ok: r.ok, status: r.status, data: data, text: text };
         });
+      }).then(function (result) {
+        if (result.ok && result.data && result.data.ok) {
+          // Switch to edit mode for the brand-new booking — keep the
+          // slide-over open so the planner can keep editing.
+          var title = $('#bk2-edit-title');
+          if (title) title.textContent = '#' + (result.data.booking_number || result.data.id) + ' · ' +
+            ((fd.get('client_name') || '') + (fd.get('site_label') ? ' · ' + fd.get('site_label') : '')).trim();
+          setEditorMode('edit');
+          setTimeout(function () { location.reload(); }, 600);
+        } else {
+          // Show the most informative message we can extract.
+          var msg = (result.data && result.data.error) ||
+                    (result.status >= 500 ? ('Server error (HTTP ' + result.status + '). Try again or refresh the page.') : null) ||
+                    (result.status === 0 ? 'Network error — check your connection.' : null) ||
+                    ('Could not create the booking (HTTP ' + result.status + ').');
+          // Log the raw body to the console for debugging.
+          if (result.text && (!result.data || !result.data.error)) {
+            console.warn('[bk2 quick] non-JSON response (HTTP ' + result.status + '):', result.text.slice(0, 600));
+          }
+          alert(msg);
+          if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+        }
+      }).catch(function (err) {
+        console.warn('[bk2 quick] fetch failed:', err && err.message);
+        alert('Could not create the booking — network error.');
+        if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+      });
     });
   }
 
@@ -2410,6 +2446,12 @@
   //   · viewing ANY OTHER DAY → that day + 06:00. Most field shifts
   //     start at 6am, so this skips the typing for the common case.
   // End time gets the +8h treatment via the change handler below.
+  //
+  // Exposed as rearmCreatePrefill() on the module scope so openEditor()
+  // can re-attach the `once: true` focus listeners every time the
+  // slide-over opens (otherwise the listeners detach after the first
+  // tap and subsequent opens lose the prefill behaviour).
+  var rearmCreatePrefill;
   (function () {
     var dateEl = document.querySelector('[data-bk-autofill="start_date"]');
     var timeEl = document.querySelector('[data-bk-autofill="start_time"]');
@@ -2442,12 +2484,8 @@
     function prefillFor() {
       var viewedDate = (window.BK2_DATA && window.BK2_DATA.dateStr) || sydneyToday();
       if (viewedDate === sydneyToday()) {
-        // Same-day booking — use the next whole hour.
         return nextHourToday();
       }
-      // Past or future day — use the day the planner is currently on,
-      // with the standard 6am start. End-time auto-fills to 2pm via
-      // the +8h listener.
       return { date: viewedDate, time: '06:00' };
     }
     function prefill() {
@@ -2465,8 +2503,12 @@
       var pad = function (n) { return n < 10 ? '0' + n : '' + n; };
       endEl.value = pad(d.getHours()) + ':' + pad(d.getMinutes());
     }
-    timeEl.addEventListener('focus', prefill, { once: true });
-    if (dateEl) dateEl.addEventListener('focus', prefill, { once: true });
+    rearmCreatePrefill = function () {
+      endTouched = false;
+      timeEl.addEventListener('focus', prefill, { once: true });
+      if (dateEl) dateEl.addEventListener('focus', prefill, { once: true });
+    };
+    rearmCreatePrefill();
     timeEl.addEventListener('change', applyEnd);
     if (dateEl) dateEl.addEventListener('change', applyEnd);
   })();
@@ -2964,6 +3006,16 @@
       }).then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
         applyResponseDoc(doc);
+        // Keep BK2_DATA.dateStr in sync so the slide-over prefill,
+        // resource panel date filter, etc. read the day the planner
+        // is currently looking at instead of the initial page load.
+        var newDate = url.searchParams.get('date');
+        if (!newDate) {
+          // /bookings with no ?date= = "Today" shortcut. Mirror the
+          // server default (Sydney today).
+          newDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date());
+        }
+        if (window.BK2_DATA) window.BK2_DATA.dateStr = newDate;
         try { history.pushState({ bkDate: true }, '', url.toString()); } catch (e) {}
       }).catch(function (err) {
         // On failure, fall back to a full navigation so the planner

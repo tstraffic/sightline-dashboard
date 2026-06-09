@@ -842,21 +842,29 @@ router.post('/quick', (req, res) => {
   // Parse optional lat/lng from the address autocomplete picker.
   const lat = b.latitude ? parseFloat(b.latitude) : null;
   const lng = b.longitude ? parseFloat(b.longitude) : null;
-  const result = db.prepare(`
-    INSERT INTO bookings (booking_number, job_id, client_id, title, status, depot,
-      start_datetime, end_datetime, site_address, suburb, state, postcode,
-      latitude, longitude, marker_is_accurate,
-      created_by_id, booking_type, is_booking_pool)
-    VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regular', 0)
-  `).run(
-    bookingNumber, jobId, clientId, title, b.depot || '',
-    b.start_date + 'T' + startTime + ':00',
-    b.start_date + 'T' + endTime + ':00',
-    b.site_address || b.site_label || '',
-    b.suburb || '', b.state || '', b.postcode || '',
-    lat, lng, lat ? 1 : 0,
-    req.session.user.id
-  );
+  let result;
+  try {
+    result = db.prepare(`
+      INSERT INTO bookings (booking_number, job_id, client_id, title, status, depot,
+        start_datetime, end_datetime, site_address, suburb, state, postcode,
+        latitude, longitude, marker_is_accurate,
+        created_by_id, booking_type, is_booking_pool)
+      VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regular', 0)
+    `).run(
+      bookingNumber, jobId, clientId, title, b.depot || '',
+      b.start_date + 'T' + startTime + ':00',
+      b.start_date + 'T' + endTime + ':00',
+      b.site_address || b.site_label || '',
+      b.suburb || '', b.state || '', b.postcode || '',
+      lat, lng, lat ? 1 : 0,
+      req.session.user.id
+    );
+  } catch (err) {
+    console.error('[bookings/quick] INSERT failed:', err.message);
+    if (isJson) return res.status(500).json({ error: 'Could not create booking: ' + err.message });
+    req.flash('error', 'Could not create booking: ' + err.message);
+    return res.redirect('/bookings');
+  }
   const newId = result.lastInsertRowid;
 
   // Crew composition steppers: crew_size_1..5 → "Nx TC Crew" requirement rows.
