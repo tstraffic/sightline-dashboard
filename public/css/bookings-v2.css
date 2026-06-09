@@ -1915,3 +1915,21 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-slot--unassigned {
   opacity: 0.92;
 }
+
+/* Subtle in-flight cue while the AJAX date navigation is loading
+   the new day's cards. Keeps the layout calm — just a thin progress
+   strip at the top of the page and a slight cursor change. */
+body.bk2-date-loading { cursor: progress; }
+body.bk2-date-loading::before {
+  content: '';
+  position: fixed; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, #2B7FFF 0%, #60A5FA 50%, #2B7FFF 100%);
+  background-size: 200% 100%;
+  animation: bk2DateLoading 900ms linear infinite;
+  z-index: 9999;
+}
+@keyframes bk2DateLoading {
+  0%   { background-position: 100% 0; opacity: 0.35; }
+  50%  { opacity: 1; }
+  100% { background-position: -100% 0; opacity: 0.35; }
+}

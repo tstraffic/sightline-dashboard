@@ -2846,6 +2846,149 @@
         location.reload();
       }).catch(function () { alert('Could not move that worker — network error.'); });
   }
+
+  // ==========================================================
+  //  AJAX DATE NAVIGATION — flip between days without doing a
+  //  full page reload. Intercepts:
+  //    · prev / next anchors in .bk2-daynav and .bk2-fs-chip--date
+  //    · the .bk2-daynav-today shortcut
+  //    · the date <input> in .bk2-daynav (change event)
+  //  Fetches the same /bookings URL, parses the response and
+  //  swaps the date-affected sections in place (day label, the
+  //  board pane, list pane, date chip + nav). pushState keeps
+  //  the URL in sync so back/forward still work.
+  // ==========================================================
+  (function () {
+    var navInFlight = false;
+
+    function isDateLink(a) {
+      if (!a || a.tagName !== 'A') return false;
+      var href = a.getAttribute('href') || '';
+      if (!/^\/bookings(\?|$)/.test(href)) return false;
+      // Only intercept links that change the date — date= param, or
+      // the bare /bookings (Today shortcut).
+      return /[?&]date=/.test(href) || href === '/bookings' || href === '/bookings?';
+    }
+
+    function buildTargetUrl(href) {
+      var url = new URL(href, window.location.origin);
+      // Preserve other query params already on the page (status,
+      // depot, search, etc.) so navigating dates doesn't reset
+      // filters. New `date` from the link wins.
+      var current = new URL(window.location.href);
+      current.searchParams.forEach(function (val, key) {
+        if (key === 'date') return; // overridden by the link
+        if (!url.searchParams.has(key)) url.searchParams.set(key, val);
+      });
+      return url;
+    }
+
+    function swapBlock(currentRoot, freshRoot, selector) {
+      var oldEl = currentRoot.querySelector(selector);
+      var newEl = freshRoot.querySelector(selector);
+      if (!oldEl || !newEl) return;
+      oldEl.replaceWith(newEl);
+    }
+
+    function applyResponseDoc(doc) {
+      // Day label + count (the <p class="bk2-daylabel">).
+      swapBlock(document, doc, '.bk2-daylabel');
+      // Filter strip date chip — also carries prev/next hrefs.
+      swapBlock(document, doc, '.bk2-fs-chip--date');
+      // Header day-nav block (prev arrow + input + next + Today).
+      swapBlock(document, doc, '.bk2-daynav');
+      // The four view panes (board / list / calendar / map) — the
+      // calendar and map don't strictly need the swap, but keeping
+      // them in sync means alt views match the day too.
+      swapBlock(document, doc, '[data-view-pane="board"]');
+      swapBlock(document, doc, '[data-view-pane="list"]');
+      swapBlock(document, doc, '[data-view-pane="map"]');
+      // After replacement, re-fire view-pane visibility for the
+      // currently selected view tab (the swap might have reset
+      // aria-current). The existing view-tab JS toggles
+      // aria-current="true" on the active pane; mirror that here.
+      var activeTab = document.querySelector('.bk2-view-tab[aria-selected="true"]');
+      if (activeTab) {
+        var which = activeTab.getAttribute('data-view-tab');
+        document.querySelectorAll('.bk2-pane').forEach(function (p) {
+          p.setAttribute('aria-current', p.getAttribute('data-view-pane') === which ? 'true' : 'false');
+        });
+      }
+      // Re-wire the "+ New" button on the empty state (gets replaced
+      // along with the board pane and loses its listener).
+      var emptyNew = document.getElementById('bk2-empty-new');
+      if (emptyNew && !emptyNew.dataset.bound) {
+        emptyNew.dataset.bound = '1';
+        emptyNew.addEventListener('click', function (e) {
+          // Defer to the existing global handler — easiest is firing
+          // a click on the main "New booking" button which IS still
+          // bound from the initial page load.
+          e.preventDefault();
+          var newBtn = document.getElementById('bk2-new-btn');
+          if (newBtn) newBtn.click();
+        });
+      }
+    }
+
+    function navigateToDate(href) {
+      if (navInFlight) return;
+      navInFlight = true;
+      var url = buildTargetUrl(href);
+      document.body.classList.add('bk2-date-loading');
+      fetch(url.toString(), {
+        credentials: 'same-origin',
+        headers: { 'Accept': 'text/html', 'X-Requested-With': 'fetch' },
+      }).then(function (r) {
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        return r.text();
+      }).then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        applyResponseDoc(doc);
+        try { history.pushState({ bkDate: true }, '', url.toString()); } catch (e) {}
+      }).catch(function (err) {
+        // On failure, fall back to a full navigation so the planner
+        // still gets to the new date.
+        window.location.href = url.toString();
+      }).finally(function () {
+        document.body.classList.remove('bk2-date-loading');
+        navInFlight = false;
+      });
+    }
+
+    // Delegated click: catch all date-changing anchors anywhere on
+    // the page, including ones that were swapped in by a previous
+    // AJAX navigation.
+    document.addEventListener('click', function (e) {
+      // Modifier clicks open a new tab — let the browser handle it.
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+      var a = e.target.closest && e.target.closest('a');
+      if (!a || !isDateLink(a)) return;
+      // Skip anchors that explicitly opt out (none today, but defensive).
+      if (a.target && a.target !== '' && a.target !== '_self') return;
+      e.preventDefault();
+      navigateToDate(a.getAttribute('href') || '/bookings');
+    });
+
+    // Date <input> in the day-nav — fires `change` when user picks a
+    // new date. Intercept before the surrounding <form> submits.
+    document.addEventListener('change', function (e) {
+      var input = e.target;
+      if (!input || input.tagName !== 'INPUT' || input.type !== 'date') return;
+      if (!input.closest || !input.closest('.bk2-daynav')) return;
+      e.preventDefault();
+      if (input.form) {
+        // Stop the implicit form submit baked into the inline onchange.
+        input.form.setAttribute('onsubmit', 'return false');
+      }
+      navigateToDate('/bookings?date=' + encodeURIComponent(input.value));
+    }, true);
+
+    // Browser back / forward — re-fetch the URL the same way so the
+    // planner can step through dates with the back button.
+    window.addEventListener('popstate', function () {
+      navigateToDate(window.location.pathname + window.location.search);
+    });
+  })();
 })();
 </script>
 
