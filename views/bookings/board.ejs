@@ -257,6 +257,7 @@
       <div class="bk2-board">
         <% bookings.forEach(function (b) { %>
           <a class="bk2-card bk2-status-tone-<%= b.status %>" href="/bookings/<%= b.id %>"
+             draggable="false"
              data-booking-id="<%= b.id %>"
              data-depot="<%= (b.depot || '').toLowerCase() %>"
              data-state="<%= (b.state || '').toLowerCase() %>"
@@ -2282,14 +2283,22 @@
     });
   });
 
-  // dragover/dragenter on empty slots — must preventDefault to mark
+  // dragover/dragenter on ANY drop target — must preventDefault to mark
   // the slot as a valid drop target (browser default is to refuse).
+  // Type filtering happens in the drop handler (it has access to the
+  // actual payload via getData; dragover only sees the list of types).
   document.addEventListener('dragover', function (e) {
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
     if (!slot) return;
     e.preventDefault();
     e.stopPropagation();
-    try { e.dataTransfer.dropEffect = 'copy'; } catch (err) {}
+    try {
+      var t = e.dataTransfer && e.dataTransfer.types;
+      var has = function (name) { return t && Array.prototype.indexOf.call(t, name) !== -1; };
+      // crew-move on a vehicle / unassign target = move; otherwise copy.
+      if (has('application/x-bk2-crew-move')) e.dataTransfer.dropEffect = 'move';
+      else                                    e.dataTransfer.dropEffect = 'copy';
+    } catch (err) {}
     slot.classList.add('is-drag-over');
   });
   document.addEventListener('dragleave', function (e) {
@@ -2306,22 +2315,47 @@
     e.stopPropagation();
     slot.classList.remove('is-drag-over');
 
-    var isVehicleSlot = slot.classList.contains('bk2-slot--drop-vehicle');
     var bookingId = slot.getAttribute('data-booking-id');
     if (!bookingId) return;
 
-    // ── VEHICLE DROP ──────────────────────────────────────────────
-    if (isVehicleSlot) {
-      var vehiclePayload = '';
-      try { vehiclePayload = e.dataTransfer.getData('application/x-bk2-vehicle') || ''; } catch (err) {}
-      if (!vehiclePayload) return; // person/equipment dropped here — ignore
+    // Read every payload we might receive. Whichever the source set
+    // determines the action — crew-move ALWAYS wins because it can
+    // only come from a worker slot drag (most specific intent).
+    var crewMovePayload = '';
+    var personId        = '';
+    var vehiclePayload  = '';
+    try { crewMovePayload = e.dataTransfer.getData('application/x-bk2-crew-move') || ''; } catch (err) {}
+    try { personId        = e.dataTransfer.getData('application/x-bk2-person')   || ''; } catch (err) {}
+    try { vehiclePayload  = e.dataTransfer.getData('application/x-bk2-vehicle')  || ''; } catch (err) {}
+
+    // ── CREW MOVE (existing worker → vehicle, or → unassigned pool) ──
+    if (crewMovePayload) {
+      if (!slot.classList.contains('bk2-slot--drop-veh-assign') &&
+          !slot.classList.contains('bk2-slot--drop-unassign')) {
+        // Crew-move drag dropped on a non-crew-move target — ignore.
+        return;
+      }
+      var payload;
+      try { payload = JSON.parse(crewMovePayload); } catch (err) { return; }
+      if (!payload || !payload.booking_crew_id || !payload.booking_id) return;
+      if (payload.booking_id !== bookingId) {
+        alert('Workers can only be reassigned within the same booking.');
+        return;
+      }
+      var isAssign = slot.classList.contains('bk2-slot--drop-veh-assign');
+      var vehicleId = isAssign ? (slot.getAttribute('data-vehicle-id') || '') : '';
+      assignCrewToVehicle(payload, vehicleId);
+      return;
+    }
+
+    // ── VEHICLE DROP (resource panel → empty UTE slot) ──
+    if (vehiclePayload && slot.classList.contains('bk2-slot--drop-vehicle')) {
       var v;
       try { v = JSON.parse(vehiclePayload); } catch (err) { return; }
       if (!v || !v.id) return;
 
       slot.classList.add('is-saving');
       var vBody = new URLSearchParams();
-      // Fleet vehicles use fleet_vehicle_id; legacy equipment uses equipment_id.
       if (v.source === 'fleet') vBody.append('fleet_vehicle_id', v.id);
       else                      vBody.append('equipment_id',     v.id);
       vBody.append('vehicle_role', slot.getAttribute('data-vehicle-role') || v.role || 'ute');
@@ -2346,8 +2380,7 @@
           replaceVehicleSlot(slot, v);
           flashAssigned(v.id);
         } else {
-          var msg = (result.json && result.json.error) || ('Could not assign vehicle (HTTP ' + result.status + ')');
-          alert(msg);
+          alert((result.json && result.json.error) || ('Could not assign vehicle (HTTP ' + result.status + ')'));
         }
       }).catch(function () {
         slot.classList.remove('is-saving');
@@ -2356,24 +2389,24 @@
       return;
     }
 
-    // ── PERSON DROP ───────────────────────────────────────────────
-    var personId = '';
-    try { personId = e.dataTransfer.getData('application/x-bk2-person') || ''; } catch (err) {}
+    // ── PERSON DROP (resource panel → empty crew slot) ──
     if (!personId) {
       // Some browsers (Safari) only expose text/plain for unknown types
       try {
         var fallback = e.dataTransfer.getData('text/plain') || '';
-        // Only accept fallback if it's a numeric id (resource rows set
-        // text/plain to the name, not the id, so this is rare).
         if (/^\d+$/.test(fallback)) personId = fallback;
       } catch (err) {}
     }
     if (!personId) return;
+    // Don't treat the vehicle/unassign drop targets as person-add slots —
+    // those are crew-move only.
+    if (slot.classList.contains('bk2-slot--drop-veh-assign') ||
+        slot.classList.contains('bk2-slot--drop-unassign')   ||
+        slot.classList.contains('bk2-slot--drop-vehicle')) {
+      return;
+    }
 
     var role = slot.getAttribute('data-role-on-site') || '';
-
-    // Optimistic UI — show a "saving" state on the slot while the
-    // request is in flight, then patch the DOM in place on success.
     slot.classList.add('is-saving');
     var body = new URLSearchParams();
     body.append('crew_member_id', personId);
@@ -2396,16 +2429,11 @@
     }).then(function (result) {
       slot.classList.remove('is-saving');
       if (result.ok && (!result.json || result.json.ok !== false)) {
-        // In-place DOM update — no page reload. Build a filled slot
-        // from the server-returned crew member and insert it above
-        // the empty slot, then decrement the empty counter (or
-        // remove the empty slot entirely when it hits zero).
         var crew = (result.json && result.json.crew) || { id: personId, full_name: '', role: role };
         insertFilledSlot(slot, crew);
         flashAssigned(personId);
       } else {
-        var msg = (result.json && result.json.error) || ('Could not assign worker (HTTP ' + result.status + ')');
-        alert(msg);
+        alert((result.json && result.json.error) || ('Could not assign worker (HTTP ' + result.status + ')'));
       }
     }).catch(function () {
       slot.classList.remove('is-saving');
@@ -2843,44 +2871,10 @@
     if (src) src.classList.remove('is-dragging');
   });
 
-  // Dragover/leave/drop for the two new crew-targeted zones (vehicle
-  // assignment + unassigned pool). These share the existing
-  // .bk2-slot--drop highlight machinery from the resource-panel drop.
-  document.addEventListener('dragover', function (e) {
-    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop-veh-assign, .bk2-slot--drop-unassign');
-    if (!slot) return;
-    // Only highlight if the active drag is a crew-move (not a person
-    // from the resource panel and not a vehicle).
-    var types = e.dataTransfer && e.dataTransfer.types;
-    if (types && types.length && Array.prototype.indexOf.call(types, 'application/x-bk2-crew-move') === -1) return;
-    e.preventDefault();
-    e.stopPropagation();
-    try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
-    slot.classList.add('is-drag-over');
-  });
-  document.addEventListener('drop', function (e) {
-    var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop-veh-assign, .bk2-slot--drop-unassign');
-    if (!slot) return;
-    var payloadStr = '';
-    try { payloadStr = e.dataTransfer.getData('application/x-bk2-crew-move') || ''; } catch (err) {}
-    if (!payloadStr) return; // not a crew-move drag — let the resource-panel handler take it
-    e.preventDefault();
-    e.stopPropagation();
-    slot.classList.remove('is-drag-over');
-    var payload;
-    try { payload = JSON.parse(payloadStr); } catch (err) { return; }
-    if (!payload || !payload.booking_crew_id || !payload.booking_id) return;
-    // Server expects the drop's booking to match the worker's booking
-    // (we don't support cross-booking moves yet).
-    var slotBookingId = slot.getAttribute('data-booking-id');
-    if (slotBookingId && slotBookingId !== payload.booking_id) {
-      alert('Workers can only be reassigned within the same booking.');
-      return;
-    }
-    var isAssign = slot.classList.contains('bk2-slot--drop-veh-assign');
-    var vehicleId = isAssign ? slot.getAttribute('data-vehicle-id') : '';
-    assignCrewToVehicle(payload, vehicleId);
-  });
+  // Dragover/drop for crew-move drags are handled by the consolidated
+  // dispatcher above — every drop target shares the .bk2-slot--drop
+  // class and the dispatcher branches on what data the dataTransfer
+  // carries (crew-move vs vehicle vs person).
 
   function assignCrewToVehicle(payload, vehicleId) {
     var body = new URLSearchParams();

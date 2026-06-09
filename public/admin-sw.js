@@ -1,5 +1,5 @@
 // Atomis Admin Service Worker — Network-first with offline fallback
-const CACHE_NAME = 'atomis-admin-v13-ajax-date-nav';
+const CACHE_NAME = 'atomis-admin-v14-crew-drop-fix';
 const OFFLINE_URL = '/offline.html';
 
 // Assets to pre-cache
