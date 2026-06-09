@@ -1,23 +1,64 @@
 // Invoice assembly — turn signed Traffio works dockets into draft invoices.
 //
 // Groups signed, not-yet-invoiced dockets per Traffio client over a period into
-// one draft invoice, with a labour line per person per day/night segment (reusing
-// lib/payroll.splitDayNightSegments so billing day/night matches PAY day/night)
-// plus a travel line where present. Rates are left flagged for finance to set in
-// the review screen until client rate-card pricing is wired in. Marking the
-// consumed dockets invoiced happens in the same transaction to prevent
-// double-billing. Approval generates the invoice number; the QBO push is Phase 3.
+// one draft invoice, with lines shaped the way T&S actually bills (mirrors the
+// hand-built QuickBooks invoices):
+//
+//   Per docket, aggregated across crew:
+//     Traffic Controller (Day)      — day-window hours, first 8h/person
+//     Traffic Controller (Day OT)   — day-window hours beyond 8h/person
+//     Traffic Controller (Night)    — night-window hours, first 8h/person
+//     Traffic Controller (Night OT) — night-window hours beyond 8h/person
+//     Travel Allowance              — one per person on the docket
+//     Meal Allowance                — one per person working ≥ trigger hours (default 9.5)
+//     Additional Ute                — docket clock span (no break deduction)
+//
+// The 8h overtime clock resets per rate window: a 7h-day + 1.5h-night shift
+// bills no OT, while a straight 9h night shift bills 8h night + 1h night OT.
+// (Confirmed against real dockets 4467 / 4482 / 4486 / 4488.)
+//
+// Day/night windows come from lib/payroll.splitDayNightSegments so billing
+// day/night matches PAY day/night. Rates resolve from the client's rate card
+// (rate_cards → rate_card_items → rate_card_item_variants, allowances from
+// rate_card_allowances); lines with no resolvable rate stay $0 + rate_flagged
+// for finance to set in the review screen. Marking the consumed dockets
+// invoiced happens in the same transaction to prevent double-billing.
+// Approval generates the invoice number; the QBO push is Phase 3.
 
 const { getDb } = require('../db/database');
 const { splitDayNightSegments, round2 } = require('../lib/payroll');
 
 const GST_RATE = 0.10;
+const OT_THRESHOLD_HOURS = 8;      // per person, per day/night window
+const MEAL_TRIGGER_HOURS = 9.5;    // fallback when no rate-card allowance defines one
 
 /** Time portion ("HH:mm[:ss]") of a Traffio "YYYY-MM-DD HH:mm:ss" stamp. */
 function timeOf(dt) {
   const s = String(dt || '');
   const parts = s.split(/[ T]/);
   return parts.length > 1 ? parts[1] : s;
+}
+
+/** "HH:mm" → "HHmm" display form (e.g. "06:45:00" → "0645"). */
+function hhmm(dt) {
+  const t = timeOf(dt);
+  const m = String(t).match(/^(\d{1,2}):(\d{2})/);
+  if (!m) return '';
+  return m[1].padStart(2, '0') + m[2];
+}
+
+/** Clock-span hours between two Traffio stamps (overnight-safe, no break deduction). */
+function clockSpanHours(on, off) {
+  const parse = (s) => {
+    const m = String(s || '').match(/(\d{1,2}):(\d{2})/);
+    return m ? parseInt(m[1], 10) + parseInt(m[2], 10) / 60 : null;
+  };
+  const a = parse(timeOf(on));
+  const b = parse(timeOf(off));
+  if (a == null || b == null) return 0;
+  let span = b - a;
+  if (span < 0) span += 24;
+  return round2(span);
 }
 
 /** Recompute and persist a draft invoice's subtotal / GST / total from its lines. */
@@ -50,6 +91,150 @@ function generateInvoiceNumber(db) {
   }
   return prefix + String(next).padStart(4, '0');
 }
+
+// ---- Rate resolution -------------------------------------------------------
+
+/**
+ * Pick the rate card that applies to this client on this date: an active
+ * client-specific card whose effective window covers the date, else the
+ * active default card. Returns null when neither exists.
+ */
+function findRateCard(db, localClientId, onDate) {
+  const date = String(onDate || '').slice(0, 10) || null;
+  if (localClientId) {
+    const card = db.prepare(`
+      SELECT * FROM rate_cards
+      WHERE is_active = 1 AND client_id = ?
+        AND (effective_from IS NULL OR effective_from <= COALESCE(?, date('now')))
+        AND (effective_to IS NULL OR effective_to >= COALESCE(?, date('now')))
+      ORDER BY effective_from DESC LIMIT 1
+    `).get(localClientId, date, date);
+    if (card) return card;
+  }
+  return db.prepare(`
+    SELECT * FROM rate_cards WHERE is_active = 1 AND is_default = 1
+    ORDER BY effective_from DESC LIMIT 1
+  `).get() || null;
+}
+
+/**
+ * Resolve the four labour rates (day / day OT / night / night OT) from a rate
+ * card's TC-labour item variants. Any rate that can't be resolved is null →
+ * that line goes out flagged at $0. Variant fallback chains are conservative:
+ * an OT bracket never silently falls back to the ordinary rate.
+ */
+function resolveLabourRates(db, rateCard) {
+  const empty = { day: null, day_ot: null, night: null, night_ot: null };
+  if (!rateCard) return empty;
+  const item = db.prepare(`
+    SELECT * FROM rate_card_items
+    WHERE rate_card_id = ? AND category = 'tc_labour' AND is_active = 1
+    ORDER BY CASE WHEN name LIKE '%traffic controller%' COLLATE NOCASE THEN 0 ELSE 1 END, sort_order
+    LIMIT 1
+  `).get(rateCard.id);
+  if (!item) return empty;
+
+  const variants = db.prepare('SELECT shift_type, hour_bracket, rate FROM rate_card_item_variants WHERE rate_card_item_id = ?')
+    .all(item.id);
+  const get = (shift, bracket) => {
+    const v = variants.find(x => x.shift_type === shift && x.hour_bracket === bracket);
+    return v && v.rate != null ? Number(v.rate) : null;
+  };
+  const first = (...pairs) => {
+    for (const [s, b] of pairs) { const r = get(s, b); if (r != null) return r; }
+    return null;
+  };
+  return {
+    day: first(['weekday', '0_to_8'], ['standard', '0_to_8'], ['weekday', 'standard'], ['standard', 'standard']),
+    day_ot: first(['weekday', '8_to_10'], ['standard', '8_to_10'], ['weekday', '10_plus'], ['standard', '10_plus']),
+    night: first(['weeknight', '0_to_8'], ['weeknight', 'standard']),
+    night_ot: first(['weeknight', '8_to_10'], ['weeknight', '10_plus']),
+  };
+}
+
+/** Resolve the per-hour ute rate from the rate card's equipment items (null if absent). */
+function resolveUteRate(db, rateCard) {
+  if (!rateCard) return null;
+  const item = db.prepare(`
+    SELECT rcv.rate FROM rate_card_items rci
+    JOIN rate_card_item_variants rcv ON rcv.rate_card_item_id = rci.id
+    WHERE rci.rate_card_id = ? AND rci.category = 'equipment_vehicles' AND rci.is_active = 1
+      AND rci.unit = 'per_hour' AND rci.name LIKE '%ute%' COLLATE NOCASE
+    ORDER BY CASE WHEN rcv.shift_type = 'standard' THEN 0 ELSE 1 END
+    LIMIT 1
+  `).get(rateCard.id);
+  return item && item.rate != null ? Number(item.rate) : null;
+}
+
+/** Auto-apply allowances on the rate card (travel / meal / etc.). */
+function loadAllowances(db, rateCard) {
+  if (!rateCard) return [];
+  return db.prepare(`
+    SELECT * FROM rate_card_allowances
+    WHERE rate_card_id = ? AND is_active = 1 AND auto_apply = 1
+    ORDER BY sort_order
+  `).all(rateCard.id);
+}
+
+// ---- Per-docket line building ----------------------------------------------
+
+/**
+ * Split one person's worked hours into the four billing buckets. The OT clock
+ * runs per window: first 8h of day-window time at day rate (rest day OT), and
+ * independently first 8h of night-window time at night rate (rest night OT).
+ */
+function bucketPersonHours(person) {
+  const worked = Number(person.total_hours) || 0;
+  const segs = splitDayNightSegments(timeOf(person.time_on), worked);
+  let day = 0, night = 0;
+  for (const s of segs) { if (s.night) night = round2(night + s.hours); else day = round2(day + s.hours); }
+  return {
+    day: round2(Math.min(day, OT_THRESHOLD_HOURS)),
+    day_ot: round2(Math.max(0, day - OT_THRESHOLD_HOURS)),
+    night: round2(Math.min(night, OT_THRESHOLD_HOURS)),
+    night_ot: round2(Math.max(0, night - OT_THRESHOLD_HOURS)),
+  };
+}
+
+/**
+ * "2TC: 0645-1445, 1TC: 0645-1430 (30 mins break)" — group identical
+ * (on, off, break) spans so the line description reads like the docket.
+ */
+function shiftBreakdown(persons) {
+  const groups = new Map();
+  for (const p of persons) {
+    const brk = Number(p.break_time) || 0;
+    const key = `${hhmm(p.time_on)}-${hhmm(p.time_off)}|${brk}`;
+    groups.set(key, (groups.get(key) || 0) + 1);
+  }
+  return [...groups.entries()].map(([key, n]) => {
+    const [span, brk] = key.split('|');
+    const brkNote = Number(brk) > 0 ? ` (${Math.round(Number(brk) * 60)} mins break)` : '';
+    return `${n}TC: ${span}${brkNote}`;
+  }).join(', ');
+}
+
+/** "PO 79389 · Hill Rd, Olympic Park · Ticket #4467" header for line descriptions. */
+function docketHeader(d) {
+  let raw = {};
+  try { raw = JSON.parse(d.raw_json || '{}'); } catch (e) { raw = {}; }
+  const po = raw.contract_code || raw.po_number || raw.purchase_order || '';
+  const parts = [];
+  if (po) parts.push(`PO ${po}`);
+  else if (d.billing_reference) parts.push(`Ref ${d.billing_reference}`);
+  if (d.address) parts.push(String(d.address).split(',')[0]);
+  if (d.job_number) parts.push(`Ticket #${d.job_number}`);
+  return parts.join(' · ');
+}
+
+const LABOUR_LINES = [
+  { key: 'day', label: 'Traffic Controller (Day)', segment: 'day' },
+  { key: 'day_ot', label: 'Traffic Controller (Day OT)', segment: 'day_ot' },
+  { key: 'night', label: 'Traffic Controller (Night)', segment: 'night' },
+  { key: 'night_ot', label: 'Traffic Controller (Night OT)', segment: 'night_ot' },
+];
+
+// ---- Assembly ---------------------------------------------------------------
 
 /**
  * Assemble draft invoices from signed, un-invoiced dockets in [periodStart, periodEnd].
@@ -103,26 +288,80 @@ function assembleDraftInvoices({ periodStart, periodEnd, traffioClientId }, user
     );
     const invoiceId = inv.lastInsertRowid;
 
+    // Rates resolve once per invoice (same client; period start anchors the card).
+    const rateCard = findRateCard(db, first.local_client_id, first.booking_start_time || periodStart);
+    const labourRates = resolveLabourRates(db, rateCard);
+    const uteRate = resolveUteRate(db, rateCard);
+    const allowances = loadAllowances(db, rateCard);
+
     let sort = 0;
+    const addLine = (desc, qty, unit, rate, sourceType, segment, docketId) => {
+      const flagged = rate == null ? 1 : 0;
+      const price = rate == null ? 0 : round2(rate);
+      insLine.run(invoiceId, sort++, desc, qty, unit, price, round2(qty * price),
+        sourceType, segment, docketId, null, flagged);
+    };
+
     for (const d of group) {
       const persons = personsFor.all(d.works_docket_id);
+      const header = docketHeader(d);
+      const withHeader = (label, extra) => [label, header, extra].filter(Boolean).join(' · ');
+
+      // Labour: aggregate each person's bucketed hours, remember who
+      // contributed to each bucket for the span breakdown.
+      const totals = { day: 0, day_ot: 0, night: 0, night_ot: 0 };
+      const contributors = { day: [], day_ot: [], night: [], night_ot: [] };
       for (const p of persons) {
-        const role = p.resource_name || p.item_classification_name || 'Labour';
-        const name = [p.first_name, p.last_name].filter(Boolean).join(' ') || 'Crew';
-        const segs = splitDayNightSegments(timeOf(p.time_on), p.total_hours);
-        // Fallback: if the split yields nothing (no hours), still record a 0h line for visibility
-        const segList = segs.length ? segs : [{ hours: round2(p.total_hours || 0), night: false }];
-        for (const seg of segList) {
-          const desc = `${role} · ${name} · ${seg.night ? 'Night' : 'Day'} ${seg.hours}h · Docket ${d.works_docket_number || d.works_docket_id}`;
-          insLine.run(invoiceId, sort++, desc, seg.hours, 'hr', 0, 0,
-            'labour', seg.night ? 'night' : 'day', d.works_docket_id, p.person_id, 1);
-        }
-        const travel = Number(p.travel_time) || 0;
-        if (travel > 0) {
-          insLine.run(invoiceId, sort++, `Travel · ${name} · ${travel}h · Docket ${d.works_docket_number || d.works_docket_id}`,
-            travel, 'hr', 0, 0, 'allowance', '', d.works_docket_id, p.person_id, 1);
+        const b = bucketPersonHours(p);
+        for (const k of Object.keys(totals)) {
+          if (b[k] > 0) { totals[k] = round2(totals[k] + b[k]); contributors[k].push(p); }
         }
       }
+      for (const line of LABOUR_LINES) {
+        const qty = totals[line.key];
+        if (qty <= 0) continue;
+        addLine(withHeader(line.label, shiftBreakdown(contributors[line.key])),
+          qty, 'hr', labourRates[line.key], 'labour', line.segment, d.works_docket_id);
+      }
+
+      // Allowances. Rate-card-driven when defined; otherwise the two standard
+      // ones (travel per person, meal past the long-shift trigger) go out
+      // flagged at $0 so finance prices them rather than forgetting them.
+      if (persons.length) {
+        const emitted = { travel: false, meal: false };
+        for (const a of allowances) {
+          const trigger = a.min_hours_trigger != null ? Number(a.min_hours_trigger) : null;
+          const eligible = trigger == null ? persons : persons.filter(p => (Number(p.total_hours) || 0) >= trigger);
+          let qty = 0;
+          if (a.scope === 'per_person_per_shift' || a.scope === 'per_person_per_day') qty = eligible.length;
+          else if (a.scope === 'per_shift' || a.scope === 'per_day') qty = eligible.length ? 1 : 0;
+          else continue; // 'flat' scope is quote-level, not per-docket
+          if (qty <= 0) continue;
+          addLine(withHeader(a.name), qty, 'ea', a.amount != null ? Number(a.amount) : null,
+            'allowance', '', d.works_docket_id);
+          if (/travel/i.test(a.name)) emitted.travel = true;
+          if (/meal/i.test(a.name)) emitted.meal = true;
+        }
+        if (!emitted.travel) {
+          addLine(withHeader('Travel Allowance'), persons.length, 'ea', null, 'allowance', '', d.works_docket_id);
+        }
+        if (!emitted.meal) {
+          const mealQty = persons.filter(p => (Number(p.total_hours) || 0) >= MEAL_TRIGGER_HOURS).length;
+          if (mealQty > 0) addLine(withHeader('Meal Allowance'), mealQty, 'ea', null, 'allowance', '', d.works_docket_id);
+        }
+      }
+
+      // Additional Ute — billed for the docket's clock span (no break
+      // deduction): the longest person span, else the booking window. One
+      // ute by default; finance adjusts the qty when a docket ran more.
+      const spans = persons.map(p => clockSpanHours(p.time_on, p.time_off)).filter(h => h > 0);
+      const uteHours = spans.length
+        ? round2(Math.max(...spans))
+        : clockSpanHours(d.booking_start_time, d.approx_booking_end_time);
+      if (uteHours > 0) {
+        addLine(withHeader('Additional Ute'), uteHours, 'hr', uteRate, 'charge', '', d.works_docket_id);
+      }
+
       // Consume the docket in the same transaction (prevents double-billing)
       db.prepare('UPDATE traffio_dockets SET invoiced = 1, invoice_id = ? WHERE id = ?').run(invoiceId, d.id);
     }
