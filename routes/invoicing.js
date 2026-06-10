@@ -8,7 +8,7 @@ const multer = require('multer');
 const { getDb } = require('../db/database');
 const { requirePermission } = require('../middleware/auth');
 const { logActivity } = require('../middleware/audit');
-const { assembleDraftInvoices, recomputeInvoiceTotals, generateInvoiceNumber } = require('../middleware/invoicing');
+const { assembleDraftInvoices, recomputeInvoiceTotals, generateInvoiceNumber, applyRateCardToInvoice } = require('../middleware/invoicing');
 const { getInternalRef } = require('../middleware/integrations');
 const { round2 } = require('../lib/payroll');
 
@@ -322,6 +322,25 @@ router.post('/:id/lines', requirePermission(PERM), (req, res) => {
 });
 
 // POST /finance/invoicing/:id/approve — draft → approved (assigns number)
+// POST /finance/invoicing/:id/apply-rates — price the draft's flagged lines
+// from the client's rate card (for drafts assembled before the card existed).
+router.post('/:id/apply-rates', requirePermission(PERM), (req, res) => {
+  try {
+    const result = applyRateCardToInvoice(Number(req.params.id));
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'invoice', entityId: Number(req.params.id),
+      details: `Applied rate card "${result.cardName}": ${result.updated} line(s) priced, ${result.remaining} still need a rate`,
+      ip: req.ip,
+    });
+    req.flash(result.remaining ? 'error' : 'success',
+      `Priced ${result.updated} line${result.updated === 1 ? '' : 's'} from "${result.cardName}".`
+      + (result.remaining ? ` ${result.remaining} line${result.remaining === 1 ? '' : 's'} still need a rate the card doesn't carry — set those on the card or price them manually.` : ''));
+  } catch (err) {
+    req.flash('error', err.message || 'Could not apply the rate card.');
+  }
+  res.redirect('/finance/invoicing/' + req.params.id);
+});
+
 router.post('/:id/approve', requirePermission(PERM), (req, res) => {
   const db = getDb();
   const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);

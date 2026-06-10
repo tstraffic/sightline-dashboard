@@ -377,4 +377,162 @@ function assembleDraftInvoices({ periodStart, periodEnd, traffioClientId }, user
   return { invoiceIds, clients: groups.size, dockets: dockets.length };
 }
 
-module.exports = { assembleDraftInvoices, recomputeInvoiceTotals, generateInvoiceNumber };
+// ---- Rate-card application to existing drafts --------------------------------
+
+/**
+ * Re-price a draft invoice's rate_flagged lines from the client's rate card
+ * (drafts assembled before the card existed stay $0-flagged — this fixes them
+ * without re-assembling). Manually priced lines are never touched. Returns
+ * { updated, remaining, cardName } — remaining = lines still flagged because
+ * the card doesn't carry that rate.
+ */
+function applyRateCardToInvoice(invoiceId) {
+  const db = getDb();
+  const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(invoiceId);
+  if (!invoice) throw new Error('Invoice not found.');
+  if (invoice.status !== 'draft') throw new Error('Only draft invoices can be re-priced.');
+
+  const rateCard = findRateCard(db, invoice.client_id, invoice.period_start);
+  if (!rateCard) {
+    throw new Error(invoice.client_id
+      ? 'No active rate card found for this client (and no default card). Create one under Rate Cards first.'
+      : 'Invoice has no linked client and there is no default rate card.');
+  }
+  const labourRates = resolveLabourRates(db, rateCard);
+  const uteRate = resolveUteRate(db, rateCard);
+  const allowances = loadAllowances(db, rateCard);
+  const allowanceByName = (desc) => {
+    const name = String(desc || '').split(' · ')[0].trim().toLowerCase();
+    const a = allowances.find(x => String(x.name).trim().toLowerCase() === name);
+    return a && a.amount != null ? Number(a.amount) : null;
+  };
+
+  const lines = db.prepare('SELECT * FROM invoice_line_items WHERE invoice_id = ? AND rate_flagged = 1').all(invoiceId);
+  const upd = db.prepare('UPDATE invoice_line_items SET unit_price = ?, line_total = ?, rate_flagged = 0 WHERE id = ?');
+  let updated = 0;
+
+  const tx = db.transaction(() => {
+    for (const l of lines) {
+      let rate = null;
+      if (l.source_type === 'labour' && l.shift_segment) rate = labourRates[l.shift_segment];
+      else if (l.source_type === 'allowance') rate = allowanceByName(l.description);
+      else if (l.source_type === 'charge' && /^additional ute/i.test(String(l.description))) rate = uteRate;
+      if (rate == null) continue;
+      const price = round2(rate);
+      upd.run(price, round2((Number(l.qty) || 0) * price), l.id);
+      updated++;
+    }
+    recomputeInvoiceTotals(db, invoiceId);
+  });
+  tx();
+
+  return { updated, remaining: lines.length - updated, cardName: rateCard.name };
+}
+
+// ---- Billing-rates panel (rate-card editor) -----------------------------------
+// The rate-card editor only manages standard/standard pricing; invoicing needs
+// the day/night × ordinary/OT variant matrix plus travel/meal allowances and a
+// per-hour ute. These two helpers give the editor a single compact form that
+// reads and writes exactly the rows the resolvers above consume.
+
+/** Current billing rates for the editor panel (nulls where not set). */
+function getBillingRates(db, rateCardId) {
+  const card = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(rateCardId);
+  if (!card) return null;
+  const labour = resolveLabourRates(db, card);
+  const meal = db.prepare(`
+    SELECT amount, min_hours_trigger FROM rate_card_allowances
+    WHERE rate_card_id = ? AND is_active = 1 AND name LIKE '%meal%' COLLATE NOCASE LIMIT 1
+  `).get(rateCardId);
+  const travel = db.prepare(`
+    SELECT amount FROM rate_card_allowances
+    WHERE rate_card_id = ? AND is_active = 1 AND name LIKE '%travel%' COLLATE NOCASE LIMIT 1
+  `).get(rateCardId);
+  return {
+    day: labour.day, day_ot: labour.day_ot, night: labour.night, night_ot: labour.night_ot,
+    ute: resolveUteRate(db, card),
+    travel: travel ? travel.amount : null,
+    meal: meal ? meal.amount : null,
+    meal_trigger: meal && meal.min_hours_trigger != null ? meal.min_hours_trigger : MEAL_TRIGGER_HOURS,
+  };
+}
+
+/**
+ * Upsert the billing rows from the editor panel: a "Traffic Controller"
+ * tc_labour item with the 4 shift×bracket variants, an "Additional Ute"
+ * per-hour equipment item, and Travel/Meal per-person allowances. Blank
+ * inputs leave that rate unset (lines stay flagged for manual pricing).
+ */
+function saveBillingRates(db, rateCardId, v) {
+  const num = (x) => { const n = parseFloat(x); return isFinite(n) ? n : null; };
+  const rates = {
+    day: num(v.day), day_ot: num(v.day_ot), night: num(v.night), night_ot: num(v.night_ot),
+    ute: num(v.ute), travel: num(v.travel), meal: num(v.meal),
+    meal_trigger: num(v.meal_trigger) != null ? num(v.meal_trigger) : MEAL_TRIGGER_HOURS,
+  };
+
+  const tx = db.transaction(() => {
+    // TC labour item + variant matrix
+    let item = db.prepare(`
+      SELECT id FROM rate_card_items WHERE rate_card_id = ? AND category = 'tc_labour' AND is_active = 1
+      ORDER BY CASE WHEN name LIKE '%traffic controller%' COLLATE NOCASE THEN 0 ELSE 1 END, sort_order LIMIT 1
+    `).get(rateCardId);
+    if (!item) {
+      const r = db.prepare(`
+        INSERT INTO rate_card_items (rate_card_id, category, name, unit, has_hours_input, cost_method)
+        VALUES (?, 'tc_labour', 'Traffic Controller', 'per_hour', 1, 'fixed')
+      `).run(rateCardId);
+      item = { id: r.lastInsertRowid };
+    }
+    const upVar = db.prepare(`
+      INSERT INTO rate_card_item_variants (rate_card_item_id, shift_type, hour_bracket, rate)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(rate_card_item_id, shift_type, hour_bracket) DO UPDATE SET rate = excluded.rate
+    `);
+    if (rates.day != null) upVar.run(item.id, 'weekday', '0_to_8', rates.day);
+    if (rates.day_ot != null) upVar.run(item.id, 'weekday', '8_to_10', rates.day_ot);
+    if (rates.night != null) upVar.run(item.id, 'weeknight', '0_to_8', rates.night);
+    if (rates.night_ot != null) upVar.run(item.id, 'weeknight', '8_to_10', rates.night_ot);
+
+    // Additional Ute (per hour)
+    if (rates.ute != null) {
+      let ute = db.prepare(`
+        SELECT id FROM rate_card_items WHERE rate_card_id = ? AND category = 'equipment_vehicles'
+          AND unit = 'per_hour' AND name LIKE '%ute%' COLLATE NOCASE AND is_active = 1 LIMIT 1
+      `).get(rateCardId);
+      if (!ute) {
+        const r = db.prepare(`
+          INSERT INTO rate_card_items (rate_card_id, category, name, unit, cost_method)
+          VALUES (?, 'equipment_vehicles', 'Additional Ute', 'per_hour', 'fixed')
+        `).run(rateCardId);
+        ute = { id: r.lastInsertRowid };
+      }
+      upVar.run(ute.id, 'standard', 'standard', rates.ute);
+    }
+
+    // Travel / Meal allowances (per person per shift; meal gated on trigger hours)
+    const upAllowance = (likePattern, name, amount, trigger) => {
+      const existing = db.prepare(`
+        SELECT id FROM rate_card_allowances WHERE rate_card_id = ? AND name LIKE ? COLLATE NOCASE LIMIT 1
+      `).get(rateCardId, likePattern);
+      if (existing) {
+        db.prepare('UPDATE rate_card_allowances SET amount = ?, min_hours_trigger = ?, is_active = 1, auto_apply = 1 WHERE id = ?')
+          .run(amount, trigger, existing.id);
+      } else {
+        db.prepare(`
+          INSERT INTO rate_card_allowances (rate_card_id, name, scope, amount, min_hours_trigger, auto_apply)
+          VALUES (?, ?, 'per_person_per_shift', ?, ?, 1)
+        `).run(rateCardId, name, amount, trigger);
+      }
+    };
+    if (rates.travel != null) upAllowance('%travel%', 'Travel Allowance', rates.travel, null);
+    if (rates.meal != null) upAllowance('%meal%', 'Meal Allowance', rates.meal, rates.meal_trigger);
+  });
+  tx();
+  return rates;
+}
+
+module.exports = {
+  assembleDraftInvoices, recomputeInvoiceTotals, generateInvoiceNumber,
+  applyRateCardToInvoice, getBillingRates, saveBillingRates,
+};

@@ -22,8 +22,16 @@
   <% if (invoice.docket_ref) { %><p class="text-xs text-gray-400 mb-4">Dockets: <%= invoice.docket_ref %></p><% } %>
 
   <% if (draft && flaggedCount) { %>
-    <div class="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800">
-      <strong><%= flaggedCount %></strong> line<%= flaggedCount === 1 ? '' : 's' %> need a rate — set the unit price before approving. (Rate-card auto-pricing comes next.)
+    <div class="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800 flex flex-wrap items-center gap-3">
+      <span class="flex-1 min-w-[240px]">
+        <strong><%= flaggedCount %></strong> line<%= flaggedCount === 1 ? '' : 's' %> need a rate —
+        apply the client's rate card, or set the prices below.
+      </span>
+      <form method="POST" action="/finance/invoicing/<%= invoice.id %>/apply-rates" class="shrink-0">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="px-3 py-1.5 rounded-lg text-sm font-semibold bg-amber-600 text-white hover:bg-amber-700">Apply client rate card</button>
+      </form>
+      <a href="/rate-cards" class="shrink-0 text-sm font-medium text-amber-700 hover:text-amber-900 underline">Manage rate cards</a>
     </div>
   <% } %>
 
