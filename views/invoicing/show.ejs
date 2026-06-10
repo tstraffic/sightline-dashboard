@@ -111,12 +111,29 @@
   </div>
 
   <% if (invoice.status === 'approved') { %>
+    <% if (invoice.error_message) { %>
+      <div class="mb-3 rounded-lg bg-rose-50 border border-rose-200 px-4 py-3 text-sm text-rose-800">
+        Last QuickBooks push failed: <%= invoice.error_message %>
+      </div>
+    <% } %>
     <div class="flex items-center gap-3">
-      <span class="text-sm text-gray-500">Approved<%= invoice.approved_at ? ' · ' + invoice.approved_at : '' %>. QuickBooks push arrives in Phase 3.</span>
+      <form method="POST" action="/finance/invoicing/<%= invoice.id %>/push" onsubmit="return confirm('Push this invoice to QuickBooks?');">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700">Push to QuickBooks</button>
+      </form>
+      <span class="text-sm text-gray-500">Approved<%= invoice.approved_at ? ' · ' + invoice.approved_at : '' %></span>
       <form method="POST" action="/finance/invoicing/<%= invoice.id %>/void" onsubmit="return confirm('Void this invoice? Its dockets become available again.');">
         <%- include('../partials/csrf') %>
         <button type="submit" class="px-3 py-2 rounded-lg text-sm font-medium text-gray-400 hover:text-rose-600">Void</button>
       </form>
+    </div>
+  <% } %>
+  <% if (invoice.status === 'pushed') { %>
+    <div class="flex items-center gap-3">
+      <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20">
+        In QuickBooks<%= invoice.qbo_doc_number ? ' · #' + invoice.qbo_doc_number : '' %>
+      </span>
+      <span class="text-sm text-gray-500"><%= invoice.pushed_at ? 'Pushed ' + invoice.pushed_at : '' %></span>
     </div>
   <% } %>
   <% } %>

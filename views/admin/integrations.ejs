@@ -103,40 +103,54 @@
           <p class="text-gray-400 text-xs">Accounting & invoicing</p>
         </div>
       </div>
-      <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-50 text-purple-700 ring-1 ring-purple-600/20">Coming Soon</span>
+      <% if (configs.quickbooks.config.realm_id) { %>
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20">Connected · <%= configs.quickbooks.config.environment === 'production' ? 'Production' : 'Sandbox' %></span>
+      <% } else { %>
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 ring-1 ring-gray-300">Not connected</span>
+      <% } %>
     </div>
     <form method="POST" action="/admin/integrations/quickbooks" class="p-5 space-y-4">
       <%- include('../partials/csrf') %>
-      <div class="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <p class="text-sm text-gray-500">QuickBooks Online integration is being prepared. Once connected, the dashboard will be able to:</p>
-        <ul class="mt-2 space-y-1 text-xs text-gray-400">
-          <li>• Push invoices from cost entries</li>
-          <li>• Sync customer/client records</li>
-          <li>• Import payment status</li>
-          <li>• Match invoice references</li>
-        </ul>
-      </div>
       <div>
         <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Client ID</label>
         <input type="text" name="client_id" value="<%= configs.quickbooks.config.client_id || '' %>" placeholder="QBO OAuth Client ID"
-          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 opacity-60" disabled>
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500">
       </div>
       <div>
         <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Client Secret</label>
         <input type="password" name="client_secret" value="<%= configs.quickbooks.config.client_secret || '' %>" placeholder="QBO OAuth Client Secret"
-          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 opacity-60" disabled>
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500">
       </div>
       <div>
-        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Realm ID (Company)</label>
-        <input type="text" name="realm_id" value="<%= configs.quickbooks.config.realm_id || '' %>" placeholder="QBO Realm / Company ID"
-          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 opacity-60" disabled>
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Environment</label>
+        <select name="environment" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="sandbox" <%= configs.quickbooks.config.environment !== 'production' ? 'selected' : '' %>>Sandbox (test company)</option>
+          <option value="production" <%= configs.quickbooks.config.environment === 'production' ? 'selected' : '' %>>Production (live QuickBooks)</option>
+        </select>
+        <p class="mt-1 text-xs text-gray-400">Sandbox uses Intuit's test company — nothing touches the real books. Switching environment requires reconnecting.</p>
       </div>
+      <% if (configs.quickbooks.config.realm_id) { %>
+        <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-3 text-sm text-emerald-800">
+          Linked to company (realm) <strong><%= configs.quickbooks.config.realm_id %></strong>.
+          Reconnect below to switch companies or repair an expired connection.
+        </div>
+      <% } %>
       <div class="flex items-center gap-2">
         <input type="hidden" name="enabled" value="0">
-        <input type="checkbox" name="enabled" value="1" id="qb_enabled" disabled
-          class="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-brand-500 opacity-60">
-        <label for="qb_enabled" class="text-sm text-gray-400">Enable QuickBooks Online sync (coming soon)</label>
+        <input type="checkbox" name="enabled" value="1" id="qb_enabled" <%= configs.quickbooks.enabled ? 'checked' : '' %>
+          class="w-4 h-4 rounded border-gray-300 bg-white text-brand-500 focus:ring-brand-500">
+        <label for="qb_enabled" class="text-sm text-gray-600">Enable QuickBooks Online integration</label>
       </div>
+      <div class="flex items-center gap-2 pt-2 border-t border-gray-100">
+        <button type="submit" class="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-800 text-white hover:bg-gray-900">Save settings</button>
+        <a href="/admin/integrations/quickbooks/connect" class="px-4 py-2 rounded-lg text-sm font-semibold bg-emerald-600 text-white hover:bg-emerald-700">
+          <%= configs.quickbooks.config.realm_id ? 'Reconnect to QuickBooks' : 'Connect to QuickBooks' %>
+        </a>
+      </div>
+    </form>
+    <form method="POST" action="/admin/integrations/quickbooks/test" class="px-5 pb-4">
+      <%- include('../partials/csrf') %>
+      <button type="submit" class="text-sm text-brand-600 hover:text-brand-700 font-medium">Test connection →</button>
     </form>
   </div>
 

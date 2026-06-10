@@ -12175,6 +12175,21 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 261: QuickBooks push (Traffio Phase 3) — store the signed docket
+  // PDF alongside the invoice so the push can attach it to the QBO invoice.
+  if (!isMigrationApplied.get(261)) {
+    console.log('Running migration 261: invoices docket-PDF columns');
+    try {
+      const cols = db.prepare("PRAGMA table_info(invoices)").all().map(c => c.name);
+      if (!cols.includes('docket_pdf_path')) db.exec("ALTER TABLE invoices ADD COLUMN docket_pdf_path TEXT");
+      if (!cols.includes('docket_pdf_name')) db.exec("ALTER TABLE invoices ADD COLUMN docket_pdf_name TEXT");
+      recordMigration.run(261, 'QuickBooks push: invoices.docket_pdf_path/_name for QBO attachment');
+      console.log('Migration 261 applied');
+    } catch (e) {
+      console.error('Migration 261 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -20,6 +20,12 @@ const {
   syncTraffioForms,
   testTraffioConnection,
 } = require('../middleware/traffio');
+const {
+  buildAuthorizeUrl,
+  exchangeCodeForTokens,
+  testQboConnection,
+} = require('../middleware/quickbooks');
+const crypto = require('crypto');
 
 // GET /admin/integrations — Settings page
 router.get('/', (req, res) => {
@@ -46,6 +52,55 @@ router.get('/', (req, res) => {
     googleMapsKey,
     googleMapsEnvOverride: envOverride,
   });
+});
+
+// GET /admin/integrations/quickbooks/connect — kick off the Intuit OAuth flow.
+// Random state goes in the session and is checked on callback (CSRF guard).
+router.get('/quickbooks/connect', (req, res) => {
+  try {
+    const state = crypto.randomBytes(16).toString('hex');
+    req.session.qboOauthState = state;
+    res.redirect(buildAuthorizeUrl(state));
+  } catch (err) {
+    req.flash('error', `Could not start QuickBooks connect: ${err.message}`);
+    res.redirect('/admin/integrations');
+  }
+});
+
+// GET /admin/integrations/quickbooks/callback — Intuit redirects here with
+// ?code=&realmId=&state=. Validate state, swap the code for tokens, link the
+// company. (This exact URI is registered on the Intuit app — don't move it.)
+router.get('/quickbooks/callback', async (req, res) => {
+  const { code, realmId, state, error } = req.query;
+  const expected = req.session.qboOauthState;
+  delete req.session.qboOauthState;
+
+  if (error) {
+    req.flash('error', `QuickBooks authorisation declined: ${error}`);
+    return res.redirect('/admin/integrations');
+  }
+  if (!state || state !== expected) {
+    req.flash('error', 'QuickBooks connect failed: state mismatch — try again.');
+    return res.redirect('/admin/integrations');
+  }
+  if (!code || !realmId) {
+    req.flash('error', 'QuickBooks connect failed: missing code or company id.');
+    return res.redirect('/admin/integrations');
+  }
+
+  try {
+    await exchangeCodeForTokens(String(code), String(realmId));
+    const info = await testQboConnection();
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'integration',
+      entityLabel: 'quickbooks', details: `Connected QuickBooks company ${info.companyName || realmId}`,
+      ip: req.ip,
+    });
+    req.flash('success', `Connected to QuickBooks${info.companyName ? ` — ${info.companyName}` : ''} (realm ${realmId}).`);
+  } catch (err) {
+    req.flash('error', `QuickBooks connect failed: ${err.message}`);
+  }
+  res.redirect('/admin/integrations');
 });
 
 // POST /admin/integrations/google-maps — Save Google Maps API key into
@@ -107,7 +162,9 @@ router.post('/:provider', (req, res) => {
     case 'quickbooks':
       configObj.client_id = (req.body.client_id || '').trim();
       configObj.client_secret = (req.body.client_secret || '').trim();
-      configObj.realm_id = (req.body.realm_id || '').trim();
+      configObj.environment = req.body.environment === 'production' ? 'production' : 'sandbox';
+      // realm_id + tokens are set by the OAuth callback, not this form —
+      // saveIntegrationConfig merges, so they survive a settings save.
       break;
     case 'employment_hero':
       configObj.api_url = (req.body.api_url || '').trim();
@@ -158,9 +215,11 @@ router.post('/:provider/test', async (req, res) => {
         req.flash('success', 'Test message sent to Teams channel successfully');
         break;
       }
-      case 'quickbooks':
-        req.flash('error', 'QuickBooks Online integration is not yet active — coming soon');
+      case 'quickbooks': {
+        const info = await testQboConnection();
+        req.flash('success', `QuickBooks connection successful — ${info.companyName || 'company'} (${info.country || '?'})`);
         break;
+      }
       case 'employment_hero':
         req.flash('error', 'Employment Hero integration is not yet active — coming soon');
         break;
