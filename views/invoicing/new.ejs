@@ -1,10 +1,19 @@
 <% locals.currentPage = 'invoicing' %>
 <meta name="color-scheme" content="light only">
 
-<div class="max-w-3xl mx-auto px-4 py-6">
+<%
+  function fmtDocketDay(iso) {
+    if (!iso) return '-';
+    const d = new Date(String(iso).replace(' ', 'T'));
+    if (isNaN(d)) return String(iso).slice(0, 10);
+    return d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+  }
+%>
+
+<div class="max-w-5xl mx-auto px-4 py-6">
   <a href="/finance/invoicing" class="text-sm text-gray-400 hover:text-gray-600">&larr; Back to invoices</a>
   <h1 class="text-xl font-bold text-gray-900 mt-2 mb-1">Assemble draft invoices</h1>
-  <p class="text-sm text-gray-500 mb-5">Pick a period to preview signed, not-yet-invoiced dockets grouped by client. Assembling creates one draft invoice per client.</p>
+  <p class="text-sm text-gray-500 mb-5">Pick a period to see un-invoiced dockets grouped by client. Assembling creates one draft invoice per client from the signed dockets.</p>
 
   <!-- Period picker (reloads the preview) -->
   <form method="GET" action="/finance/invoicing/new" class="bg-white border border-gray-200 rounded-xl p-4 mb-4 flex flex-wrap items-end gap-3">
@@ -17,19 +26,39 @@
       <input type="date" name="period_end" value="<%= periodEnd %>" class="rounded-lg border border-gray-300 px-3 py-2 text-sm">
     </div>
     <button type="submit" class="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200">Preview</button>
-    <a href="/finance/invoicing/import" class="ml-auto px-4 py-2 rounded-lg text-sm font-semibold bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">Import CSV from Traffio</a>
   </form>
 
-  <div class="bg-white border border-gray-200 rounded-xl p-4">
+  <!-- Inline CSV import — lands rows in the same staging tables the API sync feeds -->
+  <form method="POST" action="/finance/invoicing/import" enctype="multipart/form-data" class="bg-white border border-gray-200 rounded-xl p-4 mb-4">
+    <%- include('../partials/csrf') %>
+    <div class="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">Import dockets from Traffio (CSV)</div>
+    <div class="flex flex-wrap items-center gap-3">
+      <input type="file" name="csv_file" accept=".csv,text/csv" required
+        class="text-sm text-gray-600 file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-gray-100 file:text-gray-700 file:text-sm file:font-medium hover:file:bg-gray-200">
+      <label class="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+        <input type="checkbox" name="mark_signed" value="1" checked class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+        Treat all dockets as signed off
+      </label>
+      <button type="submit" class="px-4 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">Import dockets</button>
+    </div>
+    <p class="mt-2 text-xs text-gray-400">
+      Traffio → Reports → <span class="font-medium">Person Dockets</span> → set the date range → export CSV.
+      Re-uploading updates rows in place; dockets already on an invoice are never touched.
+      Untick the checkbox to take the signed-off flag from the CSV as-is — only signed dockets can be assembled.
+    </p>
+  </form>
+
+  <!-- Per-client summary + assemble action -->
+  <div class="bg-white border border-gray-200 rounded-xl p-4 mb-4">
     <div class="text-xs font-bold uppercase tracking-wide text-gray-400 mb-3">
       <%= totalDockets %> signed docket<%= totalDockets === 1 ? '' : 's' %> ready · <%= clients.length %> client<%= clients.length === 1 ? '' : 's' %>
+      <% if (unsignedCount) { %><span class="normal-case font-medium text-amber-600"> · <%= unsignedCount %> unsigned (not billable)</span><% } %>
     </div>
 
     <% if (!clients.length) { %>
       <p class="text-sm text-gray-400 py-6 text-center">
-        No signed, un-invoiced dockets in this period. Sync dockets from Admin → Integrations → Traffio,
-        or <a href="/finance/invoicing/import" class="text-brand-600 hover:text-brand-700 font-medium">import a Traffio CSV export</a>.
-        (Note: only dockets <em>signed off</em> in Traffio arrive via sync — the CSV import can override that.)
+        No signed, un-invoiced dockets in this period. Import a Traffio CSV above,
+        or sync from Admin → Integrations → Traffio (sync only delivers dockets <em>signed off</em> in Traffio).
       </p>
     <% } else { %>
       <table class="w-full text-sm mb-4">
@@ -63,4 +92,47 @@
       </form>
     <% } %>
   </div>
+
+  <!-- The dockets themselves -->
+  <% if (dockets && dockets.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 text-xs font-bold uppercase tracking-wide text-gray-400">
+      Dockets in this period
+    </div>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-gray-400 text-xs uppercase tracking-wide border-b border-gray-100">
+            <th class="px-4 py-2">Ticket</th>
+            <th class="px-4 py-2">Date</th>
+            <th class="px-4 py-2">Client</th>
+            <th class="px-4 py-2">Site</th>
+            <th class="px-4 py-2 text-right">Crew</th>
+            <th class="px-4 py-2 text-right">Hours</th>
+            <th class="px-4 py-2">Status</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-50">
+          <% dockets.forEach(function(d){ %>
+            <tr class="<%= d.signed_off ? '' : 'opacity-60' %>">
+              <td class="px-4 py-2 font-medium text-gray-900">#<%= d.job_number || d.works_docket_number || d.works_docket_id %></td>
+              <td class="px-4 py-2 text-gray-600 whitespace-nowrap"><%= fmtDocketDay(d.booking_start_time) %></td>
+              <td class="px-4 py-2 text-gray-700"><%= d.client_name || '-' %></td>
+              <td class="px-4 py-2 text-gray-500 max-w-[220px] truncate"><%= (d.address || '-').split(',')[0] %></td>
+              <td class="px-4 py-2 text-right text-gray-600"><%= d.crew_count %></td>
+              <td class="px-4 py-2 text-right text-gray-900 font-medium"><%= Math.round(d.total_hours * 100) / 100 %></td>
+              <td class="px-4 py-2">
+                <% if (d.signed_off) { %>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20">Signed</span>
+                <% } else { %>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 ring-1 ring-amber-600/20">Not signed</span>
+                <% } %>
+              </td>
+            </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+  <% } %>
 </div>
