@@ -18,6 +18,12 @@
   const caughtUp = summary.caught_up || 0;
   const covered = attended + caughtUp;
   const pct = total > 0 ? Math.round((covered / total) * 100) : 0;
+  const isLocked = (typeof locked !== 'undefined') ? locked : !!toolbox.presenter_signed_at;
+  const ttLabels = (typeof talkTypeLabels !== 'undefined' && talkTypeLabels) || {};
+  const talkTypeLabel = toolbox.talk_type
+    ? (toolbox.talk_type === 'other' && toolbox.talk_type_other ? 'Other — ' + toolbox.talk_type_other : (ttLabels[toolbox.talk_type] || toolbox.talk_type))
+    : '';
+  const jobLabel = toolbox.job_number ? (toolbox.job_number + (toolbox.job_name ? ' — ' + toolbox.job_name : '')) : '';
 %>
 
 <div class="max-w-4xl mx-auto space-y-5">
@@ -27,16 +33,28 @@
       <h1 class="text-2xl font-bold text-gray-900 mt-1 flex items-center gap-2 flex-wrap">
         <%= toolbox.title %>
         <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset <%= STATUS_BADGE[toolbox.status] %>"><%= statusLabels[toolbox.status] %></span>
+        <% if (isLocked) { %>
+          <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            Signed off · TBX-<%= toolbox.id %>
+          </span>
+        <% } %>
       </h1>
-      <p class="text-sm text-gray-500 mt-1"><%= fmtDate(toolbox.held_at) %><% if (toolbox.presenter) { %> · Presented by <%= toolbox.presenter %><% } %></p>
+      <p class="text-sm text-gray-500 mt-1"><%= fmtDate(toolbox.held_at) %><% if (toolbox.talk_time) { %> · <%= toolbox.talk_time %><% } %><% if (toolbox.presenter) { %> · Presented by <%= toolbox.presenter %><% } %></p>
     </div>
-    <div class="flex items-center gap-2">
-      <a href="/toolbox-talks/<%= toolbox.id %>/edit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Edit</a>
-      <% if (toolbox.status === 'draft') { %>
-        <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/publish" class="inline">
-          <%- include('../partials/csrf') %>
-          <button type="submit" class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">Publish</button>
-        </form>
+    <div class="flex items-center gap-2 flex-wrap">
+      <a href="/toolbox-talks/<%= toolbox.id %>/record.pdf" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg inline-flex items-center gap-1.5">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m-7 7h8a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v13a2 2 0 002 2z"/></svg>
+        FRM-005 PDF
+      </a>
+      <% if (!isLocked) { %>
+        <a href="/toolbox-talks/<%= toolbox.id %>/edit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Edit</a>
+        <% if (toolbox.status === 'draft') { %>
+          <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/publish" class="inline">
+            <%- include('../partials/csrf') %>
+            <button type="submit" class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">Publish</button>
+          </form>
+        <% } %>
       <% } %>
       <% if (toolbox.status !== 'archived') { %>
         <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/archive" class="inline" onsubmit="return confirm('Archive this toolbox?')">
@@ -44,12 +62,24 @@
           <button type="submit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Archive</button>
         </form>
       <% } %>
-      <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/delete" class="inline" onsubmit="return confirm('Delete this toolbox? This cannot be undone.')">
-        <%- include('../partials/csrf') %>
-        <button type="submit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-300 hover:text-red-600 text-gray-700 text-sm font-semibold rounded-lg">Delete</button>
-      </form>
+      <% if (!isLocked) { %>
+        <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/delete" class="inline" onsubmit="return confirm('Delete this toolbox? This cannot be undone.')">
+          <%- include('../partials/csrf') %>
+          <button type="submit" class="px-3 py-2 bg-white border border-gray-300 hover:bg-red-50 hover:border-red-300 hover:text-red-600 text-gray-700 text-sm font-semibold rounded-lg">Delete</button>
+        </form>
+      <% } %>
     </div>
   </div>
+
+  <% if (isLocked) { %>
+    <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex items-start gap-3">
+      <svg class="w-5 h-5 text-emerald-600 mt-0.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <div class="text-sm text-emerald-900">
+        <p class="font-semibold">Record signed off and locked<% if (toolbox.presenter_signed_by_name) { %> by <%= toolbox.presenter_signed_by_name %><% } %> — <%= fmt(toolbox.presenter_signed_at) %></p>
+        <p class="text-emerald-800 text-xs mt-0.5">Atomis Record ID <strong>TBX-<%= toolbox.id %></strong>. Per TS-SAF-WI-003 the record can no longer be edited or deleted — if information was wrong, add a supplementary note below.</p>
+      </div>
+    </div>
+  <% } %>
 
   <!-- Tabs -->
   <div class="border-b border-gray-200 flex items-center gap-1">
@@ -145,12 +175,314 @@
     <% } %>
   <% } %>
 
+  <%# FRM-005 section 1 — Talk Details %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Talk details</p>
+    <dl class="grid grid-cols-2 sm:grid-cols-4 gap-x-4 gap-y-3 text-sm">
+      <div><dt class="text-xs text-gray-400">Date</dt><dd class="font-semibold text-gray-900"><%= fmtDate(toolbox.held_at) %></dd></div>
+      <div><dt class="text-xs text-gray-400">Time</dt><dd class="font-semibold text-gray-900"><%= toolbox.talk_time || '—' %></dd></div>
+      <div><dt class="text-xs text-gray-400">Duration</dt><dd class="font-semibold text-gray-900"><%= toolbox.duration_mins ? toolbox.duration_mins + ' mins' : '—' %></dd></div>
+      <div><dt class="text-xs text-gray-400">Talk type</dt><dd class="font-semibold text-gray-900"><%= talkTypeLabel || '—' %></dd></div>
+      <div class="col-span-2"><dt class="text-xs text-gray-400">Site / location</dt><dd class="font-semibold text-gray-900"><%= toolbox.site_location || '—' %></dd></div>
+      <div class="col-span-2">
+        <dt class="text-xs text-gray-400">Job / project</dt>
+        <dd class="font-semibold text-gray-900">
+          <% if (toolbox.job_id && jobLabel) { %>
+            <a href="/jobs/<%= toolbox.job_id %>" class="text-brand-700 hover:underline"><%= jobLabel %></a>
+          <% } else { %>—<% } %>
+        </dd>
+      </div>
+      <div class="col-span-2"><dt class="text-xs text-gray-400">Presenter</dt><dd class="font-semibold text-gray-900"><%= toolbox.presenter || '—' %></dd></div>
+      <div class="col-span-2"><dt class="text-xs text-gray-400">Topic reference (SOP / WI / incident)</dt><dd class="font-semibold text-gray-900"><%= toolbox.topic_reference || '—' %></dd></div>
+    </dl>
+  </div>
+
   <% if (toolbox.key_points) { %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
       <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Key points</p>
       <p class="text-sm text-gray-800 whitespace-pre-line leading-relaxed"><%= toolbox.key_points %></p>
     </div>
   <% } %>
+
+  <%# FRM-005 section 4 — Questions / Discussion / Worker Input %>
+  <% if (toolbox.discussion_notes) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Questions / discussion / worker input</p>
+      <p class="text-sm text-gray-800 whitespace-pre-line leading-relaxed"><%= toolbox.discussion_notes %></p>
+    </div>
+  <% } %>
+
+  <%# FRM-005 section 5 — Actions Raised %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div class="flex items-center justify-between gap-3 mb-2">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Actions raised<% if (actions.length) { %> (<%= actions.length %>)<% } %></p>
+    </div>
+    <p class="text-xs text-gray-500 mb-3">Any hazard, near miss or change request raised during the talk — log each as its own Atomis record and track it to closure. Don't bury actions in the notes.</p>
+    <% if (!actions.length) { %>
+      <p class="text-sm text-gray-400 italic">No actions raised.</p>
+    <% } else { %>
+      <ul class="divide-y divide-gray-100">
+        <% actions.forEach(function (a) { %>
+          <li class="py-2.5 flex items-start gap-3">
+            <span class="mt-0.5 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= a.status === 'closed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700' %>"><%= a.status === 'closed' ? 'Closed' : 'Open' %></span>
+            <div class="flex-1 min-w-0">
+              <p class="text-sm text-gray-900"><%= a.description %></p>
+              <p class="text-xs text-gray-400 mt-0.5">
+                <% if (a.raised_by) { %>Raised by <%= a.raised_by %> · <% } %>
+                <% if (a.linked_record) { %>Logged as <%= a.linked_record %> · <% } %>
+                <%= fmt(a.created_at) %><% if (a.closed_at) { %> · closed <%= fmt(a.closed_at) %><% } %>
+              </p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/actions/<%= a.id %>/toggle" class="inline">
+                <%- include('../partials/csrf') %>
+                <button type="submit" class="text-[11px] font-semibold text-brand-700 hover:underline"><%= a.status === 'open' ? 'Close' : 'Reopen' %></button>
+              </form>
+              <% if (!isLocked) { %>
+                <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/actions/<%= a.id %>/delete" class="inline" onsubmit="return confirm('Remove this action?')">
+                  <%- include('../partials/csrf') %>
+                  <button type="submit" class="text-[11px] font-semibold text-rose-600 hover:underline">Remove</button>
+                </form>
+              <% } %>
+            </div>
+          </li>
+        <% }); %>
+      </ul>
+    <% } %>
+    <% if (!isLocked) { %>
+      <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/actions" class="mt-3 pt-3 border-t border-gray-100 grid grid-cols-1 sm:grid-cols-[1fr_180px_180px_auto] gap-2">
+        <%- include('../partials/csrf') %>
+        <input type="text" name="description" required placeholder="What was raised?"
+          class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <input type="text" name="raised_by" placeholder="Raised by"
+          class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <input type="text" name="linked_record" placeholder="Logged as (e.g. INC-12)"
+          class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <button type="submit" class="px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-semibold rounded-lg">Add</button>
+      </form>
+    <% } %>
+  </div>
+
+  <%# FRM-005 section 6 — Attendance / Sign-On (signatures) %>
+  <% if (attendanceRows.length) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <div class="flex items-center justify-between gap-3 mb-2">
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sign-on record (<%= attendanceRows.length %>)</p>
+        <a href="/toolbox-talks/<%= toolbox.id %>/attendance" class="text-xs font-semibold text-brand-700 hover:underline">Manage attendance ›</a>
+      </div>
+      <ul class="divide-y divide-gray-100">
+        <% attendanceRows.forEach(function (a) { %>
+          <li class="py-2 flex items-center gap-3">
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-semibold text-gray-900 truncate">
+                <%= a.full_name %>
+                <% if (a.employee_id) { %><span class="text-gray-400 text-xs font-normal ml-1"><%= a.employee_id %></span><% } %>
+              </p>
+              <p class="text-xs mt-0.5">
+                <% if (a.late_arrival) { %>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold">Late<%= a.late_arrival_time ? ' — ' + a.late_arrival_time : '' %></span>
+                <% } else if (a.status === 'caught_up') { %>
+                  <span class="text-amber-600 font-semibold">Caught up after the talk</span>
+                <% } else { %>
+                  <span class="text-emerald-600 font-semibold">Attended</span>
+                <% } %>
+                <% if (a.signed_off_at) { %><span class="text-gray-400"> · signed <%= fmt(a.signed_off_at) %></span><% } %>
+              </p>
+            </div>
+            <% if (a.signature_data) { %>
+              <img src="<%= a.signature_data %>" alt="Signature" class="h-10 max-w-[140px] object-contain bg-gray-50 border border-gray-200 rounded">
+            <% } else { %>
+              <span class="text-[11px] text-gray-400"><%= a.recorded_by_id ? 'Marked off by office' : 'No signature' %></span>
+            <% } %>
+          </li>
+        <% }); %>
+      </ul>
+    </div>
+  <% } %>
+
+  <%# FRM-005 section 7 — Presenter Sign-off (locks the record) %>
+  <% if (!isLocked && toolbox.status === 'published') { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Presenter sign-off</p>
+      <p class="text-xs text-gray-500 mb-3">When the talk is done and attendance is captured, the presenter signs below with their finger. <strong>This locks the record</strong> — no further edits, attendance changes or sign-ons. You can then send the FRM-005 PDF to the client.</p>
+      <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/sign-off" id="signoff-form" onsubmit="return confirm('Sign off and lock this record? It can\'t be edited afterwards.')">
+        <%- include('../partials/csrf') %>
+        <div class="relative border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 overflow-hidden">
+          <canvas id="presenter-sig-pad" data-particle-trail style="display:block;width:100%;height:160px;touch-action:none;cursor:crosshair;"></canvas>
+          <span id="presenter-sig-placeholder" class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 text-sm text-gray-400 pointer-events-none">Presenter signs here with their finger</span>
+          <div class="absolute bottom-1.5 right-2">
+            <button type="button" id="presenter-sig-clear" class="text-xs font-semibold text-gray-500 hover:text-gray-700">Clear</button>
+          </div>
+        </div>
+        <input type="hidden" name="signature_data" id="presenter-sig-data">
+        <div class="flex items-center justify-end mt-3">
+          <button type="submit" id="presenter-sig-submit" disabled class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-semibold rounded-lg">Sign off &amp; lock record</button>
+        </div>
+      </form>
+    </div>
+    <script>
+      (function () {
+        var canvas = document.getElementById('presenter-sig-pad');
+        var placeholder = document.getElementById('presenter-sig-placeholder');
+        var clearBtn = document.getElementById('presenter-sig-clear');
+        var dataInput = document.getElementById('presenter-sig-data');
+        var submitBtn = document.getElementById('presenter-sig-submit');
+        var ctx = canvas.getContext('2d');
+        var drawing = false, last = null, hasInk = false;
+
+        function size() {
+          var dpr = window.devicePixelRatio || 1;
+          var rect = canvas.getBoundingClientRect();
+          if (rect.width === 0) return;
+          canvas.width = rect.width * dpr;
+          canvas.height = rect.height * dpr;
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.scale(dpr, dpr);
+          ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.strokeStyle = '#0f172a';
+        }
+        requestAnimationFrame(size);
+        window.addEventListener('resize', size);
+
+        function xy(e) {
+          var r = canvas.getBoundingClientRect();
+          var t = e.touches ? e.touches[0] : e;
+          return { x: t.clientX - r.left, y: t.clientY - r.top };
+        }
+        function start(e) { e.preventDefault(); drawing = true; last = xy(e); placeholder.style.display = 'none'; }
+        function move(e) {
+          if (!drawing) return;
+          e.preventDefault();
+          var p = xy(e);
+          ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+          last = p;
+          if (!hasInk) { hasInk = true; submitBtn.disabled = false; }
+          dataInput.value = canvas.toDataURL('image/png');
+        }
+        function end() {
+          drawing = false;
+          if (hasInk) dataInput.value = canvas.toDataURL('image/png');
+        }
+        canvas.addEventListener('mousedown', start);
+        canvas.addEventListener('mousemove', move);
+        canvas.addEventListener('mouseup', end);
+        canvas.addEventListener('mouseleave', end);
+        canvas.addEventListener('touchstart', start, { passive: false });
+        canvas.addEventListener('touchmove', move, { passive: false });
+        canvas.addEventListener('touchend', end);
+        clearBtn.addEventListener('click', function () {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          hasInk = false; placeholder.style.display = ''; dataInput.value = ''; submitBtn.disabled = true;
+        });
+      })();
+    </script>
+  <% } else if (isLocked) { %>
+    <div class="bg-white border border-emerald-200 rounded-xl shadow-sm p-5">
+      <p class="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-2">Presenter sign-off</p>
+      <div class="flex items-center gap-4 flex-wrap">
+        <% if (toolbox.presenter_signature_data) { %>
+          <img src="<%= toolbox.presenter_signature_data %>" alt="Presenter signature" class="h-16 max-w-[220px] object-contain bg-gray-50 border border-gray-200 rounded">
+        <% } %>
+        <div class="text-sm">
+          <p class="font-semibold text-gray-900"><%= toolbox.presenter || toolbox.presenter_signed_by_name || '—' %></p>
+          <p class="text-xs text-gray-500">Signed <%= fmt(toolbox.presenter_signed_at) %> · Atomis Record ID TBX-<%= toolbox.id %></p>
+        </div>
+      </div>
+    </div>
+  <% } %>
+
+  <%# Supplementary notes — the only post-lock addition (TS-SAF-WI-003) %>
+  <% if (isLocked || suppNotes.length) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Supplementary notes<% if (suppNotes.length) { %> (<%= suppNotes.length %>)<% } %></p>
+      <% if (!suppNotes.length) { %>
+        <p class="text-sm text-gray-400 italic">None yet. If anything on the locked record was wrong or incomplete, correct it here.</p>
+      <% } else { %>
+        <ul class="divide-y divide-gray-100">
+          <% suppNotes.forEach(function (n) { %>
+            <li class="py-2.5">
+              <p class="text-sm text-gray-900 whitespace-pre-line"><%= n.note %></p>
+              <p class="text-xs text-gray-400 mt-0.5"><%= n.author_name || 'Office' %> · <%= fmt(n.created_at) %></p>
+            </li>
+          <% }); %>
+        </ul>
+      <% } %>
+      <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/notes" class="mt-3 pt-3 border-t border-gray-100 flex items-start gap-2">
+        <%- include('../partials/csrf') %>
+        <textarea name="note" rows="2" required placeholder="Add a supplementary note..."
+          class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+        <button type="submit" class="px-4 py-2 bg-gray-900 hover:bg-gray-700 text-white text-sm font-semibold rounded-lg">Add</button>
+      </form>
+    </div>
+  <% } %>
+
+  <%# Send the FRM-005 PDF to the client — evidence the safety items
+      were addressed. Only after sign-off so clients never get an
+      unsigned record. %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Send to client</p>
+    <% if (!isLocked) { %>
+      <p class="text-sm text-gray-500">Available after the presenter signs off — the client should only receive the signed record. You can <a href="/toolbox-talks/<%= toolbox.id %>/record.pdf" class="text-brand-700 hover:underline font-semibold">preview the PDF</a> in the meantime.</p>
+    <% } else { %>
+      <p class="text-xs text-gray-500 mb-3">Emails the signed FRM-005 PDF (with all attendance signatures) as evidence the safety items were addressed.</p>
+      <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/send-to-client" class="space-y-3" onsubmit="return confirm('Send the signed record to this email?')">
+        <%- include('../partials/csrf') %>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client</label>
+            <select name="client_id" id="send-client-select"
+              onchange="var o=this.options[this.selectedIndex];var e=o.getAttribute('data-email');if(e)document.getElementById('send-recipient').value=e;"
+              class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <option value="">— Optional —</option>
+              <% clients.forEach(function (c) { %>
+                <option value="<%= c.id %>" data-email="<%= c.primary_contact_email || '' %>" <%= toolbox.job_client_id === c.id ? 'selected' : '' %>><%= c.company_name %></option>
+              <% }); %>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Recipient email <span class="text-rose-500">*</span></label>
+            <%
+              var prefillEmail = '';
+              if (toolbox.job_client_id) {
+                var jc = clients.filter(function (c) { return c.id === toolbox.job_client_id; })[0];
+                if (jc) prefillEmail = jc.primary_contact_email || '';
+              }
+            %>
+            <input type="email" name="recipient_email" id="send-recipient" required value="<%= prefillEmail %>"
+              placeholder="contact@client.com.au"
+              class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Message <span class="text-gray-300 normal-case font-medium tracking-normal">(optional, included in the email)</span></label>
+          <textarea name="message" rows="3" placeholder="e.g. Toolbox completed with the crew this morning covering the items raised in your site instruction — record attached."
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+        </div>
+        <div class="flex items-center justify-end">
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg inline-flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            Send signed record
+          </button>
+        </div>
+      </form>
+    <% } %>
+    <% if (clientSends.length) { %>
+      <div class="mt-4 pt-3 border-t border-gray-100">
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Send history</p>
+        <ul class="divide-y divide-gray-100">
+          <% clientSends.forEach(function (s) { %>
+            <li class="py-2 flex items-center gap-3 text-sm">
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold <%= s.status === 'sent' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700' %>"><%= s.status === 'sent' ? 'Sent' : 'Failed' %></span>
+              <div class="flex-1 min-w-0">
+                <p class="text-gray-900 truncate"><%= s.recipient_email %><% if (s.company_name) { %> <span class="text-gray-400">(<%= s.company_name %>)</span><% } %></p>
+                <p class="text-xs text-gray-400"><%= fmt(s.sent_at) %><% if (s.sent_by_name) { %> · by <%= s.sent_by_name %><% } %></p>
+              </div>
+            </li>
+          <% }); %>
+        </ul>
+      </div>
+    <% } %>
+  </div>
 
   <% if (toolbox.slides_path || toolbox.signon_path) { %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 space-y-3">

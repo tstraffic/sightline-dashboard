@@ -113,6 +113,38 @@ function sopSignLinkEmail(fullName, signUrl) {
   `);
 }
 
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// Cover email for the TS-SAF-FRM-005 Toolbox Talk Record PDF sent to a
+// client as evidence the safety items raised on their job were addressed.
+function toolboxClientEmail(recipientName, toolbox, message, senderName) {
+  const rows = [
+    ['Topic', toolbox.title],
+    ['Date', toolbox.held_at],
+    ['Site / Location', toolbox.site_location],
+    ['Job / Project', toolbox.job_label],
+    ['Presenter', toolbox.presenter],
+    ['Atomis Record ID', 'TBX-' + toolbox.id],
+  ].filter(r => r[1]).map(([label, value]) =>
+    `<tr>
+      <td style="padding:6px 12px 6px 0;font-size:13px;color:#6B7280;white-space:nowrap;">${label}</td>
+      <td style="padding:6px 0;font-size:13px;color:#111827;font-weight:500;">${escapeHtml(value)}</td>
+    </tr>`
+  ).join('');
+  const customMessage = message
+    ? `<p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">${escapeHtml(message).replace(/\n/g, '<br>')}</p>`
+    : '';
+  return baseTemplate('Toolbox Talk Record', `
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 8px;">Hi ${escapeHtml(recipientName || 'there')},</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Please find attached the signed toolbox talk record (TS-SAF-FRM-005) confirming the safety items discussed and addressed with our crew.</p>
+    ${customMessage}
+    <table cellpadding="0" cellspacing="0" style="margin:0 0 16px;background:#F9FAFB;border:1px solid #E5E7EB;border-radius:8px;padding:12px 16px;width:100%;">${rows}</table>
+    <p style="color:#6B7280;font-size:13px;margin:0;">Sent by ${escapeHtml(senderName || 'T&S Traffic Control')} via Atomis. Worker attendance signatures are embedded in the attached PDF.</p>
+  `);
+}
+
 module.exports = {
   adminInviteEmail,
   workerInviteEmail,
@@ -121,4 +153,5 @@ module.exports = {
   notificationEmail,
   dailyDigestEmail,
   sopSignLinkEmail,
+  toolboxClientEmail,
 };

@@ -35,11 +35,78 @@
       </div>
     </div>
 
+    <%
+      var _jobs = (typeof jobs !== 'undefined' && jobs) || [];
+      var _ttLabels = (typeof talkTypeLabels !== 'undefined' && talkTypeLabels) || {};
+      var _tt = isEdit ? (toolbox.talk_type || '') : '';
+    %>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div>
+        <label for="talk_time" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Time</label>
+        <input type="time" id="talk_time" name="talk_time" value="<%= isEdit ? (toolbox.talk_time || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label for="duration_mins" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Duration (mins)</label>
+        <input type="number" id="duration_mins" name="duration_mins" min="1" max="480" value="<%= isEdit && toolbox.duration_mins ? toolbox.duration_mins : '' %>"
+          placeholder="15"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="col-span-2">
+        <label for="site_location" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Site / location</label>
+        <input type="text" id="site_location" name="site_location" value="<%= isEdit ? (toolbox.site_location || '') : '' %>"
+          placeholder="e.g. Pacific Hwy & Bay Rd, Waitara"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label for="job_id" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Job / project</label>
+        <select id="job_id" name="job_id"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">— No job linked —</option>
+          <% _jobs.forEach(function (j) { %>
+            <option value="<%= j.id %>" <%= isEdit && toolbox.job_id === j.id ? 'selected' : '' %>><%= j.job_number %> — <%= j.job_name %></option>
+          <% }); %>
+        </select>
+      </div>
+      <div>
+        <label for="talk_type" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Talk type</label>
+        <select id="talk_type" name="talk_type" onchange="document.getElementById('tt-other-wrap').style.display = this.value === 'other' ? '' : 'none'"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">— Select —</option>
+          <% Object.keys(_ttLabels).forEach(function (k) { %>
+            <option value="<%= k %>" <%= _tt === k ? 'selected' : '' %>><%= _ttLabels[k] %></option>
+          <% }); %>
+        </select>
+        <div id="tt-other-wrap" style="<%= _tt === 'other' ? '' : 'display:none' %>" class="mt-2">
+          <input type="text" name="talk_type_other" value="<%= isEdit ? (toolbox.talk_type_other || '') : '' %>"
+            placeholder="Describe the talk type"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <label for="topic_reference" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Topic reference <span class="text-gray-300 normal-case font-medium tracking-normal">(SOP / WI / incident)</span></label>
+      <input type="text" id="topic_reference" name="topic_reference" value="<%= isEdit ? (toolbox.topic_reference || '') : '' %>"
+        placeholder="e.g. TS-SAF-SOP-011, incident #42, today's TGS"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+
     <div>
       <label for="key_points" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Key points</label>
-      <textarea id="key_points" name="key_points" rows="8" placeholder="What was covered?"
+      <textarea id="key_points" name="key_points" rows="8" placeholder="Three to five key points. Keep it brief. Tie to the work that's happening today."
         class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? (toolbox.key_points || '') : '' %></textarea>
       <p class="text-xs text-gray-400 mt-1">Plain text. Line breaks preserved on the worker side.</p>
+    </div>
+
+    <div>
+      <label for="discussion_notes" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Questions / discussion / worker input</label>
+      <textarea id="discussion_notes" name="discussion_notes" rows="5" placeholder="Capture what workers said. Don't just write 'questions raised: nil'."
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? (toolbox.discussion_notes || '') : '' %></textarea>
+      <p class="text-xs text-gray-400 mt-1">The talks where workers contribute are the ones that change behaviour. You can keep adding to this until the record is signed off.</p>
     </div>
 
     <%# Slides + sign-on sheet inputs were retired in favour of the
