@@ -104,7 +104,7 @@ router.get('/project/:projectId', requirePermission(PERM), (req, res) => {
   const projectName = (named && named.project_name) || first.project_name || first.project_title || '';
 
   const jobs = db.prepare(`
-    SELECT id, job_number, job_name, client FROM jobs
+    SELECT id, job_number, job_name, client, suburb, start_date FROM jobs
     WHERE status NOT IN ('closed','completed')
     ORDER BY job_number DESC LIMIT 500
   `).all();
@@ -112,7 +112,7 @@ router.get('/project/:projectId', requirePermission(PERM), (req, res) => {
   // If this project was reconciled before, suggest the job it mapped to.
   let suggestedJob = null;
   const ref = getInternalRef('traffio', 'job', projectId);
-  if (ref) suggestedJob = db.prepare('SELECT id, job_number, job_name, client FROM jobs WHERE id = ?').get(ref.internal_id);
+  if (ref) suggestedJob = db.prepare('SELECT id, job_number, job_name, client, suburb, start_date FROM jobs WHERE id = ?').get(ref.internal_id);
 
   res.render('traffio-imports/project', {
     title: 'Reconcile project', projectId, projectName, shifts, jobs, first, suggestedJob,
@@ -210,7 +210,7 @@ router.get('/:id', requirePermission(PERM), (req, res) => {
   const payload = parseProposed(row);
   // Active jobs for the picker
   const jobs = db.prepare(`
-    SELECT id, job_number, job_name, client FROM jobs
+    SELECT id, job_number, job_name, client, suburb, start_date FROM jobs
     WHERE status NOT IN ('closed','completed')
     ORDER BY job_number DESC LIMIT 500
   `).all();

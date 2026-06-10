@@ -40,8 +40,12 @@
         <div class="text-sm font-medium text-gray-900">Existing job</div>
         <select name="job_id" id="ti_job_id" class="mt-2 w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
           <option value="">— select a job —</option>
-          <% jobs.forEach(function(j){ %>
-            <option value="<%= j.id %>" <%= (suggestedJob && suggestedJob.id === j.id) ? 'selected' : '' %>><%= j.job_number %> — <%= j.job_name %><%= j.client ? ' (' + j.client + ')' : '' %></option>
+          <% jobs.forEach(function(j){
+               const primary = [j.client || j.job_name, j.suburb].filter(Boolean).join(' · ');
+               const meta = [j.job_number, j.start_date].filter(Boolean).join(' · ');
+          %>
+            <option value="<%= j.id %>" <%= (suggestedJob && suggestedJob.id === j.id) ? 'selected' : '' %>
+              data-primary="<%= primary %>" data-meta="<%= meta %>"><%= j.job_number %> — <%= j.job_name %><%= j.client ? ' (' + j.client + ')' : '' %></option>
           <% }); %>
         </select>
       </div>
