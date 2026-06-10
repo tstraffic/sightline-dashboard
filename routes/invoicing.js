@@ -60,12 +60,10 @@ router.get('/', requirePermission(PERM), (req, res) => {
   res.render('invoicing/index', { title: 'Invoicing', invoices, counts, status, money });
 });
 
-// GET /finance/invoicing/import — upload a Traffio "Person Dockets" CSV export.
-// Escape hatch for when the API sync can't deliver (dockets not signed off in
-// Traffio yet, sync window missed, etc.) — finance exports the report from
-// Traffio and lands the same staging rows the sync would have created.
+// GET /finance/invoicing/import — the upload form now lives inline on the
+// assemble page; keep the URL alive for old links/bookmarks.
 router.get('/import', requirePermission(PERM), (req, res) => {
-  res.render('invoicing/import', { title: 'Import Traffio dockets' });
+  res.redirect('/finance/invoicing/new');
 });
 
 // POST /finance/invoicing/import — parse + upsert into traffio_dockets /
@@ -223,7 +221,25 @@ router.get('/new', requirePermission(PERM), (req, res) => {
   `).all(periodStart, periodEnd);
   const totalDockets = clients.reduce((s, c) => s + c.docket_count, 0);
 
-  res.render('invoicing/new', { title: 'New Invoices', clients, totalDockets, periodStart, periodEnd });
+  // Every un-invoiced docket in the period — signed AND unsigned — with crew
+  // counts and hours, so finance can see exactly what's there before
+  // assembling. Unsigned rows render muted (they're not assemble-able yet).
+  const dockets = db.prepare(`
+    SELECT d.works_docket_id, d.works_docket_number, d.job_number, d.client_name,
+      d.address, d.booking_start_time, d.signed_off,
+      COUNT(p.id) AS crew_count,
+      COALESCE(SUM(p.total_hours), 0) AS total_hours
+    FROM traffio_dockets d
+    LEFT JOIN traffio_docket_persons p ON p.works_docket_id = d.works_docket_id AND p.is_deleted = 0
+    WHERE d.is_deleted = 0 AND d.invoiced = 0
+      AND date(d.booking_start_time) BETWEEN ? AND ?
+    GROUP BY d.works_docket_id
+    ORDER BY d.client_name, d.booking_start_time
+    LIMIT 500
+  `).all(periodStart, periodEnd);
+  const unsignedCount = dockets.filter(d => !d.signed_off).length;
+
+  res.render('invoicing/new', { title: 'New Invoices', clients, totalDockets, periodStart, periodEnd, dockets, unsignedCount });
 });
 
 // POST /finance/invoicing/assemble
