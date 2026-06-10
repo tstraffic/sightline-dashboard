@@ -211,6 +211,29 @@ router.get('/:id', (req, res, next) => {
   let billingRates = null;
   try { billingRates = require('../../middleware/invoicing').getBillingRates(db, id); } catch (e) { /* panel hidden */ }
 
+  // Engine v2: the client's billing profile (rule switches) + the coded
+  // activity × band rate matrix (CREW_3, TMA_DRIVER, …).
+  let billingProfile = null;
+  let activities = [];
+  try {
+    billingProfile = require('../../middleware/invoicing').getBillingProfile(db, card.client_id);
+    activities = db.prepare(`
+      SELECT i.id, i.code, i.name, i.category FROM rate_card_items i
+      WHERE i.rate_card_id = ? AND i.is_active = 1 AND COALESCE(i.code,'') != ''
+      ORDER BY i.category, i.code
+    `).all(id);
+    const varFor = db.prepare(`
+      SELECT rate FROM rate_card_item_variants WHERE rate_card_item_id = ? AND shift_type = ? AND hour_bracket = ?
+    `);
+    for (const a of activities) {
+      a.bands = {};
+      for (const [band, [shift, bracket]] of Object.entries(BAND_SLOTS)) {
+        const v = varFor.get(a.id, shift, bracket);
+        a.bands[band] = v && v.rate != null ? v.rate : '';
+      }
+    }
+  } catch (e) { /* engine-v2 tables missing on stale deploy — panels hidden */ }
+
   res.render('quoting/rate-cards/edit', {
     title: card.name + ' — Rate Card',
     currentPage: 'quoting',
@@ -220,7 +243,130 @@ router.get('/:id', (req, res, next) => {
     categories: CATEGORIES,
     units: UNITS,
     billingRates,
+    billingProfile,
+    activities,
+    bandKeys: Object.keys(BAND_SLOTS),
   });
+});
+
+// Engine v2: band → canonical (shift_type, hour_bracket) variant slot. The
+// matrix reads and writes these exact slots; the invoicing resolver's
+// fallback chains start from them.
+const BAND_SLOTS = {
+  NT: ['weekday', '0_to_8'],
+  OT: ['weekday', '8_to_10'],
+  DT: ['weekday', '10_plus'],
+  WE: ['weekend', 'standard'],
+  PH: ['public_holiday', 'standard'],
+  FLAT: ['standard', 'standard'],
+};
+
+// Save the client billing profile (rule switches) — keyed by the card's
+// client; a card with no client edits the DEFAULT profile.
+router.post('/:id/billing-profile', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const db = getDb();
+  const card = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(id);
+  if (!card) { req.flash('error', 'Rate card not found.'); return res.redirect('/rate-cards'); }
+
+  const b = req.body;
+  const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+  const mode = ['tc_hours', 'per_hour_banded', 'flat_day_rate', 'per_crew_day'].includes(b.billing_mode) ? b.billing_mode : 'tc_hours';
+  const wkMode = ['flat_rate', 'multiplier', 'sat_sun_split', 'same_as_weekday'].includes(b.weekend_mode) ? b.weekend_mode : 'same_as_weekday';
+  const phMode = ['flat_rate', 'multiplier', 'sat_sun_split', 'same_as_weekday'].includes(b.public_holiday_mode) ? b.public_holiday_mode : 'same_as_weekday';
+
+  try {
+    db.prepare(`
+      INSERT INTO client_billing_profile (client_id, billing_mode, nt_threshold_hours, ot_threshold_hours,
+        weekend_mode, public_holiday_mode, minimum_shift_hours, rounding_increment_minutes,
+        crew_grouping_enabled, bill_vehicles, bill_equipment, require_signoff_to_bill, break_billing, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(client_id) DO UPDATE SET
+        billing_mode=excluded.billing_mode, nt_threshold_hours=excluded.nt_threshold_hours,
+        ot_threshold_hours=excluded.ot_threshold_hours, weekend_mode=excluded.weekend_mode,
+        public_holiday_mode=excluded.public_holiday_mode, minimum_shift_hours=excluded.minimum_shift_hours,
+        rounding_increment_minutes=excluded.rounding_increment_minutes,
+        crew_grouping_enabled=excluded.crew_grouping_enabled, bill_vehicles=excluded.bill_vehicles,
+        bill_equipment=excluded.bill_equipment, require_signoff_to_bill=excluded.require_signoff_to_bill,
+        break_billing=excluded.break_billing, updated_at=CURRENT_TIMESTAMP
+    `).run(
+      card.client_id || null, mode,
+      num(b.nt_threshold_hours) != null ? num(b.nt_threshold_hours) : 8,
+      num(b.ot_threshold_hours),
+      wkMode, phMode,
+      num(b.minimum_shift_hours),
+      num(b.rounding_increment_minutes) != null ? Math.round(num(b.rounding_increment_minutes)) : null,
+      isCheckboxOn(b.crew_grouping_enabled) ? 1 : 0,
+      isCheckboxOn(b.bill_vehicles) ? 1 : 0,
+      isCheckboxOn(b.bill_equipment) ? 1 : 0,
+      isCheckboxOn(b.require_signoff_to_bill) ? 1 : 0,
+      b.break_billing === 'paid' ? 'paid' : 'unpaid'
+    );
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'rate_card', entityId: id,
+      entityLabel: card.name, details: `Updated billing profile (${card.client_id ? 'client ' + card.client_id : 'DEFAULT'}): mode ${mode}`, ip: req.ip,
+    });
+    req.flash('success', `Billing profile saved (${mode}).`);
+  } catch (err) {
+    req.flash('error', 'Could not save billing profile: ' + err.message);
+  }
+  res.redirect('/rate-cards/' + id + '#billing-profile');
+});
+
+// Save the activity × band matrix. Inputs are named rate_<itemId>_<BAND>;
+// the add-row uses new_code / new_name / new_category / new_<BAND>.
+router.post('/:id/activity-rates', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const db = getDb();
+  const card = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(id);
+  if (!card) { req.flash('error', 'Rate card not found.'); return res.redirect('/rate-cards'); }
+  const b = req.body;
+  const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : null; };
+
+  try {
+    const upVar = db.prepare(`
+      INSERT INTO rate_card_item_variants (rate_card_item_id, shift_type, hour_bracket, rate)
+      VALUES (?, ?, ?, ?)
+      ON CONFLICT(rate_card_item_id, shift_type, hour_bracket) DO UPDATE SET rate = excluded.rate
+    `);
+    const delVar = db.prepare('DELETE FROM rate_card_item_variants WHERE rate_card_item_id = ? AND shift_type = ? AND hour_bracket = ?');
+    const tx = db.transaction(() => {
+      const items = db.prepare(`SELECT id FROM rate_card_items WHERE rate_card_id = ? AND is_active = 1 AND COALESCE(code,'') != ''`).all(id);
+      for (const it of items) {
+        for (const [band, [shift, bracket]] of Object.entries(BAND_SLOTS)) {
+          const key = `rate_${it.id}_${band}`;
+          if (!(key in b)) continue;
+          const rate = num(b[key]);
+          if (rate == null) delVar.run(it.id, shift, bracket);
+          else upVar.run(it.id, shift, bracket, rate);
+        }
+      }
+      // New activity row
+      const code = (b.new_code || '').trim().toUpperCase().replace(/\s+/g, '_');
+      if (code) {
+        const name = (b.new_name || '').trim() || code.replace(/_/g, ' ');
+        const category = ['tc_labour', 'equipment_vehicles', 'allowances_misc', 'planning_compliance', 'provisioning'].includes(b.new_category) ? b.new_category : 'tc_labour';
+        const unit = category === 'tc_labour' || category === 'equipment_vehicles' ? 'per_hour' : 'per_shift';
+        const r = db.prepare(`
+          INSERT INTO rate_card_items (rate_card_id, category, code, name, unit, cost_method)
+          VALUES (?, ?, ?, ?, ?, 'fixed')
+        `).run(id, category, code, name, unit);
+        for (const [band, [shift, bracket]] of Object.entries(BAND_SLOTS)) {
+          const rate = num(b[`new_${band}`]);
+          if (rate != null) upVar.run(r.lastInsertRowid, shift, bracket, rate);
+        }
+      }
+    });
+    tx();
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'rate_card', entityId: id,
+      entityLabel: card.name, details: 'Updated activity band rates', ip: req.ip,
+    });
+    req.flash('success', 'Activity rates saved.');
+  } catch (err) {
+    req.flash('error', 'Could not save activity rates: ' + err.message);
+  }
+  res.redirect('/rate-cards/' + id + '#activities');
 });
 
 // Save the Traffio invoice billing rates panel — upserts the TC-labour
