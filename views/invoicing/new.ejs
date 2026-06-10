@@ -17,6 +17,7 @@
       <input type="date" name="period_end" value="<%= periodEnd %>" class="rounded-lg border border-gray-300 px-3 py-2 text-sm">
     </div>
     <button type="submit" class="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-100 text-gray-700 hover:bg-gray-200">Preview</button>
+    <a href="/finance/invoicing/import" class="ml-auto px-4 py-2 rounded-lg text-sm font-semibold bg-white border border-gray-300 text-gray-700 hover:bg-gray-50">Import CSV from Traffio</a>
   </form>
 
   <div class="bg-white border border-gray-200 rounded-xl p-4">
@@ -25,7 +26,11 @@
     </div>
 
     <% if (!clients.length) { %>
-      <p class="text-sm text-gray-400 py-6 text-center">No signed, un-invoiced dockets in this period. Sync dockets from Admin → Integrations → Traffio first.</p>
+      <p class="text-sm text-gray-400 py-6 text-center">
+        No signed, un-invoiced dockets in this period. Sync dockets from Admin → Integrations → Traffio,
+        or <a href="/finance/invoicing/import" class="text-brand-600 hover:text-brand-700 font-medium">import a Traffio CSV export</a>.
+        (Note: only dockets <em>signed off</em> in Traffio arrive via sync — the CSV import can override that.)
+      </p>
     <% } else { %>
       <table class="w-full text-sm mb-4">
         <thead><tr class="text-left text-gray-400 text-xs uppercase tracking-wide">
