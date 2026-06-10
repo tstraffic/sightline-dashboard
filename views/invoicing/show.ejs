@@ -19,7 +19,13 @@
     <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wide ring-1 ring-inset <%= statusPill(invoice.status) %>"><%= invoice.status %></span>
   </div>
   <p class="text-sm text-gray-500 mb-1"><%= invoice.client_name_snapshot || 'Unknown client' %> · <%= invoice.period_start %> → <%= invoice.period_end %></p>
-  <% if (invoice.docket_ref) { %><p class="text-xs text-gray-400 mb-4">Dockets: <%= invoice.docket_ref %></p><% } %>
+  <% if (invoice.docket_ref) { %>
+    <p class="text-xs text-gray-400 mb-4">
+      Dockets: <%= invoice.docket_ref %>
+      · <a href="/finance/invoicing/<%= invoice.id %>/docket-pdf" target="_blank" class="text-brand-600 hover:text-brand-700 font-medium">View docket PDF</a>
+      <span class="text-gray-300">(attached to the QuickBooks invoice on push)</span>
+    </p>
+  <% } %>
 
   <% if (draft && flaggedCount) { %>
     <div class="mb-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-2.5 text-sm text-amber-800 flex flex-wrap items-center gap-3">

@@ -322,6 +322,29 @@ router.post('/:id/lines', requirePermission(PERM), (req, res) => {
 });
 
 // POST /finance/invoicing/:id/approve — draft → approved (assigns number)
+// GET /finance/invoicing/:id/docket-pdf — view the invoice's docket evidence
+// PDF (generated on demand from the staged docket hours; regenerate=1 forces
+// a fresh render after docket data changes).
+router.get('/:id/docket-pdf', requirePermission(PERM), async (req, res) => {
+  const db = getDb();
+  const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!invoice) { req.flash('error', 'Invoice not found.'); return res.redirect('/finance/invoicing'); }
+  try {
+    let pdfPath = invoice.docket_pdf_path;
+    const fs = require('fs');
+    if (!pdfPath || !fs.existsSync(pdfPath) || req.query.regenerate === '1') {
+      const gen = await require('../services/docketPdf').generateInvoiceDocketPdf(invoice.id);
+      pdfPath = gen.path;
+    }
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="${invoice.docket_pdf_name || 'dockets.pdf'}"`);
+    fs.createReadStream(pdfPath).pipe(res);
+  } catch (err) {
+    req.flash('error', 'Could not generate the docket PDF: ' + err.message);
+    res.redirect('/finance/invoicing/' + invoice.id);
+  }
+});
+
 // POST /finance/invoicing/:id/apply-rates — price the draft's flagged lines
 // from the client's rate card (for drafts assembled before the card existed).
 router.post('/:id/apply-rates', requirePermission(PERM), (req, res) => {
@@ -372,10 +395,24 @@ router.post('/:id/push', requirePermission(PERM), async (req, res) => {
     const { pushInvoiceToQbo, attachDocketPdf } = require('../middleware/quickbooks');
     const result = await pushInvoiceToQbo(invoice.id);
 
-    let attachNote = '';
-    if (invoice.docket_pdf_path) {
+    // No docket PDF stored yet → generate one from the staged docket hours so
+    // the QBO invoice always carries its evidence. Non-fatal: a render failure
+    // must not block the push that already landed.
+    let pdfPath = invoice.docket_pdf_path;
+    let pdfName = invoice.docket_pdf_name;
+    if (!pdfPath) {
       try {
-        await attachDocketPdf(result.qboInvoiceId, invoice.docket_pdf_path, invoice.docket_pdf_name || undefined);
+        const gen = await require('../services/docketPdf').generateInvoiceDocketPdf(invoice.id);
+        pdfPath = gen.path; pdfName = gen.name;
+      } catch (genErr) {
+        console.error('[invoicing] docket PDF generation failed:', genErr.message);
+      }
+    }
+
+    let attachNote = '';
+    if (pdfPath) {
+      try {
+        await attachDocketPdf(result.qboInvoiceId, pdfPath, pdfName || undefined);
         attachNote = ' Docket PDF attached.';
       } catch (attachErr) {
         // The invoice landed; a failed attachment shouldn't roll that back.
