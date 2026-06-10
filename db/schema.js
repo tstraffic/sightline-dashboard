@@ -12190,6 +12190,62 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 262: Invoice engine v2 config (per the invoice-engine build
+  // brief) — every pricing rule is client-scoped with a DEFAULT fallback row
+  // (client_id NULL). billing_mode picks the engine branch: 'tc_hours' is the
+  // pre-existing per-TC day/night model (kept as DEFAULT so behaviour doesn't
+  // change until a client is configured); 'per_hour_banded' is the
+  // crew-grouped NT/OT/DT model (ACI006 / Abergeldie); 'flat_day_rate' bills
+  // one day-rate line per docket. resource_billing_map translates Traffio
+  // vehicle/plant resource names into rate-card activity codes per client
+  // (NULL activity_code = not billed separately, baked into crew rate).
+  if (!isMigrationApplied.get(262)) {
+    console.log('Running migration 262: invoice engine v2 config tables');
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS client_billing_profile (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_id INTEGER UNIQUE REFERENCES clients(id) ON DELETE CASCADE, -- NULL = DEFAULT profile
+          billing_mode TEXT NOT NULL DEFAULT 'tc_hours'
+            CHECK(billing_mode IN ('tc_hours','per_hour_banded','flat_day_rate','per_crew_day')),
+          nt_threshold_hours REAL NOT NULL DEFAULT 8,
+          ot_threshold_hours REAL,                      -- NULL = no DT band
+          weekend_mode TEXT NOT NULL DEFAULT 'same_as_weekday'
+            CHECK(weekend_mode IN ('flat_rate','multiplier','sat_sun_split','same_as_weekday')),
+          public_holiday_mode TEXT NOT NULL DEFAULT 'same_as_weekday'
+            CHECK(public_holiday_mode IN ('flat_rate','multiplier','sat_sun_split','same_as_weekday')),
+          minimum_shift_hours REAL,                     -- NULL = bill actual
+          rounding_increment_minutes INTEGER,           -- NULL = no rounding
+          crew_grouping_enabled INTEGER NOT NULL DEFAULT 0,
+          bill_vehicles INTEGER NOT NULL DEFAULT 0,
+          bill_equipment INTEGER NOT NULL DEFAULT 0,
+          require_signoff_to_bill INTEGER NOT NULL DEFAULT 1,
+          break_billing TEXT NOT NULL DEFAULT 'unpaid' CHECK(break_billing IN ('unpaid','paid')),
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS resource_billing_map (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          client_id INTEGER REFERENCES clients(id) ON DELETE CASCADE,  -- NULL = DEFAULT mapping
+          traffio_resource_type TEXT NOT NULL,
+          activity_code TEXT,                            -- NULL = not billed separately
+          UNIQUE(client_id, traffio_resource_type)
+        );
+        CREATE INDEX IF NOT EXISTS idx_rbm_client ON resource_billing_map(client_id);
+      `);
+      // DEFAULT profile = current verified behaviour (per-TC hours model)
+      db.exec(`
+        INSERT INTO client_billing_profile (client_id, billing_mode)
+        SELECT NULL, 'tc_hours'
+        WHERE NOT EXISTS (SELECT 1 FROM client_billing_profile WHERE client_id IS NULL)
+      `);
+      recordMigration.run(262, 'Invoice engine v2: client_billing_profile + resource_billing_map (DEFAULT = legacy tc_hours)');
+      console.log('Migration 262 applied');
+    } catch (e) {
+      console.error('Migration 262 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

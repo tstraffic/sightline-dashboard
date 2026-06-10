@@ -234,6 +234,205 @@ const LABOUR_LINES = [
   { key: 'night_ot', label: 'Traffic Controller (Night OT)', segment: 'night_ot' },
 ];
 
+// ---- Engine v2: client billing profiles + banded crew billing -----------------
+// Per the invoice-engine build brief: every pricing rule is client-scoped with
+// a DEFAULT fallback (client_billing_profile.client_id NULL). billing_mode
+// branches the per-docket line builder:
+//   tc_hours        — the original per-TC day/night model (DEFAULT; verified
+//                     against the hand-built Hill Rd QBO invoice)
+//   per_hour_banded — crew-grouped NT/OT/DT banding (ACI006 / Abergeldie)
+//   flat_day_rate   — one DAY_RATE line per docket
+
+const LEGACY_PROFILE = {
+  billing_mode: 'tc_hours', nt_threshold_hours: 8, ot_threshold_hours: null,
+  weekend_mode: 'same_as_weekday', public_holiday_mode: 'same_as_weekday',
+  minimum_shift_hours: null, rounding_increment_minutes: null,
+  crew_grouping_enabled: 0, bill_vehicles: 1, bill_equipment: 0,
+  require_signoff_to_bill: 1, break_billing: 'unpaid',
+};
+
+/** The billing profile for a client: client row → DEFAULT row → legacy built-in. */
+function getBillingProfile(db, clientId) {
+  let row = null;
+  try {
+    if (clientId) row = db.prepare('SELECT * FROM client_billing_profile WHERE client_id = ?').get(clientId);
+    if (!row) row = db.prepare('SELECT * FROM client_billing_profile WHERE client_id IS NULL').get();
+  } catch (e) { /* table missing on stale deploy */ }
+  return row || LEGACY_PROFILE;
+}
+
+const BAND_LABELS = { NT: 'Normal', OT: 'OT', DT: 'DT', WE: 'Weekend', PH: 'Public Holiday', FLAT: 'Flat' };
+
+/**
+ * Variant lookup chain for an activity band. Conservative on purpose: an OT/DT
+ * bracket never silently falls back to the ordinary rate, and night bands only
+ * resolve from weeknight variants.
+ */
+function bandVariantChain(band, night) {
+  if (night) {
+    if (band === 'NT') return [['weeknight', '0_to_8'], ['weeknight', 'standard']];
+    if (band === 'OT') return [['weeknight', '8_to_10']];
+    if (band === 'DT') return [['weeknight', '10_plus']];
+  }
+  switch (band) {
+    case 'NT': return [['weekday', '0_to_8'], ['standard', '0_to_8'], ['weekday', 'standard'], ['standard', 'standard']];
+    case 'OT': return [['weekday', '8_to_10'], ['standard', '8_to_10']];
+    case 'DT': return [['weekday', '10_plus'], ['standard', '10_plus']];
+    case 'WE': return [['weekend', 'standard'], ['weekend', '0_to_8']];
+    case 'PH': return [['public_holiday', 'standard'], ['public_holiday', '0_to_8']];
+    default: return [['standard', 'standard']];
+  }
+}
+
+/**
+ * Rate resolver for coded activities (CREW_3, TC_SINGLE, TMA_DRIVER, …) on a
+ * rate card: rate_card_items.code → variants by band chain. Caches per code.
+ */
+function makeActivityRateResolver(db, rateCard) {
+  const cache = new Map();
+  const variantsFor = (code) => {
+    if (!rateCard || !code) return null;
+    const key = String(code).toUpperCase();
+    if (!cache.has(key)) {
+      const item = db.prepare(`
+        SELECT id FROM rate_card_items
+        WHERE rate_card_id = ? AND is_active = 1 AND UPPER(COALESCE(code,'')) = ?
+        LIMIT 1
+      `).get(rateCard.id, key);
+      cache.set(key, item
+        ? db.prepare('SELECT shift_type, hour_bracket, rate FROM rate_card_item_variants WHERE rate_card_item_id = ?').all(item.id)
+        : null);
+    }
+    return cache.get(key);
+  };
+  return {
+    hasActivity: (code) => !!variantsFor(code),
+    get: (code, band, night) => {
+      const vars = variantsFor(code);
+      if (!vars) return null;
+      for (const [s, b] of bandVariantChain(band, night)) {
+        const v = vars.find(x => x.shift_type === s && x.hour_bracket === b);
+        if (v && v.rate != null) return Number(v.rate);
+      }
+      return null;
+    },
+  };
+}
+
+function isWeekendDate(dt) {
+  const s = String(dt || '').slice(0, 10);
+  if (!s) return false;
+  const d = new Date(s + 'T00:00:00');
+  return !isNaN(d) && (d.getDay() === 0 || d.getDay() === 6);
+}
+
+/** Night shift = starts at/after 18:00 or before 04:00 (matches payroll's full-night rule). */
+function isNightStart(dt) {
+  const m = String(timeOf(dt)).match(/^(\d{1,2}):/);
+  if (!m) return false;
+  const h = parseInt(m[1], 10);
+  return h >= 18 || h < 4;
+}
+
+/** Round hours to the nearest billing increment (e.g. 15 min). */
+function roundToIncrement(hours, minutes) {
+  const inc = Number(minutes) / 60;
+  if (!inc || inc <= 0) return hours;
+  return Math.round(hours / inc) * inc;
+}
+
+/**
+ * per_hour_banded — group same-span people into CREW_N blocks (when enabled
+ * and the card carries a CREW_N rate), band each block NT→OT→DT by the
+ * profile thresholds (weekend flat_rate replaces banding), apply minimum
+ * shift hours + rounding, and emit an unpaid-break qty-0 sub-line like the
+ * hand-built invoices. TC_SINGLE falls back to the legacy tc_labour rates
+ * when the card has no TC_SINGLE coded item (NT→day, OT→day OT; DT flags).
+ */
+function buildBandedDocketLines(ctx, d, persons) {
+  const { addLine, profile, activityRate, labourRates } = ctx;
+  const header = docketHeader(d);
+  const withHeader = (label, extra) => [label, header, extra].filter(Boolean).join(' · ');
+  const ntTh = Number(profile.nt_threshold_hours) || 8;
+  const otTh = profile.ot_threshold_hours != null ? Number(profile.ot_threshold_hours) : null;
+  const weekend = isWeekendDate(d.booking_start_time);
+
+  // Blocks: same time_on/time_off people group; crew rate must exist to group.
+  const bySpan = new Map();
+  for (const p of persons) {
+    const key = `${timeOf(p.time_on)}|${timeOf(p.time_off)}`;
+    if (!bySpan.has(key)) bySpan.set(key, []);
+    bySpan.get(key).push(p);
+  }
+  const blocks = [];
+  for (const members of bySpan.values()) {
+    const n = members.length;
+    const crewCode = `CREW_${n}`;
+    if (profile.crew_grouping_enabled && n >= 2 && activityRate.hasActivity(crewCode)) {
+      blocks.push({ code: crewCode, label: `${n} Person Crew`, members, hours: Number(members[0].total_hours) || 0 });
+    } else {
+      for (const p of members) blocks.push({ code: 'TC_SINGLE', label: 'Traffic Controller', members: [p], hours: Number(p.total_hours) || 0 });
+    }
+  }
+
+  const tcFallback = (band, night) => {
+    if (band === 'NT') return night ? labourRates.night : labourRates.day;
+    if (band === 'OT') return night ? labourRates.night_ot : labourRates.day_ot;
+    return null;
+  };
+
+  for (const blk of blocks) {
+    const night = isNightStart(blk.members[0].time_on);
+    let h = blk.hours;
+    if (profile.minimum_shift_hours != null) h = Math.max(h, Number(profile.minimum_shift_hours));
+    if (profile.rounding_increment_minutes) h = roundToIncrement(h, profile.rounding_increment_minutes);
+    h = round2(h);
+    if (h <= 0) continue;
+    const breakdown = shiftBreakdown(blk.members);
+
+    let bands;
+    if (weekend && profile.weekend_mode === 'flat_rate') {
+      bands = [{ band: 'WE', hours: h }];
+    } else {
+      // multiplier / sat_sun_split weekend modes are not configured for any
+      // client yet — weekend dockets band normally and the WE-less card
+      // leaves rates resolvable; revisit when a client needs those modes.
+      const nt = Math.min(h, ntTh);
+      const ot = otTh != null ? Math.min(Math.max(h - ntTh, 0), Math.max(otTh - ntTh, 0)) : Math.max(h - ntTh, 0);
+      const dt = otTh != null ? Math.max(h - otTh, 0) : 0;
+      bands = [
+        { band: 'NT', hours: round2(nt) },
+        { band: 'OT', hours: round2(ot) },
+        { band: 'DT', hours: round2(dt) },
+      ].filter(b => b.hours > 0);
+    }
+
+    for (const b of bands) {
+      let rate = activityRate.get(blk.code, b.band, night);
+      if (rate == null && blk.code === 'TC_SINGLE') rate = tcFallback(b.band, night);
+      addLine(
+        withHeader(`${blk.label} (${BAND_LABELS[b.band]}${night && b.band !== 'WE' ? ' Night' : ''})`, breakdown),
+        b.hours, 'hr', rate, 'labour', `${blk.code}:${b.band}:${night ? 'N' : 'D'}`, d.works_docket_id);
+    }
+
+    // Unpaid break as an explicit qty-0 sub-line (mirrors the hand-built
+    // invoices, which show the break deduction without billing it).
+    const breakMin = Math.round(Math.max(0, ...blk.members.map(p => Number(p.break_time) || 0)) * 60);
+    if (profile.break_billing === 'unpaid' && breakMin > 0) {
+      addLine(withHeader(`Less unpaid break (${breakMin} mins) — not billed`), 0, 'hr', 0, 'adjustment', '', d.works_docket_id);
+    }
+  }
+}
+
+/** flat_day_rate — one DAY_RATE line per docket regardless of hours. */
+function buildFlatDayDocketLines(ctx, d, persons) {
+  const { addLine, activityRate } = ctx;
+  const header = docketHeader(d);
+  const withHeader = (label, extra) => [label, header, extra].filter(Boolean).join(' · ');
+  addLine(withHeader('Day Rate', shiftBreakdown(persons)), 1, 'ea',
+    activityRate.get('DAY_RATE', 'FLAT', false), 'labour', 'DAY_RATE:FLAT:D', d.works_docket_id);
+}
+
 // ---- Assembly ---------------------------------------------------------------
 
 /**
@@ -288,11 +487,13 @@ function assembleDraftInvoices({ periodStart, periodEnd, traffioClientId }, user
     );
     const invoiceId = inv.lastInsertRowid;
 
-    // Rates resolve once per invoice (same client; period start anchors the card).
+    // Rates + rules resolve once per invoice (same client; period start anchors the card).
     const rateCard = findRateCard(db, first.local_client_id, first.booking_start_time || periodStart);
     const labourRates = resolveLabourRates(db, rateCard);
     const uteRate = resolveUteRate(db, rateCard);
     const allowances = loadAllowances(db, rateCard);
+    const profile = getBillingProfile(db, first.local_client_id);
+    const activityRate = makeActivityRateResolver(db, rateCard);
 
     let sort = 0;
     const addLine = (desc, qty, unit, rate, sourceType, segment, docketId) => {
@@ -301,27 +502,36 @@ function assembleDraftInvoices({ periodStart, periodEnd, traffioClientId }, user
       insLine.run(invoiceId, sort++, desc, qty, unit, price, round2(qty * price),
         sourceType, segment, docketId, null, flagged);
     };
+    const ctx = { addLine, profile, activityRate, labourRates };
 
     for (const d of group) {
       const persons = personsFor.all(d.works_docket_id);
       const header = docketHeader(d);
       const withHeader = (label, extra) => [label, header, extra].filter(Boolean).join(' · ');
 
-      // Labour: aggregate each person's bucketed hours, remember who
-      // contributed to each bucket for the span breakdown.
-      const totals = { day: 0, day_ot: 0, night: 0, night_ot: 0 };
-      const contributors = { day: [], day_ot: [], night: [], night_ot: [] };
-      for (const p of persons) {
-        const b = bucketPersonHours(p);
-        for (const k of Object.keys(totals)) {
-          if (b[k] > 0) { totals[k] = round2(totals[k] + b[k]); contributors[k].push(p); }
+      // Labour — branch on the client's billing mode. tc_hours is the
+      // original verified model and stays the DEFAULT.
+      if (profile.billing_mode === 'per_hour_banded') {
+        buildBandedDocketLines(ctx, d, persons);
+      } else if (profile.billing_mode === 'flat_day_rate' || profile.billing_mode === 'per_crew_day') {
+        buildFlatDayDocketLines(ctx, d, persons);
+      } else {
+        // tc_hours: aggregate each person's bucketed hours, remember who
+        // contributed to each bucket for the span breakdown.
+        const totals = { day: 0, day_ot: 0, night: 0, night_ot: 0 };
+        const contributors = { day: [], day_ot: [], night: [], night_ot: [] };
+        for (const p of persons) {
+          const b = bucketPersonHours(p);
+          for (const k of Object.keys(totals)) {
+            if (b[k] > 0) { totals[k] = round2(totals[k] + b[k]); contributors[k].push(p); }
+          }
         }
-      }
-      for (const line of LABOUR_LINES) {
-        const qty = totals[line.key];
-        if (qty <= 0) continue;
-        addLine(withHeader(line.label, shiftBreakdown(contributors[line.key])),
-          qty, 'hr', labourRates[line.key], 'labour', line.segment, d.works_docket_id);
+        for (const line of LABOUR_LINES) {
+          const qty = totals[line.key];
+          if (qty <= 0) continue;
+          addLine(withHeader(line.label, shiftBreakdown(contributors[line.key])),
+            qty, 'hr', labourRates[line.key], 'labour', line.segment, d.works_docket_id);
+        }
       }
 
       // Allowances. Rate-card-driven when defined; otherwise the two standard
@@ -354,11 +564,15 @@ function assembleDraftInvoices({ periodStart, periodEnd, traffioClientId }, user
       // Additional Ute — billed for the docket's clock span (no break
       // deduction): the longest person span, else the booking window. One
       // ute by default; finance adjusts the qty when a docket ran more.
+      // tc_hours always bills it (original behaviour); the new modes honour
+      // the profile's bill_vehicles switch (vehicle-report ingestion will
+      // replace this span-derived line per resource_billing_map).
+      const billUte = profile.billing_mode === 'tc_hours' || profile.bill_vehicles;
       const spans = persons.map(p => clockSpanHours(p.time_on, p.time_off)).filter(h => h > 0);
       const uteHours = spans.length
         ? round2(Math.max(...spans))
         : clockSpanHours(d.booking_start_time, d.approx_booking_end_time);
-      if (uteHours > 0) {
+      if (billUte && uteHours > 0) {
         addLine(withHeader('Additional Ute'), uteHours, 'hr', uteRate, 'charge', '', d.works_docket_id);
       }
 
@@ -409,12 +623,22 @@ function applyRateCardToInvoice(invoiceId) {
 
   const lines = db.prepare('SELECT * FROM invoice_line_items WHERE invoice_id = ? AND rate_flagged = 1').all(invoiceId);
   const upd = db.prepare('UPDATE invoice_line_items SET unit_price = ?, line_total = ?, rate_flagged = 0 WHERE id = ?');
+  const activityRate = makeActivityRateResolver(db, rateCard);
   let updated = 0;
 
   const tx = db.transaction(() => {
     for (const l of lines) {
       let rate = null;
-      if (l.source_type === 'labour' && l.shift_segment) rate = labourRates[l.shift_segment];
+      if (l.source_type === 'labour' && String(l.shift_segment || '').includes(':')) {
+        // Banded line — segment is "ACTIVITY:BAND:N|D" (engine v2)
+        const [code, band, dn] = String(l.shift_segment).split(':');
+        rate = activityRate.get(code, band, dn === 'N');
+        if (rate == null && code === 'TC_SINGLE') {
+          if (band === 'NT') rate = dn === 'N' ? labourRates.night : labourRates.day;
+          else if (band === 'OT') rate = dn === 'N' ? labourRates.night_ot : labourRates.day_ot;
+        }
+      }
+      else if (l.source_type === 'labour' && l.shift_segment) rate = labourRates[l.shift_segment];
       else if (l.source_type === 'allowance') rate = allowanceByName(l.description);
       else if (l.source_type === 'charge' && /^additional ute/i.test(String(l.description))) rate = uteRate;
       if (rate == null) continue;
@@ -535,4 +759,5 @@ function saveBillingRates(db, rateCardId, v) {
 module.exports = {
   assembleDraftInvoices, recomputeInvoiceTotals, generateInvoiceNumber,
   applyRateCardToInvoice, getBillingRates, saveBillingRates,
+  getBillingProfile, makeActivityRateResolver,
 };
