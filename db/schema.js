@@ -12246,6 +12246,80 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 263: Toolbox Talk Record (TS-SAF-FRM-005)
+  // Extends toolbox_talks into the controlled form: talk details (time,
+  // site, job, duration, talk type, topic reference), worker discussion
+  // (section 4), presenter sign-off signature (section 7, which locks the
+  // record per TS-SAF-WI-003), late-arrival tracking on attendance,
+  // actions raised (section 5), post-lock supplementary notes, and a log
+  // of FRM-005 PDFs emailed to clients.
+  if (!isMigrationApplied.get(263)) {
+    console.log('Running migration 263: toolbox talk record (TS-SAF-FRM-005)');
+    try {
+      const tbCols = [
+        "ALTER TABLE toolbox_talks ADD COLUMN talk_time TEXT DEFAULT ''",
+        "ALTER TABLE toolbox_talks ADD COLUMN site_location TEXT DEFAULT ''",
+        "ALTER TABLE toolbox_talks ADD COLUMN job_id INTEGER REFERENCES jobs(id)",
+        "ALTER TABLE toolbox_talks ADD COLUMN duration_mins INTEGER",
+        "ALTER TABLE toolbox_talks ADD COLUMN talk_type TEXT DEFAULT ''",
+        "ALTER TABLE toolbox_talks ADD COLUMN talk_type_other TEXT DEFAULT ''",
+        "ALTER TABLE toolbox_talks ADD COLUMN topic_reference TEXT DEFAULT ''",
+        "ALTER TABLE toolbox_talks ADD COLUMN discussion_notes TEXT DEFAULT ''",
+        "ALTER TABLE toolbox_talks ADD COLUMN presenter_signature_data TEXT",
+        "ALTER TABLE toolbox_talks ADD COLUMN presenter_signed_at DATETIME",
+        "ALTER TABLE toolbox_talks ADD COLUMN presenter_signed_by_id INTEGER REFERENCES users(id)",
+        "ALTER TABLE toolbox_attendance ADD COLUMN late_arrival INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE toolbox_attendance ADD COLUMN late_arrival_time TEXT",
+      ];
+      for (const sql of tbCols) {
+        try { db.exec(sql); } catch (e) { /* column likely already exists */ }
+      }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS toolbox_actions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          description TEXT NOT NULL,
+          raised_by TEXT DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','closed')),
+          -- Free-text pointer to the separate Atomis record the action was
+          -- raised as (hazard / near-miss / CAR), per WI-003 step 8.
+          linked_record TEXT DEFAULT '',
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          closed_at DATETIME
+        );
+
+        CREATE TABLE IF NOT EXISTS toolbox_supplementary_notes (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          note TEXT NOT NULL,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS toolbox_client_sends (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          toolbox_id INTEGER NOT NULL REFERENCES toolbox_talks(id) ON DELETE CASCADE,
+          client_id INTEGER REFERENCES clients(id),
+          recipient_email TEXT NOT NULL,
+          subject TEXT DEFAULT '',
+          message TEXT DEFAULT '',
+          pdf_path TEXT DEFAULT '',
+          sent_by_id INTEGER REFERENCES users(id),
+          sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          status TEXT NOT NULL DEFAULT 'sent' CHECK(status IN ('sent','failed'))
+        );
+      `);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_actions_tb ON toolbox_actions(toolbox_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_notes_tb ON toolbox_supplementary_notes(toolbox_id)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_toolbox_sends_tb ON toolbox_client_sends(toolbox_id)');
+      recordMigration.run(263, 'Toolbox Talk Record (TS-SAF-FRM-005): talk details, presenter sign-off lock, late arrivals, actions raised, supplementary notes, client sends');
+      console.log('Migration 263 applied');
+    } catch (e) {
+      console.error('Migration 263 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

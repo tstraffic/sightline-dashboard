@@ -228,6 +228,16 @@
                 maxlength="500"
                 class="mt-1.5 block w-full text-xs rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500 <%= isAbsent ? '' : 'hidden' %>"
               >
+              <%# FRM-005 late-attendee tracking — only meaningful on
+                  attended / caught-up rows. %>
+              <div data-late-wrap class="mt-1.5 flex items-center gap-1.5 <%= (isAttended || isCaughtUp) ? '' : 'hidden' %>">
+                <label class="flex items-center gap-1 text-[11px] text-amber-700 font-semibold cursor-pointer whitespace-nowrap">
+                  <input type="checkbox" name="late[<%= r.crew_id %>]" value="1" data-late-check class="w-3.5 h-3.5 rounded text-amber-600" <%= r.late_arrival ? 'checked' : '' %>>
+                  Late
+                </label>
+                <input type="time" name="late_time[<%= r.crew_id %>]" data-late-time value="<%= r.late_arrival_time || '' %>"
+                  class="block w-24 text-xs rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500 <%= r.late_arrival ? '' : 'hidden' %>">
+              </div>
             </td>
             <td class="px-2 py-2">
               <% if (isAttended) { %>
@@ -259,18 +269,33 @@
   <script>
     (function () {
       // Show/hide the absence-reason input as the status dropdown flips.
+      // Also toggles the FRM-005 Late controls, which only apply to
+      // attended / caught-up rows.
       function syncReason(sel) {
         const row = sel.closest('tr');
         const reason = row.querySelector('input[data-reason-input]');
-        if (!reason) return;
-        if (sel.value === 'absent') {
-          reason.classList.remove('hidden');
-          reason.setAttribute('required', 'required');
-        } else {
-          reason.classList.add('hidden');
-          reason.removeAttribute('required');
+        if (reason) {
+          if (sel.value === 'absent') {
+            reason.classList.remove('hidden');
+            reason.setAttribute('required', 'required');
+          } else {
+            reason.classList.add('hidden');
+            reason.removeAttribute('required');
+          }
+        }
+        const lateWrap = row.querySelector('[data-late-wrap]');
+        if (lateWrap) {
+          const show = sel.value === 'attended' || sel.value === 'caught_up';
+          lateWrap.classList.toggle('hidden', !show);
         }
       }
+      // Late checkbox shows/hides its time input.
+      document.querySelectorAll('input[data-late-check]').forEach(cb => {
+        cb.addEventListener('change', () => {
+          const t = cb.closest('[data-late-wrap]').querySelector('input[data-late-time]');
+          if (t) t.classList.toggle('hidden', !cb.checked);
+        });
+      });
       // Live summary counters at the top — recompute whenever a dropdown
       // changes so the admin sees the running totals before saving.
       // "Absent" includes both stored 'absent' values that fall under the
