@@ -206,6 +206,11 @@ router.get('/:id', (req, res, next) => {
     if (itemsByCategory[it.category]) itemsByCategory[it.category].push(it);
   }
 
+  // Traffio invoice billing rates (day/night/OT labour, travel/meal, ute) —
+  // the compact panel that feeds /finance/invoicing pricing.
+  let billingRates = null;
+  try { billingRates = require('../../middleware/invoicing').getBillingRates(db, id); } catch (e) { /* panel hidden */ }
+
   res.render('quoting/rate-cards/edit', {
     title: card.name + ' — Rate Card',
     currentPage: 'quoting',
@@ -214,7 +219,30 @@ router.get('/:id', (req, res, next) => {
     itemsByCategory,
     categories: CATEGORIES,
     units: UNITS,
+    billingRates,
   });
+});
+
+// Save the Traffio invoice billing rates panel — upserts the TC-labour
+// variant matrix, ute item and travel/meal allowances the invoicing
+// assembler resolves rates from.
+router.post('/:id/billing-rates', (req, res) => {
+  const id = parseInt(req.params.id, 10);
+  const db = getDb();
+  const card = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(id);
+  if (!card) { req.flash('error', 'Rate card not found.'); return res.redirect('/rate-cards'); }
+  try {
+    require('../../middleware/invoicing').saveBillingRates(db, id, req.body);
+    logActivity({
+      user: req.session.user, action: 'update',
+      entityType: 'rate_card', entityId: id, entityLabel: card.name,
+      details: 'Updated invoice billing rates', ip: req.ip,
+    });
+    req.flash('success', 'Invoice billing rates saved — drafts for this client can now price automatically.');
+  } catch (err) {
+    req.flash('error', 'Could not save billing rates: ' + err.message);
+  }
+  res.redirect('/rate-cards/' + id + '#billing-rates');
 });
 
 // Update card header (name, dates, default, purpose, description, client)
