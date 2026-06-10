@@ -146,7 +146,49 @@ router.post('/:id/approve', requirePermission(PERM), (req, res) => {
   db.prepare(`UPDATE invoices SET status='approved', invoice_number=?, approved_by_id=?, approved_at=datetime('now'), updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .run(number, req.session.user.id, invoice.id);
   logActivity({ user: req.session.user, action: 'approve', entityType: 'invoice', entityId: invoice.id, entityLabel: number, details: `Approved invoice ${number}`, ip: req.ip });
-  req.flash('success', `Invoice ${number} approved. (QuickBooks push lands in Phase 3.)`);
+  req.flash('success', `Invoice ${number} approved — ready to push to QuickBooks.`);
+  res.redirect('/finance/invoicing/' + invoice.id);
+});
+
+// POST /finance/invoicing/:id/push — push an approved invoice into QuickBooks
+// Online (idempotent in the middleware), attaching the signed docket PDF when
+// one has been stored. On failure the invoice stays approved with the QBO
+// fault recorded in error_message for the review screen.
+router.post('/:id/push', requirePermission(PERM), async (req, res) => {
+  const db = getDb();
+  const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
+  if (!invoice) { req.flash('error', 'Invoice not found.'); return res.redirect('/finance/invoicing'); }
+  if (invoice.status !== 'approved') {
+    req.flash('error', invoice.status === 'pushed' ? 'Already pushed to QuickBooks.' : 'Approve the invoice before pushing.');
+    return res.redirect('/finance/invoicing/' + invoice.id);
+  }
+
+  try {
+    const { pushInvoiceToQbo, attachDocketPdf } = require('../middleware/quickbooks');
+    const result = await pushInvoiceToQbo(invoice.id);
+
+    let attachNote = '';
+    if (invoice.docket_pdf_path) {
+      try {
+        await attachDocketPdf(result.qboInvoiceId, invoice.docket_pdf_path, invoice.docket_pdf_name || undefined);
+        attachNote = ' Docket PDF attached.';
+      } catch (attachErr) {
+        // The invoice landed; a failed attachment shouldn't roll that back.
+        attachNote = ` (Docket PDF attach failed: ${attachErr.message})`;
+      }
+    }
+
+    db.prepare("UPDATE invoices SET status='pushed', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(invoice.id);
+    logActivity({
+      user: req.session.user, action: 'create', entityType: 'invoice', entityId: invoice.id,
+      entityLabel: invoice.invoice_number || `#${invoice.id}`,
+      details: `Pushed to QuickBooks as ${result.docNumber || result.qboInvoiceId}${attachNote}`, ip: req.ip,
+    });
+    req.flash('success', `Pushed to QuickBooks — QBO invoice ${result.docNumber || result.qboInvoiceId}.${attachNote}`);
+  } catch (err) {
+    db.prepare('UPDATE invoices SET error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(String(err.message || err).slice(0, 1000), invoice.id);
+    req.flash('error', `QuickBooks push failed: ${err.message}`);
+  }
   res.redirect('/finance/invoicing/' + invoice.id);
 });
 
