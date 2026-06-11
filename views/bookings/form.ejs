@@ -157,7 +157,14 @@
     <h2 class="booking-form-section-header">CLIENT INFORMATION</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
       <div>
-        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client <span class="text-red-500">*</span></label>
+        <div class="flex items-center justify-between mb-1">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Client <span class="text-red-500">*</span></label>
+          <button type="button" id="addClientBtn"
+            class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            New client
+          </button>
+        </div>
         <select name="client_id" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           <option value="">-- Select Client --</option>
           <% if (typeof clients !== 'undefined' && clients.length) { clients.forEach(c => { %>
@@ -229,6 +236,48 @@
       </div>
       <div id="siteContactsList" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-3"></div>
       <p id="siteContactsHint" class="text-xs text-gray-400 mt-2">Select a client above to choose or add site contacts.</p>
+    </div>
+  </div>
+
+  <!-- Quick-add CLIENT modal — creates a new client company inline, then
+       selects it in the dropdown (posts via fetch, not the booking submit) -->
+  <div id="clientModal" class="hidden fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div class="p-5 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">New client</h2>
+        <p class="text-sm text-gray-500 mt-1">Creates a client company you can book against right away.</p>
+      </div>
+      <div class="p-5 space-y-3">
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Company Name <span class="text-red-500">*</span></label>
+          <input type="text" id="clm_company_name" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="e.g. Acme Roads Pty Ltd">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">ABN</label>
+            <input type="text" id="clm_abn" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="optional">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Primary Contact</label>
+            <input type="text" id="clm_contact_name" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="optional">
+          </div>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Contact Phone</label>
+            <input type="tel" id="clm_contact_phone" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="optional">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Contact Email</label>
+            <input type="email" id="clm_contact_email" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="optional">
+          </div>
+        </div>
+        <p id="clm_error" class="hidden text-sm text-red-600"></p>
+      </div>
+      <div class="px-5 py-4 bg-gray-50 rounded-b-xl flex items-center justify-end gap-2">
+        <button type="button" id="clm_cancel" class="px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
+        <button type="button" id="clm_save" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg">Save client</button>
+      </div>
     </div>
   </div>
 
@@ -392,6 +441,74 @@
           })
           .catch(function (err) { errEl.textContent = err.message; errEl.classList.remove('hidden'); })
           .finally(function () { saveBtn.disabled = false; saveBtn.textContent = 'Save contact'; });
+      });
+    })();
+  </script>
+
+  <script>
+    // ---- New-client quick add ----
+    (function () {
+      var clientSelect = document.querySelector('select[name="client_id"]');
+      var addBtn = document.getElementById('addClientBtn');
+      var modal = document.getElementById('clientModal');
+      if (!clientSelect || !addBtn || !modal) return;
+
+      var errEl = document.getElementById('clm_error');
+      var f = {
+        company_name: document.getElementById('clm_company_name'),
+        abn: document.getElementById('clm_abn'),
+        primary_contact_name: document.getElementById('clm_contact_name'),
+        primary_contact_phone: document.getElementById('clm_contact_phone'),
+        primary_contact_email: document.getElementById('clm_contact_email')
+      };
+
+      function open() {
+        errEl.classList.add('hidden'); errEl.textContent = '';
+        Object.keys(f).forEach(function (k) { f[k].value = ''; });
+        modal.classList.remove('hidden');
+        setTimeout(function () { f.company_name.focus(); }, 30);
+      }
+      function close() { modal.classList.add('hidden'); }
+
+      addBtn.addEventListener('click', open);
+      document.getElementById('clm_cancel').addEventListener('click', close);
+      modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+      document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !modal.classList.contains('hidden')) close(); });
+
+      var saveBtn = document.getElementById('clm_save');
+      saveBtn.addEventListener('click', function () {
+        var name = f.company_name.value.trim();
+        if (!name) { errEl.textContent = 'Company name is required.'; errEl.classList.remove('hidden'); f.company_name.focus(); return; }
+
+        var meta = document.querySelector('meta[name="csrf-token"]');
+        saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+        fetch('/clients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'x-csrf-token': meta ? meta.content : '' },
+          credentials: 'same-origin',
+          body: JSON.stringify({
+            company_name: name,
+            company_type: 'client',
+            abn: f.abn.value.trim(),
+            primary_contact_name: f.primary_contact_name.value.trim(),
+            primary_contact_phone: f.primary_contact_phone.value.trim(),
+            primary_contact_email: f.primary_contact_email.value.trim()
+          })
+        })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+          .then(function (res) {
+            if (!res.ok || !res.body.success || !res.body.client) { throw new Error((res.body && res.body.error) || 'Failed to create client.'); }
+            var c = res.body.client;
+            var opt = document.createElement('option');
+            opt.value = c.id; opt.textContent = c.company_name;
+            clientSelect.appendChild(opt);
+            clientSelect.value = String(c.id);
+            // Trigger the site-contacts picker to refresh for the new client.
+            clientSelect.dispatchEvent(new Event('change', { bubbles: true }));
+            close();
+          })
+          .catch(function (err) { errEl.textContent = err.message; errEl.classList.remove('hidden'); })
+          .finally(function () { saveBtn.disabled = false; saveBtn.textContent = 'Save client'; });
       });
     })();
   </script>
