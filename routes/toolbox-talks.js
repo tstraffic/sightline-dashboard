@@ -442,18 +442,23 @@ router.get('/:id', (req, res) => {
     WHERE a.toolbox_id = ? AND a.status IN ('attended','caught_up')
     ORDER BY a.late_arrival ASC, cm.full_name
   `).all(toolbox.id);
-  // Attendee sign-off section on the detail page: everyone who's part of
-  // the meeting (attending / attended / caught up). Signed rows show their
-  // signature; unsigned 'attending' rows get a "Sign here" button. Link
-  // sign-offs land here too (same signature_data column).
+  // Attendee sign-off section on the detail page: everyone selected for the
+  // toolbox (the invitee scope — or all active crew when open to all). They're
+  // assumed attending; each gets a "Sign here" button until they've signed.
+  // Signed rows show the signature (link sign-offs land here too — same
+  // signature_data column).
   const signoffRows = db.prepare(`
-    SELECT a.crew_member_id AS crew_id, cm.full_name, cm.employee_id, a.status,
-           a.signature_data, a.signed_off_at, a.recorded_by_id, a.late_arrival, a.late_arrival_time
-    FROM toolbox_attendance a
-    JOIN crew_members cm ON cm.id = a.crew_member_id
-    WHERE a.toolbox_id = ? AND a.status IN ('attending','attended','caught_up')
-    ORDER BY (a.signed_off_at IS NOT NULL), cm.full_name
-  `).all(toolbox.id);
+    SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
+           a.status, a.signature_data, a.signed_off_at, a.recorded_by_id, a.late_arrival, a.late_arrival_time
+    FROM crew_members cm
+    LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
+    WHERE cm.active = 1
+      AND (NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+           OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL))
+      AND (NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ?)
+           OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ? AND i.crew_member_id = cm.id))
+    ORDER BY (a.signature_data IS NOT NULL), cm.full_name
+  `).all(toolbox.id, toolbox.id, toolbox.id);
   const actions = db.prepare('SELECT * FROM toolbox_actions WHERE toolbox_id = ? ORDER BY id ASC').all(toolbox.id);
   const suppNotes = db.prepare(`
     SELECT n.*, u.full_name AS author_name

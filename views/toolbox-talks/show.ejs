@@ -273,9 +273,9 @@
         <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Attendee sign-off (<%= signedCount %>/<%= signoffRows.length %> signed)</p>
         <a href="/toolbox-talks/<%= toolbox.id %>/attendance" class="text-xs font-semibold text-brand-700 hover:underline">Manage attendance ›</a>
       </div>
-      <p class="text-xs text-gray-500 mb-3">Each attendee signs below — hand the device over, or they sign from the attendance link. Signatures are saved against their name.</p>
+      <p class="text-xs text-gray-500 mb-3">Everyone on this toolbox signs below — hand the device over, or they sign from the attendance link. Signatures save against their name.</p>
       <% if (!signoffRows.length) { %>
-        <p class="text-sm text-gray-400">No one marked attending yet. As workers RSVP (via the link) or you mark them attending, they'll appear here to sign off.</p>
+        <p class="text-sm text-gray-400">No one's on this toolbox yet — add attendees on <a href="/toolbox-talks/<%= toolbox.id %>/attendance" class="text-brand-700 hover:underline font-semibold">Manage attendance</a>.</p>
       <% } %>
       <ul class="divide-y divide-gray-100" id="attendee-signoff-list">
         <% signoffRows.forEach(function (a) { %>
@@ -286,16 +286,13 @@
                 <% if (a.employee_id) { %><span class="text-gray-400 text-xs font-normal ml-1"><%= a.employee_id %></span><% } %>
               </p>
               <p class="text-xs mt-0.5" data-signoff-meta>
-                <% if (a.late_arrival) { %>
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold">Late<%= a.late_arrival_time ? ' — ' + a.late_arrival_time : '' %></span>
-                <% } else if (a.status === 'caught_up') { %>
-                  <span class="text-amber-600 font-semibold">Caught up after the talk</span>
-                <% } else if (a.status === 'attended') { %>
-                  <span class="text-emerald-600 font-semibold">Attended</span>
+                <% if (a.signature_data) { %>
+                  <span class="text-emerald-600 font-semibold">Signed</span>
+                  <% if (a.late_arrival) { %><span class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 font-semibold">Late<%= a.late_arrival_time ? ' ' + a.late_arrival_time : '' %></span><% } %>
+                  <% if (a.signed_off_at) { %><span class="text-gray-400"> · <%= fmt(a.signed_off_at) %></span><% } %>
                 <% } else { %>
-                  <span class="text-blue-600 font-semibold">Attending</span>
+                  <span class="text-gray-400">Not signed yet</span>
                 <% } %>
-                <% if (a.signed_off_at) { %><span class="text-gray-400"> · signed <%= fmt(a.signed_off_at) %></span><% } %>
               </p>
             </div>
             <div data-signoff-action class="flex-shrink-0">
@@ -397,7 +394,7 @@
                 var action = row.querySelector('[data-signoff-action]');
                 if (action) { var img = document.createElement('img'); img.src = data; img.alt = 'Signature'; img.className = 'h-10 max-w-[140px] object-contain bg-gray-50 border border-gray-200 rounded'; action.innerHTML = ''; action.appendChild(img); }
                 var m = row.querySelector('[data-signoff-meta]');
-                if (m) { m.innerHTML = '<span class="text-emerald-600 font-semibold">Attended</span><span class="text-gray-400"> · signed just now</span>'; }
+                if (m) { m.innerHTML = '<span class="text-emerald-600 font-semibold">Signed</span><span class="text-gray-400"> · just now</span>'; }
               }
               close();
             })
