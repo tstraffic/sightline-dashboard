@@ -670,6 +670,7 @@ router.get('/:id/attendance', (req, res) => {
     SELECT cm.id AS crew_id, cm.full_name, cm.employee_id, cm.email,
            a.status AS attendance_status, a.recorded_at, a.recorded_by_id,
            a.signed_off_at, a.absence_reason, a.late_arrival, a.late_arrival_time,
+           a.signature_data,
            (a.signature_data IS NOT NULL) AS has_signature
     FROM crew_members cm
     LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id

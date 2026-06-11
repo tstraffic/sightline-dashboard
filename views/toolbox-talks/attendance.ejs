@@ -4,70 +4,38 @@
     if (!s) return '—';
     return new Date(s).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
-  const allocatedSet = new Set(allocatedIds);
-  // Meeting timing — used to derive the "Absent" label for workers who
-  // RSVP'd attending but never signed off after a past meeting.
-  const heldMs = toolbox.held_at ? new Date(toolbox.held_at + 'T00:00:00').getTime() : null;
-  const isPastMeeting = heldMs !== null && heldMs <= Date.now();
-
-  // Header summary counts — same vocabulary the worker app uses.
-  // "Absent" is the derived state (attending + past + no sign-off) plus
-  // pending-on-past-meetings; not stored as its own DB value.
-  const summary = { attended: 0, attending: 0, absent: 0, notAttending: 0, caughtUp: 0, pending: 0 };
-  rows.forEach(r => {
-    const s = r.attendance_status;
-    if (s === 'attended') summary.attended++;
-    else if (s === 'caught_up') summary.caughtUp++;
-    else if (s === 'absent') summary.notAttending++;
-    else if (s === 'attending') {
-      if (isPastMeeting && !r.signed_off_at) summary.absent++;
-      else summary.attending++;
-    } else {
-      if (isPastMeeting) summary.absent++;
-      else summary.pending++;
-    }
-  });
-  const totalInvitees = rows.length;
+  // A person is "signed" once we have their signature on file.
+  const signedCount = rows.filter(r => r.signature_data).length;
 %>
 
 <div class="max-w-5xl mx-auto space-y-5">
   <div>
     <a href="/toolbox-talks/<%= toolbox.id %>" class="text-sm text-brand-600 hover:underline">← <%= toolbox.title %></a>
-    <h1 class="text-2xl font-bold text-gray-900 mt-1">Attendance</h1>
-    <p class="text-sm text-gray-500 mt-0.5">Workers sign off their own attendance from the portal — those rows show <strong>Attended ✓</strong> with the signature timestamp. Use the dropdown to set status on behalf of any worker (no phone, missed signoff, late cancel, etc.). "Caught up" is reserved for worker self-claim.</p>
+    <h1 class="text-2xl font-bold text-gray-900 mt-1">Who's here &amp; sign-off</h1>
+    <p class="text-sm text-gray-500 mt-0.5">Pick who's at the talk, then sign each person off — on this device, or send them the link to sign. Their signature saves against their name and flows into the record PDF.</p>
   </div>
 
   <!-- Tabs -->
   <div class="border-b border-gray-200 flex items-center gap-1">
     <a href="/toolbox-talks/<%= toolbox.id %>" class="px-4 py-2 -mb-px border-b-2 border-transparent text-gray-500 hover:text-gray-700 text-sm font-semibold">Details</a>
-    <span class="px-4 py-2 -mb-px border-b-2 border-brand-600 text-brand-700 text-sm font-semibold">Attendance</span>
+    <span class="px-4 py-2 -mb-px border-b-2 border-brand-600 text-brand-700 text-sm font-semibold">Sign-off</span>
   </div>
 
-  <!-- Sign-off QR — project this in the meeting room. Workers scan,
-       pick their name, sign with their finger, and the row flips to
-       Attended ✓ here (auto-loaded on next page render) and unlocks
-       the post-attendance Materials in the worker portal. -->
+  <!-- Share link — QR + copy + email everyone unsigned -->
   <% if (attendanceUrl) { %>
     <div class="bg-gradient-to-br from-brand-50 to-emerald-50 border border-brand-200 rounded-xl shadow-sm p-5">
       <div class="flex flex-col sm:flex-row items-start gap-4">
         <div class="bg-white p-3 rounded-lg shadow-sm flex-shrink-0">
-          <div id="att-qr" style="width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 11px;">Loading QR…</div>
+          <div id="att-qr" style="width: 160px; height: 160px; display: flex; align-items: center; justify-content: center; color: #9CA3AF; font-size: 11px;">Loading QR…</div>
         </div>
         <div class="flex-1 min-w-0 space-y-2">
-          <p class="text-[10px] font-bold text-brand-700 uppercase tracking-widest">Sign-off QR · project in the meeting room</p>
-          <p class="text-sm text-gray-700">
-            Workers scan, pick their name, sign with their finger. Their row here flips to <strong>Attended ✓</strong> and post-attendance materials unlock on their phone.
-          </p>
+          <p class="text-[10px] font-bold text-brand-700 uppercase tracking-widest">Sign-off link · project the QR or share the URL</p>
+          <p class="text-sm text-gray-700">Workers scan, pick their name, and sign with their finger. Their signature appears below and in the PDF.</p>
           <div class="flex items-center gap-2">
             <input id="att-url" type="text" readonly value="<%= attendanceUrl %>" onclick="this.select()"
               class="flex-1 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg text-gray-800 font-mono min-w-0">
-            <button type="button" id="att-url-copy" class="inline-flex items-center gap-1 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg flex-shrink-0">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-              Copy
-            </button>
-            <a href="<%= attendanceUrl %>" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg flex-shrink-0">
-              Preview
-            </a>
+            <button type="button" id="att-url-copy" class="inline-flex items-center gap-1 px-3 py-2 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg flex-shrink-0">Copy</button>
+            <a href="<%= attendanceUrl %>" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-3 py-2 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg flex-shrink-0">Preview</a>
           </div>
           <div class="flex items-center gap-2 pt-1">
             <button type="button" id="att-email-all" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-brand-200 hover:bg-brand-50 text-brand-700 text-xs font-semibold rounded-lg">
@@ -85,17 +53,9 @@
         var box = document.getElementById('att-qr');
         if (window.QRCode && box) {
           box.innerHTML = '';
-          try {
-            new QRCode(box, {
-              text: <%- JSON.stringify(attendanceUrl) %>,
-              width: 180, height: 180,
-              colorDark: '#111827', colorLight: '#ffffff',
-              correctLevel: QRCode.CorrectLevel.M,
-            });
-          } catch (e) { box.textContent = 'QR render failed — share the URL below instead.'; }
-        } else if (box) {
-          box.textContent = 'QR library failed to load — share the URL below.';
-        }
+          try { new QRCode(box, { text: <%- JSON.stringify(attendanceUrl) %>, width: 160, height: 160, colorDark: '#111827', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M }); }
+          catch (e) { box.textContent = 'QR render failed — share the URL below.'; }
+        } else if (box) { box.textContent = 'Share the URL below.'; }
         var copyBtn = document.getElementById('att-url-copy');
         if (copyBtn) copyBtn.addEventListener('click', function () {
           var i = document.getElementById('att-url');
@@ -107,81 +67,35 @@
     </script>
   <% } %>
 
-  <!-- Status summary — live counts that match the worker portal's
-       vocabulary. Updates client-side as the dropdowns are flipped so
-       admins can see the running totals before they hit Save. -->
-  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs" data-att-summary>
-    <div class="bg-white border border-gray-200 rounded-lg px-3 py-2">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-gray-500">Total invited</div>
-      <div class="text-lg font-bold text-gray-900 tabular-nums mt-0.5" data-summary-total><%= totalInvitees %></div>
-    </div>
-    <div class="bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-emerald-700">Attended</div>
-      <div class="text-lg font-bold text-emerald-900 tabular-nums mt-0.5" data-summary-attended><%= summary.attended %></div>
-    </div>
-    <div class="bg-blue-50 border border-blue-200 rounded-lg px-3 py-2">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-blue-700">Attending</div>
-      <div class="text-lg font-bold text-blue-900 tabular-nums mt-0.5" data-summary-attending><%= summary.attending %></div>
-    </div>
-    <div class="bg-rose-50 border border-rose-200 rounded-lg px-3 py-2">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-rose-700">Absent</div>
-      <div class="text-lg font-bold text-rose-900 tabular-nums mt-0.5" data-summary-absent><%= summary.absent %></div>
-    </div>
-    <div class="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-amber-700">Not attending</div>
-      <div class="text-lg font-bold text-amber-900 tabular-nums mt-0.5" data-summary-notattending><%= summary.notAttending %></div>
-    </div>
-    <div class="bg-violet-50 border border-violet-200 rounded-lg px-3 py-2">
-      <div class="text-[10px] font-semibold uppercase tracking-wider text-violet-700">Caught up</div>
-      <div class="text-lg font-bold text-violet-900 tabular-nums mt-0.5" data-summary-caughtup><%= summary.caughtUp %></div>
-    </div>
-  </div>
-  <% if (summary.pending > 0) { %>
-    <p class="text-xs text-gray-500 -mt-2">Plus <span class="font-semibold text-gray-700" data-summary-pending><%= summary.pending %></span> pending (no response yet).</p>
-  <% } else { %>
-    <p class="hidden text-xs text-gray-500 -mt-2" data-summary-pending-wrap>Plus <span class="font-semibold text-gray-700" data-summary-pending>0</span> pending (no response yet).</p>
-  <% } %>
-
-  <form method="POST" action="/toolbox-talks/<%= toolbox.id %>/attendance" class="bg-white border border-gray-200 rounded-xl shadow-sm" id="att-form">
-    <%- include('../partials/csrf') %>
+  <!-- Roster: who's here + sign-off -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm">
     <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
-      <div class="flex items-center gap-3 flex-wrap text-xs text-gray-500">
-        <span><%= allocatedIds.length %> workers were allocated on <%= toolbox.held_at %></span>
-      </div>
-      <div class="flex items-center gap-2 flex-wrap">
-        <div class="relative" data-add-invitee>
-          <button type="button" data-add-invitee-toggle class="px-3 py-1.5 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded inline-flex items-center gap-1.5">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-            Add worker
-          </button>
-          <div data-add-invitee-pop class="hidden absolute right-0 top-full mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2">
-            <% if (isOpenToAll) { %>
-              <p class="text-xs text-gray-600 px-2 py-1.5">This toolbox is currently <strong>open to everyone</strong> — every active crew member is already invited. Use <em>Remove</em> on any row to scope the invite list first.</p>
-            <% } else if (!selectableCrew || !selectableCrew.length) { %>
-              <p class="text-xs text-gray-600 px-2 py-1.5">All active crew are already on the invite list.</p>
-            <% } else { %>
-              <input type="text" data-add-invitee-search placeholder="Search by name or ID…" class="block w-full px-2 py-1.5 text-xs border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500 mb-1.5">
-              <div data-add-invitee-list class="max-h-56 overflow-y-auto">
-                <% selectableCrew.forEach(cm => { %>
-                  <button type="button" data-add-invitee-crew-id="<%= cm.id %>" data-add-invitee-crew-name="<%= cm.full_name %>" data-add-invitee-crew-emp="<%= cm.employee_id || '' %>"
-                          data-name="<%= (cm.full_name || '').toLowerCase() %>" data-emp="<%= (cm.employee_id || '').toLowerCase() %>"
-                          class="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 rounded flex items-center justify-between gap-2">
-                    <span class="font-medium text-gray-800"><%= cm.full_name %></span>
-                    <span class="text-gray-500 tabular-nums"><%= cm.employee_id || '' %></span>
-                  </button>
-                <% }) %>
-              </div>
-              <p class="text-[11px] text-gray-400 mt-1.5 px-1" data-add-invitee-empty hidden>No matches.</p>
-            <% } %>
-          </div>
+      <div class="text-sm font-semibold text-gray-700"><span data-signed-count><%= signedCount %></span> of <span data-total-count><%= rows.length %></span> signed</div>
+      <div class="relative" data-add-invitee>
+        <button type="button" data-add-invitee-toggle class="px-3 py-1.5 text-xs font-semibold text-brand-700 bg-brand-50 hover:bg-brand-100 rounded inline-flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          Add worker
+        </button>
+        <div data-add-invitee-pop class="hidden absolute right-0 top-full mt-1 w-72 bg-white border border-gray-200 rounded-lg shadow-lg z-20 p-2">
+          <% if (isOpenToAll) { %>
+            <p class="text-xs text-gray-600 px-2 py-1.5">This toolbox is currently <strong>open to everyone</strong> — every active crew member is listed. Use <em>Remove</em> on a row to narrow it to just who's here.</p>
+          <% } else if (!selectableCrew || !selectableCrew.length) { %>
+            <p class="text-xs text-gray-600 px-2 py-1.5">All active crew are already listed.</p>
+          <% } else { %>
+            <input type="text" data-add-invitee-search placeholder="Search by name or ID…" class="block w-full px-2 py-1.5 text-xs border-gray-300 rounded focus:border-brand-500 focus:ring-brand-500 mb-1.5">
+            <div data-add-invitee-list class="max-h-56 overflow-y-auto">
+              <% selectableCrew.forEach(cm => { %>
+                <button type="button" data-add-invitee-crew-id="<%= cm.id %>" data-add-invitee-crew-name="<%= cm.full_name %>" data-add-invitee-crew-emp="<%= cm.employee_id || '' %>"
+                        data-name="<%= (cm.full_name || '').toLowerCase() %>" data-emp="<%= (cm.employee_id || '').toLowerCase() %>"
+                        class="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 rounded flex items-center justify-between gap-2">
+                  <span class="font-medium text-gray-800"><%= cm.full_name %></span>
+                  <span class="text-gray-500 tabular-nums"><%= cm.employee_id || '' %></span>
+                </button>
+              <% }) %>
+            </div>
+            <p class="text-[11px] text-gray-400 mt-1.5 px-1" data-add-invitee-empty hidden>No matches.</p>
+          <% } %>
         </div>
-        <button type="button" data-bulk="pending" class="px-3 py-1.5 text-xs font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded">Clear all</button>
-        <button type="button" data-bulk="attending" class="px-3 py-1.5 text-xs font-semibold text-blue-700 bg-blue-50 hover:bg-blue-100 rounded">Mark all attending</button>
-        <button type="button" data-bulk="attended" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded">Mark all attended</button>
-        <% if (allocatedIds.length) { %>
-          <button type="button" data-bulk-allocated="attended" class="px-3 py-1.5 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded">Attended: allocated only</button>
-        <% } %>
-        <button type="submit" class="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 rounded">Save attendance</button>
       </div>
     </div>
     <table class="min-w-full text-sm">
@@ -189,383 +103,45 @@
         <tr>
           <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Worker</th>
           <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Employee ID</th>
-          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest w-48">Set status</th>
-          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Current</th>
-          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Recorded</th>
-          <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest w-40">Sign-off / invite</th>
+          <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Signature</th>
+          <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest w-48">Sign-off</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-100">
-        <% rows.forEach(r => {
-          const isAllocated = allocatedSet.has(r.crew_id);
-          const cur = r.attendance_status || '';
-          const isAttended  = cur === 'attended';
-          const isAttending = cur === 'attending';
-          const isCaughtUp  = cur === 'caught_up';
-          const isAbsent    = cur === 'absent';
-          const isPending   = !cur;
-          const isDerivedAbsent = isAttending && isPastMeeting && !r.signed_off_at;
-          // The dropdown's selected value reflects the stored status; the
-          // derived "Absent" label is for the Current column only.
-          const dropdownValue = cur;
-          const reasonText = (r.absence_reason || '').toString();
-        %>
-          <tr class="tb-att-row hover:bg-gray-50/50 align-top" data-allocated="<%= isAllocated ? '1' : '0' %>" data-crew-id="<%= r.crew_id %>" data-signed-off="<%= r.signed_off_at ? '1' : '0' %>">
-            <input type="hidden" name="manageable_crew_ids[]" value="<%= r.crew_id %>">
-            <td class="px-3 py-2 text-sm font-medium text-gray-900">
-              <%= r.full_name %>
-              <% if (isAllocated) { %><span class="ml-1 text-[10px] text-emerald-600">· allocated</span><% } %>
-              <% if (isCaughtUp) { %><span class="ml-1 text-[10px] text-violet-600" title="Worker self-claimed">↻ self-claim</span><% } %>
-            </td>
-            <td class="px-2 py-2 text-xs text-gray-500"><%= r.employee_id || '—' %></td>
-            <td class="px-2 py-2">
-              <select name="status[<%= r.crew_id %>]" data-status-select class="block w-full text-xs font-semibold rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500" <%= isCaughtUp ? '' : '' %>>
-                <option value=""          <%= isPending   ? 'selected' : '' %>>Pending</option>
-                <option value="attending" <%= isAttending ? 'selected' : '' %>>Attending</option>
-                <option value="attended"  <%= isAttended  ? 'selected' : '' %>>Attended (mark off)</option>
-                <option value="absent"    <%= isAbsent    ? 'selected' : '' %>>Not attending</option>
-                <option value="caught_up" <%= isCaughtUp  ? 'selected' : '' %>>Caught up</option>
-              </select>
-              <input
-                type="text"
-                name="absence_reason[<%= r.crew_id %>]"
-                data-reason-input
-                placeholder="Reason (required)"
-                value="<%= reasonText %>"
-                maxlength="500"
-                class="mt-1.5 block w-full text-xs rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500 <%= isAbsent ? '' : 'hidden' %>"
-              >
-              <%# FRM-005 late-attendee tracking — only meaningful on
-                  attended / caught-up rows. %>
-              <div data-late-wrap class="mt-1.5 flex items-center gap-1.5 <%= (isAttended || isCaughtUp) ? '' : 'hidden' %>">
-                <label class="flex items-center gap-1 text-[11px] text-amber-700 font-semibold cursor-pointer whitespace-nowrap">
-                  <input type="checkbox" name="late[<%= r.crew_id %>]" value="1" data-late-check class="w-3.5 h-3.5 rounded text-amber-600" <%= r.late_arrival ? 'checked' : '' %>>
-                  Late
-                </label>
-                <input type="time" name="late_time[<%= r.crew_id %>]" data-late-time value="<%= r.late_arrival_time || '' %>"
-                  class="block w-24 text-xs rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500 <%= r.late_arrival ? '' : 'hidden' %>">
-              </div>
-            </td>
-            <td class="px-2 py-2">
-              <% if (isAttended) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200" title="<%= r.signed_off_at ? 'Worker signed off ' + fmt(r.signed_off_at) : 'Marked by office' %>">Attended<% if (r.signed_off_at) { %> ✓<% } %></span>
-              <% } else if (isDerivedAbsent) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-rose-50 text-rose-700 ring-rose-200" title="Said they'd attend but never signed off">Absent</span>
-              <% } else if (isAttending) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-blue-50 text-blue-700 ring-blue-200">Attending</span>
-              <% } else if (isCaughtUp) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-violet-50 text-violet-700 ring-violet-200">Caught up</span>
-              <% } else if (isAbsent) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-amber-50 text-amber-700 ring-amber-200" title="<%= r.absence_reason || 'Declined the invite' %>">Not attending</span>
-              <% } else if (isPending && isPastMeeting) { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-rose-50 text-rose-700 ring-rose-200">Absent</span>
-              <% } else { %>
-                <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-gray-100 text-gray-600 ring-gray-200">Pending</span>
-              <% } %>
-            </td>
-            <td class="px-2 py-2 text-xs text-gray-500 tabular-nums whitespace-nowrap"><%= fmt(r.signed_off_at || r.recorded_at) %></td>
-            <td class="px-2 py-2 text-right whitespace-nowrap">
-              <% if (attendanceUrl) { %>
-                <div class="flex items-center justify-end gap-2 mb-1">
-                  <button type="button" class="tb-sign-here text-[11px] font-semibold text-brand-700 hover:text-brand-800 hover:underline" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>">Sign here</button>
-                  <span class="text-gray-300">·</span>
-                  <button type="button" class="tb-send-link text-[11px] font-semibold text-gray-600 hover:text-gray-800 hover:underline" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>"<%= r.email ? '' : ' title="No email on file" disabled' %>>Send link</button>
+      <tbody class="divide-y divide-gray-100" id="tb-roster">
+        <% rows.forEach(r => { const signed = !!r.signature_data; %>
+          <tr class="tb-row hover:bg-gray-50/50 align-middle" data-crew-id="<%= r.crew_id %>">
+            <td class="px-3 py-2.5 text-sm font-medium text-gray-900"><%= r.full_name %></td>
+            <td class="px-2 py-2.5 text-xs text-gray-500"><%= r.employee_id || '—' %></td>
+            <td class="px-2 py-2.5" data-sig-cell>
+              <% if (signed) { %>
+                <div class="flex items-center gap-2">
+                  <img src="<%= r.signature_data %>" alt="Signature" class="h-9 max-w-[130px] object-contain bg-gray-50 border border-gray-200 rounded">
+                  <span class="text-[11px] text-emerald-600 font-semibold whitespace-nowrap">Signed<% if (r.late_arrival) { %> · Late<%= r.late_arrival_time ? ' ' + r.late_arrival_time : '' %><% } %></span>
                 </div>
+                <% if (r.signed_off_at) { %><p class="text-[10px] text-gray-400 mt-0.5"><%= fmt(r.signed_off_at) %></p><% } %>
+              <% } else { %>
+                <span class="text-[11px] text-gray-400">Not signed yet</span>
               <% } %>
-              <button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>" title="Remove from invite list">Remove</button>
+            </td>
+            <td class="px-2 py-2.5 text-right whitespace-nowrap" data-action-cell>
+              <% if (attendanceUrl && !signed) { %>
+                <button type="button" class="tb-sign-here text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded px-2.5 py-1.5" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>">Sign here</button>
+                <button type="button" class="tb-send-link text-[11px] font-semibold text-gray-600 hover:text-gray-800 hover:underline ml-1" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>"<%= r.email ? '' : ' title="No email on file" disabled' %>>Send link</button>
+              <% } %>
+              <button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline ml-1" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>" title="Remove — not here">Remove</button>
             </td>
           </tr>
         <% }) %>
       </tbody>
     </table>
-  </form>
+    <% if (!rows.length) { %><p class="px-5 py-8 text-center text-sm text-gray-500">No one selected yet. Use <strong>Add worker</strong> to pick who's at the talk.</p><% } %>
+  </div>
 
-  <script>
-    (function () {
-      // Show/hide the absence-reason input as the status dropdown flips.
-      // Also toggles the FRM-005 Late controls, which only apply to
-      // attended / caught-up rows.
-      function syncReason(sel) {
-        const row = sel.closest('tr');
-        const reason = row.querySelector('input[data-reason-input]');
-        if (reason) {
-          if (sel.value === 'absent') {
-            reason.classList.remove('hidden');
-            reason.setAttribute('required', 'required');
-          } else {
-            reason.classList.add('hidden');
-            reason.removeAttribute('required');
-          }
-        }
-        const lateWrap = row.querySelector('[data-late-wrap]');
-        if (lateWrap) {
-          const show = sel.value === 'attended' || sel.value === 'caught_up';
-          lateWrap.classList.toggle('hidden', !show);
-        }
-      }
-      // Late checkbox shows/hides its time input.
-      document.querySelectorAll('input[data-late-check]').forEach(cb => {
-        cb.addEventListener('change', () => {
-          const t = cb.closest('[data-late-wrap]').querySelector('input[data-late-time]');
-          if (t) t.classList.toggle('hidden', !cb.checked);
-        });
-      });
-      // Live summary counters at the top — recompute whenever a dropdown
-      // changes so the admin sees the running totals before saving.
-      // "Absent" includes both stored 'absent' values that fall under the
-      // past-meeting derived rule and pending-on-past-meeting rows; here
-      // on the client we keep it simple and treat stored 'absent' as
-      // "Not attending" — the derived past-meeting Absent count only
-      // shifts on server reload, which is fine since save → reload.
-      const isPastMeeting = <%= JSON.stringify(isPastMeeting) %>;
-      function recomputeSummary() {
-        const c = { attended: 0, attending: 0, absent: 0, notAttending: 0, caughtUp: 0, pending: 0 };
-        document.querySelectorAll('select[data-status-select]').forEach(sel => {
-          const v = sel.value;
-          const row = sel.closest('tr');
-          if (v === 'attended') c.attended++;
-          else if (v === 'caught_up') c.caughtUp++;
-          else if (v === 'absent') c.notAttending++;
-          else if (v === 'attending') {
-            const signedOff = row && row.dataset.signedOff === '1';
-            if (isPastMeeting && !signedOff) c.absent++;
-            else c.attending++;
-          } else {
-            if (isPastMeeting) c.absent++;
-            else c.pending++;
-          }
-        });
-        const set = (sel, n) => { const el = document.querySelector(sel); if (el) el.textContent = n; };
-        set('[data-summary-attended]', c.attended);
-        set('[data-summary-attending]', c.attending);
-        set('[data-summary-absent]', c.absent);
-        set('[data-summary-notattending]', c.notAttending);
-        set('[data-summary-caughtup]', c.caughtUp);
-        set('[data-summary-pending]', c.pending);
-        const pendingWrap = document.querySelector('[data-summary-pending-wrap]');
-        if (pendingWrap) pendingWrap.classList.toggle('hidden', c.pending === 0);
-        set('[data-summary-total]', document.querySelectorAll('tr.tb-att-row').length);
-      }
-
-      document.querySelectorAll('select[data-status-select]').forEach(sel => {
-        syncReason(sel);
-        sel.addEventListener('change', () => { syncReason(sel); recomputeSummary(); });
-      });
-
-      // Bulk-set helpers — apply the chosen status to every row at once.
-      // "Attended: allocated only" limits the change to workers who were
-      // on shift the day of the meeting, which is the usual "everyone who
-      // should have been here" subset.
-      function setAll(value, predicate) {
-        document.querySelectorAll('select[data-status-select]').forEach(sel => {
-          const row = sel.closest('tr');
-          if (predicate && !predicate(row)) return;
-          sel.value = value;
-          syncReason(sel);
-        });
-        recomputeSummary();
-      }
-      document.querySelectorAll('button[data-bulk]').forEach(btn => {
-        btn.addEventListener('click', () => setAll(btn.dataset.bulk === 'pending' ? '' : btn.dataset.bulk));
-      });
-      document.querySelectorAll('button[data-bulk-allocated]').forEach(btn => {
-        btn.addEventListener('click', () => setAll(btn.dataset.bulkAllocated, row => row.dataset.allocated === '1'));
-      });
-
-      // Guard rail: don't let the form submit with "Not attending" rows
-      // missing a reason — backend rejects them otherwise.
-      document.getElementById('att-form').addEventListener('submit', (e) => {
-        const bad = [];
-        document.querySelectorAll('select[data-status-select]').forEach(sel => {
-          if (sel.value === 'absent') {
-            const row = sel.closest('tr');
-            const reason = row.querySelector('input[data-reason-input]');
-            if (!reason || !reason.value.trim()) {
-              bad.push(row.querySelector('td')?.innerText?.trim() || 'a worker');
-              if (reason) { reason.focus(); reason.classList.add('ring-2', 'ring-rose-400'); }
-            }
-          }
-        });
-        if (bad.length) {
-          e.preventDefault();
-          alert('Add a reason for: ' + bad.join(', '));
-        }
-      });
-
-      // Remove-from-invite — same flow as before, mounted outside the
-      // attendance form so the per-row Remove button doesn't accidentally
-      // submit the bulk save.
-      const csrfMeta = document.querySelector('meta[name="csrf-token"]');
-      const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') :
-        (document.querySelector('input[name="_csrf"]') || {}).value || '';
-      const toolboxId = <%= toolbox.id %>;
-      const hasSession = <%= attendanceUrl ? 'true' : 'false' %>;
-      document.querySelectorAll('.tb-remove-invite').forEach(btn => {
-        btn.addEventListener('click', async () => {
-          const crewId = btn.getAttribute('data-crew-id');
-          const name = btn.getAttribute('data-name') || 'this worker';
-          if (!confirm('Remove ' + name + " from the invite list? They'll disappear from this attendance page.")) return;
-          btn.disabled = true;
-          btn.textContent = 'Removing…';
-          try {
-            const r = await fetch('/toolbox-talks/' + toolboxId + '/invitees/' + crewId + '/remove', {
-              method: 'POST',
-              headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrfToken },
-              credentials: 'same-origin',
-            });
-            const data = await r.json().catch(() => ({}));
-            if (!r.ok || !data.ok) throw new Error(data.error || 'Remove failed');
-            const row = btn.closest('tr');
-            if (row) row.remove();
-            recomputeSummary();
-          } catch (e) {
-            alert('Could not remove: ' + e.message);
-            btn.disabled = false;
-            btn.textContent = 'Remove';
-          }
-        });
-      });
-
-      // ── Add-worker picker ──────────────────────────────────────────
-      // Toggle the popover, filter as you type, and AJAX-insert a new
-      // table row when a crew member is picked. Hides the picker entry
-      // for that crew so they can't be added twice.
-      const addRoot = document.querySelector('[data-add-invitee]');
-      if (addRoot) {
-        const toggle = addRoot.querySelector('[data-add-invitee-toggle]');
-        const pop = addRoot.querySelector('[data-add-invitee-pop]');
-        const search = addRoot.querySelector('[data-add-invitee-search]');
-        const list = addRoot.querySelector('[data-add-invitee-list]');
-        const empty = addRoot.querySelector('[data-add-invitee-empty]');
-
-        toggle.addEventListener('click', () => {
-          const isOpen = !pop.classList.contains('hidden');
-          if (isOpen) { pop.classList.add('hidden'); return; }
-          pop.classList.remove('hidden');
-          if (search) { search.value = ''; search.focus(); }
-          if (list) list.querySelectorAll('[data-add-invitee-crew-id]').forEach(b => b.classList.remove('hidden'));
-          if (empty) empty.hidden = true;
-        });
-        document.addEventListener('click', (e) => {
-          if (!addRoot.contains(e.target)) pop.classList.add('hidden');
-        });
-        if (search) {
-          search.addEventListener('input', () => {
-            const q = search.value.trim().toLowerCase();
-            let shown = 0;
-            list.querySelectorAll('[data-add-invitee-crew-id]').forEach(btn => {
-              if (btn.dataset.hidden === '1') { btn.classList.add('hidden'); return; }
-              const name = btn.dataset.name || '';
-              const emp  = btn.dataset.emp  || '';
-              const match = !q || name.includes(q) || emp.includes(q);
-              btn.classList.toggle('hidden', !match);
-              if (match) shown++;
-            });
-            if (empty) empty.hidden = shown > 0;
-          });
-        }
-        if (list) {
-          list.addEventListener('click', async (e) => {
-            const btn = e.target.closest('[data-add-invitee-crew-id]');
-            if (!btn) return;
-            const crewId = btn.getAttribute('data-add-invitee-crew-id');
-            const crewName = btn.getAttribute('data-add-invitee-crew-name');
-            const crewEmp  = btn.getAttribute('data-add-invitee-crew-emp') || '';
-            btn.disabled = true;
-            try {
-              const body = new URLSearchParams({ crew_member_id: crewId, _csrf: csrfToken });
-              const r = await fetch('/toolbox-talks/' + toolboxId + '/invitees/add', {
-                method: 'POST',
-                headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrfToken },
-                credentials: 'same-origin',
-                body,
-              });
-              const data = await r.json().catch(() => ({}));
-              if (!r.ok || !data.ok) throw new Error(data.error || 'Add failed');
-              if (data.was_already_invited) {
-                alert(crewName + ' is already invited (this toolbox is open to everyone).');
-                return;
-              }
-              // Insert a fresh row into the table, defaulted to Pending.
-              const tbody = document.querySelector('#att-form tbody');
-              const tr = document.createElement('tr');
-              tr.className = 'tb-att-row hover:bg-gray-50/50 align-top';
-              tr.dataset.allocated = '0';
-              tr.dataset.crewId = crewId;
-              tr.dataset.signedOff = '0';
-              tr.innerHTML = (
-                '<input type="hidden" name="manageable_crew_ids[]" value="' + crewId + '">' +
-                '<td class="px-3 py-2 text-sm font-medium text-gray-900">' + crewName + ' <span class="ml-1 text-[10px] text-brand-600">· just added</span></td>' +
-                '<td class="px-2 py-2 text-xs text-gray-500">' + (crewEmp || '—') + '</td>' +
-                '<td class="px-2 py-2">' +
-                  '<select name="status[' + crewId + ']" data-status-select class="block w-full text-xs font-semibold rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500">' +
-                    '<option value="" selected>Pending</option>' +
-                    '<option value="attending">Attending</option>' +
-                    '<option value="attended">Attended (mark off)</option>' +
-                    '<option value="absent">Not attending</option>' +
-                    '<option value="caught_up">Caught up</option>' +
-                  '</select>' +
-                  '<input type="text" name="absence_reason[' + crewId + ']" data-reason-input placeholder="Reason (required)" maxlength="500" class="mt-1.5 block w-full text-xs rounded border-gray-300 focus:border-brand-500 focus:ring-brand-500 hidden">' +
-                '</td>' +
-                '<td class="px-2 py-2"><span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-gray-100 text-gray-600 ring-gray-200">Pending</span></td>' +
-                '<td class="px-2 py-2 text-xs text-gray-500 tabular-nums whitespace-nowrap">—</td>' +
-                '<td class="px-2 py-2 text-right whitespace-nowrap">' +
-                  (hasSession ?
-                    ('<div class="flex items-center justify-end gap-2 mb-1">' +
-                       '<button type="button" class="tb-sign-here text-[11px] font-semibold text-brand-700 hover:text-brand-800 hover:underline" data-crew-id="' + crewId + '" data-name="' + crewName + '">Sign here</button>' +
-                       '<span class="text-gray-300">·</span>' +
-                       '<button type="button" class="tb-send-link text-[11px] font-semibold text-gray-600 hover:text-gray-800 hover:underline" data-crew-id="' + crewId + '" data-name="' + crewName + '">Send link</button>' +
-                     '</div>') : '') +
-                  '<button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" data-crew-id="' + crewId + '" data-name="' + crewName + '" title="Remove from invite list">Remove</button>' +
-                '</td>'
-              );
-              tbody.appendChild(tr);
-              // Wire the new row's select + remove button into existing handlers.
-              const newSel = tr.querySelector('select[data-status-select]');
-              newSel.addEventListener('change', () => { syncReason(newSel); recomputeSummary(); });
-              const newRemove = tr.querySelector('.tb-remove-invite');
-              newRemove.addEventListener('click', async () => {
-                if (!confirm('Remove ' + crewName + " from the invite list? They'll disappear from this attendance page.")) return;
-                newRemove.disabled = true; newRemove.textContent = 'Removing…';
-                try {
-                  const rr = await fetch('/toolbox-talks/' + toolboxId + '/invitees/' + crewId + '/remove', {
-                    method: 'POST',
-                    headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrfToken },
-                    credentials: 'same-origin',
-                  });
-                  const dd = await rr.json().catch(() => ({}));
-                  if (!rr.ok || !dd.ok) throw new Error(dd.error || 'Remove failed');
-                  tr.remove();
-                  recomputeSummary();
-                  // Re-show the crew in the picker so they can be re-added.
-                  btn.dataset.hidden = '0';
-                  btn.classList.remove('hidden');
-                  btn.disabled = false;
-                } catch (e) {
-                  alert('Could not remove: ' + e.message);
-                  newRemove.disabled = false; newRemove.textContent = 'Remove';
-                }
-              });
-              // Hide this crew in the picker so admin can't double-add.
-              btn.dataset.hidden = '1';
-              btn.classList.add('hidden');
-              pop.classList.add('hidden');
-              recomputeSummary();
-            } catch (e) {
-              alert('Could not add: ' + e.message);
-              btn.disabled = false;
-            }
-          });
-        }
-      }
-    })();
-  </script>
-
-  <!-- Manual sign-off (admin device) + send-link handlers -->
+  <!-- Signature modal (admin device) -->
   <div id="tb-sign-modal" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
       <div class="p-5 border-b border-gray-200">
-        <h2 class="text-lg font-semibold text-gray-900">Sign off attendance</h2>
+        <h2 class="text-lg font-semibold text-gray-900">Sign off</h2>
         <p class="text-sm text-gray-500 mt-1">Hand the device to <span id="tb-sign-name" class="font-medium text-gray-700">the worker</span> to sign.</p>
       </div>
       <div class="p-5 space-y-3">
@@ -592,18 +168,16 @@
   <script>
     (function () {
       var toolboxId = <%= toolbox.id %>;
+      var hasSession = <%= attendanceUrl ? 'true' : 'false' %>;
       var csrfMeta = document.querySelector('meta[name="csrf-token"]');
       var csrf = csrfMeta ? csrfMeta.getAttribute('content') : ((document.querySelector('input[name="_csrf"]') || {}).value || '');
 
-      function rowFor(crewId) { return document.querySelector('tr.tb-att-row[data-crew-id="' + crewId + '"]'); }
-      function markAttended(crewId) {
-        var row = rowFor(crewId); if (!row) return;
-        var tds = row.querySelectorAll('td');
-        if (tds[3]) tds[3].innerHTML = '<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200">Attended ✓</span>';
-        if (tds[4]) tds[4].textContent = 'just now';
-        var sel = row.querySelector('select[data-status-select]'); if (sel) sel.value = 'attended';
-        row.dataset.signedOff = '1';
-        row.querySelectorAll('.tb-sign-here, .tb-send-link').forEach(function (b) { b.remove(); });
+      function recount() {
+        var rowsEls = document.querySelectorAll('#tb-roster tr.tb-row');
+        var signed = 0;
+        rowsEls.forEach(function (r) { if (r.getAttribute('data-signed') === '1' || r.querySelector('[data-sig-cell] img')) signed++; });
+        var sc = document.querySelector('[data-signed-count]'); if (sc) sc.textContent = signed;
+        var tc = document.querySelector('[data-total-count]'); if (tc) tc.textContent = rowsEls.length;
       }
 
       // ── Signature modal ──
@@ -614,30 +188,16 @@
       var canvas = document.getElementById('tb-sign-pad');
       var ph = document.getElementById('tb-sign-ph');
       var ctx = canvas.getContext('2d');
-      var drawing = false, hasInk = false, last = null, currentCrewId = null;
-
-      function sizePad() {
-        var dpr = window.devicePixelRatio || 1;
-        var rect = canvas.getBoundingClientRect();
-        if (!rect.width) return;
-        canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
-        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(dpr, dpr);
-        ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a';
-      }
+      var drawing = false, hasInk = false, last = null, crewId = null;
+      function sizePad() { var dpr = window.devicePixelRatio || 1, rect = canvas.getBoundingClientRect(); if (!rect.width) return; canvas.width = rect.width * dpr; canvas.height = rect.height * dpr; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(dpr, dpr); ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a'; }
       function pos(e) { var r = canvas.getBoundingClientRect(); var t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; }
       function start(e) { drawing = true; last = pos(e); if (!hasInk) { hasInk = true; ph.style.display = 'none'; } e.preventDefault(); }
       function move(e) { if (!drawing) return; var p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; e.preventDefault(); }
       function stop() { drawing = false; }
       canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); canvas.addEventListener('mouseup', stop); canvas.addEventListener('mouseleave', stop);
       canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', stop);
-
       function clearPad() { ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; ph.style.display = ''; }
-      function openModal(crewId, name) {
-        currentCrewId = crewId; nameEl.textContent = name || 'the worker';
-        errEl.classList.add('hidden'); errEl.textContent = ''; lateEl.checked = false;
-        modal.classList.remove('hidden');
-        setTimeout(function () { sizePad(); clearPad(); }, 30);
-      }
+      function openModal(id, name) { crewId = id; nameEl.textContent = name || 'the worker'; errEl.classList.add('hidden'); errEl.textContent = ''; lateEl.checked = false; modal.classList.remove('hidden'); setTimeout(function () { sizePad(); clearPad(); }, 30); }
       function closeModal() { modal.classList.add('hidden'); }
       document.getElementById('tb-sign-cancel').addEventListener('click', closeModal);
       document.getElementById('tb-sign-clear').addEventListener('click', clearPad);
@@ -648,41 +208,52 @@
         if (!hasInk) { errEl.textContent = 'Draw a signature first.'; errEl.classList.remove('hidden'); return; }
         var data = canvas.toDataURL('image/png');
         saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
-        fetch('/toolbox-talks/' + toolboxId + '/attendance/' + currentCrewId + '/sign-off', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': csrf },
-          credentials: 'same-origin',
-          body: JSON.stringify({ signature_data: data, late_arrival: lateEl.checked ? '1' : '' })
+        fetch('/toolbox-talks/' + toolboxId + '/attendance/' + crewId + '/sign-off', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': csrf },
+          credentials: 'same-origin', body: JSON.stringify({ signature_data: data, late_arrival: lateEl.checked ? '1' : '' })
         })
           .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
           .then(function (res) {
             if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Sign-off failed.');
-            markAttended(currentCrewId); closeModal();
+            var row = document.querySelector('#tb-roster tr.tb-row[data-crew-id="' + crewId + '"]');
+            if (row) {
+              row.setAttribute('data-signed', '1');
+              var sigCell = row.querySelector('[data-sig-cell]');
+              if (sigCell) { sigCell.innerHTML = '<div class="flex items-center gap-2"><img src="' + data + '" alt="Signature" class="h-9 max-w-[130px] object-contain bg-gray-50 border border-gray-200 rounded"><span class="text-[11px] text-emerald-600 font-semibold whitespace-nowrap">Signed' + (lateEl.checked ? ' · Late' : '') + '</span></div><p class="text-[10px] text-gray-400 mt-0.5">just now</p>'; }
+              var actCell = row.querySelector('[data-action-cell]');
+              if (actCell) { var rm = actCell.querySelector('.tb-remove-invite'); actCell.innerHTML = ''; if (rm) actCell.appendChild(rm); }
+            }
+            recount(); closeModal();
           })
           .catch(function (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); })
           .finally(function () { saveBtn.disabled = false; saveBtn.textContent = 'Save sign-off'; });
       });
 
-      // ── Delegated row actions ──
+      // ── Delegated row actions: Sign here / Send link / Remove ──
       document.addEventListener('click', function (e) {
         var sign = e.target.closest('.tb-sign-here');
         if (sign) { openModal(sign.getAttribute('data-crew-id'), sign.getAttribute('data-name')); return; }
         var send = e.target.closest('.tb-send-link');
         if (send) {
           if (send.disabled) return;
-          var crewId = send.getAttribute('data-crew-id');
-          var orig = send.textContent;
+          var crew = send.getAttribute('data-crew-id'); var orig = send.textContent;
           send.disabled = true; send.textContent = 'Sending…';
-          fetch('/toolbox-talks/' + toolboxId + '/attendance/' + crewId + '/send-link', {
-            method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf }, credentials: 'same-origin'
-          })
+          fetch('/toolbox-talks/' + toolboxId + '/attendance/' + crew + '/send-link', { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf }, credentials: 'same-origin' })
             .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
-            .then(function (res) {
-              if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Send failed.');
-              send.textContent = 'Sent ✓'; send.classList.add('text-emerald-600');
-              setTimeout(function () { send.textContent = orig; send.classList.remove('text-emerald-600'); send.disabled = false; }, 2500);
-            })
+            .then(function (res) { if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Send failed.'); send.textContent = 'Sent ✓'; send.classList.add('text-emerald-600'); setTimeout(function () { send.textContent = orig; send.classList.remove('text-emerald-600'); send.disabled = false; }, 2500); })
             .catch(function (e) { alert('Could not send: ' + e.message); send.textContent = orig; send.disabled = false; });
+          return;
+        }
+        var rm = e.target.closest('.tb-remove-invite');
+        if (rm) {
+          var rcrew = rm.getAttribute('data-crew-id'); var rname = rm.getAttribute('data-name') || 'this worker';
+          if (!confirm('Remove ' + rname + " — they weren't here?")) return;
+          rm.disabled = true; rm.textContent = 'Removing…';
+          fetch('/toolbox-talks/' + toolboxId + '/invitees/' + rcrew + '/remove', { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf }, credentials: 'same-origin' })
+            .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) { if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Remove failed'); var row = rm.closest('tr'); if (row) row.remove(); recount(); })
+            .catch(function (e) { alert('Could not remove: ' + e.message); rm.disabled = false; rm.textContent = 'Remove'; });
+          return;
         }
       });
 
@@ -692,14 +263,11 @@
         emailAll.addEventListener('click', function () {
           var statusEl = document.getElementById('att-email-all-status');
           emailAll.disabled = true; var orig = emailAll.textContent; emailAll.textContent = 'Sending…';
-          fetch('/toolbox-talks/' + toolboxId + '/attendance/send-link', {
-            method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf }, credentials: 'same-origin'
-          })
+          fetch('/toolbox-talks/' + toolboxId + '/attendance/send-link', { method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf }, credentials: 'same-origin' })
             .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
             .then(function (res) {
               if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Send failed.');
-              var b = res.body;
-              var msg = 'Sent ' + b.sent + ' link' + (b.sent === 1 ? '' : 's') + '.';
+              var b = res.body, msg = 'Sent ' + b.sent + ' link' + (b.sent === 1 ? '' : 's') + '.';
               if (b.no_email) msg += ' ' + b.no_email + ' had no email.';
               if (b.already_signed) msg += ' ' + b.already_signed + ' already signed.';
               if (b.failed) msg += ' ' + b.failed + ' failed.';
@@ -707,6 +275,66 @@
             })
             .catch(function (e) { if (statusEl) statusEl.textContent = e.message; })
             .finally(function () { emailAll.disabled = false; emailAll.textContent = orig; });
+        });
+      }
+
+      // ── Add-worker picker (select who's here) ──
+      var addRoot = document.querySelector('[data-add-invitee]');
+      if (addRoot) {
+        var toggle = addRoot.querySelector('[data-add-invitee-toggle]');
+        var pop = addRoot.querySelector('[data-add-invitee-pop]');
+        var search = addRoot.querySelector('[data-add-invitee-search]');
+        var list = addRoot.querySelector('[data-add-invitee-list]');
+        var empty = addRoot.querySelector('[data-add-invitee-empty]');
+        toggle.addEventListener('click', function () {
+          var isOpen = !pop.classList.contains('hidden');
+          if (isOpen) { pop.classList.add('hidden'); return; }
+          pop.classList.remove('hidden');
+          if (search) { search.value = ''; search.focus(); }
+          if (list) list.querySelectorAll('[data-add-invitee-crew-id]').forEach(function (b) { if (b.dataset.hidden !== '1') b.classList.remove('hidden'); });
+          if (empty) empty.hidden = true;
+        });
+        document.addEventListener('click', function (e) { if (!addRoot.contains(e.target)) pop.classList.add('hidden'); });
+        if (search) search.addEventListener('input', function () {
+          var q = search.value.trim().toLowerCase(); var shown = 0;
+          list.querySelectorAll('[data-add-invitee-crew-id]').forEach(function (btn) {
+            if (btn.dataset.hidden === '1') { btn.classList.add('hidden'); return; }
+            var match = !q || (btn.dataset.name || '').includes(q) || (btn.dataset.emp || '').includes(q);
+            btn.classList.toggle('hidden', !match); if (match) shown++;
+          });
+          if (empty) empty.hidden = shown > 0;
+        });
+        if (list) list.addEventListener('click', function (e) {
+          var btn = e.target.closest('[data-add-invitee-crew-id]'); if (!btn) return;
+          var crewId = btn.getAttribute('data-add-invitee-crew-id');
+          var crewName = btn.getAttribute('data-add-invitee-crew-name');
+          var crewEmp = btn.getAttribute('data-add-invitee-crew-emp') || '';
+          btn.disabled = true;
+          var body = new URLSearchParams({ crew_member_id: crewId, _csrf: csrf });
+          fetch('/toolbox-talks/' + toolboxId + '/invitees/add', { method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf }, credentials: 'same-origin', body: body })
+            .then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+              if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Add failed');
+              if (res.body.was_already_invited) { alert(crewName + ' is already listed.'); btn.disabled = false; return; }
+              var tbody = document.getElementById('tb-roster');
+              var tr = document.createElement('tr');
+              tr.className = 'tb-row hover:bg-gray-50/50 align-middle'; tr.dataset.crewId = crewId;
+              var actions = hasSession
+                ? ('<button type="button" class="tb-sign-here text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded px-2.5 py-1.5" data-crew-id="' + crewId + '" data-name="' + crewName + '">Sign here</button>' +
+                   '<button type="button" class="tb-send-link text-[11px] font-semibold text-gray-600 hover:text-gray-800 hover:underline ml-1" data-crew-id="' + crewId + '" data-name="' + crewName + '">Send link</button>')
+                : '';
+              tr.innerHTML =
+                '<td class="px-3 py-2.5 text-sm font-medium text-gray-900">' + crewName + ' <span class="text-[10px] text-brand-600">· added</span></td>' +
+                '<td class="px-2 py-2.5 text-xs text-gray-500">' + (crewEmp || '—') + '</td>' +
+                '<td class="px-2 py-2.5" data-sig-cell><span class="text-[11px] text-gray-400">Not signed yet</span></td>' +
+                '<td class="px-2 py-2.5 text-right whitespace-nowrap" data-action-cell>' + actions +
+                  '<button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline ml-1" data-crew-id="' + crewId + '" data-name="' + crewName + '" title="Remove — not here">Remove</button>' +
+                '</td>';
+              tbody.appendChild(tr);
+              btn.dataset.hidden = '1'; btn.classList.add('hidden'); pop.classList.add('hidden');
+              recount();
+            })
+            .catch(function (e) { alert('Could not add: ' + e.message); btn.disabled = false; });
         });
       }
     })();

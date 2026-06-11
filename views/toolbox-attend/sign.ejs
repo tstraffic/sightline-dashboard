@@ -134,24 +134,18 @@
     </div>
 
     <% if (!submitted) { %>
-      <form method="POST" action="/toolbox-attend/<%= session.token %>/submit" id="att-form">
+      <form method="POST" action="/toolbox-attend/<%= session.token %>/sign-off" id="att-form">
         <div class="card">
-          <p class="eyebrow" style="margin-bottom:8px;">Who are you?</p>
+          <p class="eyebrow" style="margin-bottom:8px;">1. Who are you?</p>
           <input class="filter" type="text" id="filter" placeholder="Filter by name..." oninput="filterRows(this.value)">
-          <div id="people" style="max-height:42vh;overflow-y:auto;border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);">
+          <div id="people" style="max-height:38vh;overflow-y:auto;border:1px solid rgba(255,255,255,0.06);border-radius:12px;background:rgba(255,255,255,0.02);">
             <% attendees.forEach(function (a) { %>
               <label class="row" data-name="<%= (a.full_name || '').toLowerCase() %>">
                 <input type="radio" name="crew_member_id" value="<%= a.id %>" onchange="onPick(this)">
                 <span class="name"><%= a.full_name %></span>
                 <% if (a.employee_id) { %><span class="emp"><%= a.employee_id %></span><% } %>
                 <% if (a.currentStatus === 'attended') { %>
-                  <span class="status-tag status-attended">Attended</span>
-                <% } else if (a.currentStatus === 'attending') { %>
-                  <span class="status-tag status-attending">Attending</span>
-                <% } else if (a.currentStatus === 'absent') { %>
-                  <span class="status-tag status-absent">Not attending</span>
-                <% } else if (a.currentStatus === 'caught_up') { %>
-                  <span class="status-tag status-caught">Caught up</span>
+                  <span class="status-tag status-attended">Signed ✓</span>
                 <% } %>
               </label>
             <% }); %>
@@ -159,54 +153,30 @@
         </div>
 
         <div class="card">
-          <p class="eyebrow" style="margin-bottom:6px;">Your status</p>
-          <div class="seg" id="status-seg">
-            <label class="signoff">
-              <input type="radio" name="status" value="attended" onchange="onStatus(this)">
-              <span>I'm here — sign me off</span>
-            </label>
-            <label class="attended">
-              <input type="radio" name="status" value="attending" onchange="onStatus(this)">
-              <span>I will attend</span>
-            </label>
-            <label class="absent">
-              <input type="radio" name="status" value="absent" onchange="onStatus(this)">
-              <span>I can't attend</span>
-            </label>
-          </div>
-          <div class="reason-block" id="reason-block">
-            <p class="eyebrow" style="margin-top:14px;margin-bottom:6px;">Why?</p>
-            <textarea name="absence_reason" id="absence-reason" rows="3" placeholder="A short reason..." maxlength="1000"></textarea>
-          </div>
-          <div class="sig-block" id="sig-block">
-            <label style="display:flex;align-items:center;gap:8px;margin-top:14px;font-size:13px;color:rgba(255,255,255,0.85);cursor:pointer;">
-              <input type="checkbox" name="late_arrival" value="1" style="width:16px;height:16px;">
-              <span>I arrived late (the time will be recorded)</span>
-            </label>
-            <p class="eyebrow" style="margin-top:14px;margin-bottom:6px;">Sign here</p>
-            <div class="sig-wrap">
-              <canvas id="sig-pad" class="sig-pad"></canvas>
-              <span id="sig-placeholder" class="sig-placeholder">Sign with your finger</span>
-              <div class="sig-footer">
-                <span>Signature</span>
-                <button type="button" id="sig-clear" class="sig-clear">Clear</button>
-              </div>
+          <p class="eyebrow" style="margin-bottom:6px;">2. Sign to confirm you attended</p>
+          <div class="sig-wrap">
+            <canvas id="sig-pad" class="sig-pad"></canvas>
+            <span id="sig-placeholder" class="sig-placeholder">Sign with your finger</span>
+            <div class="sig-footer">
+              <span>Signature</span>
+              <button type="button" id="sig-clear" class="sig-clear">Clear</button>
             </div>
-            <input type="hidden" name="signature_data" id="sig-data">
           </div>
+          <input type="hidden" name="signature_data" id="sig-data">
+          <label style="display:flex;align-items:center;gap:8px;margin-top:12px;font-size:13px;color:rgba(255,255,255,0.85);cursor:pointer;">
+            <input type="checkbox" name="late_arrival" value="1" style="width:16px;height:16px;">
+            <span>I arrived late (the time will be recorded)</span>
+          </label>
         </div>
 
-        <button type="submit" class="submit" id="submit-btn" disabled>Submit</button>
+        <button type="submit" class="submit" id="submit-btn" disabled>Sign off attendance</button>
       </form>
     <% } %>
   </div>
 
   <script>
     var pickedCrew = null;
-    var pickedStatus = null;
     var hasInk = false;
-    var sessionToken = <%- JSON.stringify(session.token) %>;
-    var form = document.getElementById('att-form');
 
     function onPick(input) {
       pickedCrew = input.value;
@@ -215,31 +185,9 @@
       if (lbl) lbl.classList.add('is-selected');
       updateSubmit();
     }
-    function onStatus(input) {
-      pickedStatus = input.value;
-      document.querySelectorAll('#status-seg label').forEach(function (l) { l.classList.remove('is-checked'); });
-      var lbl = input.closest('label');
-      if (lbl) lbl.classList.add('is-checked');
-      var rb = document.getElementById('reason-block');
-      var sb = document.getElementById('sig-block');
-      rb.classList.toggle('is-visible', pickedStatus === 'absent');
-      sb.classList.toggle('is-visible', pickedStatus === 'attended');
-      // Sign-off uses a different endpoint so the server can write
-      // status='attended' + signed_off_at + signature_data instead of
-      // an RSVP row.
-      form.action = pickedStatus === 'attended'
-        ? '/toolbox-attend/' + sessionToken + '/sign-off'
-        : '/toolbox-attend/' + sessionToken + '/submit';
-      if (pickedStatus === 'attended') initSignaturePad();
-      updateSubmit();
-    }
     function updateSubmit() {
       var btn = document.getElementById('submit-btn');
-      var reason = (document.getElementById('absence-reason') || {}).value || '';
-      var ok = !!pickedCrew && !!pickedStatus;
-      if (pickedStatus === 'absent')   ok = ok && reason.trim().length > 0;
-      if (pickedStatus === 'attended') ok = ok && hasInk;
-      btn.disabled = !ok;
+      btn.disabled = !(pickedCrew && hasInk);
     }
     function filterRows(q) {
       q = (q || '').toLowerCase().trim();
@@ -248,10 +196,8 @@
         r.style.display = (!q || name.indexOf(q) !== -1) ? '' : 'none';
       });
     }
-    var ar = document.getElementById('absence-reason');
-    if (ar) ar.addEventListener('input', updateSubmit);
 
-    // ── Signature pad (only initialised when the user picks sign-off) ──
+    // ── Signature pad — always available; signing is the only action ──
     var sigInitialised = false;
     function initSignaturePad() {
       if (sigInitialised) return;
@@ -308,6 +254,9 @@
         hasInk = false; placeholder.style.display = ''; dataInput.value = ''; updateSubmit();
       });
     }
+
+    // Signing is the only action — wire the pad up immediately.
+    initSignaturePad();
   </script>
 </body>
 </html>
