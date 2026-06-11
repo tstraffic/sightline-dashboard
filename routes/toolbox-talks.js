@@ -442,6 +442,18 @@ router.get('/:id', (req, res) => {
     WHERE a.toolbox_id = ? AND a.status IN ('attended','caught_up')
     ORDER BY a.late_arrival ASC, cm.full_name
   `).all(toolbox.id);
+  // Attendee sign-off section on the detail page: everyone who's part of
+  // the meeting (attending / attended / caught up). Signed rows show their
+  // signature; unsigned 'attending' rows get a "Sign here" button. Link
+  // sign-offs land here too (same signature_data column).
+  const signoffRows = db.prepare(`
+    SELECT a.crew_member_id AS crew_id, cm.full_name, cm.employee_id, a.status,
+           a.signature_data, a.signed_off_at, a.recorded_by_id, a.late_arrival, a.late_arrival_time
+    FROM toolbox_attendance a
+    JOIN crew_members cm ON cm.id = a.crew_member_id
+    WHERE a.toolbox_id = ? AND a.status IN ('attending','attended','caught_up')
+    ORDER BY (a.signed_off_at IS NOT NULL), cm.full_name
+  `).all(toolbox.id);
   const actions = db.prepare('SELECT * FROM toolbox_actions WHERE toolbox_id = ? ORDER BY id ASC').all(toolbox.id);
   const suppNotes = db.prepare(`
     SELECT n.*, u.full_name AS author_name
@@ -466,7 +478,7 @@ router.get('/:id', (req, res) => {
     toolbox, photos, documents, prepDocuments, summary, absences, attendanceSession, attendanceUrl,
     invitees,
     statusLabels: STATUS_LABELS,
-    attendanceRows, actions, suppNotes, clientSends, clients,
+    attendanceRows, signoffRows, actions, suppNotes, clientSends, clients,
     locked: isLocked(toolbox),
     talkTypeLabels: TALK_TYPE_LABELS,
   });
