@@ -113,6 +113,18 @@ function sopSignLinkEmail(fullName, signUrl) {
   `);
 }
 
+// Link emailed to a worker so they can open the toolbox talk on their own
+// phone and sign off their attendance (draw signature → submit).
+function toolboxSignLinkEmail(fullName, toolbox, signUrl) {
+  return baseTemplate('Toolbox Talk — Sign Off', `
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 8px;">Hi ${escapeHtml(fullName || 'there')},</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Please sign off your attendance for the toolbox talk <strong>${escapeHtml(toolbox.title)}</strong>${toolbox.held_at ? ' (' + escapeHtml(toolbox.held_at) + ')' : ''}.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Open the link on your phone, pick your name, draw your signature and submit. Takes about 30 seconds.</p>
+    ${buttonHtml('Sign off attendance', signUrl)}
+    <p style="color:#6B7280;font-size:13px;margin:0;">If the button doesn't work, copy and paste this link into your browser:<br><a href="${signUrl}" style="color:#059669;word-break:break-all;">${signUrl}</a></p>
+  `);
+}
+
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -154,4 +166,5 @@ module.exports = {
   dailyDigestEmail,
   sopSignLinkEmail,
   toolboxClientEmail,
+  toolboxSignLinkEmail,
 };

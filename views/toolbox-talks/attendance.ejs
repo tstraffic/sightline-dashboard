@@ -69,6 +69,13 @@
               Preview
             </a>
           </div>
+          <div class="flex items-center gap-2 pt-1">
+            <button type="button" id="att-email-all" class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-brand-200 hover:bg-brand-50 text-brand-700 text-xs font-semibold rounded-lg">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              Email link to everyone who hasn't signed
+            </button>
+            <span id="att-email-all-status" class="text-xs text-gray-500"></span>
+          </div>
         </div>
       </div>
     </div>
@@ -185,7 +192,7 @@
           <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest w-48">Set status</th>
           <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Current</th>
           <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Recorded</th>
-          <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest w-20">Invite</th>
+          <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest w-40">Sign-off / invite</th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-100">
@@ -257,7 +264,14 @@
               <% } %>
             </td>
             <td class="px-2 py-2 text-xs text-gray-500 tabular-nums whitespace-nowrap"><%= fmt(r.signed_off_at || r.recorded_at) %></td>
-            <td class="px-2 py-2 text-right">
+            <td class="px-2 py-2 text-right whitespace-nowrap">
+              <% if (attendanceUrl) { %>
+                <div class="flex items-center justify-end gap-2 mb-1">
+                  <button type="button" class="tb-sign-here text-[11px] font-semibold text-brand-700 hover:text-brand-800 hover:underline" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>">Sign here</button>
+                  <span class="text-gray-300">·</span>
+                  <button type="button" class="tb-send-link text-[11px] font-semibold text-gray-600 hover:text-gray-800 hover:underline" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>"<%= r.email ? '' : ' title="No email on file" disabled' %>>Send link</button>
+                </div>
+              <% } %>
               <button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" data-crew-id="<%= r.crew_id %>" data-name="<%= r.full_name %>" title="Remove from invite list">Remove</button>
             </td>
           </tr>
@@ -385,6 +399,7 @@
       const csrfToken = csrfMeta ? csrfMeta.getAttribute('content') :
         (document.querySelector('input[name="_csrf"]') || {}).value || '';
       const toolboxId = <%= toolbox.id %>;
+      const hasSession = <%= attendanceUrl ? 'true' : 'false' %>;
       document.querySelectorAll('.tb-remove-invite').forEach(btn => {
         btn.addEventListener('click', async () => {
           const crewId = btn.getAttribute('data-crew-id');
@@ -494,7 +509,15 @@
                 '</td>' +
                 '<td class="px-2 py-2"><span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-gray-100 text-gray-600 ring-gray-200">Pending</span></td>' +
                 '<td class="px-2 py-2 text-xs text-gray-500 tabular-nums whitespace-nowrap">—</td>' +
-                '<td class="px-2 py-2 text-right"><button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" data-crew-id="' + crewId + '" data-name="' + crewName + '" title="Remove from invite list">Remove</button></td>'
+                '<td class="px-2 py-2 text-right whitespace-nowrap">' +
+                  (hasSession ?
+                    ('<div class="flex items-center justify-end gap-2 mb-1">' +
+                       '<button type="button" class="tb-sign-here text-[11px] font-semibold text-brand-700 hover:text-brand-800 hover:underline" data-crew-id="' + crewId + '" data-name="' + crewName + '">Sign here</button>' +
+                       '<span class="text-gray-300">·</span>' +
+                       '<button type="button" class="tb-send-link text-[11px] font-semibold text-gray-600 hover:text-gray-800 hover:underline" data-crew-id="' + crewId + '" data-name="' + crewName + '">Send link</button>' +
+                     '</div>') : '') +
+                  '<button type="button" class="tb-remove-invite text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline" data-crew-id="' + crewId + '" data-name="' + crewName + '" title="Remove from invite list">Remove</button>' +
+                '</td>'
               );
               tbody.appendChild(tr);
               // Wire the new row's select + remove button into existing handlers.
@@ -534,6 +557,157 @@
             }
           });
         }
+      }
+    })();
+  </script>
+
+  <!-- Manual sign-off (admin device) + send-link handlers -->
+  <div id="tb-sign-modal" class="hidden fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+      <div class="p-5 border-b border-gray-200">
+        <h2 class="text-lg font-semibold text-gray-900">Sign off attendance</h2>
+        <p class="text-sm text-gray-500 mt-1">Hand the device to <span id="tb-sign-name" class="font-medium text-gray-700">the worker</span> to sign.</p>
+      </div>
+      <div class="p-5 space-y-3">
+        <div class="border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 relative" style="height:170px;">
+          <canvas id="tb-sign-pad" style="width:100%;height:100%;touch-action:none;display:block;"></canvas>
+          <span id="tb-sign-ph" class="absolute inset-0 flex items-center justify-center text-sm text-gray-400 pointer-events-none">Sign with your finger</span>
+        </div>
+        <div class="flex items-center justify-between">
+          <label class="inline-flex items-center gap-2 text-sm text-gray-700">
+            <input type="checkbox" id="tb-sign-late" class="h-4 w-4 rounded border-gray-300 text-amber-600">
+            Late arrival
+          </label>
+          <button type="button" id="tb-sign-clear" class="text-xs font-semibold text-gray-500 hover:text-gray-700">Clear</button>
+        </div>
+        <p id="tb-sign-err" class="hidden text-sm text-red-600"></p>
+      </div>
+      <div class="px-5 py-4 bg-gray-50 rounded-b-xl flex items-center justify-end gap-2">
+        <button type="button" id="tb-sign-cancel" class="px-4 py-2 bg-white border border-gray-300 text-sm font-medium text-gray-700 rounded-lg hover:bg-gray-50">Cancel</button>
+        <button type="button" id="tb-sign-save" class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg">Save sign-off</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      var toolboxId = <%= toolbox.id %>;
+      var csrfMeta = document.querySelector('meta[name="csrf-token"]');
+      var csrf = csrfMeta ? csrfMeta.getAttribute('content') : ((document.querySelector('input[name="_csrf"]') || {}).value || '');
+
+      function rowFor(crewId) { return document.querySelector('tr.tb-att-row[data-crew-id="' + crewId + '"]'); }
+      function markAttended(crewId) {
+        var row = rowFor(crewId); if (!row) return;
+        var tds = row.querySelectorAll('td');
+        if (tds[3]) tds[3].innerHTML = '<span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold ring-1 ring-inset bg-emerald-50 text-emerald-700 ring-emerald-200">Attended ✓</span>';
+        if (tds[4]) tds[4].textContent = 'just now';
+        var sel = row.querySelector('select[data-status-select]'); if (sel) sel.value = 'attended';
+        row.dataset.signedOff = '1';
+        row.querySelectorAll('.tb-sign-here, .tb-send-link').forEach(function (b) { b.remove(); });
+      }
+
+      // ── Signature modal ──
+      var modal = document.getElementById('tb-sign-modal');
+      var nameEl = document.getElementById('tb-sign-name');
+      var errEl = document.getElementById('tb-sign-err');
+      var lateEl = document.getElementById('tb-sign-late');
+      var canvas = document.getElementById('tb-sign-pad');
+      var ph = document.getElementById('tb-sign-ph');
+      var ctx = canvas.getContext('2d');
+      var drawing = false, hasInk = false, last = null, currentCrewId = null;
+
+      function sizePad() {
+        var dpr = window.devicePixelRatio || 1;
+        var rect = canvas.getBoundingClientRect();
+        if (!rect.width) return;
+        canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+        ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(dpr, dpr);
+        ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a';
+      }
+      function pos(e) { var r = canvas.getBoundingClientRect(); var t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; }
+      function start(e) { drawing = true; last = pos(e); if (!hasInk) { hasInk = true; ph.style.display = 'none'; } e.preventDefault(); }
+      function move(e) { if (!drawing) return; var p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; e.preventDefault(); }
+      function stop() { drawing = false; }
+      canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); canvas.addEventListener('mouseup', stop); canvas.addEventListener('mouseleave', stop);
+      canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', stop);
+
+      function clearPad() { ctx.clearRect(0, 0, canvas.width, canvas.height); hasInk = false; ph.style.display = ''; }
+      function openModal(crewId, name) {
+        currentCrewId = crewId; nameEl.textContent = name || 'the worker';
+        errEl.classList.add('hidden'); errEl.textContent = ''; lateEl.checked = false;
+        modal.classList.remove('hidden');
+        setTimeout(function () { sizePad(); clearPad(); }, 30);
+      }
+      function closeModal() { modal.classList.add('hidden'); }
+      document.getElementById('tb-sign-cancel').addEventListener('click', closeModal);
+      document.getElementById('tb-sign-clear').addEventListener('click', clearPad);
+      modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+
+      var saveBtn = document.getElementById('tb-sign-save');
+      saveBtn.addEventListener('click', function () {
+        if (!hasInk) { errEl.textContent = 'Draw a signature first.'; errEl.classList.remove('hidden'); return; }
+        var data = canvas.toDataURL('image/png');
+        saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+        fetch('/toolbox-talks/' + toolboxId + '/attendance/' + currentCrewId + '/sign-off', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'X-CSRF-Token': csrf },
+          credentials: 'same-origin',
+          body: JSON.stringify({ signature_data: data, late_arrival: lateEl.checked ? '1' : '' })
+        })
+          .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+          .then(function (res) {
+            if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Sign-off failed.');
+            markAttended(currentCrewId); closeModal();
+          })
+          .catch(function (e) { errEl.textContent = e.message; errEl.classList.remove('hidden'); })
+          .finally(function () { saveBtn.disabled = false; saveBtn.textContent = 'Save sign-off'; });
+      });
+
+      // ── Delegated row actions ──
+      document.addEventListener('click', function (e) {
+        var sign = e.target.closest('.tb-sign-here');
+        if (sign) { openModal(sign.getAttribute('data-crew-id'), sign.getAttribute('data-name')); return; }
+        var send = e.target.closest('.tb-send-link');
+        if (send) {
+          if (send.disabled) return;
+          var crewId = send.getAttribute('data-crew-id');
+          var orig = send.textContent;
+          send.disabled = true; send.textContent = 'Sending…';
+          fetch('/toolbox-talks/' + toolboxId + '/attendance/' + crewId + '/send-link', {
+            method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf }, credentials: 'same-origin'
+          })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+              if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Send failed.');
+              send.textContent = 'Sent ✓'; send.classList.add('text-emerald-600');
+              setTimeout(function () { send.textContent = orig; send.classList.remove('text-emerald-600'); send.disabled = false; }, 2500);
+            })
+            .catch(function (e) { alert('Could not send: ' + e.message); send.textContent = orig; send.disabled = false; });
+        }
+      });
+
+      // ── Email link to everyone unsigned ──
+      var emailAll = document.getElementById('att-email-all');
+      if (emailAll) {
+        emailAll.addEventListener('click', function () {
+          var statusEl = document.getElementById('att-email-all-status');
+          emailAll.disabled = true; var orig = emailAll.textContent; emailAll.textContent = 'Sending…';
+          fetch('/toolbox-talks/' + toolboxId + '/attendance/send-link', {
+            method: 'POST', headers: { 'Accept': 'application/json', 'X-CSRF-Token': csrf }, credentials: 'same-origin'
+          })
+            .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+            .then(function (res) {
+              if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Send failed.');
+              var b = res.body;
+              var msg = 'Sent ' + b.sent + ' link' + (b.sent === 1 ? '' : 's') + '.';
+              if (b.no_email) msg += ' ' + b.no_email + ' had no email.';
+              if (b.already_signed) msg += ' ' + b.already_signed + ' already signed.';
+              if (b.failed) msg += ' ' + b.failed + ' failed.';
+              if (statusEl) statusEl.textContent = msg;
+            })
+            .catch(function (e) { if (statusEl) statusEl.textContent = e.message; })
+            .finally(function () { emailAll.disabled = false; emailAll.textContent = orig; });
+        });
       }
     })();
   </script>

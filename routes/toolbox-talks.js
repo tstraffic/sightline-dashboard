@@ -655,9 +655,10 @@ router.get('/:id/attendance', (req, res) => {
   // the worker sees. Otherwise (open-to-all toolbox) show every active
   // crew, excluding only workers whose ONLY HR profile is soft-deleted.
   const rows = db.prepare(`
-    SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
+    SELECT cm.id AS crew_id, cm.full_name, cm.employee_id, cm.email,
            a.status AS attendance_status, a.recorded_at, a.recorded_by_id,
-           a.signed_off_at, a.absence_reason, a.late_arrival, a.late_arrival_time
+           a.signed_off_at, a.absence_reason, a.late_arrival, a.late_arrival_time,
+           (a.signature_data IS NOT NULL) AS has_signature
     FROM crew_members cm
     LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
     WHERE cm.active = 1
@@ -702,6 +703,140 @@ router.get('/:id/attendance', (req, res) => {
     title: toolbox.title + ' — Attendance', currentPage: 'toolbox-talks',
     toolbox, rows, allocatedIds, selectableCrew, isOpenToAll, attendanceUrl,
   });
+});
+
+// Is this crew member eligible for this toolbox (active + within the invitee
+// scope)? Returns the crew row (id, full_name, email) or undefined.
+function eligibleCrewForToolbox(db, toolboxId, crewId) {
+  return db.prepare(`
+    SELECT cm.id, cm.full_name, cm.email FROM crew_members cm
+    WHERE cm.id = ? AND cm.active = 1
+      AND (NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+           OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL))
+      AND (NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ?)
+           OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ? AND i.crew_member_id = cm.id))
+  `).get(crewId, toolboxId, toolboxId);
+}
+
+// All eligible crew for a toolbox, with email + whether they've signed off.
+function eligibleCrewList(db, toolboxId) {
+  return db.prepare(`
+    SELECT cm.id, cm.full_name, cm.email, a.signed_off_at
+    FROM crew_members cm
+    LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
+    WHERE cm.active = 1
+      AND (NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+           OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL))
+      AND (NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ?)
+           OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ? AND i.crew_member_id = cm.id))
+    ORDER BY cm.full_name
+  `).all(toolboxId, toolboxId, toolboxId);
+}
+
+// Guard shared by the manual sign-off + send-link endpoints: toolbox must be
+// published and not yet locked (a closed/locked session can't take sign-ons).
+function activeToolboxOr(res, id) {
+  const tb = getDb().prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(id);
+  if (!tb) { res.status(404).json({ ok: false, error: 'Toolbox not found.' }); return null; }
+  if (tb.status !== 'published') { res.status(400).json({ ok: false, error: 'Publish the toolbox first.' }); return null; }
+  if (isLocked(tb)) { res.status(423).json({ ok: false, error: 'Record is locked — the presenter has signed off.' }); return null; }
+  return tb;
+}
+
+// POST /toolbox-talks/:id/attendance/:crewId/sign-off
+// Manual sign-off on an admin's device: the worker draws their signature on
+// the office device and we store it exactly like a self sign-off.
+router.post('/:id/attendance/:crewId/sign-off', (req, res) => {
+  const db = getDb();
+  const tb = activeToolboxOr(res, req.params.id);
+  if (!tb) return;
+  const crew = eligibleCrewForToolbox(db, tb.id, parseInt(req.params.crewId, 10));
+  if (!crew) return res.status(400).json({ ok: false, error: 'That worker is not on this toolbox.' });
+
+  const sigRaw = (req.body.signature_data || '').toString();
+  if (!sigRaw.startsWith('data:image/') || sigRaw.length > 260000) {
+    return res.status(400).json({ ok: false, error: 'Draw a signature before submitting.' });
+  }
+  const userId = req.session.user ? req.session.user.id : null;
+  const isLate = req.body.late_arrival === '1' ? 1 : 0;
+  db.prepare(`
+    INSERT INTO toolbox_attendance
+      (toolbox_id, crew_member_id, status, signature_data, signed_off_at, recorded_by_id, recorded_at, late_arrival, late_arrival_time)
+    VALUES (?, ?, 'attended', ?, datetime('now'), ?, datetime('now'), ?, CASE WHEN ? THEN strftime('%H:%M','now','localtime') ELSE NULL END)
+    ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+      status = 'attended',
+      signature_data = excluded.signature_data,
+      signed_off_at = datetime('now'),
+      recorded_by_id = excluded.recorded_by_id,
+      recorded_at = datetime('now'),
+      absence_reason = NULL,
+      late_arrival = excluded.late_arrival,
+      late_arrival_time = excluded.late_arrival_time
+  `).run(tb.id, crew.id, sigRaw, userId, isLate, isLate);
+
+  try {
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'toolbox_talk',
+      entityId: tb.id, entityLabel: tb.title, details: 'manual sign-off (admin device) for ' + crew.full_name, ip: req.ip,
+    });
+  } catch (e) {}
+  res.json({ ok: true, crew_id: crew.id, signed_off_at: new Date().toISOString() });
+});
+
+// POST /toolbox-talks/:id/attendance/:crewId/send-link
+// Email the public sign-off link to one worker.
+router.post('/:id/attendance/:crewId/send-link', async (req, res) => {
+  const db = getDb();
+  const tb = activeToolboxOr(res, req.params.id);
+  if (!tb) return;
+  if (!emailConfigured()) return res.status(400).json({ ok: false, error: 'Email is not configured on this server.' });
+  const crew = eligibleCrewForToolbox(db, tb.id, parseInt(req.params.crewId, 10));
+  if (!crew) return res.status(400).json({ ok: false, error: 'That worker is not on this toolbox.' });
+  if (!crew.email) return res.status(400).json({ ok: false, error: crew.full_name + ' has no email on file.' });
+
+  try {
+    const s = getOrCreateAttendanceSession(tb.id, req.session.user && req.session.user.id);
+    const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+    const url = base + '/toolbox-attend/' + s.token;
+    const ok = await sendEmail(crew.email, 'Sign off: ' + tb.title, toolboxSignLinkEmail(crew.full_name, tb, url));
+    if (!ok) return res.status(502).json({ ok: false, error: 'Email failed to send.' });
+    res.json({ ok: true, sent_to: crew.email });
+  } catch (e) {
+    console.error('[toolbox send-link]', e.message);
+    res.status(500).json({ ok: false, error: 'Could not send the link.' });
+  }
+});
+
+// POST /toolbox-talks/:id/attendance/send-link
+// Email the sign-off link to every eligible worker who has an email and
+// hasn't signed off yet. Returns counts so the UI can report what happened.
+router.post('/:id/attendance/send-link', async (req, res) => {
+  const db = getDb();
+  const tb = activeToolboxOr(res, req.params.id);
+  if (!tb) return;
+  if (!emailConfigured()) return res.status(400).json({ ok: false, error: 'Email is not configured on this server.' });
+
+  const s = getOrCreateAttendanceSession(tb.id, req.session.user && req.session.user.id);
+  const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+  const url = base + '/toolbox-attend/' + s.token;
+  const html = (name) => toolboxSignLinkEmail(name, tb, url);
+
+  let sent = 0, noEmail = 0, alreadySigned = 0, failed = 0;
+  for (const c of eligibleCrewList(db, tb.id)) {
+    if (c.signed_off_at) { alreadySigned++; continue; }
+    if (!c.email) { noEmail++; continue; }
+    try {
+      const ok = await sendEmail(c.email, 'Sign off: ' + tb.title, html(c.full_name));
+      if (ok) sent++; else failed++;
+    } catch (e) { failed++; }
+  }
+  try {
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'toolbox_talk',
+      entityId: tb.id, entityLabel: tb.title, details: 'emailed sign-off link to ' + sent + ' worker(s)', ip: req.ip,
+    });
+  } catch (e) {}
+  res.json({ ok: true, sent, no_email: noEmail, already_signed: alreadySigned, failed });
 });
 
 // POST /toolbox-talks/:id/invitees/add — manually add a single worker
