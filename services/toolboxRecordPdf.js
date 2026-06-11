@@ -51,6 +51,13 @@ function sigBuffer(dataUrl) {
   if (!dataUrl || !/^data:image\/(png|jpe?g);base64,/.test(dataUrl)) return null;
   try { return Buffer.from(dataUrl.split(',')[1], 'base64'); } catch (e) { return null; }
 }
+// Sanitise free text for pdfkit's built-in (WinAnsi) fonts: collapse CRLF/CR
+// to LF (stray \r renders as a "Đ"-like glyph) and drop other control chars.
+function clean(s) {
+  return String(s == null ? '' : s)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, '');
+}
 
 /**
  * Generate the FRM-005 PDF for a toolbox talk. Returns a Promise of
@@ -129,7 +136,7 @@ function generateToolboxRecordPdf(toolboxId) {
     y += 30;
   };
   const bodyText = (text, opts) => {
-    const t = String(text || '').trim() || '—';
+    const t = clean(text).trim() || '—';
     doc.font('Helvetica').fontSize(9.5).fillColor(GRAY_DARK);
     const h = doc.heightOfString(t, { width: pageW - 8 });
     ensure(h + 10);
@@ -211,9 +218,10 @@ function generateToolboxRecordPdf(toolboxId) {
         a.status === 'closed' ? `Closed ${dateTimePart(a.closed_at)}` : 'Open',
       ].filter(Boolean).join('  ·  ');
       doc.font('Helvetica').fontSize(9.5).fillColor(GRAY_DARK);
-      const h = doc.heightOfString(`${i + 1}. ${a.description}`, { width: pageW - 8 }) + 12;
+      const desc = `${i + 1}. ${clean(a.description)}`;
+      const h = doc.heightOfString(desc, { width: pageW - 8 }) + 12;
       ensure(h + 14);
-      doc.text(`${i + 1}. ${a.description}`, ML + 4, y, { width: pageW - 8 });
+      doc.text(desc, ML + 4, y, { width: pageW - 8 });
       y = doc.y + 1;
       doc.font('Helvetica').fontSize(8).fillColor(a.status === 'closed' ? GREEN : AMBER)
         .text(meta, ML + 16, y, { width: pageW - 20 });
@@ -313,9 +321,10 @@ function generateToolboxRecordPdf(toolboxId) {
     sectionHeader('Supplementary Notes');
     for (const n of notes) {
       doc.font('Helvetica').fontSize(9.5).fillColor(GRAY_DARK);
-      const h = doc.heightOfString(n.note, { width: pageW - 8 }) + 14;
+      const noteText = clean(n.note);
+      const h = doc.heightOfString(noteText, { width: pageW - 8 }) + 14;
       ensure(h);
-      doc.text(n.note, ML + 4, y, { width: pageW - 8 });
+      doc.text(noteText, ML + 4, y, { width: pageW - 8 });
       y = doc.y + 1;
       doc.font('Helvetica').fontSize(7.5).fillColor(GRAY)
         .text(`${n.author_name || 'Office'} · ${dateTimePart(n.created_at)}`, ML + 4, y, { lineBreak: false });
