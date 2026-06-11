@@ -166,18 +166,26 @@ function generateToolboxRecordPdf(toolboxId) {
     ['Talk Type', talkTypeLabel], ['Topic Reference', tb.topic_reference || '—'],
   ];
   const halfW = pageW / 2;
+  const labelW = 100;                 // label column width within each half
+  const valW = halfW - labelW - 10;   // wrapping width for the value
   for (let i = 0; i < details.length; i += 2) {
-    ensure(18);
+    // Row height = the taller of the two columns' (possibly wrapped) values,
+    // so long values (job/site/topic) no longer overlap the next row.
+    let rowH = 12;
+    for (let k = 0; k < 2 && i + k < details.length; k++) {
+      doc.font('Helvetica-Bold').fontSize(9);
+      rowH = Math.max(rowH, doc.heightOfString(String(details[i + k][1]), { width: valW }));
+    }
+    ensure(rowH + 6);
     for (let k = 0; k < 2 && i + k < details.length; k++) {
       const [label, value] = details[i + k];
       const x = ML + k * halfW;
-      doc.font('Helvetica').fontSize(9).fillColor(GRAY_MED).text(label + ':', x + 4, y, { lineBreak: false });
-      doc.font('Helvetica-Bold').fontSize(9).fillColor(GRAY_DARK)
-        .text(String(value), x + 110, y, { width: halfW - 118, lineBreak: false });
+      doc.font('Helvetica').fontSize(9).fillColor(GRAY_MED).text(label + ':', x + 4, y, { width: labelW - 6, lineBreak: false });
+      doc.font('Helvetica-Bold').fontSize(9).fillColor(GRAY_DARK).text(String(value), x + labelW, y, { width: valW });
     }
-    y += 16;
+    y += rowH + 7;
   }
-  y += 6;
+  y += 4;
 
   // ===== 2. Topic =====
   sectionHeader('2. Topic');
@@ -270,9 +278,9 @@ function generateToolboxRecordPdf(toolboxId) {
     y += 12;
   }
 
-  // ===== 7. Presenter Sign-off & Atomis Record =====
+  // ===== 7. Presenter Sign-off =====
   ensure(120);
-  sectionHeader('7. Presenter Sign-off & Atomis Record');
+  sectionHeader('7. Presenter Sign-off');
   if (tb.presenter_signed_at) {
     const sig = sigBuffer(tb.presenter_signature_data);
     if (sig) {
@@ -287,12 +295,12 @@ function generateToolboxRecordPdf(toolboxId) {
       .font('Helvetica-Bold').fillColor(GRAY_DARK)
       .text(dateTimePart(tb.presenter_signed_at), ML + 290, y + 20, { lineBreak: false });
     doc.font('Helvetica').fontSize(9).fillColor(GRAY_MED)
-      .text('Atomis Record ID:', ML + 230, y + 36, { lineBreak: false })
+      .text('Record ID:', ML + 230, y + 36, { lineBreak: false })
       .font('Helvetica-Bold').fillColor(GRAY_DARK)
-      .text(`TBX-${tb.id}`, ML + 330, y + 36, { lineBreak: false });
+      .text(`TBX-${tb.id}`, ML + 290, y + 36, { lineBreak: false });
     y += 64;
     doc.font('Helvetica-Bold').fontSize(8.5).fillColor(GREEN)
-      .text('Record signed off and locked in Atomis. Attendance above is the audit evidence.', ML + 4, y, { width: pageW - 8 });
+      .text('Record signed off and locked. Attendance above is the audit evidence.', ML + 4, y, { width: pageW - 8 });
     y = doc.y + 8;
   } else {
     doc.font('Helvetica-Bold').fontSize(9).fillColor(AMBER)
