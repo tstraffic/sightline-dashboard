@@ -772,10 +772,14 @@
         <div class="bk2-create-card">
           <h3 class="bk2-create-head">Client Information</h3>
           <div class="bk2-create-grid">
-            <label class="bk2-create-field bk2-create-field--required bk2-create-field--full">
-              <span class="bk2-create-lbl">Client *</span>
-              <input list="bk2-clients" name="client_name" required placeholder="Select Client" autocomplete="off">
-            </label>
+            <div class="bk2-create-field bk2-create-field--required bk2-create-field--full">
+              <span class="bk2-create-lbl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span>Client *</span>
+                <button type="button" id="bk2c-new-client" class="bk2c-mini-add">+ New client</button>
+              </span>
+              <input list="bk2-clients" name="client_name" id="bk2c-client-name" required placeholder="Select Client" autocomplete="off">
+              <input type="hidden" name="client_id" id="bk2c-client-id">
+            </div>
             <label class="bk2-create-field">
               <span class="bk2-create-lbl">Project</span>
               <input list="bk2-jobs" name="site_label" placeholder="Select Project" autocomplete="off">
@@ -800,10 +804,15 @@
               <span class="bk2-create-lbl">Planner</span>
               <select name="planner_id"><option value="">Select one</option></select>
             </label>
-            <label class="bk2-create-field bk2-create-field--required bk2-create-field--full">
-              <span class="bk2-create-lbl">Site contacts *</span>
-              <input type="text" name="site_contacts" placeholder="Type to search contacts…">
-            </label>
+            <div class="bk2-create-field bk2-create-field--required bk2-create-field--full">
+              <span class="bk2-create-lbl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span>Site contacts *</span>
+                <button type="button" id="bk2c-add-contact" class="bk2c-mini-add" disabled>+ Add contact</button>
+              </span>
+              <div id="bk2c-contacts" class="bk2c-contacts">
+                <span id="bk2c-contacts-hint" class="bk2c-contacts-hint">Pick a client first to choose or add site contacts.</span>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1134,6 +1143,202 @@
     </button>
   </footer>
 </aside>
+
+<!-- Inline client + site-contact quick-add (board create form) -->
+<style>
+  .bk2c-mini-add { font-size: 11px; font-weight: 700; color: #2B7FFF; background: none; border: 0; cursor: pointer; padding: 0; }
+  .bk2c-mini-add:hover { text-decoration: underline; }
+  .bk2c-mini-add:disabled { color: #6B7280; cursor: not-allowed; text-decoration: none; }
+  .bk2c-contacts { border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 9px 10px; min-height: 42px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+  .bk2c-contacts-hint { font-size: 12px; color: #9CA3AF; }
+  .bk2c-contact { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #E5E7EB; cursor: pointer; }
+  .bk2c-contact input { width: 15px; height: 15px; accent-color: #2B7FFF; }
+  .bk2c-modal { display: none; position: fixed; inset: 0; z-index: 130; background: rgba(0,0,0,0.55); align-items: center; justify-content: center; padding: 16px; }
+  .bk2c-modal.is-open { display: flex; }
+  .bk2c-modal-card { background: #fff; color: #0F172A; border-radius: 12px; max-width: 430px; width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,0.45); overflow: hidden; }
+  .bk2c-modal-head { padding: 16px 18px; border-bottom: 1px solid #E5E7EB; font-weight: 700; font-size: 16px; }
+  .bk2c-modal-body { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+  .bk2c-modal-foot { padding: 14px 18px; background: #F9FAFB; display: flex; justify-content: flex-end; gap: 8px; }
+  .bk2c-flbl { font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 3px; display: block; }
+  .bk2c-inp { width: 100%; padding: 9px 11px; border: 1px solid #D1D5DB; border-radius: 8px; font-size: 14px; color: #0F172A; }
+  .bk2c-inp:focus { outline: none; border-color: #2B7FFF; box-shadow: 0 0 0 3px rgba(43,127,255,0.15); }
+  .bk2c-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .bk2c-btn { padding: 9px 16px; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; border: 1px solid transparent; }
+  .bk2c-btn--ghost { background: #fff; border-color: #D1D5DB; color: #374151; }
+  .bk2c-btn--primary { background: #2B7FFF; color: #fff; }
+  .bk2c-err { display: none; color: #DC2626; font-size: 13px; }
+</style>
+
+<div id="bk2c-modal-client" class="bk2c-modal">
+  <div class="bk2c-modal-card">
+    <div class="bk2c-modal-head">New client</div>
+    <div class="bk2c-modal-body">
+      <div><label class="bk2c-flbl">Company name *</label><input id="bk2c-cl-name" class="bk2c-inp" type="text" placeholder="e.g. Acme Roads Pty Ltd"></div>
+      <div class="bk2c-row2">
+        <div><label class="bk2c-flbl">ABN</label><input id="bk2c-cl-abn" class="bk2c-inp" type="text" placeholder="optional"></div>
+        <div><label class="bk2c-flbl">Primary contact</label><input id="bk2c-cl-contact" class="bk2c-inp" type="text" placeholder="optional"></div>
+      </div>
+      <div class="bk2c-row2">
+        <div><label class="bk2c-flbl">Contact phone</label><input id="bk2c-cl-phone" class="bk2c-inp" type="tel" placeholder="optional"></div>
+        <div><label class="bk2c-flbl">Contact email</label><input id="bk2c-cl-email" class="bk2c-inp" type="email" placeholder="optional"></div>
+      </div>
+      <p id="bk2c-cl-err" class="bk2c-err"></p>
+    </div>
+    <div class="bk2c-modal-foot">
+      <button type="button" class="bk2c-btn bk2c-btn--ghost" data-bk2c-close="client">Cancel</button>
+      <button type="button" class="bk2c-btn bk2c-btn--primary" id="bk2c-cl-save">Save client</button>
+    </div>
+  </div>
+</div>
+
+<div id="bk2c-modal-contact" class="bk2c-modal">
+  <div class="bk2c-modal-card">
+    <div class="bk2c-modal-head">New site contact</div>
+    <div class="bk2c-modal-body">
+      <p style="font-size:13px;color:#6B7280;margin:-4px 0 2px;">Saved as a contact for <span id="bk2c-ct-client" style="font-weight:600;color:#374151;">the selected client</span>.</p>
+      <div><label class="bk2c-flbl">Full name *</label><input id="bk2c-ct-name" class="bk2c-inp" type="text" placeholder="e.g. Jane Smith"></div>
+      <div><label class="bk2c-flbl">Position / role</label><input id="bk2c-ct-position" class="bk2c-inp" type="text" placeholder="e.g. Site Manager"></div>
+      <div class="bk2c-row2">
+        <div><label class="bk2c-flbl">Phone</label><input id="bk2c-ct-phone" class="bk2c-inp" type="tel" placeholder="04xx xxx xxx"></div>
+        <div><label class="bk2c-flbl">Email</label><input id="bk2c-ct-email" class="bk2c-inp" type="email" placeholder="name@company.com"></div>
+      </div>
+      <p id="bk2c-ct-err" class="bk2c-err"></p>
+    </div>
+    <div class="bk2c-modal-foot">
+      <button type="button" class="bk2c-btn bk2c-btn--ghost" data-bk2c-close="contact">Cancel</button>
+      <button type="button" class="bk2c-btn bk2c-btn--primary" id="bk2c-ct-save">Save contact</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  (function () {
+    var clients = <%- JSON.stringify(clients.map(function (c) { return { id: c.id, name: c.company_name }; })) %>;
+    var byName = {};
+    clients.forEach(function (c) { byName[(c.name || '').toLowerCase()] = c.id; });
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    var nameInput = document.getElementById('bk2c-client-name');
+    var idInput = document.getElementById('bk2c-client-id');
+    var addContactBtn = document.getElementById('bk2c-add-contact');
+    var contactsBox = document.getElementById('bk2c-contacts');
+    var hint = document.getElementById('bk2c-contacts-hint');
+    if (!nameInput || !contactsBox) return; // create form not on this page
+
+    function setHint(t) { contactsBox.innerHTML = ''; var s = document.createElement('span'); s.className = 'bk2c-contacts-hint'; s.textContent = t; contactsBox.appendChild(s); }
+    function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+
+    function renderContacts(list) {
+      contactsBox.innerHTML = '';
+      if (!list.length) { setHint('No contacts yet for this client — use “Add contact”.'); return; }
+      list.forEach(function (c) { addContactChip(c, false); });
+    }
+    function addContactChip(c, checked) {
+      // Drop the hint if present.
+      var h = contactsBox.querySelector('.bk2c-contacts-hint'); if (h) h.remove();
+      if (contactsBox.querySelector('input[value="' + c.id + '"]')) {
+        var ex = contactsBox.querySelector('input[value="' + c.id + '"]'); ex.checked = true; return;
+      }
+      var lbl = document.createElement('label');
+      lbl.className = 'bk2c-contact';
+      lbl.innerHTML = '<input type="checkbox" name="site_contacts" value="' + c.id + '"' + (checked ? ' checked' : '') + '><span>' + esc(c.full_name) + (c.position ? ' <span style="color:#9CA3AF;font-size:11px;">· ' + esc(c.position) + '</span>' : '') + '</span>';
+      contactsBox.appendChild(lbl);
+    }
+
+    var curClientId = null, curClientName = '';
+    function resolveClient() {
+      var nm = (nameInput.value || '').trim();
+      curClientName = nm;
+      var id = byName[nm.toLowerCase()] || '';
+      curClientId = id || null;
+      idInput.value = id || '';
+      addContactBtn.disabled = !curClientId;
+      if (!curClientId) { setHint(nm ? 'Create this client (“+ New client”) to add its contacts.' : 'Pick a client first to choose or add site contacts.'); return; }
+      // Load this client's contacts.
+      setHint('Loading contacts…');
+      fetch('/contacts/api/by-client/' + curClientId, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { renderContacts((j && j.contacts) || []); })
+        .catch(function () { setHint('Could not load contacts.'); });
+    }
+    nameInput.addEventListener('change', resolveClient);
+    nameInput.addEventListener('blur', resolveClient);
+
+    // ---- Modal helpers ----
+    function openModal(id) { document.getElementById(id).classList.add('is-open'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('is-open'); }
+    document.querySelectorAll('[data-bk2c-close]').forEach(function (b) {
+      b.addEventListener('click', function () { closeModal('bk2c-modal-' + b.getAttribute('data-bk2c-close')); });
+    });
+    ['bk2c-modal-client', 'bk2c-modal-contact'].forEach(function (mid) {
+      var m = document.getElementById(mid);
+      m.addEventListener('click', function (e) { if (e.target === m) m.classList.remove('is-open'); });
+    });
+
+    // ---- New client ----
+    document.getElementById('bk2c-new-client').addEventListener('click', function () {
+      ['bk2c-cl-name', 'bk2c-cl-abn', 'bk2c-cl-contact', 'bk2c-cl-phone', 'bk2c-cl-email'].forEach(function (i) { document.getElementById(i).value = ''; });
+      var e = document.getElementById('bk2c-cl-err'); e.style.display = 'none';
+      openModal('bk2c-modal-client');
+      setTimeout(function () { document.getElementById('bk2c-cl-name').focus(); }, 30);
+    });
+    var clSave = document.getElementById('bk2c-cl-save');
+    clSave.addEventListener('click', function () {
+      var name = document.getElementById('bk2c-cl-name').value.trim();
+      var err = document.getElementById('bk2c-cl-err');
+      if (!name) { err.textContent = 'Company name is required.'; err.style.display = 'block'; return; }
+      clSave.disabled = true; clSave.textContent = 'Saving…';
+      fetch('/clients', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'x-csrf-token': csrf }, credentials: 'same-origin',
+        body: JSON.stringify({ company_name: name, company_type: 'client', abn: document.getElementById('bk2c-cl-abn').value.trim(), primary_contact_name: document.getElementById('bk2c-cl-contact').value.trim(), primary_contact_phone: document.getElementById('bk2c-cl-phone').value.trim(), primary_contact_email: document.getElementById('bk2c-cl-email').value.trim() })
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.body.success || !res.body.client) throw new Error((res.body && res.body.error) || 'Failed to create client.');
+          var c = res.body.client;
+          byName[(c.company_name || '').toLowerCase()] = c.id;
+          clients.push({ id: c.id, name: c.company_name });
+          var dl = document.getElementById('bk2-clients');
+          if (dl) { var opt = document.createElement('option'); opt.value = c.company_name; dl.appendChild(opt); }
+          nameInput.value = c.company_name;
+          closeModal('bk2c-modal-client');
+          resolveClient();
+        })
+        .catch(function (e) { err.textContent = e.message; err.style.display = 'block'; })
+        .finally(function () { clSave.disabled = false; clSave.textContent = 'Save client'; });
+    });
+
+    // ---- New contact ----
+    addContactBtn.addEventListener('click', function () {
+      if (!curClientId) return;
+      ['bk2c-ct-name', 'bk2c-ct-position', 'bk2c-ct-phone', 'bk2c-ct-email'].forEach(function (i) { document.getElementById(i).value = ''; });
+      var e = document.getElementById('bk2c-ct-err'); e.style.display = 'none';
+      document.getElementById('bk2c-ct-client').textContent = curClientName || 'the selected client';
+      openModal('bk2c-modal-contact');
+      setTimeout(function () { document.getElementById('bk2c-ct-name').focus(); }, 30);
+    });
+    var ctSave = document.getElementById('bk2c-ct-save');
+    ctSave.addEventListener('click', function () {
+      var name = document.getElementById('bk2c-ct-name').value.trim();
+      var err = document.getElementById('bk2c-ct-err');
+      if (!name) { err.textContent = 'Contact name is required.'; err.style.display = 'block'; return; }
+      if (!curClientId) { err.textContent = 'Select a client first.'; err.style.display = 'block'; return; }
+      ctSave.disabled = true; ctSave.textContent = 'Saving…';
+      fetch('/contacts/api/quick-create', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'x-csrf-token': csrf }, credentials: 'same-origin',
+        body: JSON.stringify({ company_id: curClientId, full_name: name, position: document.getElementById('bk2c-ct-position').value.trim(), phone: document.getElementById('bk2c-ct-phone').value.trim(), email: document.getElementById('bk2c-ct-email').value.trim() })
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.body.success || !res.body.contact) throw new Error((res.body && res.body.error) || 'Failed to save contact.');
+          addContactChip(res.body.contact, true);
+          closeModal('bk2c-modal-contact');
+        })
+        .catch(function (e) { err.textContent = e.message; err.style.display = 'block'; })
+        .finally(function () { ctSave.disabled = false; ctSave.textContent = 'Save contact'; });
+    });
+  })();
+</script>
 
 <datalist id="bk2-clients">
   <% clients.forEach(function (c) { %><option value="<%= c.company_name %>"><% }); %>

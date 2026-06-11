@@ -859,14 +859,19 @@ router.post('/quick', (req, res) => {
   // Parse optional lat/lng from the address autocomplete picker.
   const lat = b.latitude ? parseFloat(b.latitude) : null;
   const lng = b.longitude ? parseFloat(b.longitude) : null;
+  // Site contacts — the create form posts contact ids (one per ticked
+  // contact). Store as a JSON array of ids, same shape the edit form uses.
+  const siteContactsJson = Array.isArray(b.site_contacts)
+    ? JSON.stringify(b.site_contacts.map(String).filter(Boolean))
+    : (b.site_contacts && /^\d+$/.test(String(b.site_contacts).trim()) ? JSON.stringify([String(b.site_contacts).trim()]) : '[]');
   let result;
   try {
     result = db.prepare(`
       INSERT INTO bookings (booking_number, job_id, client_id, title, status, depot,
         start_datetime, end_datetime, site_address, suburb, state, postcode,
         latitude, longitude, marker_is_accurate,
-        created_by_id, booking_type, is_booking_pool)
-      VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regular', 0)
+        created_by_id, booking_type, is_booking_pool, site_contacts)
+      VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regular', 0, ?)
     `).run(
       bookingNumber, jobId, clientId, title, b.depot || '',
       b.start_date + 'T' + startTime + ':00',
@@ -874,7 +879,7 @@ router.post('/quick', (req, res) => {
       b.site_address || b.site_label || '',
       b.suburb || '', b.state || '', b.postcode || '',
       lat, lng, lat ? 1 : 0,
-      req.session.user.id
+      req.session.user.id, siteContactsJson
     );
   } catch (err) {
     console.error('[bookings/quick] INSERT failed:', err.message);
