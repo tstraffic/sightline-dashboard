@@ -11,6 +11,8 @@
  * paper form ("Workers who didn't attend don't sign on").
  */
 const PDFDocument = require('pdfkit');
+const path = require('path');
+const fs = require('fs');
 const { getDb } = require('../db/database');
 
 const GRAY_DARK = '#1F2937';
@@ -20,8 +22,10 @@ const GRAY_LINE = '#E5E7EB';
 const GRAY_BG   = '#F9FAFB';
 const GREEN     = '#059669';
 const AMBER     = '#D97706';
-const BRAND     = '#1D6AE5';
-const ML = 50, MR = 50, MT = 50, MB = 60;
+const BRAND     = '#1D2C8C';     // T&S deep blue (matches the logo swoosh)
+const BRAND_BG  = '#EEF2FF';
+const ML = 48, MR = 48, MT = 46, MB = 56;
+const LOGO_PATH = path.join(__dirname, '..', 'public', 'images', 'logo-colour.png');
 
 const TALK_TYPE_LABELS = {
   pre_start: 'Pre-start',
@@ -64,12 +68,15 @@ function generateToolboxRecordPdf(toolboxId) {
   `).get(toolboxId);
   if (!tb) throw new Error('Toolbox talk not found.');
 
+  // Everyone who was there (selected/present) — signed rows show their
+  // signature, the rest show a pending line. Absent/declined are omitted.
   const attendance = db.prepare(`
     SELECT a.*, cm.full_name, cm.employee_id
     FROM toolbox_attendance a
     JOIN crew_members cm ON cm.id = a.crew_member_id
-    WHERE a.toolbox_id = ? AND a.status IN ('attended','caught_up')
-    ORDER BY a.late_arrival ASC, cm.full_name
+    WHERE a.toolbox_id = ?
+      AND (a.signature_data IS NOT NULL OR a.status IN ('attended','caught_up','attending'))
+    ORDER BY (a.signature_data IS NULL), cm.full_name
   `).all(toolboxId);
   const actions = db.prepare(`
     SELECT * FROM toolbox_actions WHERE toolbox_id = ? ORDER BY id ASC
@@ -101,9 +108,12 @@ function generateToolboxRecordPdf(toolboxId) {
     // recursion. Zero the bottom margin while the footer draws.
     const prevBottom = doc.page.margins.bottom;
     doc.page.margins.bottom = 0;
+    const fy = doc.page.height - 38;
+    doc.moveTo(ML, fy - 6).lineTo(ML + pageW, fy - 6).strokeColor(GRAY_LINE).lineWidth(0.5).stroke();
     doc.font('Helvetica').fontSize(7.5).fillColor(GRAY)
-      .text('TS-SAF-FRM-005  |  Toolbox Talk Record Form  |  Version 1.0  —  Uncontrolled when printed. Generated from Atomis.',
-        ML, doc.page.height - 42, { width: pageW, align: 'center', lineBreak: false });
+      .text('TS-SAF-FRM-005  ·  Toolbox Talk Record  ·  T&S Traffic Control Pty Ltd', ML, fy, { width: pageW, align: 'left', lineBreak: false });
+    doc.font('Helvetica').fontSize(7.5).fillColor(GRAY)
+      .text('Uncontrolled when printed', ML, fy, { width: pageW, align: 'right', lineBreak: false });
     doc.page.margins.bottom = prevBottom;
   };
   doc.on('pageAdded', () => { footer(); y = MT; });
@@ -113,9 +123,10 @@ function generateToolboxRecordPdf(toolboxId) {
   };
   const sectionHeader = (label) => {
     ensure(34);
-    doc.rect(ML, y, pageW, 20).fill(GRAY_BG);
-    doc.font('Helvetica-Bold').fontSize(10).fillColor(GRAY_DARK).text(label, ML + 8, y + 5.5, { lineBreak: false });
-    y += 28;
+    doc.rect(ML, y, pageW, 21).fill(BRAND_BG);
+    doc.rect(ML, y, 3, 21).fill(BRAND);           // brand accent bar
+    doc.font('Helvetica-Bold').fontSize(10).fillColor(BRAND).text(label, ML + 10, y + 6, { lineBreak: false });
+    y += 30;
   };
   const bodyText = (text, opts) => {
     const t = String(text || '').trim() || '—';
@@ -126,17 +137,19 @@ function generateToolboxRecordPdf(toolboxId) {
     y = doc.y + 10;
   };
 
-  // ===== Header =====
-  doc.font('Helvetica-Bold').fontSize(13).fillColor(BRAND).text('T&S', ML, MT, { lineBreak: false });
-  doc.font('Helvetica-Bold').fontSize(18).fillColor(GRAY_DARK)
-    .text('TOOLBOX TALK RECORD', ML, MT, { width: pageW, align: 'right' });
-  doc.font('Helvetica').fontSize(9).fillColor(GRAY)
-    .text('T&S Traffic Control Pty Ltd', ML, MT + 24, { width: pageW, align: 'right' })
-    .text('TS-SAF-FRM-005  |  Toolbox Talk Record Form  |  Version 1.0', ML, doc.y, { width: pageW, align: 'right' })
-    .text(`Atomis Record ID: TBX-${tb.id}`, ML, doc.y, { width: pageW, align: 'right' });
-  y = MT + 64;
-  doc.moveTo(ML, y).lineTo(ML + pageW, y).strokeColor(GRAY_LINE).lineWidth(1).stroke();
-  y += 12;
+  // ===== Header — official T&S logo (left) + title block (right) =====
+  try {
+    if (fs.existsSync(LOGO_PATH)) doc.image(LOGO_PATH, ML, MT, { fit: [92, 48] });
+  } catch (e) { /* fall back to text below if the logo can't load */ }
+  doc.font('Helvetica-Bold').fontSize(19).fillColor(GRAY_DARK)
+    .text('TOOLBOX TALK RECORD', ML, MT + 2, { width: pageW, align: 'right' });
+  doc.font('Helvetica').fontSize(8.5).fillColor(GRAY)
+    .text('T&S Traffic Control Pty Ltd', ML, MT + 26, { width: pageW, align: 'right' })
+    .text('TS-SAF-FRM-005  ·  Toolbox Talk Record  ·  Version 1.0', ML, doc.y + 1, { width: pageW, align: 'right' })
+    .text(`Record ID: TBX-${tb.id}`, ML, doc.y + 1, { width: pageW, align: 'right' });
+  y = MT + 60;
+  doc.moveTo(ML, y).lineTo(ML + pageW, y).strokeColor(BRAND).lineWidth(1.5).stroke();
+  y += 14;
 
   // ===== 1. Talk Details =====
   sectionHeader('1. Talk Details');
@@ -202,62 +215,59 @@ function generateToolboxRecordPdf(toolboxId) {
   }
 
   // ===== 6. Attendance / Sign-On =====
-  sectionHeader('6. Attendance / Sign-On');
-  const rowH = 36;
-  const colName = 0.42, colStatus = 0.24;
+  const signedTotal = attendance.filter(a => sigBuffer(a.signature_data)).length;
+  sectionHeader('6. Attendance — Sign-On  (' + signedTotal + ' of ' + attendance.length + ' signed)');
+  const rowH = 46;
+  const colName = 0.40;          // left column = name + meta; rest = signature
+  const numW = 22;               // row number gutter
   const drawAttHeader = () => {
     ensure(rowH);
-    doc.rect(ML, y, pageW, 18).fill(GRAY_BG);
-    doc.font('Helvetica-Bold').fontSize(8.5).fillColor(GRAY_DARK);
-    doc.text('Worker Name', ML + 4, y + 5, { lineBreak: false });
-    doc.text('Attendance', ML + colName * pageW + 4, y + 5, { lineBreak: false });
-    doc.text('Signature', ML + (colName + colStatus) * pageW + 4, y + 5, { lineBreak: false });
-    y += 18;
+    doc.rect(ML, y, pageW, 19).fill(GRAY_BG);
+    doc.font('Helvetica-Bold').fontSize(8.5).fillColor(GRAY_MED);
+    doc.text('#', ML + 6, y + 5.5, { lineBreak: false });
+    doc.text('Worker', ML + numW + 4, y + 5.5, { lineBreak: false });
+    doc.text('Signature', ML + colName * pageW + 6, y + 5.5, { lineBreak: false });
+    y += 19;
   };
   if (!attendance.length) {
-    bodyText('No attendance recorded.');
+    bodyText('No attendees selected yet.');
   } else {
     drawAttHeader();
-    for (const a of attendance) {
+    attendance.forEach((a, idx) => {
       if (y + rowH > doc.page.height - MB - 20) { doc.addPage(); drawAttHeader(); }
-      doc.font('Helvetica-Bold').fontSize(9.5).fillColor(GRAY_DARK)
-        .text(a.full_name, ML + 4, y + 8, { width: colName * pageW - 8, lineBreak: false });
-      if (a.employee_id) {
+      // zebra striping
+      if (idx % 2 === 1) doc.rect(ML, y, pageW, rowH).fill(GRAY_BG);
+      // number
+      doc.font('Helvetica').fontSize(8.5).fillColor(GRAY).text(String(idx + 1), ML + 6, y + rowH / 2 - 5, { lineBreak: false });
+      // name + meta
+      doc.font('Helvetica-Bold').fontSize(10).fillColor(GRAY_DARK)
+        .text(a.full_name, ML + numW + 4, y + 8, { width: colName * pageW - numW - 8, lineBreak: false });
+      const metaBits = [];
+      if (a.employee_id) metaBits.push(a.employee_id);
+      if (a.late_arrival) metaBits.push('Late' + (a.late_arrival_time ? ' ' + a.late_arrival_time : ''));
+      if (a.signed_off_at) metaBits.push('Signed ' + dateTimePart(a.signed_off_at));
+      if (metaBits.length) {
         doc.font('Helvetica').fontSize(7.5).fillColor(GRAY)
-          .text(a.employee_id, ML + 4, y + 21, { lineBreak: false });
+          .text(metaBits.join('  ·  '), ML + numW + 4, y + 24, { width: colName * pageW - numW - 8, lineBreak: false });
       }
-      let statusLabel, statusColor;
-      if (a.late_arrival) {
-        statusLabel = 'Late' + (a.late_arrival_time ? ` — ${a.late_arrival_time}` : '');
-        statusColor = AMBER;
-      } else if (a.status === 'caught_up') {
-        statusLabel = 'Caught up after talk';
-        statusColor = AMBER;
-      } else {
-        statusLabel = 'Attended';
-        statusColor = GREEN;
-      }
-      doc.font('Helvetica-Bold').fontSize(8.5).fillColor(statusColor)
-        .text(statusLabel, ML + colName * pageW + 4, y + 8, { width: colStatus * pageW - 8, lineBreak: false });
-      if (a.signed_off_at) {
-        doc.font('Helvetica').fontSize(7).fillColor(GRAY)
-          .text('Signed ' + dateTimePart(a.signed_off_at), ML + colName * pageW + 4, y + 20, { width: colStatus * pageW - 8, lineBreak: false });
-      }
+      // signature box
+      const sigX = ML + colName * pageW + 6;
+      const sigW = pageW - colName * pageW - 12;
       const sig = sigBuffer(a.signature_data);
-      const sigX = ML + (colName + colStatus) * pageW + 4;
       if (sig) {
-        try { doc.image(sig, sigX, y + 3, { fit: [(1 - colName - colStatus) * pageW - 12, rowH - 6] }); }
-        catch (e) {
-          doc.font('Helvetica').fontSize(8).fillColor(GRAY).text('(signature on file)', sigX, y + 12, { lineBreak: false });
-        }
+        try { doc.image(sig, sigX, y + 5, { fit: [sigW, rowH - 12], align: 'left', valign: 'center' }); }
+        catch (e) { doc.font('Helvetica').fontSize(8).fillColor(GRAY).text('(signature on file)', sigX, y + rowH / 2 - 5, { lineBreak: false }); }
+        // baseline under the signature
+        doc.moveTo(sigX, y + rowH - 7).lineTo(sigX + sigW, y + rowH - 7).strokeColor(GRAY_LINE).lineWidth(0.5).stroke();
       } else {
-        doc.font('Helvetica').fontSize(8).fillColor(GRAY)
-          .text(a.recorded_by_id ? 'Marked off by office' : '—', sigX, y + 12, { lineBreak: false });
+        doc.font('Helvetica-Oblique').fontSize(8).fillColor(AMBER)
+          .text('Signature pending', sigX, y + rowH / 2 - 5, { lineBreak: false });
+        doc.moveTo(sigX, y + rowH - 7).lineTo(sigX + sigW, y + rowH - 7).strokeColor(GRAY_LINE).lineWidth(0.5).dash(2, { space: 2 }).stroke().undash();
       }
       y += rowH;
       doc.moveTo(ML, y).lineTo(ML + pageW, y).strokeColor(GRAY_LINE).lineWidth(0.5).stroke();
-    }
-    y += 10;
+    });
+    y += 12;
   }
 
   // ===== 7. Presenter Sign-off & Atomis Record =====
