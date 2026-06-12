@@ -16,105 +16,23 @@
     </div>
   </div>
 
-  <!-- Viewer body — a normal scrollable div (NOT an iframe: iOS Safari won't
-       scroll a PDF iframe). PDFs render page-by-page to canvases like the
-       SWMS/SOP viewer, so the whole document scrolls smoothly. -->
+  <!-- Scrollable body. PDFs and Word docs render via the shared
+       worker-pdf-viewer (self-hosted pdfjs from /vendor/pdfjs, page-by-page
+       canvases) — the same engine the SWMS/SOP pages use, which scrolls
+       smoothly on iOS where an <iframe> won't. Images render inline. -->
   <div id="docScroll" class="flex-1 min-h-0"
        style="background:#1A1D24;overflow-y:auto;-webkit-overflow-scrolling:touch;">
-    <% if (kind === 'pdf') { %>
-      <div id="pdfTarget" class="pdf-render-target px-3 py-3 space-y-3" data-pdf-url="<%= fileUrl %>"
-           style="max-width:900px;margin:0 auto;">
-        <p class="text-sm text-center py-8" style="color:rgba(255,255,255,0.5);">Loading document…</p>
-      </div>
-    <% } else if (kind === 'image') { %>
+    <% if (kind === 'image') { %>
       <div class="w-full flex items-start justify-center p-3">
         <img src="<%= fileUrl %>" alt="<%= docName %>" style="max-width:100%;height:auto;border-radius:8px;">
       </div>
     <% } else { %>
-      <div class="w-full flex flex-col items-center justify-center text-center px-8" style="min-height:60vh;">
-        <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style="background:rgba(255,255,255,0.06);">
-          <svg class="w-8 h-8" style="color:rgba(255,255,255,0.5);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-        </div>
-        <p class="text-sm font-semibold" style="color:rgba(255,255,255,0.85);"><%= docName %></p>
-        <p class="text-xs mt-1 mb-4" style="color:rgba(255,255,255,0.5);">This file type can’t be previewed in the app.</p>
-        <a href="<%= fileUrl %>" download class="px-4 py-2.5 rounded-lg text-sm font-semibold" style="background:#10B981;color:#fff;">Download to open</a>
-      </div>
+      <div class="pdf-viewer" data-pdf-src="<%= fileUrl %>" data-pdf-name="<%= docName %>" data-pdf-max-width="900"
+           style="padding:12px;max-width:900px;margin:0 auto;"></div>
     <% } %>
   </div>
 </div>
 
-<% if (kind === 'pdf') { %>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script>
-  (function () {
-    if (window.pdfjsLib) {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-    var target = document.getElementById('pdfTarget');
-    if (!target) return;
-
-    function fallback(msg) {
-      target.innerHTML = '<p class="text-sm text-center py-8" style="color:#FCA5A5;">' + msg +
-        ' <a href="' + target.dataset.pdfUrl + '" download style="color:#10B981;text-decoration:underline;">Download it</a> instead.</p>';
-    }
-
-    async function render() {
-      if (!window.pdfjsLib) return fallback('Couldn’t load the PDF viewer.');
-      var url = target.dataset.pdfUrl;
-      var isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
-      var dprCap = isMobile ? 1.5 : 2;
-      var scaleCap = isMobile ? 1.4 : 2;
-      try {
-        var pdf = await window.pdfjsLib.getDocument({ url: url, disableAutoFetch: false, disableStream: false }).promise;
-        target.innerHTML = '';
-        var containerWidth = target.clientWidth || 600;
-        var dpr = Math.min(window.devicePixelRatio || 1, dprCap);
-        var pages = [];
-        for (var n = 1; n <= pdf.numPages; n++) {
-          var page = await pdf.getPage(n);
-          var vp = page.getViewport({ scale: 1 });
-          var scale = Math.min(scaleCap, containerWidth / vp.width);
-          var scaled = page.getViewport({ scale: scale });
-          var canvas = document.createElement('canvas');
-          canvas.width = scaled.width * dpr;
-          canvas.height = scaled.height * dpr;
-          canvas.style.width = '100%';
-          canvas.style.height = 'auto';
-          canvas.className = 'block w-full rounded-lg shadow-sm bg-white';
-          target.appendChild(canvas);
-          pages.push({ canvas: canvas, page: page, scaled: scaled, rendered: false });
-        }
-        var renderOne = async function (e) {
-          if (e.rendered) return;
-          e.rendered = true;
-          var ctx = e.canvas.getContext('2d');
-          ctx.scale(dpr, dpr);
-          try { await e.page.render({ canvasContext: ctx, viewport: e.scaled }).promise; }
-          catch (err) { console.error('page render failed', err); }
-        };
-        if (!('IntersectionObserver' in window) || pages.length <= 3) {
-          for (var i = 0; i < pages.length; i++) await renderOne(pages[i]);
-          return;
-        }
-        var io = new IntersectionObserver(function (entries) {
-          entries.forEach(function (ent) {
-            if (!ent.isIntersecting) return;
-            var idx = pages.findIndex(function (p) { return p.canvas === ent.target; });
-            if (idx >= 0) {
-              renderOne(pages[idx]);
-              if (idx + 1 < pages.length) renderOne(pages[idx + 1]);
-              io.unobserve(ent.target);
-            }
-          });
-        }, { rootMargin: '500px 0px' });
-        pages.forEach(function (p) { io.observe(p.canvas); });
-        await renderOne(pages[0]);
-      } catch (err) {
-        console.error('PDF render failed', err);
-        fallback('Couldn’t display this PDF.');
-      }
-    }
-    render();
-  })();
-</script>
+<% if (kind !== 'image') { %>
+<script src="/js/worker-pdf-viewer.js?v=1"></script>
 <% } %>
