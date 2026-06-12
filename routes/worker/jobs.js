@@ -39,6 +39,50 @@ function getShiftTemplates(db, crewMemberId, allocationId) {
   } catch (e) { return []; }
 }
 
+// Vehicles on a booking with the crew grouped under each one — who's
+// riding in what (booking_crew.assigned_vehicle_id), who's driving
+// (booking_vehicles.crew_member_id), and who's on site without a vehicle.
+// Returns null when the booking has no vehicles so views can skip the
+// whole block.
+function getBookingVehicleGroups(db, bookingId, currentCrewId) {
+  try {
+    const vehicles = db.prepare(`
+      SELECT bv.id, bv.vehicle_name, bv.registration, bv.crew_member_id AS driver_id,
+             fv.asset_id AS fleet_asset_id, fv.rego AS fleet_rego
+      FROM booking_vehicles bv
+      LEFT JOIN vehicles fv ON fv.id = bv.fleet_vehicle_id
+      WHERE bv.booking_id = ?
+      ORDER BY bv.id
+    `).all(bookingId);
+    if (!vehicles.length) return null;
+    const crew = db.prepare(`
+      SELECT bc.crew_member_id, bc.assigned_vehicle_id, bc.role_on_site, bc.status,
+             cm.full_name, cm.phone, cm.portal_role
+      FROM booking_crew bc
+      JOIN crew_members cm ON cm.id = bc.crew_member_id
+      WHERE bc.booking_id = ? AND bc.status != 'declined'
+      ORDER BY CASE cm.portal_role WHEN 'supervisor' THEN 0 WHEN 'team_leader' THEN 1 ELSE 2 END, cm.full_name
+    `).all(bookingId);
+    const decorate = (c, v) => ({
+      ...c,
+      is_driver: !!v && c.crew_member_id === v.driver_id,
+      is_you: !!currentCrewId && c.crew_member_id === currentCrewId,
+    });
+    const groups = vehicles.map(v => ({
+      vehicle: {
+        id: v.id,
+        name: v.vehicle_name || v.fleet_asset_id || 'Vehicle',
+        rego: v.registration || v.fleet_rego || '',
+      },
+      members: crew.filter(c => c.assigned_vehicle_id === v.id).map(c => decorate(c, v)),
+    }));
+    const onFoot = crew
+      .filter(c => !c.assigned_vehicle_id || !vehicles.some(v => v.id === c.assigned_vehicle_id))
+      .map(c => decorate(c, null));
+    return { groups, onFoot };
+  } catch (e) { return null; }
+}
+
 // Worker-facing sign/view URL for the shift an allocation belongs to.
 function docketUrlForAllocation(db, allocationId) {
   const shift = resolveShift(db, { allocationId });
@@ -510,6 +554,7 @@ router.get('/jobs/:id', (req, res) => {
     supervisorPhone,
     formStatus,
     shiftTemplates,
+    vehicleGroups: allocation.booking_id ? getBookingVehicleGroups(db, allocation.booking_id, worker.id) : null,
     docket,
     jobDocuments,
   });
@@ -820,6 +865,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
     startDay, startDate, startTime, endTime,
     allocation, formStatus, docket, jobDocuments,
     shiftTemplates: allocation ? getShiftTemplates(db, worker.id, allocation.id) : [],
+    vehicleGroups: getBookingVehicleGroups(db, booking.id, worker.id),
     docketSignUrl: '/w/dockets/shift/' + booking.id,
     myTasks, teamTasks,
   });

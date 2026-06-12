@@ -263,6 +263,63 @@
     </div>
     <% } %>
 
+    <!-- Vehicles + who's riding in each (booking-backed shifts). Drivers
+         flagged; anyone not assigned to a ute shows under "On site". -->
+    <% if (typeof vehicleGroups !== 'undefined' && vehicleGroups) { %>
+      <%
+        var vgSections = vehicleGroups.groups.map(function (g) { return { vehicle: g.vehicle, members: g.members }; });
+        if (vehicleGroups.onFoot.length) vgSections.push({ vehicle: null, members: vehicleGroups.onFoot });
+      %>
+      <div class="bg-white border border-gray-200 rounded-xl p-4">
+        <h2 class="text-xs font-bold text-brand-600 uppercase tracking-wider mb-3">Vehicles</h2>
+        <div class="space-y-3">
+          <% vgSections.forEach(function (sec) { %>
+            <div class="rounded-lg border border-gray-200 overflow-hidden">
+              <% if (sec.vehicle) { %>
+                <div class="flex items-center gap-2.5 px-3 py-2 bg-blue-50 border-b border-blue-100">
+                  <span class="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><rect x="1" y="6" width="14" height="10" rx="1"/><path d="M15 9h4l3 3v4h-3"/><circle cx="6" cy="18" r="2"/><circle cx="17.5" cy="18" r="2"/></svg>
+                  </span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-gray-900 truncate"><%= sec.vehicle.name %></p>
+                    <% if (sec.vehicle.rego) { %><p class="text-[11px] font-mono tracking-wider text-gray-500"><%= sec.vehicle.rego.toUpperCase() %></p><% } %>
+                  </div>
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 shrink-0"><%= sec.members.length %> aboard</span>
+                </div>
+              <% } else { %>
+                <div class="flex items-center gap-2.5 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                  <span class="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  </span>
+                  <p class="text-sm font-bold text-gray-700 flex-1">On site — not in a vehicle</p>
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0"><%= sec.members.length %></span>
+                </div>
+              <% } %>
+              <% if (sec.members.length === 0) { %>
+                <p class="px-3 py-2 text-xs italic text-gray-400">No crew assigned to this vehicle yet.</p>
+              <% } %>
+              <% sec.members.forEach(function (c) { %>
+                <div class="flex items-center gap-2.5 px-3 py-2 border-b border-gray-50 last:border-b-0">
+                  <div class="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 <%= c.is_you ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-500' %>">
+                    <%= c.full_name.split(' ').map(function(n){return n[0]}).join('').slice(0,2) %>
+                  </div>
+                  <p class="text-sm text-gray-900 flex-1 min-w-0 truncate">
+                    <%= c.full_name %><% if (c.is_you) { %> <span class="text-brand-600 font-semibold">(you)</span><% } %>
+                  </p>
+                  <% if (c.is_driver) { %>
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-blue-50 text-blue-700 ring-1 ring-blue-600/10 shrink-0">
+                      <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3" stroke-linecap="round"/></svg>
+                      Driver
+                    </span>
+                  <% } %>
+                </div>
+              <% }) %>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
+
     <!-- Crew and Resources -->
     <div class="bg-white border border-gray-200 rounded-xl p-4">
       <h2 class="text-xs font-bold text-brand-600 uppercase tracking-wider mb-3">Crew and resources</h2>
