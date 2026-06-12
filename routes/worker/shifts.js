@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../../db/database');
 const { geocodeQuery } = require('../../services/bookingGeocode');
+const { maybePromoteToGreenToGo } = require('../../lib/bookingLifecycle');
+const bookingNotify = require('../../services/bookingNotify');
 
 // GET /w/shifts — Week-paginated shift list (Mon → Sun).
 // `?week=YYYY-MM-DD` jumps to the week containing that ISO date. Without
@@ -28,7 +30,9 @@ router.get('/shifts', (req, res) => {
   const weekEndIso   = isoDate(sunday);
   const todayIso     = isoDate(new Date());
 
-  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','completed','on_hold'];
+  // Excludes 'unconfirmed' — crew don't see a shift until the allocator
+  // confirms the booking (matches routes/worker/jobs.js).
+  const VISIBLE_BOOKING_STATUSES = ['confirmed','green_to_go','in_progress','completed','on_hold'];
 
   // Allocations for this week — LEFT JOIN both jobs and bookings so
   // booking-only allocations (post mig 142) still render full data.
@@ -267,6 +271,15 @@ router.post('/shifts/:id/confirm', (req, res) => {
   if (allocation.booking_id) {
     db.prepare("UPDATE booking_crew SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP WHERE booking_id = ? AND crew_member_id = ?")
       .run(allocation.booking_id, worker.id);
+
+    // Last one in? → booking goes green_to_go and the whole crew is notified.
+    try {
+      if (maybePromoteToGreenToGo(db, allocation.booking_id)) {
+        const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(allocation.booking_id);
+        const crewIds = bookingNotify.activeCrewIds(db, allocation.booking_id);
+        if (bk && crewIds.length) bookingNotify.notifyGreenToGo(crewIds, bk);
+      }
+    } catch (e) { console.error('[GTG] promote failed for booking', allocation.booking_id, ':', e.message); }
   }
   req.flash('success', 'Shift confirmed.');
   res.redirect('/w/shifts/' + req.params.id);

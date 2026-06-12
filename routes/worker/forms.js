@@ -117,6 +117,21 @@ router.get('/forms', (req, res) => {
   const hasTodaysPrestart = todaysForms.some(f => f.form_type === 'prestart');
   const hasTodaysTake5 = todaysForms.some(f => f.form_type === 'take5');
 
+  // Admin-built form templates published to workers. The 5 Job-Pack shift
+  // checklists are excluded — they're opened from a shift's Forms tab so
+  // the submission lands against the right allocation.
+  const JOB_PACK_KEYS = ['vehicle_prestart', 'risk_toolbox', 'tc_prestart', 'team_leader', 'post_shift_vehicle'];
+  let formTemplates = [];
+  try {
+    formTemplates = db.prepare(`
+      SELECT id, name, description FROM checklist_templates
+      WHERE worker_visible = 1 AND status = 'active'
+        AND published_revision IS NOT NULL AND published_revision > 0
+        AND (system_key IS NULL OR system_key NOT IN (${JOB_PACK_KEYS.map(() => '?').join(',')}))
+      ORDER BY sort_order ASC, name ASC
+    `).all(...JOB_PACK_KEYS);
+  } catch (e) { /* templates table predates migration 105 */ }
+
   res.render('worker/forms/index', {
     title: 'Forms',
     currentPage: 'forms',
@@ -125,12 +140,33 @@ router.get('/forms', (req, res) => {
     shiftStatus,
     hasTodaysPrestart,
     hasTodaysTake5,
+    formTemplates,
   });
 });
+
+// Legacy form URLs → their template-driven replacements. The old hardcoded
+// EJS forms are superseded by admin-editable templates (migration 265); we
+// keep the URLs alive because they're bookmarked / linked from old pushes.
+// If the template doesn't exist (migration not run), fall through to the
+// legacy renderer below.
+function redirectToTemplate(db, res, systemKey) {
+  try {
+    const t = db.prepare(`
+      SELECT id FROM checklist_templates
+      WHERE system_key = ? AND status = 'active' AND worker_visible = 1
+        AND published_revision IS NOT NULL AND published_revision > 0
+    `).get(systemKey);
+    if (t) { res.redirect('/w/forms/custom/' + t.id); return true; }
+  } catch (e) { /* fall through to legacy form */ }
+  return false;
+}
 
 // GET /w/forms/prestart
 router.get('/forms/prestart', (req, res) => {
   const db = getDb();
+  // The signage variant became its own editable template (migration 265);
+  // the plain prestart stays as the legacy renderer.
+  if (req.query.type === 'signage' && redirectToTemplate(db, res, 'signage_inspection')) return;
   const worker = req.session.worker;
   const today = sydneyToday();
 
@@ -221,6 +257,10 @@ router.post('/forms/take5', (req, res) => {
 
 // GET /w/forms/incident
 router.get('/forms/incident', (req, res) => {
+  const db = getDb();
+  const byType = { bullying: 'bullying_harassment', vehicle: 'vehicle_incident' };
+  const systemKey = byType[String(req.query.type || '')] || 'incident_report';
+  if (redirectToTemplate(db, res, systemKey)) return;
   res.render('worker/forms/incident', {
     title: 'Report Incident',
     currentPage: 'forms',
@@ -268,6 +308,7 @@ router.post('/forms/incident', (req, res) => {
 
 // GET /w/forms/hazard
 router.get('/forms/hazard', (req, res) => {
+  if (redirectToTemplate(getDb(), res, 'near_miss')) return;
   res.render('worker/forms/hazard', {
     title: 'Report Hazard',
     currentPage: 'forms',
@@ -292,6 +333,7 @@ router.post('/forms/hazard', (req, res) => {
 
 // GET /w/forms/equipment
 router.get('/forms/equipment', (req, res) => {
+  if (redirectToTemplate(getDb(), res, 'pre_delivery_vehicle')) return;
   res.render('worker/forms/equipment', {
     title: 'Equipment Check',
     currentPage: 'forms',

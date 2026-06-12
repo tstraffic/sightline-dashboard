@@ -16,6 +16,7 @@ const { sidebarBadges } = require('./middleware/sidebarBadges');
 const { chatUnreadCountMiddleware } = require('./middleware/chat');
 const { initVapid } = require('./services/pushNotification');
 const { sendUpcomingShiftReminders } = require('./services/shiftReminders');
+const { advanceShiftStatuses, sendInShiftFormsReminders } = require('./services/shiftAdvance');
 const { sendCertExpiryReminders } = require('./services/certExpiryReminders');
 const { sendSwmsExpiryReminders } = require('./services/swmsExpiryReminders');
 const { sendInductionReminders } = require('./services/inductionReminders');
@@ -446,6 +447,16 @@ app.listen(PORT, () => {
   // every 15 min (matches the alloc / booking-roster cadence).
   sendUpcomingShiftReminders();
   setInterval(sendUpcomingShiftReminders, 15 * 60 * 1000);
+
+  // Time-based booking lifecycle: roll shifts to in_progress once their start
+  // time passes (silent), and nudge crew to submit forms ~2h into the shift.
+  // Same 15-min cadence as the reminders.
+  const runShiftAdvance = () => {
+    try { advanceShiftStatuses(); } catch (e) { console.error('[cron] advanceShiftStatuses error:', e.message); }
+    sendInShiftFormsReminders().catch(e => console.error('[cron] in-shift forms reminder error:', e.message));
+  };
+  runShiftAdvance();
+  setInterval(runShiftAdvance, 15 * 60 * 1000);
 
   // Daily digest emails — check every 15 min, send at 7:00 AM
   setInterval(() => {

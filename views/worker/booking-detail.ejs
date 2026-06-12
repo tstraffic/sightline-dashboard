@@ -196,7 +196,31 @@
           </a>
         <% }) %>
       <% } %>
+
+      <!-- myROL quick link — always shown so crew can activate/deactivate
+           their Road Occupancy Licence on the NSW Transport portal. -->
+      <div class="mt-4 pt-3" style="border-top:1px solid rgba(255,255,255,0.08);">
+        <p class="text-xs text-gray-500 mb-1.5">Road Occupancy Licence (ROL)</p>
+        <div class="flex items-center gap-2 px-3 py-2.5 rounded-lg" style="background:rgba(96,165,250,0.10);border:1px solid rgba(96,165,250,0.25);">
+          <a href="https://myrol.transport.nsw.gov.au" target="_blank" rel="noopener"
+             class="flex-1 min-w-0 text-sm font-semibold truncate" style="color:#60A5FA;">myrol.transport.nsw.gov.au</a>
+          <button type="button" data-myrol-copy="https://myrol.transport.nsw.gov.au"
+                  class="shrink-0 px-2.5 py-1 rounded-md text-xs font-bold"
+                  style="background:rgba(96,165,250,0.18);color:#93C5FD;border:1px solid rgba(96,165,250,0.35);">Copy</button>
+        </div>
+        <p class="text-[11px] text-gray-500 mt-1">Remember to deactivate your ROL here once the shift is done.</p>
+      </div>
     </div>
+    <script>
+      document.querySelectorAll('[data-myrol-copy]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var url = btn.getAttribute('data-myrol-copy');
+          var done = function () { var t = btn.textContent; btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = t; }, 1500); };
+          if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done).catch(done); }
+          else { var ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta); done(); }
+        });
+      });
+    </script>
   <% } %>
 
   <!-- TASKS TAB -->

@@ -95,6 +95,42 @@
       <% }) %>
     </div>
 
+    <!-- Other shift forms — admin-built templates flagged "show on shift"
+         (created/edited on /checklists). Rendered from the latest published
+         revision via the custom-form engine. -->
+    <% if (typeof shiftTemplates !== 'undefined' && shiftTemplates && shiftTemplates.length) { %>
+    <div class="rounded-xl overflow-hidden" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
+      <div class="px-3.5 pt-3 pb-1">
+        <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Other shift forms</h3>
+        <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Added by the office for every shift</p>
+      </div>
+      <% shiftTemplates.forEach(function (t) { var done = t.done_count > 0; var c = jpRow(done, 'recommended'); %>
+        <a href="/w/forms/custom/<%= t.id %>?allocationId=<%= allocation.id %>"
+           class="flex items-center justify-between py-2.5 px-3.5" style="border-top:1px solid rgba(255,255,255,0.05);">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                 style="background: <%= c.bg %>; color: <%= c.fg %>;">
+              <% if (done) { %>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              <% } else { %>
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              <% } %>
+            </div>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-white truncate"><%= t.name %></p>
+              <% if (done) { %>
+                <p class="text-[11px]" style="color:#34D399;">Submitted<%= t.done_count > 1 ? ' ×' + t.done_count : '' %></p>
+              <% } else if (t.description) { %>
+                <p class="text-[11px] truncate" style="color:rgba(255,255,255,0.45);"><%= t.description %></p>
+              <% } %>
+            </div>
+          </div>
+          <svg class="w-4 h-4 shrink-0" style="color:rgba(255,255,255,0.4);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </a>
+      <% }) %>
+    </div>
+    <% } %>
+
     <!-- Docket -->
     <a href="<%= typeof docketSignUrl !== 'undefined' && docketSignUrl ? docketSignUrl : ('/w/dockets/sign/' + allocation.id) %>"
        class="flex items-center justify-between py-2.5 px-3 rounded-lg mt-2" style="background:linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.06));border:1px solid rgba(16,185,129,0.35);">

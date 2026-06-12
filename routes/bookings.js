@@ -1433,8 +1433,10 @@ router.post('/:id', (req, res) => {
     // Diff against current crew — keeps existing rows (and their
     // confirmed/declined statuses) instead of wiping + re-adding everyone.
     const diff = diffCrew(db, parseInt(req.params.id, 10), validIds, cid => roleById[cid], { userId: req.session.user.id });
-    const bkNow = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
-    if (bkNow) {
+    const bkNow = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+    // Only ping crew once the booking is confirmed — a worker assigned to an
+    // unconfirmed booking hears nothing until the allocator commits it.
+    if (bkNow && bookingNotify.isNotifiable(bkNow.status)) {
       if (diff.added.length) bookingNotify.notifyAssigned(diff.added, bkNow);
       if (diff.removed.length) bookingNotify.notifyRemoved(diff.removed, bkNow);
     }
@@ -1445,8 +1447,9 @@ router.post('/:id', (req, res) => {
   syncAllocationsToBooking(db, parseInt(req.params.id, 10));
   const newStartDt = b.start_date + 'T' + b.start_time + ':00';
   if (existing.start_datetime && existing.start_datetime !== newStartDt) {
-    const bkAfter = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
-    if (bkAfter) bookingNotify.notifyRescheduled(bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10)), bkAfter, existing.start_datetime);
+    const bkAfter = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+    // Don't announce a time change for a shift the crew were never told about.
+    if (bkAfter && bookingNotify.isNotifiable(bkAfter.status)) bookingNotify.notifyRescheduled(bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10)), bkAfter, existing.start_datetime);
   }
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Updated booking ${existing.booking_number}`, req });
@@ -1491,9 +1494,18 @@ router.post('/:id/status', (req, res) => {
     const crewIds = bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10));
     cascadeCancel(db, parseInt(req.params.id, 10));
     const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
-    if (bk) bookingNotify.notifyCancelled(crewIds, bk);
+    // Only tell crew a shift is cancelled if they'd already been told it was on
+    // (i.e. it had reached confirmed). Cancelling an unconfirmed booking is silent.
+    if (bk && bookingNotify.isNotifiable(existing.status)) bookingNotify.notifyCancelled(crewIds, bk);
   } else if (CANCEL_LIKE.includes(existing.status) && !CANCEL_LIKE.includes(newStatus)) {
     cascadeRestore(db, parseInt(req.params.id, 10));
+  } else if (!bookingNotify.isNotifiable(existing.status) && bookingNotify.isNotifiable(newStatus)) {
+    // The allocator just committed the booking (e.g. unconfirmed → confirmed).
+    // This is the moment crew should hear about their shift — push the
+    // assignment notice to everyone currently on it who hasn't declined.
+    const crewIds = bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10));
+    const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
+    if (bk && crewIds.length) bookingNotify.notifyAssigned(crewIds, bk);
   }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Status: ${existing.status} → ${newStatus} on ${existing.booking_number}`, req });
   if (isJson) return res.json({ ok: true, status: newStatus });
@@ -1510,9 +1522,12 @@ router.post('/:id/delete', (req, res) => {
   // A deleted booking's shifts must drop off the worker portal too — and
   // the crew should hear about it (a delete is a cancellation to them).
   const delCrewIds = bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10));
+  const delStatus = (db.prepare('SELECT status FROM bookings WHERE id=?').get(req.params.id) || {}).status;
   cascadeCancel(db, parseInt(req.params.id, 10));
   const delBk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
-  if (delBk) bookingNotify.notifyCancelled(delCrewIds, delBk);
+  // Deleting a booking is a cancellation to the crew — but only worth a push
+  // if they'd been told the shift was on (confirmed or later).
+  if (delBk && bookingNotify.isNotifiable(delStatus)) bookingNotify.notifyCancelled(delCrewIds, delBk);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'booking', entityId: req.params.id, details: `Soft-deleted ${booking.booking_number}`, req });
   if (isJson) return res.json({ ok: true });
   req.flash('success', `Booking ${booking.booking_number} deleted.`); res.redirect('/bookings');
@@ -1554,7 +1569,7 @@ router.post('/:id/crew', (req, res) => {
   // date. Returned in the JSON response too so the board can toast it (the
   // flash was invisible to AJAX callers).
   let conflictWarning = null;
-  const thisBooking = db.prepare("SELECT start_datetime, end_datetime, booking_number FROM bookings WHERE id=?").get(req.params.id);
+  const thisBooking = db.prepare("SELECT start_datetime, end_datetime, booking_number, status FROM bookings WHERE id=?").get(req.params.id);
   if (thisBooking && thisBooking.start_datetime) {
     const bookingDate = thisBooking.start_datetime.substring(0, 10);
     const conflicts = db.prepare(`
@@ -1596,12 +1611,16 @@ router.post('/:id/crew', (req, res) => {
     } catch (e) { console.error('Auto-create allocation error:', e.message); }
   }
 
-  // Tell the worker they've been put on a shift.
-  bookingNotify.notifyAssigned([crew_member_id], {
-    booking_number: thisBooking && thisBooking.booking_number,
-    title: (db.prepare('SELECT title FROM bookings WHERE id=?').get(req.params.id) || {}).title,
-    start_datetime: thisBooking && thisBooking.start_datetime,
-  });
+  // Tell the worker they've been put on a shift — but only if the booking is
+  // confirmed. On an unconfirmed booking the assignment stays silent; the crew
+  // get pushed when the allocator flips it to confirmed (see /:id/status).
+  if (thisBooking && bookingNotify.isNotifiable(thisBooking.status)) {
+    bookingNotify.notifyAssigned([crew_member_id], {
+      booking_number: thisBooking.booking_number,
+      title: (db.prepare('SELECT title FROM bookings WHERE id=?').get(req.params.id) || {}).title,
+      start_datetime: thisBooking.start_datetime,
+    });
+  }
 
   // Audit trail — who put whom on the shift.
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
@@ -1714,8 +1733,9 @@ router.post('/:id/crew/:crewId/remove', (req, res) => {
   // Also clear them as driver on any vehicles on this booking
   db.prepare("UPDATE booking_vehicles SET crew_member_id = NULL WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
   if (removed.changes > 0) {
-    const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
-    if (bk) bookingNotify.notifyRemoved([req.params.crewId], bk);
+    const bk = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+    // Only notify a removal if the crew had already been told they were on it.
+    if (bk && bookingNotify.isNotifiable(bk.status)) bookingNotify.notifyRemoved([req.params.crewId], bk);
     logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
       details: `Removed crew #${req.params.crewId} from ${bk ? bk.booking_number : 'booking'}`, req });
   }
@@ -2125,7 +2145,8 @@ router.post('/:id/move', (req, res) => {
   // workers keep seeing the shift on the old day. Then tell them it moved.
   syncAllocationsToBooking(db, parseInt(req.params.id, 10));
   const movedBk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
-  if (movedBk && booking.start_datetime !== movedBk.start_datetime) {
+  // Suppress the "shift moved" push on bookings the crew were never told about.
+  if (movedBk && booking.start_datetime !== movedBk.start_datetime && bookingNotify.isNotifiable(booking.status)) {
     bookingNotify.notifyRescheduled(bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10)), movedBk, booking.start_datetime);
   }
 
