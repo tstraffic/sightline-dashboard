@@ -102,8 +102,12 @@
   }
   .ws-section-title.requests  { color: #FCD34D; }
   .ws-section-title.confirmed { color: #6EE7B7; }
+  /* The three week buckets each get their own shade of green so they're
+     tellable at a glance: Today = bright emerald, Coming up = teal,
+     Earlier = muted sage. Card accent bars + pills match below. */
   .ws-section-title.now       { color: #34D399; }
-  .ws-section-title.earlier   { color: rgba(255,255,255,0.45); }
+  .ws-section-title.upcoming  { color: #2DD4BF; }
+  .ws-section-title.earlier   { color: #8FAE9D; }
   .ws-section-title.past      { color: rgba(255,255,255,0.6); }
 
   /* Day heading inside the list */
@@ -181,6 +185,12 @@
      with what's live or next. */
   .ws-shift.is-earlier { opacity: 0.55; }
   .ws-shift.is-earlier:active { opacity: 0.75; }
+  /* Per-bucket accent bars + Accepted pill tints — match the section
+     header shade so each group reads as one colour family. */
+  .ws-shift.is-today .ws-shift-bar    { background: linear-gradient(180deg, #34D399, #10B981); }
+  .ws-shift.is-upcoming .ws-shift-bar { background: linear-gradient(180deg, #2DD4BF, #0D9488); }
+  .ws-shift.is-earlier .ws-shift-bar  { background: rgba(143,174,157,0.45); }
+  .ws-shift.is-upcoming .ws-pill.confirmed { background: rgba(45,212,191,0.16); color: #5EEAD4; border-color: rgba(45,212,191,0.35); }
   /* A shift running right now gets the strongest treatment on the page. */
   .ws-shift.is-now { border-color: rgba(16,185,129,0.55); box-shadow: 0 0 0 1px rgba(16,185,129,0.35), 0 4px 18px rgba(16,185,129,0.12); }
 
@@ -212,7 +222,11 @@
 
   :root[data-theme="light"] .ws-section-title.past { color: #6B7280; }
   :root[data-theme="light"] .ws-section-title.now { color: #047857; }
-  :root[data-theme="light"] .ws-section-title.earlier { color: #9CA3AF; }
+  :root[data-theme="light"] .ws-section-title.upcoming { color: #0D9488; }
+  :root[data-theme="light"] .ws-section-title.earlier { color: #94A3A0; }
+  :root[data-theme="light"] .ws-shift.is-upcoming .ws-shift-bar { background: linear-gradient(180deg, #2DD4BF, #0D9488); }
+  :root[data-theme="light"] .ws-shift.is-earlier .ws-shift-bar { background: #C7D4CD; }
+  :root[data-theme="light"] .ws-shift.is-upcoming .ws-pill.confirmed { background: #CCFBF1; color: #0F766E; border-color: #5EEAD4; }
   :root[data-theme="light"] .ws-pill.now { background: #D1FAE5; color: #047857; border-color: #6EE7B7; }
   :root[data-theme="light"] .ws-live-dot { background: #059669; }
   :root[data-theme="light"] .ws-shift.is-now { border-color: #34D399; box-shadow: 0 0 0 1px rgba(16,185,129,0.3), 0 4px 14px rgba(16,185,129,0.10); }
@@ -348,9 +362,9 @@
         else pastDates.push(k);
       });
       var buckets = [
-        { id: 'today',    title: 'Today',             cls: 'now',       icon: 'bolt',  dates: todayDates },
-        { id: 'upcoming', title: 'Coming up',         cls: 'confirmed', icon: 'tick',  dates: futureDates },
-        { id: 'earlier',  title: 'Earlier this week', cls: 'earlier',   icon: 'flag',  dates: pastDates },
+        { id: 'today',    title: 'Today',             cls: 'now',      icon: 'bolt',  dates: todayDates },
+        { id: 'upcoming', title: 'Coming up',         cls: 'upcoming', icon: 'tick',  dates: futureDates },
+        { id: 'earlier',  title: 'Earlier this week', cls: 'earlier',  icon: 'flag',  dates: pastDates },
       ];
       function bucketCount(b) {
         var n = 0; b.dates.forEach(function (d) { n += confirmedByDate[d].length; }); return n;
@@ -401,7 +415,7 @@
               : (nowTime >= s.start_time && (!s.end_time || nowTime <= s.end_time));
           }
         %>
-          <a href="<%= link %>" class="ws-shift <%= bucket.id === 'earlier' ? 'is-earlier' : '' %> <%= onNow ? 'is-now' : '' %>">
+          <a href="<%= link %>" class="ws-shift is-<%= bucket.id %> <%= onNow ? 'is-now' : '' %>">
             <span class="ws-shift-bar"></span>
             <div class="ws-shift-body">
               <div class="ws-shift-top">
