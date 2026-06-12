@@ -2086,6 +2086,17 @@ router.post('/:id/documents/:docId/delete', (req, res) => {
   res.redirect('/bookings/' + req.params.id);
 });
 
+// POST /:id/documents/:docId/type — relabel a document's type in place.
+router.post('/:id/documents/:docId/type', (req, res) => {
+  const db = getDb();
+  const VALID = ['tgs','tmp','ctmp','rol','rol_day','rol_night','stage_plan','swms','permit','invoice','photo','other'];
+  const type = VALID.includes(req.body.document_type) ? req.body.document_type : 'other';
+  db.prepare("UPDATE booking_documents SET document_type=? WHERE id=? AND booking_id=?").run(type, req.params.docId, req.params.id);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking_document', entityId: req.params.id, details: `Document #${req.params.docId} type → ${type}`, req });
+  req.flash('success', 'Document type updated.');
+  res.redirect('/bookings/' + req.params.id + '#documents');
+});
+
 // ===========================================================================
 // REQUIREMENTS (resource quantities)
 // ===========================================================================
