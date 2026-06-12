@@ -171,9 +171,22 @@
           console.log('Admin SW registered, scope:', reg.scope);
         })
         .catch(function(err) { console.log('Admin SW registration failed:', err); });
-      // Auto-refresh when new SW activates
+      // Auto-refresh when new SW activates — but at most twice per 2 minutes
+      // per tab. During a rolling deploy the old and new containers briefly
+      // serve different SW bytes; each flip registers as an "update", and an
+      // unguarded reload-on-update loops the page until the old instance
+      // drains. sessionStorage survives reloads (per-tab), so it can count.
       navigator.serviceWorker.addEventListener('message', function(e) {
-        if (e.data && e.data.type === 'SW_UPDATED') window.location.reload();
+        if (!e.data || e.data.type !== 'SW_UPDATED') return;
+        try {
+          var now = Date.now();
+          var log = (sessionStorage.getItem('__sw_reloads') || '').split(',')
+            .filter(Boolean).map(Number).filter(function (t) { return now - t < 120000; });
+          if (log.length >= 2) return; // reload loop — stay on the current bundle
+          log.push(now);
+          sessionStorage.setItem('__sw_reloads', log.join(','));
+          window.location.reload();
+        } catch (err) { /* storage blocked — never risk a loop */ }
       });
     }
   </script>
