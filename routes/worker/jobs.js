@@ -3,7 +3,24 @@ const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday, TZ: SYD_TZ } = require('../../lib/sydney');
 const { resolveShift, getCurrentDocket } = require('../../lib/shiftDocket');
+const { maybePromoteToGreenToGo } = require('../../lib/bookingLifecycle');
+const bookingNotify = require('../../services/bookingNotify');
 const { logActivity } = require('../../middleware/audit');
+
+// Shared by every worker accept path: if this acceptance was the last one
+// outstanding, advance the booking to green_to_go and notify the whole crew.
+// Safe to call after any single confirm — it's a no-op until everyone's in.
+function promoteAndNotifyGTG(db, bookingId, req, worker) {
+  if (!bookingId) return;
+  try {
+    if (maybePromoteToGreenToGo(db, bookingId)) {
+      const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(bookingId);
+      const crewIds = bookingNotify.activeCrewIds(db, bookingId);
+      if (bk && crewIds.length) bookingNotify.notifyGreenToGo(crewIds, bk);
+      try { logActivity({ user: null, action: 'update', entityType: 'booking', entityId: bookingId, details: `Auto: ${bk ? bk.booking_number : 'booking'} → green_to_go (all crew confirmed; last: ${worker && worker.full_name})`, ip: req && req.ip }); } catch (e) {}
+    }
+  } catch (e) { console.error('[GTG] promote failed for booking', bookingId, ':', e.message); }
+}
 
 // Worker-facing sign/view URL for the shift an allocation belongs to.
 function docketUrlForAllocation(db, allocationId) {
@@ -70,10 +87,12 @@ router.get('/jobs', (req, res) => {
   // The bookings table CHECK uses these literal status values:
   //   'unconfirmed','confirmed','green_to_go','in_progress','completed',
   //   'cancelled','late_cancellation','on_hold'
-  // Worker-visible bookings = anything that's not cancelled / late-cancelled.
-  // Including 'unconfirmed' so a newly-assigned shift surfaces as a Pending
-  // request the worker can accept/decline before the allocator confirms.
-  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','complete','on_hold'];
+  // Crew don't see a shift until the ALLOCATOR confirms the booking, so
+  // 'unconfirmed' is deliberately excluded — a pre-confirmation booking never
+  // surfaces in the portal. Once confirmed it appears as a request the worker
+  // can accept/decline (that accept/decline drives allocation status, which is
+  // separate from booking status).
+  const VISIBLE_BOOKING_STATUSES = ['confirmed','green_to_go','in_progress','complete','on_hold'];
 
   // Upcoming from crew_allocations. Falls back to booking columns when the
   // allocation isn't linked to a job (ad-hoc bookings post-migration 142),
@@ -571,16 +590,9 @@ router.post('/jobs/:id/respond', (req, res) => {
       db.prepare("UPDATE booking_crew SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP WHERE booking_id = ? AND crew_member_id = ?")
         .run(fullAlloc.booking_id, worker.id);
 
-      // Check if ALL crew on this booking are now confirmed → auto-set booking to GTG
-      const totalCrew = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ?").get(fullAlloc.booking_id);
-      const confirmedCrew = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ? AND status = 'confirmed'").get(fullAlloc.booking_id);
-      if (totalCrew && confirmedCrew && totalCrew.c > 0 && confirmedCrew.c >= totalCrew.c) {
-        const booking = db.prepare("SELECT status, booking_number FROM bookings WHERE id = ?").get(fullAlloc.booking_id);
-        if (booking && (booking.status === 'confirmed' || booking.status === 'unconfirmed')) {
-          db.prepare("UPDATE bookings SET status = 'green_to_go', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(fullAlloc.booking_id);
-          try { logActivity({ user: null, action: 'update', entityType: 'booking', entityId: fullAlloc.booking_id, details: `Auto: ${booking.booking_number || 'booking'} → green_to_go (all crew confirmed; last: ${worker.full_name})`, ip: req.ip }); } catch (e) {}
-        }
-      }
+      // All crew accepted? → auto-advance the booking to green_to_go and tell
+      // the whole crew it's locked in.
+      promoteAndNotifyGTG(db, fullAlloc.booking_id, req, worker);
     }
 
     req.flash('success', 'Shift accepted!');
@@ -806,16 +818,8 @@ router.post('/bookings/:id/respond', (req, res) => {
     db.prepare("UPDATE crew_allocations SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP WHERE booking_id = ? AND crew_member_id = ? AND status = 'allocated'")
       .run(req.params.id, worker.id);
 
-    // Check if ALL crew confirmed → auto-GTG
-    const total = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ?").get(req.params.id);
-    const conf = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ? AND status = 'confirmed'").get(req.params.id);
-    if (total && conf && total.c > 0 && conf.c >= total.c) {
-      const booking = db.prepare("SELECT status, booking_number FROM bookings WHERE id = ?").get(req.params.id);
-      if (booking && (booking.status === 'confirmed' || booking.status === 'unconfirmed')) {
-        db.prepare("UPDATE bookings SET status = 'green_to_go', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
-        try { logActivity({ user: null, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Auto: ${booking.booking_number || 'booking'} → green_to_go (all crew confirmed; last: ${worker.full_name})`, ip: req.ip }); } catch (e) {}
-      }
-    }
+    // All crew accepted? → auto-advance the booking to green_to_go + notify.
+    promoteAndNotifyGTG(db, parseInt(req.params.id, 10), req, worker);
     req.flash('success', 'Shift accepted!');
   } else {
     db.prepare("UPDATE booking_crew SET status = 'declined' WHERE booking_id = ? AND crew_member_id = ?")

@@ -7,6 +7,18 @@
 
 const { sendPushToCrew } = require('./pushNotification');
 
+// Workers must not hear about a shift until the allocator has committed it.
+// A booking is only "notifiable" once it reaches 'confirmed' or any later
+// lifecycle state. Before that (client_booking / unconfirmed / on_hold) the
+// shift is still being worked up, so assignment/reschedule/removal pushes are
+// suppressed. Callers gate on this so the policy lives in one place.
+const NOTIFIABLE_STATUSES = new Set([
+  'confirmed', 'locked', 'conflict', 'green_to_go', 'in_progress', 'complete', 'finalised',
+]);
+function isNotifiable(status) {
+  return NOTIFIABLE_STATUSES.has(String(status || ''));
+}
+
 function fmtDate(dt) {
   const s = String(dt || '').slice(0, 10);
   if (!s) return '';
@@ -54,6 +66,28 @@ function notifyRemoved(crewIds, booking) {
   });
 }
 
+// All crew accepted — the shift is locked in (booking auto-advanced to
+// green_to_go). A reassuring "you're all set" ping to the whole crew.
+function notifyGreenToGo(crewIds, booking) {
+  fanOut(crewIds, {
+    title: 'Shift good to go ✅',
+    body: shiftLabel(booking) + ' — all crew confirmed. You’re all set.',
+    url: '/w/jobs',
+    category: 'bookings', type: 'booking_green_to_go',
+  });
+}
+
+// Docket submitted → shift complete. Doubles as the prompt for crew to
+// deactivate their ROL (a worker responsibility) on the myROL site.
+function notifyDocketSubmitted(crewIds, booking) {
+  fanOut(crewIds, {
+    title: 'Docket submitted — shift complete',
+    body: 'Nice work on ' + shiftLabel(booking) + '. If this shift had an ROL, deactivate it now at myrol.transport.nsw.gov.au.',
+    url: '/w/jobs',
+    category: 'bookings', type: 'booking_docket_submitted',
+  });
+}
+
 function notifyCancelled(crewIds, booking) {
   fanOut(crewIds, {
     title: 'Shift cancelled',
@@ -84,4 +118,4 @@ function activeCrewIds(db, bookingId) {
   } catch (e) { return []; }
 }
 
-module.exports = { notifyAssigned, notifyRemoved, notifyCancelled, notifyRescheduled, activeCrewIds };
+module.exports = { notifyAssigned, notifyRemoved, notifyCancelled, notifyRescheduled, notifyGreenToGo, notifyDocketSubmitted, activeCrewIds, isNotifiable };

@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday } = require('../../lib/sydney');
 const { resolveShift, getCurrentDocket, getDocketCrew, completeShift, calcHours } = require('../../lib/shiftDocket');
+const bookingNotify = require('../../services/bookingNotify');
 const { logActivity } = require('../../middleware/audit');
 
 // Build the worker-facing sign URL for a resolved shift.
@@ -64,7 +65,9 @@ router.get('/dockets', (req, res) => {
   // row) won't have a crew_allocations row. Surface those here so they can
   // see "needs signing" — clicking the row routes to /w/booking-shift/...
   // which creates the alloc and then they can sign the docket from there.
-  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','complete','on_hold'];
+  // Excludes 'unconfirmed' — crew don't see a shift until the allocator
+  // confirms the booking (matches routes/worker/jobs.js).
+  const VISIBLE_BOOKING_STATUSES = ['confirmed','green_to_go','in_progress','complete','on_hold'];
   let bookingFallback = [];
   try {
     bookingFallback = db.prepare(`
@@ -281,6 +284,23 @@ function submitShiftDocket(req, res, shift) {
       ip: req.ip,
     });
   } catch (e) {}
+
+  // Tell the crew the shift is done — and nudge them to deactivate their ROL
+  // on myROL (their responsibility). Works for booking and job-based shifts.
+  try {
+    let crewIds = [];
+    let bk = null;
+    if (shift.type === 'booking' && shift.bookingId) {
+      crewIds = bookingNotify.activeCrewIds(db, parseInt(shift.bookingId, 10));
+      bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(shift.bookingId);
+    } else if (shift.jobId && shift.shiftDate) {
+      crewIds = db.prepare("SELECT DISTINCT crew_member_id FROM crew_allocations WHERE job_id = ? AND allocation_date = ? AND status NOT IN ('cancelled','declined')")
+        .all(shift.jobId, shift.shiftDate).map(r => r.crew_member_id);
+      const job = db.prepare('SELECT job_name, job_number FROM jobs WHERE id = ?').get(shift.jobId) || {};
+      bk = { booking_number: job.job_number, title: job.job_name, start_datetime: shift.shiftDate + 'T00:00:00' };
+    }
+    if (crewIds.length && bk) bookingNotify.notifyDocketSubmitted(crewIds, bk);
+  } catch (e) { console.error('[dockets] docket-submitted notify failed:', e.message); }
 
   req.flash('success', 'Docket signed — shift marked complete.');
   res.redirect(backRedirect);
