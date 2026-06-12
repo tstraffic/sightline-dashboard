@@ -102,6 +102,8 @@
   }
   .ws-section-title.requests  { color: #FCD34D; }
   .ws-section-title.confirmed { color: #6EE7B7; }
+  .ws-section-title.now       { color: #34D399; }
+  .ws-section-title.earlier   { color: rgba(255,255,255,0.45); }
   .ws-section-title.past      { color: rgba(255,255,255,0.6); }
 
   /* Day heading inside the list */
@@ -172,6 +174,15 @@
   .ws-pill.declined  { background: rgba(239,68,68,0.18); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.35); }
   .ws-pill.past      { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.55); border: 1px solid rgba(255,255,255,0.10); }
   .ws-pill.role      { background: rgba(255,255,255,0.05); color: rgba(255,255,255,0.65); border: 1px solid rgba(255,255,255,0.08); text-transform: none; letter-spacing: 0; font-weight: 600; }
+  .ws-pill.now       { background: rgba(16,185,129,0.25); color: #34D399; border: 1px solid rgba(16,185,129,0.5); display: inline-flex; align-items: center; gap: 5px; }
+  .ws-live-dot       { width: 6px; height: 6px; border-radius: 9999px; background: #34D399; animation: ws-pulse 1.6s ease-in-out infinite; }
+  @keyframes ws-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.8); } }
+  /* Done/past shifts sink visually — still tappable, no longer competing
+     with what's live or next. */
+  .ws-shift.is-earlier { opacity: 0.55; }
+  .ws-shift.is-earlier:active { opacity: 0.75; }
+  /* A shift running right now gets the strongest treatment on the page. */
+  .ws-shift.is-now { border-color: rgba(16,185,129,0.55); box-shadow: 0 0 0 1px rgba(16,185,129,0.35), 0 4px 18px rgba(16,185,129,0.12); }
 
   /* Empty state */
   .ws-empty { text-align: center; padding: 56px 20px 20px; color: rgba(255,255,255,0.55); }
@@ -200,6 +211,11 @@
   :root[data-theme="light"] .ws-day-bar { background: #E5E7EB; }
 
   :root[data-theme="light"] .ws-section-title.past { color: #6B7280; }
+  :root[data-theme="light"] .ws-section-title.now { color: #047857; }
+  :root[data-theme="light"] .ws-section-title.earlier { color: #9CA3AF; }
+  :root[data-theme="light"] .ws-pill.now { background: #D1FAE5; color: #047857; border-color: #6EE7B7; }
+  :root[data-theme="light"] .ws-live-dot { background: #059669; }
+  :root[data-theme="light"] .ws-shift.is-now { border-color: #34D399; box-shadow: 0 0 0 1px rgba(16,185,129,0.3), 0 4px 14px rgba(16,185,129,0.10); }
   :root[data-theme="light"] .ws-day-title { color: #4B5563; }
   :root[data-theme="light"] .ws-day-meta  { color: #6B7280; }
 
@@ -320,22 +336,48 @@
       <% }) %>
     <% } %>
 
-    <!-- This week's shifts (confirmed + finished within the visible week
-         so navigating backward to a past week shows the shifts that
-         were actually worked). -->
+    <!-- Week shifts, split by time so "what's happening" reads at a
+         glance: Today (with a live ON NOW badge), then Coming up, then
+         Earlier this week (done/past — dimmed, at the bottom instead of
+         chronologically jumbled in with the future). -->
     <%
-      var weekTotal = 0;
-      Object.keys(confirmedByDate).forEach(function (k) { weekTotal += confirmedByDate[k].length; });
+      var todayDates = [], futureDates = [], pastDates = [];
+      Object.keys(confirmedByDate).sort().forEach(function (k) {
+        if (k === today) todayDates.push(k);
+        else if (k > today) futureDates.push(k);
+        else pastDates.push(k);
+      });
+      var buckets = [
+        { id: 'today',    title: 'Today',             cls: 'now',       icon: 'bolt',  dates: todayDates },
+        { id: 'upcoming', title: 'Coming up',         cls: 'confirmed', icon: 'tick',  dates: futureDates },
+        { id: 'earlier',  title: 'Earlier this week', cls: 'earlier',   icon: 'flag',  dates: pastDates },
+      ];
+      function bucketCount(b) {
+        var n = 0; b.dates.forEach(function (d) { n += confirmedByDate[d].length; }); return n;
+      }
     %>
-    <div class="ws-section-head">
-      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4" style="color:#6EE7B7;"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-      <span class="ws-section-title confirmed">This week (<%= weekTotal %>)</span>
-    </div>
 
     <% if (Object.keys(confirmedByDate).length === 0) { %>
+      <div class="ws-section-head">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4" style="color:#6EE7B7;"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        <span class="ws-section-title confirmed">This week</span>
+      </div>
       <p class="text-sm italic" style="color:rgba(255,255,255,0.4); padding-left: 6px;">No shifts this week.</p>
-    <% } else { %>
-      <% Object.keys(confirmedByDate).sort().forEach(function (date) {
+    <% } %>
+
+    <% buckets.forEach(function (bucket) { if (!bucket.dates.length) return; %>
+      <div class="ws-section-head">
+        <% if (bucket.icon === 'bolt') { %>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2" style="color:#34D399;"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        <% } else if (bucket.icon === 'tick') { %>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4" style="color:#6EE7B7;"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        <% } else { %>
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="color:rgba(255,255,255,0.4);"><path stroke-linecap="round" stroke-linejoin="round" d="M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2z"/></svg>
+        <% } %>
+        <span class="ws-section-title <%= bucket.cls %>"><%= bucket.title %> (<%= bucketCount(bucket) %>)</span>
+      </div>
+
+      <% bucket.dates.forEach(function (date) {
         var d = new Date(date + 'T00:00:00');
         var isToday = date === today;
         var dayLabel = isToday ? 'Today' : d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short' });
@@ -350,8 +392,16 @@
           var link = (s.source === 'booking' && s.booking_id)
             ? ('/w/booking-shift/' + s.booking_id)
             : ('/w/jobs/' + s.id);
+          // Running right now? Only meaningful on today's bucket. Handles
+          // overnight shifts where the end time wraps past midnight.
+          var onNow = false;
+          if (isToday && s.status !== 'completed' && s.status !== 'declined' && s.start_time && typeof nowTime !== 'undefined') {
+            onNow = s.end_time && s.end_time < s.start_time
+              ? (nowTime >= s.start_time || nowTime <= s.end_time)
+              : (nowTime >= s.start_time && (!s.end_time || nowTime <= s.end_time));
+          }
         %>
-          <a href="<%= link %>" class="ws-shift">
+          <a href="<%= link %>" class="ws-shift <%= bucket.id === 'earlier' ? 'is-earlier' : '' %> <%= onNow ? 'is-now' : '' %>">
             <span class="ws-shift-bar"></span>
             <div class="ws-shift-body">
               <div class="ws-shift-top">
@@ -369,7 +419,9 @@
                 </p>
               <% } %>
               <div class="ws-shift-pills">
-                <% if (s.status === 'completed') { %>
+                <% if (onNow) { %>
+                  <span class="ws-pill now"><span class="ws-live-dot"></span>On now</span>
+                <% } else if (s.status === 'completed') { %>
                   <span class="ws-pill completed">Completed</span>
                 <% } else if (s.status === 'declined') { %>
                   <span class="ws-pill declined">Declined</span>
@@ -386,7 +438,7 @@
           </a>
         <% }) %>
       <% }) %>
-    <% } %>
+    <% }) %>
 
     <!-- Empty state when nothing for this week and no requests -->
     <% if (requests.length === 0 && Object.keys(confirmedByDate).length === 0) { %>

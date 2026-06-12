@@ -301,11 +301,16 @@ router.get('/jobs', (req, res) => {
   const endMon   = sunday.toLocaleDateString('en-AU', { month: 'short' });
   const monthLabel = (startMon === endMon ? startMon : startMon + ' / ' + endMon) + ' ' + sunday.getFullYear();
 
+  // Sydney wall-clock HH:MM — the view uses it to badge today's shifts
+  // that are running right now.
+  const nowTime = new Date().toLocaleTimeString('en-AU', { timeZone: SYD_TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+
   res.render('worker/jobs', {
     title: 'My Shifts',
     currentPage: 'shifts',
     tab,
     today,
+    nowTime,
     requests,
     confirmed,
     finished,
