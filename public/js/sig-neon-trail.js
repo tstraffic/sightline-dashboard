@@ -10,9 +10,11 @@
   'use strict';
 
   var RGB = '43,127,255';   // brand blue (#2B7FFF)
-  var FADE = 420;           // ms a point stays lit after it's drawn
-  var WIDTH = 3.2;          // trail line width (css px)
-  var BLUR = 14;            // glow blur (css px)
+  var FADE = 340;           // ms a point stays lit after it's drawn
+  var WIDTH = 1.4;          // trail line width (css px) — thin
+  var BLUR = 5;             // glow blur (css px) — soft, subtle
+  var ALPHA = 0.3;          // peak line opacity — light
+  var GLOW = 0.45;          // peak glow opacity
 
   function now() { return (window.performance && performance.now) ? performance.now() : Date.now(); }
 
@@ -47,19 +49,22 @@
     function render() {
       octx.clearRect(0, 0, w, h);
       var t = now();
+      // Keep only the recent tail; drop old points so the trail recedes.
       while (pts.length && t - pts[0].t > FADE) pts.shift();
-      if (pts.length > 1) {
-        octx.lineCap = 'round'; octx.lineJoin = 'round';
-        octx.shadowColor = 'rgba(' + RGB + ',0.9)';
-        for (var i = 1; i < pts.length; i++) {
-          var a = Math.max(0, 1 - (t - pts[i].t) / FADE);
-          if (a <= 0) continue;
+      if (pts.length >= 2) {
+        // One continuous stroke (not per-segment) so the glow is an even
+        // line, never a string of overlapping dots. The whole trail fades
+        // out once the pen stops moving.
+        var g = Math.max(0, 1 - (t - pts[pts.length - 1].t) / FADE);
+        if (g > 0) {
+          octx.lineCap = 'round'; octx.lineJoin = 'round';
           octx.beginPath();
-          octx.moveTo(pts[i - 1].x, pts[i - 1].y);
-          octx.lineTo(pts[i].x, pts[i].y);
-          octx.strokeStyle = 'rgba(' + RGB + ',' + (0.85 * a) + ')';
+          octx.moveTo(pts[0].x, pts[0].y);
+          for (var i = 1; i < pts.length; i++) octx.lineTo(pts[i].x, pts[i].y);
+          octx.strokeStyle = 'rgba(' + RGB + ',' + (ALPHA * g) + ')';
           octx.lineWidth = WIDTH;
-          octx.shadowBlur = BLUR * a;
+          octx.shadowColor = 'rgba(' + RGB + ',' + (GLOW * g) + ')';
+          octx.shadowBlur = BLUR * g;
           octx.stroke();
         }
       }
