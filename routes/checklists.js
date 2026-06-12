@@ -6,22 +6,37 @@ const { logActivity } = require('../middleware/audit');
 // GET / — List all checklist templates
 router.get('/', (req, res) => {
   const db = getDb();
-  // System templates (system_key NOT NULL) sort to the top of the list
-  // because they're the operationally-critical ones the worker portal
-  // actually depends on. Among system templates we order by name; the
-  // rest fall back to sort_order / created_at as before.
   const templates = db.prepare(`
     SELECT ct.*, u.full_name as creator_name,
       (SELECT COUNT(*) FROM checklist_template_items WHERE template_id = ct.id) as item_count
     FROM checklist_templates ct
     LEFT JOIN users u ON ct.created_by_id = u.id
-    ORDER BY (ct.system_key IS NULL) ASC, ct.system_key ASC, ct.sort_order ASC, ct.created_at DESC
+    ORDER BY ct.sort_order ASC, ct.name ASC
   `).all();
 
+  // Split into the three buckets the worker actually experiences:
+  //   1. On-shift checklists — opened from a shift's Forms tab (the Job-Pack
+  //      5 system templates + anything flagged "show on every shift").
+  //   2. Always-available forms — the worker portal Forms tab (incidents,
+  //      purchase orders, etc.). Live as soon as visible + published.
+  //   3. Hidden & archived — drafts not yet visible to workers, and
+  //      archived templates.
+  const JOB_PACK = ['vehicle_prestart', 'risk_toolbox', 'tc_prestart', 'team_leader', 'post_shift_vehicle'];
+  const groups = [
+    { key: 'shift', title: 'On-shift checklists', desc: 'Filled in from a shift\'s Forms tab — the Job-Pack 5 plus anything marked "Show on every shift".', items: [] },
+    { key: 'forms', title: 'Always-available forms', desc: 'The worker portal Forms tab — incidents, reports and requests workers can submit any time.', items: [] },
+    { key: 'hidden', title: 'Hidden & archived', desc: 'Not visible to workers — drafts in progress and retired templates.', items: [] },
+  ];
+  templates.forEach(t => {
+    if (t.status === 'archived' || !t.worker_visible) groups[2].items.push(t);
+    else if (JOB_PACK.includes(t.system_key) || t.show_on_shift) groups[0].items.push(t);
+    else groups[1].items.push(t);
+  });
+
   res.render('checklists/index', {
-    title: 'Checklist Templates',
+    title: 'Forms & Checklists',
     currentPage: 'checklists',
-    templates,
+    groups,
     user: req.session.user
   });
 });

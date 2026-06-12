@@ -5,80 +5,110 @@
     draft: 'bg-gray-100 text-gray-500',
     archived: 'bg-gray-100 text-gray-400'
   };
+  var totalCount = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
 %>
 
-<div class="space-y-5">
+<div class="space-y-8">
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">Checklist Templates</h1>
-      <p class="text-sm text-gray-500 mt-1">Create and manage checklists that TCs fill out on each booking</p>
+      <h1 class="text-2xl font-bold text-gray-900">Forms &amp; Checklists</h1>
+      <p class="text-sm text-gray-500 mt-1">Everything workers fill in — edit a template, hit Publish, and the worker portal updates instantly.</p>
     </div>
     <a href="/checklists/new" class="inline-flex items-center justify-center px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">
       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-      New Template
+      New Form
     </a>
   </div>
 
-  <% if (templates && templates.length > 0) { %>
-    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-      <% templates.forEach(function(t) { %>
-        <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden">
-          <div class="p-5">
-            <div class="flex items-start justify-between mb-3">
-              <div>
-                <div class="flex items-center gap-1.5 flex-wrap">
-                  <h3 class="text-base font-bold text-gray-900"><%= t.name %></h3>
-                  <% if (t.system_key) { %>
-                    <span title="Built-in worker portal checklist — edit + publish to push changes live" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600/20">
-                      <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                      System
-                    </span>
-                  <% } %>
-                  <% if (t.worker_visible && t.published_revision) { %>
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20">Live · rev <%= t.published_revision %></span>
-                  <% } %>
-                </div>
-                <% if (t.description) { %>
-                  <p class="text-sm text-gray-500 mt-1 line-clamp-2"><%= t.description %></p>
-                <% } %>
-              </div>
-              <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize flex-shrink-0 ml-2 <%= statusBadges[t.status] || statusBadges.draft %>"><%= t.status %></span>
-            </div>
-            <div class="flex items-center gap-4 text-xs text-gray-400 mb-4">
-              <span class="flex items-center gap-1">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                <strong class="text-gray-600"><%= t.item_count %></strong> questions
-              </span>
-              <% if (t.creator_name) { %>
-                <span>by <%= t.creator_name %></span>
-              <% } %>
-            </div>
-          </div>
-          <div class="px-5 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
-            <a href="/checklists/<%= t.id %>" class="text-brand-600 hover:text-brand-700 text-sm font-medium">
-              Edit Template &rarr;
-            </a>
-            <form method="POST" action="/checklists/<%= t.id %>/archive" class="inline">
-              <%- include('../partials/csrf') %>
-              <button type="submit" class="text-xs text-gray-400 hover:text-gray-600 transition">
-                <%= t.status === 'archived' ? 'Reactivate' : 'Archive' %>
-              </button>
-            </form>
-          </div>
-        </div>
-      <% }); %>
-    </div>
-  <% } else { %>
+  <% if (totalCount === 0) { %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center">
       <div class="w-14 h-14 bg-brand-50 rounded-full flex items-center justify-center mx-auto mb-4">
         <svg class="w-7 h-7 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
       </div>
-      <h3 class="text-gray-900 font-semibold text-base mb-1">No checklist templates yet</h3>
-      <p class="text-gray-500 text-sm mb-4">Create your first template to start building checklists for your TCs.</p>
+      <h3 class="text-gray-900 font-semibold text-base mb-1">No forms yet</h3>
+      <p class="text-gray-500 text-sm mb-4">Create your first form to start building checklists for your crew.</p>
       <a href="/checklists/new" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-        Create Template
+        Create Form
       </a>
     </div>
   <% } %>
+
+  <% groups.forEach(function (g) { if (g.items.length === 0) return; %>
+    <section>
+      <div class="mb-3 flex items-center gap-2">
+        <% if (g.key === 'shift') { %>
+          <span class="w-7 h-7 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+          </span>
+        <% } else if (g.key === 'forms') { %>
+          <span class="w-7 h-7 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          </span>
+        <% } else { %>
+          <span class="w-7 h-7 rounded-lg bg-gray-100 text-gray-400 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+          </span>
+        <% } %>
+        <div>
+          <h2 class="text-sm font-bold text-gray-900"><%= g.title %> <span class="text-gray-400 font-medium">(<%= g.items.length %>)</span></h2>
+          <p class="text-xs text-gray-500"><%= g.desc %></p>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <% g.items.forEach(function(t) { %>
+          <div class="bg-white border border-gray-200 rounded-xl shadow-sm hover:shadow-md transition-shadow overflow-hidden <%= g.key === 'hidden' ? 'opacity-75' : '' %>">
+            <div class="p-5">
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <div class="flex items-center gap-1.5 flex-wrap">
+                    <h3 class="text-base font-bold text-gray-900"><%= t.name %></h3>
+                    <% if (t.system_key) { %>
+                      <span title="Built-in worker portal form — edit + publish to push changes live" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600/20">
+                        <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                        System
+                      </span>
+                    <% } %>
+                    <% if (t.show_on_shift) { %>
+                      <span title="Appears in every shift's Forms tab" class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-sky-50 text-sky-700 ring-1 ring-sky-600/20">Every shift</span>
+                    <% } %>
+                    <% if (t.worker_visible && t.published_revision) { %>
+                      <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20">Live · rev <%= t.published_revision %></span>
+                    <% } else if (t.worker_visible) { %>
+                      <span title="Visible but nothing published yet — open and hit Publish" class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wide bg-amber-50 text-amber-700 ring-1 ring-amber-600/20">Not published</span>
+                    <% } %>
+                  </div>
+                  <% if (t.description) { %>
+                    <p class="text-sm text-gray-500 mt-1 line-clamp-2"><%= t.description %></p>
+                  <% } %>
+                </div>
+                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium capitalize flex-shrink-0 ml-2 <%= statusBadges[t.status] || statusBadges.draft %>"><%= t.status %></span>
+              </div>
+              <div class="flex items-center gap-4 text-xs text-gray-400 mb-4">
+                <span class="flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+                  <strong class="text-gray-600"><%= t.item_count %></strong> questions
+                </span>
+                <% if (t.creator_name) { %>
+                  <span>by <%= t.creator_name %></span>
+                <% } %>
+              </div>
+            </div>
+            <div class="px-5 py-3 bg-gray-50 border-t border-gray-200 flex items-center justify-between">
+              <a href="/checklists/<%= t.id %>" class="text-brand-600 hover:text-brand-700 text-sm font-medium">
+                Edit Form &rarr;
+              </a>
+              <form method="POST" action="/checklists/<%= t.id %>/archive" class="inline">
+                <%- include('../partials/csrf') %>
+                <button type="submit" class="text-xs text-gray-400 hover:text-gray-600 transition">
+                  <%= t.status === 'archived' ? 'Reactivate' : 'Archive' %>
+                </button>
+              </form>
+            </div>
+          </div>
+        <% }); %>
+      </div>
+    </section>
+  <% }); %>
 </div>
