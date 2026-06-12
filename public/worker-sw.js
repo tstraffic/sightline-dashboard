@@ -10,7 +10,7 @@
 // this the user's current tab keeps running the prior bundle of JS even
 // after the new SW takes over.
 
-const CACHE_NAME = 'atomis-worker-v9';
+const CACHE_NAME = 'atomis-worker-v10'; // v10: SW-reload loop guard in worker.js
 const VENDOR_CACHE = 'atomis-worker-vendor-v1';
 
 // PDF.js, docx-preview, jszip, Motion One — versioned bundles, safe to
