@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday, TZ: SYD_TZ } = require('../../lib/sydney');
 const { resolveShift, getCurrentDocket } = require('../../lib/shiftDocket');
+const { logActivity } = require('../../middleware/audit');
 
 // Worker-facing sign/view URL for the shift an allocation belongs to.
 function docketUrlForAllocation(db, allocationId) {
@@ -574,9 +575,10 @@ router.post('/jobs/:id/respond', (req, res) => {
       const totalCrew = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ?").get(fullAlloc.booking_id);
       const confirmedCrew = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ? AND status = 'confirmed'").get(fullAlloc.booking_id);
       if (totalCrew && confirmedCrew && totalCrew.c > 0 && confirmedCrew.c >= totalCrew.c) {
-        const booking = db.prepare("SELECT status FROM bookings WHERE id = ?").get(fullAlloc.booking_id);
-        if (booking && booking && (booking.status === 'confirmed' || booking.status === 'unconfirmed')) {
+        const booking = db.prepare("SELECT status, booking_number FROM bookings WHERE id = ?").get(fullAlloc.booking_id);
+        if (booking && (booking.status === 'confirmed' || booking.status === 'unconfirmed')) {
           db.prepare("UPDATE bookings SET status = 'green_to_go', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(fullAlloc.booking_id);
+          try { logActivity({ user: null, action: 'update', entityType: 'booking', entityId: fullAlloc.booking_id, details: `Auto: ${booking.booking_number || 'booking'} → green_to_go (all crew confirmed; last: ${worker.full_name})`, ip: req.ip }); } catch (e) {}
         }
       }
     }
@@ -808,9 +810,10 @@ router.post('/bookings/:id/respond', (req, res) => {
     const total = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ?").get(req.params.id);
     const conf = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ? AND status = 'confirmed'").get(req.params.id);
     if (total && conf && total.c > 0 && conf.c >= total.c) {
-      const booking = db.prepare("SELECT status FROM bookings WHERE id = ?").get(req.params.id);
-      if (booking && booking && (booking.status === 'confirmed' || booking.status === 'unconfirmed')) {
+      const booking = db.prepare("SELECT status, booking_number FROM bookings WHERE id = ?").get(req.params.id);
+      if (booking && (booking.status === 'confirmed' || booking.status === 'unconfirmed')) {
         db.prepare("UPDATE bookings SET status = 'green_to_go', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
+        try { logActivity({ user: null, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Auto: ${booking.booking_number || 'booking'} → green_to_go (all crew confirmed; last: ${worker.full_name})`, ip: req.ip }); } catch (e) {}
       }
     }
     req.flash('success', 'Shift accepted!');

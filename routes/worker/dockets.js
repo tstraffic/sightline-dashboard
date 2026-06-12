@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday } = require('../../lib/sydney');
 const { resolveShift, getCurrentDocket, getDocketCrew, completeShift, calcHours } = require('../../lib/shiftDocket');
+const { logActivity } = require('../../middleware/audit');
 
 // Build the worker-facing sign URL for a resolved shift.
 function shiftUrl(shift) {
@@ -269,6 +270,17 @@ function submitShiftDocket(req, res, shift) {
     completeShift(db, shift);
   });
   tx();
+
+  // Audit trail for the multi-table completion (allocations + booking_crew
+  // + booking -> complete) that signing just triggered.
+  try {
+    logActivity({
+      user: null, action: 'complete', entityType: 'booking',
+      entityId: shift.bookingId || null,
+      details: `Shift docket signed by ${worker.full_name} — shift auto-completed (${shift.type === 'booking' ? 'booking ' + shift.bookingId : 'job ' + shift.jobId + ' ' + shift.shiftDate})`,
+      ip: req.ip,
+    });
+  } catch (e) {}
 
   req.flash('success', 'Docket signed — shift marked complete.');
   res.redirect(backRedirect);

@@ -2449,6 +2449,20 @@
   var csrfMeta = document.querySelector('meta[name="csrf-token"]');
   var CSRF_TOKEN = csrfMeta ? csrfMeta.getAttribute('content') : '';
 
+  // Lightweight toast — used to surface server-side warnings (e.g. crew or
+  // vehicle double-booked) that a flash message can't deliver to AJAX flows.
+  function bk2Toast(msg) {
+    var el = document.createElement('div');
+    el.textContent = msg;
+    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:200;' +
+      'background:#92400E;color:#FEF3C7;font-size:13px;font-weight:600;padding:10px 16px;border-radius:10px;' +
+      'box-shadow:0 8px 24px rgba(0,0,0,0.45);max-width:90vw;opacity:0;transition:opacity .2s;';
+    document.body.appendChild(el);
+    requestAnimationFrame(function () { el.style.opacity = '1'; });
+    setTimeout(function () { el.style.opacity = '0'; setTimeout(function () { el.remove(); }, 250); }, 5000);
+  }
+  window.bk2Toast = bk2Toast;
+
   // dragstart on resource-panel rows. Captures the worker id +
   // name into dataTransfer (multiple types so any drop target
   // can read it, and so we have a text/plain fallback).
@@ -2698,6 +2712,8 @@
         var crew = (result.json && result.json.crew) || { id: personId, full_name: '', role: role };
         insertFilledSlot(slot, crew);
         flashAssigned(personId);
+        // Double-booking warning from the server — surface it, don't bury it.
+        if (result.json && result.json.warning) bk2Toast('⚠ ' + (crew.full_name || 'Worker') + ': ' + result.json.warning);
       } else {
         alert((result.json && result.json.error) || ('Could not assign worker (HTTP ' + result.status + ')'));
       }
