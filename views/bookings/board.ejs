@@ -2199,6 +2199,11 @@
   // ── Filter predicates per tab ─────────────────────────────────
   function rpPersonOk(p) {
     var f = rpFilters.people;
+    // Parked crew aren't available to roster onto a shift, so they're hidden
+    // by default — the Reserved / On Leave chips reveal them on demand. This
+    // keeps the panel matching the roster's active crew, not the wider HR list.
+    if (!f.reserved && p.employment_status === 'reserved') return false;
+    if (!f.on_leave && p.employment_status === 'on_leave') return false;
     if (f.tls           && !rpIsTl(p.role)) return false;
     if (f.assigned      && !p.assigned_today) return false;
     if (f.conflicts     && !(p.warnings && p.warnings.length)) return false;
