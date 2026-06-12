@@ -1,29 +1,37 @@
 <div class="flex flex-col" style="height:100dvh;">
-  <!-- Top bar with Back -->
-  <div class="flex items-center gap-2 px-3 shrink-0"
-       style="height:56px;padding-top:env(safe-area-inset-top);background:#15181F;border-bottom:1px solid rgba(255,255,255,0.08);">
-    <a href="<%= back %>" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold"
-       style="color:#10B981;background:rgba(16,185,129,0.12);">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-      Back
-    </a>
-    <p class="flex-1 min-w-0 text-sm font-semibold truncate text-center" style="color:rgba(255,255,255,0.9);"><%= docName %></p>
-    <a href="<%= fileUrl %>" download class="flex items-center justify-center w-9 h-9 rounded-lg shrink-0"
-       style="color:rgba(255,255,255,0.6);background:rgba(255,255,255,0.06);" aria-label="Download">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
-    </a>
+  <!-- Top bar with Back — background extends under the status bar (safe area)
+       so the title never sits behind the notch. -->
+  <div class="shrink-0" style="background:#15181F;border-bottom:1px solid rgba(255,255,255,0.08);padding-top:env(safe-area-inset-top);">
+    <div class="flex items-center gap-2 px-3" style="height:52px;">
+      <a href="<%= back %>" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold"
+         style="color:#10B981;background:rgba(16,185,129,0.12);">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back
+      </a>
+      <p class="flex-1 min-w-0 text-sm font-semibold truncate text-center" style="color:rgba(255,255,255,0.9);"><%= docName %></p>
+      <a href="<%= fileUrl %>" download class="flex items-center justify-center w-9 h-9 rounded-lg shrink-0"
+         style="color:rgba(255,255,255,0.6);background:rgba(255,255,255,0.06);" aria-label="Download">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+      </a>
+    </div>
   </div>
 
-  <!-- Viewer body -->
-  <div class="flex-1 min-h-0" style="background:#1A1D24;">
+  <!-- Viewer body — a normal scrollable div (NOT an iframe: iOS Safari won't
+       scroll a PDF iframe). PDFs render page-by-page to canvases like the
+       SWMS/SOP viewer, so the whole document scrolls smoothly. -->
+  <div id="docScroll" class="flex-1 min-h-0"
+       style="background:#1A1D24;overflow-y:auto;-webkit-overflow-scrolling:touch;">
     <% if (kind === 'pdf') { %>
-      <iframe src="<%= fileUrl %>" title="<%= docName %>" style="width:100%;height:100%;border:0;background:#fff;"></iframe>
+      <div id="pdfTarget" class="pdf-render-target px-3 py-3 space-y-3" data-pdf-url="<%= fileUrl %>"
+           style="max-width:900px;margin:0 auto;">
+        <p class="text-sm text-center py-8" style="color:rgba(255,255,255,0.5);">Loading document…</p>
+      </div>
     <% } else if (kind === 'image') { %>
-      <div class="w-full h-full overflow-auto flex items-center justify-center p-3">
+      <div class="w-full flex items-start justify-center p-3">
         <img src="<%= fileUrl %>" alt="<%= docName %>" style="max-width:100%;height:auto;border-radius:8px;">
       </div>
     <% } else { %>
-      <div class="w-full h-full flex flex-col items-center justify-center text-center px-8">
+      <div class="w-full flex flex-col items-center justify-center text-center px-8" style="min-height:60vh;">
         <div class="w-16 h-16 rounded-2xl flex items-center justify-center mb-4" style="background:rgba(255,255,255,0.06);">
           <svg class="w-8 h-8" style="color:rgba(255,255,255,0.5);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
         </div>
@@ -34,3 +42,79 @@
     <% } %>
   </div>
 </div>
+
+<% if (kind === 'pdf') { %>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  (function () {
+    if (window.pdfjsLib) {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+    var target = document.getElementById('pdfTarget');
+    if (!target) return;
+
+    function fallback(msg) {
+      target.innerHTML = '<p class="text-sm text-center py-8" style="color:#FCA5A5;">' + msg +
+        ' <a href="' + target.dataset.pdfUrl + '" download style="color:#10B981;text-decoration:underline;">Download it</a> instead.</p>';
+    }
+
+    async function render() {
+      if (!window.pdfjsLib) return fallback('Couldn’t load the PDF viewer.');
+      var url = target.dataset.pdfUrl;
+      var isMobile = window.matchMedia && window.matchMedia('(max-width: 768px)').matches;
+      var dprCap = isMobile ? 1.5 : 2;
+      var scaleCap = isMobile ? 1.4 : 2;
+      try {
+        var pdf = await window.pdfjsLib.getDocument({ url: url, disableAutoFetch: false, disableStream: false }).promise;
+        target.innerHTML = '';
+        var containerWidth = target.clientWidth || 600;
+        var dpr = Math.min(window.devicePixelRatio || 1, dprCap);
+        var pages = [];
+        for (var n = 1; n <= pdf.numPages; n++) {
+          var page = await pdf.getPage(n);
+          var vp = page.getViewport({ scale: 1 });
+          var scale = Math.min(scaleCap, containerWidth / vp.width);
+          var scaled = page.getViewport({ scale: scale });
+          var canvas = document.createElement('canvas');
+          canvas.width = scaled.width * dpr;
+          canvas.height = scaled.height * dpr;
+          canvas.style.width = '100%';
+          canvas.style.height = 'auto';
+          canvas.className = 'block w-full rounded-lg shadow-sm bg-white';
+          target.appendChild(canvas);
+          pages.push({ canvas: canvas, page: page, scaled: scaled, rendered: false });
+        }
+        var renderOne = async function (e) {
+          if (e.rendered) return;
+          e.rendered = true;
+          var ctx = e.canvas.getContext('2d');
+          ctx.scale(dpr, dpr);
+          try { await e.page.render({ canvasContext: ctx, viewport: e.scaled }).promise; }
+          catch (err) { console.error('page render failed', err); }
+        };
+        if (!('IntersectionObserver' in window) || pages.length <= 3) {
+          for (var i = 0; i < pages.length; i++) await renderOne(pages[i]);
+          return;
+        }
+        var io = new IntersectionObserver(function (entries) {
+          entries.forEach(function (ent) {
+            if (!ent.isIntersecting) return;
+            var idx = pages.findIndex(function (p) { return p.canvas === ent.target; });
+            if (idx >= 0) {
+              renderOne(pages[idx]);
+              if (idx + 1 < pages.length) renderOne(pages[idx + 1]);
+              io.unobserve(ent.target);
+            }
+          });
+        }, { rootMargin: '500px 0px' });
+        pages.forEach(function (p) { io.observe(p.canvas); });
+        await renderOne(pages[0]);
+      } catch (err) {
+        console.error('PDF render failed', err);
+        fallback('Couldn’t display this PDF.');
+      }
+    }
+    render();
+  })();
+</script>
+<% } %>
