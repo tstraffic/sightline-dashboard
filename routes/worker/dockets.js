@@ -55,6 +55,7 @@ router.get('/dockets', (req, res) => {
     LEFT JOIN jobs j ON ca.job_id = j.id
     LEFT JOIN bookings b ON ca.booking_id = b.id
     WHERE ca.crew_member_id = ? AND ca.allocation_date = ? AND ca.status != 'cancelled'
+      AND (ca.booking_id IS NULL OR (b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')))
   `).all(worker.id, today);
 
   // Booking-only fallback: workers assigned to a booking via booking_crew
@@ -62,7 +63,7 @@ router.get('/dockets', (req, res) => {
   // row) won't have a crew_allocations row. Surface those here so they can
   // see "needs signing" — clicking the row routes to /w/booking-shift/...
   // which creates the alloc and then they can sign the docket from there.
-  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','completed','on_hold'];
+  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','complete','on_hold'];
   let bookingFallback = [];
   try {
     bookingFallback = db.prepare(`

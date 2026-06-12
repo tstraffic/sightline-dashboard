@@ -6,6 +6,7 @@ const multer = require('multer');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { requireRole } = require('../middleware/auth');
+const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew } = require('../lib/bookingLifecycle');
 
 // Multer config for booking document uploads
 const BOOKING_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'bookings');
@@ -1399,40 +1400,33 @@ router.post('/:id', (req, res) => {
   // wipes the crew, AND clearing every chip on the slide-in still works.
   const crewPickerSubmitted = b.crew_ids_present === '1' || b.crew_ids_present === 1 || b.crew_ids_present === true;
   if (crewPickerSubmitted) {
-    const crewIds = Array.isArray(b.crew_ids) ? b.crew_ids : (b.crew_ids ? [b.crew_ids] : []);
-    db.prepare("DELETE FROM booking_crew WHERE booking_id = ?").run(req.params.id);
-    db.prepare("DELETE FROM crew_allocations WHERE booking_id = ?").run(req.params.id);
-    if (crewIds.length > 0) {
-      const insertCrew = db.prepare("INSERT OR IGNORE INTO booking_crew (booking_id, crew_member_id, role_on_site, status) VALUES (?, ?, ?, 'assigned')");
-      const insertAlloc = db.prepare("INSERT OR IGNORE INTO crew_allocations (job_id, crew_member_id, allocation_date, start_time, end_time, role_on_site, status, booking_id, allocated_by_id) VALUES (?, ?, ?, ?, ?, ?, 'allocated', ?, ?)");
-      const updAllocDate = (b.start_date + 'T' + b.start_time + ':00').substring(0, 10);
-      const updAllocStart = b.start_time || '06:00';
-      const updAllocEnd = b.end_time || '15:00';
-      const VALID_SITE_ROLES = ['traffic_controller','team_leader','supervisor'];
-      function pickSiteRole(cid, fallback) {
-        const raw = b['crew_role_' + cid];
-        if (raw && VALID_SITE_ROLES.includes(raw)) return raw;
-        if (fallback && VALID_SITE_ROLES.includes(fallback)) return fallback;
-        return 'traffic_controller';
+    const rawIds = Array.isArray(b.crew_ids) ? b.crew_ids : (b.crew_ids ? [b.crew_ids] : []);
+    const VALID_SITE_ROLES = ['traffic_controller','team_leader','supervisor'];
+    // Reject any id that isn't a real, active crew member to stop browser
+    // autofill or stale form state assigning shifts to people not on roster.
+    const validIds = [];
+    const roleById = {};
+    rawIds.forEach(cid => {
+      if (!cid) return;
+      const member = db.prepare("SELECT id, portal_role, active FROM crew_members WHERE id = ?").get(cid);
+      if (!member || !member.active) {
+        console.warn('[bookings.update] ignoring crew_id', cid, 'on booking', req.params.id, '— no matching active crew_member');
+        return;
       }
-      crewIds.forEach(cid => {
-        if (!cid) return;
-        // Reject any id that isn't a real, active crew member to stop
-        // browser autofill or stale form state assigning shifts to people
-        // who aren't on roster.
-        const member = db.prepare("SELECT id, role, portal_role, active FROM crew_members WHERE id = ?").get(cid);
-        if (!member || !member.active) {
-          console.warn('[bookings.update] ignoring crew_id', cid, 'on booking', req.params.id, '— no matching active crew_member');
-          return;
-        }
-        const siteRole = pickSiteRole(cid, member.portal_role);
-        insertCrew.run(req.params.id, cid, siteRole);
-        if (b.job_id) {
-          try { insertAlloc.run(b.job_id, cid, updAllocDate, updAllocStart, updAllocEnd, siteRole, req.params.id, req.session.user.id); } catch (e) {}
-        }
-      });
-    }
+      const raw = b['crew_role_' + cid];
+      roleById[member.id] = (raw && VALID_SITE_ROLES.includes(raw)) ? raw
+        : (member.portal_role && VALID_SITE_ROLES.includes(member.portal_role)) ? member.portal_role
+        : 'traffic_controller';
+      validIds.push(member.id);
+    });
+    // Diff against current crew — keeps existing rows (and their
+    // confirmed/declined statuses) instead of wiping + re-adding everyone.
+    diffCrew(db, parseInt(req.params.id, 10), validIds, cid => roleById[cid], { userId: req.session.user.id });
   }
+
+  // Date/time changes must follow through to the worker portal — move the
+  // booking's crew_allocations to the new schedule (statuses preserved).
+  syncAllocationsToBooking(db, parseInt(req.params.id, 10));
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Updated booking ${existing.booking_number}`, req });
   req.flash('success', `Booking ${existing.booking_number} updated.`); res.redirect('/bookings/' + req.params.id);
@@ -1469,6 +1463,14 @@ router.post('/:id/status', (req, res) => {
   const existing = db.prepare("SELECT id, booking_number, status FROM bookings WHERE id = ?").get(req.params.id);
   if (!existing) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
   db.prepare("UPDATE bookings SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(newStatus, req.params.id);
+  // Cancellation cascades to the crew's allocations so the shift drops off
+  // worker views; un-cancelling brings them back (confirmed stays confirmed).
+  const CANCEL_LIKE = ['cancelled', 'late_cancellation'];
+  if (CANCEL_LIKE.includes(newStatus) && !CANCEL_LIKE.includes(existing.status)) {
+    cascadeCancel(db, parseInt(req.params.id, 10));
+  } else if (CANCEL_LIKE.includes(existing.status) && !CANCEL_LIKE.includes(newStatus)) {
+    cascadeRestore(db, parseInt(req.params.id, 10));
+  }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Status: ${existing.status} → ${newStatus} on ${existing.booking_number}`, req });
   if (isJson) return res.json({ ok: true, status: newStatus });
   req.flash('success', `Status updated to ${newStatus.replace(/_/g, ' ')}.`); res.redirect('/bookings/' + req.params.id);
@@ -1481,6 +1483,8 @@ router.post('/:id/delete', (req, res) => {
   const booking = db.prepare("SELECT id, booking_number FROM bookings WHERE id = ?").get(req.params.id);
   if (!booking) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
   db.prepare("UPDATE bookings SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
+  // A deleted booking's shifts must drop off the worker portal too.
+  cascadeCancel(db, parseInt(req.params.id, 10));
   logActivity({ user: req.session.user, action: 'delete', entityType: 'booking', entityId: req.params.id, details: `Soft-deleted ${booking.booking_number}`, req });
   if (isJson) return res.json({ ok: true });
   req.flash('success', `Booking ${booking.booking_number} deleted.`); res.redirect('/bookings');
@@ -1493,6 +1497,8 @@ router.post('/:id/undelete', (req, res) => {
   const booking = db.prepare("SELECT id, booking_number FROM bookings WHERE id = ?").get(req.params.id);
   if (!booking) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
   db.prepare("UPDATE bookings SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
+  // Revive the crew's allocations that the delete cancelled.
+  cascadeRestore(db, parseInt(req.params.id, 10));
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Restored ${booking.booking_number}`, req });
   if (isJson) return res.json({ ok: true });
   req.flash('success', `Booking ${booking.booking_number} restored.`); res.redirect('/bookings');
@@ -2039,6 +2045,10 @@ router.post('/:id/move', (req, res) => {
 
   db.prepare("UPDATE bookings SET start_datetime = ?, end_datetime = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .run(newDate + 'T' + oldStartTime, newDate + 'T' + oldEndTime, req.params.id);
+
+  // Drag the crew's allocations to the new date with the booking, otherwise
+  // workers keep seeing the shift on the old day.
+  syncAllocationsToBooking(db, parseInt(req.params.id, 10));
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Moved booking ${booking.booking_number} to ${newDate}`, req });
   res.json({ ok: true });

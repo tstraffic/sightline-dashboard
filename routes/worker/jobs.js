@@ -72,7 +72,7 @@ router.get('/jobs', (req, res) => {
   // Worker-visible bookings = anything that's not cancelled / late-cancelled.
   // Including 'unconfirmed' so a newly-assigned shift surfaces as a Pending
   // request the worker can accept/decline before the allocator confirms.
-  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','completed','on_hold'];
+  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','complete','on_hold'];
 
   // Upcoming from crew_allocations. Falls back to booking columns when the
   // allocation isn't linked to a job (ad-hoc bookings post-migration 142),
@@ -629,14 +629,18 @@ router.get('/booking-shift/:bookingId', (req, res) => {
       const endTimeFromDt   = booking.end_datetime   ? booking.end_datetime.substring(11, 16)   : '';
       const allocDate       = booking.start_datetime ? booking.start_datetime.substring(0, 10)  : sydneyToday();
       const allocBy = booking.created_by_id || (req.session.user && req.session.user.id) || null;
-      const ins = db.prepare(`
-        INSERT INTO crew_allocations
+      // OR IGNORE + re-select: two devices (or a double-tap) racing to
+      // lazy-create can't produce duplicates — the unique index on
+      // (booking_id, crew_member_id) makes the second insert a no-op and
+      // the re-select picks up whichever row won.
+      db.prepare(`
+        INSERT OR IGNORE INTO crew_allocations
           (job_id, crew_member_id, allocation_date, start_time, end_time,
            role_on_site, status, allocated_by_id, booking_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(booking.job_id || null, worker.id, allocDate, startTimeFromDt, endTimeFromDt,
              myAssignment.role_on_site || '', allocStatus, allocBy, booking.id);
-      allocation = db.prepare('SELECT * FROM crew_allocations WHERE id = ?').get(ins.lastInsertRowid);
+      allocation = db.prepare('SELECT * FROM crew_allocations WHERE booking_id = ? AND crew_member_id = ? LIMIT 1').get(booking.id, worker.id);
     } catch (e) {
       console.error('[booking-shift] failed to lazy-bind allocation:', e.message);
     }

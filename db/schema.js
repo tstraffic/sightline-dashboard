@@ -2784,7 +2784,7 @@ function runMigrations(db) {
         client_id INTEGER REFERENCES clients(id),
         title TEXT NOT NULL DEFAULT '',
         description TEXT DEFAULT '',
-        status TEXT NOT NULL DEFAULT 'unconfirmed' CHECK(status IN ('unconfirmed','confirmed','green_to_go','in_progress','completed','cancelled','on_hold')),
+        status TEXT NOT NULL DEFAULT 'unconfirmed' CHECK(status IN ('client_booking','unconfirmed','confirmed','locked','conflict','green_to_go','in_progress','complete','finalised','cancelled','late_cancellation','on_hold')),
         depot TEXT DEFAULT '',
         start_datetime TEXT NOT NULL,
         end_datetime TEXT NOT NULL,
@@ -12317,6 +12317,46 @@ function runMigrations(db) {
       console.log('Migration 263 applied');
     } catch (e) {
       console.error('Migration 263 error:', e.message);
+    }
+  }
+
+  // Migration 264: one allocation per (booking, crew member). The worker
+  // portal lazy-creates allocations for booking shifts; without a unique
+  // index a double-tap or two devices could insert duplicates. Dedupe
+  // first (keep the original = lowest id), then enforce going forward.
+  if (!isMigrationApplied.get(264)) {
+    console.log('Running migration 264: unique crew_allocations (booking_id, crew_member_id)');
+    try {
+      db.exec(`
+        DELETE FROM crew_allocations
+        WHERE booking_id IS NOT NULL
+          AND id NOT IN (
+            SELECT MIN(id) FROM crew_allocations
+            WHERE booking_id IS NOT NULL
+            GROUP BY booking_id, crew_member_id
+          )
+      `);
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_crew_alloc_booking_member
+        ON crew_allocations(booking_id, crew_member_id)
+        WHERE booking_id IS NOT NULL
+      `);
+      // Backfill: bookings cancelled/deleted before the lifecycle cascade
+      // existed left live allocations behind — cancel them now so workers
+      // stop seeing ghost shifts.
+      db.exec(`
+        UPDATE crew_allocations SET status = 'cancelled'
+        WHERE booking_id IS NOT NULL
+          AND status NOT IN ('cancelled','declined')
+          AND EXISTS (
+            SELECT 1 FROM bookings b WHERE b.id = crew_allocations.booking_id
+              AND (b.deleted_at IS NOT NULL OR b.status IN ('cancelled','late_cancellation'))
+          )
+      `);
+      recordMigration.run(264, 'crew_allocations unique (booking_id, crew_member_id) + dedupe + ghost-shift backfill');
+      console.log('Migration 264 applied');
+    } catch (e) {
+      console.error('Migration 264 error:', e.message);
     }
   }
 
