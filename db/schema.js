@@ -12360,6 +12360,305 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 265: Forms-tab forms become editable templates.
+  //
+  // Everything a worker can fill in now runs on the checklist-template
+  // engine (admin builds/edits on /checklists, publishes a revision,
+  // worker portal renders the published revision):
+  //   1. show_on_shift flag — templates flagged on appear in every
+  //      shift's Forms tab alongside the 5 Job-Pack checklists.
+  //   2. custom_checklist_response_photos — media_upload answers get
+  //      real photo storage (previously the input existed but files
+  //      were silently dropped).
+  //   3. Seed system templates for the worker Forms-tab forms. The
+  //      incident-flavoured ones (system_key in the INCIDENT map in
+  //      routes/worker/custom-checklists.js) also create an incidents
+  //      row on submit so the admin incident pipeline keeps working.
+  //      Seeds mirror the previously hardcoded EJS forms; the four
+  //      dead Forms-tab links (purchase order, repair request,
+  //      equipment count) get sensible starter questions admins can
+  //      reshape.
+  // =============================================
+  if (!isMigrationApplied.get(265)) {
+    console.log('Running migration 265: forms-tab system templates + response photos + show_on_shift');
+    try {
+      const ctCols265 = db.prepare("PRAGMA table_info(checklist_templates)").all().map(c => c.name);
+      if (!ctCols265.includes('show_on_shift')) {
+        try { db.exec("ALTER TABLE checklist_templates ADD COLUMN show_on_shift INTEGER DEFAULT 0"); } catch (e) {}
+      }
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS custom_checklist_response_photos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          response_id INTEGER NOT NULL REFERENCES custom_checklist_responses(id) ON DELETE CASCADE,
+          item_id TEXT NOT NULL DEFAULT '',
+          file_path TEXT NOT NULL,
+          original_name TEXT DEFAULT '',
+          mime_type TEXT DEFAULT '',
+          size_bytes INTEGER DEFAULT 0,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_ccr_photos_response ON custom_checklist_response_photos(response_id);
+      `);
+
+      const SEV_OPTS = ['Low', 'Medium', 'High', 'Critical'];
+      const formsTabTemplates = [
+        {
+          system_key: 'incident_report',
+          name: 'On-Site Incident Report',
+          description: 'Report an incident that occurred on site. Creates an incident record the office investigates.',
+          require_signature: 0,
+          items: [
+            { item_key: 'incident_type', question: 'Type of incident', response_type: 'radio', section: 'Incident', required: 1,
+              options: ['Injury', 'Near Miss', 'Property Damage', 'Environmental', 'Vehicle', 'Hazard', 'Other'] },
+            { item_key: 'severity', question: 'Severity', response_type: 'radio', section: 'Incident', required: 1, options: SEV_OPTS },
+            { item_key: 'title', question: 'Short title (what happened in a few words)', response_type: 'text', section: 'Incident', required: 1 },
+            { item_key: 'description', question: 'Describe what happened, who was involved and any immediate action taken', response_type: 'textarea', section: 'Details', required: 1 },
+            { item_key: 'location', question: 'Location (site / street / suburb)', response_type: 'text', section: 'Details', required: 1 },
+            { item_key: 'witnesses', question: 'Witnesses (names / contact)', response_type: 'text', section: 'Details', required: 0 },
+            { item_key: 'photos', question: 'Photos of the scene', response_type: 'media_upload', section: 'Evidence', required: 0 },
+          ],
+        },
+        {
+          system_key: 'vehicle_incident',
+          name: 'Vehicle Incident Report',
+          description: 'Report a vehicle accident or damage involving a company vehicle.',
+          require_signature: 0,
+          items: [
+            { item_key: 'severity', question: 'Severity', response_type: 'radio', section: 'Incident', required: 1, options: SEV_OPTS },
+            { item_key: 'title', question: 'Short title (e.g. "Rear-ended at lights, UTE-12")', response_type: 'text', section: 'Incident', required: 1 },
+            { item_key: 'vehicle_rego', question: 'Vehicle / rego involved', response_type: 'text', section: 'Incident', required: 1 },
+            { item_key: 'description', question: 'Describe what happened, other parties involved, injuries and damage', response_type: 'textarea', section: 'Details', required: 1 },
+            { item_key: 'location', question: 'Location of the incident', response_type: 'text', section: 'Details', required: 1 },
+            { item_key: 'other_party', question: 'Other party details (name, rego, insurer) if applicable', response_type: 'textarea', section: 'Details', required: 0 },
+            { item_key: 'photos', question: 'Photos (damage, scene, licences)', response_type: 'media_upload', section: 'Evidence', required: 0 },
+          ],
+        },
+        {
+          system_key: 'bullying_harassment',
+          name: 'Bullying and Harassment Report',
+          description: 'Confidential report of bullying, harassment or discrimination. Goes to the office as a high-priority incident.',
+          require_signature: 0,
+          items: [
+            { item_key: 'title', question: 'Brief summary of the behaviour', response_type: 'text', section: 'Report', required: 1 },
+            { item_key: 'description', question: 'Describe what happened — include dates, times, what was said or done', response_type: 'textarea', section: 'Report', required: 1 },
+            { item_key: 'location', question: 'Where did this occur?', response_type: 'text', section: 'Report', required: 0 },
+            { item_key: 'people_involved', question: 'People involved', response_type: 'text', section: 'Report', required: 0 },
+            { item_key: 'witnesses', question: 'Witnesses (if any)', response_type: 'text', section: 'Report', required: 0 },
+            { item_key: 'ongoing', question: 'Is this behaviour ongoing?', response_type: 'yes_no_na', section: 'Report', required: 0 },
+          ],
+        },
+        {
+          system_key: 'near_miss',
+          name: 'Near Miss Investigation',
+          description: 'Report a near miss or hazard before it becomes an incident.',
+          require_signature: 0,
+          items: [
+            { item_key: 'title', question: 'What nearly happened?', response_type: 'text', section: 'Near Miss', required: 1 },
+            { item_key: 'location', question: 'Location', response_type: 'text', section: 'Near Miss', required: 1 },
+            { item_key: 'severity', question: 'Risk level if it had happened', response_type: 'radio', section: 'Near Miss', required: 1, options: SEV_OPTS },
+            { item_key: 'description', question: 'Describe the near miss and what led to it', response_type: 'textarea', section: 'Details', required: 1 },
+            { item_key: 'suggested_action', question: 'Suggested action to stop it happening again', response_type: 'textarea', section: 'Details', required: 0 },
+            { item_key: 'photos', question: 'Photos of the hazard', response_type: 'media_upload', section: 'Evidence', required: 0 },
+          ],
+        },
+        {
+          system_key: 'pre_delivery_vehicle',
+          name: 'Pre-Delivery Vehicle Inspection',
+          description: 'Inspection before a vehicle or equipment is delivered to / collected from site.',
+          require_signature: 1,
+          items: [
+            { item_key: 'equipment_type', question: 'Vehicle / equipment type', response_type: 'text', section: 'Identification', required: 1 },
+            { item_key: 'equipment_id', question: 'Fleet number / rego / ID', response_type: 'text', section: 'Identification', required: 1 },
+            { item_key: 'body_exterior', question: 'Body and exterior condition acceptable', response_type: 'yes_no_na', section: 'Inspection', required: 1 },
+            { item_key: 'lights_signals', question: 'Lights and signals working', response_type: 'yes_no_na', section: 'Inspection', required: 1 },
+            { item_key: 'tyres', question: 'Tyres serviceable', response_type: 'yes_no_na', section: 'Inspection', required: 1 },
+            { item_key: 'safety_equipment', question: 'Safety equipment present (extinguisher, first aid)', response_type: 'yes_no_na', section: 'Inspection', required: 1 },
+            { item_key: 'fluid_levels', question: 'Fluid levels checked', response_type: 'yes_no_na', section: 'Inspection', required: 0 },
+            { item_key: 'defects_notes', question: 'Defects / notes', response_type: 'textarea', section: 'Defects', required: 0 },
+            { item_key: 'photos', question: 'Photos (condition on handover)', response_type: 'media_upload', section: 'Defects', required: 0 },
+          ],
+        },
+        {
+          system_key: 'purchase_order',
+          name: 'Purchase Order',
+          description: 'Request a purchase — consumables, PPE, equipment. Goes to the office for approval.',
+          require_signature: 0,
+          items: [
+            { item_key: 'supplier', question: 'Supplier / store', response_type: 'text', section: 'Order', required: 1 },
+            { item_key: 'items_needed', question: 'Items needed (one per line, with quantities)', response_type: 'textarea', section: 'Order', required: 1 },
+            { item_key: 'estimated_cost', question: 'Estimated cost ($)', response_type: 'number', section: 'Order', required: 0 },
+            { item_key: 'job_number', question: 'Job / booking number to charge against', response_type: 'text', section: 'Order', required: 0 },
+            { item_key: 'urgency', question: 'Urgency', response_type: 'radio', section: 'Order', required: 1, options: ['Today', 'This week', 'When convenient'] },
+            { item_key: 'reason', question: 'What is it for?', response_type: 'textarea', section: 'Order', required: 0 },
+          ],
+        },
+        {
+          system_key: 'repair_request',
+          name: 'Repair Request',
+          description: 'Report a vehicle or equipment fault that needs repair.',
+          require_signature: 0,
+          items: [
+            { item_key: 'asset', question: 'Vehicle / equipment (fleet no. or rego)', response_type: 'text', section: 'Asset', required: 1 },
+            { item_key: 'fault', question: 'Describe the fault', response_type: 'textarea', section: 'Fault', required: 1 },
+            { item_key: 'severity', question: 'How urgent is it?', response_type: 'radio', section: 'Fault', required: 1,
+              options: ['Unsafe — do not use', 'Needs repair soon', 'Minor — note for next service'] },
+            { item_key: 'photos', question: 'Photos of the fault', response_type: 'media_upload', section: 'Evidence', required: 0 },
+          ],
+        },
+        {
+          system_key: 'equipment_count',
+          name: 'Site / Vehicle Equipment Count',
+          description: 'Stocktake of signs and equipment on a vehicle or site.',
+          require_signature: 1,
+          items: [
+            { item_key: 'vehicle_or_site', question: 'Vehicle (fleet no.) or site being counted', response_type: 'text', section: 'Identification', required: 1 },
+            { item_key: 'cones', question: 'Cones', response_type: 'number', section: 'Count', required: 0 },
+            { item_key: 'signs_mms', question: 'Multi-message signs (MMS)', response_type: 'number', section: 'Count', required: 0 },
+            { item_key: 'signs_swing', question: 'Swing stands / sign frames', response_type: 'number', section: 'Count', required: 0 },
+            { item_key: 'bats', question: 'Stop/Slow bats', response_type: 'number', section: 'Count', required: 0 },
+            { item_key: 'barriers', question: 'Barrier boards / bollards', response_type: 'number', section: 'Count', required: 0 },
+            { item_key: 'missing_damaged', question: 'Missing / damaged items', response_type: 'textarea', section: 'Notes', required: 0 },
+            { item_key: 'photos', question: 'Photos (tray / store)', response_type: 'media_upload', section: 'Notes', required: 0 },
+          ],
+        },
+        {
+          system_key: 'signage_inspection',
+          name: 'Team Leader Signage Inspection (Hourly)',
+          description: 'Hourly check that signs and devices are still standing, visible and per the TGS.',
+          require_signature: 0,
+          items: [
+            { item_key: 'signs_standing', question: 'All signs standing and facing correctly', response_type: 'yes_no_na', section: 'Inspection', required: 1 },
+            { item_key: 'devices_in_place', question: 'Cones / devices in place per TGS', response_type: 'yes_no_na', section: 'Inspection', required: 1 },
+            { item_key: 'visibility_ok', question: 'Signs clean and visible to traffic', response_type: 'yes_no_na', section: 'Inspection', required: 1 },
+            { item_key: 'taper_ok', question: 'Tapers and spacing still correct', response_type: 'yes_no_na', section: 'Inspection', required: 1 },
+            { item_key: 'comments', question: 'Comments / corrections made', response_type: 'textarea', section: 'Notes', required: 0 },
+          ],
+        },
+      ];
+
+      const adminId265 = (db.prepare("SELECT id FROM users WHERE LOWER(role) IN ('admin','management') ORDER BY id ASC LIMIT 1").get() || {}).id || null;
+      const findByKey265 = db.prepare("SELECT id FROM checklist_templates WHERE system_key = ?");
+      const insertTemplate265 = db.prepare(`
+        INSERT INTO checklist_templates (system_key, name, description, status, worker_visible, require_signature, created_by_id)
+        VALUES (?, ?, ?, 'active', 1, ?, ?)
+      `);
+      const insertItem265 = db.prepare(`
+        INSERT INTO checklist_template_items (template_id, item_order, section, item_key, question, response_type, required, options_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const insertRev265 = db.prepare(`
+        INSERT INTO checklist_template_revisions (template_id, revision_number, name, description, require_signature, items_json, published_by_id)
+        VALUES (?, 1, ?, ?, ?, ?, ?)
+      `);
+      const setPublished265 = db.prepare(`
+        UPDATE checklist_templates SET published_revision = 1, published_at = datetime('now'), published_by_id = ? WHERE id = ?
+      `);
+
+      let created265 = 0;
+      for (const tpl of formsTabTemplates) {
+        if (findByKey265.get(tpl.system_key)) continue;
+        const tx = db.transaction(() => {
+          const r = insertTemplate265.run(tpl.system_key, tpl.name, tpl.description, tpl.require_signature || 0, adminId265);
+          const tplId = r.lastInsertRowid;
+          const itemRows = [];
+          tpl.items.forEach((it, idx) => {
+            const optionsJson = it.options ? JSON.stringify(it.options) : null;
+            const ir = insertItem265.run(tplId, idx, it.section || '', it.item_key, it.question, it.response_type, it.required ? 1 : 0, optionsJson);
+            // Mirror the /checklists publish snapshot shape (raw item rows,
+            // including id) — the worker fill view names inputs answer_<id>.
+            itemRows.push({
+              id: ir.lastInsertRowid, template_id: tplId,
+              item_order: idx, section: it.section || '', item_key: it.item_key,
+              question: it.question, response_type: it.response_type,
+              required: it.required ? 1 : 0,
+              options_json: optionsJson,
+            });
+          });
+          insertRev265.run(tplId, tpl.name, tpl.description, tpl.require_signature ? 1 : 0, JSON.stringify(itemRows), adminId265);
+          setPublished265.run(adminId265, tplId);
+        });
+        tx();
+        created265++;
+      }
+
+      recordMigration.run(265, 'forms-tab system templates + custom_checklist_response_photos + show_on_shift');
+      console.log(`Migration 265 applied: seeded ${created265} forms-tab templates`);
+    } catch (e) {
+      console.error('Migration 265 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 266: worker-reported incidents.
+  //
+  // incidents.job_id and reported_by_id were NOT NULL, which made every
+  // worker-submitted incident INSERT fail silently — field reports have no
+  // job and no admin user. Rebuild with both nullable (+ incident_date
+  // defaulting to today) so the worker Forms-tab incident templates can
+  // actually create incidents. Admin-created incidents are unaffected.
+  // =============================================
+  if (!isMigrationApplied.get(266)) {
+    console.log('Running migration 266: incidents nullable job_id/reported_by_id');
+    try {
+      const needRebuild = db.prepare("PRAGMA table_info(incidents)").all()
+        .some(c => (c.name === 'job_id' || c.name === 'reported_by_id') && c.notnull === 1);
+      if (needRebuild) {
+        db.exec('PRAGMA foreign_keys = OFF');
+        const tx = db.transaction(() => {
+          db.exec('ALTER TABLE incidents RENAME TO _incidents_old_266');
+          db.exec(`
+            CREATE TABLE incidents (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              job_id INTEGER,
+              incident_number TEXT NOT NULL,
+              incident_type TEXT NOT NULL CHECK(incident_type IN ('near_miss','traffic_incident','worker_injury','vehicle_damage','public_complaint','environmental','injury','hazard','property_damage','vehicle','other')),
+              severity TEXT NOT NULL DEFAULT 'low',
+              title TEXT NOT NULL,
+              description TEXT NOT NULL,
+              location TEXT DEFAULT '',
+              incident_date DATE NOT NULL DEFAULT (date('now')),
+              incident_time TEXT DEFAULT '',
+              reported_by_id INTEGER,
+              persons_involved TEXT DEFAULT '',
+              witnesses TEXT DEFAULT '',
+              immediate_actions TEXT DEFAULT '',
+              root_cause TEXT DEFAULT '',
+              investigation_status TEXT NOT NULL DEFAULT 'reported',
+              notifiable_incident INTEGER NOT NULL DEFAULT 0,
+              photo_path TEXT DEFAULT '',
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              traffic_disruption TEXT DEFAULT '',
+              police_notified INTEGER DEFAULT 0,
+              client_notified INTEGER DEFAULT 0,
+              close_out_date DATE,
+              escalation_level TEXT DEFAULT 'standard',
+              escalated_at DATETIME,
+              escalated_by_id INTEGER,
+              reported_by_crew_id INTEGER REFERENCES crew_members(id),
+              weather_conditions TEXT DEFAULT '',
+              gps_lat REAL, gps_lng REAL
+            )
+          `);
+          const cols = 'id, job_id, incident_number, incident_type, severity, title, description, location, incident_date, incident_time, reported_by_id, persons_involved, witnesses, immediate_actions, root_cause, investigation_status, notifiable_incident, photo_path, created_at, updated_at, traffic_disruption, police_notified, client_notified, close_out_date, escalation_level, escalated_at, escalated_by_id, reported_by_crew_id, weather_conditions, gps_lat, gps_lng';
+          db.exec(`INSERT INTO incidents (${cols}) SELECT ${cols} FROM _incidents_old_266`);
+          db.exec('DROP TABLE _incidents_old_266');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_incidents_job ON incidents(job_id)');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_incidents_status ON incidents(investigation_status)');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_incidents_severity ON incidents(severity)');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_incidents_date ON incidents(incident_date)');
+        });
+        tx();
+        db.exec('PRAGMA foreign_keys = ON');
+      }
+      recordMigration.run(266, 'incidents: job_id + reported_by_id nullable for worker-submitted reports');
+      console.log('Migration 266 applied');
+    } catch (e) {
+      console.error('Migration 266 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -64,7 +64,7 @@
         <h2 class="text-sm font-bold text-gray-900">Worker portal</h2>
         <p class="text-xs text-gray-500 mt-0.5">
           <% if (template.worker_visible && template.published_revision) { %>
-            Live · revision <%= template.published_revision %><% if (typeof responseCount !== 'undefined' && responseCount) { %> · <%= responseCount %> submission<%= responseCount === 1 ? '' : 's' %><% } %>
+            Live · revision <%= template.published_revision %><% if (typeof responseCount !== 'undefined' && responseCount) { %> · <a href="/checklists/<%= template.id %>/responses" class="text-brand-600 font-semibold hover:underline"><%= responseCount %> submission<%= responseCount === 1 ? '' : 's' %></a><% } %>
           <% } else if (template.worker_visible) { %>
             Visible to workers but no revision published yet — hit Publish below to make it fillable.
           <% } else { %>
@@ -88,6 +88,10 @@
       <label class="inline-flex items-center gap-2 text-sm">
         <input type="checkbox" name="require_signature" value="1" <%= template.require_signature ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
         <span class="text-gray-700">Require signature</span>
+      </label>
+      <label class="inline-flex items-center gap-2 text-sm" title="Appears in every shift's Forms tab alongside the 5 Job-Pack checklists">
+        <input type="checkbox" name="show_on_shift" value="1" <%= template.show_on_shift ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+        <span class="text-gray-700">Show on every shift</span>
       </label>
       <label class="inline-flex items-center gap-2 text-sm">
         <input type="checkbox" name="require_photo" value="1" <%= template.require_photo ? 'checked' : '' %> class="h-4 w-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">

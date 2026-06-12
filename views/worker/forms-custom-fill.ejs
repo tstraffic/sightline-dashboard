@@ -49,14 +49,14 @@
 </style>
 
 <div class="cf-wrap">
-  <a href="/w/forms/custom" class="cf-back">
+  <a href="<%= allocation ? '/w/jobs/' + allocation.id + '?tab=forms' : '/w/forms' %>" class="cf-back">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-    Custom checklists
+    Forms
   </a>
   <h1 class="cf-h1"><%= template.name %></h1>
   <p class="cf-rev">Revision <%= revision.revision_number %><% if (template.description) { %> &middot; <%= template.description %><% } %></p>
 
-  <form method="POST" action="/w/forms/custom/<%= template.id %>">
+  <form method="POST" action="/w/forms/custom/<%= template.id %>" enctype="multipart/form-data">
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
     <% if (allocation) { %><input type="hidden" name="allocation_id" value="<%= allocation.id %>"><% } %>
 
@@ -142,7 +142,7 @@
                   <% }) %>
                 </div>
               <% } else if (rt === 'media_upload') { %>
-                <input type="file" name="answer_<%= it.id %>" accept="image/*" capture="environment" data-wpi data-wpi-max="1" data-wpi-label="Take photo" class="cf-input" <%= it.required ? 'required' : '' %>>
+                <input type="file" name="answer_<%= it.id %>" accept="image/*" capture="environment" multiple data-wpi data-wpi-max="4" data-wpi-label="Take photo" class="cf-input" <%= it.required ? 'required' : '' %>>
               <% } else if (rt === 'signature') { %>
                 <div class="cf-sig-pad" id="sig-<%= it.id %>">
                   <canvas data-itemid="<%= it.id %>"></canvas>

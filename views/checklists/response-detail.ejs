@@ -1,0 +1,52 @@
+<div class="max-w-3xl mx-auto space-y-4">
+  <div>
+    <a href="/checklists/<%= template.id %>/responses" class="text-xs font-semibold text-brand-600 hover:underline">&larr; All responses</a>
+    <h1 class="text-xl font-bold text-gray-900 mt-1"><%= template.name %></h1>
+    <p class="text-xs text-gray-500 mt-0.5">
+      <%= response.worker_name || 'Unknown worker' %>
+      &middot; <%= new Date(response.submitted_at + (String(response.submitted_at).includes('Z') ? '' : 'Z')).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %>
+      &middot; revision <%= response.revision_number %>
+      <% if (response.booking_number) { %> &middot; booking <%= response.booking_number %><% } else if (response.allocation_id) { %> &middot; allocation #<%= response.allocation_id %><% } %>
+    </p>
+  </div>
+
+  <% sections.forEach(function (s) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <% if (s.name) { %>
+        <div class="px-4 pt-3 pb-1.5 border-b border-gray-100">
+          <h2 class="text-[11px] font-bold uppercase tracking-wider text-brand-600"><%= s.name %></h2>
+        </div>
+      <% } %>
+      <% s.items.forEach(function (it) { %>
+        <% var isDisplay = ['heading','information','hyperlink','media'].indexOf(it.response_type) !== -1; %>
+        <% if (!isDisplay) { %>
+          <div class="px-4 py-3 border-b border-gray-100 last:border-b-0">
+            <p class="text-xs text-gray-500"><%= it.question %></p>
+            <% if (it.photos && it.photos.length) { %>
+              <div class="flex flex-wrap gap-2 mt-2">
+                <% it.photos.forEach(function (p) { %>
+                  <a href="/checklists/response-photos/<%= p.id %>" target="_blank">
+                    <img src="/checklists/response-photos/<%= p.id %>" alt="" class="w-24 h-24 object-cover rounded-lg border border-gray-200">
+                  </a>
+                <% }) %>
+              </div>
+            <% } else if (it.response_type === 'signature' && it.answer && String(it.answer).startsWith('data:image')) { %>
+              <img src="<%= it.answer %>" alt="Signature" class="mt-1.5 h-16 bg-gray-50 rounded border border-gray-200">
+            <% } else if (it.answer !== undefined && it.answer !== null && it.answer !== '') { %>
+              <p class="text-sm font-semibold text-gray-900 mt-0.5 whitespace-pre-line"><%= it.answer %></p>
+            <% } else { %>
+              <p class="text-sm text-gray-400 italic mt-0.5">No answer</p>
+            <% } %>
+          </div>
+        <% } %>
+      <% }) %>
+    </div>
+  <% }) %>
+
+  <% if (response.signature_data) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <h2 class="text-[11px] font-bold uppercase tracking-wider text-brand-600 mb-2">Worker signature</h2>
+      <img src="<%= response.signature_data %>" alt="Signature" class="h-20 bg-gray-50 rounded border border-gray-200">
+    </div>
+  <% } %>
+</div>

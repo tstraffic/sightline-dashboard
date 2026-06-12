@@ -22,6 +22,23 @@ function promoteAndNotifyGTG(db, bookingId, req, worker) {
   } catch (e) { console.error('[GTG] promote failed for booking', bookingId, ':', e.message); }
 }
 
+// Admin-built form templates flagged to appear on every shift's Forms tab
+// (checklist_templates.show_on_shift, migration 265), with this worker's
+// per-shift completion status. Returns [] until the migration has run.
+function getShiftTemplates(db, crewMemberId, allocationId) {
+  try {
+    return db.prepare(`
+      SELECT t.id, t.name, t.description,
+        (SELECT COUNT(*) FROM custom_checklist_responses r
+          WHERE r.template_id = t.id AND r.crew_member_id = ? AND r.allocation_id = ?) AS done_count
+      FROM checklist_templates t
+      WHERE t.show_on_shift = 1 AND t.worker_visible = 1 AND t.status = 'active'
+        AND t.published_revision IS NOT NULL AND t.published_revision > 0
+      ORDER BY t.sort_order ASC, t.name ASC
+    `).all(crewMemberId, allocationId);
+  } catch (e) { return []; }
+}
+
 // Worker-facing sign/view URL for the shift an allocation belongs to.
 function docketUrlForAllocation(db, allocationId) {
   const shift = resolveShift(db, { allocationId });
@@ -419,6 +436,10 @@ router.get('/jobs/:id', (req, res) => {
     post_shift_vehicle: allForms.find(f => f.form_type === 'post_shift_vehicle') || null,
   };
 
+  // Admin-built templates flagged "show on shift" — appear on the Forms tab
+  // after the Job-Pack 5, with per-shift completion status.
+  const shiftTemplates = getShiftTemplates(db, worker.id, allocation.id);
+
   // Documents the worker should see on the DOCS tab — drawn from two places:
   //
   //   1. job_documents (admin uploads via /jobs/:id/documents) — scoped to a
@@ -480,6 +501,7 @@ router.get('/jobs/:id', (req, res) => {
     otherCrew,
     supervisorPhone,
     formStatus,
+    shiftTemplates,
     docket,
     jobDocuments,
   });
@@ -789,6 +811,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
     myStatus: myAssignment.status,
     startDay, startDate, startTime, endTime,
     allocation, formStatus, docket, jobDocuments,
+    shiftTemplates: allocation ? getShiftTemplates(db, worker.id, allocation.id) : [],
     docketSignUrl: '/w/dockets/shift/' + booking.id,
     myTasks, teamTasks,
   });

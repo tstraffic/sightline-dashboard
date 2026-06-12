@@ -106,9 +106,10 @@ router.post('/:id/visibility', (req, res) => {
   const visible = req.body.worker_visible === '1' || req.body.worker_visible === 'on' ? 1 : 0;
   const sig = req.body.require_signature === '1' || req.body.require_signature === 'on' ? 1 : 0;
   const photo = req.body.require_photo === '1' || req.body.require_photo === 'on' ? 1 : 0;
-  db.prepare(`UPDATE checklist_templates SET worker_visible = ?, require_signature = ?, require_photo = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
-    .run(visible, sig, photo, req.params.id);
-  logActivity({ user: req.session.user, action: 'update', entityType: 'checklist_template', entityId: tpl.id, entityLabel: tpl.name, details: `Visibility: worker_visible=${visible}, sig=${sig}, photo=${photo}`, ip: req.ip });
+  const onShift = req.body.show_on_shift === '1' || req.body.show_on_shift === 'on' ? 1 : 0;
+  db.prepare(`UPDATE checklist_templates SET worker_visible = ?, require_signature = ?, require_photo = ?, show_on_shift = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .run(visible, sig, photo, onShift, req.params.id);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'checklist_template', entityId: tpl.id, entityLabel: tpl.name, details: `Visibility: worker_visible=${visible}, sig=${sig}, photo=${photo}, show_on_shift=${onShift}`, ip: req.ip });
   req.flash('success', visible ? 'Template will be visible to workers once published.' : 'Template hidden from workers.');
   res.redirect(`/checklists/${req.params.id}`);
 });
@@ -369,6 +370,102 @@ router.post('/:id/archive', (req, res) => {
   db.prepare('UPDATE checklist_templates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newStatus, req.params.id);
   req.flash('success', `Template ${newStatus === 'archived' ? 'archived' : 'reactivated'}.`);
   res.redirect('/checklists');
+});
+
+// ============================================================
+// Responses — what workers actually submitted against a template.
+// Answers are rendered against the revision the worker filled in
+// (not the current draft), so edits never reinterpret old data.
+// ============================================================
+
+// GET /:id/responses — list a template's submissions
+router.get('/:id/responses', (req, res) => {
+  const db = getDb();
+  const template = db.prepare('SELECT * FROM checklist_templates WHERE id = ?').get(req.params.id);
+  if (!template) { req.flash('error', 'Template not found.'); return res.redirect('/checklists'); }
+  let responses = [];
+  try {
+    responses = db.prepare(`
+      SELECT r.id, r.revision_number, r.submitted_at, r.allocation_id, r.booking_id,
+             r.signature_data IS NOT NULL AND r.signature_data != '' AS has_signature,
+             cm.full_name AS worker_name,
+             b.booking_number,
+             (SELECT COUNT(*) FROM custom_checklist_response_photos p WHERE p.response_id = r.id) AS photo_count
+      FROM custom_checklist_responses r
+      LEFT JOIN crew_members cm ON cm.id = r.crew_member_id
+      LEFT JOIN bookings b ON b.id = r.booking_id
+      WHERE r.template_id = ?
+      ORDER BY r.submitted_at DESC
+      LIMIT 500
+    `).all(template.id);
+  } catch (e) { /* photos table predates migration 265 */ }
+  res.render('checklists/responses', {
+    title: `Responses: ${template.name}`,
+    currentPage: 'checklists',
+    template, responses,
+    user: req.session.user,
+  });
+});
+
+// GET /:id/responses/:responseId — one submission, answers matched to the
+// questions of the revision it was filled against.
+router.get('/:id/responses/:responseId', (req, res) => {
+  const db = getDb();
+  const template = db.prepare('SELECT * FROM checklist_templates WHERE id = ?').get(req.params.id);
+  if (!template) { req.flash('error', 'Template not found.'); return res.redirect('/checklists'); }
+  const response = db.prepare(`
+    SELECT r.*, cm.full_name AS worker_name, b.booking_number
+    FROM custom_checklist_responses r
+    LEFT JOIN crew_members cm ON cm.id = r.crew_member_id
+    LEFT JOIN bookings b ON b.id = r.booking_id
+    WHERE r.id = ? AND r.template_id = ?
+  `).get(req.params.responseId, template.id);
+  if (!response) { req.flash('error', 'Response not found.'); return res.redirect(`/checklists/${template.id}/responses`); }
+
+  const rev = db.prepare('SELECT * FROM checklist_template_revisions WHERE template_id = ? AND revision_number = ?')
+    .get(template.id, response.revision_number);
+  let items = [];
+  try { items = JSON.parse((rev && rev.items_json) || '[]'); } catch (e) { items = []; }
+  let answers = {};
+  try { answers = JSON.parse(response.answers_json || '{}'); } catch (e) { answers = {}; }
+  let photos = [];
+  try { photos = db.prepare('SELECT * FROM custom_checklist_response_photos WHERE response_id = ?').all(response.id); } catch (e) {}
+
+  // Group by section, attaching each item's answer + photos.
+  const sections = [];
+  const byKey = {};
+  items.forEach(it => {
+    const a = answers[String(it.id)];
+    const row = {
+      ...it,
+      answer: Array.isArray(a) ? a.join(', ') : a,
+      photos: photos.filter(p => String(p.item_id) === String(it.id)),
+    };
+    const key = it.section || '';
+    if (!byKey[key]) { byKey[key] = { name: key, items: [] }; sections.push(byKey[key]); }
+    byKey[key].items.push(row);
+  });
+
+  res.render('checklists/response-detail', {
+    title: `${template.name} — ${response.worker_name || 'response'}`,
+    currentPage: 'checklists',
+    template, response, sections,
+    user: req.session.user,
+  });
+});
+
+// GET /response-photos/:photoId — stream a response photo (admin side).
+router.get('/response-photos/:photoId', (req, res) => {
+  const db = getDb();
+  const path = require('path');
+  const fs = require('fs');
+  let photo = null;
+  try { photo = db.prepare('SELECT * FROM custom_checklist_response_photos WHERE id = ?').get(req.params.photoId); } catch (e) {}
+  if (!photo) return res.status(404).send('Not found');
+  const abs = path.join(__dirname, '..', photo.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('Not found');
+  res.type(photo.mime_type || 'image/jpeg');
+  fs.createReadStream(abs).pipe(res);
 });
 
 module.exports = router;
