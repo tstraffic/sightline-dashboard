@@ -9,7 +9,7 @@
 (function () {
   'use strict';
 
-  var RGB = '43,127,255';   // brand blue (#2B7FFF)
+  var RGB = '0,210,190';    // Atomis teal (#00D2BE)
   var FADE = 340;           // ms a point stays lit after it's drawn
   var WIDTH = 1.4;          // trail line width (css px) — thin
   var BLUR = 5;             // glow blur (css px) — soft, subtle
