@@ -1153,7 +1153,9 @@
   .bk2c-contacts-hint { font-size: 12px; color: #9CA3AF; }
   .bk2c-contact { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #E5E7EB; cursor: pointer; }
   .bk2c-contact input { width: 15px; height: 15px; accent-color: #2B7FFF; }
-  .bk2c-modal { display: none; position: fixed; inset: 0; z-index: 130; background: rgba(0,0,0,0.55); align-items: center; justify-content: center; padding: 16px; }
+  /* Above the create slide-over (.bk2-editor is z-index 1001) so the
+     new-client / new-contact modals aren't hidden behind the panel. */
+  .bk2c-modal { display: none; position: fixed; inset: 0; z-index: 1100; background: rgba(0,0,0,0.55); align-items: center; justify-content: center; padding: 16px; }
   .bk2c-modal.is-open { display: flex; }
   .bk2c-modal-card { background: #fff; color: #0F172A; border-radius: 12px; max-width: 430px; width: 100%; box-shadow: 0 24px 60px rgba(0,0,0,0.45); overflow: hidden; }
   .bk2c-modal-head { padding: 16px 18px; border-bottom: 1px solid #E5E7EB; font-weight: 700; font-size: 16px; }
