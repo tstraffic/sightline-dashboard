@@ -982,6 +982,18 @@ router.post('/shift-tasks', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(allocScope, bookingScope, crew_member_id, title.trim(),
          ['low','normal','high'].includes(priority) ? priority : 'normal', worker.id);
+  // Notify the assignee (no point pinging yourself for a task you just made).
+  if (String(crew_member_id) !== String(worker.id)) {
+    try {
+      let meta = { title: title.trim(), url: '/w/home', shift_label: '' };
+      if (bookingScope) {
+        const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(bookingScope) || {};
+        const date = bk.start_datetime ? new Date(String(bk.start_datetime).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+        meta = { title: title.trim(), url: '/w/booking-shift/' + bookingScope + '?tab=tasks', shift_label: [date, bk.title || bk.booking_number].filter(Boolean).join(' ') };
+      }
+      bookingNotify.notifyTaskAssigned([crew_member_id], meta);
+    } catch (e) { console.error('[worker tasks] task-assigned notify failed:', e.message); }
+  }
   req.flash('success', isGeneral ? 'General task added.' : 'Shift task added.');
   if (bookingScope) return res.redirect('/w/booking-shift/' + bookingScope + '?tab=tasks');
   return res.redirect('/w/home');
