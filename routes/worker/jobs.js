@@ -594,6 +594,48 @@ router.get('/booking-documents/:id', (req, res) => {
   fs.createReadStream(abs).pipe(res);
 });
 
+// GET /w/doc/:source/:id — In-app document viewer. Renders a full-screen
+// page that embeds the document (PDF in an iframe, image inline, anything
+// else falls back to a download link) with a Back button — so workers read
+// site docs without bouncing out to a new browser tab. `source` is 'job' or
+// 'booking'; access is re-validated against the underlying stream route.
+router.get('/doc/:source/:id', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const source = req.params.source === 'job' ? 'job' : 'booking';
+  let doc = null, jobId = null, bookingId = null;
+
+  if (source === 'job') {
+    doc = db.prepare(`SELECT jd.*, j.id AS jid FROM job_documents jd JOIN jobs j ON jd.job_id = j.id WHERE jd.id = ? AND jd.archived_at IS NULL`).get(req.params.id);
+    if (doc) jobId = doc.jid;
+  } else {
+    doc = db.prepare(`SELECT * FROM booking_documents WHERE id = ?`).get(req.params.id);
+    if (doc) bookingId = doc.booking_id;
+  }
+  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/w/jobs'); }
+
+  const linked = source === 'job'
+    ? db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND job_id = ? AND status != 'cancelled' LIMIT 1`).get(worker.id, jobId)
+    : db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND booking_id = ? AND status != 'cancelled' LIMIT 1`).get(worker.id, bookingId);
+  if (!linked) { req.flash('error', 'You don’t have access to that document.'); return res.redirect('/w/jobs'); }
+
+  const name = doc.original_name || doc.title || 'Document';
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const kind = ext === 'pdf' ? 'pdf'
+    : ['png','jpg','jpeg','gif','webp','heic'].includes(ext) ? 'image'
+    : 'other';
+  // Sanitise the back target — only allow internal worker paths.
+  let back = typeof req.query.back === 'string' && req.query.back.startsWith('/w/') ? req.query.back : '/w/jobs';
+
+  res.render('worker/doc-view', {
+    title: doc.title || name,
+    layout: 'worker/layout-bare',
+    fileUrl: '/w/' + source + '-documents/' + doc.id,
+    docName: doc.title || name,
+    kind, back,
+  });
+});
+
 // GET /w/job-documents/:id — Stream an admin-uploaded job document to the
 // worker. Permission check: the worker must have an allocation on the same
 // job (current or past) before we'll serve the file.
