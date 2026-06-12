@@ -78,6 +78,12 @@
   <div class="space-y-3">
     <h3 class="text-xs font-bold uppercase tracking-wider" style="color:#10B981;">Details</h3>
     <div class="space-y-2">
+      <% var STATUS_LABELS = {
+        client_booking: 'Client booking', unconfirmed: 'Awaiting confirmation', confirmed: 'Confirmed',
+        locked: 'Locked in', conflict: 'Under review', green_to_go: 'Ready to go', in_progress: 'In progress',
+        complete: 'Completed', finalised: 'Finalised', cancelled: 'Cancelled',
+        late_cancellation: 'Cancelled (late)', on_hold: 'On hold',
+      }; %>
       <% var details = [
         ['Booking', (startTime12 || '') + ' – ' + (endTime12 || '') + ' (approx)'],
         ['Booking #', booking.booking_number],
@@ -87,7 +93,7 @@
         ['Site Address', (booking.site_address || '-') + (booking.suburb ? ', ' + booking.suburb : '')],
         ['Order #', booking.order_number || '-'],
         ['Billing Code', booking.billing_code || '-'],
-        ['Status', booking.status],
+        ['Status', STATUS_LABELS[booking.status] || booking.status],
       ]; %>
       <% details.forEach(function(d) { %>
         <div class="flex items-start justify-between py-2" style="border-bottom:1px solid rgba(255,255,255,0.06);">
@@ -324,6 +330,13 @@
 
   <!-- FORMS TAB &mdash; shared partial keeps this 1:1 with views/worker/job-detail.ejs -->
   <% if (tab === 'forms') { %>
-    <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null }) %>
+    <% if (allocation) { %>
+      <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null }) %>
+    <% } else { %>
+      <div class="rounded-xl p-4" style="background:rgba(244,63,94,0.10);border:1px solid rgba(244,63,94,0.30);">
+        <p class="text-sm font-semibold" style="color:#FDA4AF;">Couldn't link this shift to your roster</p>
+        <p class="text-xs mt-1" style="color:rgba(255,255,255,0.65);">Pull down to refresh and try again. If forms still don't load, let the office know — they can re-add you to this booking.</p>
+      </div>
+    <% } %>
   <% } %>
 </div>
