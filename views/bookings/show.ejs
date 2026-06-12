@@ -893,6 +893,50 @@
     <div id="notes" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="notes">
       <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Notes</h2>
 
+      <!-- Fields captured on the booking form — each shown separately so
+           nothing filled in at creation gets buried. Edit them on the
+           booking edit page; the timeline notes below are add-only. -->
+      <% if (b.description || b.location_notes || b.requirements_text || b.internal_notes) { %>
+        <div class="space-y-2.5 mb-5">
+          <% if (b.description) { %>
+            <div class="p-3 rounded-lg bg-blue-50/60 border border-blue-100">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-blue-700 uppercase tracking-widest">Booking Description</span>
+                <a href="/bookings/<%= b.id %>/edit" class="text-[10px] font-semibold text-blue-400 hover:text-blue-600">Edit</a>
+              </div>
+              <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= b.description %></p>
+            </div>
+          <% } %>
+          <% if (b.location_notes) { %>
+            <div class="p-3 rounded-lg bg-teal-50/60 border border-teal-100">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-teal-700 uppercase tracking-widest">Location Notes</span>
+                <a href="/bookings/<%= b.id %>/edit" class="text-[10px] font-semibold text-teal-400 hover:text-teal-600">Edit</a>
+              </div>
+              <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= b.location_notes %></p>
+            </div>
+          <% } %>
+          <% if (b.requirements_text) { %>
+            <div class="p-3 rounded-lg bg-indigo-50/60 border border-indigo-100">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-indigo-700 uppercase tracking-widest">Site Requirements / PPE</span>
+                <a href="/bookings/<%= b.id %>/edit" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-600">Edit</a>
+              </div>
+              <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= b.requirements_text %></p>
+            </div>
+          <% } %>
+          <% if (b.internal_notes) { %>
+            <div class="p-3 rounded-lg bg-amber-50/60 border border-amber-100">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-amber-700 uppercase tracking-widest">Internal Notes <span class="font-medium normal-case tracking-normal">· office only, hidden from workers</span></span>
+                <a href="/bookings/<%= b.id %>/edit" class="text-[10px] font-semibold text-amber-400 hover:text-amber-600">Edit</a>
+              </div>
+              <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= b.internal_notes %></p>
+            </div>
+          <% } %>
+        </div>
+      <% } %>
+
       <% if (b.notes && b.notes.length > 0) { %>
         <div class="space-y-3 mb-4">
           <% b.notes.forEach(n => { %>
