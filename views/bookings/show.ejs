@@ -971,6 +971,69 @@
         </div>
       </form>
     </div>
+
+    <!-- Documents — lives in the wide main column (not the right rail) so the
+         upload area + list use the full width when the Documents tab is open. -->
+    <%
+      var DOC_TYPES = [
+        ['tgs','TGS'],['tmp','TMP'],['ctmp','CTMP'],['rol','ROL'],['rol_day','ROL — Day'],['rol_night','ROL — Night'],
+        ['stage_plan','Stage Plan'],['swms','SWMS'],['permit','Permit'],['invoice','Invoice'],['photo','Photo'],['other','Other'],
+      ];
+      var DOC_TYPE_LABEL = {}; DOC_TYPES.forEach(function (t) { DOC_TYPE_LABEL[t[0]] = t[1]; });
+    %>
+    <div id="documents" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="documents">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Documents (<%= b.documents ? b.documents.length : 0 %>)</h2>
+
+      <!-- Upload zone — the big drop target fills the tab. Drop a file (or
+           browse), name it and tag its type, and it lists below. Workers on
+           the shift see these in their portal DOCS tab. -->
+      <form method="POST" action="/bookings/<%= b.id %>/documents" enctype="multipart/form-data" class="mb-5">
+        <%- include('../partials/csrf') %>
+        <div data-dropzone class="rounded-xl border-2 border-dashed border-gray-300 hover:border-brand-400 transition bg-gray-50/60 px-6 py-12 text-center">
+          <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+          <input type="file" name="file" required class="block mx-auto text-sm text-gray-600">
+          <p class="dropzone-label text-sm text-gray-500 mt-2">Drag a document here or <span class="text-brand-600 font-semibold">browse</span></p>
+          <p class="text-[11px] text-gray-400 mt-1">PDF, image or office doc · workers on this shift can view it in the app</p>
+        </div>
+        <div class="flex flex-wrap items-end gap-2 mt-3">
+          <input type="text" name="title" placeholder="Document title (optional)" class="flex-1 min-w-[160px] px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <select name="document_type" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <% DOC_TYPES.forEach(function (t) { %><option value="<%= t[0] %>"<%= t[0] === 'other' ? ' selected' : '' %>><%= t[1] %></option><% }) %>
+          </select>
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">Upload</button>
+        </div>
+      </form>
+
+      <% if (b.documents && b.documents.length > 0) { %>
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Uploaded</p>
+        <div class="space-y-2">
+          <% b.documents.forEach(doc => {
+            const sizeKb = doc.file_size ? (doc.file_size / 1024).toFixed(0) + ' KB' : '';
+          %>
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
+              <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+              <div class="min-w-0 flex-1">
+                <a href="/bookings/<%= b.id %>/documents/<%= doc.id %>/download" target="_blank" class="text-sm font-medium text-brand-600 hover:text-brand-700 truncate block"><%= doc.title || doc.original_name %></a>
+                <p class="text-[10px] text-gray-400"><%= sizeKb %><%= doc.uploader_name ? ' · ' + doc.uploader_name : '' %></p>
+              </div>
+              <!-- Relabel the document type in place — auto-submits on change. -->
+              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/type" class="inline">
+                <%- include('../partials/csrf') %>
+                <select name="document_type" onchange="this.form.submit()" class="px-2 py-1 bg-white border border-gray-200 rounded-md text-gray-700 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  <% DOC_TYPES.forEach(function (t) { %><option value="<%= t[0] %>"<%= (doc.document_type || 'other') === t[0] ? ' selected' : '' %>><%= t[1] %></option><% }) %>
+                </select>
+              </form>
+              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/delete" class="inline">
+                <%- include('../partials/csrf') %>
+                <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Delete"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+              </form>
+            </div>
+          <% }); %>
+        </div>
+      <% } else { %>
+        <p class="text-sm text-gray-400 italic text-center py-2">No documents yet — drop the first one above.</p>
+      <% } %>
+    </div>
   </div>
 
   <!-- Right column: Details + Vehicles -->
@@ -1110,67 +1173,6 @@
 
 <!-- Vehicles block moved to the combined Crew & Vehicles card at the top of the grid. -->
 
-    <!-- Documents -->
-    <%
-      var DOC_TYPES = [
-        ['tgs','TGS'],['tmp','TMP'],['ctmp','CTMP'],['rol','ROL'],['rol_day','ROL — Day'],['rol_night','ROL — Night'],
-        ['stage_plan','Stage Plan'],['swms','SWMS'],['permit','Permit'],['invoice','Invoice'],['photo','Photo'],['other','Other'],
-      ];
-      var DOC_TYPE_LABEL = {}; DOC_TYPES.forEach(function (t) { DOC_TYPE_LABEL[t[0]] = t[1]; });
-    %>
-    <div id="documents" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="documents">
-      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Documents (<%= b.documents ? b.documents.length : 0 %>)</h2>
-
-      <!-- Upload zone — the big drop target fills the tab. Drop a file (or
-           browse), name it and tag its type, and it lists below. Workers on
-           the shift see these in their portal DOCS tab. -->
-      <form method="POST" action="/bookings/<%= b.id %>/documents" enctype="multipart/form-data" class="mb-5">
-        <%- include('../partials/csrf') %>
-        <div data-dropzone class="rounded-xl border-2 border-dashed border-gray-300 hover:border-brand-400 transition bg-gray-50/60 px-6 py-10 text-center">
-          <svg class="w-10 h-10 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-          <input type="file" name="file" required class="block mx-auto text-sm text-gray-600">
-          <p class="dropzone-label text-sm text-gray-500 mt-2">Drag a document here or <span class="text-brand-600 font-semibold">browse</span></p>
-          <p class="text-[11px] text-gray-400 mt-1">PDF, image or office doc · workers on this shift can view it in the app</p>
-        </div>
-        <div class="flex flex-wrap items-end gap-2 mt-3">
-          <input type="text" name="title" placeholder="Document title (optional)" class="flex-1 min-w-[160px] px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-          <select name="document_type" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-            <% DOC_TYPES.forEach(function (t) { %><option value="<%= t[0] %>"<%= t[0] === 'other' ? ' selected' : '' %>><%= t[1] %></option><% }) %>
-          </select>
-          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">Upload</button>
-        </div>
-      </form>
-
-      <% if (b.documents && b.documents.length > 0) { %>
-        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Uploaded</p>
-        <div class="space-y-2">
-          <% b.documents.forEach(doc => {
-            const sizeKb = doc.file_size ? (doc.file_size / 1024).toFixed(0) + ' KB' : '';
-          %>
-            <div class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
-              <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-              <div class="min-w-0 flex-1">
-                <a href="/bookings/<%= b.id %>/documents/<%= doc.id %>/download" target="_blank" class="text-sm font-medium text-brand-600 hover:text-brand-700 truncate block"><%= doc.title || doc.original_name %></a>
-                <p class="text-[10px] text-gray-400"><%= sizeKb %><%= doc.uploader_name ? ' · ' + doc.uploader_name : '' %></p>
-              </div>
-              <!-- Relabel the document type in place — auto-submits on change. -->
-              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/type" class="inline">
-                <%- include('../partials/csrf') %>
-                <select name="document_type" onchange="this.form.submit()" class="px-2 py-1 bg-white border border-gray-200 rounded-md text-gray-700 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
-                  <% DOC_TYPES.forEach(function (t) { %><option value="<%= t[0] %>"<%= (doc.document_type || 'other') === t[0] ? ' selected' : '' %>><%= t[1] %></option><% }) %>
-                </select>
-              </form>
-              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/delete" class="inline">
-                <%- include('../partials/csrf') %>
-                <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Delete"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
-              </form>
-            </div>
-          <% }); %>
-        </div>
-      <% } else { %>
-        <p class="text-sm text-gray-400 italic text-center py-2">No documents yet — drop the first one above.</p>
-      <% } %>
-    </div>
 
     <!-- Activity History -->
     <% if (b.activity && b.activity.length > 0) { %>
