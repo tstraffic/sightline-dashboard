@@ -218,7 +218,7 @@
           </tr>
           <% if (allocation.job_notes) { %>
             <tr class="border-t border-gray-100">
-              <td class="px-4 py-2.5 text-gray-500 font-medium align-top">Description</td>
+              <td class="px-4 py-2.5 text-gray-500 font-medium align-top">Job notes</td>
               <td class="px-4 py-2.5 text-gray-900 whitespace-pre-line"><%= allocation.job_notes %></td>
             </tr>
           <% } %>
@@ -229,6 +229,39 @@
         </tbody>
       </table>
     </div>
+
+    <!-- What the office wrote on the booking — description, location notes
+         and site requirements as separate labelled cards. Internal office
+         notes (bookings.notes) are deliberately not shown to workers. -->
+    <% if (typeof allocation.booking_description !== 'undefined' && allocation.booking_description) { %>
+    <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+      <h2 class="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1.5">
+        <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        About this job
+      </h2>
+      <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= allocation.booking_description %></p>
+    </div>
+    <% } %>
+
+    <% if (typeof allocation.booking_location_notes !== 'undefined' && allocation.booking_location_notes) { %>
+    <div class="bg-teal-50 border border-teal-100 rounded-xl p-4">
+      <h2 class="text-xs font-bold text-teal-700 uppercase tracking-wider mb-1.5">
+        <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Location notes
+      </h2>
+      <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= allocation.booking_location_notes %></p>
+    </div>
+    <% } %>
+
+    <% if (typeof allocation.booking_requirements !== 'undefined' && allocation.booking_requirements) { %>
+    <div class="bg-amber-50 border border-amber-100 rounded-xl p-4">
+      <h2 class="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1.5">
+        <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        Site requirements / PPE
+      </h2>
+      <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= allocation.booking_requirements %></p>
+    </div>
+    <% } %>
 
     <!-- Crew and Resources -->
     <div class="bg-white border border-gray-200 rounded-xl p-4">
