@@ -1367,7 +1367,7 @@ router.get('/:id/edit', (req, res) => {
 
 // POST /:id — Update
 router.post('/:id', (req, res) => {
-  const db = getDb(); const existing = db.prepare("SELECT id, booking_number, start_datetime FROM bookings WHERE id = ?").get(req.params.id);
+  const db = getDb(); const existing = db.prepare("SELECT id, booking_number, start_datetime, description, location_notes FROM bookings WHERE id = ?").get(req.params.id);
   if (!existing) { req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
   const b = req.body;
   if (!b.title || !b.start_date || !b.start_time || !b.end_date || !b.end_time) { req.flash('error', 'Title and schedule are required.'); return res.redirect('/bookings/' + req.params.id + '/edit'); }
@@ -1450,6 +1450,21 @@ router.post('/:id', (req, res) => {
     const bkAfter = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
     // Don't announce a time change for a shift the crew were never told about.
     if (bkAfter && bookingNotify.isNotifiable(bkAfter.status)) bookingNotify.notifyRescheduled(bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10)), bkAfter, existing.start_datetime);
+  }
+
+  // Worker-facing notes changed? Tell the crew their shift info was updated
+  // — only the fields they actually see (About this job + Location notes),
+  // and only once the booking is confirmed so they'd already have it.
+  const newDesc = (b.description || '').trim();
+  const newLoc  = (b.location_notes || '').trim();
+  const notesChanged = [];
+  if (newDesc !== (existing.description || '').trim()) notesChanged.push('About this job');
+  if (newLoc  !== (existing.location_notes || '').trim()) notesChanged.push('Location notes');
+  if (notesChanged.length) {
+    const bkNotes = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+    if (bkNotes && bookingNotify.isNotifiable(bkNotes.status)) {
+      bookingNotify.notifyShiftNotesUpdated(bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10)), bkNotes, notesChanged);
+    }
   }
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Updated booking ${existing.booking_number}`, req });
@@ -2239,6 +2254,16 @@ router.post('/:id/tasks', (req, res) => {
     due_at || null,
     req.session.user.id
   );
+  // Tell the worker the task landed on them.
+  try {
+    const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(req.params.id) || {};
+    const date = bk.start_datetime ? new Date(String(bk.start_datetime).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+    bookingNotify.notifyTaskAssigned([crew_member_id], {
+      title: title.trim(),
+      url: '/w/booking-shift/' + req.params.id + '?tab=tasks',
+      shift_label: [date, bk.title || bk.booking_number].filter(Boolean).join(' '),
+    });
+  } catch (e) { console.error('[bookings] task-assigned notify failed:', e.message); }
   req.flash('success', 'Task added.');
   res.redirect('/bookings/' + req.params.id + '#tasks');
 });

@@ -88,6 +88,33 @@ function notifyDocketSubmitted(crewIds, booking) {
   });
 }
 
+// A task was assigned to a worker. Fires whenever the task is created
+// against them — admin shift-task page, booking detail, or a TL on site.
+// `url` deep-links to the shift's Tasks tab when the task is shift-bound,
+// otherwise the worker home (general tasks live on the home dashboard).
+function notifyTaskAssigned(crewIds, task) {
+  const where = task && task.shift_label ? ' on ' + task.shift_label : '';
+  fanOut(crewIds, {
+    title: 'New task assigned',
+    body: (task && task.title ? '“' + task.title + '”' : 'A task') + where + '. Open the app to view it.',
+    url: (task && task.url) || '/w/home',
+    category: 'bookings', type: 'task_assigned',
+  });
+}
+
+// Shift notes changed after the crew could already see the shift — e.g. the
+// office edits "About this job" / Location notes. `changed` is a list of
+// human labels of what was updated.
+function notifyShiftNotesUpdated(crewIds, booking, changed) {
+  const what = (changed && changed.length) ? changed.join(' and ') : 'details';
+  fanOut(crewIds, {
+    title: 'Shift details updated',
+    body: what + ' updated for ' + shiftLabel(booking) + '. Open the app to read the latest.',
+    url: '/w/jobs',
+    category: 'bookings', type: 'booking_notes_updated',
+  });
+}
+
 function notifyCancelled(crewIds, booking) {
   fanOut(crewIds, {
     title: 'Shift cancelled',
@@ -118,4 +145,4 @@ function activeCrewIds(db, bookingId) {
   } catch (e) { return []; }
 }
 
-module.exports = { notifyAssigned, notifyRemoved, notifyCancelled, notifyRescheduled, notifyGreenToGo, notifyDocketSubmitted, activeCrewIds, isNotifiable };
+module.exports = { notifyAssigned, notifyRemoved, notifyCancelled, notifyRescheduled, notifyGreenToGo, notifyDocketSubmitted, notifyTaskAssigned, notifyShiftNotesUpdated, activeCrewIds, isNotifiable };
