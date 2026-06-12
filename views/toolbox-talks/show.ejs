@@ -343,11 +343,11 @@
           var canvas = pad.querySelector('[data-pad-canvas]');
           var ph = pad.querySelector('[data-pad-ph]');
           var ctx = canvas.getContext('2d');
-          var drawing = false, hasInk = false, last = null;
-          function size() { var dpr = window.devicePixelRatio || 1, r = canvas.getBoundingClientRect(); if (!r.width) return; canvas.width = r.width * dpr; canvas.height = r.height * dpr; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(dpr, dpr); ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a'; }
+          var drawing = false, hasInk = false, last = null, lastMid = null;
+          function size() { var dpr = Math.min(window.devicePixelRatio || 1, 3), r = canvas.getBoundingClientRect(); if (!r.width) return; canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a'; }
           function pos(e) { var r = canvas.getBoundingClientRect(); var t = e.touches ? e.touches[0] : e; return { x: t.clientX - r.left, y: t.clientY - r.top }; }
-          function start(e) { drawing = true; last = pos(e); if (!hasInk) { hasInk = true; ph.style.display = 'none'; } e.preventDefault(); }
-          function move(e) { if (!drawing) return; var p = pos(e); ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke(); last = p; e.preventDefault(); }
+          function start(e) { drawing = true; last = pos(e); lastMid = last; if (!hasInk) { hasInk = true; ph.style.display = 'none'; } e.preventDefault(); }
+          function move(e) { if (!drawing) return; var p = pos(e); var mid = { x: (last.x + p.x) / 2, y: (last.y + p.y) / 2 }; ctx.beginPath(); ctx.moveTo(lastMid.x, lastMid.y); ctx.quadraticCurveTo(last.x, last.y, mid.x, mid.y); ctx.stroke(); last = p; lastMid = mid; e.preventDefault(); }
           function stop() { drawing = false; }
           canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); canvas.addEventListener('mouseup', stop); canvas.addEventListener('mouseleave', stop);
           canvas.addEventListener('touchstart', start, { passive: false }); canvas.addEventListener('touchmove', move, { passive: false }); canvas.addEventListener('touchend', stop);
@@ -444,17 +444,16 @@
         var dataInput = document.getElementById('presenter-sig-data');
         var submitBtn = document.getElementById('presenter-sig-submit');
         var ctx = canvas.getContext('2d');
-        var drawing = false, last = null, hasInk = false;
+        var drawing = false, last = null, lastMid = null, hasInk = false;
 
         function size() {
-          var dpr = window.devicePixelRatio || 1;
+          var dpr = Math.min(window.devicePixelRatio || 1, 3);
           var rect = canvas.getBoundingClientRect();
           if (rect.width === 0) return;
-          canvas.width = rect.width * dpr;
-          canvas.height = rect.height * dpr;
-          ctx.setTransform(1, 0, 0, 1, 0, 0);
-          ctx.scale(dpr, dpr);
-          ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          canvas.width = Math.round(rect.width * dpr);
+          canvas.height = Math.round(rect.height * dpr);
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
           ctx.strokeStyle = '#0f172a';
         }
         requestAnimationFrame(size);
@@ -465,13 +464,14 @@
           var t = e.touches ? e.touches[0] : e;
           return { x: t.clientX - r.left, y: t.clientY - r.top };
         }
-        function start(e) { e.preventDefault(); drawing = true; last = xy(e); placeholder.style.display = 'none'; }
+        function start(e) { e.preventDefault(); drawing = true; last = xy(e); lastMid = last; placeholder.style.display = 'none'; }
         function move(e) {
           if (!drawing) return;
           e.preventDefault();
           var p = xy(e);
-          ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
-          last = p;
+          var mid = { x: (last.x + p.x) / 2, y: (last.y + p.y) / 2 };
+          ctx.beginPath(); ctx.moveTo(lastMid.x, lastMid.y); ctx.quadraticCurveTo(last.x, last.y, mid.x, mid.y); ctx.stroke();
+          last = p; lastMid = mid;
           if (!hasInk) { hasInk = true; submitBtn.disabled = false; }
           dataInput.value = canvas.toDataURL('image/png');
         }
