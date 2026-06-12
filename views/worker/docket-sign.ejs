@@ -98,7 +98,10 @@
     background: #F8FAFC; height: 160px; position: relative; overflow: hidden;
   }
   .ds-sig-pad.ds-error { border-color: #F87171; background: #FEF2F2; }
-  .ds-sig-pad canvas { width: 100%; height: 100%; touch-action: none; display: block; }
+  .ds-sig-pad canvas { width: 100%; height: 100%; touch-action: none; display: block;
+    /* Subtle neon glow on the live ink — presentational only, doesn't affect
+       the saved signature (toDataURL reads raw canvas pixels, not CSS). */
+    filter: drop-shadow(0 0 1px rgba(34,211,238,0.6)) drop-shadow(0 0 4px rgba(34,211,238,0.42)); }
   .ds-sig-pad.signed { border-style: solid; border-color: rgba(16,185,129,0.45); background: #F0FDF4; }
   .ds-sig-hint { font-size: 0.68rem; color: rgba(255,255,255,0.4); text-align: center; margin-top: 6px; }
   .ds-sig-hint.signed { color: #34D399; font-weight: 600; }
