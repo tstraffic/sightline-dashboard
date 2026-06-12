@@ -4156,6 +4156,10 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 
 /* ── Smart Select (searchable dropdown cards — palette B) ─────────────── */
 .ss-wrap { position: relative; }
+/* While the panel is open, lift the wrapper into its own stacking context so
+   the dropdown paints above sibling cards below it (Equipment / Details) —
+   without this the panel rendered behind them. */
+.ss-wrap.ss-open { z-index: 1000; }
 .ss-native {
   position: absolute !important; width: 1px !important; height: 1px !important;
   opacity: 0 !important; pointer-events: none !important; margin: -1px !important;
@@ -4176,7 +4180,7 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 .ss-caret { color: #9CA3AF; font-size: 11px; flex-shrink: 0; }
 
 .ss-panel {
-  position: absolute; z-index: 70; left: 0; right: 0; top: calc(100% + 6px);
+  position: absolute; z-index: 1000; left: 0; right: 0; top: calc(100% + 6px);
   background: #fff; border: 1px solid #E5E7EB; border-radius: 0.75rem;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.14);
   overflow: hidden;

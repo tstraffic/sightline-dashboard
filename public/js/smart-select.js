@@ -180,8 +180,10 @@
 
     function open() {
       if (sel.disabled) return;
-      // close any other open panel
+      // close any other open panel (and drop their lift)
       document.querySelectorAll('.ss-panel:not([hidden])').forEach(function (pn) { pn.hidden = true; });
+      document.querySelectorAll('.ss-wrap.ss-open').forEach(function (w) { w.classList.remove('ss-open'); });
+      wrap.classList.add('ss-open'); // lift this wrapper above sibling cards
       mode = 'all';
       search.value = '';
       renderChips();
@@ -193,7 +195,7 @@
       if (r.bottom + 340 > window.innerHeight && r.top > 360) panel.classList.add('ss-panel-up');
       setTimeout(function () { search.focus(); }, 0);
     }
-    function close() { panel.hidden = true; }
+    function close() { panel.hidden = true; wrap.classList.remove('ss-open'); }
 
     trigger.addEventListener('click', function () { panel.hidden ? open() : close(); });
     trigger.addEventListener('keydown', function (e) {
