@@ -7,6 +7,7 @@ const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { requireRole } = require('../middleware/auth');
 const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew } = require('../lib/bookingLifecycle');
+const { getDocketCrew } = require('../lib/shiftDocket');
 const bookingNotify = require('../services/bookingNotify');
 
 // Multer config for booking document uploads
@@ -233,7 +234,58 @@ function loadBookingDetail(db, bookingId) {
     console.error('[loadBookingDetail] requirement-fulfilment failed:', e.message);
   }
 
-  return { ...row, supervisor_name: supervisorName, internal_notes: row.notes || '', crew, notes, vehicles, dockets, documents, activity, requirements, equipment: equipmentList, job: jobInfo, client: clientInfo };
+  const shiftDockets = loadShiftDockets(db, bookingId, crew);
+
+  return { ...row, supervisor_name: supervisorName, internal_notes: row.notes || '', crew, notes, vehicles, dockets, shiftDockets, documents, activity, requirements, equipment: equipmentList, job: jobInfo, client: clientInfo };
+}
+
+/**
+ * Worker-signed shift dockets for a booking, with crew lines and version chain.
+ * Returns:
+ *   {
+ *     current: { id, signed_at, signer_name, version, ... crew: [{ name, start_on_site, ... }] } | null,
+ *     history: [ same shape, ordered newest first, status='superseded' ],
+ *     drift: { added: [{crew_member_id, name, role}], removed: [{crew_member_id, name}] }   // booking_crew vs current docket
+ *   }
+ */
+function loadShiftDockets(db, bookingId, bookingCrewRows) {
+  let rows = [];
+  try {
+    rows = db.prepare(`
+      SELECT ds.*, cm.full_name AS signer_name
+      FROM docket_signatures ds
+      LEFT JOIN crew_members cm ON cm.id = COALESCE(ds.signed_by_crew_id, ds.crew_member_id)
+      WHERE ds.booking_id = ?
+      ORDER BY COALESCE(ds.version, 1) DESC, ds.id DESC
+    `).all(bookingId);
+  } catch (e) { return { current: null, history: [], drift: { added: [], removed: [] } }; }
+
+  if (!rows.length) return { current: null, history: [], drift: { added: [], removed: [] } };
+
+  const decorate = (d) => ({
+    ...d,
+    crew: getDocketCrew(db, d),
+  });
+
+  const current = rows.find(r => (r.status || 'current') === 'current') || null;
+  const history = rows.filter(r => (r.status || 'current') !== 'current').map(decorate);
+  const currentDecorated = current ? decorate(current) : null;
+
+  // Drift: who is on the booking now vs who is on the current docket?
+  // Booking_crew is the source of truth for "should be on the docket".
+  let added = [], removed = [];
+  if (currentDecorated) {
+    const onDocket = new Set(currentDecorated.crew.map(c => c.crew_member_id));
+    const onBooking = new Set((bookingCrewRows || []).map(c => c.crew_member_id));
+    added = (bookingCrewRows || [])
+      .filter(c => !onDocket.has(c.crew_member_id))
+      .map(c => ({ crew_member_id: c.crew_member_id, name: c.full_name || ('#' + c.crew_member_id), role: c.role_on_site || '' }));
+    removed = currentDecorated.crew
+      .filter(c => c.crew_member_id && !onBooking.has(c.crew_member_id))
+      .map(c => ({ crew_member_id: c.crew_member_id, name: c.name }));
+  }
+
+  return { current: currentDecorated, history, drift: { added, removed } };
 }
 
 // GET /classic — legacy list view (was GET /). Preserved for any old

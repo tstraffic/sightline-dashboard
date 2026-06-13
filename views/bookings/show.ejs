@@ -844,10 +844,156 @@
 
 <!-- Crew block moved to the top of the two-column grid (see <%= 'sec-crew-vehicles' %>). -->
 
+    <!-- Worker-signed shift docket — surfaced from docket_signatures.
+         One docket covers the whole shift's crew; signing it auto-completes
+         the booking (see lib/shiftDocket.completeShift). Admins can edit
+         hours in place, or "Re-adjust" to version up when crew composition
+         has changed since signing. -->
+    <% if (b.shiftDockets && (b.shiftDockets.current || b.shiftDockets.history.length)) { %>
+      <div id="shift-docket" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="dockets">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Shift Docket
+            <% if (b.shiftDockets.current) { %>
+              <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">SIGNED</span>
+            <% } %>
+            <% if (b.shiftDockets.history.length) { %>
+              <span class="ml-1 text-[11px] text-gray-400 font-normal">(<%= b.shiftDockets.history.length + (b.shiftDockets.current ? 1 : 0) %> versions)</span>
+            <% } %>
+          </h2>
+        </div>
+
+        <% if (b.shiftDockets.current) {
+             const cur = b.shiftDockets.current;
+             const drift = b.shiftDockets.drift; %>
+          <% if (drift.added.length || drift.removed.length) { %>
+            <!-- Crew drift between booking_crew and the current docket -->
+            <div class="mb-4 p-4 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-3">
+              <svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-amber-900">Crew has changed since this docket was signed</p>
+                <p class="text-xs text-amber-800 mt-1">
+                  <% if (drift.added.length) { %>Now on booking: <strong><%= drift.added.map(p => p.name).join(', ') %></strong>. <% } %>
+                  <% if (drift.removed.length) { %>No longer on booking: <strong><%= drift.removed.map(p => p.name).join(', ') %></strong>. <% } %>
+                </p>
+                <form method="POST" action="/dockets/<%= cur.id %>/readjust-with-booking-crew" class="mt-2 inline">
+                  <%- include('../partials/csrf') %>
+                  <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+                    Re-adjust for current crew
+                  </button>
+                </form>
+                <p class="text-[11px] text-amber-700 mt-1.5">Creates a new docket version mirroring the current crew. The current docket becomes a superseded copy.</p>
+              </div>
+            </div>
+          <% } %>
+
+          <!-- Current docket summary card -->
+          <div class="border border-gray-200 rounded-lg overflow-hidden">
+            <div class="bg-gradient-to-br from-emerald-50 to-white px-4 py-3 border-b border-emerald-100 flex items-center justify-between gap-2 flex-wrap">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-gray-900">
+                  v<%= cur.version || 1 %>
+                  <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold <%= cur.source === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800' %>"><%= cur.source === 'admin' ? 'ADMIN EDITED' : 'WORKER SIGNED' %></span>
+                </p>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  Signed by <strong class="text-gray-700"><%= cur.signer_name || '—' %></strong>
+                  <% if (cur.signed_at) { %> · <%= new Date(cur.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) %><% } %>
+                </p>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <a href="/dockets/<%= cur.id %>" class="px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-xs font-semibold text-gray-700 rounded-lg">View</a>
+                <% if (cur.source === 'admin') { %>
+                  <a href="/dockets/<%= cur.id %>/edit" class="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg">Edit hours</a>
+                <% } else { %>
+                  <form method="POST" action="/dockets/<%= cur.id %>/adjust" class="inline">
+                    <%- include('../partials/csrf') %>
+                    <button type="submit" class="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg">Edit hours</button>
+                  </form>
+                <% } %>
+              </div>
+            </div>
+
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                <tr>
+                  <th class="text-left px-4 py-2">Crew</th>
+                  <th class="text-left px-2 py-2">Start</th>
+                  <th class="text-left px-2 py-2">Finish</th>
+                  <th class="text-right px-2 py-2">Break</th>
+                  <th class="text-right px-2 py-2">Travel</th>
+                  <th class="text-right px-4 py-2">Hours</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <% cur.crew.forEach(function (c) { %>
+                  <tr>
+                    <td class="px-4 py-2 font-medium text-gray-900"><%= c.name %><% if (c.role) { %> <span class="text-xs text-gray-400 font-normal"><%= c.role %></span><% } %></td>
+                    <td class="px-2 py-2 text-gray-700 font-mono text-xs"><%= c.start_on_site || '—' %></td>
+                    <td class="px-2 py-2 text-gray-700 font-mono text-xs"><%= c.finish_on_site || '—' %></td>
+                    <td class="px-2 py-2 text-gray-600 text-right text-xs"><%= c.break_minutes || 0 %>m</td>
+                    <td class="px-2 py-2 text-gray-600 text-right text-xs"><%= (c.travel_hours || 0).toFixed ? c.travel_hours.toFixed(2) : c.travel_hours %>h</td>
+                    <td class="px-4 py-2 text-right font-semibold text-emerald-700 tabular-nums"><%= (c.total_hours || 0).toFixed ? c.total_hours.toFixed(2) : c.total_hours %>h</td>
+                  </tr>
+                <% }) %>
+                <% if (!cur.crew.length) { %>
+                  <tr><td colspan="6" class="px-4 py-3 text-center text-sm text-gray-400">No crew lines on this docket.</td></tr>
+                <% } %>
+              </tbody>
+              <tfoot class="bg-emerald-50 text-emerald-900 font-semibold">
+                <tr>
+                  <td class="px-4 py-2 text-xs uppercase tracking-wide" colspan="5">Total man-hours</td>
+                  <td class="px-4 py-2 text-right tabular-nums"><%= (cur.total_hours || 0).toFixed ? cur.total_hours.toFixed(2) : cur.total_hours %>h</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <% if (b.shiftDockets.history.length) { %>
+            <details class="mt-3">
+              <summary class="cursor-pointer text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 py-2">Previous versions (<%= b.shiftDockets.history.length %>)</summary>
+              <div class="mt-2 space-y-2">
+                <% b.shiftDockets.history.forEach(function (h) { %>
+                  <a href="/dockets/<%= h.id %>" class="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gray-200 text-gray-700">v<%= h.version || 1 %></span>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold <%= h.source === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800' %>"><%= h.source === 'admin' ? 'ADMIN' : 'WORKER' %></span>
+                      <span class="text-xs text-gray-600 truncate">
+                        <% if (h.signed_at) { %><%= new Date(h.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) %><% } %>
+                        · <%= h.crew.length %> crew · <%= (h.total_hours || 0).toFixed ? h.total_hours.toFixed(2) : h.total_hours %>h
+                      </span>
+                    </div>
+                    <span class="text-xs text-gray-400">superseded</span>
+                  </a>
+                <% }) %>
+              </div>
+            </details>
+          <% } %>
+        <% } else if (b.shiftDockets.history.length) { %>
+          <p class="text-sm text-gray-500 mb-3">No current docket — all versions have been superseded. History below.</p>
+          <div class="space-y-2">
+            <% b.shiftDockets.history.forEach(function (h) { %>
+              <a href="/dockets/<%= h.id %>" class="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition">
+                <span class="text-sm text-gray-700">v<%= h.version || 1 %> · <%= h.signed_at || '' %></span>
+                <span class="text-xs text-gray-400">superseded</span>
+              </a>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+    <% } else { %>
+      <div id="shift-docket" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="dockets">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Shift Docket</h2>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600">NOT SIGNED</span>
+        </div>
+        <p class="text-sm text-gray-500">No shift docket signed yet. The booking stays in its current status until a worker signs the docket from the crew portal — that's what marks the shift complete.</p>
+      </div>
+    <% } %>
+
     <!-- Dockets -->
     <div id="dockets" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="dockets">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Dockets (<%= b.dockets ? b.dockets.length : 0 %>)</h2>
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Legacy dockets (<%= b.dockets ? b.dockets.length : 0 %>)</h2>
         <form method="POST" action="/bookings/<%= b.id %>/dockets" class="inline">
           <%- include('../partials/csrf') %>
           <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg transition">
