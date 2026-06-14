@@ -258,7 +258,62 @@
     display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px;
   }
   .ds-submit:active { transform: scale(0.99); }
+  .ds-submit[disabled], .ds-submit.is-blocked {
+    background: #94A3B8;
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 0.95;
+  }
+  .ds-submit[disabled]:active, .ds-submit.is-blocked:active { transform: none; }
   .ds-submit-summary { text-align: center; font-size: 0.72rem; color: var(--ds-text-faint); margin-top: 8px; }
+
+  /* Preflight: required-checklist warning — shows BEFORE the worker hits
+     submit so they don't lose their entered hours/signatures to a redirect.
+     Themed amber, links straight to the missing form (allocationId already
+     baked into the href from the server), reads on both light + dark. */
+  .ds-prereq {
+    margin-top: 14px;
+    padding: 14px 14px 12px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(251,191,36,0.16), rgba(251,191,36,0.06));
+    border: 1px solid rgba(251,191,36,0.45);
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  :root[data-theme="light"] .ds-prereq {
+    background: #FFFBEB;
+    border-color: #FCD34D;
+  }
+  .ds-prereq-icon { width: 26px; height: 26px; flex-shrink: 0; color: #F59E0B; }
+  :root[data-theme="light"] .ds-prereq-icon { color: #B45309; }
+  .ds-prereq-body { min-width: 0; flex: 1; }
+  .ds-prereq-title { font-size: 0.95rem; font-weight: 800; color: #FCD34D; letter-spacing: -0.01em; }
+  :root[data-theme="light"] .ds-prereq-title { color: #78350F; }
+  .ds-prereq-sub   { font-size: 0.78rem; color: var(--ds-text-mute); margin-top: 3px; }
+  :root[data-theme="light"] .ds-prereq-sub { color: #92400E; }
+  .ds-prereq-list  { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .ds-prereq-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 12px; border-radius: 10px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(251,191,36,0.25);
+    color: var(--ds-text);
+    font-size: 0.88rem; font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s, transform 0.05s;
+    min-height: 44px;
+  }
+  :root[data-theme="light"] .ds-prereq-item {
+    background: #FFFFFF;
+    border-color: #FCD34D;
+    color: #78350F;
+  }
+  .ds-prereq-item:active { transform: scale(0.99); }
+  .ds-prereq-item .arrow {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: #FCD34D;
+  }
+  :root[data-theme="light"] .ds-prereq-item .arrow { color: #B45309; }
 
   /* Locked / signed read-only */
   .ds-locked-banner {
@@ -354,7 +409,30 @@
 
   <% } else { %>
     <!-- ============ EDITABLE MULTI-CREW FORM ============ -->
-    <form method="POST" action="<%= signActionUrl %>" id="docket-form" novalidate>
+    <% if (typeof missingRequiredForms !== 'undefined' && missingRequiredForms && missingRequiredForms.length) { %>
+      <div class="ds-prereq" role="alert" aria-live="polite">
+        <svg class="ds-prereq-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div class="ds-prereq-body">
+          <p class="ds-prereq-title">Finish these before signing</p>
+          <p class="ds-prereq-sub">The docket can't be signed until <%= missingRequiredForms.length === 1 ? 'this' : 'these' %> required <%= missingRequiredForms.length === 1 ? 'checklist is' : 'checklists are' %> done for your shift.</p>
+          <div class="ds-prereq-list">
+            <% missingRequiredForms.forEach(function (f) { %>
+              <a href="<%= f.href %>" class="ds-prereq-item">
+                <span><%= f.label %></span>
+                <span class="arrow">
+                  Open
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </span>
+              </a>
+            <% }) %>
+          </div>
+        </div>
+      </div>
+    <% } %>
+
+    <form method="POST" action="<%= signActionUrl %>" id="docket-form" novalidate data-blocked="<%= (typeof missingRequiredForms !== 'undefined' && missingRequiredForms && missingRequiredForms.length) ? '1' : '' %>">
       <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
       <input type="hidden" name="docket_type" value="daily_docket">
 
@@ -516,11 +594,23 @@
 
       <!-- Sticky submit -->
       <div class="ds-submit-bar">
-        <button type="submit" class="ds-submit" id="ds-submit-btn">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-          Sign &amp; Submit Docket
+        <% var blocked = (typeof missingRequiredForms !== 'undefined' && missingRequiredForms && missingRequiredForms.length); %>
+        <button type="submit" class="ds-submit<%= blocked ? ' is-blocked' : '' %>" id="ds-submit-btn" <%= blocked ? 'disabled' : '' %>>
+          <% if (blocked) { %>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m0 0v3m0-3h-3m3 0h3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Finish the checklists first
+          <% } else { %>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            Sign &amp; Submit Docket
+          <% } %>
         </button>
-        <p class="ds-submit-summary">One docket for the whole crew. Your signature and a client signature (or "no client") are required.</p>
+        <p class="ds-submit-summary">
+          <% if (blocked) { %>
+            <%= missingRequiredForms.map(function (f) { return f.label; }).join(' and ') %> required before this docket can be signed.
+          <% } else { %>
+            One docket for the whole crew. Your signature and a client signature (or "no client") are required.
+          <% } %>
+        </p>
       </div>
     </form>
   <% } %>
@@ -673,6 +763,17 @@ recalc();
 
 // ===== Submit validation =====
 document.getElementById('docket-form').addEventListener('submit', function (e) {
+  // Server-side gating safety net — if the page rendered with required
+  // forms outstanding the submit button is already disabled and the warning
+  // banner is visible; bail here too so a forced submit (e.g. via the JS
+  // console) lands the user back on the prereq banner instead of silently
+  // losing their work to a server redirect.
+  if (this.getAttribute('data-blocked') === '1') {
+    e.preventDefault();
+    var prereq = document.querySelector('.ds-prereq');
+    if (prereq) prereq.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
   var ok = true;
   // Each crew row needs start + finish.
   document.querySelectorAll('[data-crew-row]').forEach(function(row) {

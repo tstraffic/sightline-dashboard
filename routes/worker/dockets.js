@@ -130,6 +130,28 @@ router.get('/dockets', (req, res) => {
 // Shift dockets — one docket per shift, covering the whole crew.
 // ===========================================================================
 
+// Required checklists a signing worker must have submitted on this shift
+// before they can sign the docket. The submit handler enforces this; we
+// also surface it as a banner on the sign page so the worker doesn't try
+// to sign and lose their entered data to a redirect.
+const REQUIRED_FORMS = [
+  { key: 'risk_toolbox', label: 'Risk Assessment & Toolbox', url: '/w/forms/risk-assessment' },
+  { key: 'team_leader',  label: 'Team Leader Checklist',     url: '/w/forms/team-leader' },
+];
+
+function computeMissingRequiredForms(db, workerId, signerAlloc) {
+  if (!signerAlloc) return [];
+  const submitted = new Set(
+    db.prepare(`
+      SELECT DISTINCT form_type FROM safety_forms
+      WHERE crew_member_id = ? AND allocation_id = ? AND form_type IN ('risk_toolbox','team_leader')
+    `).all(workerId, signerAlloc.id).map(r => r.form_type)
+  );
+  return REQUIRED_FORMS
+    .filter(f => !submitted.has(f.key))
+    .map(f => ({ ...f, href: f.url + '?allocationId=' + signerAlloc.id }));
+}
+
 // Render the sign page (editable form) or, if already signed, a read-only
 // locked view. One docket per shift can't be re-done from the portal.
 function renderShiftSign(req, res, shift) {
@@ -146,6 +168,7 @@ function renderShiftSign(req, res, shift) {
       locked: true,
       signActionUrl: shiftUrl(shift),
       prefillStart: '', prefillFinish: '', prefillBreakMinutes: 30,
+      missingRequiredForms: [],
       lockedDocket: {
         signed_at: current.signed_at,
         signed_by_name: signer ? signer.full_name : '',
@@ -161,11 +184,16 @@ function renderShiftSign(req, res, shift) {
     });
   }
 
+  const worker = req.session.worker;
+  const signerAlloc = getSignerAllocation(db, worker.id, shift);
+  const missingRequiredForms = computeMissingRequiredForms(db, worker.id, signerAlloc);
+
   res.render('worker/docket-sign', {
     title: 'Sign Docket', currentPage: 'forms', shift, backUrl,
     locked: false, lockedDocket: null,
     signActionUrl: shiftUrl(shift),
     prefillStart: shift.startTime || '', prefillFinish: shift.endTime || '', prefillBreakMinutes: 30,
+    missingRequiredForms,
   });
 }
 
@@ -223,19 +251,17 @@ function submitShiftDocket(req, res, shift) {
 
   // Job-Pack gating — preserve the existing "required: risk_toolbox +
   // team_leader" rule, evaluated against the signing worker's allocation when
-  // one exists (booking shifts may not have lazily created it).
+  // one exists (booking shifts may not have lazily created it). Same helper
+  // is used by renderShiftSign to surface the requirement BEFORE the worker
+  // tries to sign, so this branch should only fire if they bypassed the UI.
   const signerAlloc = getSignerAllocation(db, worker.id, shift);
-  if (signerAlloc) {
-    const FRIENDLY = { risk_toolbox: 'Risk Assessment & Toolbox', team_leader: 'Team Leader Checklist' };
-    const submitted = db.prepare(`
-      SELECT DISTINCT form_type FROM safety_forms
-      WHERE crew_member_id = ? AND allocation_id = ? AND form_type IN ('risk_toolbox','team_leader')
-    `).all(worker.id, signerAlloc.id).map(r => r.form_type);
-    const missingRequired = ['risk_toolbox','team_leader'].filter(t => !submitted.includes(t));
-    if (missingRequired.length) {
-      req.flash('error', "You can't sign the docket yet — these are required first: " + missingRequired.map(m => FRIENDLY[m]).join(', ') + '.');
-      return res.redirect('/w/jobs/' + signerAlloc.id + '?tab=forms');
-    }
+  const missingForms = computeMissingRequiredForms(db, worker.id, signerAlloc);
+  if (missingForms.length) {
+    req.flash('error',
+      "Docket not signed — finish these checklists first: " +
+      missingForms.map(f => f.label).join(' and ') +
+      ". You'll find them in this shift's Forms tab.");
+    return res.redirect(backRedirect);
   }
 
   const finalClientSig = noClient ? null : (b.client_signature || null);
