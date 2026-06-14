@@ -39,12 +39,48 @@ const photoStorage = multer.diskStorage({
 });
 const photoUpload = multer({
   storage: photoStorage,
-  limits: { fileSize: 8 * 1024 * 1024, files: 12 }, // 12 photos × 8 MB ceiling
+  // Raised from 12 → 25 to cover the busiest checklist (Team Leader allows
+  // 8 worker photos + 10 setup photos = 18) with headroom for the multer
+  // global file count vs. per-field maxCount, which used to silently 500
+  // when team_photos + setup_photos crossed the old 12-file ceiling.
+  // Per-file ceiling raised from 8MB → 15MB so iPhone HEIC/Live photos
+  // (often 8-12MB) don't get rejected.
+  limits: { fileSize: 15 * 1024 * 1024, files: 25 },
   fileFilter: (req, file, cb) => {
     if (!/^image\//i.test(file.mimetype)) return cb(new Error('Images only'));
     cb(null, true);
   },
 });
+
+// Wrap `photoUpload.fields(...)` so multer errors surface as flash messages
+// the worker can actually read instead of bubbling into a 500. Without this
+// a too-many-files / file-too-large rejection just looked like the form
+// silently failed to submit. The wrapped middleware redirects back to the
+// page the worker came from with a specific reason, e.g. "Photo too large —
+// keep each one under 15 MB. Please try again."
+function withPhotoUploadError(fields) {
+  const handler = photoUpload.fields(fields);
+  return (req, res, next) => {
+    handler(req, res, (err) => {
+      if (!err) return next();
+      let msg;
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        msg = 'A photo is over 15 MB. iPhone "Live" photos and 4K bursts are common culprits — try a smaller image or take a fresh one.';
+      } else if (err.code === 'LIMIT_FILE_COUNT') {
+        msg = 'Too many photos uploaded at once (max 25 across all fields). Submit what you have, then add the rest as a follow-up.';
+      } else if (err.code === 'LIMIT_UNEXPECTED_FILE') {
+        msg = 'Too many photos for one of the fields. Each field has its own cap — check the limits next to each upload.';
+      } else if (err.message === 'Images only') {
+        msg = "Only photos can be uploaded here. Don't attach PDFs or videos to a checklist.";
+      } else {
+        msg = 'Photo upload failed: ' + (err.message || 'unknown error') + '.';
+      }
+      console.error('[forms] photo upload error:', err.code || err.message);
+      req.flash('error', msg);
+      return res.redirect('back');
+    });
+  };
+}
 
 // Move every uploaded photo from the request's tmp dir into the form's home
 // dir (data/uploads/job-forms/<safety_form_id>/), resize to a sane max size,
@@ -77,6 +113,131 @@ async function persistFormPhotos(db, safetyFormId, files, tagFor) {
   // Best-effort tmp dir cleanup
   try { fs.rmSync(path.dirname(files[0].path), { recursive: true, force: true }); } catch (_) {}
 }
+
+// ===========================================================================
+// Team-shared drafts (migration 267)
+//
+// Any worker on a shift can save partial form state as a draft; teammates
+// on the same shift see and resume that same draft. shift_key identifies
+// the shift: 'b:<bookingId>' or 'j:<jobId>:<allocationDate>'. Drafts hold
+// the same JSON-blob `data` + `safety_form_photos` rows as a submitted
+// form, just with status='draft'. Submitting transitions the draft row
+// to status='submitted' so the photos and notes carry across without
+// re-uploading.
+// ===========================================================================
+
+function computeShiftKey(db, allocation) {
+  if (!allocation) return null;
+  if (allocation.booking_id) return 'b:' + allocation.booking_id;
+  if (allocation.job_id && allocation.allocation_date) return 'j:' + allocation.job_id + ':' + allocation.allocation_date;
+  return null;
+}
+
+function findTeamDraft(db, shiftKey, formType, fallbackAllocationId) {
+  if (shiftKey) {
+    const row = db.prepare(`
+      SELECT sf.*, cm.full_name AS draft_started_by_name
+      FROM safety_forms sf
+      LEFT JOIN crew_members cm ON cm.id = sf.draft_started_by_id
+      WHERE sf.shift_key = ? AND sf.form_type = ? AND sf.status = 'draft'
+      ORDER BY sf.id DESC LIMIT 1
+    `).get(shiftKey, formType);
+    if (row) return row;
+  }
+  // Fallback for allocations without booking/job context — scope to the
+  // allocation itself so a worker on a legacy shift can still resume their
+  // own draft (just not team-shared).
+  if (fallbackAllocationId) {
+    return db.prepare(`
+      SELECT sf.*, cm.full_name AS draft_started_by_name
+      FROM safety_forms sf
+      LEFT JOIN crew_members cm ON cm.id = sf.draft_started_by_id
+      WHERE sf.allocation_id = ? AND sf.form_type = ? AND sf.status = 'draft'
+      ORDER BY sf.id DESC LIMIT 1
+    `).get(fallbackAllocationId, formType);
+  }
+  return null;
+}
+
+function getDraftPhotos(db, draftId) {
+  if (!draftId) return [];
+  return db.prepare(`
+    SELECT id, tag, original_name, mime_type
+    FROM safety_form_photos
+    WHERE safety_form_id = ?
+    ORDER BY id
+  `).all(draftId);
+}
+
+// GET /w/forms/draft-photos/:id — worker-accessible photo serve. Restricted
+// to a draft whose shift the worker is currently on. (Submitted-form photos
+// are surfaced only to admins via /safety-forms/:id/photos/:photoId.)
+router.get('/forms/draft-photos/:id', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const photo = db.prepare(`
+    SELECT p.*, sf.shift_key, sf.status
+    FROM safety_form_photos p JOIN safety_forms sf ON sf.id = p.safety_form_id
+    WHERE p.id = ?
+  `).get(req.params.id);
+  if (!photo) return res.status(404).send('Not found');
+  if (photo.status !== 'draft') return res.status(403).send('Forbidden');
+  // Make sure the worker is on this shift.
+  let allowed = false;
+  if (photo.shift_key && photo.shift_key.startsWith('b:')) {
+    const bid = parseInt(photo.shift_key.slice(2), 10);
+    allowed = !!db.prepare('SELECT 1 FROM booking_crew WHERE booking_id = ? AND crew_member_id = ?').get(bid, worker.id);
+  } else if (photo.shift_key && photo.shift_key.startsWith('j:')) {
+    const parts = photo.shift_key.slice(2).split(':');
+    if (parts.length === 2) {
+      allowed = !!db.prepare("SELECT 1 FROM crew_allocations WHERE job_id = ? AND allocation_date = ? AND crew_member_id = ? AND status != 'cancelled'").get(parts[0], parts[1], worker.id);
+    }
+  }
+  if (!allowed) return res.status(403).send('Not on this shift');
+  const abs = path.isAbsolute(photo.file_path) ? photo.file_path : path.join(__dirname, '..', '..', photo.file_path);
+  if (!fs.existsSync(abs)) return res.status(404).send('File missing');
+  res.setHeader('Content-Type', photo.mime_type || 'image/jpeg');
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  fs.createReadStream(abs).pipe(res);
+});
+
+// POST /w/forms/draft/:id/delete — delete a team draft. Anyone on the shift
+// can wipe it (drafts are owned by the team, not the starter).
+router.post('/forms/draft/:id/delete', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const draft = db.prepare("SELECT * FROM safety_forms WHERE id = ? AND status = 'draft'").get(req.params.id);
+  if (!draft) { req.flash('error', 'Draft not found or already submitted.'); return res.redirect('back'); }
+  // Guard: worker has to be on this draft's shift.
+  let allowed = false;
+  if (draft.shift_key && draft.shift_key.startsWith('b:')) {
+    allowed = !!db.prepare('SELECT 1 FROM booking_crew WHERE booking_id = ? AND crew_member_id = ?').get(parseInt(draft.shift_key.slice(2), 10), worker.id);
+  } else if (draft.shift_key && draft.shift_key.startsWith('j:')) {
+    const parts = draft.shift_key.slice(2).split(':');
+    if (parts.length === 2) allowed = !!db.prepare("SELECT 1 FROM crew_allocations WHERE job_id = ? AND allocation_date = ? AND crew_member_id = ? AND status != 'cancelled'").get(parts[0], parts[1], worker.id);
+  }
+  if (!allowed) { req.flash('error', "You're not on this shift."); return res.redirect('back'); }
+
+  // Photo files on disk get cleaned along with the row (FK ON DELETE CASCADE
+  // wipes safety_form_photos automatically; here we also unlink the files).
+  const photos = db.prepare('SELECT file_path FROM safety_form_photos WHERE safety_form_id = ?').all(draft.id);
+  db.prepare('DELETE FROM safety_form_photos WHERE safety_form_id = ?').run(draft.id);
+  db.prepare("DELETE FROM safety_forms WHERE id = ? AND status = 'draft'").run(draft.id);
+  for (const p of photos) {
+    try {
+      const abs = path.isAbsolute(p.file_path) ? p.file_path : path.join(__dirname, '..', '..', p.file_path);
+      if (fs.existsSync(abs)) fs.unlinkSync(abs);
+    } catch (_) {}
+  }
+  // Also remove the per-form photo directory if it's now empty.
+  try {
+    const homeDir = path.join(JOB_FORMS_DIR, String(draft.id));
+    if (fs.existsSync(homeDir)) fs.rmSync(homeDir, { recursive: true, force: true });
+  } catch (_) {}
+
+  req.flash('success', 'Draft deleted.');
+  return res.redirect('back');
+});
 
 // GET /w/forms — Form type selector with today's status
 router.get('/forms', (req, res) => {
@@ -966,18 +1127,31 @@ router.get('/forms/team-leader', (req, res) => {
     PPE_ITEMS.map(i => ({ item_key: i.key, question: i.label })));
   const ppeItems = sysPPE.map(toSimpleItem);
 
+  // Team draft: if anyone on this shift has saved a draft, surface it so
+  // the worker can resume + add their own photos / answers on top.
+  const shiftKey = computeShiftKey(db, allocation);
+  const draft = findTeamDraft(db, shiftKey, 'team_leader', allocation ? allocation.id : null);
+  let draftData = null, draftPhotos = [];
+  if (draft) {
+    try { draftData = JSON.parse(draft.data || '{}'); } catch (e) { draftData = {}; }
+    draftPhotos = getDraftPhotos(db, draft.id);
+  }
+
   res.render('worker/forms/team-leader', {
     title: 'Team Leader Checklist',
     currentPage: 'forms',
     allocation,
     ppeItems,
     isManager,
+    draft,
+    draftData,
+    draftPhotos,
     flash_success: req.flash('success'),
     flash_error: req.flash('error'),
   });
 });
 
-router.post('/forms/team-leader', photoUpload.fields([
+router.post('/forms/team-leader', withPhotoUploadError([
   { name: 'team_photos',  maxCount: 8 },
   { name: 'setup_photos', maxCount: 10 },
 ]), async (req, res) => {
@@ -985,12 +1159,16 @@ router.post('/forms/team-leader', photoUpload.fields([
   const worker = req.session.worker;
   const body = req.body || {};
   const allocationId = body.allocation_id ? Number(body.allocation_id) : null;
+  const isSaveDraft = body.save_as_draft === '1';
 
   let allocation = null;
   if (allocationId) {
-    allocation = db.prepare('SELECT id, job_id FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
+    allocation = db.prepare(`
+      SELECT id, job_id, booking_id, allocation_date
+      FROM crew_allocations WHERE id = ? AND crew_member_id = ?
+    `).get(allocationId, worker.id);
     if (!allocation) {
-      req.flash('error', 'Allocation not found or not yours.');
+      req.flash('error', "We couldn't match this shift to you — please reopen it from your Jobs list.");
       return res.redirect('/w/forms/team-leader');
     }
   }
@@ -1011,31 +1189,50 @@ router.post('/forms/team-leader', photoUpload.fields([
     notes: (body.notes || '').trim(),
   };
 
-  const result = db.prepare(`
-    INSERT INTO safety_forms (crew_member_id, form_type, job_id, allocation_id, data, signature_data, signed_name, status, submitted_at)
-    VALUES (?, 'team_leader', ?, ?, ?, ?, ?, 'submitted', datetime('now'))
-  `).run(
-    worker.id,
-    allocation ? allocation.job_id : null,
-    allocation ? allocation.id : null,
-    JSON.stringify(data),
-    body.signature_data || null,
-    data.team_leader_name || null,
-  );
-  const safetyFormId = result.lastInsertRowid;
+  // Server-side validation for SUBMIT only. Drafts can have any state — that's
+  // the point of saving partial progress. We list every missing field in one
+  // message so the worker doesn't have to fix them one at a time.
+  const shiftKey = computeShiftKey(db, allocation);
+  const existingDraft = findTeamDraft(db, shiftKey, 'team_leader', allocation ? allocation.id : null);
 
-  const allFiles = [];
-  for (const key of Object.keys(req.files || {})) {
-    for (const f of req.files[key]) allFiles.push({ ...f, fieldname: key });
+  if (!isSaveDraft) {
+    const missing = [];
+    if (!data.team_leader_name) missing.push("Team Leader's name");
+    if (body.workers_present !== 'yes' && body.workers_present !== 'no') missing.push('whether all workers are present');
+    if (body.setup_correct !== 'yes' && body.setup_correct !== 'no') missing.push('whether the setup is correct');
+    if (missing.length) {
+      req.flash('error', 'Checklist not submitted — please answer: ' + missing.join('; ') + '. Your other answers are kept; finish those and submit again. (Tip: tap "Save as draft" to keep your progress while you sort the rest.)');
+      // Best-effort: persist whatever was filled so the worker doesn't lose it.
+      try {
+        const draftRow = upsertDraft(db, { worker, allocation, shiftKey, formType: 'team_leader', data, signature: body.signature_data, signedName: data.team_leader_name, existingDraft });
+        const allFiles = collectMulterFiles(req);
+        if (allFiles.length) await persistFormPhotos(db, draftRow.id, allFiles, tagForTeamLeader);
+      } catch (e) { console.error('[team-leader] auto-draft on validation fail:', e.message); }
+      return allocation ? res.redirect('/w/forms/team-leader?allocationId=' + allocation.id) : res.redirect('/w/forms/team-leader');
+    }
   }
+
+  // Either reuse the existing team draft (UPDATE in place — keeps photos) or
+  // INSERT a new row. Submitting transitions an existing draft → submitted.
+  const draftRow = upsertDraft(db, {
+    worker, allocation, shiftKey, formType: 'team_leader', data,
+    signature: body.signature_data, signedName: data.team_leader_name,
+    existingDraft,
+    finalStatus: isSaveDraft ? 'draft' : 'submitted',
+  });
+  const safetyFormId = draftRow.id;
+
+  const allFiles = collectMulterFiles(req);
   try {
-    await persistFormPhotos(db, safetyFormId, allFiles, (field) => {
-      if (field === 'team_photos') return 'team';
-      if (field === 'setup_photos') return 'setup';
-      return 'other';
-    });
+    await persistFormPhotos(db, safetyFormId, allFiles, tagForTeamLeader);
   } catch (e) {
     console.error('[team-leader] photo persist error:', e.message);
+    if (allFiles.length) req.flash('error', "Saved everything except the photos — they failed to attach. Try uploading them again from the same form.");
+  }
+
+  if (isSaveDraft) {
+    req.flash('success', existingDraft ? 'Draft updated. Your team can pick this up.' : 'Draft saved. Your team can resume it here.');
+    return allocation ? res.redirect('/w/forms/team-leader?allocationId=' + allocation.id) : res.redirect('/w/forms/team-leader');
   }
 
   fireOpsNotification(db, safetyFormId);
@@ -1044,6 +1241,77 @@ router.post('/forms/team-leader', photoUpload.fields([
   if (allocation) return res.redirect('/w/jobs/' + allocation.id + '?tab=forms');
   return res.redirect('/w/forms');
 });
+
+function collectMulterFiles(req) {
+  const out = [];
+  for (const key of Object.keys(req.files || {})) {
+    for (const f of req.files[key]) out.push({ ...f, fieldname: key });
+  }
+  return out;
+}
+
+function tagForTeamLeader(field) {
+  if (field === 'team_photos') return 'team';
+  if (field === 'setup_photos') return 'setup';
+  return 'other';
+}
+
+// Insert or update a safety_forms row, scoped to a team shift draft. Reuses
+// the existing draft when one is present so photos persist across saves and
+// multiple workers contribute to the same team form. `finalStatus` controls
+// whether the row ends up as 'draft' (save-as-draft) or 'submitted' (live).
+function upsertDraft(db, opts) {
+  const { worker, allocation, shiftKey, formType, data, signature, signedName, existingDraft, finalStatus = 'draft' } = opts;
+  const dataJson = JSON.stringify(data || {});
+  if (existingDraft) {
+    db.prepare(`
+      UPDATE safety_forms SET
+        data = ?,
+        signature_data = COALESCE(NULLIF(?, ''), signature_data),
+        signed_name = COALESCE(NULLIF(?, ''), signed_name),
+        status = ?,
+        submitted_at = CASE WHEN ? = 'submitted' THEN datetime('now') ELSE submitted_at END,
+        job_id = COALESCE(?, job_id),
+        allocation_id = COALESCE(?, allocation_id),
+        booking_id = COALESCE(?, booking_id),
+        allocation_date = COALESCE(?, allocation_date),
+        shift_key = COALESCE(?, shift_key)
+      WHERE id = ?
+    `).run(
+      dataJson,
+      signature || '',
+      signedName || '',
+      finalStatus,
+      finalStatus,
+      allocation ? allocation.job_id : null,
+      allocation ? allocation.id : null,
+      allocation ? allocation.booking_id : null,
+      allocation ? allocation.allocation_date : null,
+      shiftKey || null,
+      existingDraft.id
+    );
+    return { id: existingDraft.id };
+  }
+  const result = db.prepare(`
+    INSERT INTO safety_forms (
+      crew_member_id, form_type, job_id, allocation_id, booking_id, allocation_date, shift_key,
+      data, signature_data, signed_name, status, submitted_at, draft_started_by_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
+  `).run(
+    worker.id, formType,
+    allocation ? allocation.job_id : null,
+    allocation ? allocation.id : null,
+    allocation ? allocation.booking_id : null,
+    allocation ? allocation.allocation_date : null,
+    shiftKey || null,
+    dataJson,
+    signature || null,
+    signedName || null,
+    finalStatus,
+    finalStatus === 'draft' ? worker.id : null
+  );
+  return { id: result.lastInsertRowid };
+}
 
 // GET /w/forms/history/:id/pdf — Worker re-downloads their own submission as
 // the same branded PDF the office gets. Auth: must be the submitter.

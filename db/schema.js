@@ -12659,6 +12659,28 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 267: safety_forms — team-shared drafts. shift_key groups
+  // every form filed against the same shift so any worker on that shift
+  // (booking_id, or job_id + allocation_date) can find an in-progress
+  // draft started by a teammate. booking_id is denormalised onto the row
+  // so we can query without a join when listing per-booking dockets +
+  // forms together. Existing rows stay NULL — drafts are only meaningful
+  // forward of this migration.
+  if (!isMigrationApplied.get(267)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(safety_forms)").all().map(c => c.name);
+      if (!cols.includes('shift_key')) db.exec('ALTER TABLE safety_forms ADD COLUMN shift_key TEXT');
+      if (!cols.includes('booking_id')) db.exec('ALTER TABLE safety_forms ADD COLUMN booking_id INTEGER REFERENCES bookings(id)');
+      if (!cols.includes('allocation_date')) db.exec('ALTER TABLE safety_forms ADD COLUMN allocation_date TEXT');
+      if (!cols.includes('draft_started_by_id')) db.exec('ALTER TABLE safety_forms ADD COLUMN draft_started_by_id INTEGER REFERENCES crew_members(id)');
+      db.exec("CREATE INDEX IF NOT EXISTS idx_safety_forms_shift_draft ON safety_forms(shift_key, form_type, status)");
+      recordMigration.run(267, 'safety_forms: shift_key + booking_id + allocation_date for team-shared drafts');
+      console.log('Migration 267 applied');
+    } catch (e) {
+      console.error('Migration 267 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
