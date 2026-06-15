@@ -333,6 +333,48 @@
     </form>
   </div>
 
+  <!-- Geoapify — booking address autocomplete -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+          <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+        </div>
+        <div>
+          <h3 class="text-gray-900 font-semibold">Geoapify</h3>
+          <p class="text-gray-400 text-xs">Address autocomplete for the New Booking site picker</p>
+        </div>
+      </div>
+      <% if (geoapifyKey) { %>
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20">Key set</span>
+      <% } else { %>
+        <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">No key</span>
+      <% } %>
+    </div>
+    <form method="POST" action="/admin/integrations/geoapify" class="p-5 space-y-4">
+      <%- include('../partials/csrf') %>
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-4 text-sm text-gray-600">
+        <p>Powers the type-ahead suggestions in the New Booking slide-over's address field, populating site address, suburb, state, postcode and lat/lng on selection. Without a key the picker returns nothing and planners type the address by hand.</p>
+        <p class="mt-2 text-xs text-gray-500">Get a key at <a href="https://myprojects.geoapify.com/" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700 underline">myprojects.geoapify.com</a> — the free tier covers 3,000 requests/day, more than enough for booking creation.</p>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Geoapify API key</label>
+        <input type="password" name="api_key" value="<%= geoapifyKey || '' %>" placeholder="your geoapify key" autocomplete="off"
+          <%= geoapifyEnvOverride ? 'readonly' : '' %>
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 <%= geoapifyEnvOverride ? 'bg-gray-50 cursor-not-allowed' : '' %>">
+        <% if (geoapifyEnvOverride) { %>
+          <p class="mt-1 text-xs text-amber-600">An environment variable (<code class="font-mono">GEOAPIFY_API_KEY</code>) is set and overrides this field. Unset it on Railway to manage the key from here instead.</p>
+        <% } else { %>
+          <p class="mt-1 text-xs text-gray-400">Saved in <code class="font-mono">system_config</code>. Persists across deploys. Leave blank to clear.</p>
+        <% } %>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="submit" <%= geoapifyEnvOverride ? 'disabled' : '' %>
+          class="px-4 py-2 bg-brand-600 hover:bg-brand-500 disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed text-white text-sm font-medium rounded-lg transition-colors">Save</button>
+      </div>
+    </form>
+  </div>
+
 </div>
 
 <!-- Sync Log -->

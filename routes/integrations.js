@@ -44,6 +44,13 @@ router.get('/', (req, res) => {
     ? (process.env.GOOGLE_MAPS_API_KEY || process.env.GOOGLE_GEOCODING_API_KEY)
     : getConfig('google_maps_api_key', '');
 
+  // Geoapify API key — drives the booking address autocomplete picker.
+  // Same env-wins-over-DB pattern as Google Maps above.
+  const geoapifyEnvOverride = !!process.env.GEOAPIFY_API_KEY;
+  const geoapifyKey = geoapifyEnvOverride
+    ? process.env.GEOAPIFY_API_KEY
+    : getConfig('geoapify_api_key', '');
+
   res.render('admin/integrations', {
     title: 'Integrations',
     currentPage: 'integrations',
@@ -51,6 +58,8 @@ router.get('/', (req, res) => {
     syncLogs,
     googleMapsKey,
     googleMapsEnvOverride: envOverride,
+    geoapifyKey,
+    geoapifyEnvOverride,
   });
 });
 
@@ -127,6 +136,33 @@ router.post('/google-maps', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', raw ? 'Google Maps key saved.' : 'Google Maps key cleared.');
+  res.redirect('/admin/integrations');
+});
+
+// POST /admin/integrations/geoapify — Save the Geoapify autocomplete key.
+// Mirrors the Google Maps handler exactly: upsert into system_config,
+// reload the in-process cache, log it. Empty value clears the row.
+router.post('/geoapify', (req, res) => {
+  const db = getDb();
+  const raw = (req.body.api_key || '').trim();
+
+  db.prepare(`
+    INSERT INTO system_config (config_key, config_value, config_type, description, updated_at, updated_by_id)
+    VALUES ('geoapify_api_key', ?, 'string', 'Geoapify autocomplete key for booking address picker', CURRENT_TIMESTAMP, ?)
+    ON CONFLICT(config_key) DO UPDATE SET config_value = excluded.config_value, updated_at = CURRENT_TIMESTAMP, updated_by_id = excluded.updated_by_id
+  `).run(raw, req.session.user.id);
+
+  reloadSettings();
+
+  logActivity({
+    user: req.session.user,
+    action: 'update',
+    entityType: 'integration',
+    entityLabel: 'geoapify',
+    details: raw ? 'Geoapify API key updated' : 'Geoapify API key cleared',
+    ip: req.ip,
+  });
+  req.flash('success', raw ? 'Geoapify key saved.' : 'Geoapify key cleared.');
   res.redirect('/admin/integrations');
 });
 
