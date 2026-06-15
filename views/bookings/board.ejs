@@ -1542,6 +1542,18 @@
     ed.dataset.bookingId = '';
     var created = $('#bk2-edit-created'); if (created) created.hidden = true;
     var qv = $('#bk2-edit-quickview'); if (qv) qv.hidden = true;
+    var form0 = $('#bk2-edit-form');
+    if (form0) {
+      form0.style.display = '';
+      form0.setAttribute('action', '/bookings/quick'); // reset from any edit reuse
+    }
+    // Restore the Create button (prefillEditForm may have relabelled it Save).
+    var cBtn = $('#bk2-edit-create');
+    if (cBtn) {
+      cBtn.setAttribute('data-mode-only', 'create');
+      cBtn.style.display = '';
+      cBtn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg> Create';
+    }
     setEditorMode('create');
     var title = $('#bk2-edit-title'); if (title) title.textContent = 'New Booking';
     // Reset the create form so reopening doesn't carry over stale
@@ -1612,9 +1624,10 @@
     setEditorMode('edit');
     var t = $('#bk2-edit-title');
     if (t) t.textContent = (number ? ('#' + number) : ('Booking ' + id)) + (title ? ' · ' + title : '');
-    // Quickview panel is the empty-state when the form prefill is in flight;
-    // we hide it once Overview's form is populated below.
-    var qv = $('#bk2-edit-quickview'); if (qv) qv.hidden = false;
+    // Quick-view is an error fallback only — keep it hidden; the Overview
+    // form (prefilled below) is the surface. Title/sub are still set so the
+    // fallback reads correctly if the prefill fetch fails.
+    var qv = $('#bk2-edit-quickview'); if (qv) qv.hidden = true;
     var qvT = $('#bk2-edit-qv-title'); if (qvT) qvT.textContent = number ? ('#' + number) : ('Booking ' + id);
     var qvS = $('#bk2-edit-qv-sub'); if (qvS) qvS.textContent = title || '';
     setFullEditTarget(id);
@@ -1639,6 +1652,7 @@
   // and shows the form (hiding the quick-view placeholder).
   function prefillEditForm(bookingId) {
     var form = $('#bk2-edit-form'); if (!form) return;
+    form.style.display = ''; // clear any error-state hide from a prior open
     fetch('/bookings/api/' + bookingId + '/edit-data', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
       .then(function (data) {
@@ -1681,7 +1695,10 @@
         }
       })
       .catch(function () {
-        // On failure the quickview stays visible as the fallback surface.
+        // Prefill failed — fall back to the quick-view panel so the planner
+        // still gets the "Open full edit page" route instead of a blank pane.
+        var qv = $('#bk2-edit-quickview'); if (qv) qv.hidden = false;
+        var form = $('#bk2-edit-form'); if (form) form.style.display = 'none';
       });
   }
 

@@ -386,9 +386,9 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-edit-qv-btn:hover { background: #047857; }
 .bk2-edit-qv-hint { font-size: 11px; color: #94A3B8; margin: 12px 0 0; }
 
-/* When the editor is opened for an existing booking, the create form is
-   hidden in favour of the quick-view panel above. */
-.bk2-editor[data-existing="1"] #bk2-edit-form { display: none; }
+/* The quick-view panel is only ever an error/loading fallback now — for an
+   existing booking the Overview shows the prefilled form, same as New
+   Booking. Its visibility is driven by the [hidden] attribute in JS. */
 .bk2-editor:not([data-existing="1"]) #bk2-edit-quickview { display: none; }
 
 /* Tab body — scrollable. */
