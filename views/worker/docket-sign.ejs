@@ -619,57 +619,16 @@
 <% if (!locked) { %>
 <script>
 // ===== Signature pad =====
+// Use the shared WorkerSigPad helper so docket signatures get the same
+// stroke-replay high-resolution export the rest of the worker forms now
+// use — the captured PNG is rebuilt at ~2000px on the long edge from the
+// recorded stroke points, so the docket PDF embeds a crisp signature
+// instead of the pixellated on-screen bitmap.
 function setupSigPad(canvasId, padId) {
-  var canvas = document.getElementById(canvasId);
-  var pad = document.getElementById(padId);
-  var ctx = canvas.getContext('2d');
-  var drawing = false, hasDrawn = false;
-  var last = null, lastMid = null, cssW = 0, cssH = 0;
-  function style() { ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; }
-  function resize() {
-    var rect = canvas.parentElement.getBoundingClientRect();
-    if (!rect.width) return;
-    var data = hasDrawn ? canvas.toDataURL() : null;
-    // Render at device resolution so the ink isn't pixelated on phones.
-    var dpr = Math.min(window.devicePixelRatio || 1, 3);
-    cssW = rect.width; cssH = rect.height;
-    canvas.width = Math.round(cssW * dpr);
-    canvas.height = Math.round(cssH * dpr);
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    style();
-    if (data && hasDrawn) { var img = new Image(); img.onload = function() { ctx.drawImage(img, 0, 0, cssW, cssH); }; img.src = data; }
-  }
-  resize();
-  window.addEventListener('resize', resize);
-  function getPos(e) { var rect = canvas.getBoundingClientRect(); return { x: e.clientX - rect.left, y: e.clientY - rect.top }; }
-  canvas.addEventListener('pointerdown', function(e) {
-    drawing = true; hasDrawn = true; pad.classList.add('signed'); pad.classList.remove('ds-error');
-    last = getPos(e); lastMid = last;
-    // a dot so a tap still leaves a mark
-    ctx.beginPath(); ctx.arc(last.x, last.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fillStyle = '#0F172A'; ctx.fill();
-    e.preventDefault();
-  });
-  canvas.addEventListener('pointermove', function(e) {
-    if (!drawing) return;
-    var p = getPos(e);
-    var mid = { x: (last.x + p.x) / 2, y: (last.y + p.y) / 2 };
-    // Quadratic curve from the previous midpoint through the last point to
-    // the new midpoint — smooth continuous ink, not straight dotty segments.
-    ctx.beginPath();
-    ctx.moveTo(lastMid.x, lastMid.y);
-    ctx.quadraticCurveTo(last.x, last.y, mid.x, mid.y);
-    ctx.stroke();
-    last = p; lastMid = mid;
-    e.preventDefault();
-  });
-  function end() { if (!drawing) return; drawing = false; ctx.beginPath(); ctx.moveTo(lastMid.x, lastMid.y); ctx.lineTo(last.x, last.y); ctx.stroke(); }
-  canvas.addEventListener('pointerup', end);
-  canvas.addEventListener('pointerleave', end);
-  return {
-    clear: function() { ctx.clearRect(0, 0, cssW, cssH); hasDrawn = false; pad.classList.remove('signed'); },
-    getData: function() { return hasDrawn ? canvas.toDataURL('image/png') : ''; },
-    hasDrawn: function() { return hasDrawn; },
-  };
+  return window.WorkerSigPad && window.WorkerSigPad.setup(
+    document.getElementById(canvasId),
+    document.getElementById(padId)
+  );
 }
 var workerPad = setupSigPad('worker-sig-canvas', 'worker-sig-pad');
 var clientPad = setupSigPad('client-sig-canvas', 'client-sig-pad');

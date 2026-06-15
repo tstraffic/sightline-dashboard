@@ -332,7 +332,13 @@ function drawSignatures(doc, pageW, docket) {
     doc.lineWidth(0.8).strokeColor(GRAY_LINE).roundedRect(x, y0 + 14, boxW, boxH, 6).stroke();
     const buf = dataUrlToBuffer(dataUrl);
     if (buf) {
-      try { doc.image(buf, x + 10, y0 + 24, { fit: [boxW - 20, boxH - 36] }); } catch (_) {}
+      // Inset by 6pt instead of 10pt so the signature reads larger inside
+      // the box. fit:[w,h] preserves aspect ratio — pdfkit embeds the PNG
+      // natively (lossless) so the apparent resolution comes from the
+      // source bitmap, which is now ~2000px on the long edge thanks to
+      // WorkerSigPad's stroke-replay export. Net result: noticeably less
+      // pixelated ink than the previous on-screen-bitmap capture.
+      try { doc.image(buf, x + 6, y0 + 20, { fit: [boxW - 12, boxH - 30] }); } catch (_) {}
     } else {
       doc.font('Helvetica-Oblique').fontSize(9).fillColor(GRAY_SOFT)
         .text('— no signature captured —', x, y0 + 14 + boxH / 2 - 5, { width: boxW, align: 'center' });
