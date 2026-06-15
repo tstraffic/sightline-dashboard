@@ -2409,13 +2409,59 @@
     rpRepaint();
   }
 
-  function rpLoad() {
+  // Resource-panel hydration. Made resilient because the panel was getting
+  // stuck on "Loading resources…" forever:
+  //   - the original fetch had no timeout, so a request that stalled (e.g.
+  //     a back/forward bfcache restore that aborted the in-flight fetch, or
+  //     a transient network hiccup) left the spinner up until a hard refresh;
+  //   - it only ran once at init, so AJAX date-nav never re-hydrated it.
+  // Now: re-entrant, aborts a stuck request after 12s, resets the meta line
+  // to "Loading…" on each attempt, and offers a Retry link on failure.
+  var rpLoadInFlight = false;
+  function rpLoad(force) {
+    if (rpLoadInFlight && !force) return;
+    rpLoadInFlight = true;
     var meta = $('#bk2-rp-meta');
-    fetch('/bookings/api/resources?date=' + encodeURIComponent(rpDate), { credentials: 'same-origin' })
-      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
-      .then(function (data) { rpData = data; rpRepaint(); })
-      .catch(function (err) { if (meta) meta.textContent = 'Could not load resources (' + err + ').'; });
+    if (meta) meta.textContent = 'Loading resources…';
+
+    var controller = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timedOut = false;
+    var timer = setTimeout(function () { timedOut = true; if (controller) controller.abort(); }, 12000);
+
+    fetch('/bookings/api/resources?date=' + encodeURIComponent(rpDate), {
+      credentials: 'same-origin',
+      signal: controller ? controller.signal : undefined,
+    })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject('HTTP ' + r.status); })
+      .then(function (data) {
+        clearTimeout(timer);
+        rpLoadInFlight = false;
+        rpData = data;
+        rpRepaint();
+      })
+      .catch(function (err) {
+        clearTimeout(timer);
+        rpLoadInFlight = false;
+        var why = timedOut ? 'timed out' : (err && err.message ? err.message : err);
+        if (meta) {
+          meta.innerHTML = '';
+          var span = document.createElement('span');
+          span.textContent = 'Couldn’t load resources (' + why + '). ';
+          var retry = document.createElement('button');
+          retry.type = 'button';
+          retry.textContent = 'Retry';
+          retry.style.cssText = 'background:none;border:0;color:#6EE7B7;font-weight:700;cursor:pointer;text-decoration:underline;padding:0;font:inherit;';
+          retry.addEventListener('click', function () { rpLoad(true); });
+          meta.appendChild(span);
+          meta.appendChild(retry);
+        }
+      });
   }
+  // Expose so AJAX date navigation can re-hydrate the panel for the new day.
+  window.bk2ReloadResources = function (date) {
+    if (date) rpDate = date;
+    rpLoad(true);
+  };
 
   // ── Hide / show panel — persisted in localStorage ──
   var RP_STATE_KEY = 'bk2.rp.collapsed';
@@ -2446,6 +2492,14 @@
     if (saved === '1') rpSetCollapsed(true);
 
     rpLoad();
+
+    // bfcache / back-forward safety net: if the page is restored from the
+    // back/forward cache (or somehow rendered with the panel never
+    // hydrated), kick a reload so it can't sit on "Loading resources…"
+    // until a manual refresh.
+    window.addEventListener('pageshow', function (e) {
+      if (e.persisted || rpData === null) rpLoad(true);
+    });
   }
 
   // ==========================================================
@@ -3447,6 +3501,9 @@
           newDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Australia/Sydney' }).format(new Date());
         }
         if (window.BK2_DATA) window.BK2_DATA.dateStr = newDate;
+        // Re-hydrate the resource panel for the day we just moved to — it
+        // shows availability + "assigned today" against the viewed date.
+        if (typeof window.bk2ReloadResources === 'function') window.bk2ReloadResources(newDate);
         try { history.pushState({ bkDate: true }, '', url.toString()); } catch (e) {}
       }).catch(function (err) {
         // On failure, fall back to a full navigation so the planner
