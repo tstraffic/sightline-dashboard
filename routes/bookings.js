@@ -8,6 +8,7 @@ const { logActivity } = require('../middleware/audit');
 const { requireRole } = require('../middleware/auth');
 const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew } = require('../lib/bookingLifecycle');
 const { getDocketCrew } = require('../lib/shiftDocket');
+const { getConfig } = require('../middleware/settings');
 const bookingNotify = require('../services/bookingNotify');
 
 // Multer config for booking document uploads
@@ -983,31 +984,68 @@ router.post('/:id/quick-update', (req, res) => {
   return res.redirect('/bookings/' + req.params.id);
 });
 
-// GET /api/places — address autocomplete via Nominatim (OpenStreetMap).
-// Free, AU-biased. Returns up to 8 suggestions as { label, lat, lng,
-// suburb, state, postcode, formatted }.
+// GET /api/places — address autocomplete via Geoapify.
+//
+// AU-biased, returns up to 8 suggestions shaped { label, lat, lng,
+// site_address, suburb, state, postcode, formatted } so the slide-over's
+// address picker can populate its hidden fields straight from the result.
+//
+// Key resolution chain (matches services/bookingGeocode.getGoogleKey):
+//   1. GEOAPIFY_API_KEY env var (preferred — easy to rotate per-env)
+//   2. system_config 'geoapify_api_key' row
+//   3. Hard-coded operational key handed over with the brief — last resort
+//      so a fresh container still autocompletes before env wiring is done.
+function getGeoapifyKey() {
+  return process.env.GEOAPIFY_API_KEY
+      || getConfig('geoapify_api_key', '')
+      || '4bdbe7bd52a944579817e5a60a4cbdd0';
+}
 router.get('/api/places', async (req, res) => {
   const q = (req.query.q || '').trim();
   if (q.length < 3) return res.json({ results: [] });
+  const key = getGeoapifyKey();
+  if (!key) return res.json({ results: [], error: 'No Geoapify key configured' });
   try {
-    const url = 'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=8&countrycodes=au&q=' + encodeURIComponent(q);
-    const resp = await fetch(url, { headers: { 'User-Agent': 'Atomis/1.0 (operations dashboard)' } });
-    if (!resp.ok) return res.json({ results: [] });
-    const rows = await resp.json();
-    const results = (rows || []).map(r => {
-      const a = r.address || {};
+    // bias=countrycode:au keeps results AU-only, lang=en for English place
+    // names, format=json gives flat objects (no GeoJSON envelope to unpack),
+    // type=amenity,street,locality,postcode — broad on purpose so worksite
+    // names + addresses both autocomplete.
+    const url = 'https://api.geoapify.com/v1/geocode/autocomplete'
+      + '?text=' + encodeURIComponent(q)
+      + '&limit=8'
+      + '&filter=countrycode:au'
+      + '&format=json'
+      + '&lang=en'
+      + '&apiKey=' + encodeURIComponent(key);
+    const resp = await fetch(url);
+    if (!resp.ok) {
+      console.error('[bookings/places] geoapify error', resp.status);
+      return res.json({ results: [], error: 'Geoapify HTTP ' + resp.status });
+    }
+    const json = await resp.json();
+    const rows = Array.isArray(json.results) ? json.results : [];
+    const results = rows.map(r => {
+      // Geoapify's flat format already breaks the address into components.
+      // The street-line we want for site_address is "<housenumber> <street>"
+      // when both are present, falling back to whatever street/name field
+      // was returned. State always normalised to the AU 2/3-letter form.
+      const street = [r.housenumber, r.street].filter(Boolean).join(' ').trim();
+      const stateRaw = String(r.state_code || r.state || '').trim();
+      const stateNorm = (stateRaw.match(/\b(NSW|VIC|QLD|WA|SA|TAS|ACT|NT)\b/i) || [stateRaw])[0].toUpperCase();
       return {
-        label: r.display_name,
-        lat: parseFloat(r.lat),
-        lng: parseFloat(r.lon),
-        site_address: [a.house_number, a.road].filter(Boolean).join(' ') || r.name || '',
-        suburb: a.suburb || a.city || a.town || a.village || '',
-        state: (a.state || '').replace(/^.*?\b(NSW|VIC|QLD|WA|SA|TAS|ACT|NT)\b.*$/i, (m, s) => s.toUpperCase()) || a.state || '',
-        postcode: a.postcode || '',
+        label: r.formatted || r.address_line1 || r.name || '',
+        formatted: r.formatted || '',
+        lat: typeof r.lat === 'number' ? r.lat : parseFloat(r.lat),
+        lng: typeof r.lon === 'number' ? r.lon : parseFloat(r.lon),
+        site_address: street || r.address_line1 || r.name || '',
+        suburb: r.suburb || r.city || r.town || r.village || r.county || '',
+        state: stateNorm,
+        postcode: r.postcode || '',
       };
     });
     res.json({ results });
   } catch (e) {
+    console.error('[bookings/places] failed', e.message);
     res.json({ results: [], error: e.message });
   }
 });

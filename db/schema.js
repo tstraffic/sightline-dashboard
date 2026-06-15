@@ -12768,6 +12768,23 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 270: seed the Geoapify autocomplete key handed over with the
+  // brief into system_config so the bookings address picker resolves an
+  // API key without env wiring. INSERT OR IGNORE means an admin's later
+  // edit on /admin/integrations (or an env var override) still wins.
+  if (!isMigrationApplied.get(270)) {
+    try {
+      db.prepare(`
+        INSERT OR IGNORE INTO system_config (config_key, config_value, config_type, description)
+        VALUES (?, ?, 'string', ?)
+      `).run('geoapify_api_key', '4bdbe7bd52a944579817e5a60a4cbdd0', 'Geoapify autocomplete key for booking address picker');
+      recordMigration.run(270, 'seed Geoapify autocomplete key into system_config');
+      console.log('Migration 270 applied');
+    } catch (e) {
+      console.error('Migration 270 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
