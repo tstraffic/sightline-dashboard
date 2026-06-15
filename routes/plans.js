@@ -4,6 +4,7 @@ const { getDb } = require('../db/database');
 const upload = require('../middleware/upload');
 const { autoLogDiary, logStatusChange } = require('../lib/diary');
 const { logActivity } = require('../middleware/audit');
+const { notifyPlanSubmission, parseTaggedIds } = require('../lib/planNotify');
 
 // Conditional date rules (spec §3). Council Application + ROL require all
 // three dates; every other plan type requires the two office dates but the
@@ -208,6 +209,25 @@ router.post('/', uploadPlanFile(false), (req, res) => {
       } catch (e) { console.error('[Plans] Council auto-task failed:', e.message); }
     }
 
+    // Notify admin + planning, plus anyone the submitter tagged.
+    try {
+      const jobNumber = b.job_id
+        ? (db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(b.job_id) || {}).job_number
+        : null;
+      notifyPlanSubmission(db, {
+        submitterId: req.session.user.id,
+        submitterName: req.session.user.full_name,
+        taggedIds: parseTaggedIds(b.notify_user_ids),
+        ref: planNumber,
+        label: `traffic plan ${typeLabel || ''}`.trim(),
+        jobNumber,
+        link: '/plans/' + result.lastInsertRowid,
+        jobId: b.job_id || null,
+      });
+    } catch (notifyErr) {
+      console.error('[Plans] submission notify failed:', notifyErr.message);
+    }
+
     req.flash('success', `Traffic Plan ${planNumber} created successfully${markFinal ? ' and pushed to Final Plans.' : '.'}`);
     const returnTo = b.return_to && b.return_to !== '/plans' ? b.return_to : '/plans';
     res.redirect(returnTo);
@@ -291,6 +311,22 @@ router.post('/quick-upload', uploadPlanFile(true), (req, res) => {
       summary: `[${req.session.user.full_name}] Uploaded ${planType}: ${fileOriginalName}${isClientProvided ? ' (client provided)' : ''}${markFinal ? ' → FINAL' : ''}.`,
       userId: req.session.user.id
     });
+
+    // Notify admin + planning. Quick-upload is a drag-drop with no tagging UI.
+    try {
+      notifyPlanSubmission(db, {
+        submitterId: req.session.user.id,
+        submitterName: req.session.user.full_name,
+        taggedIds: [],
+        ref: planNumber,
+        label: `traffic plan ${planType}`,
+        jobNumber: job && job.job_number ? job.job_number : null,
+        link: '/plans/' + result.lastInsertRowid,
+        jobId: jobId || null,
+      });
+    } catch (notifyErr) {
+      console.error('[Plans] quick-upload notify failed:', notifyErr.message);
+    }
 
     res.json({ success: true, planNumber, planId: result.lastInsertRowid, isFinal: markFinal, title: fileTitle });
   } catch (err) {
