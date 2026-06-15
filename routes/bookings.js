@@ -1077,18 +1077,26 @@ router.get('/api/resources', (req, res) => {
     // Bookings on this date and the crew already on them.
     const assignedIds = db.prepare(`SELECT DISTINCT bc.crew_member_id FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id WHERE DATE(b.start_datetime) = ? AND b.status NOT IN ('cancelled','complete','late_cancellation','finalised') AND b.deleted_at IS NULL`).all(date).map(r => r.crew_member_id);
 
-    // PEOPLE — all active crew members + the employee join for status.
+    // PEOPLE — driven by the HR roster (employees), not the raw crew_members
+    // table. crew_members carries a lot of legacy / orphaned / duplicate rows
+    // (225 vs. the roster's 113), so querying it directly showed "149 active"
+    // when the roster only has 37. The roster is the source of truth for who
+    // is a current worker, so we start FROM employees and INNER JOIN the
+    // linked crew_member (needed for its id + portal/ticket data to allocate).
+    // That makes the panel's active count match the roster's Active tab.
+    // Reserved + on-leave come through too so the client-side "Show Reserves"
+    // / "Show On-Leave" toggles can reveal them; everything else is excluded.
     const people = db.prepare(`
       SELECT cm.id, cm.full_name, cm.role, cm.portal_role, cm.phone, cm.employee_id,
         cm.tc_ticket_expiry, cm.white_card_expiry, cm.licence_expiry, cm.licence_type,
         cm.tcp_level, cm.first_aid, cm.company, cm.employment_type,
-        COALESCE(e.employment_status, 'active') AS employment_status,
+        e.employment_status AS employment_status,
         e.address, e.suburb, e.state, e.postcode,
         e.blocked_from_allocation
-      FROM crew_members cm
-      LEFT JOIN employees e ON e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL
-      WHERE cm.active = 1
-        AND COALESCE(e.employment_status, 'active') IN ('active', 'reserved', 'on_leave')
+      FROM employees e
+      JOIN crew_members cm ON cm.id = e.linked_crew_member_id
+      WHERE e.deleted_at IS NULL
+        AND e.employment_status IN ('active', 'reserved', 'on_leave')
       ORDER BY cm.full_name
     `).all().map(p => {
       const warnings = [];
@@ -1248,19 +1256,19 @@ router.get('/:id', (req, res) => {
     }
   }
 
-  // Available crew for the picker — joined to employees so the UI can
-  // split into Active + Reserved sections. Reserved workers are
-  // accepted-but-not-yet-working; allocator can still pick them, just
-  // from a separate group. Skip anyone inactive/terminated.
+  // Available crew for the picker — driven by the HR roster (employees), not
+  // raw crew_members, so it matches the roster's active set instead of the
+  // larger legacy crew_members list. INNER JOIN the linked crew_member for
+  // its id (needed to allocate). Active first, then reserved, then on-leave.
   const allCrew = db.prepare(`
     SELECT cm.id, cm.full_name, cm.role, cm.employee_id,
-      COALESCE(e.employment_status, 'active') AS employment_status
-    FROM crew_members cm
-    LEFT JOIN employees e ON e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL
-    WHERE cm.active = 1
-      AND COALESCE(e.employment_status, 'active') IN ('active', 'reserved', 'on_leave')
+      e.employment_status AS employment_status
+    FROM employees e
+    JOIN crew_members cm ON cm.id = e.linked_crew_member_id
+    WHERE e.deleted_at IS NULL
+      AND e.employment_status IN ('active', 'reserved', 'on_leave')
     ORDER BY
-      CASE COALESCE(e.employment_status, 'active')
+      CASE e.employment_status
         WHEN 'active' THEN 0 WHEN 'reserved' THEN 1 ELSE 2 END,
       cm.full_name
   `).all();
