@@ -2,7 +2,7 @@ const { getDb } = require('../db/database');
 const { sendTeamsNotification } = require('./integrations');
 const { sendEmail } = require('../services/email');
 const { notificationEmail, dailyDigestEmail } = require('../services/emailTemplates');
-const { sendPushForNotifications } = require('../services/pushNotification');
+const { sendPushForNotifications, sendPushToUser } = require('../services/pushNotification');
 const { todaysBirthdays, localIso: bdayLocalIso } = require('../lib/birthdays');
 
 /**
@@ -20,6 +20,47 @@ function notificationCountMiddleware(req, res, next) {
   }
 
   next();
+}
+
+/**
+ * Create a notification for one or more users and fire a Web Push to each.
+ * Used for event-driven notifications (e.g. a plan being submitted) rather
+ * than the periodic generateNotifications() sweep.
+ *
+ * @param {object} db           - better-sqlite3 handle
+ * @param {Array<number>} userIds - recipient user ids (deduped, falsy dropped)
+ * @param {object} opts         - { type, title, message, link, jobId }
+ * @returns {number} count of notification rows inserted
+ */
+function notifyUsers(db, userIds, opts = {}) {
+  const { type = 'general', title = '', message = '', link = '', jobId = null } = opts;
+  if (!db || !title) return 0;
+
+  // Dedupe + drop falsy ids (e.g. a null submitter excluded by the caller)
+  const recipients = [...new Set((userIds || []).map(Number).filter(Boolean))];
+  if (recipients.length === 0) return 0;
+
+  const insert = db.prepare(
+    'INSERT INTO notifications (user_id, type, title, message, link, job_id) VALUES (?, ?, ?, ?, ?, ?)'
+  );
+
+  let inserted = 0;
+  for (const userId of recipients) {
+    try {
+      insert.run(userId, type, title, message, link, jobId);
+      inserted++;
+      // Fire-and-forget push; failures are swallowed inside sendPushToUser
+      Promise.resolve(sendPushToUser(userId, {
+        title,
+        body: message,
+        url: link || '/notifications',
+        type
+      })).catch(() => {});
+    } catch (err) {
+      console.error('[notifyUsers] failed for user', userId, ':', err.message);
+    }
+  }
+  return inserted;
 }
 
 /**
@@ -726,4 +767,4 @@ function generateWeeklySummaries() {
   }
 }
 
-module.exports = { notificationCountMiddleware, generateNotifications, sendDailyDigests, generateWeeklySummaries };
+module.exports = { notificationCountMiddleware, generateNotifications, sendDailyDigests, generateWeeklySummaries, notifyUsers };

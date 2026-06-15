@@ -557,6 +557,28 @@ document.addEventListener('DOMContentLoaded', initCountUp);
       });
   };
 
+  // Keep the "Notify specific people" picker summary in sync with the
+  // checked boxes (e.g. "2 people tagged"). Delegated so it works for every
+  // picker on the page, including dynamically-rendered sub-plan cards.
+  document.addEventListener('change', function (e) {
+    var cb = e.target;
+    if (!cb || cb.name !== 'notify_user_ids') return;
+    var picker = cb.closest('.notify-picker');
+    if (!picker) return;
+    var label = picker.querySelector('.notify-picker-label');
+    if (!label) return;
+    var checked = picker.querySelectorAll('input[name="notify_user_ids"]:checked');
+    if (checked.length === 0) {
+      label.textContent = 'No-one tagged';
+      label.classList.add('text-gray-500');
+      label.classList.remove('text-brand-700', 'font-medium');
+    } else {
+      label.textContent = checked.length + (checked.length === 1 ? ' person tagged' : ' people tagged');
+      label.classList.remove('text-gray-500');
+      label.classList.add('text-brand-700', 'font-medium');
+    }
+  });
+
   // Convert base64 VAPID key to Uint8Array for the Push API
   function urlBase64ToUint8Array(base64String) {
     var padding = '='.repeat((4 - base64String.length % 4) % 4);

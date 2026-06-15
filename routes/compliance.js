@@ -6,6 +6,16 @@ const fs = require('fs');
 const { getDb } = require('../db/database');
 const { autoLogDiary, logStatusChange } = require('../lib/diary');
 const planStatus = require('../lib/planStatus');
+const { notifyPlanSubmission, parseTaggedIds } = require('../lib/planNotify');
+
+// Friendly labels for sub-plan item types (used in submission notifications).
+const ITEM_TYPE_LABELS = {
+  tmp_approval: 'TMP / CTMP', council_permit: 'Council Permit', traffic_guidance: 'Traffic Guidance Scheme',
+  rol: 'Road Occupancy Licence', road_occupancy: 'Road Occupancy Licence', spa: 'SPA', sza: 'SZA',
+  bus_approval: 'Bus Approval', police_notification: 'Police Notification', letter_drop: 'Letter Drop',
+  insurance: 'Insurance', swms_review: 'SWMS Review', induction: 'Induction',
+  utility_clearance: 'Utility Clearance', environmental: 'Environmental', other: 'Plan / Approval',
+};
 
 // Multer config for compliance document uploads
 const complianceStorage = multer.diskStorage({
@@ -167,6 +177,26 @@ function createParentPlan(req, res, db, b) {
       summary: `[${req.session.user.full_name}] Created Plan ${title} (#${planNumber}) with ${subPlanCount} sub-plan(s).`,
       userId: req.session.user.id
     });
+
+    // Notify admin + planning that a new plan was created, plus any tagged users.
+    try {
+      const jobNumber = jobId
+        ? (db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(jobId) || {}).job_number
+        : null;
+      notifyPlanSubmission(db, {
+        submitterId: req.session.user.id,
+        submitterName: req.session.user.full_name,
+        taggedIds: parseTaggedIds(b.notify_user_ids),
+        ref: '#' + planNumber,
+        label: `"${title}"`,
+        jobNumber,
+        link: '/compliance/' + parentId + '/edit',
+        jobId: jobId || null,
+        verb: 'created',
+      });
+    } catch (notifyErr) {
+      console.error('[Compliance] new-plan notify failed:', notifyErr.message);
+    }
 
     const raSuffix = raCreatedCount > 0 ? ` + ${raCreatedCount} Risk Assessment${raCreatedCount === 1 ? '' : 's'} drafted` : '';
     req.flash('success', `Plan #${planNumber} created with ${subPlanCount} sub-plan slot(s)${raSuffix}.`);
@@ -579,6 +609,25 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
         summary: `[${req.session.user.full_name}] Submitted ${sub.reference_number}: ${desc}. ${files.length} file(s) uploaded.${expiryDate ? ' Expires ' + expiryDate + '.' : ''}`,
         userId: req.session.user.id
       });
+    }
+
+    // Notify admin + planning, plus anyone the submitter tagged.
+    try {
+      const jobNumber = sub.job_id
+        ? (db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(sub.job_id) || {}).job_number
+        : null;
+      notifyPlanSubmission(db, {
+        submitterId: req.session.user.id,
+        submitterName: req.session.user.full_name,
+        taggedIds: parseTaggedIds(req.body.notify_user_ids),
+        ref: sub.reference_number,
+        label: ITEM_TYPE_LABELS[sub.item_type] || 'Plan / Approval',
+        jobNumber,
+        link: '/compliance/' + sub.parent_id + '/edit',
+        jobId: sub.job_id || null,
+      });
+    } catch (notifyErr) {
+      console.error('[Compliance] submission notify failed:', notifyErr.message);
     }
 
     req.flash('success', `${sub.reference_number} submitted (${files.length} file(s) uploaded).`);
