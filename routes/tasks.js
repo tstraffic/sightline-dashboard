@@ -336,6 +336,26 @@ router.post('/', (req, res) => {
     // Sync all owners to task_owners table
     syncTaskOwners(db, newTaskId, ownerIds);
 
+    // Checklist items — saved as subtasks so they share the existing tick-off /
+    // assign / progress UI on the task. Titles + assignees arrive as parallel
+    // arrays from the create form (one of each per row); empty rows are skipped.
+    try {
+      const titles = Array.isArray(b.checklist_title) ? b.checklist_title : (b.checklist_title ? [b.checklist_title] : []);
+      const assignees = Array.isArray(b.checklist_assignee) ? b.checklist_assignee : (b.checklist_assignee ? [b.checklist_assignee] : []);
+      const insSub = db.prepare('INSERT INTO subtasks (task_id, title, sort_order, assigned_to_id) VALUES (?, ?, ?, ?)');
+      let order = 0;
+      titles.forEach((rawTitle, i) => {
+        const title = (rawTitle || '').trim();
+        if (!title) return; // skip blank rows
+        order += 1;
+        const assigneeId = assignees[i] ? (parseInt(assignees[i], 10) || null) : null;
+        const r = insSub.run(newTaskId, title, order, assigneeId);
+        if (assigneeId) {
+          notifySubtaskAssigned(db, newTaskId, { id: r.lastInsertRowid, title }, assigneeId, req);
+        }
+      });
+    } catch (e) { console.error('[Tasks] Checklist insert error on create:', e.message); }
+
     // Send email/push notification to all assigned owners (fire-and-forget)
     const assignedByName = req.session.user ? req.session.user.full_name : '';
     const baseUrl = process.env.APP_BASE_URL || `${req.protocol}://${req.get('host')}`;

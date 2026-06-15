@@ -211,6 +211,49 @@
     color: rgba(255,255,255,0.8);
   }
   .dark-glass .tf-btn-secondary:hover { background: rgba(255,255,255,0.08); }
+
+  /* Checklist builder (create form) */
+  .cl-box {
+    border: 1px solid #E5E7EB;
+    border-radius: 10px;
+    background: #FCFCFD;
+    padding: 0.5rem;
+  }
+  .dark-glass .cl-box { border-color: rgba(255,255,255,0.10); background: rgba(255,255,255,0.03); }
+  .cl-row {
+    display: flex; align-items: center; gap: 0.5rem;
+    background: #fff; border: 1px solid #E5E7EB;
+    border-radius: 8px; padding: 0.25rem 0.5rem 0.25rem 0.625rem;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+  .cl-row:focus-within { border-color: #2B7FFF; box-shadow: 0 0 0 3px rgba(43,127,255,0.12); }
+  .dark-glass .cl-row { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.12); }
+  /* Leading "to-do" dot — a hint that the item becomes tickable once saved */
+  .cl-dot { width: 16px; height: 16px; border: 1.5px solid #CBD5E1; border-radius: 9999px; flex-shrink: 0; }
+  .dark-glass .cl-dot { border-color: rgba(255,255,255,0.30); }
+  .cl-row input.cl-title {
+    flex: 1; min-width: 0; border: 0; background: transparent; outline: none;
+    font-size: 0.875rem; color: #111827; padding: 0.375rem 0;
+  }
+  .dark-glass .cl-row input.cl-title { color: rgba(255,255,255,0.92); }
+  .cl-row select.cl-assignee {
+    border: 0; background: transparent; outline: none; cursor: pointer;
+    font-size: 0.75rem; color: #64748B; max-width: 130px;
+    text-align: right; padding-right: 0.25rem;
+  }
+  .dark-glass .cl-row select.cl-assignee { color: rgba(255,255,255,0.6); }
+  .cl-row select.cl-assignee option { color: #111827; }
+  .cl-remove { color: #CBD5E1; flex-shrink: 0; padding: 2px; border-radius: 6px; transition: color 0.15s ease, background 0.15s ease; }
+  .cl-remove:hover { color: #EF4444; background: #FEF2F2; }
+  .cl-add {
+    display: inline-flex; align-items: center; gap: 0.375rem;
+    margin-top: 0.25rem; padding: 0.375rem 0.5rem;
+    font-size: 0.8125rem; font-weight: 600; color: #1D6AE5;
+    border-radius: 8px; transition: background 0.15s ease;
+  }
+  .cl-add:hover { background: #EFF6FF; }
+  .dark-glass .cl-add { color: #93C5FD; }
+  .dark-glass .cl-add:hover { background: rgba(59,130,246,0.12); }
 </style>
 
 <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -264,6 +307,24 @@
             </label>
             <textarea id="description" name="description" rows="3" <%= disabled %> class="tf-textarea <%= disabled ? 'opacity-60 cursor-not-allowed' : '' %>" placeholder="Context, links, definition of done..."><%= isEdit && task.description ? task.description : '' %></textarea>
           </div>
+
+          <!-- Checklist (new tasks only — edit mode has the full subtasks panel below) -->
+          <% if (!isEdit) { %>
+          <div>
+            <label class="tf-label">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+              Checklist <span class="text-gray-400 font-normal normal-case tracking-normal">(optional)</span>
+            </label>
+            <div class="cl-box">
+              <div id="checklist-rows" class="space-y-1.5"></div>
+              <p id="checklist-empty" class="text-xs text-gray-400 px-1 py-1.5">Break this into a to-do list — tick items off as you go, and assign any item to a teammate.</p>
+              <button type="button" id="checklist-add-btn" class="cl-add">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
+                Add item
+              </button>
+            </div>
+          </div>
+          <% } %>
         </div>
       </div>
 
@@ -487,6 +548,51 @@
         alert('Please select at least one owner.');
       }
     });
+
+    // --- Checklist (new-task create form only) ---
+    (function () {
+      const rows = document.getElementById('checklist-rows');
+      const addBtn = document.getElementById('checklist-add-btn');
+      const empty = document.getElementById('checklist-empty');
+      if (!rows || !addBtn) return; // edit mode has no inline checklist builder
+
+      // User <option> list for the per-item assignee picker.
+      const userOptions = '<option value="">Assign…</option>'
+        <% users.forEach(function(u) { %>
+          + '<option value="<%= u.id %>"><%= (u.full_name || u.username).replace(/'/g, "\\'") %></option>'
+        <% }) %>;
+
+      function refreshEmpty() {
+        if (empty) empty.style.display = rows.children.length ? 'none' : '';
+      }
+
+      function addRow(focus) {
+        const row = document.createElement('div');
+        row.className = 'cl-row';
+        row.innerHTML =
+          '<span class="cl-dot"></span>'
+          + '<input type="text" name="checklist_title" class="cl-title" placeholder="Add a to-do item…">'
+          + '<select name="checklist_assignee" class="cl-assignee" title="Assign to">' + userOptions + '</select>'
+          + '<button type="button" class="cl-remove" title="Remove item" aria-label="Remove item">'
+          + '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>';
+        rows.appendChild(row);
+        refreshEmpty();
+        if (focus) row.querySelector('input').focus();
+      }
+
+      rows.addEventListener('click', function (e) {
+        const btn = e.target.closest('.cl-remove');
+        if (btn) { btn.closest('.cl-row').remove(); refreshEmpty(); }
+      });
+      // Enter in an item adds the next one (fast keyboard entry)
+      rows.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && e.target.classList.contains('cl-title')) {
+          e.preventDefault();
+          addRow(true);
+        }
+      });
+      addBtn.addEventListener('click', function () { addRow(true); });
+    })();
   </script>
 
   <% if (isEdit) { %>
