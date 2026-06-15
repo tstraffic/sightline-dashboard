@@ -902,9 +902,10 @@
         <div class="bk2-create-card">
           <h3 class="bk2-create-head">Location</h3>
           <div class="bk2-create-grid">
-            <label class="bk2-create-field bk2-create-field--required bk2-create-field--full">
+            <label class="bk2-create-field bk2-create-field--required bk2-create-field--full" style="position:relative">
               <span class="bk2-create-lbl">Main address *</span>
-              <input type="text" name="site_address" required placeholder="Start typing the address…">
+              <input type="text" name="site_address" required placeholder="Start typing the address…"
+                data-bk-addr-autocomplete autocomplete="off">
             </label>
             <input type="hidden" name="suburb">
             <input type="hidden" name="state">
@@ -1105,6 +1106,7 @@
       <label class="bk2-row"><span class="lbl">Site address *</span><span class="val">
         <span style="position:relative;display:block">
           <input type="text" name="site_address" id="bk2-addr-input" placeholder="Start typing the address…" autocomplete="off" required
+            data-bk-addr-autocomplete
             style="width:100%;padding:7px 10px;border:1px solid #D1D5DB;border-radius:8px;font-size:13px">
           <div id="bk2-addr-suggest" style="position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #E5E7EB;border-radius:8px;margin-top:4px;box-shadow:0 4px 12px rgba(0,0,0,0.08);z-index:60;max-height:240px;overflow:auto;display:none"></div>
         </span>
@@ -2156,13 +2158,37 @@
   }
   refreshSummary();
 
-  // Address autocomplete via /bookings/api/places (Nominatim)
-  (function () {
-    var input = $('#bk2-addr-input');
-    var box   = $('#bk2-addr-suggest');
-    if (!input || !box) return;
+  // Address autocomplete via /bookings/api/places (Geoapify).
+  //
+  // Generalised: every input flagged [data-bk-addr-autocomplete] gets the
+  // suggest popover wired up — the Main address input in the editor's
+  // Location card and the old Quick Book input both opt in via the same
+  // attribute, so adding more address fields anywhere is now markup-only.
+  // Each input writes the picked lat / lng / suburb / state / postcode into
+  // its closest <form>'s hidden fields by name, so we don't need each
+  // popover to know about every field id.
+  function bkAddrAttach(input) {
+    if (!input || input.dataset.bkAddrBound === '1') return;
+    input.dataset.bkAddrBound = '1';
+    var form = input.closest('form');
+    function setSibling(name, value) {
+      if (!form) return;
+      var el = form.querySelector('[name="' + name + '"]');
+      if (el) el.value = (value == null) ? '' : String(value);
+    }
+    // Create the popover lazily right after the input. position:absolute
+    // anchored to the input's offsetParent — the label wrapper has
+    // position:relative so the box sits under the field, not the page.
+    var box = document.createElement('div');
+    box.style.cssText = 'position:absolute;left:0;right:0;top:100%;z-index:60;background:#fff;border:1px solid #D1D5DB;border-radius:8px;box-shadow:0 8px 24px rgba(15,23,42,0.12);max-height:260px;overflow:auto;display:none';
+    var parent = input.parentElement;
+    if (parent && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+    (parent || input.parentNode).appendChild(box);
+
     var timer = null;
     function hide() { box.style.display = 'none'; box.innerHTML = ''; }
+    function esc(s) { return String(s == null ? '' : s).replace(/[<>&]/g, function (c) { return c === '<' ? '&lt;' : c === '>' ? '&gt;' : '&amp;'; }); }
+
     input.addEventListener('input', function () {
       var q = input.value.trim();
       if (q.length < 3) { hide(); return; }
@@ -2174,18 +2200,31 @@
             var list = data.results || [];
             if (!list.length) { hide(); return; }
             box.innerHTML = list.map(function (r, i) {
-              return '<div data-i="' + i + '" style="padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #F3F4F6"><div style="font-weight:600;color:#111827">' + (r.site_address || r.label.split(',')[0]) + '</div><div style="color:#9CA3AF;font-size:11px">' + (r.suburb || '') + (r.state ? ' ' + r.state : '') + (r.postcode ? ' ' + r.postcode : '') + '</div></div>';
+              var head = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
+              var sub = [r.suburb, r.state, r.postcode].filter(Boolean).join(' ');
+              return '<div data-i="' + i + '" style="padding:8px 10px;font-size:12px;cursor:pointer;border-bottom:1px solid #F3F4F6">'
+                + '<div style="font-weight:600;color:#111827">' + esc(head) + '</div>'
+                + '<div style="color:#9CA3AF;font-size:11px">' + esc(sub) + '</div>'
+                + '</div>';
             }).join('');
             box.style.display = 'block';
             box.querySelectorAll('[data-i]').forEach(function (row) {
+              row.addEventListener('mousedown', function (e) { e.preventDefault(); }); // keep input focus
               row.addEventListener('click', function () {
                 var r = list[parseInt(row.dataset.i, 10)];
-                input.value = r.site_address || r.label.split(',')[0];
-                $('#bk2-addr-suburb').value   = r.suburb || '';
-                $('#bk2-addr-state').value    = r.state || '';
-                $('#bk2-addr-postcode').value = r.postcode || '';
-                $('#bk2-addr-lat').value      = r.lat || '';
-                $('#bk2-addr-lng').value      = r.lng || '';
+                input.value = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
+                setSibling('suburb',    r.suburb || '');
+                setSibling('state',     r.state || '');
+                setSibling('postcode',  r.postcode || '');
+                setSibling('latitude',  r.lat || '');
+                setSibling('longitude', r.lng || '');
+                // Old Quick Book form has these by id too; cover both.
+                var byId = function (id, v) { var el = document.getElementById(id); if (el) el.value = (v == null) ? '' : String(v); };
+                byId('bk2-addr-suburb',   r.suburb);
+                byId('bk2-addr-state',    r.state);
+                byId('bk2-addr-postcode', r.postcode);
+                byId('bk2-addr-lat',      r.lat);
+                byId('bk2-addr-lng',      r.lng);
                 hide();
               });
             });
@@ -2194,7 +2233,10 @@
       }, 250);
     });
     document.addEventListener('click', function (e) { if (!box.contains(e.target) && e.target !== input) hide(); });
-  })();
+  }
+  // Bind every flagged input on the page (the Main address field in the
+  // editor's Location card + the old Quick Book input both opt in).
+  $$('input[data-bk-addr-autocomplete]').forEach(bkAddrAttach);
 
   // ============================================================
   //  MAP (Leaflet)
