@@ -38,6 +38,15 @@
          worker portal inherits) need legible text/border colours. */
       '.bg-white .wpi-add, .sf-wrap .wpi-add { color: #4b5563; border-color: rgba(0,0,0,0.18); background: #f9fafb; }',
       '.bg-white .wpi-tile, .sf-wrap .wpi-tile { background: #f3f4f6; border-color: rgba(0,0,0,0.08); }',
+      /* Worker-portal light theme — same legibility rules but keyed on the
+         <html data-theme="light"> the worker layout sets, so the Take Photo
+         tile is visible on every worker form (it was previously white-on-
+         white because the dashed-white border + 0.7 white text disappear on
+         a white body). */
+      ':root[data-theme="light"] .wpi-add { color: #374151; border-color: #CBD5E1; background: #F9FAFB; }',
+      ':root[data-theme="light"] .wpi-add:active { background: #E5E7EB; }',
+      ':root[data-theme="light"] .wpi-tile { background: #F3F4F6; border-color: #E5E7EB; }',
+      ':root[data-theme="light"] .wpi-meta { color: #6B7280; }',
       '.wpi-meta { font-size: 0.7rem; color: rgba(255,255,255,0.55); margin-top: 6px; }',
       '.bg-white .wpi-meta, .sf-wrap .wpi-meta { color: #6b7280; }',
     ].join('\n');
