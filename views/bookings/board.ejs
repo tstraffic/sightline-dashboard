@@ -1983,6 +1983,30 @@
   // editor's data-existing flag; uses the form's current action attribute,
   // which prefillEditForm sets to the right URL in edit mode.
   var createForm = $('#bk2-edit-form');
+
+  // Belt-and-braces: explicit click handler on the green Save button
+  // (the Create button relabelled by prefillEditForm) AND the legacy
+  // gray #bk2-edit-save. The submit-via-form="…" attribute had been
+  // failing for some planners — the button visibly depressed but the
+  // form's submit event never fired. requestSubmit() forces it to
+  // dispatch reliably; novalidate (set by prefillEditForm) keeps the
+  // hidden-pane required fields from blocking it.
+  function forceSubmit(e) {
+    if (!createForm) return;
+    if (e) e.preventDefault();
+    if (typeof createForm.requestSubmit === 'function') {
+      try { createForm.requestSubmit(); return; } catch (_) {}
+    }
+    createForm.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+  }
+  var saveBtn1 = $('#bk2-edit-create');
+  if (saveBtn1) saveBtn1.addEventListener('click', forceSubmit);
+  var saveBtn2 = $('#bk2-edit-save');
+  if (saveBtn2) {
+    saveBtn2.removeAttribute('disabled');
+    saveBtn2.addEventListener('click', forceSubmit);
+  }
+
   if (createForm) {
     createForm.addEventListener('submit', function (e) {
       var ed = document.querySelector('#bk2-editor');
