@@ -12731,6 +12731,43 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 269: backfill docket numbers on every existing shift docket.
+  // The docket_number column has lived on docket_signatures since migration
+  // 57 but was never populated — workers signed dockets and the column sat
+  // NULL. Now that PDFs and admin views surface the number, every docket
+  // needs one. We hand out TS-DK-00001, TS-DK-00002, … in id order so the
+  // existing chronological sequence is preserved, then forward inserts pick
+  // up the next number via lib/shiftDocket.generateDocketNumber.
+  if (!isMigrationApplied.get(269)) {
+    try {
+      const rows = db.prepare(`
+        SELECT id FROM docket_signatures
+        WHERE docket_number IS NULL OR docket_number = ''
+        ORDER BY id
+      `).all();
+      if (rows.length) {
+        const startRow = db.prepare(`
+          SELECT MAX(CAST(SUBSTR(docket_number, 7) AS INTEGER)) AS maxNum
+          FROM docket_signatures
+          WHERE docket_number LIKE 'TS-DK-%' AND SUBSTR(docket_number, 7) GLOB '[0-9]*'
+        `).get();
+        let n = (startRow && Number.isFinite(startRow.maxNum) ? startRow.maxNum : 0) + 1;
+        const upd = db.prepare('UPDATE docket_signatures SET docket_number = ? WHERE id = ?');
+        const tx = db.transaction(() => {
+          for (const r of rows) {
+            upd.run('TS-DK-' + String(n).padStart(5, '0'), r.id);
+            n++;
+          }
+        });
+        tx();
+      }
+      recordMigration.run(269, 'docket_signatures: backfill docket_number (TS-DK-NNNNN sequence)');
+      console.log('Migration 269 applied — backfilled', rows.length, 'docket numbers');
+    } catch (e) {
+      console.error('Migration 269 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

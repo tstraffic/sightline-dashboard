@@ -22,7 +22,11 @@
         Back to dockets
       </a>
       <h1 class="mt-1 text-2xl font-bold text-gray-900 flex items-center gap-2 flex-wrap">
-        Docket — <%= docket.crew_name || ('#' + docket.crew_member_id) %>
+        <% if (docket.docket_number) { %>
+          <span class="font-mono text-brand-700"><%= docket.docket_number %></span>
+          <span class="text-gray-300 font-normal">·</span>
+        <% } %>
+        <span><%= docket.crew_name || ('#' + docket.crew_member_id) %></span>
         <% if (dstatus === 'superseded') { %>
           <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gray-100 text-gray-500">Superseded (locked)</span>
         <% } else if (docket.version && docket.version > 1) { %>

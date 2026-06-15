@@ -9,7 +9,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
-const { getDocketCrew, calcHours, resolveShift } = require('../lib/shiftDocket');
+const { getDocketCrew, calcHours, resolveShift, generateDocketNumber } = require('../lib/shiftDocket');
 
 // GET /dockets — register. Defaults to current dockets; ?show=superseded|all.
 router.get('/', (req, res) => {
@@ -34,7 +34,7 @@ router.get('/', (req, res) => {
   }
 
   const rows = db.prepare(`
-    SELECT ds.id, ds.signed_at, ds.docket_type, ds.client_name, ds.no_client_on_site,
+    SELECT ds.id, ds.signed_at, ds.docket_number, ds.docket_type, ds.client_name, ds.no_client_on_site,
       ds.total_hours, COALESCE(ds.status,'current') AS status, ds.version, ds.source,
       ds.signature_data IS NOT NULL  AS has_worker_sig,
       ds.client_signature IS NOT NULL AS has_client_sig,
@@ -224,9 +224,13 @@ router.post('/:id/adjust', (req, res) => {
 
   let newId;
   const tx = db.transaction(() => {
+    const docketNumber = generateDocketNumber(db);
+    // Each docket version is its own document — give it a fresh sequential
+    // number rather than reusing the parent's so the printed PDF is uniquely
+    // referenceable (the parent_docket_id link still ties the chain together).
     const r = db.prepare(`
       INSERT INTO docket_signatures (
-        allocation_id, crew_member_id, signed_by_crew_id, docket_type, client_name, signature_data,
+        allocation_id, crew_member_id, signed_by_crew_id, docket_type, docket_number, client_name, signature_data,
         client_signature, client_signed_name, client_signed_at, notes,
         start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
         no_client_on_site, no_client_reason, signed_at,
@@ -234,14 +238,14 @@ router.post('/:id/adjust', (req, res) => {
         booking_id, shift_job_id, shift_date, updated_at
       )
       SELECT
-        allocation_id, crew_member_id, signed_by_crew_id, docket_type, client_name, signature_data,
+        allocation_id, crew_member_id, signed_by_crew_id, docket_type, ?, client_name, signature_data,
         client_signature, client_signed_name, client_signed_at, notes,
         start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
         no_client_on_site, no_client_reason, signed_at,
         'current', COALESCE(version,1) + 1, 'admin', ?, id,
         booking_id, shift_job_id, shift_date, datetime('now')
       FROM docket_signatures WHERE id = ?
-    `).run(req.session.user ? req.session.user.id : null, orig.id);
+    `).run(docketNumber, req.session.user ? req.session.user.id : null, orig.id);
     newId = r.lastInsertRowid;
 
     // Copy crew lines (or synthesise one from the legacy header).
@@ -302,18 +306,20 @@ router.post('/:id/readjust-with-booking-crew', (req, res) => {
 
   let newId;
   const tx = db.transaction(() => {
+    const docketNumber = generateDocketNumber(db);
     // Clone header, bump version, parent → original, admin source.
     const r = db.prepare(`
       INSERT INTO docket_signatures (
-        allocation_id, crew_member_id, signed_by_crew_id, docket_type, client_name, signature_data,
+        allocation_id, crew_member_id, signed_by_crew_id, docket_type, docket_number, client_name, signature_data,
         client_signature, client_signed_name, client_signed_at, notes,
         start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
         no_client_on_site, no_client_reason, signed_at,
         status, version, source, created_by_user_id, parent_docket_id,
         booking_id, shift_job_id, shift_date, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'current', ?, 'admin', ?, ?, ?, ?, ?, datetime('now'))
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'current', ?, 'admin', ?, ?, ?, ?, ?, datetime('now'))
     `).run(
       orig.allocation_id, orig.crew_member_id, orig.signed_by_crew_id, orig.docket_type || 'daily_docket',
+      docketNumber,
       orig.client_name, orig.signature_data,
       orig.client_signature, orig.client_signed_name, orig.client_signed_at, orig.notes,
       startFallback, finishFallback, breakFallback, 0, 0,

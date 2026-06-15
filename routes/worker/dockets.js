@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday } = require('../../lib/sydney');
-const { resolveShift, getCurrentDocket, getDocketCrew, completeShift, calcHours } = require('../../lib/shiftDocket');
+const { resolveShift, getCurrentDocket, getDocketCrew, completeShift, calcHours, generateDocketNumber } = require('../../lib/shiftDocket');
 const bookingNotify = require('../../services/bookingNotify');
 const { logActivity } = require('../../middleware/audit');
 
@@ -271,17 +271,19 @@ function submitShiftDocket(req, res, shift) {
   const first = lines[0] || {};
 
   const tx = db.transaction(() => {
+    const docketNumber = generateDocketNumber(db);
     const header = db.prepare(`
       INSERT INTO docket_signatures (
-        allocation_id, crew_member_id, signed_by_crew_id, docket_type, client_name, signature_data,
+        allocation_id, crew_member_id, signed_by_crew_id, docket_type, docket_number, client_name, signature_data,
         client_signature, client_signed_name, client_signed_at, notes,
         start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
         no_client_on_site, no_client_reason,
         status, version, source, booking_id, shift_job_id, shift_date, updated_at
-      ) VALUES (?, ?, ?, 'daily_docket', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'current', 1, 'worker', ?, ?, ?, datetime('now'))
+      ) VALUES (?, ?, ?, 'daily_docket', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'current', 1, 'worker', ?, ?, ?, datetime('now'))
     `).run(
       signerAlloc ? signerAlloc.id : null,
       worker.id, worker.id,
+      docketNumber,
       b.client_name || null, b.signature_data || null,
       finalClientSig, finalClientName, finalClientSignedAt, b.notes || null,
       first.start_on_site || null, first.finish_on_site || null,
