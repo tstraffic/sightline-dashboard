@@ -12681,6 +12681,56 @@ function runMigrations(db) {
     }
   }
 
+  // Migration 268: keep crew_members.active in sync with employees.active.
+  //
+  // The bookings crew picker and the HR roster were using two different
+  // "active" flags: bookings queried crew_members.active (legacy boolean),
+  // the roster toggles employees.active + employment_status. Status changes
+  // through HR never touched crew_members.active, so people the operator
+  // had just marked Active wouldn't show up in the bookings picker, and
+  // the roster's Cash/TFN/ABN pill counts (which used the legacy column)
+  // disagreed with the Active tab (which used employment_status).
+  //
+  // One-time backfill aligns crew_members.active with employees.active for
+  // every linked row. The pair of triggers keeps them aligned on every
+  // future INSERT/UPDATE so neither side can silently drift again.
+  if (!isMigrationApplied.get(268)) {
+    try {
+      db.exec(`
+        UPDATE crew_members
+        SET active = (
+          SELECT e.active FROM employees e
+          WHERE e.linked_crew_member_id = crew_members.id AND e.deleted_at IS NULL
+          ORDER BY e.id DESC LIMIT 1
+        )
+        WHERE EXISTS (
+          SELECT 1 FROM employees e
+          WHERE e.linked_crew_member_id = crew_members.id AND e.deleted_at IS NULL
+        );
+
+        DROP TRIGGER IF EXISTS trg_employees_sync_crew_active_upd;
+        CREATE TRIGGER trg_employees_sync_crew_active_upd
+        AFTER UPDATE OF active ON employees
+        WHEN NEW.linked_crew_member_id IS NOT NULL AND NEW.active IS NOT OLD.active
+        BEGIN
+          UPDATE crew_members SET active = NEW.active WHERE id = NEW.linked_crew_member_id;
+        END;
+
+        DROP TRIGGER IF EXISTS trg_employees_sync_crew_active_ins;
+        CREATE TRIGGER trg_employees_sync_crew_active_ins
+        AFTER INSERT ON employees
+        WHEN NEW.linked_crew_member_id IS NOT NULL
+        BEGIN
+          UPDATE crew_members SET active = NEW.active WHERE id = NEW.linked_crew_member_id;
+        END;
+      `);
+      recordMigration.run(268, 'sync crew_members.active with employees.active (backfill + triggers)');
+      console.log('Migration 268 applied');
+    } catch (e) {
+      console.error('Migration 268 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

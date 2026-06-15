@@ -255,15 +255,41 @@ router.get('/roster', requirePermission('hr_employees'), (req, res) => {
   const inductedCount = employees.filter(e => e.employment_status === 'active' && e.inducted_at).length;
   const notInductedCount = employees.filter(e => e.employment_status === 'active' && !e.inducted_at).length;
 
-  // Stats (all exclude deleted except totalDeleted)
+  // Stats — these drive the pill counts above the table. They previously
+  // used two different definitions of "active" (employment_status='active'
+  // for the Active tab vs. the legacy `active = 1` column for Cash/TFN/ABN),
+  // which is why Cash could show 45 while Active showed 37. Everything now
+  // counts against the same population: employees not deleted, matching
+  // whichever status tab the operator has selected. Cash/TFN/ABN are strict
+  // subsets so they can never exceed "All" on this row.
+  // Build the "currently viewed population" predicate once and reuse it for
+  // every pill so they're guaranteed to share the same scope.
+  let pillWhere = 'deleted_at IS NULL';
+  const pillParams = [];
+  if (status === 'inactive' || status === 'deactivated') {
+    pillWhere += " AND employment_status IN ('inactive','deactivated')";
+  } else if (status === 'terminated') {
+    pillWhere += " AND employment_status IN ('terminated','offboarded')";
+  } else if (status) {
+    pillWhere += ' AND employment_status = ?'; pillParams.push(status);
+  } else {
+    // No status filter selected → default the payment pills to the "Active"
+    // population so Cash + TFN + ABN add up to the green Active tab number,
+    // not the broader "All employees" tab. That's what operators expect from
+    // the row and matches the page's primary working set.
+    pillWhere += " AND employment_status = 'active'";
+  }
+  const totalPillAll = db.prepare(`SELECT COUNT(*) AS c FROM employees WHERE ${pillWhere}`).get(...pillParams).c;
+  const totalCash = db.prepare(`SELECT COUNT(*) AS c FROM employees WHERE ${pillWhere} AND payment_type = 'cash'`).get(...pillParams).c;
+  const totalTfn  = db.prepare(`SELECT COUNT(*) AS c FROM employees WHERE ${pillWhere} AND payment_type = 'tfn'`).get(...pillParams).c;
+  const totalAbn  = db.prepare(`SELECT COUNT(*) AS c FROM employees WHERE ${pillWhere} AND payment_type = 'abn'`).get(...pillParams).c;
+
+  // Status-tab counts — unchanged definitions, just kept beside the pills.
   const totalActive = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status = 'active' AND deleted_at IS NULL").get().c;
   const totalReserved = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status = 'reserved' AND deleted_at IS NULL").get().c;
   const totalDeactivated = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status IN ('inactive', 'deactivated') AND deleted_at IS NULL").get().c;
   const totalOnLeave = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status = 'on_leave' AND deleted_at IS NULL").get().c;
   const totalTerminated = db.prepare("SELECT COUNT(*) as c FROM employees WHERE employment_status IN ('terminated', 'offboarded') AND deleted_at IS NULL").get().c;
-  const totalCash = db.prepare("SELECT COUNT(*) as c FROM employees WHERE payment_type = 'cash' AND active = 1 AND deleted_at IS NULL").get().c;
-  const totalTfn = db.prepare("SELECT COUNT(*) as c FROM employees WHERE payment_type = 'tfn' AND active = 1 AND deleted_at IS NULL").get().c;
-  const totalAbn = db.prepare("SELECT COUNT(*) as c FROM employees WHERE payment_type = 'abn' AND active = 1 AND deleted_at IS NULL").get().c;
   const totalActiveAll = db.prepare("SELECT COUNT(*) as c FROM employees WHERE deleted_at IS NULL").get().c;
   const totalDeleted = db.prepare("SELECT COUNT(*) as c FROM employees WHERE deleted_at IS NOT NULL").get().c;
 
@@ -271,7 +297,7 @@ router.get('/roster', requirePermission('hr_employees'), (req, res) => {
     title: 'Roster',
     currentPage: 'hr-roster',
     employees,
-    stats: { totalActive, totalReserved, totalDeactivated, totalOnLeave, totalTerminated, totalCash, totalTfn, totalAbn, totalActiveAll, totalDeleted, inductedCount, notInductedCount },
+    stats: { totalActive, totalReserved, totalDeactivated, totalOnLeave, totalTerminated, totalCash, totalTfn, totalAbn, totalPillAll, totalActiveAll, totalDeleted, inductedCount, notInductedCount },
     filters: { employment_type, status, level, search, sort, order, payment_type, view, induction },
     showDeleted,
     sopVersion,
