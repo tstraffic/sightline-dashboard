@@ -196,7 +196,10 @@ router.post('/', (req, res) => {
     }
 
     req.flash('success', `Job ${jobNumber} created successfully.`);
-    res.redirect('/jobs');
+    // Land on the new job's detail page (not the long /jobs list) so the
+    // planner sees their just-created job straight away rather than having
+    // to hunt for it in a status-sorted register.
+    res.redirect(newJobId ? ('/jobs/' + newJobId.id) : '/jobs');
   } catch (err) {
     console.error('[Jobs] CREATE ERROR:', err.message);
     if (err.message.includes('UNIQUE')) {

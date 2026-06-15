@@ -539,8 +539,11 @@ function toggleJobClientAdd() {
 }
 
 function saveJobClient() {
-  var name = document.getElementById('qa_job_client_name').value.trim();
-  if (!name) { document.getElementById('qa_job_client_name').focus(); return; }
+  var nameEl = document.getElementById('qa_job_client_name');
+  var name = nameEl.value.trim();
+  if (!name) { nameEl.focus(); return; }
+  var btn = document.querySelector('#jobQuickAddClient button[onclick="saveJobClient()"]');
+  if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
   fetch('/clients', {
     method: 'POST',
     headers: csrfHeaders({ 'Content-Type': 'application/json', 'Accept': 'application/json' }),
@@ -551,16 +554,45 @@ function saveJobClient() {
   }).then(function(data) {
     if (data.success && data.client) {
       var sel = document.getElementById('client_id');
-      var opt = new Option(data.client.company_name, data.client.id, true, true);
-      sel.add(opt);
+      // If the client already existed in the list (dupe name), reuse that
+      // option instead of adding a second one.
+      var existing = Array.prototype.find.call(sel.options, function (o) { return String(o.value) === String(data.client.id); });
+      if (!existing) {
+        var opt = new Option(data.client.company_name, data.client.id, true, true);
+        sel.add(opt);
+      }
       sel.value = data.client.id;
       document.getElementById('client').value = data.client.company_name;
-      document.getElementById('qa_job_client_name').value = '';
+      nameEl.value = '';
       document.getElementById('jobQuickAddClient').classList.add('hidden');
+      // Fire change so any client-dependent logic re-runs + so the select
+      // visibly reflects the new selection.
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      showJobClientCreated(data.client.company_name);
     } else {
       alert('Failed to create client: ' + JSON.stringify(data));
     }
-  }).catch(function(e) { alert('Error creating client: ' + e.message); });
+  }).catch(function(e) {
+    alert('Error creating client: ' + e.message);
+  }).finally(function () {
+    if (btn) { btn.disabled = false; btn.textContent = 'Create'; }
+  });
+}
+
+// Brief inline confirmation under the Client field after a quick-add, with
+// a green tick so the planner knows the new company was created AND applied.
+function showJobClientCreated(name) {
+  var anchor = document.getElementById('client_id');
+  if (!anchor) return;
+  var existing = document.getElementById('jobClientCreatedNote');
+  if (existing) existing.remove();
+  var note = document.createElement('div');
+  note.id = 'jobClientCreatedNote';
+  note.className = 'mt-1.5 inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-2 py-1';
+  note.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>'
+    + '<span>New client created &amp; selected: ' + name.replace(/[<>&]/g, '') + '</span>';
+  anchor.parentNode.insertBefore(note, anchor.nextSibling);
+  setTimeout(function () { if (note && note.parentNode) { note.style.transition = 'opacity .3s'; note.style.opacity = '0'; setTimeout(function () { note.remove(); }, 300); } }, 4000);
 }
 
 // Address autocomplete (Photon by Komoot — fast, free, based on OSM, no API key)
