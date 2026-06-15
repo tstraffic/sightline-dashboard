@@ -691,8 +691,6 @@
       { k: 'forms',     l: 'Forms',        i: 'M9 5h6a2 2 0 012 2v12a2 2 0 01-2 2H9a2 2 0 01-2-2V7a2 2 0 012-2zm0 0V3h6v2M9 12h6m-6 4h6' },
       { k: 'reqplans',  l: 'Req. Plans',   i: 'M9 5H6a2 2 0 00-2 2v12a2 2 0 002 2h12a2 2 0 002-2V7a2 2 0 00-2-2h-3M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 13h6m-6 4h6m-6-8h.01' },
       { k: 'reqperm',   l: 'Req. Permits', i: 'M5 13l4 4L19 7M9 21H4v-5' },
-      { k: 'works',     l: 'Works',        i: 'M5 13l4 4L19 7' },
-      { k: 'stories',   l: 'Stories',      i: 'M15 10l4.6-3.3A1 1 0 0121 7.5v9a1 1 0 01-1.4.8L15 14m-11 1h7a2 2 0 002-2V9a2 2 0 00-2-2H4a2 2 0 00-2 2v6a2 2 0 002 2z' },
       { k: 'invoices',  l: 'Invoices',     i: 'M12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2m0-8c1.1 0 2.1.4 2.6 1M12 8V7m0 1v8m0 0v1m0-1c-1.1 0-2.1-.4-2.6-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
       { k: 'print',     l: 'Print',        i: 'M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z' },
     ]; %>
@@ -1052,8 +1050,6 @@
       { k: 'forms',     l: 'Forms' },
       { k: 'reqplans',  l: 'Req. Plans' },
       { k: 'reqperm',   l: 'Req. Permits' },
-      { k: 'works',     l: 'Works' },
-      { k: 'stories',   l: 'Stories' },
       { k: 'invoices',  l: 'Invoices' },
       { k: 'print',     l: 'Print' },
     ].forEach(function (t) { %>
@@ -1644,7 +1640,8 @@
 
     // Reset lazy fragment caches — they belong to the previously-loaded
     // booking and would otherwise leak across opens.
-    fragmentLoaded = { crews: false, tasks: false };
+    fragmentLoaded = {};
+    fragmentDocCache = null;
   }
 
   // ── Prefill the Overview form from a booking's edit-data JSON ──
@@ -1709,14 +1706,29 @@
   // node into the overlay pane. Forms + buttons inside the lifted fragment
   // keep their server-side action URLs, so saves/uploads work as on the
   // full edit page (submitting reloads the page, which is fine).
-  var fragmentLoaded = { crews: false, tasks: false };
+  // Map overlay tab keys → the [data-bk-tab] values used on /bookings/:id.
+  // Most are 1:1; "resources" picks up the crew/vehicles section under
+  // data-bk-tab="crews". Tabs not in this map can't be lifted (the user
+  // gets a "Open full edit page" CTA).
+  var TAB_TO_BK_TAB = {
+    resources: 'crews',
+    tasks:     'tasks',
+    dockets:   'dockets',
+    history:   'history',
+    notes:     'notes',
+    documents: 'documents',
+    forms:     'forms',
+  };
+  var fragmentLoaded = {};
   var fragmentDocCache = null;
   function loadBookingFragment(tab) {
+    var bkTab = TAB_TO_BK_TAB[tab];
+    if (!bkTab) return; // not liftable — leave the placeholder pane as-is
     if (fragmentLoaded[tab]) return;
     var ed = $('#bk2-editor');
     var id = ed && ed.dataset.bookingId;
     if (!id) return;
-    var pane = document.querySelector('[data-edit-pane="' + (tab === 'crews' ? 'resources' : tab) + '"]');
+    var pane = document.querySelector('[data-edit-pane="' + tab + '"]');
     if (!pane) return;
     pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Loading…</h3></div>';
     var p = fragmentDocCache && fragmentDocCache.id === id
@@ -1729,20 +1741,20 @@
             return doc;
           });
     p.then(function (doc) {
-      var node = doc.querySelector('[data-bk-tab="' + tab + '"]');
-      if (!node) { pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Not available here</h3><p>Open the full edit page to use this tab.</p></div>'; return; }
-      // Strip the hide-class the booking page uses for non-active tabs so the
-      // fragment is visible on its own.
-      node.classList.remove('bk-hidden');
-      // Adopt the node into our document so it lives in our DOM.
-      var imported = document.importNode(node, true);
+      // Lift EVERY element matching the tab — Dockets in particular has
+      // multiple (the new shift-docket panel + the legacy dockets list).
+      var nodes = doc.querySelectorAll('[data-bk-tab="' + bkTab + '"]');
+      if (!nodes.length) { pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Not available here</h3><p>Open the full edit page to use this tab.</p></div>'; return; }
       pane.innerHTML = '';
-      pane.appendChild(imported);
+      nodes.forEach(function (node) {
+        node.classList.remove('bk-hidden');
+        pane.appendChild(document.importNode(node, true));
+      });
       fragmentLoaded[tab] = true;
       // The full /bookings/:id page wires the crew chips on DOMContentLoaded
       // via a script that doesn't run when we lift the node by innerHTML.
       // Bind the same interactions in the overlay so the chips are live.
-      if (tab === 'crews') wireOverlayCrewChips(pane, id);
+      if (tab === 'resources') wireOverlayCrewChips(pane, id);
     }).catch(function () {
       pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Couldn’t load</h3><p>Try the full edit page.</p></div>';
     });
@@ -1862,13 +1874,12 @@
       if (p.dataset.editPane === name) p.setAttribute('aria-current', 'true');
       else p.removeAttribute('aria-current');
     });
-    // Lazy-load the Resources + Tasks fragments from the full edit page the
-    // first time their tab is opened in edit mode. Overview owns its own
-    // form (no fetch needed).
+    // Lazy-load tab content from the full edit page the first time each
+    // tab is opened in edit mode. Overview owns its own form (no fetch).
+    // Tabs in TAB_TO_BK_TAB lift their section; others stay placeholder.
     var ed = $('#bk2-editor');
-    if (ed && ed.dataset.existing === '1') {
-      if (name === 'resources') loadBookingFragment('crews');
-      if (name === 'tasks')     loadBookingFragment('tasks');
+    if (ed && ed.dataset.existing === '1' && name !== 'overview') {
+      loadBookingFragment(name);
     }
   }
   $$('.bk2-edit-tab').forEach(function (t) {
