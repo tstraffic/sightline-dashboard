@@ -2247,7 +2247,13 @@
       var target = (bkAddrBox && bkAddrBox._owner && document.body.contains(bkAddrBox._owner))
         ? bkAddrBox._owner
         : input;
-      var pickedValue = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
+      // Fill the Main address bar with the FULL address (street, suburb,
+      // state, postcode) — the bare street alone was too thin to read at a
+      // glance. Falls back to a manually-stitched line if formatted is
+      // empty for some reason.
+      var stitched = [r.site_address, r.suburb, [r.state, r.postcode].filter(Boolean).join(' ')]
+        .filter(Boolean).join(', ');
+      var pickedValue = r.formatted || stitched || r.label || r.site_address || '';
       // Use the native setter from the prototype — bypasses any element-level
       // setter override that frameworks / wrappers occasionally install, and
       // also fires the right internal hooks so React-style tooling sees the
@@ -2305,11 +2311,13 @@
         var quickFill = function (ev) {
           ev.preventDefault();
           ev.stopPropagation();
-          var v = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
+          // Match commit()'s full-address composition so the field shows the
+          // same line whether commit() lands or the belt-and-braces path runs.
+          var stitched = [r.site_address, r.suburb, [r.state, r.postcode].filter(Boolean).join(' ')]
+            .filter(Boolean).join(', ');
+          var v = r.formatted || stitched || r.label || r.site_address || '';
           input.value = v;
           try { commit(r); } catch (e) { console.error('[bk2 addr] commit failed', e); }
-          // Reassert in the next frame — defends against any stray listener
-          // that fired during commit and cleared the value.
           requestAnimationFrame(function () { if (!input.value) input.value = v; });
         };
         row.addEventListener('mousedown', quickFill);
