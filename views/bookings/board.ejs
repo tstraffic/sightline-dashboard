@@ -534,12 +534,12 @@
         <div class="bk2-rp-chipset" data-rp-chipset="people">
           <span class="bk2-rp-chipset-label">Show/Hide</span>
           <div class="bk2-rp-chips">
+            <button type="button" class="bk2-rp-chip bk2-rp-chip--reveal" data-rp-filter="reserved" title="Layer reserved roster members in alongside active crew">+ Show Reserves</button>
+            <button type="button" class="bk2-rp-chip bk2-rp-chip--reveal" data-rp-filter="on_leave" title="Layer on-leave crew in alongside active crew">+ Show On-Leave</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="tls"          title="Only team leads / supervisors">Only TLs</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="assigned"     title="Already on a booking today">Assigned</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="conflicts"    title="Workers with warnings (conflict / fatigue / expiry)">Conflicts</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="blocked"      title="Blocked from allocation">Blocked</button>
-            <button type="button" class="bk2-rp-chip" data-rp-filter="on_leave"     title="Workers on leave">On Leave</button>
-            <button type="button" class="bk2-rp-chip" data-rp-filter="reserved"     title="Reserved roster members">Reserved</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="can_drive"    title="Has a licence type recorded">Can Drive</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="first_aid"    title="First-aid certified">First Aid</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="subcontractor" title="Subcontractor crew">Subcontractor</button>
@@ -2199,17 +2199,18 @@
   // ── Filter predicates per tab ─────────────────────────────────
   function rpPersonOk(p) {
     var f = rpFilters.people;
-    // Parked crew aren't available to roster onto a shift, so they're hidden
-    // by default — the Reserved / On Leave chips reveal them on demand. This
-    // keeps the panel matching the roster's active crew, not the wider HR list.
+    // Default view = active crew only. Reserved + on-leave crew are hidden
+    // until the allocator opts in via the "Show Reserves" / "Show On-Leave"
+    // toggles. These are ADDITIVE: turning Show Reserves on layers reserves
+    // in alongside the active list (active + reserves), it doesn't replace
+    // it. (Previously the chip was exclusive — it hid every active person
+    // and showed only reserves, which is why pressing it looked broken.)
     if (!f.reserved && p.employment_status === 'reserved') return false;
     if (!f.on_leave && p.employment_status === 'on_leave') return false;
     if (f.tls           && !rpIsTl(p.role)) return false;
     if (f.assigned      && !p.assigned_today) return false;
     if (f.conflicts     && !(p.warnings && p.warnings.length)) return false;
     if (f.blocked       && !p.blocked_from_allocation) return false;
-    if (f.on_leave      && p.employment_status !== 'on_leave') return false;
-    if (f.reserved      && p.employment_status !== 'reserved') return false;
     if (f.can_drive     && !p.licence_type) return false;
     if (f.first_aid     && !p.first_aid) return false;
     if (f.subcontractor && (p.employment_type || '').toLowerCase() !== 'subcontractor') return false;
