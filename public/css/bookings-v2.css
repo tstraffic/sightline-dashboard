@@ -1037,6 +1037,18 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
   background: rgba(16,185,129,0.18); color: #6EE7B7;
   border-color: rgba(16,185,129,0.4);
 }
+/* "Show Reserves" / "Show On-Leave" — additive reveal toggles, styled in a
+   blue accent so they read as "bring these in" rather than the green
+   restrictive filters next to them. */
+.bk2-rp-chip--reveal {
+  background: rgba(59,130,246,0.10); color: #93C5FD;
+  border-color: rgba(59,130,246,0.28);
+}
+.bk2-rp-chip--reveal:hover { background: rgba(59,130,246,0.18); color: #BFDBFE; }
+.bk2-rp-chip--reveal[aria-pressed="true"] {
+  background: rgba(59,130,246,0.30); color: #DBEAFE;
+  border-color: rgba(59,130,246,0.6);
+}
 
 .bk2-rp-search {
   position: relative; margin-top: 8px;

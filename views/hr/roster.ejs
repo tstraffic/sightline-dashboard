@@ -264,18 +264,22 @@
   </div>
 
   <% if (!locals.showDeleted) { %>
-  <!-- Payment Tabs -->
+  <!-- Payment Tabs — pill counts are scoped to the currently-selected status
+       tab (filters.status) so All / Cash / TFN / ABN always share the same
+       population. Clicking a pill preserves the status filter via the
+       hidden 'status' query param so you don't lose your tab on filter. -->
+  <% var statusQs = filters.status ? ('&status=' + encodeURIComponent(filters.status)) : ''; %>
   <div class="flex gap-2 overflow-x-auto pb-1">
-    <a href="/hr/roster" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all <%= !filters.payment_type ? 'bg-brand-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' %>">
-      All <span class="text-xs font-bold opacity-70"><%= stats.totalActive %></span>
+    <a href="/hr/roster?<%= statusQs.replace(/^&/, '') %>" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all <%= !filters.payment_type ? 'bg-brand-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' %>">
+      All <span class="text-xs font-bold opacity-70"><%= stats.totalPillAll %></span>
     </a>
-    <a href="/hr/roster?payment_type=cash" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all <%= filters.payment_type === 'cash' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' %>">
+    <a href="/hr/roster?payment_type=cash<%= statusQs %>" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all <%= filters.payment_type === 'cash' ? 'bg-emerald-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' %>">
       Cash <span class="text-xs font-bold opacity-70"><%= stats.totalCash %></span>
     </a>
-    <a href="/hr/roster?payment_type=tfn" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all <%= filters.payment_type === 'tfn' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' %>">
+    <a href="/hr/roster?payment_type=tfn<%= statusQs %>" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all <%= filters.payment_type === 'tfn' ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' %>">
       TFN <span class="text-xs font-bold opacity-70"><%= stats.totalTfn %></span>
     </a>
-    <a href="/hr/roster?payment_type=abn" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all <%= filters.payment_type === 'abn' ? 'bg-purple-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' %>">
+    <a href="/hr/roster?payment_type=abn<%= statusQs %>" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all <%= filters.payment_type === 'abn' ? 'bg-purple-600 text-white shadow-sm' : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50' %>">
       ABN <span class="text-xs font-bold opacity-70"><%= stats.totalAbn %></span>
     </a>
   </div>

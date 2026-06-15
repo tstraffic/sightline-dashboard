@@ -246,17 +246,25 @@ router.post('/:token/sign-off', (req, res) => {
     }
   }
 
+  // Late arrival (FRM-005 section 6 "Late attendee / time") — worker
+  // ticks "I arrived late" and we stamp the current local time so the
+  // attendance record matches reality.
+  const isLate = req.body.late_arrival === '1' ? 1 : 0;
   db.prepare(`
     INSERT INTO toolbox_attendance
-      (toolbox_id, crew_member_id, status, signature_data, signed_off_at, recorded_by_id, recorded_at)
-    VALUES (?, ?, 'attended', ?, datetime('now'), NULL, datetime('now'))
+      (toolbox_id, crew_member_id, status, signature_data, signed_off_at, recorded_by_id, recorded_at,
+       late_arrival, late_arrival_time)
+    VALUES (?, ?, 'attended', ?, datetime('now'), NULL, datetime('now'),
+            ?, CASE WHEN ? THEN strftime('%H:%M', 'now', 'localtime') ELSE NULL END)
     ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
       status = 'attended',
       signature_data = excluded.signature_data,
       signed_off_at = datetime('now'),
       recorded_at = datetime('now'),
-      absence_reason = NULL
-  `).run(session.toolbox_id, crew.id, sigRaw);
+      absence_reason = NULL,
+      late_arrival = excluded.late_arrival,
+      late_arrival_time = excluded.late_arrival_time
+  `).run(session.toolbox_id, crew.id, sigRaw, isLate, isLate);
 
   res.redirect('/toolbox-attend/' + encodeURIComponent(req.params.token) +
                '?submitted=1&signoff=1' +

@@ -178,6 +178,36 @@
       sel.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
+    // Position the panel as a fixed, body-portaled overlay anchored to the
+    // trigger. Rendering it in <body> (not inside .ss-wrap) is the only
+    // reliable way to escape ancestor stacking contexts + overflow clipping
+    // — cards with transform/backdrop-filter were trapping the old absolutely
+    // -positioned panel behind their neighbours regardless of z-index.
+    function position() {
+      var r = trigger.getBoundingClientRect();
+      var vh = window.innerHeight;
+      panel.style.position = 'fixed';
+      panel.style.left = r.left + 'px';
+      panel.style.right = 'auto';
+      panel.style.width = r.width + 'px';
+      var below = vh - r.bottom;
+      var above = r.top;
+      var openUp = below < 300 && above > below;
+      var avail = (openUp ? above : below) - 14;
+      if (openUp) {
+        panel.style.top = 'auto';
+        panel.style.bottom = (vh - r.top + 6) + 'px';
+      } else {
+        panel.style.bottom = 'auto';
+        panel.style.top = (r.bottom + 6) + 'px';
+      }
+      // Let the results list (the scroll area) shrink to fit the gap so the
+      // panel never runs off-screen; ~64px covers the search row.
+      list.style.maxHeight = Math.max(140, avail - 64) + 'px';
+    }
+
+    var repositionBound = function () { if (!panel.hidden) position(); };
+
     function open() {
       if (sel.disabled) return;
       // close any other open panel
@@ -186,14 +216,20 @@
       search.value = '';
       renderChips();
       renderList();
-      panel.hidden = false;
-      // flip upward when there's no room below
+      // Portal into <body> so nothing can paint over it, then anchor it.
       panel.classList.remove('ss-panel-up');
-      var r = wrap.getBoundingClientRect();
-      if (r.bottom + 340 > window.innerHeight && r.top > 360) panel.classList.add('ss-panel-up');
-      setTimeout(function () { search.focus(); }, 0);
+      if (panel.parentNode !== document.body) document.body.appendChild(panel);
+      panel.hidden = false;
+      position();
+      window.addEventListener('scroll', repositionBound, true);
+      window.addEventListener('resize', repositionBound);
+      setTimeout(function () { search.focus(); position(); }, 0);
     }
-    function close() { panel.hidden = true; }
+    function close() {
+      panel.hidden = true;
+      window.removeEventListener('scroll', repositionBound, true);
+      window.removeEventListener('resize', repositionBound);
+    }
 
     trigger.addEventListener('click', function () { panel.hidden ? open() : close(); });
     trigger.addEventListener('keydown', function (e) {
@@ -217,7 +253,8 @@
       }
     });
     document.addEventListener('click', function (e) {
-      if (!panel.hidden && !wrap.contains(e.target)) close();
+      // Panel now lives in <body>, so check it explicitly alongside the wrap.
+      if (!panel.hidden && !wrap.contains(e.target) && !panel.contains(e.target)) close();
     });
 
     // External value changes (form reset, other scripts setting .value)

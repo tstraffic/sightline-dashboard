@@ -844,10 +844,164 @@
 
 <!-- Crew block moved to the top of the two-column grid (see <%= 'sec-crew-vehicles' %>). -->
 
+    <!-- Worker-signed shift docket — surfaced from docket_signatures.
+         One docket covers the whole shift's crew; signing it auto-completes
+         the booking (see lib/shiftDocket.completeShift). Admins can edit
+         hours in place, or "Re-adjust" to version up when crew composition
+         has changed since signing. -->
+    <% if (b.shiftDockets && (b.shiftDockets.current || b.shiftDockets.history.length)) { %>
+      <div id="shift-docket" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="dockets">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Shift Docket
+            <% if (b.shiftDockets.current) { %>
+              <span class="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700">SIGNED</span>
+            <% } %>
+            <% if (b.shiftDockets.history.length) { %>
+              <span class="ml-1 text-[11px] text-gray-400 font-normal">(<%= b.shiftDockets.history.length + (b.shiftDockets.current ? 1 : 0) %> versions)</span>
+            <% } %>
+          </h2>
+        </div>
+
+        <% if (b.shiftDockets.current) {
+             const cur = b.shiftDockets.current;
+             const drift = b.shiftDockets.drift; %>
+          <% if (drift.added.length || drift.removed.length) { %>
+            <!-- Crew drift between booking_crew and the current docket -->
+            <div class="mb-4 p-4 rounded-lg bg-amber-50 border border-amber-200 flex items-start gap-3">
+              <svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-semibold text-amber-900">Crew has changed since this docket was signed</p>
+                <p class="text-xs text-amber-800 mt-1">
+                  <% if (drift.added.length) { %>Now on booking: <strong><%= drift.added.map(p => p.name).join(', ') %></strong>. <% } %>
+                  <% if (drift.removed.length) { %>No longer on booking: <strong><%= drift.removed.map(p => p.name).join(', ') %></strong>. <% } %>
+                </p>
+                <form method="POST" action="/dockets/<%= cur.id %>/readjust-with-booking-crew" class="mt-2 inline">
+                  <%- include('../partials/csrf') %>
+                  <button type="submit" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-lg transition">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/></svg>
+                    Re-adjust for current crew
+                  </button>
+                </form>
+                <p class="text-[11px] text-amber-700 mt-1.5">Creates a new docket version mirroring the current crew. The current docket becomes a superseded copy.</p>
+              </div>
+            </div>
+          <% } %>
+
+          <!-- Current docket summary card -->
+          <div class="border border-gray-200 rounded-lg overflow-hidden">
+            <div class="bg-gradient-to-br from-emerald-50 to-white px-4 py-3 border-b border-emerald-100 flex items-center justify-between gap-2 flex-wrap">
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-gray-900 flex items-center gap-2 flex-wrap">
+                  <% if (cur.docket_number) { %>
+                    <span class="font-mono text-brand-700"><%= cur.docket_number %></span>
+                    <span class="text-gray-300">·</span>
+                  <% } %>
+                  <span>v<%= cur.version || 1 %></span>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold <%= cur.source === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800' %>"><%= cur.source === 'admin' ? 'ADMIN EDITED' : 'WORKER SIGNED' %></span>
+                </p>
+                <p class="text-xs text-gray-500 mt-0.5">
+                  Signed by <strong class="text-gray-700"><%= cur.signer_name || '—' %></strong>
+                  <% if (cur.signed_at) { %> · <%= new Date(cur.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) %><% } %>
+                </p>
+              </div>
+              <div class="flex items-center gap-2 flex-shrink-0">
+                <a href="/dockets/<%= cur.id %>/pdf" target="_blank" rel="noopener" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-xs font-semibold text-gray-700 rounded-lg">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                  PDF
+                </a>
+                <a href="/dockets/<%= cur.id %>" class="px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-xs font-semibold text-gray-700 rounded-lg">View</a>
+                <% if (cur.source === 'admin') { %>
+                  <a href="/dockets/<%= cur.id %>/edit" class="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg">Edit hours</a>
+                <% } else { %>
+                  <form method="POST" action="/dockets/<%= cur.id %>/adjust" class="inline">
+                    <%- include('../partials/csrf') %>
+                    <button type="submit" class="px-2.5 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-semibold rounded-lg">Edit hours</button>
+                  </form>
+                <% } %>
+              </div>
+            </div>
+
+            <table class="w-full text-sm">
+              <thead class="bg-gray-50 text-[10px] font-bold text-gray-500 uppercase tracking-wider">
+                <tr>
+                  <th class="text-left px-4 py-2">Crew</th>
+                  <th class="text-left px-2 py-2">Start</th>
+                  <th class="text-left px-2 py-2">Finish</th>
+                  <th class="text-right px-2 py-2">Break</th>
+                  <th class="text-right px-2 py-2">Travel</th>
+                  <th class="text-right px-4 py-2">Hours</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <% cur.crew.forEach(function (c) { %>
+                  <tr>
+                    <td class="px-4 py-2 font-medium text-gray-900"><%= c.name %><% if (c.role) { %> <span class="text-xs text-gray-400 font-normal"><%= c.role %></span><% } %></td>
+                    <td class="px-2 py-2 text-gray-700 font-mono text-xs"><%= c.start_on_site || '—' %></td>
+                    <td class="px-2 py-2 text-gray-700 font-mono text-xs"><%= c.finish_on_site || '—' %></td>
+                    <td class="px-2 py-2 text-gray-600 text-right text-xs"><%= c.break_minutes || 0 %>m</td>
+                    <td class="px-2 py-2 text-gray-600 text-right text-xs"><%= (c.travel_hours || 0).toFixed ? c.travel_hours.toFixed(2) : c.travel_hours %>h</td>
+                    <td class="px-4 py-2 text-right font-semibold text-emerald-700 tabular-nums"><%= (c.total_hours || 0).toFixed ? c.total_hours.toFixed(2) : c.total_hours %>h</td>
+                  </tr>
+                <% }) %>
+                <% if (!cur.crew.length) { %>
+                  <tr><td colspan="6" class="px-4 py-3 text-center text-sm text-gray-400">No crew lines on this docket.</td></tr>
+                <% } %>
+              </tbody>
+              <tfoot class="bg-emerald-50 text-emerald-900 font-semibold">
+                <tr>
+                  <td class="px-4 py-2 text-xs uppercase tracking-wide" colspan="5">Total man-hours</td>
+                  <td class="px-4 py-2 text-right tabular-nums"><%= (cur.total_hours || 0).toFixed ? cur.total_hours.toFixed(2) : cur.total_hours %>h</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+
+          <% if (b.shiftDockets.history.length) { %>
+            <details class="mt-3">
+              <summary class="cursor-pointer text-xs font-semibold text-gray-500 uppercase tracking-wider hover:text-gray-700 py-2">Previous versions (<%= b.shiftDockets.history.length %>)</summary>
+              <div class="mt-2 space-y-2">
+                <% b.shiftDockets.history.forEach(function (h) { %>
+                  <a href="/dockets/<%= h.id %>" class="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-gray-200 text-gray-700">v<%= h.version || 1 %></span>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold <%= h.source === 'admin' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800' %>"><%= h.source === 'admin' ? 'ADMIN' : 'WORKER' %></span>
+                      <span class="text-xs text-gray-600 truncate">
+                        <% if (h.signed_at) { %><%= new Date(h.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) %><% } %>
+                        · <%= h.crew.length %> crew · <%= (h.total_hours || 0).toFixed ? h.total_hours.toFixed(2) : h.total_hours %>h
+                      </span>
+                    </div>
+                    <span class="text-xs text-gray-400">superseded</span>
+                  </a>
+                <% }) %>
+              </div>
+            </details>
+          <% } %>
+        <% } else if (b.shiftDockets.history.length) { %>
+          <p class="text-sm text-gray-500 mb-3">No current docket — all versions have been superseded. History below.</p>
+          <div class="space-y-2">
+            <% b.shiftDockets.history.forEach(function (h) { %>
+              <a href="/dockets/<%= h.id %>" class="flex items-center justify-between p-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition">
+                <span class="text-sm text-gray-700">v<%= h.version || 1 %> · <%= h.signed_at || '' %></span>
+                <span class="text-xs text-gray-400">superseded</span>
+              </a>
+            <% }) %>
+          </div>
+        <% } %>
+      </div>
+    <% } else { %>
+      <div id="shift-docket" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="dockets">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Shift Docket</h2>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600">NOT SIGNED</span>
+        </div>
+        <p class="text-sm text-gray-500">No shift docket signed yet. The booking stays in its current status until a worker signs the docket from the crew portal — that's what marks the shift complete.</p>
+      </div>
+    <% } %>
+
     <!-- Dockets -->
     <div id="dockets" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="dockets">
       <div class="flex items-center justify-between mb-4">
-        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Dockets (<%= b.dockets ? b.dockets.length : 0 %>)</h2>
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Legacy dockets (<%= b.dockets ? b.dockets.length : 0 %>)</h2>
         <form method="POST" action="/bookings/<%= b.id %>/dockets" class="inline">
           <%- include('../partials/csrf') %>
           <button type="submit" class="inline-flex items-center px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg transition">
@@ -893,6 +1047,50 @@
     <div id="notes" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="notes">
       <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Notes</h2>
 
+      <!-- Fields captured on the booking form — each shown separately so
+           nothing filled in at creation gets buried. Edit them on the
+           booking edit page; the timeline notes below are add-only. -->
+      <% if (b.description || b.location_notes || b.requirements_text || b.internal_notes) { %>
+        <div class="space-y-2.5 mb-5">
+          <% if (b.description) { %>
+            <div class="p-3 rounded-lg bg-blue-50/60 border border-blue-100">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-blue-700 uppercase tracking-widest">Booking Description</span>
+                <a href="/bookings/<%= b.id %>/edit" class="text-[10px] font-semibold text-blue-400 hover:text-blue-600">Edit</a>
+              </div>
+              <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= b.description %></p>
+            </div>
+          <% } %>
+          <% if (b.location_notes) { %>
+            <div class="p-3 rounded-lg bg-teal-50/60 border border-teal-100">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-teal-700 uppercase tracking-widest">Location Notes</span>
+                <a href="/bookings/<%= b.id %>/edit" class="text-[10px] font-semibold text-teal-400 hover:text-teal-600">Edit</a>
+              </div>
+              <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= b.location_notes %></p>
+            </div>
+          <% } %>
+          <% if (b.requirements_text) { %>
+            <div class="p-3 rounded-lg bg-indigo-50/60 border border-indigo-100">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-indigo-700 uppercase tracking-widest">Site Requirements / PPE</span>
+                <a href="/bookings/<%= b.id %>/edit" class="text-[10px] font-semibold text-indigo-400 hover:text-indigo-600">Edit</a>
+              </div>
+              <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= b.requirements_text %></p>
+            </div>
+          <% } %>
+          <% if (b.internal_notes) { %>
+            <div class="p-3 rounded-lg bg-amber-50/60 border border-amber-100">
+              <div class="flex items-center justify-between mb-1">
+                <span class="text-[10px] font-bold text-amber-700 uppercase tracking-widest">Internal Notes <span class="font-medium normal-case tracking-normal">· office only, hidden from workers</span></span>
+                <a href="/bookings/<%= b.id %>/edit" class="text-[10px] font-semibold text-amber-400 hover:text-amber-600">Edit</a>
+              </div>
+              <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= b.internal_notes %></p>
+            </div>
+          <% } %>
+        </div>
+      <% } %>
+
       <% if (b.notes && b.notes.length > 0) { %>
         <div class="space-y-3 mb-4">
           <% b.notes.forEach(n => { %>
@@ -926,6 +1124,69 @@
           </label>
         </div>
       </form>
+    </div>
+
+    <!-- Documents — lives in the wide main column (not the right rail) so the
+         upload area + list use the full width when the Documents tab is open. -->
+    <%
+      var DOC_TYPES = [
+        ['tgs','TGS'],['tmp','TMP'],['ctmp','CTMP'],['rol','ROL'],['rol_day','ROL — Day'],['rol_night','ROL — Night'],
+        ['stage_plan','Stage Plan'],['swms','SWMS'],['permit','Permit'],['invoice','Invoice'],['photo','Photo'],['other','Other'],
+      ];
+      var DOC_TYPE_LABEL = {}; DOC_TYPES.forEach(function (t) { DOC_TYPE_LABEL[t[0]] = t[1]; });
+    %>
+    <div id="documents" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="documents">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Documents (<%= b.documents ? b.documents.length : 0 %>)</h2>
+
+      <!-- Upload zone — the big drop target fills the tab. Drop a file (or
+           browse), name it and tag its type, and it lists below. Workers on
+           the shift see these in their portal DOCS tab. -->
+      <form method="POST" action="/bookings/<%= b.id %>/documents" enctype="multipart/form-data" class="mb-5">
+        <%- include('../partials/csrf') %>
+        <div data-dropzone class="rounded-xl border-2 border-dashed border-gray-300 hover:border-brand-400 transition bg-gray-50/60 px-6 py-12 text-center">
+          <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+          <input type="file" name="file" required class="block mx-auto text-sm text-gray-600">
+          <p class="dropzone-label text-sm text-gray-500 mt-2">Drag a document here or <span class="text-brand-600 font-semibold">browse</span></p>
+          <p class="text-[11px] text-gray-400 mt-1">PDF, image or office doc · workers on this shift can view it in the app</p>
+        </div>
+        <div class="flex flex-wrap items-end gap-2 mt-3">
+          <input type="text" name="title" placeholder="Document title (optional)" class="flex-1 min-w-[160px] px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <select name="document_type" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <% DOC_TYPES.forEach(function (t) { %><option value="<%= t[0] %>"<%= t[0] === 'other' ? ' selected' : '' %>><%= t[1] %></option><% }) %>
+          </select>
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">Upload</button>
+        </div>
+      </form>
+
+      <% if (b.documents && b.documents.length > 0) { %>
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Uploaded</p>
+        <div class="space-y-2">
+          <% b.documents.forEach(doc => {
+            const sizeKb = doc.file_size ? (doc.file_size / 1024).toFixed(0) + ' KB' : '';
+          %>
+            <div class="flex items-center gap-3 p-3 rounded-lg bg-gray-50 border border-gray-100">
+              <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+              <div class="min-w-0 flex-1">
+                <a href="/bookings/<%= b.id %>/documents/<%= doc.id %>/download" target="_blank" class="text-sm font-medium text-brand-600 hover:text-brand-700 truncate block"><%= doc.title || doc.original_name %></a>
+                <p class="text-[10px] text-gray-400"><%= sizeKb %><%= doc.uploader_name ? ' · ' + doc.uploader_name : '' %></p>
+              </div>
+              <!-- Relabel the document type in place — auto-submits on change. -->
+              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/type" class="inline">
+                <%- include('../partials/csrf') %>
+                <select name="document_type" onchange="this.form.submit()" class="px-2 py-1 bg-white border border-gray-200 rounded-md text-gray-700 text-xs focus:outline-none focus:ring-1 focus:ring-brand-500">
+                  <% DOC_TYPES.forEach(function (t) { %><option value="<%= t[0] %>"<%= (doc.document_type || 'other') === t[0] ? ' selected' : '' %>><%= t[1] %></option><% }) %>
+                </select>
+              </form>
+              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/delete" class="inline">
+                <%- include('../partials/csrf') %>
+                <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Delete"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+              </form>
+            </div>
+          <% }); %>
+        </div>
+      <% } else { %>
+        <p class="text-sm text-gray-400 italic text-center py-2">No documents yet — drop the first one above.</p>
+      <% } %>
     </div>
   </div>
 
@@ -1066,58 +1327,6 @@
 
 <!-- Vehicles block moved to the combined Crew & Vehicles card at the top of the grid. -->
 
-    <!-- Documents -->
-    <div id="documents" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="documents">
-      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Documents (<%= b.documents ? b.documents.length : 0 %>)</h2>
-
-      <% if (b.documents && b.documents.length > 0) { %>
-        <div class="space-y-2 mb-3">
-          <% b.documents.forEach(doc => {
-            const sizeKb = doc.file_size ? (doc.file_size / 1024).toFixed(0) + ' KB' : '';
-          %>
-            <div class="flex items-center justify-between p-2 rounded-lg bg-gray-50">
-              <div class="flex items-center gap-2 min-w-0">
-                <svg class="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-                <div class="min-w-0">
-                  <a href="/bookings/<%= b.id %>/documents/<%= doc.id %>/download" class="text-sm font-medium text-brand-600 hover:text-brand-700 truncate block"><%= doc.title || doc.original_name %></a>
-                  <p class="text-[10px] text-gray-400"><%= sizeKb %><%= doc.uploader_name ? ' · ' + doc.uploader_name : '' %></p>
-                </div>
-              </div>
-              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/delete" class="inline">
-                <%- include('../partials/csrf') %>
-                <button type="submit" class="text-gray-300 hover:text-red-500 transition"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
-              </form>
-            </div>
-          <% }); %>
-        </div>
-      <% } %>
-
-      <form method="POST" action="/bookings/<%= b.id %>/documents" enctype="multipart/form-data" class="space-y-2">
-        <%- include('../partials/csrf') %>
-        <div>
-          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Upload Document</label>
-          <div data-dropzone>
-            <input type="file" name="file" required>
-            <p class="dropzone-label text-xs text-gray-500">Drop file or <span class="text-brand-600 font-medium">browse</span></p>
-          </div>
-        </div>
-        <div class="flex items-end gap-2">
-          <div class="flex-1">
-            <input type="text" name="title" placeholder="Document title (optional)" class="w-full px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-          </div>
-          <select name="document_type" class="px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
-            <option value="other">Other</option>
-            <option value="tgs">TGS</option>
-            <option value="ctmp">CTMP</option>
-            <option value="rol">ROL</option>
-            <option value="permit">Permit</option>
-            <option value="invoice">Invoice</option>
-            <option value="photo">Photo</option>
-          </select>
-          <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg transition">Upload</button>
-        </div>
-      </form>
-    </div>
 
     <!-- Activity History -->
     <% if (b.activity && b.activity.length > 0) { %>

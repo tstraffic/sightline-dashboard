@@ -1,40 +1,98 @@
-<meta name="color-scheme" content="light only">
-
 <style>
+  /* Theme-aware tokens — dark by default, light when [data-theme="light"] is
+     set on <html> (worker layout's theme bootstrap). One rule set, two skins. */
+  :root {
+    --ds-text:          #FFFFFF;
+    --ds-text-mute:     rgba(255,255,255,0.65);
+    --ds-text-faint:    rgba(255,255,255,0.45);
+    --ds-card-bg:       rgba(255,255,255,0.03);
+    --ds-card-border:   rgba(255,255,255,0.08);
+    --ds-row-bg:        rgba(255,255,255,0.04);
+    --ds-row-border:    rgba(255,255,255,0.10);
+    --ds-input-border:  rgba(255,255,255,0.18);
+    --ds-input-bg:      #FFFFFF;
+    --ds-input-text:    #0F172A;
+    --ds-input-placeholder: #9CA3AF;
+    --ds-chip-bg:       rgba(255,255,255,0.06);
+    --ds-chip-border:   rgba(255,255,255,0.10);
+    --ds-bar-fade:      linear-gradient(180deg, transparent, rgba(15,17,21,0.95) 35%);
+    --ds-sig-bg:        #F8FAFC;
+    --ds-sig-border:    rgba(255,255,255,0.18);
+    --ds-summary-bg:    linear-gradient(155deg, rgba(16,185,129,0.12), rgba(16,185,129,0.05) 60%, rgba(15,17,21,0.6));
+    --ds-summary-border: rgba(96,165,250,0.25);
+    --ds-allcrew-bg:    linear-gradient(135deg, rgba(0,210,190,0.12), rgba(0,210,190,0.05));
+    --ds-allcrew-border: rgba(0,210,190,0.30);
+    --ds-total-bg:      linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.10));
+    --ds-total-border:  rgba(16,185,129,0.35);
+    --ds-total-label:   rgba(255,255,255,0.85);
+    --ds-total-value:   #FFFFFF;
+  }
+  :root[data-theme="light"] {
+    --ds-text:          #0F172A;
+    --ds-text-mute:     #4B5563;
+    --ds-text-faint:    #6B7280;
+    --ds-card-bg:       #FFFFFF;
+    --ds-card-border:   #E5E7EB;
+    --ds-row-bg:        #F9FAFB;
+    --ds-row-border:    #E5E7EB;
+    --ds-input-border:  #D1D5DB;
+    --ds-input-bg:      #FFFFFF;
+    --ds-input-text:    #0F172A;
+    --ds-input-placeholder: #9CA3AF;
+    --ds-chip-bg:       #F3F4F6;
+    --ds-chip-border:   #D1D5DB;
+    /* Pull the sticky-bar fade out of slate-blue and into the worker
+       portal's actual page background so it blends instead of poking
+       through as a dark stripe under the submit button. */
+    --ds-bar-fade:      linear-gradient(180deg, transparent, #F7F8FA 35%);
+    --ds-sig-bg:        #F8FAFC;
+    --ds-sig-border:    #CBD5E1;
+    --ds-summary-bg:    linear-gradient(155deg, #ECFDF5, #F0FDFA 60%, #FFFFFF);
+    --ds-summary-border: #BAE6FD;
+    --ds-allcrew-bg:    linear-gradient(135deg, #ECFEFF, #F0FDFA);
+    --ds-allcrew-border: #67E8F9;
+    --ds-total-bg:      linear-gradient(135deg, #ECFDF5, #D1FAE5);
+    --ds-total-border:  #6EE7B7;
+    --ds-total-label:   #065F46;
+    --ds-total-value:   #065F46;
+  }
+
   .ds-wrap   { padding: 0.5rem; padding-bottom: 6rem; }
   .ds-back   { display: inline-flex; align-items: center; gap: 4px; color: #10B981; font-size: 0.85rem; font-weight: 600; }
-  .ds-h1     { font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: -0.01em; margin-top: 0.25rem; }
+  .ds-h1     { font-size: 1.5rem; font-weight: 800; color: var(--ds-text); letter-spacing: -0.01em; margin-top: 0.25rem; }
 
   .ds-card {
-    background: rgba(255,255,255,0.03);
-    border: 1px solid rgba(255,255,255,0.08);
+    background: var(--ds-card-bg);
+    border: 1px solid var(--ds-card-border);
     border-radius: 14px;
     padding: 14px 14px 16px;
     margin-top: 12px;
   }
+  :root[data-theme="light"] .ds-card { box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
   .ds-card-title {
     font-size: 0.65rem; font-weight: 800; letter-spacing: 0.1em;
     text-transform: uppercase; color: #10B981; margin-bottom: 10px;
   }
+  :root[data-theme="light"] .ds-card-title { color: #047857; }
   .ds-summary {
-    background: linear-gradient(155deg, rgba(16,185,129,0.12), rgba(16,185,129,0.05) 60%, rgba(10,22,40,0.6));
-    border: 1px solid rgba(96,165,250,0.25);
+    background: var(--ds-summary-bg);
+    border: 1px solid var(--ds-summary-border);
   }
-  .ds-summary-client { font-size: 1rem; font-weight: 700; color: #fff; line-height: 1.2; }
-  .ds-summary-meta   { font-size: 0.72rem; color: rgba(255,255,255,0.55); margin-top: 2px; }
-  .ds-summary-date   { font-size: 0.72rem; font-weight: 600; color: rgba(255,255,255,0.55); }
+  .ds-summary-client { font-size: 1rem; font-weight: 700; color: var(--ds-text); line-height: 1.2; }
+  .ds-summary-meta   { font-size: 0.72rem; color: var(--ds-text-mute); margin-top: 2px; }
+  .ds-summary-date   { font-size: 0.72rem; font-weight: 600; color: var(--ds-text-mute); }
 
-  .ds-label   { display: block; font-size: 0.7rem; font-weight: 700; color: rgba(255,255,255,0.65); margin-bottom: 4px; letter-spacing: 0.02em; }
-  .ds-label .req { color: #FCA5A5; margin-left: 2px; }
-  .ds-help    { font-size: 0.7rem; color: rgba(255,255,255,0.45); margin-top: 4px; }
-  .ds-error-text { font-size: 0.72rem; font-weight: 600; color: #FCA5A5; margin-top: 4px; display: none; }
+  .ds-label   { display: block; font-size: 0.7rem; font-weight: 700; color: var(--ds-text-mute); margin-bottom: 4px; letter-spacing: 0.02em; }
+  .ds-label .req { color: #DC2626; margin-left: 2px; }
+  .ds-help    { font-size: 0.7rem; color: var(--ds-text-faint); margin-top: 4px; }
+  .ds-error-text { font-size: 0.72rem; font-weight: 600; color: #DC2626; margin-top: 4px; display: none; }
   .ds-error-text.show { display: block; }
 
   .ds-input, .ds-select, .ds-textarea {
     width: 100%;
-    background: #fff;
-    color: #0F172A;
-    border: 1px solid rgba(255,255,255,0.18);
+    background: var(--ds-input-bg);
+    color: var(--ds-input-text);
+    border: 1px solid var(--ds-input-border);
     border-radius: 10px;
     padding: 11px 12px;
     font-size: 0.95rem;
@@ -43,9 +101,9 @@
     appearance: none;
     color-scheme: light;
     box-shadow: 0 0 0 0 transparent;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.15s, box-shadow 0.15s, background-color 0.15s;
   }
-  .ds-input::placeholder, .ds-textarea::placeholder { color: #9CA3AF; }
+  .ds-input::placeholder, .ds-textarea::placeholder { color: var(--ds-input-placeholder); }
   .ds-input:focus, .ds-select:focus, .ds-textarea:focus {
     outline: none;
     border-color: #10B981;
@@ -57,56 +115,138 @@
 
   /* Per-crew docket rows */
   .ds-crew {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.10);
+    background: var(--ds-row-bg);
+    border: 1px solid var(--ds-row-border);
     border-radius: 12px;
     padding: 12px;
     margin-top: 10px;
   }
-  .ds-crew-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; }
-  .ds-crew-name { font-size: 0.92rem; font-weight: 700; color: #fff; }
-  .ds-crew-badges { display: flex; gap: 6px; flex-wrap: wrap; }
+  .ds-crew-head { width: 100%; background: none; border: 0; padding: 0; text-align: left; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 0; }
+  .ds-crew.is-open .ds-crew-head { margin-bottom: 12px; }
+  .ds-crew-chevron { width: 16px; height: 16px; color: var(--ds-text-faint); transition: transform 0.15s; flex-shrink: 0; }
+  .ds-crew.is-open .ds-crew-chevron { transform: rotate(90deg); }
+  .ds-crew-fields[hidden] { display: none; }
+  /* "Set everyone's times" master row */
+  .ds-allcrew { background: var(--ds-allcrew-bg); border: 1px solid var(--ds-allcrew-border); border-radius: 12px; padding: 14px; margin-bottom: 6px; }
+  .ds-allcrew-title { font-size: 0.68rem; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #0D9488; margin-bottom: 10px; }
+  :root[data-theme="light"] .ds-allcrew-title { color: #0F766E; }
+  .ds-chip-custom { background: rgba(0,210,190,0.15); color: #5EEAD4; border: 1px solid rgba(0,210,190,0.30); }
+  :root[data-theme="light"] .ds-chip-custom { background: #CFFAFE; color: #155E75; border-color: #67E8F9; }
+  .ds-crew-name { font-size: 0.92rem; font-weight: 700; color: var(--ds-text); }
+  .ds-crew-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
   .ds-chip { font-size: 0.6rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 7px; border-radius: 999px; }
   .ds-chip-tl { background: rgba(252,211,77,0.15); color: #FCD34D; border: 1px solid rgba(252,211,77,0.3); }
+  :root[data-theme="light"] .ds-chip-tl { background: #FEF3C7; color: #92400E; border-color: #FCD34D; }
   .ds-chip-role { background: rgba(96,165,250,0.12); color: #93C5FD; border: 1px solid rgba(96,165,250,0.25); }
-  .ds-crew-total { font-size: 0.75rem; font-weight: 700; color: #34D399; white-space: nowrap; }
-  .ds-mini-label { display:block; font-size: 0.6rem; font-weight: 700; color: rgba(255,255,255,0.5); margin-bottom: 3px; letter-spacing: 0.04em; text-transform: uppercase; }
-  .ds-grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 8px; }
-  .ds-grid-4 .ds-input { padding: 9px 8px; font-size: 0.85rem; }
+  :root[data-theme="light"] .ds-chip-role { background: #DBEAFE; color: #1E40AF; border-color: #93C5FD; }
+  .ds-crew-total { font-size: 0.75rem; font-weight: 700; color: #10B981; white-space: nowrap; }
+  :root[data-theme="light"] .ds-crew-total { color: #047857; }
+
+  /* ── Time grid: fewer, larger, friendlier inputs ──
+     The old .ds-grid-4 stuffed four cramped 0.85rem inputs into a 4-col grid.
+     Now: a 2x2 grid on phones (1x4 on tablets), each cell is a labelled tile
+     with a leading icon, generous tap target, tabular-nums numerals and a
+     soft hover/focus halo. Reads as a clock chip instead of a bare field. */
+  .ds-time-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  @media (min-width: 420px) { .ds-time-grid { grid-template-columns: repeat(4, 1fr); } }
+  .ds-time-cell {
+    position: relative;
+    background: var(--ds-input-bg);
+    border: 1px solid var(--ds-input-border);
+    border-radius: 12px;
+    padding: 8px 10px 9px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    transition: border-color 0.15s, box-shadow 0.15s, transform 0.05s;
+  }
+  .ds-time-cell:focus-within {
+    border-color: #10B981;
+    box-shadow: 0 0 0 3px rgba(16,185,129,0.18);
+  }
+  .ds-time-cell.ds-error { border-color: #F87171; box-shadow: 0 0 0 3px rgba(239,68,68,0.15); }
+  .ds-time-cell-head {
+    display: flex; align-items: center; gap: 5px;
+    font-size: 0.58rem; font-weight: 800; letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ds-text-faint);
+  }
+  .ds-time-cell-head svg { width: 11px; height: 11px; flex-shrink: 0; opacity: 0.8; }
+  .ds-time-input {
+    appearance: none;
+    -webkit-appearance: none;
+    background: transparent;
+    border: 0;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    color: var(--ds-input-text);
+    font-size: 1.05rem;
+    font-weight: 700;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    font-variant-numeric: tabular-nums;
+    font-family: 'Geist Mono', 'SF Mono', ui-monospace, monospace;
+    color-scheme: light;
+    outline: none;
+    min-height: 24px;
+  }
+  /* The native time/number picker's increment/decrement chrome makes the
+     cell feel cramped; suppress and rely on the OS-level picker UI. */
+  .ds-time-input::-webkit-inner-spin-button,
+  .ds-time-input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+  .ds-time-input::-webkit-calendar-picker-indicator {
+    opacity: 0; cursor: pointer; position: absolute; inset: 0; width: 100%; height: 100%; padding: 0;
+  }
+  .ds-time-input::-webkit-date-and-time-value { text-align: left; }
 
   .ds-total {
-    margin-top: 12px; padding: 12px 14px; border-radius: 12px;
-    background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.1));
-    border: 1px solid rgba(16,185,129,0.35);
+    margin-top: 14px; padding: 14px 16px; border-radius: 12px;
+    background: var(--ds-total-bg);
+    border: 1px solid var(--ds-total-border);
     display: flex; align-items: center; justify-content: space-between;
   }
-  .ds-total-label { font-size: 0.78rem; font-weight: 600; color: rgba(255,255,255,0.85); letter-spacing: 0.02em; }
-  .ds-total-value { font-size: 1.5rem; font-weight: 800; color: #fff; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .ds-total-label { font-size: 0.78rem; font-weight: 600; color: var(--ds-total-label); letter-spacing: 0.02em; }
+  .ds-total-value { font-size: 1.5rem; font-weight: 800; color: var(--ds-total-value); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
 
   .ds-toggle { display: inline-flex; align-items: center; gap: 8px; margin-top: 10px; cursor: pointer; }
   .ds-toggle input { width: 18px; height: 18px; accent-color: #10B981; }
-  .ds-toggle span  { font-size: 0.85rem; color: rgba(255,255,255,0.85); font-weight: 500; }
+  .ds-toggle span  { font-size: 0.85rem; color: var(--ds-text); font-weight: 500; }
 
   .ds-sig-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
   .ds-sig-clear {
-    font-size: 0.7rem; font-weight: 600; color: rgba(255,255,255,0.65);
-    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.10);
-    padding: 4px 10px; border-radius: 6px;
+    font-size: 0.72rem; font-weight: 600;
+    color: var(--ds-text-mute);
+    background: var(--ds-chip-bg);
+    border: 1px solid var(--ds-chip-border);
+    padding: 6px 12px; border-radius: 8px;
+    min-height: 32px;
+    display: inline-flex; align-items: center; gap: 4px;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+  }
+  .ds-sig-clear:hover, .ds-sig-clear:active {
+    color: var(--ds-text);
+    background: var(--ds-row-bg);
+    border-color: var(--ds-input-border);
   }
   .ds-sig-pad {
-    border: 2px dashed rgba(255,255,255,0.18); border-radius: 12px;
-    background: #F8FAFC; height: 160px; position: relative; overflow: hidden;
+    border: 2px dashed var(--ds-sig-border); border-radius: 12px;
+    background: var(--ds-sig-bg); height: 160px; position: relative; overflow: hidden;
   }
   .ds-sig-pad.ds-error { border-color: #F87171; background: #FEF2F2; }
   .ds-sig-pad canvas { width: 100%; height: 100%; touch-action: none; display: block; }
   .ds-sig-pad.signed { border-style: solid; border-color: rgba(16,185,129,0.45); background: #F0FDF4; }
-  .ds-sig-hint { font-size: 0.68rem; color: rgba(255,255,255,0.4); text-align: center; margin-top: 6px; }
-  .ds-sig-hint.signed { color: #34D399; font-weight: 600; }
-  .ds-sig-img { width: 100%; height: 130px; object-fit: contain; background: #fff; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); }
+  .ds-sig-hint { font-size: 0.72rem; color: var(--ds-text-faint); text-align: center; margin-top: 8px; }
+  .ds-sig-hint.signed { color: #10B981; font-weight: 600; }
+  .ds-sig-img { width: 100%; height: 130px; object-fit: contain; background: #fff; border-radius: 10px; border: 1px solid var(--ds-card-border); }
 
   .ds-submit-bar {
     position: sticky; bottom: 0;
-    background: linear-gradient(180deg, transparent, rgba(10,22,40,0.95) 35%);
+    background: var(--ds-bar-fade);
     padding: 16px 0 calc(16px + env(safe-area-inset-bottom, 0px));
     margin-top: 16px;
   }
@@ -118,27 +258,84 @@
     display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px;
   }
   .ds-submit:active { transform: scale(0.99); }
-  .ds-submit-summary { text-align: center; font-size: 0.72rem; color: rgba(255,255,255,0.5); margin-top: 8px; }
+  .ds-submit[disabled], .ds-submit.is-blocked {
+    background: #94A3B8;
+    box-shadow: none;
+    cursor: not-allowed;
+    opacity: 0.95;
+  }
+  .ds-submit[disabled]:active, .ds-submit.is-blocked:active { transform: none; }
+  .ds-submit-summary { text-align: center; font-size: 0.72rem; color: var(--ds-text-faint); margin-top: 8px; }
+
+  /* Preflight: required-checklist warning — shows BEFORE the worker hits
+     submit so they don't lose their entered hours/signatures to a redirect.
+     Themed amber, links straight to the missing form (allocationId already
+     baked into the href from the server), reads on both light + dark. */
+  .ds-prereq {
+    margin-top: 14px;
+    padding: 14px 14px 12px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, rgba(251,191,36,0.16), rgba(251,191,36,0.06));
+    border: 1px solid rgba(251,191,36,0.45);
+    display: flex; gap: 12px; align-items: flex-start;
+  }
+  :root[data-theme="light"] .ds-prereq {
+    background: #FFFBEB;
+    border-color: #FCD34D;
+  }
+  .ds-prereq-icon { width: 26px; height: 26px; flex-shrink: 0; color: #F59E0B; }
+  :root[data-theme="light"] .ds-prereq-icon { color: #B45309; }
+  .ds-prereq-body { min-width: 0; flex: 1; }
+  .ds-prereq-title { font-size: 0.95rem; font-weight: 800; color: #FCD34D; letter-spacing: -0.01em; }
+  :root[data-theme="light"] .ds-prereq-title { color: #78350F; }
+  .ds-prereq-sub   { font-size: 0.78rem; color: var(--ds-text-mute); margin-top: 3px; }
+  :root[data-theme="light"] .ds-prereq-sub { color: #92400E; }
+  .ds-prereq-list  { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+  .ds-prereq-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 10px 12px; border-radius: 10px;
+    background: rgba(0,0,0,0.18);
+    border: 1px solid rgba(251,191,36,0.25);
+    color: var(--ds-text);
+    font-size: 0.88rem; font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s, transform 0.05s;
+    min-height: 44px;
+  }
+  :root[data-theme="light"] .ds-prereq-item {
+    background: #FFFFFF;
+    border-color: #FCD34D;
+    color: #78350F;
+  }
+  .ds-prereq-item:active { transform: scale(0.99); }
+  .ds-prereq-item .arrow {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    color: #FCD34D;
+  }
+  :root[data-theme="light"] .ds-prereq-item .arrow { color: #B45309; }
 
   /* Locked / signed read-only */
   .ds-locked-banner {
     display: flex; align-items: center; gap: 10px;
-    background: linear-gradient(135deg, rgba(16,185,129,0.16), rgba(16,185,129,0.06));
-    border: 1px solid rgba(16,185,129,0.35); border-radius: 12px; padding: 12px 14px; margin-top: 12px;
+    background: var(--ds-total-bg);
+    border: 1px solid var(--ds-total-border);
+    border-radius: 12px; padding: 12px 14px; margin-top: 12px;
   }
-  .ds-locked-banner .t { font-size: 0.9rem; font-weight: 700; color: #fff; }
-  .ds-locked-banner .s { font-size: 0.72rem; color: rgba(255,255,255,0.6); margin-top: 1px; }
-  .ds-ro-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .ds-locked-banner .t { font-size: 0.9rem; font-weight: 700; color: var(--ds-text); }
+  .ds-locked-banner .s { font-size: 0.72rem; color: var(--ds-text-mute); margin-top: 1px; }
+  .ds-ro-row { display: flex; align-items: center; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--ds-card-border); }
   .ds-ro-row:last-child { border-bottom: none; }
-  .ds-ro-name { font-size: 0.86rem; font-weight: 600; color: #fff; }
-  .ds-ro-times { font-size: 0.72rem; color: rgba(255,255,255,0.55); }
-  .ds-ro-hours { font-size: 0.86rem; font-weight: 700; color: #34D399; }
+  .ds-ro-name { font-size: 0.86rem; font-weight: 600; color: var(--ds-text); }
+  .ds-ro-times { font-size: 0.72rem; color: var(--ds-text-mute); }
+  .ds-ro-hours { font-size: 0.86rem; font-weight: 700; color: #10B981; }
+  :root[data-theme="light"] .ds-ro-hours { color: #047857; }
 </style>
 
 <div class="ds-wrap">
   <a href="<%= backUrl %>" class="ds-back">
     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
-    Back
+    <%= typeof backLabel !== 'undefined' && backLabel ? backLabel : 'Back' %>
   </a>
 
   <h1 class="ds-h1"><%= locked ? 'Docket' : 'Sign Docket' %></h1>
@@ -187,32 +384,55 @@
     <div class="ds-card">
       <p class="ds-card-title">Client representative</p>
       <% if (lockedDocket.no_client_on_site) { %>
-        <p style="color:rgba(255,255,255,0.7);font-size:0.85rem;">No client on site<% if (lockedDocket.no_client_reason) { %> &mdash; <%= lockedDocket.no_client_reason %><% } %></p>
+        <p style="color:var(--ds-text-mute);font-size:0.85rem;">No client on site<% if (lockedDocket.no_client_reason) { %> &mdash; <%= lockedDocket.no_client_reason %><% } %></p>
       <% } else { %>
-        <p style="color:#fff;font-size:0.9rem;font-weight:600;"><%= lockedDocket.client_name || lockedDocket.client_signed_name || '—' %></p>
+        <p style="color:var(--ds-text);font-size:0.9rem;font-weight:600;"><%= lockedDocket.client_name || lockedDocket.client_signed_name || '—' %></p>
       <% } %>
     </div>
 
     <div class="ds-grid-2">
       <div class="ds-card" style="margin-top:12px;">
         <p class="ds-card-title">Worker signature</p>
-        <% if (lockedDocket.signature_data) { %><img class="ds-sig-img" src="<%= lockedDocket.signature_data %>" alt="Worker signature"><% } else { %><p style="color:rgba(255,255,255,0.4);font-size:0.8rem;">—</p><% } %>
+        <% if (lockedDocket.signature_data) { %><img class="ds-sig-img" src="<%= lockedDocket.signature_data %>" alt="Worker signature"><% } else { %><p style="color:var(--ds-text-faint);font-size:0.8rem;">—</p><% } %>
       </div>
       <div class="ds-card" style="margin-top:12px;">
         <p class="ds-card-title">Client signature</p>
-        <% if (lockedDocket.client_signature) { %><img class="ds-sig-img" src="<%= lockedDocket.client_signature %>" alt="Client signature"><% } else { %><p style="color:rgba(255,255,255,0.4);font-size:0.8rem;">—</p><% } %>
+        <% if (lockedDocket.client_signature) { %><img class="ds-sig-img" src="<%= lockedDocket.client_signature %>" alt="Client signature"><% } else { %><p style="color:var(--ds-text-faint);font-size:0.8rem;">—</p><% } %>
       </div>
     </div>
 
     <% if (lockedDocket.notes) { %>
-      <div class="ds-card"><p class="ds-card-title">Notes</p><p style="color:rgba(255,255,255,0.8);font-size:0.86rem;white-space:pre-wrap;"><%= lockedDocket.notes %></p></div>
+      <div class="ds-card"><p class="ds-card-title">Notes</p><p style="color:var(--ds-text);font-size:0.86rem;white-space:pre-wrap;opacity:0.9;"><%= lockedDocket.notes %></p></div>
     <% } %>
 
     <p class="ds-submit-summary" style="margin-top:16px;">This docket has been submitted and can't be changed here. Contact the office if it needs adjusting.</p>
 
   <% } else { %>
     <!-- ============ EDITABLE MULTI-CREW FORM ============ -->
-    <form method="POST" action="<%= signActionUrl %>" id="docket-form" novalidate>
+    <% if (typeof missingRequiredForms !== 'undefined' && missingRequiredForms && missingRequiredForms.length) { %>
+      <div class="ds-prereq" role="alert" aria-live="polite">
+        <svg class="ds-prereq-icon" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+        </svg>
+        <div class="ds-prereq-body">
+          <p class="ds-prereq-title">Finish these before signing</p>
+          <p class="ds-prereq-sub">The docket can't be signed until <%= missingRequiredForms.length === 1 ? 'this' : 'these' %> required <%= missingRequiredForms.length === 1 ? 'checklist is' : 'checklists are' %> done for your shift.</p>
+          <div class="ds-prereq-list">
+            <% missingRequiredForms.forEach(function (f) { %>
+              <a href="<%= f.href %>" class="ds-prereq-item">
+                <span><%= f.label %></span>
+                <span class="arrow">
+                  Open
+                  <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </span>
+              </a>
+            <% }) %>
+          </div>
+        </div>
+      </div>
+    <% } %>
+
+    <form method="POST" action="<%= signActionUrl %>" id="docket-form" novalidate data-blocked="<%= (typeof missingRequiredForms !== 'undefined' && missingRequiredForms && missingRequiredForms.length) ? '1' : '' %>">
       <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
       <input type="hidden" name="docket_type" value="daily_docket">
 
@@ -220,8 +440,47 @@
       <div class="ds-card">
         <p class="ds-card-title">Crew &amp; Hours</p>
         <% if (!shift.crew.length) { %>
-          <p style="color:rgba(255,255,255,0.6);font-size:0.85rem;">No crew assigned to this shift yet.</p>
+          <p style="color:var(--ds-text-mute);font-size:0.85rem;">No crew assigned to this shift yet.</p>
         <% } %>
+
+        <% if (shift.crew.length) { %>
+        <!-- Set everyone's times at once; tap a name to fine-tune anyone. -->
+        <div class="ds-allcrew">
+          <p class="ds-allcrew-title">Set everyone's times</p>
+          <div class="ds-time-grid">
+            <label class="ds-time-cell">
+              <span class="ds-time-cell-head">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>
+                Start
+              </span>
+              <input type="time" class="ds-time-input" data-m="start" value="<%= prefillStart %>">
+            </label>
+            <label class="ds-time-cell">
+              <span class="ds-time-cell-head">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2M16 5l1 1"/></svg>
+                Finish
+              </span>
+              <input type="time" class="ds-time-input" data-m="finish" value="<%= prefillFinish %>">
+            </label>
+            <label class="ds-time-cell">
+              <span class="ds-time-cell-head">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 8v8M14 8v8"/></svg>
+                Break <span style="opacity:0.65;font-weight:600;">min</span>
+              </span>
+              <input type="number" class="ds-time-input" data-m="break" min="0" max="180" step="5" value="<%= prefillBreakMinutes %>" inputmode="numeric">
+            </label>
+            <label class="ds-time-cell">
+              <span class="ds-time-cell-head">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h11l3 4h4v6h-2a2 2 0 11-4 0H9a2 2 0 11-4 0H3V7z"/></svg>
+                Travel <span style="opacity:0.65;font-weight:600;">h</span>
+              </span>
+              <input type="number" class="ds-time-input" data-m="travel" min="0" max="8" step="0.25" value="0" inputmode="decimal">
+            </label>
+          </div>
+          <p class="ds-help" style="margin-top:8px;">Applies to everyone below. Tap a name to adjust just that person.</p>
+        </div>
+        <% } %>
+
         <% shift.crew.forEach(function(c, i) {
              var cid = c.crew_member_id;
              // Prefix the key with "cm" so qs always parses crew as an object
@@ -229,33 +488,48 @@
              var base = 'crew[cm' + cid + ']';
         %>
           <div class="ds-crew" data-crew-row data-cid="<%= cid %>">
-            <div class="ds-crew-head">
+            <button type="button" class="ds-crew-head" data-crew-toggle>
               <div style="min-width:0;">
-                <p class="ds-crew-name"><%= c.name %></p>
+                <p class="ds-crew-name"><%= c.name %> <span class="ds-chip ds-chip-custom" data-custom-tag hidden>Custom</span></p>
                 <div class="ds-crew-badges">
                   <% if (c.is_team_leader) { %><span class="ds-chip ds-chip-tl">Team Leader</span><% } %>
                   <% if (c.role) { %><span class="ds-chip ds-chip-role"><%= c.role %></span><% } %>
                 </div>
               </div>
-              <span class="ds-crew-total">Total <span data-row-total>0.00</span>h</span>
-            </div>
-            <div class="ds-grid-4">
-              <div>
-                <label class="ds-mini-label">Start</label>
-                <input type="time" name="<%= base %>[start_on_site]" class="ds-input" data-f="start" value="<%= prefillStart %>">
-              </div>
-              <div>
-                <label class="ds-mini-label">Finish</label>
-                <input type="time" name="<%= base %>[finish_on_site]" class="ds-input" data-f="finish" value="<%= prefillFinish %>">
-              </div>
-              <div>
-                <label class="ds-mini-label">Break</label>
-                <input type="number" name="<%= base %>[break_minutes]" class="ds-input" data-f="break" min="0" max="180" step="5" value="<%= prefillBreakMinutes %>" inputmode="numeric">
-              </div>
-              <div>
-                <label class="ds-mini-label">Travel</label>
-                <input type="number" name="<%= base %>[travel_hours]" class="ds-input" data-f="travel" min="0" max="8" step="0.25" value="0" inputmode="decimal">
-              </div>
+              <span style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                <span class="ds-crew-total">Total <span data-row-total>0.00</span>h</span>
+                <svg class="ds-crew-chevron" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+              </span>
+            </button>
+            <div class="ds-time-grid ds-crew-fields" hidden>
+              <label class="ds-time-cell">
+                <span class="ds-time-cell-head">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2"/></svg>
+                  Start
+                </span>
+                <input type="time" name="<%= base %>[start_on_site]" class="ds-time-input" data-f="start" value="<%= prefillStart %>">
+              </label>
+              <label class="ds-time-cell">
+                <span class="ds-time-cell-head">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M12 7v5l3 2M16 5l1 1"/></svg>
+                  Finish
+                </span>
+                <input type="time" name="<%= base %>[finish_on_site]" class="ds-time-input" data-f="finish" value="<%= prefillFinish %>">
+              </label>
+              <label class="ds-time-cell">
+                <span class="ds-time-cell-head">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 8v8M14 8v8"/></svg>
+                  Break <span style="opacity:0.65;font-weight:600;">min</span>
+                </span>
+                <input type="number" name="<%= base %>[break_minutes]" class="ds-time-input" data-f="break" min="0" max="180" step="5" value="<%= prefillBreakMinutes %>" inputmode="numeric">
+              </label>
+              <label class="ds-time-cell">
+                <span class="ds-time-cell-head">
+                  <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7h11l3 4h4v6h-2a2 2 0 11-4 0H9a2 2 0 11-4 0H3V7z"/></svg>
+                  Travel <span style="opacity:0.65;font-weight:600;">h</span>
+                </span>
+                <input type="number" name="<%= base %>[travel_hours]" class="ds-time-input" data-f="travel" min="0" max="8" step="0.25" value="0" inputmode="decimal">
+              </label>
             </div>
             <p class="ds-error-text" data-row-err>Start and finish are required for <%= c.name %>.</p>
           </div>
@@ -284,10 +558,13 @@
       <!-- Worker (lead) signature -->
       <div class="ds-card">
         <div class="ds-sig-head">
-          <p class="ds-card-title" style="margin-bottom:0;">Your signature<span class="req" style="color:#FCA5A5;">*</span></p>
-          <button type="button" onclick="clearSig('worker')" class="ds-sig-clear">Clear</button>
+          <p class="ds-card-title" style="margin-bottom:0;">Your signature<span class="req" style="color:#DC2626;">*</span></p>
+          <button type="button" onclick="clearSig('worker')" class="ds-sig-clear">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M6 18L18 6"/></svg>
+            Clear
+          </button>
         </div>
-        <div class="ds-sig-pad" id="worker-sig-pad"><canvas id="worker-sig-canvas" data-particle-trail></canvas></div>
+        <div class="ds-sig-pad" id="worker-sig-pad"><canvas id="worker-sig-canvas" data-neon-trail></canvas></div>
         <input type="hidden" name="signature_data" id="worker-sig-data">
         <p class="ds-sig-hint" id="worker-sig-hint">Sign above with your finger</p>
         <p class="ds-error-text" id="err-worker-sig">Your signature is required.</p>
@@ -296,11 +573,14 @@
       <!-- Client signature -->
       <div class="ds-card" id="client-sig-block">
         <div class="ds-sig-head">
-          <p class="ds-card-title" style="margin-bottom:0;">Client signature<span class="req" style="color:#FCA5A5;">*</span></p>
-          <button type="button" onclick="clearSig('client')" class="ds-sig-clear">Clear</button>
+          <p class="ds-card-title" style="margin-bottom:0;">Client signature<span class="req" style="color:#DC2626;">*</span></p>
+          <button type="button" onclick="clearSig('client')" class="ds-sig-clear">
+            <svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 6l12 12M6 18L18 6"/></svg>
+            Clear
+          </button>
         </div>
         <input type="text" name="client_signed_name" id="client-printed-name" placeholder="Client printed name" class="ds-input" style="margin-bottom:10px;">
-        <div class="ds-sig-pad" id="client-sig-pad"><canvas id="client-sig-canvas" data-particle-trail></canvas></div>
+        <div class="ds-sig-pad" id="client-sig-pad"><canvas id="client-sig-canvas" data-neon-trail></canvas></div>
         <input type="hidden" name="client_signature" id="client-sig-data">
         <p class="ds-sig-hint" id="client-sig-hint">Client signs above</p>
         <p class="ds-error-text" id="err-client-sig">Client signature is required (or tick "No client on site").</p>
@@ -314,11 +594,23 @@
 
       <!-- Sticky submit -->
       <div class="ds-submit-bar">
-        <button type="submit" class="ds-submit" id="ds-submit-btn">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-          Sign &amp; Submit Docket
+        <% var blocked = (typeof missingRequiredForms !== 'undefined' && missingRequiredForms && missingRequiredForms.length); %>
+        <button type="submit" class="ds-submit<%= blocked ? ' is-blocked' : '' %>" id="ds-submit-btn" <%= blocked ? 'disabled' : '' %>>
+          <% if (blocked) { %>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m0 0v3m0-3h-3m3 0h3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Finish the checklists first
+          <% } else { %>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            Sign &amp; Submit Docket
+          <% } %>
         </button>
-        <p class="ds-submit-summary">One docket for the whole crew. Your signature and a client signature (or "no client") are required.</p>
+        <p class="ds-submit-summary">
+          <% if (blocked) { %>
+            <%= missingRequiredForms.map(function (f) { return f.label; }).join(' and ') %> required before this docket can be signed.
+          <% } else { %>
+            One docket for the whole crew. Your signature and a client signature (or "no client") are required.
+          <% } %>
+        </p>
       </div>
     </form>
   <% } %>
@@ -331,24 +623,50 @@ function setupSigPad(canvasId, padId) {
   var canvas = document.getElementById(canvasId);
   var pad = document.getElementById(padId);
   var ctx = canvas.getContext('2d');
-  var drawing = false;
-  var hasDrawn = false;
+  var drawing = false, hasDrawn = false;
+  var last = null, lastMid = null, cssW = 0, cssH = 0;
+  function style() { ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; }
   function resize() {
     var rect = canvas.parentElement.getBoundingClientRect();
+    if (!rect.width) return;
     var data = hasDrawn ? canvas.toDataURL() : null;
-    canvas.width = rect.width; canvas.height = rect.height;
-    ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    if (data && hasDrawn) { var img = new Image(); img.onload = function() { ctx.drawImage(img, 0, 0); }; img.src = data; }
+    // Render at device resolution so the ink isn't pixelated on phones.
+    var dpr = Math.min(window.devicePixelRatio || 1, 3);
+    cssW = rect.width; cssH = rect.height;
+    canvas.width = Math.round(cssW * dpr);
+    canvas.height = Math.round(cssH * dpr);
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    style();
+    if (data && hasDrawn) { var img = new Image(); img.onload = function() { ctx.drawImage(img, 0, 0, cssW, cssH); }; img.src = data; }
   }
   resize();
   window.addEventListener('resize', resize);
-  function getPos(e) { var rect = canvas.getBoundingClientRect(); return { x: (e.clientX - rect.left), y: (e.clientY - rect.top) }; }
-  canvas.addEventListener('pointerdown', function(e) { drawing = true; hasDrawn = true; pad.classList.add('signed'); pad.classList.remove('ds-error'); var p = getPos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); });
-  canvas.addEventListener('pointermove', function(e) { if (!drawing) return; var p = getPos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); });
-  canvas.addEventListener('pointerup', function() { drawing = false; });
-  canvas.addEventListener('pointerleave', function() { drawing = false; });
+  function getPos(e) { var rect = canvas.getBoundingClientRect(); return { x: e.clientX - rect.left, y: e.clientY - rect.top }; }
+  canvas.addEventListener('pointerdown', function(e) {
+    drawing = true; hasDrawn = true; pad.classList.add('signed'); pad.classList.remove('ds-error');
+    last = getPos(e); lastMid = last;
+    // a dot so a tap still leaves a mark
+    ctx.beginPath(); ctx.arc(last.x, last.y, ctx.lineWidth / 2, 0, Math.PI * 2); ctx.fillStyle = '#0F172A'; ctx.fill();
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', function(e) {
+    if (!drawing) return;
+    var p = getPos(e);
+    var mid = { x: (last.x + p.x) / 2, y: (last.y + p.y) / 2 };
+    // Quadratic curve from the previous midpoint through the last point to
+    // the new midpoint — smooth continuous ink, not straight dotty segments.
+    ctx.beginPath();
+    ctx.moveTo(lastMid.x, lastMid.y);
+    ctx.quadraticCurveTo(last.x, last.y, mid.x, mid.y);
+    ctx.stroke();
+    last = p; lastMid = mid;
+    e.preventDefault();
+  });
+  function end() { if (!drawing) return; drawing = false; ctx.beginPath(); ctx.moveTo(lastMid.x, lastMid.y); ctx.lineTo(last.x, last.y); ctx.stroke(); }
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointerleave', end);
   return {
-    clear: function() { ctx.clearRect(0, 0, canvas.width, canvas.height); hasDrawn = false; pad.classList.remove('signed'); },
+    clear: function() { ctx.clearRect(0, 0, cssW, cssH); hasDrawn = false; pad.classList.remove('signed'); },
     getData: function() { return hasDrawn ? canvas.toDataURL('image/png') : ''; },
     hasDrawn: function() { return hasDrawn; },
   };
@@ -386,6 +704,44 @@ function recalc() {
 document.querySelectorAll('[data-crew-row] input').forEach(function(el) {
   el.addEventListener('input', recalc); el.addEventListener('change', recalc);
 });
+
+// ===== "Set everyone's times" master row =====
+var FIELDS = ['start', 'finish', 'break', 'travel'];
+var master = {};
+FIELDS.forEach(function(k) { master[k] = document.querySelector('[data-m="' + k + '"]'); });
+function applyMasterToAll() {
+  document.querySelectorAll('[data-crew-row]').forEach(function(row) {
+    FIELDS.forEach(function(k) {
+      var src = master[k], dst = row.querySelector('[data-f="' + k + '"]');
+      if (src && dst) dst.value = src.value;
+    });
+    row.removeAttribute('data-custom');
+    var tag = row.querySelector('[data-custom-tag]'); if (tag) tag.hidden = true;
+  });
+  recalc();
+}
+FIELDS.forEach(function(k) { if (master[k]) { master[k].addEventListener('change', applyMasterToAll); master[k].addEventListener('input', applyMasterToAll); } });
+
+// Editing a person's own field marks them "Custom" (so a later master change
+// is clearly an override). Per-field edit still recalculates via the listener above.
+document.querySelectorAll('[data-crew-row] [data-f]').forEach(function(el) {
+  el.addEventListener('input', function() {
+    var row = el.closest('[data-crew-row]');
+    row.setAttribute('data-custom', '1');
+    var tag = row.querySelector('[data-custom-tag]'); if (tag) tag.hidden = false;
+  });
+});
+
+// Collapsible per-person rows — tap the name to fine-tune.
+document.querySelectorAll('[data-crew-toggle]').forEach(function(btn) {
+  btn.addEventListener('click', function() {
+    var row = btn.closest('[data-crew-row]');
+    var fields = row.querySelector('.ds-crew-fields');
+    if (fields.hasAttribute('hidden')) { fields.removeAttribute('hidden'); row.classList.add('is-open'); }
+    else { fields.setAttribute('hidden', ''); row.classList.remove('is-open'); }
+  });
+});
+
 recalc();
 
 // ===== "No client on site" toggle =====
@@ -407,15 +763,36 @@ recalc();
 
 // ===== Submit validation =====
 document.getElementById('docket-form').addEventListener('submit', function (e) {
+  // Server-side gating safety net — if the page rendered with required
+  // forms outstanding the submit button is already disabled and the warning
+  // banner is visible; bail here too so a forced submit (e.g. via the JS
+  // console) lands the user back on the prereq banner instead of silently
+  // losing their work to a server redirect.
+  if (this.getAttribute('data-blocked') === '1') {
+    e.preventDefault();
+    var prereq = document.querySelector('.ds-prereq');
+    if (prereq) prereq.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    return;
+  }
   var ok = true;
   // Each crew row needs start + finish.
   document.querySelectorAll('[data-crew-row]').forEach(function(row) {
-    var start = row.querySelector('[data-f="start"]').value;
-    var finish = row.querySelector('[data-f="finish"]').value;
+    var startEl = row.querySelector('[data-f="start"]');
+    var finishEl = row.querySelector('[data-f="finish"]');
+    var start = startEl.value, finish = finishEl.value;
     var err = row.querySelector('[data-row-err]');
+    // The error border lives on the parent .ds-time-cell now — toggle there.
+    var startCell = startEl.closest('.ds-time-cell') || startEl;
+    var finishCell = finishEl.closest('.ds-time-cell') || finishEl;
     var bad = !start || !finish;
-    if (bad) { ok = false; err.classList.add('show'); row.querySelector('[data-f="start"]').classList.toggle('ds-error', !start); row.querySelector('[data-f="finish"]').classList.toggle('ds-error', !finish); }
-    else { err.classList.remove('show'); row.querySelector('[data-f="start"]').classList.remove('ds-error'); row.querySelector('[data-f="finish"]').classList.remove('ds-error'); }
+    if (bad) {
+      ok = false; err.classList.add('show');
+      startCell.classList.toggle('ds-error', !start);
+      finishCell.classList.toggle('ds-error', !finish);
+      // Expand the row so the missing field is visible.
+      var fields = row.querySelector('.ds-crew-fields'); if (fields) { fields.removeAttribute('hidden'); row.classList.add('is-open'); }
+    }
+    else { err.classList.remove('show'); startCell.classList.remove('ds-error'); finishCell.classList.remove('ds-error'); }
   });
   function setSigErr(padId, errId, bad) {
     var pad = document.getElementById(padId), err = document.getElementById(errId);
@@ -436,4 +813,5 @@ document.getElementById('docket-form').addEventListener('submit', function (e) {
   document.getElementById('client-sig-data').value = noClient ? '' : clientPad.getData();
 });
 </script>
+<script src="/js/sig-neon-trail.js?v=3"></script>
 <% } %>

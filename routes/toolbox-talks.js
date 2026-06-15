@@ -14,6 +14,60 @@ const fs = require('fs');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { sendPushToAllActiveCrew } = require('../services/pushNotification');
+const { sendEmail, isConfigured: emailConfigured } = require('../services/email');
+const { toolboxClientEmail } = require('../services/emailTemplates');
+const { generateToolboxRecordPdf, TALK_TYPE_LABELS } = require('../services/toolboxRecordPdf');
+
+// FRM-005 talk types (section 1). 'other' pairs with talk_type_other.
+const TALK_TYPES = ['pre_start', 'monthly', 'post_incident', 'sop_rollout', 'seasonal', 'other'];
+
+// Parse the TS-SAF-FRM-005 talk-detail fields shared by create + update.
+function frmFields(b) {
+  const jobId = parseInt(b.job_id, 10);
+  const duration = parseInt(b.duration_mins, 10);
+  return {
+    talk_time: String(b.talk_time || '').trim().slice(0, 20),
+    site_location: String(b.site_location || '').trim().slice(0, 300),
+    job_id: jobId > 0 ? jobId : null,
+    duration_mins: duration > 0 ? duration : null,
+    talk_type: TALK_TYPES.includes(b.talk_type) ? b.talk_type : '',
+    talk_type_other: String(b.talk_type_other || '').trim().slice(0, 120),
+    topic_reference: String(b.topic_reference || '').trim().slice(0, 300),
+    discussion_notes: String(b.discussion_notes || '').trim(),
+  };
+}
+
+// Jobs for the talk-details picker. Recent first; smart-select makes it
+// searchable client-side.
+function selectableJobs() {
+  return getDb().prepare(`
+    SELECT id, job_number, job_name FROM jobs
+    WHERE status IN ('lead','won','active','on_hold')
+    ORDER BY id DESC
+  `).all();
+}
+
+// A toolbox is locked once the presenter has signed off (TS-SAF-WI-003:
+// "Once submitted, the record is locked — don't delete or edit; if
+// information was wrong, add a supplementary note.").
+function isLocked(toolbox) {
+  return !!(toolbox && toolbox.presenter_signed_at);
+}
+
+// Middleware for mutating routes that must be blocked after sign-off.
+// JSON endpoints (invitee add/remove) get a JSON error; everything else
+// gets a flash + redirect back to the record.
+function blockWhenLocked(req, res, next) {
+  const tb = getDb().prepare('SELECT id, presenter_signed_at FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (tb && tb.presenter_signed_at) {
+    if (req.path.includes('/invitees/')) {
+      return res.status(423).json({ ok: false, error: 'Record is locked — it was signed off by the presenter.' });
+    }
+    req.flash('error', 'This record is locked — it was signed off by the presenter. Add a supplementary note instead.');
+    return res.redirect('/toolbox-talks/' + tb.id);
+  }
+  next();
+}
 
 // Lazy-creates the public attendance session for a toolbox. Idempotent
 // for repeat publishes / detail-page renders. Returns the row.
@@ -198,6 +252,8 @@ router.get('/new', (req, res) => {
     toolbox: null, photos: [], documents: [], prepDocuments: [], isEdit: false,
     selectableCrew: selectableCrewMembers(),
     inviteeIds: [],
+    jobs: selectableJobs(),
+    talkTypeLabels: TALK_TYPE_LABELS,
   });
 });
 
@@ -224,16 +280,21 @@ router.post('/', formUploads, (req, res) => {
     const signonPath = signonFile ? relFromRepo(signonFile.path) : '';
     const signonName = signonFile ? signonFile.originalname : '';
 
+    const f = frmFields(b);
     const r = db.prepare(`
       INSERT INTO toolbox_talks
         (title, held_at, presenter, key_points,
+         talk_time, site_location, job_id, duration_mins,
+         talk_type, talk_type_other, topic_reference, discussion_notes,
          slides_path, slides_original_name, signon_path, signon_original_name,
          status, published_at, published_by_id, created_by_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       title, heldAt,
       String(b.presenter || '').trim(),
       String(b.key_points || '').trim(),
+      f.talk_time, f.site_location, f.job_id, f.duration_mins,
+      f.talk_type, f.talk_type_other, f.topic_reference, f.discussion_notes,
       slidesPath, slidesName, signonPath, signonName,
       status,
       wantsPublish ? now : null,
@@ -303,10 +364,14 @@ router.post('/', formUploads, (req, res) => {
 router.get('/:id', (req, res) => {
   const db = getDb();
   const toolbox = db.prepare(`
-    SELECT t.*, u.full_name AS created_by_name, pu.full_name AS published_by_name
+    SELECT t.*, u.full_name AS created_by_name, pu.full_name AS published_by_name,
+           su.full_name AS presenter_signed_by_name,
+           j.job_number, j.job_name, j.client_id AS job_client_id
     FROM toolbox_talks t
     LEFT JOIN users u ON u.id = t.created_by_id
     LEFT JOIN users pu ON pu.id = t.published_by_id
+    LEFT JOIN users su ON su.id = t.presenter_signed_by_id
+    LEFT JOIN jobs j ON j.id = t.job_id
     WHERE t.id = ?
   `).get(req.params.id);
   if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
@@ -345,10 +410,12 @@ router.get('/:id', (req, res) => {
   `).all(toolbox.id);
 
   // Generate / fetch the public attendance link only once the toolbox
-  // is published (drafts shouldn't be sharable yet).
+  // is published (drafts shouldn't be sharable yet). Never after lock —
+  // sign-off closed the session, and the lazy-create would otherwise
+  // mint a fresh open one and reopen sign-ons on a locked record.
   let attendanceSession = null;
   let attendanceUrl = null;
-  if (toolbox.status === 'published') {
+  if (toolbox.status === 'published' && !isLocked(toolbox)) {
     try {
       attendanceSession = getOrCreateAttendanceSession(toolbox.id, req.session.user && req.session.user.id);
       const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
@@ -366,16 +433,64 @@ router.get('/:id', (req, res) => {
     ORDER BY cm.full_name
   `).all(toolbox.id);
 
+  // FRM-005 data: sign-on rows (with signatures + late flags), actions
+  // raised, supplementary notes, client-send history, client picker.
+  const attendanceRows = db.prepare(`
+    SELECT a.*, cm.full_name, cm.employee_id
+    FROM toolbox_attendance a
+    JOIN crew_members cm ON cm.id = a.crew_member_id
+    WHERE a.toolbox_id = ? AND a.status IN ('attended','caught_up')
+    ORDER BY a.late_arrival ASC, cm.full_name
+  `).all(toolbox.id);
+  // Attendee sign-off section on the detail page: everyone selected for the
+  // toolbox (the invitee scope — or all active crew when open to all). They're
+  // assumed attending; each gets a "Sign here" button until they've signed.
+  // Signed rows show the signature (link sign-offs land here too — same
+  // signature_data column).
+  const signoffRows = db.prepare(`
+    SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
+           a.status, a.signature_data, a.signed_off_at, a.recorded_by_id, a.late_arrival, a.late_arrival_time
+    FROM crew_members cm
+    LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
+    WHERE cm.active = 1
+      AND (NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+           OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL))
+      AND (NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ?)
+           OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ? AND i.crew_member_id = cm.id))
+    ORDER BY (a.signature_data IS NOT NULL), cm.full_name
+  `).all(toolbox.id, toolbox.id, toolbox.id);
+  const actions = db.prepare('SELECT * FROM toolbox_actions WHERE toolbox_id = ? ORDER BY id ASC').all(toolbox.id);
+  const suppNotes = db.prepare(`
+    SELECT n.*, u.full_name AS author_name
+    FROM toolbox_supplementary_notes n
+    LEFT JOIN users u ON u.id = n.created_by_id
+    WHERE n.toolbox_id = ? ORDER BY n.id ASC
+  `).all(toolbox.id);
+  const clientSends = db.prepare(`
+    SELECT s.*, u.full_name AS sent_by_name, c.company_name
+    FROM toolbox_client_sends s
+    LEFT JOIN users u ON u.id = s.sent_by_id
+    LEFT JOIN clients c ON c.id = s.client_id
+    WHERE s.toolbox_id = ? ORDER BY s.id DESC
+  `).all(toolbox.id);
+  const clients = db.prepare(`
+    SELECT id, company_name, primary_contact_name, primary_contact_email
+    FROM clients WHERE active = 1 ORDER BY company_name
+  `).all();
+
   res.render('toolbox-talks/show', {
     title: toolbox.title, currentPage: 'toolbox-talks',
     toolbox, photos, documents, prepDocuments, summary, absences, attendanceSession, attendanceUrl,
     invitees,
     statusLabels: STATUS_LABELS,
+    attendanceRows, signoffRows, actions, suppNotes, clientSends, clients,
+    locked: isLocked(toolbox),
+    talkTypeLabels: TALK_TYPE_LABELS,
   });
 });
 
 // GET /toolbox-talks/:id/edit
-router.get('/:id/edit', (req, res) => {
+router.get('/:id/edit', blockWhenLocked, (req, res) => {
   const db = getDb();
   const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
   if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
@@ -387,12 +502,14 @@ router.get('/:id/edit', (req, res) => {
     toolbox, photos, documents, prepDocuments, isEdit: true,
     selectableCrew: selectableCrewMembers(),
     inviteeIds: getToolboxInviteeIds(toolbox.id),
+    jobs: selectableJobs(),
+    talkTypeLabels: TALK_TYPE_LABELS,
   });
 });
 
 // POST /toolbox-talks/:id — update. Replaces slides / sign-on if a new file
 // is uploaded; appends new photos to the existing gallery (doesn't replace).
-router.post('/:id', formUploads, (req, res) => {
+router.post('/:id', blockWhenLocked, formUploads, (req, res) => {
   try {
     const db = getDb();
     const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
@@ -410,9 +527,12 @@ router.post('/:id', formUploads, (req, res) => {
     if (slidesFile) { slidesPath = relFromRepo(slidesFile.path); slidesName = slidesFile.originalname; }
     if (signonFile) { signonPath = relFromRepo(signonFile.path); signonName = signonFile.originalname; }
 
+    const f = frmFields(b);
     db.prepare(`
       UPDATE toolbox_talks
       SET title = ?, held_at = ?, presenter = ?, key_points = ?,
+          talk_time = ?, site_location = ?, job_id = ?, duration_mins = ?,
+          talk_type = ?, talk_type_other = ?, topic_reference = ?, discussion_notes = ?,
           slides_path = ?, slides_original_name = ?,
           signon_path = ?, signon_original_name = ?,
           updated_at = CURRENT_TIMESTAMP
@@ -421,6 +541,8 @@ router.post('/:id', formUploads, (req, res) => {
       title, heldAt,
       String(b.presenter || '').trim(),
       String(b.key_points || '').trim(),
+      f.talk_time, f.site_location, f.job_id, f.duration_mins,
+      f.talk_type, f.talk_type_other, f.topic_reference, f.discussion_notes,
       slidesPath, slidesName, signonPath, signonName,
       toolbox.id
     );
@@ -508,7 +630,7 @@ router.post('/:id/publish', (req, res) => {
 // POST /toolbox-talks/:id/attendance-session/regenerate — invalidate
 // previous link, mint a new one. Used if the office sent the wrong
 // link or someone shared it externally.
-router.post('/:id/attendance-session/regenerate', (req, res) => {
+router.post('/:id/attendance-session/regenerate', blockWhenLocked, (req, res) => {
   const db = getDb();
   const tb = db.prepare('SELECT id FROM toolbox_talks WHERE id = ?').get(req.params.id);
   if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
@@ -530,7 +652,7 @@ router.post('/:id/archive', (req, res) => {
 });
 
 // POST /toolbox-talks/:id/delete
-router.post('/:id/delete', (req, res) => {
+router.post('/:id/delete', blockWhenLocked, (req, res) => {
   const db = getDb();
   const tb = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
   if (!tb) return res.redirect('/toolbox-talks');
@@ -550,9 +672,11 @@ router.get('/:id/attendance', (req, res) => {
   // the worker sees. Otherwise (open-to-all toolbox) show every active
   // crew, excluding only workers whose ONLY HR profile is soft-deleted.
   const rows = db.prepare(`
-    SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
+    SELECT cm.id AS crew_id, cm.full_name, cm.employee_id, cm.email,
            a.status AS attendance_status, a.recorded_at, a.recorded_by_id,
-           a.signed_off_at, a.absence_reason
+           a.signed_off_at, a.absence_reason, a.late_arrival, a.late_arrival_time,
+           a.signature_data,
+           (a.signature_data IS NOT NULL) AS has_signature
     FROM crew_members cm
     LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
     WHERE cm.active = 1
@@ -583,9 +707,10 @@ router.get('/:id/attendance', (req, res) => {
   const isOpenToAll = db.prepare('SELECT COUNT(*) AS c FROM toolbox_invitees WHERE toolbox_id = ?').get(toolbox.id).c === 0;
   // QR code points workers at the public attendance link so they can
   // sign off via the phone at the meeting. Only present for published
-  // toolboxes — drafts/archives don't have a public session token.
+  // toolboxes — drafts/archives don't have a public session token, and
+  // locked records must not mint a fresh session (sign-off closed it).
   let attendanceUrl = null;
-  if (toolbox.status === 'published') {
+  if (toolbox.status === 'published' && !isLocked(toolbox)) {
     try {
       const s = getOrCreateAttendanceSession(toolbox.id, req.session.user && req.session.user.id);
       const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
@@ -596,6 +721,140 @@ router.get('/:id/attendance', (req, res) => {
     title: toolbox.title + ' — Attendance', currentPage: 'toolbox-talks',
     toolbox, rows, allocatedIds, selectableCrew, isOpenToAll, attendanceUrl,
   });
+});
+
+// Is this crew member eligible for this toolbox (active + within the invitee
+// scope)? Returns the crew row (id, full_name, email) or undefined.
+function eligibleCrewForToolbox(db, toolboxId, crewId) {
+  return db.prepare(`
+    SELECT cm.id, cm.full_name, cm.email FROM crew_members cm
+    WHERE cm.id = ? AND cm.active = 1
+      AND (NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+           OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL))
+      AND (NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ?)
+           OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ? AND i.crew_member_id = cm.id))
+  `).get(crewId, toolboxId, toolboxId);
+}
+
+// All eligible crew for a toolbox, with email + whether they've signed off.
+function eligibleCrewList(db, toolboxId) {
+  return db.prepare(`
+    SELECT cm.id, cm.full_name, cm.email, a.signed_off_at
+    FROM crew_members cm
+    LEFT JOIN toolbox_attendance a ON a.toolbox_id = ? AND a.crew_member_id = cm.id
+    WHERE cm.active = 1
+      AND (NOT EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id)
+           OR EXISTS (SELECT 1 FROM employees e WHERE e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL))
+      AND (NOT EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ?)
+           OR EXISTS (SELECT 1 FROM toolbox_invitees i WHERE i.toolbox_id = ? AND i.crew_member_id = cm.id))
+    ORDER BY cm.full_name
+  `).all(toolboxId, toolboxId, toolboxId);
+}
+
+// Guard shared by the manual sign-off + send-link endpoints: toolbox must be
+// published and not yet locked (a closed/locked session can't take sign-ons).
+function activeToolboxOr(res, id) {
+  const tb = getDb().prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(id);
+  if (!tb) { res.status(404).json({ ok: false, error: 'Toolbox not found.' }); return null; }
+  if (tb.status !== 'published') { res.status(400).json({ ok: false, error: 'Publish the toolbox first.' }); return null; }
+  if (isLocked(tb)) { res.status(423).json({ ok: false, error: 'Record is locked — the presenter has signed off.' }); return null; }
+  return tb;
+}
+
+// POST /toolbox-talks/:id/attendance/:crewId/sign-off
+// Manual sign-off on an admin's device: the worker draws their signature on
+// the office device and we store it exactly like a self sign-off.
+router.post('/:id/attendance/:crewId/sign-off', (req, res) => {
+  const db = getDb();
+  const tb = activeToolboxOr(res, req.params.id);
+  if (!tb) return;
+  const crew = eligibleCrewForToolbox(db, tb.id, parseInt(req.params.crewId, 10));
+  if (!crew) return res.status(400).json({ ok: false, error: 'That worker is not on this toolbox.' });
+
+  const sigRaw = (req.body.signature_data || '').toString();
+  if (!sigRaw.startsWith('data:image/') || sigRaw.length > 260000) {
+    return res.status(400).json({ ok: false, error: 'Draw a signature before submitting.' });
+  }
+  const userId = req.session.user ? req.session.user.id : null;
+  const isLate = req.body.late_arrival === '1' ? 1 : 0;
+  db.prepare(`
+    INSERT INTO toolbox_attendance
+      (toolbox_id, crew_member_id, status, signature_data, signed_off_at, recorded_by_id, recorded_at, late_arrival, late_arrival_time)
+    VALUES (?, ?, 'attended', ?, datetime('now'), ?, datetime('now'), ?, CASE WHEN ? THEN strftime('%H:%M','now','localtime') ELSE NULL END)
+    ON CONFLICT(toolbox_id, crew_member_id) DO UPDATE SET
+      status = 'attended',
+      signature_data = excluded.signature_data,
+      signed_off_at = datetime('now'),
+      recorded_by_id = excluded.recorded_by_id,
+      recorded_at = datetime('now'),
+      absence_reason = NULL,
+      late_arrival = excluded.late_arrival,
+      late_arrival_time = excluded.late_arrival_time
+  `).run(tb.id, crew.id, sigRaw, userId, isLate, isLate);
+
+  try {
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'toolbox_talk',
+      entityId: tb.id, entityLabel: tb.title, details: 'manual sign-off (admin device) for ' + crew.full_name, ip: req.ip,
+    });
+  } catch (e) {}
+  res.json({ ok: true, crew_id: crew.id, signed_off_at: new Date().toISOString() });
+});
+
+// POST /toolbox-talks/:id/attendance/:crewId/send-link
+// Email the public sign-off link to one worker.
+router.post('/:id/attendance/:crewId/send-link', async (req, res) => {
+  const db = getDb();
+  const tb = activeToolboxOr(res, req.params.id);
+  if (!tb) return;
+  if (!emailConfigured()) return res.status(400).json({ ok: false, error: 'Email is not configured on this server.' });
+  const crew = eligibleCrewForToolbox(db, tb.id, parseInt(req.params.crewId, 10));
+  if (!crew) return res.status(400).json({ ok: false, error: 'That worker is not on this toolbox.' });
+  if (!crew.email) return res.status(400).json({ ok: false, error: crew.full_name + ' has no email on file.' });
+
+  try {
+    const s = getOrCreateAttendanceSession(tb.id, req.session.user && req.session.user.id);
+    const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+    const url = base + '/toolbox-attend/' + s.token;
+    const ok = await sendEmail(crew.email, 'Sign off: ' + tb.title, toolboxSignLinkEmail(crew.full_name, tb, url));
+    if (!ok) return res.status(502).json({ ok: false, error: 'Email failed to send.' });
+    res.json({ ok: true, sent_to: crew.email });
+  } catch (e) {
+    console.error('[toolbox send-link]', e.message);
+    res.status(500).json({ ok: false, error: 'Could not send the link.' });
+  }
+});
+
+// POST /toolbox-talks/:id/attendance/send-link
+// Email the sign-off link to every eligible worker who has an email and
+// hasn't signed off yet. Returns counts so the UI can report what happened.
+router.post('/:id/attendance/send-link', async (req, res) => {
+  const db = getDb();
+  const tb = activeToolboxOr(res, req.params.id);
+  if (!tb) return;
+  if (!emailConfigured()) return res.status(400).json({ ok: false, error: 'Email is not configured on this server.' });
+
+  const s = getOrCreateAttendanceSession(tb.id, req.session.user && req.session.user.id);
+  const base = (process.env.APP_BASE_URL || (req.protocol + '://' + req.get('host'))).replace(/\/+$/, '');
+  const url = base + '/toolbox-attend/' + s.token;
+  const html = (name) => toolboxSignLinkEmail(name, tb, url);
+
+  let sent = 0, noEmail = 0, alreadySigned = 0, failed = 0;
+  for (const c of eligibleCrewList(db, tb.id)) {
+    if (c.signed_off_at) { alreadySigned++; continue; }
+    if (!c.email) { noEmail++; continue; }
+    try {
+      const ok = await sendEmail(c.email, 'Sign off: ' + tb.title, html(c.full_name));
+      if (ok) sent++; else failed++;
+    } catch (e) { failed++; }
+  }
+  try {
+    logActivity({
+      user: req.session.user, action: 'update', entityType: 'toolbox_talk',
+      entityId: tb.id, entityLabel: tb.title, details: 'emailed sign-off link to ' + sent + ' worker(s)', ip: req.ip,
+    });
+  } catch (e) {}
+  res.json({ ok: true, sent, no_email: noEmail, already_signed: alreadySigned, failed });
 });
 
 // POST /toolbox-talks/:id/invitees/add — manually add a single worker
@@ -611,7 +870,7 @@ router.get('/:id/attendance', (req, res) => {
 //      scope" path.
 //
 // Returns JSON for the attendance page's AJAX add-row flow.
-router.post('/:id/invitees/add', (req, res) => {
+router.post('/:id/invitees/add', blockWhenLocked, (req, res) => {
   try {
     const db = getDb();
     const toolboxId = parseInt(req.params.id, 10);
@@ -674,7 +933,7 @@ router.post('/:id/invitees/add', (req, res) => {
 //
 // Returns JSON { ok: true } so the attendance page can update its row
 // in place via fetch.
-router.post('/:id/invitees/:crewId/remove', (req, res) => {
+router.post('/:id/invitees/:crewId/remove', blockWhenLocked, (req, res) => {
   try {
     const db = getDb();
     const toolboxId = parseInt(req.params.id, 10);
@@ -736,7 +995,7 @@ router.post('/:id/invitees/:crewId/remove', (req, res) => {
 // Scope: only crew_member_ids present in `manageable_crew_ids[]` are
 // touched, so a stale form submission can't accidentally wipe rows for
 // workers who've since been added/removed from the invite list.
-router.post('/:id/attendance', (req, res) => {
+router.post('/:id/attendance', blockWhenLocked, (req, res) => {
   const db = getDb();
   const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
   if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
@@ -821,6 +1080,14 @@ router.post('/:id/attendance', (req, res) => {
       absence_reason = NULL
   `);
   const del = db.prepare(`DELETE FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?`);
+  // Late arrivals (FRM-005 section 6) — only meaningful on rows that
+  // exist with an attended-ish status; cleared otherwise.
+  const lateBody = (req.body.late && typeof req.body.late === 'object') ? req.body.late : {};
+  const lateTimeBody = (req.body.late_time && typeof req.body.late_time === 'object') ? req.body.late_time : {};
+  const setLate = db.prepare(`
+    UPDATE toolbox_attendance SET late_arrival = ?, late_arrival_time = ?
+    WHERE toolbox_id = ? AND crew_member_id = ?
+  `);
 
   const tx = db.transaction(() => {
     for (const cid of manageable) {
@@ -841,6 +1108,11 @@ router.post('/:id/attendance', (req, res) => {
       } else if (s === 'caught_up') {
         upsertCaughtUp.run(toolbox.id, cid, userId);
         counts.caught_up++;
+      }
+      if (s === 'attended' || s === 'caught_up') {
+        const isLate = lateBody[cid] === '1' ? 1 : 0;
+        const lateTime = isLate ? (lateTimeBody[cid] || '').toString().trim().slice(0, 10) : null;
+        setLate.run(isLate, lateTime, toolbox.id, cid);
       }
     }
   });
@@ -898,7 +1170,7 @@ router.get('/:id/photos/:photoId', (req, res) => {
 });
 
 // POST /toolbox-talks/:id/photos/:photoId/delete
-router.post('/:id/photos/:photoId/delete', (req, res) => {
+router.post('/:id/photos/:photoId/delete', blockWhenLocked, (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ?').run(req.params.photoId, req.params.id);
   req.flash('success', 'Photo removed.');
@@ -922,7 +1194,7 @@ router.get('/:id/documents/:docId', (req, res) => {
 });
 
 // POST /toolbox-talks/:id/documents/:docId/delete
-router.post('/:id/documents/:docId/delete', (req, res) => {
+router.post('/:id/documents/:docId/delete', blockWhenLocked, (req, res) => {
   const db = getDb();
   db.prepare(
     `DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ? AND kind = 'doc'`
@@ -945,13 +1217,228 @@ router.get('/:id/prep/:prepId', (req, res) => {
 });
 
 // POST /toolbox-talks/:id/prep/:prepId/delete
-router.post('/:id/prep/:prepId/delete', (req, res) => {
+router.post('/:id/prep/:prepId/delete', blockWhenLocked, (req, res) => {
   const db = getDb();
   db.prepare(
     `DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ? AND kind = 'prep'`
   ).run(req.params.prepId, req.params.id);
   req.flash('success', 'Prep document removed.');
   return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
+});
+
+// ============================================================
+// TS-SAF-FRM-005 — presenter sign-off, actions raised,
+// supplementary notes, record PDF + send-to-client.
+// ============================================================
+
+// POST /toolbox-talks/:id/sign-off — presenter signs the record with
+// their finger (FRM-005 section 7). This LOCKS the record per
+// TS-SAF-WI-003 and closes the public attendance session.
+router.post('/:id/sign-off', (req, res) => {
+  const db = getDb();
+  const tb = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  if (isLocked(tb)) {
+    req.flash('error', 'This record is already signed off.');
+    return res.redirect('/toolbox-talks/' + tb.id);
+  }
+  if (tb.status !== 'published') {
+    req.flash('error', 'Publish the toolbox before signing off — workers need to sign on first.');
+    return res.redirect('/toolbox-talks/' + tb.id);
+  }
+  const sigRaw = (req.body.signature_data || '').toString();
+  if (!sigRaw.startsWith('data:image/') || sigRaw.length > 260000) {
+    req.flash('error', 'Draw your signature before submitting the sign-off.');
+    return res.redirect('/toolbox-talks/' + tb.id);
+  }
+  const userId = req.session.user ? req.session.user.id : null;
+  db.prepare(`
+    UPDATE toolbox_talks
+    SET presenter_signature_data = ?, presenter_signed_at = datetime('now'),
+        presenter_signed_by_id = ?, updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(sigRaw, userId, tb.id);
+  // Close the public attendance link — no sign-ons after lock.
+  db.prepare("UPDATE toolbox_attendance_sessions SET closed_at = datetime('now') WHERE toolbox_id = ? AND closed_at IS NULL").run(tb.id);
+  try {
+    // activity_log CHECK only allows a fixed action list — 'approve' is
+    // the closest fit for a sign-off.
+    logActivity({
+      user: req.session.user, action: 'approve', entityType: 'toolbox_talk',
+      entityId: tb.id, entityLabel: tb.title, details: 'presenter sign-off — record locked', ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash('success', 'Record signed off and locked. You can now download the FRM-005 PDF or send it to the client.');
+  return res.redirect('/toolbox-talks/' + tb.id);
+});
+
+// POST /toolbox-talks/:id/actions — add an action raised (section 5).
+router.post('/:id/actions', blockWhenLocked, (req, res) => {
+  const db = getDb();
+  const tb = db.prepare('SELECT id, title FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  const description = String(req.body.description || '').trim().slice(0, 2000);
+  if (!description) {
+    req.flash('error', 'Describe the action raised before adding it.');
+    return res.redirect('/toolbox-talks/' + tb.id);
+  }
+  db.prepare(`
+    INSERT INTO toolbox_actions (toolbox_id, description, raised_by, linked_record, created_by_id)
+    VALUES (?, ?, ?, ?, ?)
+  `).run(
+    tb.id, description,
+    String(req.body.raised_by || '').trim().slice(0, 120),
+    String(req.body.linked_record || '').trim().slice(0, 200),
+    req.session.user ? req.session.user.id : null
+  );
+  try {
+    logActivity({
+      user: req.session.user, action: 'create', entityType: 'toolbox_action',
+      entityId: tb.id, entityLabel: tb.title, details: description.slice(0, 120), ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash('success', 'Action recorded — remember to log it as its own hazard / near-miss record and track it to closure.');
+  return res.redirect('/toolbox-talks/' + tb.id);
+});
+
+// POST /toolbox-talks/:id/actions/:actionId/toggle — open <-> closed.
+// Allowed after lock so actions can still be tracked to closure (WI-003
+// step 8: actions are raised as separate records and closed out).
+router.post('/:id/actions/:actionId/toggle', (req, res) => {
+  const db = getDb();
+  const a = db.prepare('SELECT * FROM toolbox_actions WHERE id = ? AND toolbox_id = ?').get(req.params.actionId, req.params.id);
+  if (!a) { req.flash('error', 'Action not found.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  if (a.status === 'open') {
+    db.prepare("UPDATE toolbox_actions SET status = 'closed', closed_at = datetime('now') WHERE id = ?").run(a.id);
+  } else {
+    db.prepare("UPDATE toolbox_actions SET status = 'open', closed_at = NULL WHERE id = ?").run(a.id);
+  }
+  req.flash('success', a.status === 'open' ? 'Action closed.' : 'Action reopened.');
+  return res.redirect('/toolbox-talks/' + req.params.id);
+});
+
+// POST /toolbox-talks/:id/actions/:actionId/delete — pre-lock only.
+router.post('/:id/actions/:actionId/delete', blockWhenLocked, (req, res) => {
+  const db = getDb();
+  db.prepare('DELETE FROM toolbox_actions WHERE id = ? AND toolbox_id = ?').run(req.params.actionId, req.params.id);
+  req.flash('success', 'Action removed.');
+  return res.redirect('/toolbox-talks/' + req.params.id);
+});
+
+// POST /toolbox-talks/:id/notes — add a supplementary note. The ONLY
+// content change allowed after lock (WI-003: "if information was wrong,
+// add a supplementary note").
+router.post('/:id/notes', (req, res) => {
+  const db = getDb();
+  const tb = db.prepare('SELECT id, title FROM toolbox_talks WHERE id = ?').get(req.params.id);
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  const note = String(req.body.note || '').trim().slice(0, 4000);
+  if (!note) {
+    req.flash('error', 'Write the note before adding it.');
+    return res.redirect('/toolbox-talks/' + tb.id);
+  }
+  db.prepare('INSERT INTO toolbox_supplementary_notes (toolbox_id, note, created_by_id) VALUES (?, ?, ?)')
+    .run(tb.id, note, req.session.user ? req.session.user.id : null);
+  try {
+    logActivity({
+      user: req.session.user, action: 'create', entityType: 'toolbox_note',
+      entityId: tb.id, entityLabel: tb.title, details: 'supplementary note', ip: req.ip,
+    });
+  } catch (e) {}
+  req.flash('success', 'Supplementary note added.');
+  return res.redirect('/toolbox-talks/' + tb.id);
+});
+
+// GET /toolbox-talks/:id/record.pdf — download the FRM-005 PDF.
+// Available pre-lock too (renders as a draft watermark line) so the
+// office can preview before sign-off.
+router.get('/:id/record.pdf', async (req, res) => {
+  try {
+    const { buffer, fileName } = await generateToolboxRecordPdf(req.params.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
+    return res.send(buffer);
+  } catch (err) {
+    console.error('[toolbox record.pdf]', err);
+    req.flash('error', 'Could not generate the record PDF: ' + (err && err.message || 'unknown'));
+    return res.redirect('/toolbox-talks/' + req.params.id);
+  }
+});
+
+// POST /toolbox-talks/:id/send-to-client — generate the FRM-005 PDF and
+// email it to the client as evidence the safety items were addressed.
+// Requires the record to be signed off first so an unsigned record can
+// never reach a client.
+router.post('/:id/send-to-client', async (req, res) => {
+  const db = getDb();
+  const tb = db.prepare(`
+    SELECT t.*, j.job_number, j.job_name
+    FROM toolbox_talks t LEFT JOIN jobs j ON j.id = t.job_id
+    WHERE t.id = ?
+  `).get(req.params.id);
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  if (!isLocked(tb)) {
+    req.flash('error', 'Sign off the record before sending it to the client — they should only receive the signed form.');
+    return res.redirect('/toolbox-talks/' + tb.id);
+  }
+  const recipientEmail = String(req.body.recipient_email || '').trim().slice(0, 200);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
+    req.flash('error', 'Enter a valid recipient email address.');
+    return res.redirect('/toolbox-talks/' + tb.id);
+  }
+  if (!emailConfigured()) {
+    req.flash('error', 'Email is not configured on this server — download the PDF and send it manually instead.');
+    return res.redirect('/toolbox-talks/' + tb.id);
+  }
+  const clientId = parseInt(req.body.client_id, 10) > 0 ? parseInt(req.body.client_id, 10) : null;
+  const client = clientId ? db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId) : null;
+  const message = String(req.body.message || '').trim().slice(0, 4000);
+  const userId = req.session.user ? req.session.user.id : null;
+  const senderName = req.session.user ? req.session.user.full_name : 'T&S Traffic Control';
+
+  try {
+    const { buffer, fileName } = await generateToolboxRecordPdf(tb.id);
+    // Keep a copy of exactly what was sent — audit evidence.
+    const sentDir = path.join(UPLOAD_DIR, 'sent-records');
+    fs.mkdirSync(sentDir, { recursive: true });
+    const stamp = Date.now();
+    const savedPath = path.join(sentDir, `TBX-${tb.id}-${stamp}.pdf`);
+    fs.writeFileSync(savedPath, buffer);
+
+    const subject = `Toolbox Talk Record — ${tb.title} (${tb.held_at})`;
+    const jobLabel = tb.job_number ? `${tb.job_number}${tb.job_name ? ' — ' + tb.job_name : ''}` : '';
+    const html = toolboxClientEmail(
+      client ? (client.primary_contact_name || client.company_name) : '',
+      { id: tb.id, title: tb.title, held_at: tb.held_at, site_location: tb.site_location, presenter: tb.presenter, job_label: jobLabel },
+      message, senderName
+    );
+    // sendEmail resolves null on failure (Resend/SMTP errors are logged
+    // inside the service), an info/data object on success.
+    const result = await sendEmail(recipientEmail, subject, html, {
+      attachments: [{ filename: fileName, content: buffer }],
+    });
+    const ok = !!result;
+    db.prepare(`
+      INSERT INTO toolbox_client_sends
+        (toolbox_id, client_id, recipient_email, subject, message, pdf_path, sent_by_id, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(tb.id, clientId, recipientEmail, subject, message, relFromRepo(savedPath), userId, ok ? 'sent' : 'failed');
+    try {
+      logActivity({
+        user: req.session.user, action: 'complete', entityType: 'toolbox_talk',
+        entityId: tb.id, entityLabel: tb.title, details: 'sent to client ' + recipientEmail + (ok ? '' : ' (FAILED)'), ip: req.ip,
+      });
+    } catch (e) {}
+    if (ok) {
+      req.flash('success', 'Record sent to ' + recipientEmail + '.');
+    } else {
+      req.flash('error', 'Email failed to send — check the server email configuration. The attempt was logged.');
+    }
+  } catch (err) {
+    console.error('[toolbox send-to-client]', err);
+    req.flash('error', 'Could not send: ' + (err && err.message || 'unknown'));
+  }
+  return res.redirect('/toolbox-talks/' + tb.id);
 });
 
 module.exports = router;

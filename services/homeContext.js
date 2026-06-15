@@ -3,6 +3,12 @@
 
 const https = require('https');
 
+// A booking-linked shift only surfaces to crew once the allocator has
+// confirmed the booking ('confirmed' or later). Allocations with no booking
+// (pure job rosters) are unaffected. Mirrors the worker portal's
+// VISIBLE_BOOKING_STATUSES / bookingNotify.isNotifiable.
+const NOTIFIABLE_BOOKING_STATUSES = ['confirmed', 'green_to_go', 'in_progress', 'complete', 'on_hold'];
+
 // Date in Sydney timezone (YYYY-MM-DD). Railway containers run on UTC so
 // using the JS Date getters lands on the previous day for several hours
 // every Sydney evening. Everything worker-facing keys off this.
@@ -112,12 +118,14 @@ function buildGreetingSubtext(db, worker, member, employee, todaysShifts) {
       SELECT a.allocation_date, a.start_time, j.client
       FROM crew_allocations a
       JOIN jobs j ON j.id = a.job_id
+      LEFT JOIN bookings b ON b.id = a.booking_id
       WHERE a.crew_member_id = ?
         AND a.allocation_date > ?
         AND (a.status IS NULL OR a.status != 'cancelled')
+        AND (a.booking_id IS NULL OR b.status IN (${NOTIFIABLE_BOOKING_STATUSES.map(() => '?').join(',')}))
       ORDER BY a.allocation_date ASC, a.start_time ASC
       LIMIT 1
-    `).get(worker.id, today);
+    `).get(worker.id, today, ...NOTIFIABLE_BOOKING_STATUSES);
     if (next) {
       const d = new Date(next.allocation_date + 'T00:00:00');
       const when = d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
@@ -203,8 +211,9 @@ function buildSmartCards(db, worker, member, employee) {
     LEFT JOIN jobs j     ON ca.job_id = j.id
     LEFT JOIN bookings b ON ca.booking_id = b.id
     WHERE ca.crew_member_id = ? AND ca.allocation_date = ? AND ca.status != 'cancelled'
+      AND (ca.booking_id IS NULL OR b.status IN (${NOTIFIABLE_BOOKING_STATUSES.map(() => '?').join(',')}))
     ORDER BY ca.start_time ASC LIMIT 1
-  `).get(worker.id, tomIso);
+  `).get(worker.id, tomIso, ...NOTIFIABLE_BOOKING_STATUSES);
   if (tomorrowShift) {
     // Title: prefer suburb, then street address, then client name. Body:
     // skip the "with X" tail entirely if we have nothing meaningful — an

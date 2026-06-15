@@ -1,0 +1,42 @@
+<div class="max-w-4xl mx-auto space-y-4">
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div>
+      <a href="/checklists/<%= template.id %>" class="text-xs font-semibold text-brand-600 hover:underline">&larr; <%= template.name %></a>
+      <h1 class="text-xl font-bold text-gray-900 mt-1">Responses</h1>
+      <p class="text-xs text-gray-500 mt-0.5"><%= responses.length %> submission<%= responses.length === 1 ? '' : 's' %> &middot; each one is shown against the questions of the revision the worker filled in.</p>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <% if (!responses.length) { %>
+      <div class="px-4 py-10 text-center text-sm text-gray-500">No submissions yet.</div>
+    <% } else { %>
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="text-left text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
+            <th class="px-4 py-2.5">Worker</th>
+            <th class="px-4 py-2.5">Submitted</th>
+            <th class="px-4 py-2.5 hidden sm:table-cell">Shift</th>
+            <th class="px-4 py-2.5 hidden sm:table-cell">Rev</th>
+            <th class="px-4 py-2.5"></th>
+          </tr>
+        </thead>
+        <tbody>
+          <% responses.forEach(function (r) { %>
+            <tr class="border-b border-gray-100 hover:bg-gray-50">
+              <td class="px-4 py-2.5 font-medium text-gray-900"><%= r.worker_name || '—' %></td>
+              <td class="px-4 py-2.5 text-gray-600"><%= new Date(r.submitted_at + (String(r.submitted_at).includes('Z') ? '' : 'Z')).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %></td>
+              <td class="px-4 py-2.5 text-gray-600 hidden sm:table-cell"><%= r.booking_number || (r.allocation_id ? 'Alloc #' + r.allocation_id : '—') %></td>
+              <td class="px-4 py-2.5 text-gray-500 hidden sm:table-cell">v<%= r.revision_number %></td>
+              <td class="px-4 py-2.5 text-right">
+                <% if (r.photo_count) { %><span class="inline-block mr-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-600"><%= r.photo_count %> 📷</span><% } %>
+                <% if (r.has_signature) { %><span class="inline-block mr-2 px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">Signed</span><% } %>
+                <a href="/checklists/<%= template.id %>/responses/<%= r.id %>" class="text-brand-600 font-semibold hover:underline">View</a>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    <% } %>
+  </div>
+</div>

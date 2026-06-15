@@ -3,6 +3,85 @@ const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday, TZ: SYD_TZ } = require('../../lib/sydney');
 const { resolveShift, getCurrentDocket } = require('../../lib/shiftDocket');
+const { maybePromoteToGreenToGo } = require('../../lib/bookingLifecycle');
+const bookingNotify = require('../../services/bookingNotify');
+const { logActivity } = require('../../middleware/audit');
+
+// Shared by every worker accept path: if this acceptance was the last one
+// outstanding, advance the booking to green_to_go and notify the whole crew.
+// Safe to call after any single confirm — it's a no-op until everyone's in.
+function promoteAndNotifyGTG(db, bookingId, req, worker) {
+  if (!bookingId) return;
+  try {
+    if (maybePromoteToGreenToGo(db, bookingId)) {
+      const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(bookingId);
+      const crewIds = bookingNotify.activeCrewIds(db, bookingId);
+      if (bk && crewIds.length) bookingNotify.notifyGreenToGo(crewIds, bk);
+      try { logActivity({ user: null, action: 'update', entityType: 'booking', entityId: bookingId, details: `Auto: ${bk ? bk.booking_number : 'booking'} → green_to_go (all crew confirmed; last: ${worker && worker.full_name})`, ip: req && req.ip }); } catch (e) {}
+    }
+  } catch (e) { console.error('[GTG] promote failed for booking', bookingId, ':', e.message); }
+}
+
+// Admin-built form templates flagged to appear on every shift's Forms tab
+// (checklist_templates.show_on_shift, migration 265), with this worker's
+// per-shift completion status. Returns [] until the migration has run.
+function getShiftTemplates(db, crewMemberId, allocationId) {
+  try {
+    return db.prepare(`
+      SELECT t.id, t.name, t.description,
+        (SELECT COUNT(*) FROM custom_checklist_responses r
+          WHERE r.template_id = t.id AND r.crew_member_id = ? AND r.allocation_id = ?) AS done_count
+      FROM checklist_templates t
+      WHERE t.show_on_shift = 1 AND t.worker_visible = 1 AND t.status = 'active'
+        AND t.published_revision IS NOT NULL AND t.published_revision > 0
+      ORDER BY t.sort_order ASC, t.name ASC
+    `).all(crewMemberId, allocationId);
+  } catch (e) { return []; }
+}
+
+// Vehicles on a booking with the crew grouped under each one — who's
+// riding in what (booking_crew.assigned_vehicle_id), who's driving
+// (booking_vehicles.crew_member_id), and who's on site without a vehicle.
+// Returns null when the booking has no vehicles so views can skip the
+// whole block.
+function getBookingVehicleGroups(db, bookingId, currentCrewId) {
+  try {
+    const vehicles = db.prepare(`
+      SELECT bv.id, bv.vehicle_name, bv.registration, bv.crew_member_id AS driver_id,
+             fv.asset_id AS fleet_asset_id, fv.rego AS fleet_rego
+      FROM booking_vehicles bv
+      LEFT JOIN vehicles fv ON fv.id = bv.fleet_vehicle_id
+      WHERE bv.booking_id = ?
+      ORDER BY bv.id
+    `).all(bookingId);
+    if (!vehicles.length) return null;
+    const crew = db.prepare(`
+      SELECT bc.crew_member_id, bc.assigned_vehicle_id, bc.role_on_site, bc.status,
+             cm.full_name, cm.phone, cm.portal_role
+      FROM booking_crew bc
+      JOIN crew_members cm ON cm.id = bc.crew_member_id
+      WHERE bc.booking_id = ? AND bc.status != 'declined'
+      ORDER BY CASE cm.portal_role WHEN 'supervisor' THEN 0 WHEN 'team_leader' THEN 1 ELSE 2 END, cm.full_name
+    `).all(bookingId);
+    const decorate = (c, v) => ({
+      ...c,
+      is_driver: !!v && c.crew_member_id === v.driver_id,
+      is_you: !!currentCrewId && c.crew_member_id === currentCrewId,
+    });
+    const groups = vehicles.map(v => ({
+      vehicle: {
+        id: v.id,
+        name: v.vehicle_name || v.fleet_asset_id || 'Vehicle',
+        rego: v.registration || v.fleet_rego || '',
+      },
+      members: crew.filter(c => c.assigned_vehicle_id === v.id).map(c => decorate(c, v)),
+    }));
+    const onFoot = crew
+      .filter(c => !c.assigned_vehicle_id || !vehicles.some(v => v.id === c.assigned_vehicle_id))
+      .map(c => decorate(c, null));
+    return { groups, onFoot };
+  } catch (e) { return null; }
+}
 
 // Worker-facing sign/view URL for the shift an allocation belongs to.
 function docketUrlForAllocation(db, allocationId) {
@@ -69,10 +148,12 @@ router.get('/jobs', (req, res) => {
   // The bookings table CHECK uses these literal status values:
   //   'unconfirmed','confirmed','green_to_go','in_progress','completed',
   //   'cancelled','late_cancellation','on_hold'
-  // Worker-visible bookings = anything that's not cancelled / late-cancelled.
-  // Including 'unconfirmed' so a newly-assigned shift surfaces as a Pending
-  // request the worker can accept/decline before the allocator confirms.
-  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','completed','on_hold'];
+  // Crew don't see a shift until the ALLOCATOR confirms the booking, so
+  // 'unconfirmed' is deliberately excluded — a pre-confirmation booking never
+  // surfaces in the portal. Once confirmed it appears as a request the worker
+  // can accept/decline (that accept/decline drives allocation status, which is
+  // separate from booking status).
+  const VISIBLE_BOOKING_STATUSES = ['confirmed','green_to_go','in_progress','complete','on_hold'];
 
   // Upcoming from crew_allocations. Falls back to booking columns when the
   // allocation isn't linked to a job (ad-hoc bookings post-migration 142),
@@ -264,11 +345,16 @@ router.get('/jobs', (req, res) => {
   const endMon   = sunday.toLocaleDateString('en-AU', { month: 'short' });
   const monthLabel = (startMon === endMon ? startMon : startMon + ' / ' + endMon) + ' ' + sunday.getFullYear();
 
+  // Sydney wall-clock HH:MM — the view uses it to badge today's shifts
+  // that are running right now.
+  const nowTime = new Date().toLocaleTimeString('en-AU', { timeZone: SYD_TZ, hour: '2-digit', minute: '2-digit', hour12: false });
+
   res.render('worker/jobs', {
     title: 'My Shifts',
     currentPage: 'shifts',
     tab,
     today,
+    nowTime,
     requests,
     confirmed,
     finished,
@@ -305,7 +391,10 @@ router.get('/jobs/:id', (req, res) => {
       COALESCE(j.site_address, b.site_address)        AS site_address,
       COALESCE(j.suburb,     b.suburb)                AS suburb,
       COALESCE(j.status,     b.status)                AS job_status,
-      COALESCE(j.notes,      b.notes)                 AS job_notes,
+      j.notes                                         AS job_notes,
+      b.description                                   AS booking_description,
+      b.location_notes                                AS booking_location_notes,
+      b.requirements_text                             AS booking_requirements,
       COALESCE(j.start_date, DATE(b.start_datetime))  AS job_start,
       COALESCE(j.end_date,   DATE(b.end_datetime))    AS job_end,
       COALESCE(j.project_name, b.title)               AS project_name,
@@ -399,6 +488,10 @@ router.get('/jobs/:id', (req, res) => {
     post_shift_vehicle: allForms.find(f => f.form_type === 'post_shift_vehicle') || null,
   };
 
+  // Admin-built templates flagged "show on shift" — appear on the Forms tab
+  // after the Job-Pack 5, with per-shift completion status.
+  const shiftTemplates = getShiftTemplates(db, worker.id, allocation.id);
+
   // Documents the worker should see on the DOCS tab — drawn from two places:
   //
   //   1. job_documents (admin uploads via /jobs/:id/documents) — scoped to a
@@ -460,6 +553,8 @@ router.get('/jobs/:id', (req, res) => {
     otherCrew,
     supervisorPhone,
     formStatus,
+    shiftTemplates,
+    vehicleGroups: allocation.booking_id ? getBookingVehicleGroups(db, allocation.booking_id, worker.id) : null,
     docket,
     jobDocuments,
   });
@@ -497,6 +592,48 @@ router.get('/booking-documents/:id', (req, res) => {
   res.setHeader('Content-Type', mt);
   res.setHeader('Content-Disposition', `inline; filename="${(doc.original_name || doc.title || 'document').replace(/[^\w. -]/g, '_')}"`);
   fs.createReadStream(abs).pipe(res);
+});
+
+// GET /w/doc/:source/:id — In-app document viewer. Renders a full-screen
+// page that embeds the document (PDF in an iframe, image inline, anything
+// else falls back to a download link) with a Back button — so workers read
+// site docs without bouncing out to a new browser tab. `source` is 'job' or
+// 'booking'; access is re-validated against the underlying stream route.
+router.get('/doc/:source/:id', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const source = req.params.source === 'job' ? 'job' : 'booking';
+  let doc = null, jobId = null, bookingId = null;
+
+  if (source === 'job') {
+    doc = db.prepare(`SELECT jd.*, j.id AS jid FROM job_documents jd JOIN jobs j ON jd.job_id = j.id WHERE jd.id = ? AND jd.archived_at IS NULL`).get(req.params.id);
+    if (doc) jobId = doc.jid;
+  } else {
+    doc = db.prepare(`SELECT * FROM booking_documents WHERE id = ?`).get(req.params.id);
+    if (doc) bookingId = doc.booking_id;
+  }
+  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/w/jobs'); }
+
+  const linked = source === 'job'
+    ? db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND job_id = ? AND status != 'cancelled' LIMIT 1`).get(worker.id, jobId)
+    : db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND booking_id = ? AND status != 'cancelled' LIMIT 1`).get(worker.id, bookingId);
+  if (!linked) { req.flash('error', 'You don’t have access to that document.'); return res.redirect('/w/jobs'); }
+
+  const name = doc.original_name || doc.title || 'Document';
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  const kind = ext === 'pdf' ? 'pdf'
+    : ['png','jpg','jpeg','gif','webp','heic'].includes(ext) ? 'image'
+    : 'other';
+  // Sanitise the back target — only allow internal worker paths.
+  let back = typeof req.query.back === 'string' && req.query.back.startsWith('/w/') ? req.query.back : '/w/jobs';
+
+  res.render('worker/doc-view', {
+    title: doc.title || name,
+    layout: 'worker/layout-bare',
+    fileUrl: '/w/' + source + '-documents/' + doc.id,
+    docName: doc.title || name,
+    kind, back,
+  });
 });
 
 // GET /w/job-documents/:id — Stream an admin-uploaded job document to the
@@ -570,15 +707,9 @@ router.post('/jobs/:id/respond', (req, res) => {
       db.prepare("UPDATE booking_crew SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP WHERE booking_id = ? AND crew_member_id = ?")
         .run(fullAlloc.booking_id, worker.id);
 
-      // Check if ALL crew on this booking are now confirmed → auto-set booking to GTG
-      const totalCrew = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ?").get(fullAlloc.booking_id);
-      const confirmedCrew = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ? AND status = 'confirmed'").get(fullAlloc.booking_id);
-      if (totalCrew && confirmedCrew && totalCrew.c > 0 && confirmedCrew.c >= totalCrew.c) {
-        const booking = db.prepare("SELECT status FROM bookings WHERE id = ?").get(fullAlloc.booking_id);
-        if (booking && booking && (booking.status === 'confirmed' || booking.status === 'unconfirmed')) {
-          db.prepare("UPDATE bookings SET status = 'green_to_go', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(fullAlloc.booking_id);
-        }
-      }
+      // All crew accepted? → auto-advance the booking to green_to_go and tell
+      // the whole crew it's locked in.
+      promoteAndNotifyGTG(db, fullAlloc.booking_id, req, worker);
     }
 
     req.flash('success', 'Shift accepted!');
@@ -629,14 +760,18 @@ router.get('/booking-shift/:bookingId', (req, res) => {
       const endTimeFromDt   = booking.end_datetime   ? booking.end_datetime.substring(11, 16)   : '';
       const allocDate       = booking.start_datetime ? booking.start_datetime.substring(0, 10)  : sydneyToday();
       const allocBy = booking.created_by_id || (req.session.user && req.session.user.id) || null;
-      const ins = db.prepare(`
-        INSERT INTO crew_allocations
+      // OR IGNORE + re-select: two devices (or a double-tap) racing to
+      // lazy-create can't produce duplicates — the unique index on
+      // (booking_id, crew_member_id) makes the second insert a no-op and
+      // the re-select picks up whichever row won.
+      db.prepare(`
+        INSERT OR IGNORE INTO crew_allocations
           (job_id, crew_member_id, allocation_date, start_time, end_time,
            role_on_site, status, allocated_by_id, booking_id, created_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
       `).run(booking.job_id || null, worker.id, allocDate, startTimeFromDt, endTimeFromDt,
              myAssignment.role_on_site || '', allocStatus, allocBy, booking.id);
-      allocation = db.prepare('SELECT * FROM crew_allocations WHERE id = ?').get(ins.lastInsertRowid);
+      allocation = db.prepare('SELECT * FROM crew_allocations WHERE booking_id = ? AND crew_member_id = ? LIMIT 1').get(booking.id, worker.id);
     } catch (e) {
       console.error('[booking-shift] failed to lazy-bind allocation:', e.message);
     }
@@ -771,6 +906,8 @@ router.get('/booking-shift/:bookingId', (req, res) => {
     myStatus: myAssignment.status,
     startDay, startDate, startTime, endTime,
     allocation, formStatus, docket, jobDocuments,
+    shiftTemplates: allocation ? getShiftTemplates(db, worker.id, allocation.id) : [],
+    vehicleGroups: getBookingVehicleGroups(db, booking.id, worker.id),
     docketSignUrl: '/w/dockets/shift/' + booking.id,
     myTasks, teamTasks,
   });
@@ -800,15 +937,8 @@ router.post('/bookings/:id/respond', (req, res) => {
     db.prepare("UPDATE crew_allocations SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP WHERE booking_id = ? AND crew_member_id = ? AND status = 'allocated'")
       .run(req.params.id, worker.id);
 
-    // Check if ALL crew confirmed → auto-GTG
-    const total = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ?").get(req.params.id);
-    const conf = db.prepare("SELECT COUNT(*) as c FROM booking_crew WHERE booking_id = ? AND status = 'confirmed'").get(req.params.id);
-    if (total && conf && total.c > 0 && conf.c >= total.c) {
-      const booking = db.prepare("SELECT status FROM bookings WHERE id = ?").get(req.params.id);
-      if (booking && booking && (booking.status === 'confirmed' || booking.status === 'unconfirmed')) {
-        db.prepare("UPDATE bookings SET status = 'green_to_go', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
-      }
-    }
+    // All crew accepted? → auto-advance the booking to green_to_go + notify.
+    promoteAndNotifyGTG(db, parseInt(req.params.id, 10), req, worker);
     req.flash('success', 'Shift accepted!');
   } else {
     db.prepare("UPDATE booking_crew SET status = 'declined' WHERE booking_id = ? AND crew_member_id = ?")
@@ -894,6 +1024,18 @@ router.post('/shift-tasks', (req, res) => {
     VALUES (?, ?, ?, ?, ?, ?)
   `).run(allocScope, bookingScope, crew_member_id, title.trim(),
          ['low','normal','high'].includes(priority) ? priority : 'normal', worker.id);
+  // Notify the assignee (no point pinging yourself for a task you just made).
+  if (String(crew_member_id) !== String(worker.id)) {
+    try {
+      let meta = { title: title.trim(), url: '/w/home', shift_label: '' };
+      if (bookingScope) {
+        const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(bookingScope) || {};
+        const date = bk.start_datetime ? new Date(String(bk.start_datetime).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+        meta = { title: title.trim(), url: '/w/booking-shift/' + bookingScope + '?tab=tasks', shift_label: [date, bk.title || bk.booking_number].filter(Boolean).join(' ') };
+      }
+      bookingNotify.notifyTaskAssigned([crew_member_id], meta);
+    } catch (e) { console.error('[worker tasks] task-assigned notify failed:', e.message); }
+  }
   req.flash('success', isGeneral ? 'General task added.' : 'Shift task added.');
   if (bookingScope) return res.redirect('/w/booking-shift/' + bookingScope + '?tab=tasks');
   return res.redirect('/w/home');

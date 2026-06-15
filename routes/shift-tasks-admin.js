@@ -7,6 +7,16 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
+const bookingNotify = require('../services/bookingNotify');
+
+// Build the deep-link + shift label for a task-assigned push. Shift-bound
+// tasks open the shift's Tasks tab; general tasks land on the worker home.
+function taskNotifyMeta(db, bookingId, title) {
+  if (!bookingId) return { title, url: '/w/home', shift_label: '' };
+  const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(bookingId) || {};
+  const date = bk.start_datetime ? new Date(String(bk.start_datetime).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+  return { title, url: '/w/booking-shift/' + bookingId + '?tab=tasks', shift_label: [date, bk.title || bk.booking_number].filter(Boolean).join(' ') };
+}
 
 // GET /shift-tasks — board view
 router.get('/', (req, res) => {
@@ -124,6 +134,8 @@ router.post('/', (req, res) => {
     due_at || null, req.session.user.id
   );
   logActivity({ user: req.session.user, action: 'create', entityType: 'shift_task', details: 'Created task: ' + title.trim(), req });
+  // Ping the worker it was assigned to.
+  bookingNotify.notifyTaskAssigned([crew_member_id], taskNotifyMeta(db, bookingScope, title.trim()));
   req.flash('success', scope === 'general' ? 'General task created.' : 'Shift task created.');
   res.redirect('/shift-tasks');
 });

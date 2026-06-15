@@ -35,29 +35,13 @@
   </a>
 </div>
 
-<!-- Custom checklists callout &mdash; admin-published forms outside the
-     standard Job-Pack 5. Same hub style as the Shift Checklists tile
-     above so the entry points sit side-by-side. -->
-<div class="px-4 mb-4">
-  <a href="/w/forms/custom" class="block rounded-xl px-4 py-3 transition active:opacity-80"
-     style="background: linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.05)); border: 1px solid rgba(16,185,129,0.35);">
-    <div class="flex items-start gap-3">
-      <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(16,185,129,0.22);">
-        <svg class="w-5 h-5" style="color:#5EEAD4;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-      </div>
-      <div class="min-w-0 flex-1">
-        <p class="text-sm font-semibold text-white">Custom checklists</p>
-        <p class="text-[11px] mt-0.5" style="color:rgba(255,255,255,0.65);">Forms published by the office &mdash; fill in any time.</p>
-        <p class="text-[11px] mt-1.5 font-semibold" style="color:#5EEAD4;">Browse &rarr;</p>
-      </div>
-    </div>
-  </a>
-</div>
-
-<!-- Form List -->
+<!-- Form List — admin-built templates published to workers. Each one is
+     created/edited on the admin side (/checklists) and rendered from its
+     latest published revision, so what workers see always matches the
+     editable version in the office. -->
 <div id="formList">
-  <!-- Leave Request -->
-  <a href="/w/forms/leave-request" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="leave request">
+  <!-- Leave Request — a real HR workflow, not a form template -->
+  <a href="/w/hr/leave" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="leave request">
     <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
       <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
     </div>
@@ -65,86 +49,22 @@
     <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
   </a>
 
-  <!-- Bullying and Harassment Form -->
-  <a href="/w/forms/incident?type=bullying" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="bullying harassment">
-    <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
-      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-    </div>
-    <span class="text-sm font-medium flex-1">Bullying and Harassment Form</span>
-    <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-  </a>
-
-  <!-- Near Miss Investigation Form -->
-  <a href="/w/forms/hazard" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);border-left:3px solid #f59e0b;" data-name="near miss investigation">
-    <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
-      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-    </div>
-    <span class="text-sm font-medium flex-1">Near Miss Investigation Form</span>
-    <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-  </a>
-
-  <!-- On-Site Incident Report Form -->
-  <a href="/w/forms/incident" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);border-left:3px solid #f59e0b;" data-name="on-site incident report">
-    <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
-      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-    </div>
-    <span class="text-sm font-medium flex-1">On-Site Incident Report Form</span>
-    <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-  </a>
-
-  <!-- Pre-Delivery Vehicle Inspection -->
-  <a href="/w/forms/equipment" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="pre-delivery vehicle inspection">
-    <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
-      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-    </div>
-    <span class="text-sm font-medium flex-1">Pre-Delivery Vehicle Inspection</span>
-    <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-  </a>
-
-  <!-- Purchase Order -->
-  <a href="/w/forms/purchase-order" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="purchase order">
-    <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
-      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-    </div>
-    <span class="text-sm font-medium flex-1">Purchase Order</span>
-    <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-  </a>
-
-  <!-- Repair Request Form -->
-  <a href="/w/forms/repair-request" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="repair request">
-    <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
-      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/></svg>
-    </div>
-    <span class="text-sm font-medium flex-1">Repair Request Form</span>
-    <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-  </a>
-
-  <!-- Site / Vehicle Equipment Count -->
-  <a href="/w/forms/equipment-count" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="site vehicle equipment count">
-    <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
-      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-    </div>
-    <span class="text-sm font-medium flex-1">Site / Vehicle Equipment Count</span>
-    <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-  </a>
-
-  <!-- Team Leader Signage Inspection (Hourly) -->
-  <a href="/w/forms/prestart?type=signage" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="team leader signage inspection hourly">
+  <% (formTemplates || []).forEach(function (t) { %>
+  <a href="/w/forms/custom/<%= t.id %>" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="<%= t.name.toLowerCase() %>">
     <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
       <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
     </div>
-    <span class="text-sm font-medium flex-1">Team Leader Signage Inspection (Hourly)</span>
-    <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-  </a>
-
-  <!-- Vehicle Incident Report Form -->
-  <a href="/w/forms/incident?type=vehicle" class="form-item flex items-center gap-3 px-4 py-3.5 transition" style="border-bottom:1px solid rgba(255,255,255,0.06);" data-name="vehicle incident report">
-    <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.06);">
-      <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+    <div class="flex-1 min-w-0">
+      <span class="text-sm font-medium block truncate"><%= t.name %></span>
+      <% if (t.description) { %><span class="text-[11px] text-gray-500 block truncate"><%= t.description %></span><% } %>
     </div>
-    <span class="text-sm font-medium flex-1">Vehicle Incident Report Form</span>
     <svg class="w-4 h-4 text-gray-600 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
   </a>
+  <% }) %>
+
+  <% if (!formTemplates || !formTemplates.length) { %>
+  <p class="px-4 py-6 text-center text-xs text-gray-500">No forms published yet — the office can add them from the admin Forms &amp; Checklists page.</p>
+  <% } %>
 </div>
 
 <!-- History Link -->

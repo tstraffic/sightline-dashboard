@@ -21,8 +21,9 @@ router.get('/home', async (req, res) => {
 
   // ---- Kick off parallel work where it helps ----
   // Synchronous DB queries first (SQLite is sync) — all very fast
-  // Booking statuses worth showing on home (everything except cancelled).
-  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','completed','on_hold'];
+  // Crew don't see a shift until the allocator confirms the booking, so
+  // 'unconfirmed' is excluded here (matches routes/worker/jobs.js).
+  const VISIBLE_BOOKING_STATUSES = ['confirmed','green_to_go','in_progress','complete','on_hold'];
 
   // Tag the source like /w/jobs does so the home card's "Open shift" /
   // "Fill docket" buttons route correctly: booking-only allocations
@@ -46,6 +47,7 @@ router.get('/home', async (req, res) => {
     LEFT JOIN bookings b ON ca.booking_id = b.id
     LEFT JOIN users u    ON j.ops_supervisor_id = u.id
     WHERE ca.crew_member_id = ? AND ca.allocation_date = ? AND ca.status != 'cancelled'
+      AND (ca.booking_id IS NULL OR (b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')))
     ORDER BY ca.start_time ASC
   `).all(worker.id, today);
 

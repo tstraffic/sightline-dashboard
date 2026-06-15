@@ -6,6 +6,9 @@ const multer = require('multer');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { requireRole } = require('../middleware/auth');
+const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew } = require('../lib/bookingLifecycle');
+const { getDocketCrew } = require('../lib/shiftDocket');
+const bookingNotify = require('../services/bookingNotify');
 
 // Multer config for booking document uploads
 const BOOKING_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'bookings');
@@ -126,7 +129,7 @@ function transformBooking(db, row) {
   for (const c of crew) {
     const conflict = db.prepare(`
       SELECT b.booking_number FROM booking_crew bc2 JOIN bookings b ON b.id = bc2.booking_id
-      WHERE bc2.crew_member_id = ? AND bc2.booking_id != ? AND b.status NOT IN ('cancelled','complete','late_cancellation')
+      WHERE bc2.crew_member_id = ? AND bc2.booking_id != ? AND b.status NOT IN ('cancelled','complete','late_cancellation','finalised') AND b.deleted_at IS NULL
         AND b.start_datetime < ? AND b.end_datetime > ? LIMIT 1
     `).get(c.crew_member_id, row.id, row.end_datetime, row.start_datetime);
     if (conflict) { scheduleWarning = c.full_name + ' also on ' + conflict.booking_number; break; }
@@ -231,7 +234,58 @@ function loadBookingDetail(db, bookingId) {
     console.error('[loadBookingDetail] requirement-fulfilment failed:', e.message);
   }
 
-  return { ...row, supervisor_name: supervisorName, internal_notes: row.notes || '', crew, notes, vehicles, dockets, documents, activity, requirements, equipment: equipmentList, job: jobInfo, client: clientInfo };
+  const shiftDockets = loadShiftDockets(db, bookingId, crew);
+
+  return { ...row, supervisor_name: supervisorName, internal_notes: row.notes || '', crew, notes, vehicles, dockets, shiftDockets, documents, activity, requirements, equipment: equipmentList, job: jobInfo, client: clientInfo };
+}
+
+/**
+ * Worker-signed shift dockets for a booking, with crew lines and version chain.
+ * Returns:
+ *   {
+ *     current: { id, signed_at, signer_name, version, ... crew: [{ name, start_on_site, ... }] } | null,
+ *     history: [ same shape, ordered newest first, status='superseded' ],
+ *     drift: { added: [{crew_member_id, name, role}], removed: [{crew_member_id, name}] }   // booking_crew vs current docket
+ *   }
+ */
+function loadShiftDockets(db, bookingId, bookingCrewRows) {
+  let rows = [];
+  try {
+    rows = db.prepare(`
+      SELECT ds.*, cm.full_name AS signer_name
+      FROM docket_signatures ds
+      LEFT JOIN crew_members cm ON cm.id = COALESCE(ds.signed_by_crew_id, ds.crew_member_id)
+      WHERE ds.booking_id = ?
+      ORDER BY COALESCE(ds.version, 1) DESC, ds.id DESC
+    `).all(bookingId);
+  } catch (e) { return { current: null, history: [], drift: { added: [], removed: [] } }; }
+
+  if (!rows.length) return { current: null, history: [], drift: { added: [], removed: [] } };
+
+  const decorate = (d) => ({
+    ...d,
+    crew: getDocketCrew(db, d),
+  });
+
+  const current = rows.find(r => (r.status || 'current') === 'current') || null;
+  const history = rows.filter(r => (r.status || 'current') !== 'current').map(decorate);
+  const currentDecorated = current ? decorate(current) : null;
+
+  // Drift: who is on the booking now vs who is on the current docket?
+  // Booking_crew is the source of truth for "should be on the docket".
+  let added = [], removed = [];
+  if (currentDecorated) {
+    const onDocket = new Set(currentDecorated.crew.map(c => c.crew_member_id));
+    const onBooking = new Set((bookingCrewRows || []).map(c => c.crew_member_id));
+    added = (bookingCrewRows || [])
+      .filter(c => !onDocket.has(c.crew_member_id))
+      .map(c => ({ crew_member_id: c.crew_member_id, name: c.full_name || ('#' + c.crew_member_id), role: c.role_on_site || '' }));
+    removed = currentDecorated.crew
+      .filter(c => c.crew_member_id && !onBooking.has(c.crew_member_id))
+      .map(c => ({ crew_member_id: c.crew_member_id, name: c.name }));
+  }
+
+  return { current: currentDecorated, history, drift: { added, removed } };
 }
 
 // GET /classic — legacy list view (was GET /). Preserved for any old
@@ -372,6 +426,7 @@ router.post('/geocode/backfill', requireRole('management', 'admin'), async (req,
 router.post('/', (req, res) => {
   const db = getDb(); const b = req.body;
   if (!b.title || !b.start_date || !b.start_time || !b.end_date || !b.end_time) { req.flash('error', 'Title and schedule are required.'); return res.redirect('/bookings/new'); }
+  if ((b.end_date + 'T' + b.end_time) <= (b.start_date + 'T' + b.start_time)) { req.flash('error', 'Finish must be after the start — check the dates/times.'); return res.redirect('/bookings/new'); }
   // Normalise time fields
   b.depot_meeting_time = normaliseTimeStr(b.depot_meeting_time);
   b.straight_to_site_time = normaliseTimeStr(b.straight_to_site_time);
@@ -702,7 +757,7 @@ router.get('/', (req, res) => {
         JOIN bookings b ON b.id = bc.booking_id
         WHERE bc.crew_member_id IN (${phc})
           AND DATE(b.start_datetime) = ?
-          AND b.status NOT IN ('cancelled','late_cancellation','complete')
+          AND b.status NOT IN ('cancelled','late_cancellation','complete','finalised') AND b.deleted_at IS NULL
         GROUP BY bc.crew_member_id
         HAVING bookings_today > 1
       `).all(...allCrewIds, dateStr);
@@ -827,6 +882,14 @@ router.post('/quick', (req, res) => {
   }
   const startTime = b.start_time;
   const endTime = b.end_time || '14:30';
+  // Overnight shift: an end time at/before the start rolls to the next day
+  // (18:00 → 02:00 means finish tomorrow, not 16 hours earlier).
+  let endDate = b.start_date;
+  if (endTime <= startTime) {
+    const d = new Date(b.start_date + 'T00:00:00');
+    d.setDate(d.getDate() + 1);
+    endDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
   const bookingNumber = generateBookingNumber(db);
   const title = (b.title && b.title.trim()) || (b.site_label && b.site_label.trim()) || ('Quick booking ' + bookingNumber);
 
@@ -859,22 +922,27 @@ router.post('/quick', (req, res) => {
   // Parse optional lat/lng from the address autocomplete picker.
   const lat = b.latitude ? parseFloat(b.latitude) : null;
   const lng = b.longitude ? parseFloat(b.longitude) : null;
+  // Site contacts — the create form posts contact ids (one per ticked
+  // contact). Store as a JSON array of ids, same shape the edit form uses.
+  const siteContactsJson = Array.isArray(b.site_contacts)
+    ? JSON.stringify(b.site_contacts.map(String).filter(Boolean))
+    : (b.site_contacts && /^\d+$/.test(String(b.site_contacts).trim()) ? JSON.stringify([String(b.site_contacts).trim()]) : '[]');
   let result;
   try {
     result = db.prepare(`
       INSERT INTO bookings (booking_number, job_id, client_id, title, status, depot,
         start_datetime, end_datetime, site_address, suburb, state, postcode,
         latitude, longitude, marker_is_accurate,
-        created_by_id, booking_type, is_booking_pool)
-      VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regular', 0)
+        created_by_id, booking_type, is_booking_pool, site_contacts)
+      VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regular', 0, ?)
     `).run(
       bookingNumber, jobId, clientId, title, b.depot || '',
       b.start_date + 'T' + startTime + ':00',
-      b.start_date + 'T' + endTime + ':00',
+      endDate + 'T' + endTime + ':00',
       b.site_address || b.site_label || '',
       b.suburb || '', b.state || '', b.postcode || '',
       lat, lng, lat ? 1 : 0,
-      req.session.user.id
+      req.session.user.id, siteContactsJson
     );
   } catch (err) {
     console.error('[bookings/quick] INSERT failed:', err.message);
@@ -929,7 +997,7 @@ router.get('/resources', (req, res) => {
     const db = getDb();
     const date = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
-    const assignedIds = db.prepare(`SELECT DISTINCT bc.crew_member_id FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id WHERE DATE(b.start_datetime) = ? AND b.status NOT IN ('cancelled','complete','late_cancellation')`).all(date).map(r => r.crew_member_id);
+    const assignedIds = db.prepare(`SELECT DISTINCT bc.crew_member_id FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id WHERE DATE(b.start_datetime) = ? AND b.status NOT IN ('cancelled','complete','late_cancellation','finalised') AND b.deleted_at IS NULL`).all(date).map(r => r.crew_member_id);
     const allCrew = db.prepare(`SELECT id, full_name, role, phone, employee_id, employment_type,
       tc_ticket_expiry, white_card_expiry, licence_expiry, tcp_level,
       first_aid, company
@@ -1007,20 +1075,28 @@ router.get('/api/resources', (req, res) => {
     const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
 
     // Bookings on this date and the crew already on them.
-    const assignedIds = db.prepare(`SELECT DISTINCT bc.crew_member_id FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id WHERE DATE(b.start_datetime) = ? AND b.status NOT IN ('cancelled','complete','late_cancellation')`).all(date).map(r => r.crew_member_id);
+    const assignedIds = db.prepare(`SELECT DISTINCT bc.crew_member_id FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id WHERE DATE(b.start_datetime) = ? AND b.status NOT IN ('cancelled','complete','late_cancellation','finalised') AND b.deleted_at IS NULL`).all(date).map(r => r.crew_member_id);
 
-    // PEOPLE — all active crew members + the employee join for status.
+    // PEOPLE — driven by the HR roster (employees), not the raw crew_members
+    // table. crew_members carries a lot of legacy / orphaned / duplicate rows
+    // (225 vs. the roster's 113), so querying it directly showed "149 active"
+    // when the roster only has 37. The roster is the source of truth for who
+    // is a current worker, so we start FROM employees and INNER JOIN the
+    // linked crew_member (needed for its id + portal/ticket data to allocate).
+    // That makes the panel's active count match the roster's Active tab.
+    // Reserved + on-leave come through too so the client-side "Show Reserves"
+    // / "Show On-Leave" toggles can reveal them; everything else is excluded.
     const people = db.prepare(`
       SELECT cm.id, cm.full_name, cm.role, cm.portal_role, cm.phone, cm.employee_id,
         cm.tc_ticket_expiry, cm.white_card_expiry, cm.licence_expiry, cm.licence_type,
         cm.tcp_level, cm.first_aid, cm.company, cm.employment_type,
-        COALESCE(e.employment_status, 'active') AS employment_status,
+        e.employment_status AS employment_status,
         e.address, e.suburb, e.state, e.postcode,
         e.blocked_from_allocation
-      FROM crew_members cm
-      LEFT JOIN employees e ON e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL
-      WHERE cm.active = 1
-        AND COALESCE(e.employment_status, 'active') IN ('active', 'reserved', 'on_leave')
+      FROM employees e
+      JOIN crew_members cm ON cm.id = e.linked_crew_member_id
+      WHERE e.deleted_at IS NULL
+        AND e.employment_status IN ('active', 'reserved', 'on_leave')
       ORDER BY cm.full_name
     `).all().map(p => {
       const warnings = [];
@@ -1180,19 +1256,19 @@ router.get('/:id', (req, res) => {
     }
   }
 
-  // Available crew for the picker — joined to employees so the UI can
-  // split into Active + Reserved sections. Reserved workers are
-  // accepted-but-not-yet-working; allocator can still pick them, just
-  // from a separate group. Skip anyone inactive/terminated.
+  // Available crew for the picker — driven by the HR roster (employees), not
+  // raw crew_members, so it matches the roster's active set instead of the
+  // larger legacy crew_members list. INNER JOIN the linked crew_member for
+  // its id (needed to allocate). Active first, then reserved, then on-leave.
   const allCrew = db.prepare(`
     SELECT cm.id, cm.full_name, cm.role, cm.employee_id,
-      COALESCE(e.employment_status, 'active') AS employment_status
-    FROM crew_members cm
-    LEFT JOIN employees e ON e.linked_crew_member_id = cm.id AND e.deleted_at IS NULL
-    WHERE cm.active = 1
-      AND COALESCE(e.employment_status, 'active') IN ('active', 'reserved', 'on_leave')
+      e.employment_status AS employment_status
+    FROM employees e
+    JOIN crew_members cm ON cm.id = e.linked_crew_member_id
+    WHERE e.deleted_at IS NULL
+      AND e.employment_status IN ('active', 'reserved', 'on_leave')
     ORDER BY
-      CASE COALESCE(e.employment_status, 'active')
+      CASE e.employment_status
         WHEN 'active' THEN 0 WHEN 'reserved' THEN 1 ELSE 2 END,
       cm.full_name
   `).all();
@@ -1351,10 +1427,11 @@ router.get('/:id/edit', (req, res) => {
 
 // POST /:id — Update
 router.post('/:id', (req, res) => {
-  const db = getDb(); const existing = db.prepare("SELECT id, booking_number FROM bookings WHERE id = ?").get(req.params.id);
+  const db = getDb(); const existing = db.prepare("SELECT id, booking_number, start_datetime, description, location_notes FROM bookings WHERE id = ?").get(req.params.id);
   if (!existing) { req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
   const b = req.body;
   if (!b.title || !b.start_date || !b.start_time || !b.end_date || !b.end_time) { req.flash('error', 'Title and schedule are required.'); return res.redirect('/bookings/' + req.params.id + '/edit'); }
+  if ((b.end_date + 'T' + b.end_time) <= (b.start_date + 'T' + b.start_time)) { req.flash('error', 'Finish must be after the start — check the dates/times.'); return res.redirect('/bookings/' + req.params.id + '/edit'); }
   b.depot_meeting_time = normaliseTimeStr(b.depot_meeting_time);
   b.straight_to_site_time = normaliseTimeStr(b.straight_to_site_time);
   const siteContacts = Array.isArray(b.site_contacts) ? JSON.stringify(b.site_contacts) : (b.site_contacts ? JSON.stringify([b.site_contacts]) : '[]');
@@ -1394,38 +1471,59 @@ router.post('/:id', (req, res) => {
   // wipes the crew, AND clearing every chip on the slide-in still works.
   const crewPickerSubmitted = b.crew_ids_present === '1' || b.crew_ids_present === 1 || b.crew_ids_present === true;
   if (crewPickerSubmitted) {
-    const crewIds = Array.isArray(b.crew_ids) ? b.crew_ids : (b.crew_ids ? [b.crew_ids] : []);
-    db.prepare("DELETE FROM booking_crew WHERE booking_id = ?").run(req.params.id);
-    db.prepare("DELETE FROM crew_allocations WHERE booking_id = ?").run(req.params.id);
-    if (crewIds.length > 0) {
-      const insertCrew = db.prepare("INSERT OR IGNORE INTO booking_crew (booking_id, crew_member_id, role_on_site, status) VALUES (?, ?, ?, 'assigned')");
-      const insertAlloc = db.prepare("INSERT OR IGNORE INTO crew_allocations (job_id, crew_member_id, allocation_date, start_time, end_time, role_on_site, status, booking_id, allocated_by_id) VALUES (?, ?, ?, ?, ?, ?, 'allocated', ?, ?)");
-      const updAllocDate = (b.start_date + 'T' + b.start_time + ':00').substring(0, 10);
-      const updAllocStart = b.start_time || '06:00';
-      const updAllocEnd = b.end_time || '15:00';
-      const VALID_SITE_ROLES = ['traffic_controller','team_leader','supervisor'];
-      function pickSiteRole(cid, fallback) {
-        const raw = b['crew_role_' + cid];
-        if (raw && VALID_SITE_ROLES.includes(raw)) return raw;
-        if (fallback && VALID_SITE_ROLES.includes(fallback)) return fallback;
-        return 'traffic_controller';
+    const rawIds = Array.isArray(b.crew_ids) ? b.crew_ids : (b.crew_ids ? [b.crew_ids] : []);
+    const VALID_SITE_ROLES = ['traffic_controller','team_leader','supervisor'];
+    // Reject any id that isn't a real, active crew member to stop browser
+    // autofill or stale form state assigning shifts to people not on roster.
+    const validIds = [];
+    const roleById = {};
+    rawIds.forEach(cid => {
+      if (!cid) return;
+      const member = db.prepare("SELECT id, portal_role, active FROM crew_members WHERE id = ?").get(cid);
+      if (!member || !member.active) {
+        console.warn('[bookings.update] ignoring crew_id', cid, 'on booking', req.params.id, '— no matching active crew_member');
+        return;
       }
-      crewIds.forEach(cid => {
-        if (!cid) return;
-        // Reject any id that isn't a real, active crew member to stop
-        // browser autofill or stale form state assigning shifts to people
-        // who aren't on roster.
-        const member = db.prepare("SELECT id, role, portal_role, active FROM crew_members WHERE id = ?").get(cid);
-        if (!member || !member.active) {
-          console.warn('[bookings.update] ignoring crew_id', cid, 'on booking', req.params.id, '— no matching active crew_member');
-          return;
-        }
-        const siteRole = pickSiteRole(cid, member.portal_role);
-        insertCrew.run(req.params.id, cid, siteRole);
-        if (b.job_id) {
-          try { insertAlloc.run(b.job_id, cid, updAllocDate, updAllocStart, updAllocEnd, siteRole, req.params.id, req.session.user.id); } catch (e) {}
-        }
-      });
+      const raw = b['crew_role_' + cid];
+      roleById[member.id] = (raw && VALID_SITE_ROLES.includes(raw)) ? raw
+        : (member.portal_role && VALID_SITE_ROLES.includes(member.portal_role)) ? member.portal_role
+        : 'traffic_controller';
+      validIds.push(member.id);
+    });
+    // Diff against current crew — keeps existing rows (and their
+    // confirmed/declined statuses) instead of wiping + re-adding everyone.
+    const diff = diffCrew(db, parseInt(req.params.id, 10), validIds, cid => roleById[cid], { userId: req.session.user.id });
+    const bkNow = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+    // Only ping crew once the booking is confirmed — a worker assigned to an
+    // unconfirmed booking hears nothing until the allocator commits it.
+    if (bkNow && bookingNotify.isNotifiable(bkNow.status)) {
+      if (diff.added.length) bookingNotify.notifyAssigned(diff.added, bkNow);
+      if (diff.removed.length) bookingNotify.notifyRemoved(diff.removed, bkNow);
+    }
+  }
+
+  // Date/time changes must follow through to the worker portal — move the
+  // booking's crew_allocations to the new schedule (statuses preserved).
+  syncAllocationsToBooking(db, parseInt(req.params.id, 10));
+  const newStartDt = b.start_date + 'T' + b.start_time + ':00';
+  if (existing.start_datetime && existing.start_datetime !== newStartDt) {
+    const bkAfter = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+    // Don't announce a time change for a shift the crew were never told about.
+    if (bkAfter && bookingNotify.isNotifiable(bkAfter.status)) bookingNotify.notifyRescheduled(bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10)), bkAfter, existing.start_datetime);
+  }
+
+  // Worker-facing notes changed? Tell the crew their shift info was updated
+  // — only the fields they actually see (About this job + Location notes),
+  // and only once the booking is confirmed so they'd already have it.
+  const newDesc = (b.description || '').trim();
+  const newLoc  = (b.location_notes || '').trim();
+  const notesChanged = [];
+  if (newDesc !== (existing.description || '').trim()) notesChanged.push('About this job');
+  if (newLoc  !== (existing.location_notes || '').trim()) notesChanged.push('Location notes');
+  if (notesChanged.length) {
+    const bkNotes = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+    if (bkNotes && bookingNotify.isNotifiable(bkNotes.status)) {
+      bookingNotify.notifyShiftNotesUpdated(bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10)), bkNotes, notesChanged);
     }
   }
 
@@ -1464,6 +1562,26 @@ router.post('/:id/status', (req, res) => {
   const existing = db.prepare("SELECT id, booking_number, status FROM bookings WHERE id = ?").get(req.params.id);
   if (!existing) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
   db.prepare("UPDATE bookings SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(newStatus, req.params.id);
+  // Cancellation cascades to the crew's allocations so the shift drops off
+  // worker views; un-cancelling brings them back (confirmed stays confirmed).
+  const CANCEL_LIKE = ['cancelled', 'late_cancellation'];
+  if (CANCEL_LIKE.includes(newStatus) && !CANCEL_LIKE.includes(existing.status)) {
+    const crewIds = bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10));
+    cascadeCancel(db, parseInt(req.params.id, 10));
+    const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
+    // Only tell crew a shift is cancelled if they'd already been told it was on
+    // (i.e. it had reached confirmed). Cancelling an unconfirmed booking is silent.
+    if (bk && bookingNotify.isNotifiable(existing.status)) bookingNotify.notifyCancelled(crewIds, bk);
+  } else if (CANCEL_LIKE.includes(existing.status) && !CANCEL_LIKE.includes(newStatus)) {
+    cascadeRestore(db, parseInt(req.params.id, 10));
+  } else if (!bookingNotify.isNotifiable(existing.status) && bookingNotify.isNotifiable(newStatus)) {
+    // The allocator just committed the booking (e.g. unconfirmed → confirmed).
+    // This is the moment crew should hear about their shift — push the
+    // assignment notice to everyone currently on it who hasn't declined.
+    const crewIds = bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10));
+    const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
+    if (bk && crewIds.length) bookingNotify.notifyAssigned(crewIds, bk);
+  }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Status: ${existing.status} → ${newStatus} on ${existing.booking_number}`, req });
   if (isJson) return res.json({ ok: true, status: newStatus });
   req.flash('success', `Status updated to ${newStatus.replace(/_/g, ' ')}.`); res.redirect('/bookings/' + req.params.id);
@@ -1476,6 +1594,15 @@ router.post('/:id/delete', (req, res) => {
   const booking = db.prepare("SELECT id, booking_number FROM bookings WHERE id = ?").get(req.params.id);
   if (!booking) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
   db.prepare("UPDATE bookings SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
+  // A deleted booking's shifts must drop off the worker portal too — and
+  // the crew should hear about it (a delete is a cancellation to them).
+  const delCrewIds = bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10));
+  const delStatus = (db.prepare('SELECT status FROM bookings WHERE id=?').get(req.params.id) || {}).status;
+  cascadeCancel(db, parseInt(req.params.id, 10));
+  const delBk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
+  // Deleting a booking is a cancellation to the crew — but only worth a push
+  // if they'd been told the shift was on (confirmed or later).
+  if (delBk && bookingNotify.isNotifiable(delStatus)) bookingNotify.notifyCancelled(delCrewIds, delBk);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'booking', entityId: req.params.id, details: `Soft-deleted ${booking.booking_number}`, req });
   if (isJson) return res.json({ ok: true });
   req.flash('success', `Booking ${booking.booking_number} deleted.`); res.redirect('/bookings');
@@ -1488,6 +1615,8 @@ router.post('/:id/undelete', (req, res) => {
   const booking = db.prepare("SELECT id, booking_number FROM bookings WHERE id = ?").get(req.params.id);
   if (!booking) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
   db.prepare("UPDATE bookings SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
+  // Revive the crew's allocations that the delete cancelled.
+  cascadeRestore(db, parseInt(req.params.id, 10));
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Restored ${booking.booking_number}`, req });
   if (isJson) return res.json({ ok: true });
   req.flash('success', `Booking ${booking.booking_number} restored.`); res.redirect('/bookings');
@@ -1511,8 +1640,11 @@ router.post('/:id/crew', (req, res) => {
     req.flash('error', 'Already assigned.'); return res.redirect('/bookings/' + req.params.id);
   }
 
-  // Conflict detection — warn if crew member has overlapping bookings on same date
-  const thisBooking = db.prepare("SELECT start_datetime, end_datetime, booking_number FROM bookings WHERE id=?").get(req.params.id);
+  // Conflict detection — warn if crew member has overlapping bookings on same
+  // date. Returned in the JSON response too so the board can toast it (the
+  // flash was invisible to AJAX callers).
+  let conflictWarning = null;
+  const thisBooking = db.prepare("SELECT start_datetime, end_datetime, booking_number, status FROM bookings WHERE id=?").get(req.params.id);
   if (thisBooking && thisBooking.start_datetime) {
     const bookingDate = thisBooking.start_datetime.substring(0, 10);
     const conflicts = db.prepare(`
@@ -1520,11 +1652,13 @@ router.post('/:id/crew', (req, res) => {
       FROM booking_crew bc
       JOIN bookings b ON b.id = bc.booking_id
       WHERE bc.crew_member_id = ? AND b.id != ? AND DATE(b.start_datetime) = ?
-        AND b.status NOT IN ('cancelled','complete','late_cancellation','finalised')
-    `).all(crew_member_id, req.params.id, bookingDate);
+        AND b.deleted_at IS NULL
+        AND b.status NOT IN (${TERMINAL_STATUSES.map(() => '?').join(',')})
+    `).all(crew_member_id, req.params.id, bookingDate, ...TERMINAL_STATUSES);
     if (conflicts.length > 0) {
       const conflictNums = conflicts.map(c => c.booking_number || `#${c.id}`).join(', ');
-      req.flash('warning', `Conflict: this crew member is also assigned to ${conflictNums} on the same date.`);
+      conflictWarning = `Also assigned to ${conflictNums} on the same date.`;
+      req.flash('warning', `Conflict: this crew member is ${conflictWarning.toLowerCase()}`);
     }
   }
 
@@ -1536,28 +1670,40 @@ router.post('/:id/crew', (req, res) => {
   db.prepare("INSERT INTO booking_crew (booking_id, crew_member_id, role_on_site, status, assigned_vehicle_id) VALUES (?, ?, ?, 'assigned', ?)")
     .run(req.params.id, crew_member_id, role_on_site || '', defaultVehicleId);
 
-  // Auto-create crew_allocation so the worker sees this in their portal
+  // Auto-create crew_allocation so the worker sees this in their portal.
+  // job_id is nullable (migration 141) so ad-hoc bookings without a job
+  // still get an allocation — previously these silently never appeared in
+  // the worker portal until the worker happened to open the booking page.
   if (thisBooking && thisBooking.start_datetime) {
     const allocDate = thisBooking.start_datetime.substring(0, 10);
     const startTime = thisBooking.start_datetime.substring(11, 16) || '06:00';
     const endTime = thisBooking.end_datetime ? thisBooking.end_datetime.substring(11, 16) : '15:00';
     const booking = db.prepare("SELECT job_id FROM bookings WHERE id=?").get(req.params.id);
-    if (booking && booking.job_id) {
-      // Check if allocation already exists
-      const existing = db.prepare("SELECT id FROM crew_allocations WHERE booking_id=? AND crew_member_id=?").get(req.params.id, crew_member_id);
-      if (!existing) {
-        try {
-          db.prepare(`INSERT INTO crew_allocations (job_id, crew_member_id, allocation_date, start_time, end_time, role_on_site, status, booking_id, allocated_by_id)
-            VALUES (?, ?, ?, ?, ?, ?, 'allocated', ?, ?)`).run(
-            booking.job_id, crew_member_id, allocDate, startTime, endTime, role_on_site || '', req.params.id, req.session.user.id);
-        } catch (e) { console.error('Auto-create allocation error:', e.message); }
-      }
-    }
+    try {
+      db.prepare(`INSERT OR IGNORE INTO crew_allocations (job_id, crew_member_id, allocation_date, start_time, end_time, role_on_site, status, booking_id, allocated_by_id)
+        VALUES (?, ?, ?, ?, ?, ?, 'allocated', ?, ?)`).run(
+        (booking && booking.job_id) || null, crew_member_id, allocDate, startTime, endTime, role_on_site || '', req.params.id, req.session.user.id);
+    } catch (e) { console.error('Auto-create allocation error:', e.message); }
   }
+
+  // Tell the worker they've been put on a shift — but only if the booking is
+  // confirmed. On an unconfirmed booking the assignment stays silent; the crew
+  // get pushed when the allocator flips it to confirmed (see /:id/status).
+  if (thisBooking && bookingNotify.isNotifiable(thisBooking.status)) {
+    bookingNotify.notifyAssigned([crew_member_id], {
+      booking_number: thisBooking.booking_number,
+      title: (db.prepare('SELECT title FROM bookings WHERE id=?').get(req.params.id) || {}).title,
+      start_datetime: thisBooking.start_datetime,
+    });
+  }
+
+  // Audit trail — who put whom on the shift.
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
+    details: `Added crew #${crew_member_id} to ${thisBooking ? thisBooking.booking_number : 'booking'}`, req });
 
   if (isJson) {
     const cm = db.prepare("SELECT cm.id, cm.full_name, cm.role, COALESCE(e.employment_status,'active') AS employment_status FROM crew_members cm LEFT JOIN employees e ON e.linked_crew_member_id = cm.id WHERE cm.id = ?").get(crew_member_id);
-    return res.json({ ok: true, crew: cm });
+    return res.json({ ok: true, crew: cm, warning: conflictWarning });
   }
   req.flash('success', 'Crew member added — they can now see this shift in their portal.'); res.redirect('/bookings/' + req.params.id);
 });
@@ -1657,10 +1803,17 @@ router.post('/:id/crew/:crewId/driver', (req, res) => {
 router.post('/:id/crew/:crewId/remove', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  db.prepare("DELETE FROM booking_crew WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  const removed = db.prepare("DELETE FROM booking_crew WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
   db.prepare("DELETE FROM crew_allocations WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
   // Also clear them as driver on any vehicles on this booking
   db.prepare("UPDATE booking_vehicles SET crew_member_id = NULL WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  if (removed.changes > 0) {
+    const bk = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+    // Only notify a removal if the crew had already been told they were on it.
+    if (bk && bookingNotify.isNotifiable(bk.status)) bookingNotify.notifyRemoved([req.params.crewId], bk);
+    logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
+      details: `Removed crew #${req.params.crewId} from ${bk ? bk.booking_number : 'booking'}`, req });
+  }
   if (isJson) return res.json({ ok: true });
   req.flash('success', 'Removed from booking and worker portal.');
   res.redirect('/bookings/' + req.params.id);
@@ -1672,6 +1825,8 @@ router.post('/:id/crew/:crewId/confirm', (req, res) => {
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   db.prepare("UPDATE booking_crew SET status='confirmed', confirmed_at=CURRENT_TIMESTAMP WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
   db.prepare("UPDATE crew_allocations SET status='confirmed', confirmed_at=CURRENT_TIMESTAMP WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
+    details: `Confirmed crew #${req.params.crewId} on booking`, req });
   if (isJson) return res.json({ ok: true });
   req.flash('success', 'Confirmed.');
   res.redirect('/bookings/' + req.params.id);
@@ -1776,7 +1931,31 @@ router.post('/:id/vehicles', (req, res) => {
     `).run(req.params.id, vehicle_name, registration, req.body.vehicle_role || '', driverId, fleet_vehicle_id);
     newId = r.lastInsertRowid;
   }
-  if (isJson) return res.json({ ok: true, id: newId, upgraded: !!upgraded });
+  // Vehicle double-booking warning — same fleet vehicle or rego on another
+  // live booking the same day. Crew get this check; vehicles never did.
+  let vehicleWarning = null;
+  try {
+    const bk = db.prepare('SELECT start_datetime FROM bookings WHERE id=?').get(req.params.id);
+    if (bk && bk.start_datetime && (fleet_vehicle_id || registration)) {
+      const clash = db.prepare(`
+        SELECT DISTINCT b.booking_number, b.id
+        FROM booking_vehicles bv JOIN bookings b ON b.id = bv.booking_id
+        WHERE b.id != ? AND DATE(b.start_datetime) = DATE(?)
+          AND b.deleted_at IS NULL
+          AND b.status NOT IN (${TERMINAL_STATUSES.map(() => '?').join(',')})
+          AND ((? IS NOT NULL AND bv.fleet_vehicle_id = ?)
+               OR (? != '' AND bv.registration != '' AND UPPER(bv.registration) = UPPER(?)))
+      `).all(req.params.id, bk.start_datetime, ...TERMINAL_STATUSES,
+             fleet_vehicle_id, fleet_vehicle_id, registration || '', registration || '');
+      if (clash.length) {
+        vehicleWarning = 'This vehicle is also on ' + clash.map(c => c.booking_number || ('#' + c.id)).join(', ') + ' the same day.';
+        req.flash('warning', vehicleWarning);
+      }
+    }
+  } catch (e) { /* warning only — never block the add */ }
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
+    details: `Added vehicle ${vehicle_name || registration} to booking`, req });
+  if (isJson) return res.json({ ok: true, id: newId, upgraded: !!upgraded, warning: vehicleWarning });
   req.flash('success', upgraded ? 'Vehicle assigned.' : 'Vehicle added.');
   res.redirect('/bookings/' + req.params.id);
 });
@@ -1784,6 +1963,8 @@ router.post('/:id/vehicles/:vehicleId/remove', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   db.prepare("DELETE FROM booking_vehicles WHERE id=? AND booking_id=?").run(req.params.vehicleId, req.params.id);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
+    details: `Removed vehicle #${req.params.vehicleId} from booking`, req });
   if (isJson) return res.json({ ok: true });
   req.flash('success', 'Removed.'); res.redirect('/bookings/' + req.params.id);
 });
@@ -1965,6 +2146,17 @@ router.post('/:id/documents/:docId/delete', (req, res) => {
   res.redirect('/bookings/' + req.params.id);
 });
 
+// POST /:id/documents/:docId/type — relabel a document's type in place.
+router.post('/:id/documents/:docId/type', (req, res) => {
+  const db = getDb();
+  const VALID = ['tgs','tmp','ctmp','rol','rol_day','rol_night','stage_plan','swms','permit','invoice','photo','other'];
+  const type = VALID.includes(req.body.document_type) ? req.body.document_type : 'other';
+  db.prepare("UPDATE booking_documents SET document_type=? WHERE id=? AND booking_id=?").run(type, req.params.docId, req.params.id);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking_document', entityId: req.params.id, details: `Document #${req.params.docId} type → ${type}`, req });
+  req.flash('success', 'Document type updated.');
+  res.redirect('/bookings/' + req.params.id + '#documents');
+});
+
 // ===========================================================================
 // REQUIREMENTS (resource quantities)
 // ===========================================================================
@@ -2035,6 +2227,15 @@ router.post('/:id/move', (req, res) => {
   db.prepare("UPDATE bookings SET start_datetime = ?, end_datetime = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .run(newDate + 'T' + oldStartTime, newDate + 'T' + oldEndTime, req.params.id);
 
+  // Drag the crew's allocations to the new date with the booking, otherwise
+  // workers keep seeing the shift on the old day. Then tell them it moved.
+  syncAllocationsToBooking(db, parseInt(req.params.id, 10));
+  const movedBk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
+  // Suppress the "shift moved" push on bookings the crew were never told about.
+  if (movedBk && booking.start_datetime !== movedBk.start_datetime && bookingNotify.isNotifiable(booking.status)) {
+    bookingNotify.notifyRescheduled(bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10)), movedBk, booking.start_datetime);
+  }
+
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Moved booking ${booking.booking_number} to ${newDate}`, req });
   res.json({ ok: true });
 });
@@ -2058,9 +2259,27 @@ router.post('/:id/clone', (req, res) => {
     source.chainage_from || '', source.chainage_to || '', source.has_mobile_works || 0, source.booking_type || 'regular', source.is_booking_pool || 0,
     source.requester_id, source.planner_id, source.location_context || '');
   const newId = result.lastInsertRowid;
-  for (const c of db.prepare("SELECT crew_member_id, role_on_site FROM booking_crew WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_crew (booking_id, crew_member_id, role_on_site, status) VALUES (?, ?, ?, 'assigned')").run(newId, c.crew_member_id, c.role_on_site);
-  for (const v of db.prepare("SELECT vehicle_name, registration, notes FROM booking_vehicles WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, notes) VALUES (?, ?, ?, ?)").run(newId, v.vehicle_name, v.registration, v.notes);
+  const newStart = addDay(source.start_datetime) || '';
+  for (const c of db.prepare("SELECT crew_member_id, role_on_site FROM booking_crew WHERE booking_id=?").all(source.id)) {
+    db.prepare("INSERT INTO booking_crew (booking_id, crew_member_id, role_on_site, status) VALUES (?, ?, ?, 'assigned')").run(newId, c.crew_member_id, c.role_on_site);
+    // Allocation too — without it the cloned shift never appears in the
+    // worker portal until the worker happens to open the booking page.
+    try {
+      db.prepare(`INSERT OR IGNORE INTO crew_allocations (job_id, crew_member_id, allocation_date, start_time, end_time, role_on_site, status, booking_id, allocated_by_id)
+        VALUES (?, ?, ?, ?, ?, ?, 'allocated', ?, ?)`)
+        .run(source.job_id || null, c.crew_member_id, newStart.slice(0, 10), newStart.slice(11, 16) || '06:00',
+             (addDay(source.end_datetime) || '').slice(11, 16) || '14:30', c.role_on_site || '', newId, req.session.user.id);
+    } catch (e) { /* legacy schema */ }
+  }
+  for (const v of db.prepare("SELECT vehicle_name, registration, notes, vehicle_role, fleet_vehicle_id FROM booking_vehicles WHERE booking_id=?").all(source.id)) {
+    try { db.prepare("INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, notes, vehicle_role, fleet_vehicle_id) VALUES (?, ?, ?, ?, ?, ?)").run(newId, v.vehicle_name, v.registration, v.notes, v.vehicle_role || '', v.fleet_vehicle_id || null); }
+    catch (e) { db.prepare("INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, notes) VALUES (?, ?, ?, ?)").run(newId, v.vehicle_name, v.registration, v.notes); }
+  }
   try { for (const r of db.prepare("SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_requirements (booking_id, resource_type, quantity_required) VALUES (?, ?, ?)").run(newId, r.resource_type, r.quantity_required); } catch(e) {}
+  // Equipment + shift tasks were silently dropped by clone before — copy
+  // them too (tasks reset to pending; equipment as-is).
+  try { for (const eq of db.prepare("SELECT equipment_id, equipment_name, equipment_type, quantity, notes FROM booking_equipment WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_equipment (booking_id, equipment_id, equipment_name, equipment_type, quantity, notes) VALUES (?, ?, ?, ?, ?, ?)").run(newId, eq.equipment_id, eq.equipment_name, eq.equipment_type, eq.quantity, eq.notes); } catch(e) {}
+  try { for (const t of db.prepare("SELECT title, description, crew_member_id, priority, due_at FROM shift_tasks WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO shift_tasks (booking_id, title, description, crew_member_id, priority, due_at, status, created_by_user_id) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)").run(newId, t.title, t.description, t.crew_member_id, t.priority, t.due_at, req.session.user.id); } catch(e) {}
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: newId, details: `Cloned ${source.booking_number} → ${bookingNumber}`, req });
   if (isJson) return res.json({ ok: true, id: newId, booking_number: bookingNumber });
   req.flash('success', `Cloned as ${bookingNumber}.`); res.redirect('/bookings/' + newId);
@@ -2106,6 +2325,16 @@ router.post('/:id/tasks', (req, res) => {
     due_at || null,
     req.session.user.id
   );
+  // Tell the worker the task landed on them.
+  try {
+    const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(req.params.id) || {};
+    const date = bk.start_datetime ? new Date(String(bk.start_datetime).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+    bookingNotify.notifyTaskAssigned([crew_member_id], {
+      title: title.trim(),
+      url: '/w/booking-shift/' + req.params.id + '?tab=tasks',
+      shift_label: [date, bk.title || bk.booking_number].filter(Boolean).join(' '),
+    });
+  } catch (e) { console.error('[bookings] task-assigned notify failed:', e.message); }
   req.flash('success', 'Task added.');
   res.redirect('/bookings/' + req.params.id + '#tasks');
 });

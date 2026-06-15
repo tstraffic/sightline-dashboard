@@ -9,7 +9,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
-const { getDocketCrew, calcHours } = require('../lib/shiftDocket');
+const { getDocketCrew, calcHours, resolveShift, generateDocketNumber } = require('../lib/shiftDocket');
 
 // GET /dockets — register. Defaults to current dockets; ?show=superseded|all.
 router.get('/', (req, res) => {
@@ -34,7 +34,7 @@ router.get('/', (req, res) => {
   }
 
   const rows = db.prepare(`
-    SELECT ds.id, ds.signed_at, ds.docket_type, ds.client_name, ds.no_client_on_site,
+    SELECT ds.id, ds.signed_at, ds.docket_number, ds.docket_type, ds.client_name, ds.no_client_on_site,
       ds.total_hours, COALESCE(ds.status,'current') AS status, ds.version, ds.source,
       ds.signature_data IS NOT NULL  AS has_worker_sig,
       ds.client_signature IS NOT NULL AS has_client_sig,
@@ -102,8 +102,21 @@ router.get('/:id/edit', (req, res) => {
     req.flash('error', 'Only an adjustment docket can be edited. Use "Adjust" to create one.');
     return res.redirect('/dockets/' + docket.id);
   }
+  const crewLines = getDocketCrew(db, docket);
+  // Booking-based docket? Surface anyone on booking_crew who isn't on this
+  // docket yet so they can be added in the same form (no separate flow).
+  let addable = [];
+  if (docket.booking_id) {
+    const onDocket = new Set(crewLines.map(c => c.crew_member_id));
+    addable = db.prepare(`
+      SELECT bc.crew_member_id, cm.full_name, bc.role_on_site, bc.is_team_leader
+      FROM booking_crew bc JOIN crew_members cm ON cm.id = bc.crew_member_id
+      WHERE bc.booking_id = ? AND bc.status != 'declined'
+      ORDER BY bc.is_team_leader DESC, cm.full_name
+    `).all(docket.booking_id).filter(c => !onDocket.has(c.crew_member_id));
+  }
   res.render('dockets-admin/edit', {
-    title: 'Adjust docket', docket, crewLines: getDocketCrew(db, docket),
+    title: 'Adjust docket', docket, crewLines, addable,
   });
 });
 
@@ -120,15 +133,23 @@ router.post('/:id', (req, res) => {
   const b = req.body;
   const noClient = b.no_client_on_site === '1' || b.no_client_on_site === 'on';
   const crewInput = b.crew || {};
+  const removed = []
+    .concat(Array.isArray(b.remove) ? b.remove : (b.remove ? [b.remove] : []))
+    .map(n => parseInt(n, 10)).filter(n => n > 0);
+  const addedIds = []
+    .concat(Array.isArray(b.add_crew) ? b.add_crew : (b.add_crew ? [b.add_crew] : []))
+    .map(n => parseInt(n, 10)).filter(n => n > 0);
 
   const tx = db.transaction(() => {
     let total = 0;
-    // docket_crew rows are keyed by crew_member_id within this docket.
     const rowsForDocket = db.prepare('SELECT id, crew_member_id FROM docket_crew WHERE docket_id=?').all(docket.id);
     const updById = db.prepare(`
       UPDATE docket_crew SET start_on_site=?, finish_on_site=?, break_minutes=?, travel_hours=?, total_hours=? WHERE id=?
     `);
+    const delById = db.prepare('DELETE FROM docket_crew WHERE id=? AND docket_id=?');
     for (const r of rowsForDocket) {
+      // Removes win over edits — checking the Remove checkbox drops the line.
+      if (removed.includes(r.id)) { delById.run(r.id, docket.id); continue; }
       const inp = crewInput['cm' + r.crew_member_id] || {};
       const start = (inp.start_on_site || '').trim();
       const finish = (inp.finish_on_site || '').trim();
@@ -138,6 +159,36 @@ router.post('/:id', (req, res) => {
       total += th;
       updById.run(start, finish, brk, trav, th, r.id);
     }
+
+    // Additions — booking-only. Pull the booking_crew row so we capture
+    // role + allocation_id + booking_crew_id correctly (no orphan lines).
+    if (addedIds.length && docket.booking_id) {
+      const insLine = db.prepare(`
+        INSERT INTO docket_crew (docket_id, crew_member_id, allocation_id, booking_crew_id, name_snapshot, role_snapshot,
+          start_on_site, finish_on_site, break_minutes, travel_hours, total_hours)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const cid of addedIds) {
+        const bc = db.prepare(`
+          SELECT bc.id AS booking_crew_id, bc.crew_member_id, bc.role_on_site, cm.full_name,
+                 ca.id AS allocation_id
+          FROM booking_crew bc JOIN crew_members cm ON cm.id = bc.crew_member_id
+          LEFT JOIN crew_allocations ca ON ca.booking_id = bc.booking_id AND ca.crew_member_id = bc.crew_member_id
+          WHERE bc.booking_id = ? AND bc.crew_member_id = ?
+        `).get(docket.booking_id, cid);
+        if (!bc) continue;
+        const inp = crewInput['add' + cid] || {};
+        const start = (inp.start_on_site || docket.start_on_site || '').trim();
+        const finish = (inp.finish_on_site || docket.finish_on_site || '').trim();
+        const brk = parseInt(inp.break_minutes, 10) || (docket.break_minutes || 0);
+        const trav = parseFloat(inp.travel_hours) || 0;
+        const th = calcHours(start, finish, brk, trav);
+        total += th;
+        insLine.run(docket.id, cid, bc.allocation_id, bc.booking_crew_id, bc.full_name, bc.role_on_site || '',
+          start || null, finish || null, brk, trav, th);
+      }
+    }
+
     db.prepare(`
       UPDATE docket_signatures
       SET client_name=?, no_client_on_site=?, no_client_reason=?, notes=?, total_hours=?, updated_at=datetime('now')
@@ -173,9 +224,13 @@ router.post('/:id/adjust', (req, res) => {
 
   let newId;
   const tx = db.transaction(() => {
+    const docketNumber = generateDocketNumber(db);
+    // Each docket version is its own document — give it a fresh sequential
+    // number rather than reusing the parent's so the printed PDF is uniquely
+    // referenceable (the parent_docket_id link still ties the chain together).
     const r = db.prepare(`
       INSERT INTO docket_signatures (
-        allocation_id, crew_member_id, signed_by_crew_id, docket_type, client_name, signature_data,
+        allocation_id, crew_member_id, signed_by_crew_id, docket_type, docket_number, client_name, signature_data,
         client_signature, client_signed_name, client_signed_at, notes,
         start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
         no_client_on_site, no_client_reason, signed_at,
@@ -183,14 +238,14 @@ router.post('/:id/adjust', (req, res) => {
         booking_id, shift_job_id, shift_date, updated_at
       )
       SELECT
-        allocation_id, crew_member_id, signed_by_crew_id, docket_type, client_name, signature_data,
+        allocation_id, crew_member_id, signed_by_crew_id, docket_type, ?, client_name, signature_data,
         client_signature, client_signed_name, client_signed_at, notes,
         start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
         no_client_on_site, no_client_reason, signed_at,
         'current', COALESCE(version,1) + 1, 'admin', ?, id,
         booking_id, shift_job_id, shift_date, datetime('now')
       FROM docket_signatures WHERE id = ?
-    `).run(req.session.user ? req.session.user.id : null, orig.id);
+    `).run(docketNumber, req.session.user ? req.session.user.id : null, orig.id);
     newId = r.lastInsertRowid;
 
     // Copy crew lines (or synthesise one from the legacy header).
@@ -217,6 +272,122 @@ router.post('/:id/adjust', (req, res) => {
   });
   req.flash('success', 'Adjustment created — edit the new docket. The original is kept as superseded.');
   res.redirect('/dockets/' + newId + '/edit');
+});
+
+// POST /dockets/:id/readjust-with-booking-crew — booking-aware adjust.
+// Same lifecycle as /:id/adjust (supersede original, create new admin docket)
+// but the new docket's crew lines mirror the booking's CURRENT booking_crew —
+// so anyone added or removed on the booking after the worker signed is
+// reflected on the new docket. Returning crew keep their previous hours;
+// new members get the shift's start/end as defaults. Use this when the
+// booking's crew composition has drifted from the docket.
+router.post('/:id/readjust-with-booking-crew', (req, res) => {
+  const db = getDb();
+  const orig = db.prepare('SELECT * FROM docket_signatures WHERE id = ?').get(req.params.id);
+  if (!orig) { req.flash('error', 'Docket not found.'); return res.redirect('/dockets'); }
+  if ((orig.status || 'current') !== 'current') {
+    req.flash('error', 'Only the current docket can be re-adjusted.');
+    return res.redirect('/dockets/' + orig.id);
+  }
+  if (!orig.booking_id) {
+    req.flash('error', 'This docket is not tied to a booking — use Adjust instead.');
+    return res.redirect('/dockets/' + orig.id);
+  }
+
+  const shift = resolveShift(db, { bookingId: orig.booking_id });
+  if (!shift) { req.flash('error', 'Booking has no resolvable shift.'); return res.redirect('/dockets/' + orig.id); }
+
+  const oldByCrew = new Map(
+    db.prepare('SELECT * FROM docket_crew WHERE docket_id = ?').all(orig.id).map(l => [l.crew_member_id, l])
+  );
+  const startFallback = orig.start_on_site || shift.startTime || '';
+  const finishFallback = orig.finish_on_site || shift.endTime || '';
+  const breakFallback = orig.break_minutes || 30;
+
+  let newId;
+  const tx = db.transaction(() => {
+    const docketNumber = generateDocketNumber(db);
+    // Clone header, bump version, parent → original, admin source.
+    const r = db.prepare(`
+      INSERT INTO docket_signatures (
+        allocation_id, crew_member_id, signed_by_crew_id, docket_type, docket_number, client_name, signature_data,
+        client_signature, client_signed_name, client_signed_at, notes,
+        start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
+        no_client_on_site, no_client_reason, signed_at,
+        status, version, source, created_by_user_id, parent_docket_id,
+        booking_id, shift_job_id, shift_date, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'current', ?, 'admin', ?, ?, ?, ?, ?, datetime('now'))
+    `).run(
+      orig.allocation_id, orig.crew_member_id, orig.signed_by_crew_id, orig.docket_type || 'daily_docket',
+      docketNumber,
+      orig.client_name, orig.signature_data,
+      orig.client_signature, orig.client_signed_name, orig.client_signed_at, orig.notes,
+      startFallback, finishFallback, breakFallback, 0, 0,
+      orig.no_client_on_site || 0, orig.no_client_reason || '', orig.signed_at,
+      (orig.version || 1) + 1, req.session.user ? req.session.user.id : null, orig.id,
+      orig.booking_id, orig.shift_job_id, orig.shift_date
+    );
+    newId = r.lastInsertRowid;
+
+    // Mirror current booking_crew. Returning members keep their old hours;
+    // new ones get the shift defaults so the admin only has to tweak them.
+    const insLine = db.prepare(`
+      INSERT INTO docket_crew (docket_id, crew_member_id, allocation_id, booking_crew_id, name_snapshot, role_snapshot,
+        start_on_site, finish_on_site, break_minutes, travel_hours, total_hours)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    let total = 0;
+    for (const c of shift.crew) {
+      const prior = oldByCrew.get(c.crew_member_id);
+      const start = prior ? prior.start_on_site : startFallback;
+      const finish = prior ? prior.finish_on_site : finishFallback;
+      const brk = prior ? (prior.break_minutes || 0) : breakFallback;
+      const trv = prior ? (prior.travel_hours || 0) : 0;
+      const th = calcHours(start, finish, brk, trv);
+      total += th;
+      insLine.run(newId, c.crew_member_id, c.allocation_id, c.booking_crew_id, c.name, c.role || '',
+        start || null, finish || null, brk, trv, th);
+    }
+    db.prepare('UPDATE docket_signatures SET total_hours=? WHERE id=?').run(Math.round(total * 100) / 100, newId);
+    db.prepare("UPDATE docket_signatures SET status='superseded', superseded_by_id=?, updated_at=datetime('now') WHERE id=?").run(newId, orig.id);
+  });
+  tx();
+
+  logActivity({
+    user: req.session.user, action: 'update', entityType: 'docket', entityId: newId,
+    entityLabel: 'Docket #' + newId,
+    details: `Re-adjusted docket #${orig.id} to mirror current booking_crew (v${orig.version || 1} → v${(orig.version || 1) + 1})`,
+    ip: req.ip,
+  });
+  req.flash('success', `New docket version created (v${(orig.version || 1) + 1}) mirroring the booking's current crew. The previous version is kept as superseded.`);
+  res.redirect('/dockets/' + newId + '/edit');
+});
+
+// GET /dockets/:id/pdf — clean branded PDF of the docket (hours + signatures).
+router.get('/:id/pdf', async (req, res) => {
+  try {
+    const { renderShiftDocketPdf } = require('../services/shiftDocketPdf');
+    const db = getDb();
+    const meta = db.prepare(`
+      SELECT ds.shift_date, ds.signed_at, COALESCE(b.booking_number, j.job_number, sj.job_number) AS ref
+      FROM docket_signatures ds
+      LEFT JOIN bookings b ON ds.booking_id = b.id
+      LEFT JOIN jobs sj    ON ds.shift_job_id = sj.id
+      LEFT JOIN crew_allocations ca ON ds.allocation_id = ca.id
+      LEFT JOIN jobs j     ON ca.job_id = j.id
+      WHERE ds.id = ?
+    `).get(req.params.id);
+    if (!meta) { return res.status(404).send('Docket not found.'); }
+    const buf = await renderShiftDocketPdf(db, req.params.id);
+    const date = (meta.shift_date || (meta.signed_at || '').slice(0, 10) || 'docket');
+    const ref = (meta.ref || ('docket-' + req.params.id)).replace(/[^A-Za-z0-9_-]/g, '');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="TSTC_Docket_${ref}_${date}.pdf"`);
+    res.send(buf);
+  } catch (e) {
+    console.error('[dockets-admin] PDF render failed:', e.message);
+    res.status(500).send('PDF render failed: ' + e.message);
+  }
 });
 
 // GET /dockets/:id — detail

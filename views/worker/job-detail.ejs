@@ -115,30 +115,69 @@
         <h2 class="text-xs font-bold text-brand-600 uppercase tracking-wider">Site Documents</h2>
         <p class="text-xs text-gray-400 mt-0.5">Uploaded by your allocator — review before commencing work.</p>
       </div>
+      <%
+        // Group by type into labelled sections so the TGS / ROL / SWMS are
+        // easy to find. Links open the in-app viewer (back to this docs tab).
+        var DOC_ORDER = ['tgs','tmp','ctmp','rol','rol_day','rol_night','stage_plan','swms','permit','invoice','photo','other'];
+        var docsByType = {};
+        (jobDocuments || []).forEach(function (d) {
+          var k = DOC_TYPE_LABEL[d.doc_type] ? d.doc_type : 'other';
+          (docsByType[k] = docsByType[k] || []).push(d);
+        });
+        var docSections = DOC_ORDER.filter(function (k) { return docsByType[k]; });
+        var docBack = '/w/jobs/' + allocation.id + '?tab=docs';
+      %>
       <% if (!jobDocuments || jobDocuments.length === 0) { %>
         <div class="px-4 py-8 text-center text-xs text-gray-500 border-t border-gray-100">
           <p class="font-medium text-gray-700">No documents uploaded yet</p>
           <p class="mt-1">Your allocator hasn't attached any site documents to this job. If you're expecting a TGS / TMP / ROL, ask them to upload it.</p>
         </div>
       <% } else { %>
-        <% jobDocuments.forEach(function (doc) { %>
-          <a href="<%= doc.download_url %>" target="_blank" class="px-4 py-3 border-t border-gray-100 flex items-center gap-3 active:bg-gray-50">
-            <div class="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
-              <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><path d="M14 2v6h6M9 14h6M9 18h6M9 10h2"/></svg>
-            </div>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-semibold text-gray-900 truncate"><%= doc.title || doc.original_name %></p>
-              <p class="text-[11px] text-gray-500">
-                <%= DOC_TYPE_LABEL[doc.doc_type] || doc.doc_type %>
-                <% if (doc.source === 'booking') { %><span class="ml-1 inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-brand-50 text-brand-700 ring-1 ring-brand-600/10 uppercase tracking-wide">This shift</span><% } %>
-                <% if (doc.size_bytes) { %> &middot; <%= fmtSize(doc.size_bytes) %><% } %>
-              </p>
-            </div>
-            <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-          </a>
+        <% docSections.forEach(function (k) { %>
+          <div class="border-t border-gray-100">
+            <p class="px-4 pt-3 pb-1 text-[11px] font-bold uppercase tracking-wider text-brand-600"><%- DOC_TYPE_LABEL[k] %> <span class="text-gray-400">(<%= docsByType[k].length %>)</span></p>
+            <% docsByType[k].forEach(function (doc) { %>
+              <a href="/w/doc/<%= doc.source %>/<%= doc.id %>?back=<%= encodeURIComponent(docBack) %>" class="px-4 py-3 flex items-center gap-3 active:bg-gray-50">
+                <div class="w-10 h-10 rounded-lg bg-red-50 flex items-center justify-center shrink-0">
+                  <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><path d="M14 2v6h6M9 14h6M9 18h6M9 10h2"/></svg>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <p class="text-sm font-semibold text-gray-900 truncate"><%= doc.title || doc.original_name %></p>
+                  <p class="text-[11px] text-gray-500">
+                    <% if (doc.source === 'booking') { %><span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-brand-50 text-brand-700 ring-1 ring-brand-600/10 uppercase tracking-wide">This shift</span><% } %>
+                    <% if (doc.size_bytes) { %><%= doc.source === 'booking' ? ' &middot; ' : '' %><%= fmtSize(doc.size_bytes) %><% } %>
+                  </p>
+                </div>
+                <svg class="w-4 h-4 text-gray-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+              </a>
+            <% }) %>
+          </div>
         <% }) %>
       <% } %>
     </div>
+
+    <!-- myROL quick link — always shown so crew can activate/deactivate their
+         Road Occupancy Licence on the NSW Transport portal. -->
+    <div class="bg-white border border-gray-200 rounded-xl p-4">
+      <h2 class="text-xs font-bold text-brand-600 uppercase tracking-wider mb-2">Road Occupancy Licence (ROL)</h2>
+      <div class="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-brand-50 border border-brand-100">
+        <a href="https://myrol.transport.nsw.gov.au" target="_blank" rel="noopener"
+           class="flex-1 min-w-0 text-sm font-semibold text-brand-700 truncate">myrol.transport.nsw.gov.au</a>
+        <button type="button" data-myrol-copy="https://myrol.transport.nsw.gov.au"
+                class="shrink-0 px-2.5 py-1 rounded-md text-xs font-bold bg-brand-100 text-brand-700 active:bg-brand-200">Copy</button>
+      </div>
+      <p class="text-[11px] text-gray-500 mt-1.5">Remember to deactivate your ROL here once the shift is done.</p>
+    </div>
+    <script>
+      document.querySelectorAll('[data-myrol-copy]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var url = btn.getAttribute('data-myrol-copy');
+          var done = function () { var t = btn.textContent; btn.textContent = 'Copied!'; setTimeout(function () { btn.textContent = t; }, 1500); };
+          if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(url).then(done).catch(done); }
+          else { var ta = document.createElement('textarea'); ta.value = url; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); } catch (e) {} document.body.removeChild(ta); done(); }
+        });
+      });
+    </script>
   </div>
 
   <!-- ==================== INFO TAB ==================== -->
@@ -195,7 +234,7 @@
           </tr>
           <% if (allocation.job_notes) { %>
             <tr class="border-t border-gray-100">
-              <td class="px-4 py-2.5 text-gray-500 font-medium align-top">Description</td>
+              <td class="px-4 py-2.5 text-gray-500 font-medium align-top">Job notes</td>
               <td class="px-4 py-2.5 text-gray-900 whitespace-pre-line"><%= allocation.job_notes %></td>
             </tr>
           <% } %>
@@ -206,6 +245,96 @@
         </tbody>
       </table>
     </div>
+
+    <!-- What the office wrote on the booking — description, location notes
+         and site requirements as separate labelled cards. Internal office
+         notes (bookings.notes) are deliberately not shown to workers. -->
+    <% if (typeof allocation.booking_description !== 'undefined' && allocation.booking_description) { %>
+    <div class="bg-blue-50 border border-blue-100 rounded-xl p-4">
+      <h2 class="text-xs font-bold text-blue-700 uppercase tracking-wider mb-1.5">
+        <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        About this job
+      </h2>
+      <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= allocation.booking_description %></p>
+    </div>
+    <% } %>
+
+    <% if (typeof allocation.booking_location_notes !== 'undefined' && allocation.booking_location_notes) { %>
+    <div class="bg-teal-50 border border-teal-100 rounded-xl p-4">
+      <h2 class="text-xs font-bold text-teal-700 uppercase tracking-wider mb-1.5">
+        <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Location notes
+      </h2>
+      <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= allocation.booking_location_notes %></p>
+    </div>
+    <% } %>
+
+    <% if (typeof allocation.booking_requirements !== 'undefined' && allocation.booking_requirements) { %>
+    <div class="bg-amber-50 border border-amber-100 rounded-xl p-4">
+      <h2 class="text-xs font-bold text-amber-700 uppercase tracking-wider mb-1.5">
+        <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+        Site requirements / PPE
+      </h2>
+      <p class="text-sm text-gray-800 whitespace-pre-wrap"><%= allocation.booking_requirements %></p>
+    </div>
+    <% } %>
+
+    <!-- Vehicles + who's riding in each (booking-backed shifts). Drivers
+         flagged; anyone not assigned to a ute shows under "On site". -->
+    <% if (typeof vehicleGroups !== 'undefined' && vehicleGroups) { %>
+      <%
+        var vgSections = vehicleGroups.groups.map(function (g) { return { vehicle: g.vehicle, members: g.members }; });
+        if (vehicleGroups.onFoot.length) vgSections.push({ vehicle: null, members: vehicleGroups.onFoot });
+      %>
+      <div class="bg-white border border-gray-200 rounded-xl p-4">
+        <h2 class="text-xs font-bold text-brand-600 uppercase tracking-wider mb-3">Vehicles</h2>
+        <div class="space-y-3">
+          <% vgSections.forEach(function (sec) { %>
+            <div class="rounded-lg border border-gray-200 overflow-hidden">
+              <% if (sec.vehicle) { %>
+                <div class="flex items-center gap-2.5 px-3 py-2 bg-blue-50 border-b border-blue-100">
+                  <span class="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><rect x="1" y="6" width="14" height="10" rx="1"/><path d="M15 9h4l3 3v4h-3"/><circle cx="6" cy="18" r="2"/><circle cx="17.5" cy="18" r="2"/></svg>
+                  </span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-bold text-gray-900 truncate"><%= sec.vehicle.name %></p>
+                    <% if (sec.vehicle.rego) { %><p class="text-[11px] font-mono tracking-wider text-gray-500"><%= sec.vehicle.rego.toUpperCase() %></p><% } %>
+                  </div>
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 shrink-0"><%= sec.members.length %> aboard</span>
+                </div>
+              <% } else { %>
+                <div class="flex items-center gap-2.5 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                  <span class="w-7 h-7 rounded-lg bg-gray-100 text-gray-500 flex items-center justify-center shrink-0">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  </span>
+                  <p class="text-sm font-bold text-gray-700 flex-1">On site — not in a vehicle</p>
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 shrink-0"><%= sec.members.length %></span>
+                </div>
+              <% } %>
+              <% if (sec.members.length === 0) { %>
+                <p class="px-3 py-2 text-xs italic text-gray-400">No crew assigned to this vehicle yet.</p>
+              <% } %>
+              <% sec.members.forEach(function (c) { %>
+                <div class="flex items-center gap-2.5 px-3 py-2 border-b border-gray-50 last:border-b-0">
+                  <div class="w-7 h-7 rounded-full flex items-center justify-center text-[11px] font-bold shrink-0 <%= c.is_you ? 'bg-brand-100 text-brand-700' : 'bg-gray-100 text-gray-500' %>">
+                    <%= c.full_name.split(' ').map(function(n){return n[0]}).join('').slice(0,2) %>
+                  </div>
+                  <p class="text-sm text-gray-900 flex-1 min-w-0 truncate">
+                    <%= c.full_name %><% if (c.is_you) { %> <span class="text-brand-600 font-semibold">(you)</span><% } %>
+                  </p>
+                  <% if (c.is_driver) { %>
+                    <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide bg-blue-50 text-blue-700 ring-1 ring-blue-600/10 shrink-0">
+                      <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><circle cx="12" cy="12" r="9"/><path d="M12 3v3m0 12v3M3 12h3m12 0h3" stroke-linecap="round"/></svg>
+                      Driver
+                    </span>
+                  <% } %>
+                </div>
+              <% }) %>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
 
     <!-- Crew and Resources -->
     <div class="bg-white border border-gray-200 rounded-xl p-4">

@@ -1,0 +1,38 @@
+<div class="flex flex-col" style="height:100dvh;">
+  <!-- Top bar with Back — background extends under the status bar (safe area)
+       so the title never sits behind the notch. -->
+  <div class="shrink-0" style="background:#15181F;border-bottom:1px solid rgba(255,255,255,0.08);padding-top:env(safe-area-inset-top);">
+    <div class="flex items-center gap-2 px-3" style="height:52px;">
+      <a href="<%= back %>" class="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-sm font-semibold"
+         style="color:#10B981;background:rgba(16,185,129,0.12);">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        Back
+      </a>
+      <p class="flex-1 min-w-0 text-sm font-semibold truncate text-center" style="color:rgba(255,255,255,0.9);"><%= docName %></p>
+      <a href="<%= fileUrl %>" download class="flex items-center justify-center w-9 h-9 rounded-lg shrink-0"
+         style="color:rgba(255,255,255,0.6);background:rgba(255,255,255,0.06);" aria-label="Download">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+      </a>
+    </div>
+  </div>
+
+  <!-- Scrollable body. PDFs and Word docs render via the shared
+       worker-pdf-viewer (self-hosted pdfjs from /vendor/pdfjs, page-by-page
+       canvases) — the same engine the SWMS/SOP pages use, which scrolls
+       smoothly on iOS where an <iframe> won't. Images render inline. -->
+  <div id="docScroll" class="flex-1 min-h-0"
+       style="background:#1A1D24;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <% if (kind === 'image') { %>
+      <div class="w-full flex items-start justify-center p-3">
+        <img src="<%= fileUrl %>" alt="<%= docName %>" style="max-width:100%;height:auto;border-radius:8px;">
+      </div>
+    <% } else { %>
+      <div class="pdf-viewer" data-pdf-src="<%= fileUrl %>" data-pdf-name="<%= docName %>" data-pdf-max-width="900"
+           style="padding:12px;max-width:900px;margin:0 auto;"></div>
+    <% } %>
+  </div>
+</div>
+
+<% if (kind !== 'image') { %>
+<script src="/js/worker-pdf-viewer.js?v=1"></script>
+<% } %>

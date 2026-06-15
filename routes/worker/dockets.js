@@ -2,7 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday } = require('../../lib/sydney');
-const { resolveShift, getCurrentDocket, getDocketCrew, completeShift, calcHours } = require('../../lib/shiftDocket');
+const { resolveShift, getCurrentDocket, getDocketCrew, completeShift, calcHours, generateDocketNumber } = require('../../lib/shiftDocket');
+const bookingNotify = require('../../services/bookingNotify');
+const { logActivity } = require('../../middleware/audit');
 
 // Build the worker-facing sign URL for a resolved shift.
 function shiftUrl(shift) {
@@ -55,6 +57,7 @@ router.get('/dockets', (req, res) => {
     LEFT JOIN jobs j ON ca.job_id = j.id
     LEFT JOIN bookings b ON ca.booking_id = b.id
     WHERE ca.crew_member_id = ? AND ca.allocation_date = ? AND ca.status != 'cancelled'
+      AND (ca.booking_id IS NULL OR (b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')))
   `).all(worker.id, today);
 
   // Booking-only fallback: workers assigned to a booking via booking_crew
@@ -62,7 +65,9 @@ router.get('/dockets', (req, res) => {
   // row) won't have a crew_allocations row. Surface those here so they can
   // see "needs signing" — clicking the row routes to /w/booking-shift/...
   // which creates the alloc and then they can sign the docket from there.
-  const VISIBLE_BOOKING_STATUSES = ['unconfirmed','confirmed','green_to_go','in_progress','completed','on_hold'];
+  // Excludes 'unconfirmed' — crew don't see a shift until the allocator
+  // confirms the booking (matches routes/worker/jobs.js).
+  const VISIBLE_BOOKING_STATUSES = ['confirmed','green_to_go','in_progress','complete','on_hold'];
   let bookingFallback = [];
   try {
     bookingFallback = db.prepare(`
@@ -125,22 +130,55 @@ router.get('/dockets', (req, res) => {
 // Shift dockets — one docket per shift, covering the whole crew.
 // ===========================================================================
 
+// Required checklists a signing worker must have submitted on this shift
+// before they can sign the docket. The submit handler enforces this; we
+// also surface it as a banner on the sign page so the worker doesn't try
+// to sign and lose their entered data to a redirect.
+const REQUIRED_FORMS = [
+  { key: 'risk_toolbox', label: 'Risk Assessment & Toolbox', url: '/w/forms/risk-assessment' },
+  { key: 'team_leader',  label: 'Team Leader Checklist',     url: '/w/forms/team-leader' },
+];
+
+function computeMissingRequiredForms(db, workerId, signerAlloc) {
+  if (!signerAlloc) return [];
+  const submitted = new Set(
+    db.prepare(`
+      SELECT DISTINCT form_type FROM safety_forms
+      WHERE crew_member_id = ? AND allocation_id = ? AND form_type IN ('risk_toolbox','team_leader')
+    `).all(workerId, signerAlloc.id).map(r => r.form_type)
+  );
+  return REQUIRED_FORMS
+    .filter(f => !submitted.has(f.key))
+    .map(f => ({ ...f, href: f.url + '?allocationId=' + signerAlloc.id }));
+}
+
 // Render the sign page (editable form) or, if already signed, a read-only
 // locked view. One docket per shift can't be re-done from the portal.
 function renderShiftSign(req, res, shift) {
   const db = getDb();
   const current = getCurrentDocket(db, shift);
-  const backUrl = shift.type === 'booking' ? ('/w/booking-shift/' + shift.bookingId + '?tab=forms') : '/w/dockets';
+  // Back link is origin-aware. Default is the Dockets list — backing out of a
+  // docket used to dump booking-shift workers into the Job-Pack (forms) tab,
+  // which was disorienting when they'd arrived from the Dockets list. Only
+  // when the docket was opened FROM the Job-Pack tab (?from=forms) do we
+  // return there.
+  let backUrl = '/w/dockets';
+  let backLabel = 'Dockets';
+  if (req.query.from === 'forms' && shift.type === 'booking') {
+    backUrl = '/w/booking-shift/' + shift.bookingId + '?tab=forms';
+    backLabel = 'Forms';
+  }
 
   if (current) {
     const signer = current.signed_by_crew_id || current.crew_member_id
       ? db.prepare('SELECT full_name FROM crew_members WHERE id = ?').get(current.signed_by_crew_id || current.crew_member_id)
       : null;
     return res.render('worker/docket-sign', {
-      title: 'Docket', currentPage: 'forms', shift, backUrl,
+      title: 'Docket', currentPage: 'forms', shift, backUrl, backLabel,
       locked: true,
       signActionUrl: shiftUrl(shift),
       prefillStart: '', prefillFinish: '', prefillBreakMinutes: 30,
+      missingRequiredForms: [],
       lockedDocket: {
         signed_at: current.signed_at,
         signed_by_name: signer ? signer.full_name : '',
@@ -156,11 +194,16 @@ function renderShiftSign(req, res, shift) {
     });
   }
 
+  const worker = req.session.worker;
+  const signerAlloc = getSignerAllocation(db, worker.id, shift);
+  const missingRequiredForms = computeMissingRequiredForms(db, worker.id, signerAlloc);
+
   res.render('worker/docket-sign', {
-    title: 'Sign Docket', currentPage: 'forms', shift, backUrl,
+    title: 'Sign Docket', currentPage: 'forms', shift, backUrl, backLabel,
     locked: false, lockedDocket: null,
     signActionUrl: shiftUrl(shift),
     prefillStart: shift.startTime || '', prefillFinish: shift.endTime || '', prefillBreakMinutes: 30,
+    missingRequiredForms,
   });
 }
 
@@ -218,19 +261,17 @@ function submitShiftDocket(req, res, shift) {
 
   // Job-Pack gating — preserve the existing "required: risk_toolbox +
   // team_leader" rule, evaluated against the signing worker's allocation when
-  // one exists (booking shifts may not have lazily created it).
+  // one exists (booking shifts may not have lazily created it). Same helper
+  // is used by renderShiftSign to surface the requirement BEFORE the worker
+  // tries to sign, so this branch should only fire if they bypassed the UI.
   const signerAlloc = getSignerAllocation(db, worker.id, shift);
-  if (signerAlloc) {
-    const FRIENDLY = { risk_toolbox: 'Risk Assessment & Toolbox', team_leader: 'Team Leader Checklist' };
-    const submitted = db.prepare(`
-      SELECT DISTINCT form_type FROM safety_forms
-      WHERE crew_member_id = ? AND allocation_id = ? AND form_type IN ('risk_toolbox','team_leader')
-    `).all(worker.id, signerAlloc.id).map(r => r.form_type);
-    const missingRequired = ['risk_toolbox','team_leader'].filter(t => !submitted.includes(t));
-    if (missingRequired.length) {
-      req.flash('error', "You can't sign the docket yet — these are required first: " + missingRequired.map(m => FRIENDLY[m]).join(', ') + '.');
-      return res.redirect('/w/jobs/' + signerAlloc.id + '?tab=forms');
-    }
+  const missingForms = computeMissingRequiredForms(db, worker.id, signerAlloc);
+  if (missingForms.length) {
+    req.flash('error',
+      "Docket not signed — finish these checklists first: " +
+      missingForms.map(f => f.label).join(' and ') +
+      ". You'll find them in this shift's Forms tab.");
+    return res.redirect(backRedirect);
   }
 
   const finalClientSig = noClient ? null : (b.client_signature || null);
@@ -240,17 +281,19 @@ function submitShiftDocket(req, res, shift) {
   const first = lines[0] || {};
 
   const tx = db.transaction(() => {
+    const docketNumber = generateDocketNumber(db);
     const header = db.prepare(`
       INSERT INTO docket_signatures (
-        allocation_id, crew_member_id, signed_by_crew_id, docket_type, client_name, signature_data,
+        allocation_id, crew_member_id, signed_by_crew_id, docket_type, docket_number, client_name, signature_data,
         client_signature, client_signed_name, client_signed_at, notes,
         start_on_site, finish_on_site, break_minutes, travel_hours, total_hours,
         no_client_on_site, no_client_reason,
         status, version, source, booking_id, shift_job_id, shift_date, updated_at
-      ) VALUES (?, ?, ?, 'daily_docket', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'current', 1, 'worker', ?, ?, ?, datetime('now'))
+      ) VALUES (?, ?, ?, 'daily_docket', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'current', 1, 'worker', ?, ?, ?, datetime('now'))
     `).run(
       signerAlloc ? signerAlloc.id : null,
       worker.id, worker.id,
+      docketNumber,
       b.client_name || null, b.signature_data || null,
       finalClientSig, finalClientName, finalClientSignedAt, b.notes || null,
       first.start_on_site || null, first.finish_on_site || null,
@@ -268,6 +311,34 @@ function submitShiftDocket(req, res, shift) {
     completeShift(db, shift);
   });
   tx();
+
+  // Audit trail for the multi-table completion (allocations + booking_crew
+  // + booking -> complete) that signing just triggered.
+  try {
+    logActivity({
+      user: null, action: 'complete', entityType: 'booking',
+      entityId: shift.bookingId || null,
+      details: `Shift docket signed by ${worker.full_name} — shift auto-completed (${shift.type === 'booking' ? 'booking ' + shift.bookingId : 'job ' + shift.jobId + ' ' + shift.shiftDate})`,
+      ip: req.ip,
+    });
+  } catch (e) {}
+
+  // Tell the crew the shift is done — and nudge them to deactivate their ROL
+  // on myROL (their responsibility). Works for booking and job-based shifts.
+  try {
+    let crewIds = [];
+    let bk = null;
+    if (shift.type === 'booking' && shift.bookingId) {
+      crewIds = bookingNotify.activeCrewIds(db, parseInt(shift.bookingId, 10));
+      bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(shift.bookingId);
+    } else if (shift.jobId && shift.shiftDate) {
+      crewIds = db.prepare("SELECT DISTINCT crew_member_id FROM crew_allocations WHERE job_id = ? AND allocation_date = ? AND status NOT IN ('cancelled','declined')")
+        .all(shift.jobId, shift.shiftDate).map(r => r.crew_member_id);
+      const job = db.prepare('SELECT job_name, job_number FROM jobs WHERE id = ?').get(shift.jobId) || {};
+      bk = { booking_number: job.job_number, title: job.job_name, start_datetime: shift.shiftDate + 'T00:00:00' };
+    }
+    if (crewIds.length && bk) bookingNotify.notifyDocketSubmitted(crewIds, bk);
+  } catch (e) { console.error('[dockets] docket-submitted notify failed:', e.message); }
 
   req.flash('success', 'Docket signed — shift marked complete.');
   res.redirect(backRedirect);

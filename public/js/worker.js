@@ -55,10 +55,22 @@ if ('serviceWorker' in navigator) {
     // keeps running the prior bundle until the user manually refreshes,
     // which was the root cause of the "ack doesn't show after signing"
     // report (old worker-offline-form.js w/o cache invalidation).
+    // Guard: at most two SW-triggered reloads per 2 minutes per tab. During
+    // a rolling deploy the old + new server instances briefly alternate
+    // serving different SW bytes — each flip looks like an "update", and an
+    // unguarded reload-on-update loops the page until the old instance
+    // drains. sessionStorage survives reloads (per-tab), so it can count.
     navigator.serviceWorker.addEventListener('message', function (e) {
-      if (e.data && e.data.type === 'SW_UPDATED') {
-        try { window.location.reload(); } catch (err) {}
-      }
+      if (!e.data || e.data.type !== 'SW_UPDATED') return;
+      try {
+        var now = Date.now();
+        var log = (sessionStorage.getItem('__sw_reloads') || '').split(',')
+          .filter(Boolean).map(Number).filter(function (t) { return now - t < 120000; });
+        if (log.length >= 2) return; // reload loop — stay on the current bundle
+        log.push(now);
+        sessionStorage.setItem('__sw_reloads', log.join(','));
+        window.location.reload();
+      } catch (err) { /* storage blocked — never risk a loop */ }
     });
   });
 }

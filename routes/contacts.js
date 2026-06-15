@@ -134,6 +134,26 @@ router.post('/api/quick-create', (req, res) => {
 });
 
 // ============================================
+// CONTACTS FOR A CLIENT (JSON) — used by the booking forms to populate
+// the site-contacts picker once a client is chosen.
+// ============================================
+router.get('/api/by-client/:companyId', (req, res) => {
+  try {
+    const db = getDb();
+    const companyId = parseInt(req.params.companyId, 10);
+    if (!companyId) return res.json({ contacts: [] });
+    const contacts = db.prepare(`
+      SELECT id, full_name, position, phone, email
+      FROM client_contacts WHERE company_id = ? ORDER BY full_name
+    `).all(companyId);
+    res.json({ contacts });
+  } catch (err) {
+    console.error('contacts by-client error:', err);
+    res.status(500).json({ error: 'Failed to load contacts.' });
+  }
+});
+
+// ============================================
 // COMMUNICATION LOG (must be before /:id routes)
 // ============================================
 router.get('/comms', (req, res) => {
