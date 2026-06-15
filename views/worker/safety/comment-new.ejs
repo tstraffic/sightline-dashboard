@@ -25,6 +25,21 @@
     box-shadow: 0 6px 20px rgba(5,150,105,0.35);
   }
   .cn-submit:active { transform: translateY(1px); }
+
+  /* Light-mode overrides — page was unreadable on white. */
+  :root[data-theme="light"] .cn-wrap         { color: #0F172A; }
+  :root[data-theme="light"] .cn-back         { color: #4B5563; }
+  :root[data-theme="light"] .cn-sub          { color: #4B5563; }
+  :root[data-theme="light"] .cn-card         { background: #FFFFFF; border-color: #E5E7EB; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+  :root[data-theme="light"] .cn-label        { color: #6B7280; }
+  :root[data-theme="light"] .cn-input,
+  :root[data-theme="light"] .cn-textarea,
+  :root[data-theme="light"] .cn-select       { background: #FFFFFF; border-color: #D1D5DB; color: #0F172A; }
+  :root[data-theme="light"] .cn-input::placeholder,
+  :root[data-theme="light"] .cn-textarea::placeholder { color: #9CA3AF; }
+  :root[data-theme="light"] .cn-select option{ background: #FFFFFF; color: #0F172A; }
+  :root[data-theme="light"] .cn-anon-note    { color: #6B7280; }
+  :root[data-theme="light"] .cn-row label    { color: #0F172A !important; }
 </style>
 
 <div class="cn-wrap">
