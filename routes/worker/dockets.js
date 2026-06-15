@@ -157,14 +157,24 @@ function computeMissingRequiredForms(db, workerId, signerAlloc) {
 function renderShiftSign(req, res, shift) {
   const db = getDb();
   const current = getCurrentDocket(db, shift);
-  const backUrl = shift.type === 'booking' ? ('/w/booking-shift/' + shift.bookingId + '?tab=forms') : '/w/dockets';
+  // Back link is origin-aware. Default is the Dockets list — backing out of a
+  // docket used to dump booking-shift workers into the Job-Pack (forms) tab,
+  // which was disorienting when they'd arrived from the Dockets list. Only
+  // when the docket was opened FROM the Job-Pack tab (?from=forms) do we
+  // return there.
+  let backUrl = '/w/dockets';
+  let backLabel = 'Dockets';
+  if (req.query.from === 'forms' && shift.type === 'booking') {
+    backUrl = '/w/booking-shift/' + shift.bookingId + '?tab=forms';
+    backLabel = 'Forms';
+  }
 
   if (current) {
     const signer = current.signed_by_crew_id || current.crew_member_id
       ? db.prepare('SELECT full_name FROM crew_members WHERE id = ?').get(current.signed_by_crew_id || current.crew_member_id)
       : null;
     return res.render('worker/docket-sign', {
-      title: 'Docket', currentPage: 'forms', shift, backUrl,
+      title: 'Docket', currentPage: 'forms', shift, backUrl, backLabel,
       locked: true,
       signActionUrl: shiftUrl(shift),
       prefillStart: '', prefillFinish: '', prefillBreakMinutes: 30,
@@ -189,7 +199,7 @@ function renderShiftSign(req, res, shift) {
   const missingRequiredForms = computeMissingRequiredForms(db, worker.id, signerAlloc);
 
   res.render('worker/docket-sign', {
-    title: 'Sign Docket', currentPage: 'forms', shift, backUrl,
+    title: 'Sign Docket', currentPage: 'forms', shift, backUrl, backLabel,
     locked: false, lockedDocket: null,
     signActionUrl: shiftUrl(shift),
     prefillStart: shift.startTime || '', prefillFinish: shift.endTime || '', prefillBreakMinutes: 30,
