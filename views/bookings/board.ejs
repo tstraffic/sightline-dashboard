@@ -1599,8 +1599,10 @@
   }
 
   // Open the editor in edit mode for an EXISTING booking (board "Open").
-  // The tabbed shell appears with a quick-view panel + the prominent
-  // "Open full edit page" route to the whole-screen editor.
+  // The Overview tab opens prefilled with the booking's data (same form as
+  // New Booking, just populated); Resources + Tasks lazy-load fragments from
+  // /bookings/:id when first activated. "Open full edit page" still routes
+  // out to the whole-screen editor for everything else.
   function openEditorForBooking(id, number, title) {
     var ed = $('#bk2-editor'); var bd = $('#bk2-edit-backdrop');
     if (!ed || !bd || !id) return;
@@ -1610,6 +1612,8 @@
     setEditorMode('edit');
     var t = $('#bk2-edit-title');
     if (t) t.textContent = (number ? ('#' + number) : ('Booking ' + id)) + (title ? ' · ' + title : '');
+    // Quickview panel is the empty-state when the form prefill is in flight;
+    // we hide it once Overview's form is populated below.
     var qv = $('#bk2-edit-quickview'); if (qv) qv.hidden = false;
     var qvT = $('#bk2-edit-qv-title'); if (qvT) qvT.textContent = number ? ('#' + number) : ('Booking ' + id);
     var qvS = $('#bk2-edit-qv-sub'); if (qvS) qvS.textContent = title || '';
@@ -1617,6 +1621,108 @@
     bd.hidden = false; ed.hidden = false;
     requestAnimationFrame(function () { bd.classList.add('is-open'); ed.classList.add('is-open'); });
     document.body.style.overflow = 'hidden';
+    setEditorTab('overview');
+
+    // Prefill the Quick Book form with the booking's data + flip it into
+    // edit-save mode so submitting writes back to the same booking.
+    prefillEditForm(id);
+
+    // Reset lazy fragment caches — they belong to the previously-loaded
+    // booking and would otherwise leak across opens.
+    fragmentLoaded = { crews: false, tasks: false };
+  }
+
+  // ── Prefill the Overview form from a booking's edit-data JSON ──
+  // Wires the existing Quick Book form to act as an edit form for an existing
+  // booking. Changes its action to /bookings/:id/quick-update, repoints the
+  // Create button to "Save", populates fields by name from the API response,
+  // and shows the form (hiding the quick-view placeholder).
+  function prefillEditForm(bookingId) {
+    var form = $('#bk2-edit-form'); if (!form) return;
+    fetch('/bookings/api/' + bookingId + '/edit-data', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+      .then(function (data) {
+        if (!data || !data.ok || !data.booking) return;
+        var b = data.booking;
+        form.setAttribute('action', '/bookings/' + bookingId + '/quick-update');
+        try { form.reset(); } catch (e) {}
+        // Populate fields by name. Skips fields that don't exist on the form
+        // (the slide-over carries a subset of what the booking row has).
+        Object.keys(b).forEach(function (key) {
+          var els = form.querySelectorAll('[name="' + key + '"]');
+          els.forEach(function (el) {
+            var v = b[key];
+            if (el.type === 'checkbox') { el.checked = !!v; return; }
+            if (el.type === 'radio')    { el.checked = String(el.value) === String(v); return; }
+            if (Array.isArray(v) && el.multiple) {
+              Array.from(el.options).forEach(function (o) { o.selected = v.indexOf(o.value) !== -1; });
+              return;
+            }
+            el.value = (v == null) ? '' : String(v);
+          });
+        });
+        // Booking type / callout / status side-effects.
+        var statusPill = document.querySelector('.bk2-edit-statuspill[data-status-set="' + (b.status || '') + '"]');
+        if (statusPill) {
+          $$('.bk2-edit-statuspill').forEach(function (p) { p.classList.remove('is-active'); });
+          statusPill.classList.add('is-active');
+        }
+        // Form is the editor's primary surface now — hide the quickview.
+        var qv = $('#bk2-edit-quickview'); if (qv) qv.hidden = true;
+        // Relabel the Create button as Save (mode-only CSS still keeps it
+        // hidden in pure-edit mode; we force it visible because the form is
+        // the surface we want planners using).
+        var createBtn = $('#bk2-edit-create');
+        if (createBtn) {
+          createBtn.setAttribute('data-mode-only', 'edit-form');
+          createBtn.querySelector('svg + *') ? null : null;
+          createBtn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg> Save';
+          createBtn.style.display = '';
+        }
+      })
+      .catch(function () {
+        // On failure the quickview stays visible as the fallback surface.
+      });
+  }
+
+  // ── Lazy-load Resources + Tasks tab content from /bookings/:id ──
+  // Fetches the full booking page once and lifts the matching [data-bk-tab]
+  // node into the overlay pane. Forms + buttons inside the lifted fragment
+  // keep their server-side action URLs, so saves/uploads work as on the
+  // full edit page (submitting reloads the page, which is fine).
+  var fragmentLoaded = { crews: false, tasks: false };
+  var fragmentDocCache = null;
+  function loadBookingFragment(tab) {
+    if (fragmentLoaded[tab]) return;
+    var ed = $('#bk2-editor');
+    var id = ed && ed.dataset.bookingId;
+    if (!id) return;
+    var pane = document.querySelector('[data-edit-pane="' + (tab === 'crews' ? 'resources' : tab) + '"]');
+    if (!pane) return;
+    pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Loading…</h3></div>';
+    var p = fragmentDocCache && fragmentDocCache.id === id
+      ? Promise.resolve(fragmentDocCache.doc)
+      : fetch('/bookings/' + id, { credentials: 'same-origin', headers: { 'Accept': 'text/html' } })
+          .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+          .then(function (html) {
+            var doc = new DOMParser().parseFromString(html, 'text/html');
+            fragmentDocCache = { id: id, doc: doc };
+            return doc;
+          });
+    p.then(function (doc) {
+      var node = doc.querySelector('[data-bk-tab="' + tab + '"]');
+      if (!node) { pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Not available here</h3><p>Open the full edit page to use this tab.</p></div>'; return; }
+      // Strip the hide-class the booking page uses for non-active tabs so the
+      // fragment is visible on its own.
+      node.classList.remove('bk-hidden');
+      // Adopt the node into our document so it lives in our DOM.
+      var imported = document.importNode(node, true);
+      pane.innerHTML = '';
+      pane.appendChild(imported);
+      fragmentLoaded[tab] = true;
+    }).catch(function () {
+      pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Couldn’t load</h3><p>Try the full edit page.</p></div>';
+    });
   }
   function setEditorTab(name) {
     $$('.bk2-edit-tab').forEach(function (t) {
@@ -1627,6 +1733,14 @@
       if (p.dataset.editPane === name) p.setAttribute('aria-current', 'true');
       else p.removeAttribute('aria-current');
     });
+    // Lazy-load the Resources + Tasks fragments from the full edit page the
+    // first time their tab is opened in edit mode. Overview owns its own
+    // form (no fetch needed).
+    var ed = $('#bk2-editor');
+    if (ed && ed.dataset.existing === '1') {
+      if (name === 'resources') loadBookingFragment('crews');
+      if (name === 'tasks')     loadBookingFragment('tasks');
+    }
   }
   $$('.bk2-edit-tab').forEach(function (t) {
     t.addEventListener('click', function () { setEditorTab(t.dataset.editTab); });
@@ -1714,11 +1828,20 @@
     });
   });
 
-  // ── Create submit — POST as JSON so we stay on the board ──
+  // ── Create / Save submit — POST as JSON so we stay on the board ──
+  // Same handler for both create (POST /bookings/quick → new booking) and
+  // edit (POST /bookings/:id/quick-update → save). Distinguishes by the
+  // editor's data-existing flag; uses the form's current action attribute,
+  // which prefillEditForm sets to the right URL in edit mode.
   var createForm = $('#bk2-edit-form');
   if (createForm) {
     createForm.addEventListener('submit', function (e) {
-      if (document.querySelector('#bk2-editor').dataset.mode !== 'create') return;
+      var ed = document.querySelector('#bk2-editor');
+      // No JS hijack on the full /:id/edit page form; only inside the overlay.
+      if (!ed) return;
+      var isEdit = ed.dataset.existing === '1';
+      // Create mode: only the create slot — leave non-create modes alone.
+      if (!isEdit && ed.dataset.mode !== 'create') return;
       e.preventDefault();
       var fd = new FormData(createForm);
       // Convert FormData → URLSearchParams so the request goes as
@@ -1731,7 +1854,8 @@
       fd.forEach(function (v, k) { body.append(k, typeof v === 'string' ? v : (v && v.name ? v.name : '')); });
       var btn = $('#bk2-edit-create');
       if (btn) { btn.disabled = true; btn.classList.add('is-saving'); }
-      fetch('/bookings/quick', {
+      var url = createForm.getAttribute('action') || '/bookings/quick';
+      fetch(url, {
         method: 'POST',
         headers: {
           'Accept': 'application/json',
@@ -1750,28 +1874,39 @@
         });
       }).then(function (result) {
         if (result.ok && result.data && result.data.ok) {
-          // Switch to edit mode for the brand-new booking and KEEP the editor
-          // open — the old code reloaded the page 600ms later, which threw the
-          // planner straight off the screen. Now the form stays (showing what
-          // they entered), a success ribbon confirms the save, and the
-          // "Open full edit page" button routes to the full editor. The board
-          // behind is refreshed only when they close the editor.
-          var newId = result.data.id;
-          var newNum = result.data.booking_number || newId;
-          var ed = $('#bk2-editor'); if (ed) { ed.dataset.bookingId = newId; ed.removeAttribute('data-existing'); }
-          var title = $('#bk2-edit-title');
-          if (title) title.textContent = '#' + newNum + ' · ' +
-            ((fd.get('client_name') || '') + (fd.get('site_label') ? ' · ' + fd.get('site_label') : '')).trim();
-          setEditorMode('edit');
-          setFullEditTarget(newId);
-          var created = $('#bk2-edit-created');
-          var createdTitle = $('#bk2-edit-created-title');
-          if (createdTitle) createdTitle.textContent = 'Booking #' + newNum + ' created.';
-          if (created) created.hidden = false;
-          // Keep the Overview tab (the form) active so they can keep editing.
-          setEditorTab('overview');
-          boardDirty = true;
-          if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+          var newId = result.data.id || (ed && ed.dataset.bookingId);
+          if (isEdit) {
+            // Existing booking saved — ribbon, keep editor open, mark board
+            // dirty so a close refresh shows the updated card.
+            var savedTitle = $('#bk2-edit-created-title');
+            if (savedTitle) savedTitle.textContent = 'Booking saved.';
+            var savedRibbon = $('#bk2-edit-created');
+            if (savedRibbon) {
+              savedRibbon.hidden = false;
+              setTimeout(function () { savedRibbon.hidden = true; }, 3500);
+            }
+            boardDirty = true;
+            if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+          } else {
+            // Brand-new booking — switch overlay into editing it.
+            var newNum = result.data.booking_number || newId;
+            if (ed) { ed.dataset.bookingId = newId; ed.dataset.existing = '1'; }
+            var title = $('#bk2-edit-title');
+            if (title) title.textContent = '#' + newNum + ' · ' +
+              ((fd.get('client_name') || '') + (fd.get('site_label') ? ' · ' + fd.get('site_label') : '')).trim();
+            setEditorMode('edit');
+            setFullEditTarget(newId);
+            var created = $('#bk2-edit-created');
+            var createdTitle = $('#bk2-edit-created-title');
+            if (createdTitle) createdTitle.textContent = 'Booking #' + newNum + ' created.';
+            if (created) created.hidden = false;
+            // Re-prefill the form against the now-saved booking so Save (not
+            // Create-again) becomes the action.
+            prefillEditForm(newId);
+            setEditorTab('overview');
+            boardDirty = true;
+            if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+          }
         } else {
           // Show the most informative message we can extract.
           var msg = (result.data && result.data.error) ||

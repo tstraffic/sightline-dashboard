@@ -830,6 +830,159 @@ const QUICK_ADDONS = [
   { key: 'tma',               label: 'TMA',                 category: 'vehicle' },
 ];
 
+// GET /api/:id/edit-data — JSON snapshot of a booking's editable fields,
+// shaped to populate the Quick Book form (date / start_time / end_time split
+// out from the start_datetime / end_datetime stored on the row, etc.) so the
+// editor overlay can open in edit mode pre-filled. Returns 404 when missing.
+router.get('/api/:id/edit-data', (req, res) => {
+  const db = getDb();
+  const b = db.prepare(`
+    SELECT b.id, b.booking_number, b.job_id, b.client_id, b.title, b.depot, b.status,
+      b.start_datetime, b.end_datetime,
+      b.site_address, b.suburb, b.state, b.postcode,
+      b.latitude, b.longitude,
+      b.order_number, b.billing_code, b.client_contact,
+      b.supervisor_id, b.is_emergency, b.is_callout, b.booking_type,
+      b.requester_id, b.planner_id, b.location_context, b.location_notes,
+      b.notes, b.requirements_text, b.description,
+      b.depot_meeting_time, b.straight_to_site_time, b.site_contacts,
+      b.booking_tags,
+      c.company_name AS client_name,
+      j.job_name AS site_label
+    FROM bookings b
+    LEFT JOIN clients c ON c.id = b.client_id
+    LEFT JOIN jobs    j ON j.id = b.job_id
+    WHERE b.id = ?
+  `).get(req.params.id);
+  if (!b) return res.status(404).json({ error: 'Booking not found' });
+  // Split the stored datetimes back into the date/time pairs the form uses.
+  const startDate = (b.start_datetime || '').slice(0, 10);
+  const startTime = (b.start_datetime || '').slice(11, 16);
+  const endDate   = (b.end_datetime || '').slice(0, 10);
+  const endTime   = (b.end_datetime || '').slice(11, 16);
+  let siteContacts = [];
+  try { siteContacts = JSON.parse(b.site_contacts || '[]'); } catch (e) {}
+  res.json({
+    ok: true,
+    booking: {
+      id: b.id, booking_number: b.booking_number,
+      client_id: b.client_id, client_name: b.client_name || '',
+      job_id: b.job_id, site_label: b.site_label || '',
+      title: b.title || '',
+      depot: b.depot || '',
+      status: b.status || 'unconfirmed',
+      start_date: startDate, start_time: startTime,
+      end_date: endDate, end_time: endTime,
+      site_address: b.site_address || '',
+      suburb: b.suburb || '', state: b.state || '', postcode: b.postcode || '',
+      latitude: b.latitude || '', longitude: b.longitude || '',
+      order_number: b.order_number || '', billing_code: b.billing_code || '',
+      client_contact: b.client_contact || '',
+      supervisor_id: b.supervisor_id || '',
+      is_emergency: !!b.is_emergency, is_callout: !!b.is_callout,
+      booking_type: b.booking_type || 'regular',
+      requester_id: b.requester_id || '', planner_id: b.planner_id || '',
+      location_context: b.location_context || '', location_notes: b.location_notes || '',
+      notes: b.notes || '', requirements_text: b.requirements_text || '',
+      description: b.description || '',
+      depot_meeting_time: b.depot_meeting_time || '',
+      straight_to_site_time: b.straight_to_site_time || '',
+      site_contacts: siteContacts,
+      booking_tags: b.booking_tags || '',
+    },
+  });
+});
+
+// POST /:id/quick-update — slide-over edit endpoint. Same field shape as the
+// /quick create handler so the overlay's Overview form can save edits without
+// having to switch to the full edit page's wider field set. Touches only the
+// fields the Quick Book form actually carries; everything else is left alone.
+router.post('/:id/quick-update', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const existing = db.prepare('SELECT id FROM bookings WHERE id = ?').get(req.params.id);
+  if (!existing) {
+    if (isJson) return res.status(404).json({ error: 'Booking not found' });
+    req.flash('error', 'Booking not found.'); return res.redirect('/bookings');
+  }
+  const b = req.body;
+  const missing = [];
+  if (!b.client_name && !b.client_id) missing.push('client');
+  if (!b.site_address) missing.push('site address');
+  if (!b.start_date) missing.push('date');
+  if (!b.start_time) missing.push('start time');
+  if (missing.length) {
+    const msg = 'Missing: ' + missing.join(', ');
+    if (isJson) return res.status(400).json({ error: msg });
+    req.flash('error', msg); return res.redirect('/bookings/' + req.params.id);
+  }
+  const startTime = b.start_time;
+  const endTime = b.end_time || '14:30';
+  let endDate = b.start_date;
+  if (endTime <= startTime) {
+    const d = new Date(b.start_date + 'T00:00:00');
+    d.setDate(d.getDate() + 1);
+    endDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }
+  // Resolve / auto-create client + project from typed names, mirroring /quick.
+  let clientId = b.client_id ? parseInt(b.client_id, 10) : null;
+  if (!clientId && b.client_name) {
+    const ex = db.prepare("SELECT id FROM clients WHERE LOWER(company_name) = LOWER(?)").get(b.client_name.trim());
+    if (ex) clientId = ex.id;
+    else { try { clientId = db.prepare("INSERT INTO clients (company_name, created_at) VALUES (?, CURRENT_TIMESTAMP)").run(b.client_name.trim()).lastInsertRowid; } catch (e) {} }
+  }
+  let jobId = b.job_id ? parseInt(b.job_id, 10) : null;
+  if (!jobId && b.site_label) {
+    const pr = db.prepare("SELECT id FROM jobs WHERE LOWER(job_name) = LOWER(?) LIMIT 1").get(b.site_label.trim());
+    if (pr) jobId = pr.id;
+    else if (clientId) { try { jobId = db.prepare("INSERT INTO jobs (job_name, client_id, status, created_at) VALUES (?, ?, 'active', CURRENT_TIMESTAMP)").run(b.site_label.trim(), clientId).lastInsertRowid; } catch (e) {} }
+  }
+  const lat = b.latitude ? parseFloat(b.latitude) : null;
+  const lng = b.longitude ? parseFloat(b.longitude) : null;
+  const siteContactsJson = Array.isArray(b.site_contacts)
+    ? JSON.stringify(b.site_contacts.map(String).filter(Boolean))
+    : (b.site_contacts && /^\d+$/.test(String(b.site_contacts).trim()) ? JSON.stringify([String(b.site_contacts).trim()]) : '[]');
+
+  const title = (b.title && b.title.trim()) || (b.site_label && b.site_label.trim()) || 'Booking';
+  try {
+    db.prepare(`
+      UPDATE bookings SET
+        job_id = ?, client_id = ?, title = ?, depot = ?,
+        start_datetime = ?, end_datetime = ?,
+        site_address = ?, suburb = ?, state = ?, postcode = ?,
+        latitude = ?, longitude = ?, marker_is_accurate = ?,
+        site_contacts = ?,
+        order_number = COALESCE(?, order_number),
+        billing_code = COALESCE(?, billing_code),
+        is_emergency = ?, is_callout = ?,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      jobId, clientId, title, b.depot || '',
+      b.start_date + 'T' + startTime + ':00',
+      endDate + 'T' + endTime + ':00',
+      b.site_address || b.site_label || '',
+      b.suburb || '', b.state || '', b.postcode || '',
+      lat, lng, lat ? 1 : 0,
+      siteContactsJson,
+      b.order_number || null, b.billing_code || null,
+      b.is_emergency ? 1 : 0, b.is_callout ? 1 : 0,
+      req.params.id
+    );
+  } catch (err) {
+    console.error('[bookings/quick-update] UPDATE failed:', err.message);
+    if (isJson) return res.status(500).json({ error: 'Could not save booking: ' + err.message });
+    req.flash('error', 'Could not save booking: ' + err.message);
+    return res.redirect('/bookings/' + req.params.id);
+  }
+  // Move crew allocations along with any date/time change.
+  try { syncAllocationsToBooking(db, parseInt(req.params.id, 10)); } catch (e) {}
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Quick-edited booking #${req.params.id}`, req });
+  if (isJson) return res.json({ ok: true, id: parseInt(req.params.id, 10) });
+  req.flash('success', 'Booking saved.');
+  return res.redirect('/bookings/' + req.params.id);
+});
+
 // GET /api/places — address autocomplete via Nominatim (OpenStreetMap).
 // Free, AU-biased. Returns up to 8 suggestions as { label, lat, lng,
 // suburb, state, postcode, formatted }.

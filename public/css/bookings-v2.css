@@ -405,6 +405,19 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-editor[data-mode="create"] .bk2-edit-tabs { display: none; }
 .bk2-editor[data-mode="edit"]   [data-mode-only="create"] { display: none !important; }
 .bk2-editor[data-mode="create"] [data-mode-only="edit"]   { display: none !important; }
+/* Edit-form mode is a sub-mode of "edit": same tab strip, but the Create
+   button stays visible (relabelled "Save" by prefillEditForm) and the
+   gray Save / blue Clone are hidden because the form drives saves. */
+.bk2-editor[data-existing="1"] [data-mode-only="create"]:not([data-mode-only="edit-form"]) { display: none !important; }
+.bk2-editor[data-existing="1"] [data-mode-only="edit-form"] { display: inline-flex !important; background: #059669; color: #fff; }
+.bk2-editor[data-existing="1"] [data-mode-only="edit-form"]:hover:not(:disabled) { background: #047857; color: #fff; }
+.bk2-editor[data-existing="1"] #bk2-edit-save,
+.bk2-editor[data-existing="1"] #bk2-edit-clone { display: none !important; }
+/* Resources + Tasks panes in the overlay borrow their content from the full
+   booking page (see loadBookingFragment). Reset the padding so the lifted
+   card chrome doesn't double up. */
+.bk2-editor[data-existing="1"] .bk2-edit-pane[data-edit-pane="resources"],
+.bk2-editor[data-existing="1"] .bk2-edit-pane[data-edit-pane="tasks"] { padding: 8px; }
 .bk2-editor[data-mode="edit"]   .bk2-edit-pane[data-edit-pane="overview"] .bk2-create-card { /* small reset for tab view */ }
 
 /* ─── Create-mode form — clean section cards ─────────────────────
