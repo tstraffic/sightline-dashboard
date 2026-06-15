@@ -1544,6 +1544,7 @@
     if (form0) {
       form0.style.display = '';
       form0.setAttribute('action', '/bookings/quick'); // reset from any edit reuse
+      form0.removeAttribute('novalidate');             // create mode keeps HTML5 required checks
     }
     // Restore the Create button (prefillEditForm may have relabelled it Save).
     var cBtn = $('#bk2-edit-create');
@@ -1658,6 +1659,14 @@
         if (!data || !data.ok || !data.booking) return;
         var b = data.booking;
         form.setAttribute('action', '/bookings/' + bookingId + '/quick-update');
+        // Disable HTML5 validation in edit mode. The required fields live in
+        // the Overview pane — when the planner is on Resources / Tasks /
+        // etc. that pane is hidden, and clicking Save silently no-ops because
+        // browsers refuse to submit (and refuse to fire the JS submit event)
+        // when a hidden required field is empty. Server-side quick-update
+        // re-validates the same fields and returns proper errors, so we
+        // don't lose any safety net by relying on it.
+        form.setAttribute('novalidate', 'novalidate');
         try { form.reset(); } catch (e) {}
         // Populate fields by name. Skips fields that don't exist on the form
         // (the slide-over carries a subset of what the booking row has).
