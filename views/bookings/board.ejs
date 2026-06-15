@@ -2239,21 +2239,54 @@
       bkAddrBox.innerHTML = '';
       bkAddrBox._owner = null;
     }
+    function commit(r) {
+      input.value = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
+      setSibling('suburb',    r.suburb || '');
+      setSibling('state',     r.state || '');
+      setSibling('postcode',  r.postcode || '');
+      setSibling('latitude',  r.lat || '');
+      setSibling('longitude', r.lng || '');
+      hide();
+      // Let other listeners (summary, marker-is-accurate, etc.) see the change.
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      input.focus();
+    }
     function render(list) {
       var box = bkAddrBoxEl();
       box._owner = input;
-      box._lastResults = list;
       lastResults = list;
       if (!list.length) { hide(); return; }
-      box.innerHTML = list.map(function (r, i) {
+      // Build rows as elements so we can attach mousedown handlers that
+      // close over the actual result (no index/array lookup, no delegated
+      // body handler that could miss when the popover is rebuilt). mousedown
+      // fires BEFORE the input's blur, so preventDefault keeps focus AND
+      // beats the blur-triggered hide.
+      box.innerHTML = '';
+      list.forEach(function (r) {
         var head = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
         var sub = [r.suburb, r.state, r.postcode].filter(Boolean).join(' ');
         var formatted = r.formatted || '';
-        return '<div data-i="' + i + '" class="bk-addr-row" style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #F3F4F6">'
-          + '<div style="font-weight:600;color:#111827">' + esc(head) + '</div>'
-          + '<div style="color:#6B7280;font-size:11.5px;margin-top:2px">' + esc(sub || formatted) + '</div>'
-          + '</div>';
-      }).join('');
+        var row = document.createElement('div');
+        row.className = 'bk-addr-row';
+        row.style.cssText = 'padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid #F3F4F6';
+        row.innerHTML =
+            '<div style="font-weight:600;color:#111827;pointer-events:none">' + esc(head) + '</div>'
+          + '<div style="color:#6B7280;font-size:11.5px;margin-top:2px;pointer-events:none">' + esc(sub || formatted) + '</div>';
+        row.addEventListener('mousedown', function (ev) {
+          ev.preventDefault();    // beat the input's blur → keeps focus
+          ev.stopPropagation();
+          commit(r);
+        });
+        // Touch screens: tap fires touchstart → click; mirror commit on
+        // touchstart so phones / iPads commit the same way.
+        row.addEventListener('touchstart', function (ev) {
+          ev.preventDefault();
+          commit(r);
+        }, { passive: false });
+        row.addEventListener('mouseenter', function () { row.style.background = '#F8FAFC'; });
+        row.addEventListener('mouseleave', function () { row.style.background = ''; });
+        box.appendChild(row);
+      });
       position();
       box.style.display = 'block';
     }
@@ -2279,43 +2312,6 @@
     window.addEventListener('scroll', function () { if (bkAddrBox && bkAddrBox._owner === input && bkAddrBox.style.display !== 'none') position(); }, true);
     window.addEventListener('resize', function () { if (bkAddrBox && bkAddrBox._owner === input && bkAddrBox.style.display !== 'none') position(); });
   }
-
-  // Single delegated mousedown on the body — fires BEFORE the input's blur,
-  // so clicks reliably commit the pick instead of being eaten by the focus
-  // transition. mousedown.preventDefault keeps the input focused too.
-  document.addEventListener('mousedown', function (e) {
-    if (!bkAddrBox) return;
-    var row = e.target.closest && e.target.closest('.bk-addr-row');
-    if (!row || !bkAddrBox.contains(row)) return;
-    e.preventDefault();
-    var owner = bkAddrBox._owner;
-    if (!owner) return;
-    var i = parseInt(row.getAttribute('data-i'), 10);
-    var ownerForm = owner.closest('form');
-    var idMap = { suburb: 'bk2-addr-suburb', state: 'bk2-addr-state', postcode: 'bk2-addr-postcode', latitude: 'bk2-addr-lat', longitude: 'bk2-addr-lng' };
-    function commit(name, value) {
-      if (ownerForm) {
-        var el = ownerForm.querySelector('[name="' + name + '"]');
-        if (el) { el.value = (value == null) ? '' : String(value); return; }
-      }
-      var byId = document.getElementById(idMap[name]); if (byId) byId.value = (value == null) ? '' : String(value);
-    }
-    var stash = bkAddrBox._lastResults || [];
-    var r = stash[i];
-    if (!r) return;
-    owner.value = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
-    commit('suburb',    r.suburb || '');
-    commit('state',     r.state || '');
-    commit('postcode',  r.postcode || '');
-    commit('latitude',  r.lat || '');
-    commit('longitude', r.lng || '');
-    bkAddrBox.style.display = 'none';
-    bkAddrBox.innerHTML = '';
-    bkAddrBox._owner = null;
-    bkAddrBox._lastResults = [];
-    // Trigger an input event so any other listeners (e.g. summary) update.
-    owner.dispatchEvent(new Event('input', { bubbles: true }));
-  });
 
   // Bind every flagged input on the page (the Main address field in the
   // editor's Location card + the legacy Quick Book input both opt in).
