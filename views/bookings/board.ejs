@@ -1689,9 +1689,16 @@
         // rather than the create-form template defaults. Fire input so the
         // People/Vehicles/Equipment summary recalculates.
         var reqs = data.requirements || {};
-        form.querySelectorAll('.bk2-create-stepper input[type="number"], .bk2-stepper input[type="number"]').forEach(function (inp) {
+        console.log('[bk2 prefill] requirements for booking', bookingId, reqs);
+        // Scope the stepper query to the editor form ONLY — the old Quick
+        // Book form (#bk2-qb-form) is also on the page and shares input
+        // names; querying via the editor form's querySelectorAll already
+        // scopes, but be explicit about which form's steppers we're hitting.
+        var stepperInputs = form.querySelectorAll('.bk2-create-stepper input[type="number"]');
+        stepperInputs.forEach(function (inp) {
           if (!inp.name) return;
-          inp.value = (reqs[inp.name] != null) ? String(reqs[inp.name]) : '0';
+          var saved = reqs[inp.name];
+          inp.value = (saved != null) ? String(saved) : '0';
           inp.dispatchEvent(new Event('input', { bubbles: true }));
         });
 
@@ -1857,7 +1864,7 @@
         postForm('/bookings/' + bookingId + '/crew', { crew_member_id: pid, role_on_site: role }).then(function (res) {
           if (!res.ok) { alert(res.data.error || 'Could not add crew.'); return; }
           if (res.data && res.data.warning) {
-            if (typeof bk2Toast === 'function') bk2Toast(res.data.warning);
+            if (typeof window.bk2Toast === 'function') window.bk2Toast(res.data.warning);
           }
           boardDirty = true; refreshPane();
         });
@@ -2037,8 +2044,22 @@
       // date, start time" error users were seeing on fully-filled forms.
       var body = new URLSearchParams();
       fd.forEach(function (v, k) { body.append(k, typeof v === 'string' ? v : (v && v.name ? v.name : '')); });
+      // Sanity log so we can confirm the steppers are actually in the
+      // payload when something looks wrong — useful when a requirement
+      // appears to save but doesn't come back on reopen.
+      try {
+        var stepperSnapshot = {};
+        ['crew_size_1','crew_size_2','crew_size_3','crew_size_4','crew_size_5'].forEach(function (k) { if (body.has(k)) stepperSnapshot[k] = body.get(k); });
+        console.log('[bk2 save]', createForm.getAttribute('action'), 'steppers:', stepperSnapshot);
+      } catch (e) {}
       var btn = $('#bk2-edit-create');
-      if (btn) { btn.disabled = true; btn.classList.add('is-saving'); }
+      // Save state: pill + label while in flight. Restored on success/error.
+      var origLabel = btn ? btn.innerHTML : null;
+      if (btn) {
+        btn.disabled = true;
+        btn.classList.add('is-saving');
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6l4 2"/><circle cx="12" cy="12" r="9"/></svg> Saving…';
+      }
       var url = createForm.getAttribute('action') || '/bookings/quick';
       fetch(url, {
         method: 'POST',
@@ -2061,8 +2082,9 @@
         if (result.ok && result.data && result.data.ok) {
           var newId = result.data.id || (ed && ed.dataset.bookingId);
           if (isEdit) {
-            // Existing booking saved — ribbon, keep editor open, mark board
-            // dirty so a close refresh shows the updated card.
+            // Existing booking saved — restore Save label + success toast.
+            if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); if (origLabel) btn.innerHTML = origLabel; }
+            if (typeof window.bk2Toast === 'function') window.bk2Toast('Booking saved.', 'success');
             var savedTitle = $('#bk2-edit-created-title');
             if (savedTitle) savedTitle.textContent = 'Booking saved.';
             var savedRibbon = $('#bk2-edit-created');
@@ -2071,7 +2093,6 @@
               setTimeout(function () { savedRibbon.hidden = true; }, 3500);
             }
             boardDirty = true;
-            if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
           } else {
             // Brand-new booking — switch overlay into editing it.
             var newNum = result.data.booking_number || newId;
@@ -2090,7 +2111,8 @@
             prefillEditForm(newId);
             setEditorTab('overview');
             boardDirty = true;
-            if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+            if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); if (origLabel) btn.innerHTML = origLabel; }
+            if (typeof window.bk2Toast === 'function') window.bk2Toast('Booking #' + newNum + ' created.', 'success');
           }
         } else {
           // Show the most informative message we can extract.
@@ -2102,13 +2124,13 @@
           if (result.text && (!result.data || !result.data.error)) {
             console.warn('[bk2 quick] non-JSON response (HTTP ' + result.status + '):', result.text.slice(0, 600));
           }
-          alert(msg);
-          if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+          if (typeof window.bk2Toast === 'function') window.bk2Toast(msg, 'error'); else alert(msg);
+          if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); if (origLabel) btn.innerHTML = origLabel; }
         }
       }).catch(function (err) {
         console.warn('[bk2 quick] fetch failed:', err && err.message);
-        alert('Could not create the booking — network error.');
-        if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
+        if (typeof window.bk2Toast === 'function') window.bk2Toast('Network error — could not save.', 'error'); else alert('Could not create the booking — network error.');
+        if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); if (origLabel) btn.innerHTML = origLabel; }
       });
     });
   }
@@ -3121,15 +3143,22 @@
 
   // Lightweight toast — used to surface server-side warnings (e.g. crew or
   // vehicle double-booked) that a flash message can't deliver to AJAX flows.
-  function bk2Toast(msg) {
+  function bk2Toast(msg, kind) {
     var el = document.createElement('div');
-    el.textContent = msg;
-    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:200;' +
-      'background:#92400E;color:#FEF3C7;font-size:13px;font-weight:600;padding:10px 16px;border-radius:10px;' +
-      'box-shadow:0 8px 24px rgba(0,0,0,0.45);max-width:90vw;opacity:0;transition:opacity .2s;';
+    // Compose a tick / cross / warning glyph in front of the text so the
+    // toast reads at a glance.
+    var glyph = kind === 'success' ? '✓ ' : kind === 'error' ? '✕ ' : '';
+    el.textContent = glyph + msg;
+    var palette = kind === 'success' ? { bg: '#065F46', fg: '#D1FAE5' }
+                : kind === 'error'   ? { bg: '#7F1D1D', fg: '#FEE2E2' }
+                                     : { bg: '#92400E', fg: '#FEF3C7' };
+    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);z-index:10100;' +
+      'background:' + palette.bg + ';color:' + palette.fg + ';font-size:13.5px;font-weight:600;padding:11px 18px;border-radius:10px;' +
+      'box-shadow:0 8px 28px rgba(0,0,0,0.45);max-width:92vw;opacity:0;transition:opacity .18s ease, transform .18s ease;';
     document.body.appendChild(el);
-    requestAnimationFrame(function () { el.style.opacity = '1'; });
-    setTimeout(function () { el.style.opacity = '0'; setTimeout(function () { el.remove(); }, 250); }, 5000);
+    requestAnimationFrame(function () { el.style.opacity = '1'; el.style.transform = 'translateX(-50%) translateY(0)'; });
+    var ttl = kind === 'success' ? 2500 : 5000;
+    setTimeout(function () { el.style.opacity = '0'; el.style.transform = 'translateX(-50%) translateY(8px)'; setTimeout(function () { el.remove(); }, 250); }, ttl);
   }
   window.bk2Toast = bk2Toast;
 
@@ -3383,7 +3412,7 @@
         insertFilledSlot(slot, crew);
         flashAssigned(personId);
         // Double-booking warning from the server — surface it, don't bury it.
-        if (result.json && result.json.warning) bk2Toast('⚠ ' + (crew.full_name || 'Worker') + ': ' + result.json.warning);
+        if (result.json && result.json.warning) window.bk2Toast('⚠ ' + (crew.full_name || 'Worker') + ': ' + result.json.warning);
       } else {
         alert((result.json && result.json.error) || ('Could not assign worker (HTTP ' + result.status + ')'));
       }
