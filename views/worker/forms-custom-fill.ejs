@@ -168,7 +168,7 @@
                 <input type="file" name="answer_<%= it.id %>" accept="image/*" capture="environment" multiple data-wpi data-wpi-max="4" data-wpi-label="Take photo" class="cf-input" <%= it.required ? 'required' : '' %>>
               <% } else if (rt === 'signature') { %>
                 <div class="cf-sig-pad" id="sig-<%= it.id %>">
-                  <canvas data-itemid="<%= it.id %>"></canvas>
+                  <canvas data-itemid="<%= it.id %>" data-neon-trail></canvas>
                 </div>
                 <input type="hidden" name="answer_<%= it.id %>" id="sigval-<%= it.id %>">
                 <div style="margin-top:6px;display:flex;justify-content:flex-end;">
@@ -189,7 +189,7 @@
     <% if (template.require_signature) { %>
       <div class="cf-card">
         <p class="cf-section-title">Worker signature *</p>
-        <div class="cf-sig-pad" id="cf-main-sig"><canvas data-mainsig="1" data-particle-trail></canvas></div>
+        <div class="cf-sig-pad" id="cf-main-sig"><canvas data-mainsig="1" data-neon-trail></canvas></div>
         <input type="hidden" name="signature_data" id="cf-main-sig-val">
         <div style="margin-top:6px;display:flex;justify-content:flex-end;">
           <button type="button" class="cf-sig-clear" onclick="cfClearMain()">Clear</button>
@@ -207,24 +207,15 @@
 </div>
 
 <script>
+// Shared docket-style pads (smooth quadratic curves + neon brand-teal trail).
+// Both per-item signature questions and the optional whole-form pad route
+// through WorkerSigPad so they look + feel identical to the docket page.
 (function () {
-  function setupSig(canvas, hiddenInput, padEl) {
-    var ctx = canvas.getContext('2d');
-    var drawing = false, drawn = false;
-    function resize() {
-      var rect = canvas.parentElement.getBoundingClientRect();
-      var data = drawn ? canvas.toDataURL() : null;
-      canvas.width = rect.width; canvas.height = rect.height;
-      ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      if (data && drawn) { var img = new Image(); img.onload = function () { ctx.drawImage(img, 0, 0); }; img.src = data; }
-    }
-    resize(); window.addEventListener('resize', resize);
-    function pos(e) { var r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-    canvas.addEventListener('pointerdown', function (e) { drawing = true; drawn = true; padEl.classList.add('signed'); var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); });
-    canvas.addEventListener('pointermove', function (e) { if (!drawing) return; var p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); });
-    canvas.addEventListener('pointerup',    function () { drawing = false; if (drawn && hiddenInput) hiddenInput.value = canvas.toDataURL('image/png'); });
-    canvas.addEventListener('pointerleave', function () { drawing = false; });
-    return { clear: function () { ctx.clearRect(0,0,canvas.width,canvas.height); drawn = false; padEl.classList.remove('signed'); if (hiddenInput) hiddenInput.value = ''; } };
+  function bind(canvas, padEl, hidden) {
+    var pad = window.WorkerSigPad && window.WorkerSigPad.setup(canvas, padEl, {
+      onChange: function () { if (hidden) hidden.value = pad ? pad.getData() : ''; },
+    });
+    return pad;
   }
 
   // Per-item signature pads (response_type: signature)
@@ -232,8 +223,8 @@
   document.querySelectorAll('canvas[data-itemid]').forEach(function (c) {
     var id = c.getAttribute('data-itemid');
     var hidden = document.getElementById('sigval-' + id);
-    var pad = document.getElementById('sig-' + id);
-    itemPads[id] = setupSig(c, hidden, pad);
+    var padEl = document.getElementById('sig-' + id);
+    itemPads[id] = bind(c, padEl, hidden);
   });
   window.cfClearSig = function (id) { if (itemPads[id]) itemPads[id].clear(); };
 
@@ -241,7 +232,7 @@
   var mainCanvas = document.querySelector('canvas[data-mainsig]');
   var mainPad = document.getElementById('cf-main-sig');
   var mainVal = document.getElementById('cf-main-sig-val');
-  var mainSig = mainCanvas ? setupSig(mainCanvas, mainVal, mainPad) : null;
+  var mainSig = mainCanvas ? bind(mainCanvas, mainPad, mainVal) : null;
   window.cfClearMain = function () { if (mainSig) mainSig.clear(); };
 })();
 </script>

@@ -87,8 +87,8 @@
           <button type="button" onclick="clearSig()" class="text-xs text-gray-400 hover:text-gray-600 bg-gray-100 px-2 py-1 rounded">Clear</button>
         </div>
         <input type="text" name="signed_name" placeholder="Print name" required class="w-full bg-white border border-gray-300 rounded-lg px-3 py-2.5 text-sm text-gray-900 placeholder-gray-400 mb-2 focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-        <div class="border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 relative" style="height:160px;">
-          <canvas id="sig-canvas" data-particle-trail class="w-full h-full rounded-lg" style="touch-action: none;"></canvas>
+        <div id="sig-pad" class="border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 relative" style="height:160px;">
+          <canvas id="sig-canvas" data-neon-trail class="w-full h-full rounded-lg" style="touch-action: none;"></canvas>
         </div>
         <input type="hidden" name="signature_data" id="sig-data">
       </div>
@@ -99,17 +99,15 @@
 </div>
 
 <script>
+// Shared docket-style pad (smooth quadratic curves + neon brand-teal trail).
 (function () {
   var canvas = document.getElementById('sig-canvas');
-  var ctx = canvas.getContext('2d');
-  var drawing = false, hasDrawn = false;
-  function resize() { var rect = canvas.parentElement.getBoundingClientRect(); var data = hasDrawn ? canvas.toDataURL() : null; canvas.width = rect.width; canvas.height = rect.height; ctx.strokeStyle = '#059669'; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; if (data && hasDrawn) { var img = new Image(); img.onload = function () { ctx.drawImage(img, 0, 0); }; img.src = data; } }
-  resize(); window.addEventListener('resize', resize);
-  canvas.addEventListener('pointerdown', function (e) { drawing = true; hasDrawn = true; ctx.beginPath(); ctx.moveTo(e.offsetX, e.offsetY); e.preventDefault(); });
-  canvas.addEventListener('pointermove', function (e) { if (drawing) { ctx.lineTo(e.offsetX, e.offsetY); ctx.stroke(); e.preventDefault(); } });
-  canvas.addEventListener('pointerup', function () { drawing = false; });
-  canvas.addEventListener('pointerleave', function () { drawing = false; });
-  window.clearSig = function () { ctx.clearRect(0, 0, canvas.width, canvas.height); hasDrawn = false; };
-  window.captureSig = function () { document.getElementById('sig-data').value = hasDrawn ? canvas.toDataURL('image/png') : ''; };
+  var padEl  = document.getElementById('sig-pad');
+  var hidden = document.getElementById('sig-data');
+  var pad = window.WorkerSigPad && window.WorkerSigPad.setup(canvas, padEl, {
+    onChange: function () { if (hidden) hidden.value = pad ? pad.getData() : ''; },
+  });
+  window.clearSig = function () { if (pad) pad.clear(); };
+  window.captureSig = function () { if (pad && hidden) hidden.value = pad.getData(); };
 })();
 </script>

@@ -192,7 +192,7 @@
                 <% } else if (rt === 'media_upload') { %>
                   <input type="file" name="answer_<%= it.item_key %>" accept="image/*" capture="environment" multiple data-wpi data-wpi-max="6" data-wpi-label="Add photo">
                 <% } else if (rt === 'signature') { %>
-                  <div class="vps-sig-pad" id="sig-<%= it.item_key %>"><canvas data-sigkey="<%= it.item_key %>" data-particle-trail></canvas></div>
+                  <div class="vps-sig-pad" id="sig-<%= it.item_key %>"><canvas data-sigkey="<%= it.item_key %>" data-neon-trail></canvas></div>
                   <input type="hidden" name="answer_<%= it.item_key %>" id="sigval-<%= it.item_key %>">
                   <div style="margin-top:6px;display:flex;justify-content:flex-end;width:100%;">
                     <button type="button" class="vps-sig-clear" onclick="vpsClearSig('<%= it.item_key %>')">Clear</button>
@@ -228,30 +228,18 @@
 
 <script>
 (function () {
-  // Wire any signature pads in the form. Each pad has a hidden input
-  // named answer_<item_key>; we stamp the dataURL into it on pen-up.
+  // Shared docket-style pad: each per-item pad gets the same smooth ink +
+  // neon trail as the docket sign page.
   var pads = {};
-  function setupSig(canvas, key) {
-    var ctx = canvas.getContext('2d');
-    var pad = document.getElementById('sig-' + key);
+  document.querySelectorAll('canvas[data-sigkey]').forEach(function (c) {
+    var key = c.dataset.sigkey;
+    var padEl = document.getElementById('sig-' + key);
     var hidden = document.getElementById('sigval-' + key);
-    var drawing = false, drawn = false;
-    function resize() {
-      var rect = canvas.parentElement.getBoundingClientRect();
-      var data = drawn ? canvas.toDataURL() : null;
-      canvas.width = rect.width; canvas.height = rect.height;
-      ctx.strokeStyle = '#0F172A'; ctx.lineWidth = 2.4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      if (data && drawn) { var img = new Image(); img.onload = function () { ctx.drawImage(img, 0, 0); }; img.src = data; }
-    }
-    resize(); window.addEventListener('resize', resize);
-    function pos(e) { var r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-    canvas.addEventListener('pointerdown', function (e) { drawing = true; drawn = true; pad.classList.add('signed'); var p = pos(e); ctx.beginPath(); ctx.moveTo(p.x, p.y); e.preventDefault(); });
-    canvas.addEventListener('pointermove', function (e) { if (!drawing) return; var p = pos(e); ctx.lineTo(p.x, p.y); ctx.stroke(); e.preventDefault(); });
-    canvas.addEventListener('pointerup',    function () { drawing = false; if (drawn && hidden) hidden.value = canvas.toDataURL('image/png'); });
-    canvas.addEventListener('pointerleave', function () { drawing = false; });
-    return { clear: function () { ctx.clearRect(0,0,canvas.width,canvas.height); drawn = false; pad.classList.remove('signed'); if (hidden) hidden.value = ''; } };
-  }
-  document.querySelectorAll('canvas[data-sigkey]').forEach(function (c) { pads[c.dataset.sigkey] = setupSig(c, c.dataset.sigkey); });
+    var pad = window.WorkerSigPad && window.WorkerSigPad.setup(c, padEl, {
+      onChange: function () { if (hidden) hidden.value = pad ? pad.getData() : ''; },
+    });
+    if (pad) pads[key] = pad;
+  });
   window.vpsClearSig = function (key) { if (pads[key]) pads[key].clear(); };
 })();
 </script>
