@@ -1737,9 +1737,119 @@
       pane.innerHTML = '';
       pane.appendChild(imported);
       fragmentLoaded[tab] = true;
+      // The full /bookings/:id page wires the crew chips on DOMContentLoaded
+      // via a script that doesn't run when we lift the node by innerHTML.
+      // Bind the same interactions in the overlay so the chips are live.
+      if (tab === 'crews') wireOverlayCrewChips(pane, id);
     }).catch(function () {
       pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Couldn’t load</h3><p>Try the full edit page.</p></div>';
     });
+  }
+
+  // ── Wire interactivity on the lifted Resources fragment ──
+  // The crew chips in /bookings/:id get their click/drag handlers from a
+  // script on that page. Since we lifted the HTML via innerHTML those
+  // listeners never attach, so chips look interactive but do nothing.
+  // This binds delegated handlers that mirror the same backend endpoints:
+  //   pool chip click  → POST /bookings/:id/crew              (add)
+  //   assigned chip ×  → POST /bookings/:id/crew/:cid/remove  (remove)
+  //   driver chip ×    → POST /bookings/:id/vehicles/:vid/driver (clear)
+  // After each successful action we re-fetch the fragment so the chips
+  // accurately reflect the current state (assigned counts, driver slots,
+  // etc.) instead of trying to hand-update the DOM.
+  function wireOverlayCrewChips(pane, bookingId) {
+    function csrf() {
+      var m = document.querySelector('meta[name="csrf-token"]');
+      return m ? m.getAttribute('content') : '';
+    }
+    function refreshPane() {
+      // Drop the cached doc so we re-pull fresh server state, then re-load
+      // the fragment into the current pane.
+      fragmentDocCache = null;
+      fragmentLoaded.crews = false;
+      loadBookingFragment('crews');
+    }
+    function postForm(url, payload) {
+      var body = new URLSearchParams();
+      Object.keys(payload || {}).forEach(function (k) { body.append(k, payload[k]); });
+      body.append('_csrf', csrf());
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body,
+        credentials: 'same-origin',
+      }).then(function (r) {
+        return r.text().then(function (t) {
+          var data = {}; try { data = JSON.parse(t); } catch (e) {}
+          return { ok: r.ok, status: r.status, data: data };
+        });
+      });
+    }
+
+    pane.addEventListener('click', function (e) {
+      // Remove × on the assigned chip — strips the worker off the booking.
+      var rm = e.target.closest('[data-action="remove"]');
+      if (rm) {
+        e.preventDefault(); e.stopPropagation();
+        var chip = rm.closest('.crew-chip');
+        var cid = chip && chip.getAttribute('data-crew-id');
+        if (!cid) return;
+        postForm('/bookings/' + bookingId + '/crew/' + cid + '/remove', {}).then(function (res) {
+          if (!res.ok) return alert(res.data.error || 'Could not remove crew.');
+          boardDirty = true; refreshPane();
+        });
+        return;
+      }
+      // Driver × — clears the vehicle's driver slot.
+      var cd = e.target.closest('[data-action="clear-driver"]');
+      if (cd) {
+        e.preventDefault(); e.stopPropagation();
+        var vid = cd.getAttribute('data-vehicle-id');
+        if (!vid) return;
+        postForm('/bookings/' + bookingId + '/vehicles/' + vid + '/driver', { crew_member_id: '' }).then(function (res) {
+          if (!res.ok) return alert(res.data.error || 'Could not clear driver.');
+          boardDirty = true; refreshPane();
+        });
+        return;
+      }
+      // Pool chip — clicking adds the worker to the booking.
+      var poolChip = e.target.closest('.crew-chip.pool');
+      if (poolChip && !poolChip.classList.contains('is-assigned')) {
+        e.preventDefault(); e.stopPropagation();
+        var pid = poolChip.getAttribute('data-crew-id');
+        if (!pid) return;
+        var role = poolChip.getAttribute('data-role') || '';
+        postForm('/bookings/' + bookingId + '/crew', { crew_member_id: pid, role_on_site: role }).then(function (res) {
+          if (!res.ok) { alert(res.data.error || 'Could not add crew.'); return; }
+          if (res.data && res.data.warning) {
+            if (typeof bk2Toast === 'function') bk2Toast(res.data.warning);
+          }
+          boardDirty = true; refreshPane();
+        });
+        return;
+      }
+    });
+
+    // Pool search filter — straightforward client-side narrow.
+    var searchEl = pane.querySelector('#crewPoolSearch');
+    if (searchEl) {
+      searchEl.addEventListener('input', function () {
+        var q = this.value.trim().toLowerCase();
+        pane.querySelectorAll('.crew-chip.pool').forEach(function (c) {
+          var hay = c.getAttribute('data-search') || (c.getAttribute('data-name') || '').toLowerCase();
+          c.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
+        });
+        pane.querySelectorAll('[data-pool-section]').forEach(function (s) {
+          var hasVisible = Array.from(s.querySelectorAll('.crew-chip.pool')).some(function (c) { return c.style.display !== 'none'; });
+          s.style.display = hasVisible ? '' : 'none';
+        });
+      });
+    }
+
+    // The Vehicles side has standard <form>s and a driver <select> that
+    // already POST and navigate — they work as-is. Their redirect goes to
+    // /bookings/:id which is fine: the user lands on the full edit page,
+    // which they can always get back from via the board.
   }
   function setEditorTab(name) {
     $$('.bk2-edit-tab').forEach(function (t) {
