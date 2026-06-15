@@ -73,7 +73,7 @@ function loadDocket(db, id) {
       COALESCE(sj.job_name, j.job_name) AS job_name,
       COALESCE(sj.site_address, j.site_address, b.site_address) AS site_address,
       COALESCE(sj.suburb, j.suburb, b.suburb) AS suburb,
-      COALESCE(b.booking_number) AS booking_number
+      b.booking_number AS booking_number
     FROM docket_signatures ds
     LEFT JOIN crew_allocations ca ON ds.allocation_id = ca.id
     LEFT JOIN jobs sj            ON ds.shift_job_id = sj.id
