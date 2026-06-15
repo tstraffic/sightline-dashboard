@@ -1005,13 +1005,16 @@ router.get('/api/places', async (req, res) => {
   if (q.length < 3) return res.json({ results: [] });
   const key = getGeoapifyKey();
   if (!key) return res.json({ results: [], error: 'No Geoapify key configured' });
+  // Optional country bias: client passes ?cc=au (derived from the browser's
+  // timezone / language). We use bias= (a preference) instead of filter= (a
+  // restriction) so workers can still find an interstate or overseas address
+  // when they need to — typing keeps working past the bias.
+  const cc = String(req.query.cc || '').trim().toLowerCase().replace(/[^a-z]/g, '').slice(0, 2);
+  const biasParam = cc ? ('&bias=countrycode:' + cc) : '';
   try {
-    // Use the bare endpoint form (no filter, no format=json) so suggestions
-    // aren't restricted to AU and the response is the default GeoJSON
-    // FeatureCollection — same call shape as
-    //   https://api.geoapify.com/v1/geocode/autocomplete?text=<q>&apiKey=<key>
     const url = 'https://api.geoapify.com/v1/geocode/autocomplete'
       + '?text=' + encodeURIComponent(q)
+      + biasParam
       + '&apiKey=' + encodeURIComponent(key);
     const resp = await fetch(url);
     if (!resp.ok) {
