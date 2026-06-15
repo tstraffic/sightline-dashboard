@@ -357,6 +357,33 @@ router.post('/:id/readjust-with-booking-crew', (req, res) => {
   res.redirect('/dockets/' + newId + '/edit');
 });
 
+// GET /dockets/:id/pdf — clean branded PDF of the docket (hours + signatures).
+router.get('/:id/pdf', async (req, res) => {
+  try {
+    const { renderShiftDocketPdf } = require('../services/shiftDocketPdf');
+    const db = getDb();
+    const meta = db.prepare(`
+      SELECT ds.shift_date, ds.signed_at, COALESCE(b.booking_number, j.job_number, sj.job_number) AS ref
+      FROM docket_signatures ds
+      LEFT JOIN bookings b ON ds.booking_id = b.id
+      LEFT JOIN jobs sj    ON ds.shift_job_id = sj.id
+      LEFT JOIN crew_allocations ca ON ds.allocation_id = ca.id
+      LEFT JOIN jobs j     ON ca.job_id = j.id
+      WHERE ds.id = ?
+    `).get(req.params.id);
+    if (!meta) { return res.status(404).send('Docket not found.'); }
+    const buf = await renderShiftDocketPdf(db, req.params.id);
+    const date = (meta.shift_date || (meta.signed_at || '').slice(0, 10) || 'docket');
+    const ref = (meta.ref || ('docket-' + req.params.id)).replace(/[^A-Za-z0-9_-]/g, '');
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename="TSTC_Docket_${ref}_${date}.pdf"`);
+    res.send(buf);
+  } catch (e) {
+    console.error('[dockets-admin] PDF render failed:', e.message);
+    res.status(500).send('PDF render failed: ' + e.message);
+  }
+});
+
 // GET /dockets/:id — detail
 router.get('/:id', (req, res) => {
   const db = getDb();

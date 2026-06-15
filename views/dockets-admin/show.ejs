@@ -38,6 +38,10 @@
       <% if (child) { %><p class="text-xs text-gray-500 mt-1">Superseded by <a href="/dockets/<%= child.id %>" class="text-brand-700 hover:underline">docket #<%= child.id %> (v<%= child.version || 1 %>)</a></p><% } %>
     </div>
     <div class="flex items-center gap-2">
+      <a href="/dockets/<%= docket.id %>/pdf" target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-white border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        PDF
+      </a>
       <% if (dstatus === 'current' && docket.source === 'admin') { %>
         <a href="/dockets/<%= docket.id %>/edit" class="px-4 py-2 rounded-lg bg-white border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-50">Edit</a>
       <% } %>
@@ -149,7 +153,6 @@
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
     <div class="flex items-baseline justify-between mb-3">
       <h2 class="text-sm font-semibold text-gray-900">Job-Pack checklists for this shift</h2>
-      <span class="text-xs text-gray-500"><%= submittedTypes.length %>/<%= ALL_TYPES.length %> submitted</span>
     </div>
     <ul class="space-y-1.5 text-sm">
       <% companionForms.forEach(function (f) { %>
