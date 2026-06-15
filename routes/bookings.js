@@ -1006,16 +1006,12 @@ router.get('/api/places', async (req, res) => {
   const key = getGeoapifyKey();
   if (!key) return res.json({ results: [], error: 'No Geoapify key configured' });
   try {
-    // bias=countrycode:au keeps results AU-only, lang=en for English place
-    // names, format=json gives flat objects (no GeoJSON envelope to unpack),
-    // type=amenity,street,locality,postcode — broad on purpose so worksite
-    // names + addresses both autocomplete.
+    // Use the bare endpoint form (no filter, no format=json) so suggestions
+    // aren't restricted to AU and the response is the default GeoJSON
+    // FeatureCollection — same call shape as
+    //   https://api.geoapify.com/v1/geocode/autocomplete?text=<q>&apiKey=<key>
     const url = 'https://api.geoapify.com/v1/geocode/autocomplete'
       + '?text=' + encodeURIComponent(q)
-      + '&limit=8'
-      + '&filter=countrycode:au'
-      + '&format=json'
-      + '&lang=en'
       + '&apiKey=' + encodeURIComponent(key);
     const resp = await fetch(url);
     if (!resp.ok) {
@@ -1023,24 +1019,26 @@ router.get('/api/places', async (req, res) => {
       return res.json({ results: [], error: 'Geoapify HTTP ' + resp.status });
     }
     const json = await resp.json();
-    const rows = Array.isArray(json.results) ? json.results : [];
-    const results = rows.map(r => {
-      // Geoapify's flat format already breaks the address into components.
-      // The street-line we want for site_address is "<housenumber> <street>"
-      // when both are present, falling back to whatever street/name field
-      // was returned. State always normalised to the AU 2/3-letter form.
-      const street = [r.housenumber, r.street].filter(Boolean).join(' ').trim();
-      const stateRaw = String(r.state_code || r.state || '').trim();
-      const stateNorm = (stateRaw.match(/\b(NSW|VIC|QLD|WA|SA|TAS|ACT|NT)\b/i) || [stateRaw])[0].toUpperCase();
+    const features = Array.isArray(json.features) ? json.features : [];
+    const results = features.slice(0, 8).map(f => {
+      const p = f.properties || {};
+      const geom = f.geometry && Array.isArray(f.geometry.coordinates) ? f.geometry.coordinates : null;
+      // GeoJSON has [lon, lat]; properties.lon/.lat are also populated.
+      const lng = (typeof p.lon === 'number') ? p.lon : (geom ? geom[0] : null);
+      const lat = (typeof p.lat === 'number') ? p.lat : (geom ? geom[1] : null);
+      const street = [p.housenumber, p.street].filter(Boolean).join(' ').trim();
+      const stateRaw = String(p.state_code || p.state || '').trim();
+      const stateMatch = stateRaw.match(/\b(NSW|VIC|QLD|WA|SA|TAS|ACT|NT)\b/i);
+      const stateNorm = stateMatch ? stateMatch[1].toUpperCase() : stateRaw;
       return {
-        label: r.formatted || r.address_line1 || r.name || '',
-        formatted: r.formatted || '',
-        lat: typeof r.lat === 'number' ? r.lat : parseFloat(r.lat),
-        lng: typeof r.lon === 'number' ? r.lon : parseFloat(r.lon),
-        site_address: street || r.address_line1 || r.name || '',
-        suburb: r.suburb || r.city || r.town || r.village || r.county || '',
+        label: p.formatted || p.address_line1 || p.name || '',
+        formatted: p.formatted || '',
+        lat: lat,
+        lng: lng,
+        site_address: street || p.address_line1 || p.name || '',
+        suburb: p.suburb || p.city || p.town || p.village || p.county || '',
         state: stateNorm,
-        postcode: r.postcode || '',
+        postcode: p.postcode || '',
       };
     });
     res.json({ results });
