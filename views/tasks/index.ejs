@@ -329,6 +329,7 @@
                       <span class="text-gray-400"><%= task.client %></span>
                     </div>
                   <% } %>
+                  <%- include('_card_checklist', { task: task }) %>
                   <div class="flex items-center justify-between pt-3 border-t border-gray-100">
                     <div class="flex items-center gap-2">
                       <% if (task.owners && task.owners.length > 0) { %>
@@ -413,6 +414,7 @@
                       <span class="text-gray-400"><%= task.client %></span>
                     </div>
                   <% } %>
+                  <%- include('_card_checklist', { task: task }) %>
                   <div class="flex items-center justify-between pt-3 border-t border-gray-100">
                     <div class="flex items-center gap-2">
                       <% if (task.owners && task.owners.length > 0) { %>
@@ -464,3 +466,75 @@
     </div>
     <%- include('../partials/bulk-actions', { actions: [{ value: 'complete', label: 'Mark Complete' }, { value: 'delete', label: 'Delete Selected' }], formAction: '/tasks/bulk' }) %>
   <% } %>
+
+  <!-- Inline checklist: chevron rotation + tick-off without leaving the page -->
+  <style>
+    details.tw-checklist > summary { list-style: none; }
+    details.tw-checklist > summary::-webkit-details-marker { display: none; }
+    details.tw-checklist .tw-chev { transition: transform 0.15s ease; }
+    details.tw-checklist[open] > summary .tw-chev { transform: rotate(90deg); }
+  </style>
+  <script>
+    (function () {
+      const meta = document.querySelector('meta[name="csrf-token"]');
+      const token = meta ? meta.getAttribute('content') : '';
+
+      // Keep clicks on the checklist (toggle button + summary) from bubbling to
+      // anything that might navigate, and stop the form-less buttons doing nothing.
+      document.addEventListener('click', async function (e) {
+        const btn = e.target.closest('.tw-cl-toggle');
+        if (!btn) return;
+        e.preventDefault();
+        if (btn.dataset.busy) return;
+        btn.dataset.busy = '1';
+
+        const taskId = btn.getAttribute('data-task-id');
+        const subId = btn.getAttribute('data-sub-id');
+        try {
+          const r = await fetch('/tasks/' + taskId + '/subtasks/' + subId + '/toggle', {
+            method: 'POST',
+            headers: { 'x-csrf-token': token, 'Accept': 'application/json' }
+          });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const data = await r.json();
+
+          // Checkbox button visual
+          const check = btn.querySelector('svg');
+          if (data.completed) {
+            btn.classList.add('bg-brand-600', 'border-brand-600', 'text-white');
+            btn.classList.remove('border-gray-300', 'hover:border-brand-400', 'bg-white');
+            if (check) check.classList.remove('hidden');
+            btn.setAttribute('aria-pressed', 'true');
+          } else {
+            btn.classList.remove('bg-brand-600', 'border-brand-600', 'text-white');
+            btn.classList.add('border-gray-300', 'hover:border-brand-400', 'bg-white');
+            if (check) check.classList.add('hidden');
+            btn.setAttribute('aria-pressed', 'false');
+          }
+
+          // Label strike-through
+          const li = btn.closest('li');
+          const label = li ? li.querySelector('.tw-cl-label') : null;
+          if (label) {
+            label.classList.toggle('text-gray-400', data.completed);
+            label.classList.toggle('line-through', data.completed);
+            label.classList.toggle('text-gray-600', !data.completed);
+          }
+
+          // Progress count + bar for this card
+          const details = btn.closest('details.tw-checklist');
+          if (details) {
+            const count = details.querySelector('.tw-cl-count');
+            const bar = details.querySelector('.tw-cl-bar');
+            if (count) count.textContent = data.done + '/' + data.total;
+            if (bar) bar.style.width = (data.total ? Math.round((data.done / data.total) * 100) : 0) + '%';
+          }
+        } catch (err) {
+          console.error('Checklist toggle failed', err);
+          alert('Could not update the checklist item. Please refresh and try again.');
+        } finally {
+          delete btn.dataset.busy;
+        }
+      });
+    })();
+  </script>

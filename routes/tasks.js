@@ -151,6 +151,13 @@ router.get('/', (req, res) => {
     }
   });
 
+  // Attach each task's checklist (subtasks) so the cards can show + tick them
+  // off inline. Table may not exist pre-migration — degrade to empty lists.
+  try {
+    const subStmt = db.prepare('SELECT id, title, completed FROM subtasks WHERE task_id = ? ORDER BY sort_order ASC, id ASC');
+    tasks.forEach(t => { t.subtasks = subStmt.all(t.id); });
+  } catch (e) { tasks.forEach(t => { t.subtasks = []; }); }
+
   // Status counts (ignoring tab filter but respecting view + other filters)
   let countWhere = '1=1';
   const countParams = [];
@@ -1174,16 +1181,36 @@ router.post('/:id/subtasks/:sid/assign', (req, res) => {
   res.redirect('/tasks/' + req.params.id + '/edit');
 });
 
-// POST /:id/subtasks/:sid/toggle — Toggle subtask completion
+// POST /:id/subtasks/:sid/toggle — Toggle subtask completion.
+// Responds with JSON for AJAX callers (the inline checklist on the task cards)
+// and falls back to a redirect for the plain-form usage on the edit page.
 router.post('/:id/subtasks/:sid/toggle', (req, res) => {
   const db = getDb();
+  const wantsJson = req.xhr || (req.headers.accept && req.headers.accept.includes('application/json'));
   const subtask = db.prepare('SELECT * FROM subtasks WHERE id = ? AND task_id = ?').get(req.params.sid, req.params.id);
-  if (subtask) {
-    if (subtask.completed) {
-      db.prepare('UPDATE subtasks SET completed = 0, completed_at = NULL WHERE id = ?').run(req.params.sid);
-    } else {
-      db.prepare("UPDATE subtasks SET completed = 1, completed_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.sid);
-    }
+  const task = subtask ? db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id) : null;
+
+  if (!subtask || !task) {
+    if (wantsJson) return res.status(404).json({ error: 'Checklist item not found.' });
+    return res.redirect('/tasks/' + req.params.id + '/edit');
+  }
+  // Ticking an item is a modification — gate it the same as the task itself.
+  if (!canModifyTask(task, req.session.user)) {
+    if (wantsJson) return res.status(403).json({ error: 'You can only update your own tasks.' });
+    req.flash('error', 'You can only update your own tasks.');
+    return res.redirect('/tasks/' + req.params.id + '/edit');
+  }
+
+  const nowCompleted = subtask.completed ? 0 : 1;
+  if (nowCompleted) {
+    db.prepare("UPDATE subtasks SET completed = 1, completed_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.sid);
+  } else {
+    db.prepare('UPDATE subtasks SET completed = 0, completed_at = NULL WHERE id = ?').run(req.params.sid);
+  }
+
+  if (wantsJson) {
+    const agg = db.prepare('SELECT COUNT(*) AS total, COALESCE(SUM(completed), 0) AS done FROM subtasks WHERE task_id = ?').get(req.params.id);
+    return res.json({ ok: true, id: Number(req.params.sid), completed: !!nowCompleted, total: agg.total, done: agg.done });
   }
   res.redirect('/tasks/' + req.params.id + '/edit');
 });
