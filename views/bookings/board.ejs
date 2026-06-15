@@ -2240,16 +2240,43 @@
       bkAddrBox._owner = null;
     }
     function commit(r) {
-      input.value = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
-      setSibling('suburb',    r.suburb || '');
-      setSibling('state',     r.state || '');
-      setSibling('postcode',  r.postcode || '');
-      setSibling('latitude',  r.lat || '');
-      setSibling('longitude', r.lng || '');
+      // Always look the owner up live — if the form was re-rendered (edit
+      // mode prefill, openEditor reset) the closure-captured `input` could
+      // be detached; the popover's _owner pointer is the most recent live
+      // input that opened the popover.
+      var target = (bkAddrBox && bkAddrBox._owner && document.body.contains(bkAddrBox._owner))
+        ? bkAddrBox._owner
+        : input;
+      var pickedValue = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
+      // Use the native setter from the prototype — bypasses any element-level
+      // setter override that frameworks / wrappers occasionally install, and
+      // also fires the right internal hooks so React-style tooling sees the
+      // change. Plain assignment is the fallback.
+      var setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value');
+      if (setter && setter.set) { setter.set.call(target, pickedValue); }
+      else                       { target.value = pickedValue; }
+      // Sibling hidden fields — scoped to the target's own form so we don't
+      // overwrite the wrong form's fields when both forms live on the page.
+      var targetForm = target.closest('form');
+      function setOn(name, value) {
+        if (targetForm) {
+          var el = targetForm.querySelector('[name="' + name + '"]');
+          if (el) { el.value = (value == null) ? '' : String(value); return; }
+        }
+        var legacy = { suburb: 'bk2-addr-suburb', state: 'bk2-addr-state', postcode: 'bk2-addr-postcode', latitude: 'bk2-addr-lat', longitude: 'bk2-addr-lng' };
+        var byId = document.getElementById(legacy[name]);
+        if (byId) byId.value = (value == null) ? '' : String(value);
+      }
+      setOn('suburb',    r.suburb || '');
+      setOn('state',     r.state || '');
+      setOn('postcode',  r.postcode || '');
+      setOn('latitude',  r.lat || '');
+      setOn('longitude', r.lng || '');
       hide();
-      // Let other listeners (summary, marker-is-accurate, etc.) see the change.
-      input.dispatchEvent(new Event('input', { bubbles: true }));
-      input.focus();
+      // Tick a change event so any form-level "is this still valid" listeners
+      // re-evaluate. We deliberately don't dispatch 'input' because that
+      // would re-trigger our own typed-search debounce.
+      try { target.dispatchEvent(new Event('change', { bubbles: true })); } catch (e) {}
     }
     function render(list) {
       var box = bkAddrBoxEl();
@@ -2272,17 +2299,22 @@
         row.innerHTML =
             '<div style="font-weight:600;color:#111827;pointer-events:none">' + esc(head) + '</div>'
           + '<div style="color:#6B7280;font-size:11.5px;margin-top:2px;pointer-events:none">' + esc(sub || formatted) + '</div>';
-        row.addEventListener('mousedown', function (ev) {
-          ev.preventDefault();    // beat the input's blur → keeps focus
-          ev.stopPropagation();
-          commit(r);
-        });
-        // Touch screens: tap fires touchstart → click; mirror commit on
-        // touchstart so phones / iPads commit the same way.
-        row.addEventListener('touchstart', function (ev) {
+        // Belt-and-braces: set input.value directly here BEFORE delegating
+        // to commit(), so even if commit() throws / a later listener clears
+        // something the visible field is still filled.
+        var quickFill = function (ev) {
           ev.preventDefault();
-          commit(r);
-        }, { passive: false });
+          ev.stopPropagation();
+          var v = r.site_address || (r.label ? r.label.split(',')[0] : '') || r.formatted || '';
+          input.value = v;
+          try { commit(r); } catch (e) { console.error('[bk2 addr] commit failed', e); }
+          // Reassert in the next frame — defends against any stray listener
+          // that fired during commit and cleared the value.
+          requestAnimationFrame(function () { if (!input.value) input.value = v; });
+        };
+        row.addEventListener('mousedown', quickFill);
+        row.addEventListener('touchstart', quickFill, { passive: false });
+        row.addEventListener('click', quickFill); // fallback for assistive tech
         row.addEventListener('mouseenter', function () { row.style.background = '#F8FAFC'; });
         row.addEventListener('mouseleave', function () { row.style.background = ''; });
         box.appendChild(row);
