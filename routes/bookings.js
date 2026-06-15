@@ -831,6 +831,40 @@ const QUICK_ADDONS = [
   { key: 'tma',               label: 'TMA',                 category: 'vehicle' },
 ];
 
+// Overview "Booking Requirements" stepper field → booking_requirements
+// resource_type label. Mirrors the grid in views/bookings/board.ejs exactly
+// (crew_size_1..5 + the addon_* fields), so the slide-over editor can both
+// SAVE the steppers into booking_requirements and PREFILL them back when a
+// booking is reopened. Keep this list in sync with that EJS array.
+const QUICK_REQ_FIELDS = [
+  ['crew_size_1', '1x TC Crew'],
+  ['crew_size_2', '2x TC Crew'],
+  ['crew_size_3', '3x TC Crew'],
+  ['crew_size_4', '4x TC Crew'],
+  ['crew_size_5', '5x TC Crew'],
+  ['addon_arrow', 'Arrow Board'],
+  ['addon_hoist', 'Hoist Operator'],
+  ['addon_labour', 'Labour'],
+  ['addon_light_tower', 'Light Tower'],
+  ['addon_permit', 'Permit'],
+  ['addon_pod_truck', 'Pod Truck'],
+  ['addon_portaboom', 'Portaboom'],
+  ['addon_security', 'Security'],
+  ['addon_speed_advisory', 'Speed Advisory Sign'],
+  ['addon_spotter', 'Spotter'],
+  ['addon_tma_dry', 'TMA (dry hire)'],
+  ['addon_tma_wet', 'TMA (wet hire)'],
+  ['addon_tmp', 'TMP'],
+  ['addon_tmp_tm', 'TMP with Traffic Management'],
+  ['addon_tc', 'Traffic Controller'],
+  ['addon_tgs', 'Traffic Guidance Scheme'],
+  ['addon_trainee', 'Trainee'],
+  ['addon_vms_board', 'VMS Board'],
+  ['addon_vms_ute', 'VMS Ute'],
+  ['addon_vehicle', 'Vehicle'],
+];
+const QUICK_REQ_LABEL_TO_FIELD = QUICK_REQ_FIELDS.reduce((m, [f, l]) => { m[l] = f; return m; }, {});
+
 // GET /api/:id/edit-data — JSON snapshot of a booking's editable fields,
 // shaped to populate the Quick Book form (date / start_time / end_time split
 // out from the start_datetime / end_datetime stored on the row, etc.) so the
@@ -863,8 +897,21 @@ router.get('/api/:id/edit-data', (req, res) => {
   const endTime   = (b.end_datetime || '').slice(11, 16);
   let siteContacts = [];
   try { siteContacts = JSON.parse(b.site_contacts || '[]'); } catch (e) {}
+  // Booking Requirements steppers — map current booking_requirements rows back
+  // to the grid's field names so the overlay can prefill the steppers with
+  // their real saved quantities instead of the template defaults.
+  const requirements = {};
+  try {
+    db.prepare('SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id = ?')
+      .all(b.id)
+      .forEach(r => {
+        const field = QUICK_REQ_LABEL_TO_FIELD[r.resource_type];
+        if (field) requirements[field] = r.quantity_required;
+      });
+  } catch (e) {}
   res.json({
     ok: true,
+    requirements,
     booking: {
       id: b.id, booking_number: b.booking_number,
       client_id: b.client_id, client_name: b.client_name || '',
@@ -976,6 +1023,29 @@ router.post('/:id/quick-update', (req, res) => {
     req.flash('error', 'Could not save booking: ' + err.message);
     return res.redirect('/bookings/' + req.params.id);
   }
+  // Booking Requirements steppers → rebuild booking_requirements. Only do
+  // this when the form actually carried the grid (the steppers always post,
+  // even at 0, so presence of any crew_size_*/addon_* key means the grid was
+  // there). Mirrors the full edit page's delete-then-reinsert; skips writing
+  // when the grid wasn't submitted so we never wipe requirements from a
+  // partial POST.
+  const gridPresent = QUICK_REQ_FIELDS.some(([f]) => b[f] !== undefined);
+  if (gridPresent) {
+    try {
+      const tx = db.transaction(() => {
+        db.prepare('DELETE FROM booking_requirements WHERE booking_id = ?').run(req.params.id);
+        const insReq = db.prepare('INSERT INTO booking_requirements (booking_id, resource_type, quantity_required) VALUES (?, ?, ?)');
+        for (const [field, label] of QUICK_REQ_FIELDS) {
+          const qty = parseInt(b[field], 10);
+          if (Number.isFinite(qty) && qty > 0) insReq.run(req.params.id, label, qty);
+        }
+      });
+      tx();
+      // Keep ute placeholders in step with the TC-Crew requirement rows.
+      try { syncTCCrewVehicles(db, parseInt(req.params.id, 10)); } catch (e) { console.error('syncTCCrewVehicles:', e.message); }
+    } catch (e) { console.error('[bookings/quick-update] requirements rebuild failed:', e.message); }
+  }
+
   // Move crew allocations along with any date/time change.
   try { syncAllocationsToBooking(db, parseInt(req.params.id, 10)); } catch (e) {}
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Quick-edited booking #${req.params.id}`, req });

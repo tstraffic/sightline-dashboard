@@ -1683,6 +1683,18 @@
             el.value = (v == null) ? '' : String(v);
           });
         });
+        // Booking Requirements steppers — set each from the saved quantities
+        // the server returned (data.requirements maps field → qty). Fields
+        // not present default to 0 so the grid reflects exactly what's saved
+        // rather than the create-form template defaults. Fire input so the
+        // People/Vehicles/Equipment summary recalculates.
+        var reqs = data.requirements || {};
+        form.querySelectorAll('.bk2-create-stepper input[type="number"], .bk2-stepper input[type="number"]').forEach(function (inp) {
+          if (!inp.name) return;
+          inp.value = (reqs[inp.name] != null) ? String(reqs[inp.name]) : '0';
+          inp.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+
         // Booking type / callout / status side-effects.
         var statusPill = document.querySelector('.bk2-edit-statuspill[data-status-set="' + (b.status || '') + '"]');
         if (statusPill) {
