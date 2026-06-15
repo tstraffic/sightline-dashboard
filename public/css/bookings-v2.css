@@ -354,6 +354,42 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-edit-actbtn:disabled { opacity: 0.55; cursor: not-allowed; }
 .bk2-edit-actbtn--primary { background: #2B7FFF; color: #fff; }
 .bk2-edit-actbtn--primary:hover { background: #1D6AE5; }
+/* "Open full edit page" — green so it reads as the way through to the
+   complete editor, distinct from the gray Save / blue Clone. */
+.bk2-edit-actbtn--fulledit { background: #059669; color: #fff; text-decoration: none; }
+.bk2-edit-actbtn--fulledit:hover { background: #047857; color: #fff; }
+
+/* Post-create success ribbon. */
+.bk2-edit-created {
+  display: flex; align-items: flex-start; gap: 10px;
+  background: #ECFDF5; border: 1px solid #6EE7B7; color: #065F46;
+  border-radius: 10px; padding: 12px 14px; margin-bottom: 16px;
+}
+.bk2-edit-created svg { color: #059669; flex-shrink: 0; margin-top: 1px; }
+.bk2-edit-created strong { display: block; font-size: 13px; }
+.bk2-edit-created span { font-size: 12px; color: #047857; }
+
+/* Quick-view panel (existing-booking open). */
+.bk2-edit-quickview {
+  background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
+  padding: 20px; text-align: center; max-width: 520px; margin: 8px auto 0;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04);
+}
+.bk2-edit-qv-head h3 { font-size: 18px; font-weight: 700; color: #0F172A; margin: 0; }
+.bk2-edit-qv-head p { font-size: 13px; color: #64748B; margin: 4px 0 0; }
+.bk2-edit-qv-btn {
+  display: inline-flex; align-items: center; gap: 8px; margin-top: 16px;
+  background: #059669; color: #fff; text-decoration: none;
+  padding: 11px 20px; border-radius: 10px; font-size: 14px; font-weight: 600;
+  box-shadow: 0 6px 18px rgba(5,150,105,0.30);
+}
+.bk2-edit-qv-btn:hover { background: #047857; }
+.bk2-edit-qv-hint { font-size: 11px; color: #94A3B8; margin: 12px 0 0; }
+
+/* When the editor is opened for an existing booking, the create form is
+   hidden in favour of the quick-view panel above. */
+.bk2-editor[data-existing="1"] #bk2-edit-form { display: none; }
+.bk2-editor:not([data-existing="1"]) #bk2-edit-quickview { display: none; }
 
 /* Tab body — scrollable. */
 .bk2-edit-body {

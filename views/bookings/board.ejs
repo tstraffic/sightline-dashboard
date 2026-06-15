@@ -259,6 +259,8 @@
           <a class="bk2-card bk2-status-tone-<%= b.status %>" href="/bookings/<%= b.id %>"
              draggable="false"
              data-booking-id="<%= b.id %>"
+             data-booking-number="<%= b.booking_number || b.id %>"
+             data-booking-title="<%= (b.title || b.site_address || 'Untitled booking').replace(/\"/g, '&quot;') %>"
              data-depot="<%= (b.depot || '').toLowerCase() %>"
              data-state="<%= (b.state || '').toLowerCase() %>"
              data-status="<%= b.status || '' %>"
@@ -729,6 +731,13 @@
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
       Create
     </button>
+    <!-- Open full edit page — visible only in edit mode (i.e. once a booking
+         exists). Takes the planner to the whole-screen /bookings/:id editor
+         where every tab is live. -->
+    <a class="bk2-edit-actbtn bk2-edit-actbtn--fulledit" id="bk2-edit-fulledit" data-mode-only="edit" href="#">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+      Open full edit page
+    </a>
     <!-- Save & Clone — visible only in edit mode. -->
     <button type="button" class="bk2-edit-actbtn" id="bk2-edit-save" data-mode-only="edit" disabled>
       <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
@@ -746,6 +755,32 @@
          Single comprehensive form when in create mode. In edit mode
          this stays as the Overview tab so all fields remain editable. -->
     <section class="bk2-edit-pane" data-edit-pane="overview" aria-current="true">
+
+      <!-- Post-create success ribbon — shown after a booking is created so the
+           planner knows it saved and the editor deliberately stayed open. -->
+      <div class="bk2-edit-created" id="bk2-edit-created" hidden>
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <div>
+          <strong id="bk2-edit-created-title">Booking created.</strong>
+          <span>It's saved as a draft — keep editing the details below, or open the full edit page for crew, vehicles, documents and more.</span>
+        </div>
+      </div>
+
+      <!-- Quick-view panel — shown when the editor is opened for an EXISTING
+           booking from the board (Open). The tabbed shell's other panes are
+           summaries; the full editor lives on the whole-screen page. -->
+      <div class="bk2-edit-quickview" id="bk2-edit-quickview" hidden>
+        <div class="bk2-edit-qv-head">
+          <h3 id="bk2-edit-qv-title">Booking</h3>
+          <p id="bk2-edit-qv-sub"></p>
+        </div>
+        <a class="bk2-edit-qv-btn" id="bk2-edit-qv-fulledit" href="#">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+          Open full edit page
+        </a>
+        <p class="bk2-edit-qv-hint">The full page has every tab live — Resources, Tasks, Dockets, Documents and the rest.</p>
+      </div>
+
       <form id="bk2-edit-form" method="POST" action="/bookings/quick" class="bk2-create">
 
         <%- include('../partials/csrf') %>
@@ -1503,6 +1538,10 @@
   function openEditor() {
     var ed = $('#bk2-editor'); var bd = $('#bk2-edit-backdrop');
     if (!ed || !bd) return;
+    ed.removeAttribute('data-existing');
+    ed.dataset.bookingId = '';
+    var created = $('#bk2-edit-created'); if (created) created.hidden = true;
+    var qv = $('#bk2-edit-quickview'); if (qv) qv.hidden = true;
     setEditorMode('create');
     var title = $('#bk2-edit-title'); if (title) title.textContent = 'New Booking';
     // Reset the create form so reopening doesn't carry over stale
@@ -1537,6 +1576,47 @@
     ed.classList.remove('is-open'); bd.classList.remove('is-open');
     setTimeout(function () { ed.hidden = true; bd.hidden = true; }, 220);
     document.body.style.overflow = '';
+    // A booking was created while the editor was open — the board behind
+    // doesn't show the new card yet. Refresh it now (on close) instead of
+    // yanking the planner out mid-edit with a reload right after Create.
+    if (boardDirty) { boardDirty = false; refreshBoard(); }
+  }
+
+  // Board refresh after a create — runs only once the editor is CLOSED, so
+  // the new card appears without ever yanking the planner out mid-edit
+  // (the old behaviour reloaded 600ms after Create and closed the editor).
+  var boardDirty = false;
+  function refreshBoard() {
+    if (typeof window.bk2RefreshBoard === 'function') { window.bk2RefreshBoard(); return; }
+    location.reload();
+  }
+
+  // Point both "Open full edit page" controls at a booking id.
+  function setFullEditTarget(id) {
+    var href = '/bookings/' + encodeURIComponent(id);
+    var a1 = $('#bk2-edit-fulledit');    if (a1) a1.setAttribute('href', href);
+    var a2 = $('#bk2-edit-qv-fulledit'); if (a2) a2.setAttribute('href', href);
+  }
+
+  // Open the editor in edit mode for an EXISTING booking (board "Open").
+  // The tabbed shell appears with a quick-view panel + the prominent
+  // "Open full edit page" route to the whole-screen editor.
+  function openEditorForBooking(id, number, title) {
+    var ed = $('#bk2-editor'); var bd = $('#bk2-edit-backdrop');
+    if (!ed || !bd || !id) return;
+    var created = $('#bk2-edit-created'); if (created) created.hidden = true;
+    ed.dataset.existing = '1';
+    ed.dataset.bookingId = id;
+    setEditorMode('edit');
+    var t = $('#bk2-edit-title');
+    if (t) t.textContent = (number ? ('#' + number) : ('Booking ' + id)) + (title ? ' · ' + title : '');
+    var qv = $('#bk2-edit-quickview'); if (qv) qv.hidden = false;
+    var qvT = $('#bk2-edit-qv-title'); if (qvT) qvT.textContent = number ? ('#' + number) : ('Booking ' + id);
+    var qvS = $('#bk2-edit-qv-sub'); if (qvS) qvS.textContent = title || '';
+    setFullEditTarget(id);
+    bd.hidden = false; ed.hidden = false;
+    requestAnimationFrame(function () { bd.classList.add('is-open'); ed.classList.add('is-open'); });
+    document.body.style.overflow = 'hidden';
   }
   function setEditorTab(name) {
     $$('.bk2-edit-tab').forEach(function (t) {
@@ -1670,13 +1750,28 @@
         });
       }).then(function (result) {
         if (result.ok && result.data && result.data.ok) {
-          // Switch to edit mode for the brand-new booking — keep the
-          // slide-over open so the planner can keep editing.
+          // Switch to edit mode for the brand-new booking and KEEP the editor
+          // open — the old code reloaded the page 600ms later, which threw the
+          // planner straight off the screen. Now the form stays (showing what
+          // they entered), a success ribbon confirms the save, and the
+          // "Open full edit page" button routes to the full editor. The board
+          // behind is refreshed only when they close the editor.
+          var newId = result.data.id;
+          var newNum = result.data.booking_number || newId;
+          var ed = $('#bk2-editor'); if (ed) { ed.dataset.bookingId = newId; ed.removeAttribute('data-existing'); }
           var title = $('#bk2-edit-title');
-          if (title) title.textContent = '#' + (result.data.booking_number || result.data.id) + ' · ' +
+          if (title) title.textContent = '#' + newNum + ' · ' +
             ((fd.get('client_name') || '') + (fd.get('site_label') ? ' · ' + fd.get('site_label') : '')).trim();
           setEditorMode('edit');
-          setTimeout(function () { location.reload(); }, 600);
+          setFullEditTarget(newId);
+          var created = $('#bk2-edit-created');
+          var createdTitle = $('#bk2-edit-created-title');
+          if (createdTitle) createdTitle.textContent = 'Booking #' + newNum + ' created.';
+          if (created) created.hidden = false;
+          // Keep the Overview tab (the form) active so they can keep editing.
+          setEditorTab('overview');
+          boardDirty = true;
+          if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); }
         } else {
           // Show the most informative message we can extract.
           var msg = (result.data && result.data.error) ||
@@ -1701,6 +1796,40 @@
   $('#bk2-new-btn').addEventListener('click', openEditor);
   var emptyNew = $('#bk2-empty-new');
   if (emptyNew) emptyNew.addEventListener('click', openEditor);
+
+  // Wire both "Open full edit page" controls — they're <a> with the href set
+  // dynamically, so a plain click navigates. Nothing extra needed, but close
+  // the editor first so the back button returns to the board cleanly.
+  ['#bk2-edit-fulledit', '#bk2-edit-qv-fulledit'].forEach(function (sel) {
+    var a = $(sel);
+    if (a) a.addEventListener('click', function () { boardDirty = false; });
+  });
+
+  // ── Board "Open" → editor overlay ──
+  // Clicking a booking card opens the tabbed editor overlay (edit mode) for
+  // that booking instead of hard-navigating to the full page. The overlay's
+  // "Open full edit page" button is the route to the whole-screen editor.
+  // We only hijack plain left-clicks on the card's non-interactive chrome —
+  // crew/vehicle slots, drag handles, buttons and nested links keep working,
+  // and modified clicks (cmd/ctrl/middle) still open the full page in a new
+  // tab via the anchor's href.
+  var CARD_INTERACTIVE = 'button, a[href]:not(.bk2-card), input, select, textarea, label,' +
+    '[data-bk-crew-drag], .bk2-slot, .bk2-slot--drop, .bk2-veh-slot, .bk2-unassigned,' +
+    '.bk2-addon, [role="button"], [draggable="true"]';
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var card = e.target.closest && e.target.closest('.bk2-card');
+    if (!card || !card.getAttribute('data-booking-id')) return;
+    var hit = e.target.closest(CARD_INTERACTIVE);
+    if (hit && hit !== card && card.contains(hit)) return; // real control — leave it
+    e.preventDefault();
+    openEditorForBooking(
+      card.getAttribute('data-booking-id'),
+      card.getAttribute('data-booking-number'),
+      card.getAttribute('data-booking-title')
+    );
+  });
 
   // Keyboard: N opens Quick Book, Esc closes it
   document.addEventListener('keydown', function (e) {
@@ -3476,6 +3605,15 @@
         });
       }
     }
+
+    // Expose a soft board refresh (re-fetch current URL, swap panes) so the
+    // editor can show a freshly-created booking on close without a full reload.
+    window.bk2RefreshBoard = function () {
+      fetch(location.href, { credentials: 'same-origin', headers: { 'Accept': 'text/html', 'X-Requested-With': 'fetch' } })
+        .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+        .then(function (html) { applyResponseDoc(new DOMParser().parseFromString(html, 'text/html')); })
+        .catch(function () { location.reload(); });
+    };
 
     function navigateToDate(href) {
       if (navInFlight) return;
