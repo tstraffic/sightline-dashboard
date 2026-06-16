@@ -42,6 +42,9 @@
     <% } else if (a.isOnCalendar) { %>
       <span class="rec-badge rec-badge--ok">On calendar</span>
     <% } %>
+    <% if (a.induction_email_sent_at) { %>
+      <span class="rec-badge rec-badge--mail" title="Confirmation email sent <%= a.induction_email_sent_at %>">Emailed</span>
+    <% } %>
   </div>
 
   <% if (_noteLine) { %>

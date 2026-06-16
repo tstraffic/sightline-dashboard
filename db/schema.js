@@ -13165,6 +13165,23 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 275: record when the induction confirmation email was sent to
+  // an applicant, so the board can show a durable "confirmation sent" marker.
+  // =============================================
+  if (!isMigrationApplied.get(275)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(seek_applicants)").all().map(c => c.name);
+      if (!cols.includes('induction_email_sent_at')) {
+        db.exec("ALTER TABLE seek_applicants ADD COLUMN induction_email_sent_at DATETIME");
+      }
+      recordMigration.run(275, 'seek_applicants.induction_email_sent_at');
+      console.log('Migration 275 applied');
+    } catch (e) {
+      console.error('Migration 275 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

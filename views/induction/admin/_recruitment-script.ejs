@@ -223,8 +223,12 @@
       var data = await postUpdate(id, payload);
       if (data.becameHired && data.converted) {
         toast(data.converted.employeeName ? (data.converted.employeeName + ' added to roster') : 'Added to roster as ' + (data.converted.employeeCode || ''));
-      } else if (data.inductionEmailed) {
+      } else if (data.inductionEmailed === 'sent') {
         toast('Booked — confirmation emailed');
+      } else if (data.inductionEmailed === 'failed') {
+        toast("Booked, but the confirmation email didn't send", true);
+      } else if (data.inductionEmailed === 'no_email') {
+        toast('Booked — no email on file, so no confirmation sent');
       } else {
         toast('Saved');
       }

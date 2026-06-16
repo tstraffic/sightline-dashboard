@@ -307,7 +307,7 @@ router.post('/', (req, res) => {
 // POST /induction/admin/recruitment/:id — partial update. Only the fields
 // present in the body get touched. Handles stage moves (drag-and-drop) without
 // destroying earlier dates.
-router.post('/:id', (req, res) => {
+router.post('/:id', async (req, res) => {
   const db = getDb();
   const row = db.prepare('SELECT id, stage, induction_date, induction_time, applicant_name, email, linked_crew_member_id FROM seek_applicants WHERE id = ?').get(req.params.id);
   if (!row) {
@@ -402,36 +402,50 @@ router.post('/:id', (req, res) => {
   }
 
   // Email the applicant a booking confirmation when an induction date is set
-  // (or changed) and we have an email to send to. Fire-and-forget so a slow
-  // mail API never blocks the drag/save; failures are logged, not surfaced.
-  if (inductionDateChange && row.email && /@/.test(row.email)) {
-    // Final induction time = the incoming value if this request set one,
-    // otherwise whatever was already on the row.
-    let finalTime = row.induction_time || '';
-    if (typeof req.body.induction_time !== 'undefined') {
-      const t = String(req.body.induction_time || '').trim();
-      if (t === '' || /^([01]?\d|2[0-3]):[0-5]\d$/.test(t)) finalTime = t;
+  // (or changed) and we have an email to send to. Awaited so we can report the
+  // real outcome and stamp `induction_email_sent_at` for a durable record.
+  //   inductionEmailed: 'sent' | 'failed' | 'no_email' | null (no booking change)
+  let inductionEmailed = null;
+  if (inductionDateChange) {
+    if (!row.email || !/@/.test(row.email)) {
+      inductionEmailed = 'no_email';
+    } else {
+      // Final induction time = the incoming value if this request set one,
+      // otherwise whatever was already on the row.
+      let finalTime = row.induction_time || '';
+      if (typeof req.body.induction_time !== 'undefined') {
+        const t = String(req.body.induction_time || '').trim();
+        if (t === '' || /^([01]?\d|2[0-3]):[0-5]\d$/.test(t)) finalTime = t;
+      }
+      const isoDate = inductionDateChange.newDate;
+      const dateStr = new Date(isoDate + 'T00:00:00Z').toLocaleDateString('en-AU', {
+        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+      });
+      let timeStr = '';
+      const m = finalTime.match(/^(\d{1,2}):(\d{2})/);
+      if (m) {
+        let h = parseInt(m[1], 10); const min = m[2];
+        const ampm = h >= 12 ? 'pm' : 'am';
+        h = h % 12; if (h === 0) h = 12;
+        timeStr = h + ':' + min + ' ' + ampm;
+      }
+      const whenText = 'on ' + dateStr + (timeStr ? ' at ' + timeStr : '');
+      const replyTo = (req.session.user && req.session.user.email) || undefined;
+      try {
+        const result = await sendEmail(row.email, 'Induction Confirmation — T&S Traffic Control',
+          inductionConfirmationEmail(whenText, INDUCTION_FORM_URL), { replyTo });
+        if (result) {
+          inductionEmailed = 'sent';
+          try { db.prepare('UPDATE seek_applicants SET induction_email_sent_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id); } catch (e) { /* column missing on stale deploy */ }
+        } else {
+          inductionEmailed = 'failed';
+          console.warn('[recruitment] induction confirmation email not sent for applicant', row.id, '(email service not configured or rejected)');
+        }
+      } catch (e) {
+        inductionEmailed = 'failed';
+        console.error('[recruitment] induction confirmation email error:', e.message);
+      }
     }
-    const isoDate = inductionDateChange.newDate;
-    const dateStr = new Date(isoDate + 'T00:00:00Z').toLocaleDateString('en-AU', {
-      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
-    });
-    let timeStr = '';
-    const m = finalTime.match(/^(\d{1,2}):(\d{2})/);
-    if (m) {
-      let h = parseInt(m[1], 10); const min = m[2];
-      const ampm = h >= 12 ? 'pm' : 'am';
-      h = h % 12; if (h === 0) h = 12;
-      timeStr = h + ':' + min + ' ' + ampm;
-    }
-    const whenText = 'on ' + dateStr + (timeStr ? ' at ' + timeStr : '');
-    const replyTo = (req.session.user && req.session.user.email) || undefined;
-    Promise.resolve(
-      sendEmail(row.email, 'Induction Confirmation — T&S Traffic Control',
-        inductionConfirmationEmail(whenText, INDUCTION_FORM_URL), { replyTo })
-    ).then(r => {
-      if (!r) console.warn('[recruitment] induction confirmation email not sent for applicant', row.id, '(email service not configured?)');
-    }).catch(e => console.error('[recruitment] induction confirmation email error:', e.message));
   }
 
   // Auto-convert to crew_member when the candidate reaches HIRED (idempotent —
@@ -454,7 +468,6 @@ router.post('/:id', (req, res) => {
   }
 
   if (wantsJson(req)) {
-    const inductionEmailed = !!(inductionDateChange && row.email && /@/.test(row.email));
     return res.json({ ok: true, converted, becameHired, stage: newStage, inductionEmailed });
   }
   res.redirect(backUrl(req));
