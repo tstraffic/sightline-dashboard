@@ -403,6 +403,58 @@ router.post('/submissions/:id/status', (req, res) => {
   // If approved, auto-create Crew Member + Employee records
   if (status === 'approved') {
     try {
+      // ── Dedup guards — prevent the "approve creates 2 profiles" bug ──
+      // The conversion was idempotent on the /convert route but not here,
+      // so a double-click on Approve (or two separate induction submissions
+      // for the same person, e.g. they re-filled the form) would mint a
+      // second crew_member + employee. Two checks now sit in front of the
+      // create:
+      //   1. This submission already has a linked_crew_member_id (and the
+      //      target still exists) → return early.
+      //   2. A crew_member already matches the submission's email or phone
+      //      → link to that one instead of creating a duplicate.
+      // Only fall through to the create when neither hit.
+      const fresh = db.prepare('SELECT linked_crew_member_id FROM induction_submissions WHERE id = ?').get(req.params.id);
+      if (fresh && fresh.linked_crew_member_id) {
+        const stillThere = db.prepare('SELECT id, full_name, employee_id FROM crew_members WHERE id = ?').get(fresh.linked_crew_member_id);
+        if (stillThere) {
+          req.flash('success', `${stillThere.full_name} is already on the roster as ${stillThere.employee_id}.`);
+          return res.redirect(`/induction/admin/submissions/${req.params.id}`);
+        }
+        // Linked crew was deleted — clear the broken pointer and re-create.
+        db.prepare('UPDATE induction_submissions SET linked_crew_member_id = NULL WHERE id = ?').run(req.params.id);
+      }
+
+      // Match by email first (strongest signal), then by digits-only phone.
+      let matched = null;
+      if (s.email) {
+        matched = db.prepare(`
+          SELECT id, full_name, employee_id FROM crew_members
+          WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND active = 1
+          ORDER BY id DESC LIMIT 1
+        `).get(s.email);
+      }
+      if (!matched && s.phone) {
+        const digits = String(s.phone).replace(/\D/g, '');
+        if (digits.length >= 7) {
+          // GLOB pattern on digit-stripped phone — better-sqlite3 doesn't ship
+          // a regexp engine, so we strip via REPLACE chain in SQL.
+          matched = db.prepare(`
+            SELECT id, full_name, employee_id FROM crew_members
+            WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', '') LIKE '%' || ? || '%'
+              AND active = 1
+            ORDER BY id DESC LIMIT 1
+          `).get(digits);
+        }
+      }
+      if (matched) {
+        db.prepare(`
+          UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime('now') WHERE id = ?
+        `).run(matched.id, req.params.id);
+        req.flash('success', `Matched to existing roster member ${matched.full_name} (${matched.employee_id}). No duplicate created.`);
+        return res.redirect(`/induction/admin/submissions/${req.params.id}`);
+      }
+
       // Allocate next EMP-XXX — ignores non-numeric codes (e.g. EMP-TEST) and
       // retries if the allocated code is already in use.
       const employeeId = allocateEmployeeId(db);
@@ -527,6 +579,36 @@ router.post('/submissions/:id/convert', (req, res) => {
   const s = db.prepare('SELECT * FROM induction_submissions WHERE id = ?').get(req.params.id);
   if (!s) { req.flash('error', 'Submission not found.'); return res.redirect('/induction/admin/submissions'); }
   if (s.linked_crew_member_id) { req.flash('error', 'Already converted to employee.'); return res.redirect(`/induction/admin/submissions/${req.params.id}`); }
+
+  // Same email/phone dedup as the approve route — link to an existing
+  // roster member instead of minting a duplicate when the worker already
+  // exists (re-submitted induction, manually onboarded earlier, etc.).
+  try {
+    let matched = null;
+    if (s.email) {
+      matched = db.prepare(`
+        SELECT id, full_name, employee_id FROM crew_members
+        WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND active = 1
+        ORDER BY id DESC LIMIT 1
+      `).get(s.email);
+    }
+    if (!matched && s.phone) {
+      const digits = String(s.phone).replace(/\D/g, '');
+      if (digits.length >= 7) {
+        matched = db.prepare(`
+          SELECT id, full_name, employee_id FROM crew_members
+          WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', '') LIKE '%' || ? || '%'
+            AND active = 1
+          ORDER BY id DESC LIMIT 1
+        `).get(digits);
+      }
+    }
+    if (matched) {
+      db.prepare('UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime(\'now\') WHERE id = ?').run(matched.id, req.params.id);
+      req.flash('success', `Matched to existing roster member ${matched.full_name} (${matched.employee_id}). No duplicate created.`);
+      return res.redirect(`/induction/admin/submissions/${req.params.id}`);
+    }
+  } catch (e) { /* dedup is best-effort — fall through to create on error */ }
 
   try {
     const employeeId = allocateEmployeeId(db);
