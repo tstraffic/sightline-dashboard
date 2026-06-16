@@ -20,7 +20,7 @@
   /* Faint per-pixel noise tile, reused by every gradient skin to kill banding.
      A real PNG (not an SVG feTurbulence filter) — SVG filters render
      unreliably as CSS background tiles and showed as a grid of rectangles. */
-  --atomis-grain: url("/images/atomis-noise.png");
+  --atomis-grain: url("/images/atomis-noise.png?v=2");
 }
 
 /* Shared helper: paint a fixed background image stack behind everything.
@@ -168,6 +168,15 @@
 :root[data-skin="mint-glass"][data-theme="light"] {
   --atomis-base: #eaf6f0;
   --skin-gradient: linear-gradient(170deg, #e3f5ec 0%, #f4fbf8 34%, #ffffff 72%);
+}
+/* No grain on the light theme — a pale background shows speckle far too
+   readily, and a gentle mint fade doesn't band. Gradient only. */
+:root[data-skin="mint-glass"][data-theme="light"] body,
+:root[data-skin="mint-glass"][data-theme="light"] body.dark-glass {
+  background-image: var(--skin-gradient);
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center top;
 }
 /* Frosted cards — translucent enough to feel glassy, opaque enough that
    table text stays crisp (the tricky bit the spec calls out). */
