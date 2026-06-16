@@ -17,8 +17,10 @@
    ============================================================ */
 
 :root {
-  /* ~4% fractal-noise tile, reused by every gradient skin to kill banding. */
-  --atomis-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+  /* Faint per-pixel noise tile, reused by every gradient skin to kill banding.
+     A real PNG (not an SVG feTurbulence filter) — SVG filters render
+     unreliably as CSS background tiles and showed as a grid of rectangles. */
+  --atomis-grain: url("/images/atomis-noise.png");
 }
 
 /* Shared helper: paint a fixed background image stack behind everything.
@@ -31,10 +33,14 @@
 :root[data-skin="mint-glass"] body,    :root[data-skin="mint-glass"] body.dark-glass {
   background-color: var(--atomis-base);
   background-image: var(--atomis-grain), var(--skin-gradient);
-  background-attachment: fixed, fixed;
-  background-repeat: repeat, no-repeat;
-  background-size: 140px 140px, cover;
-  background-position: 0 0, center top;
+  background-attachment: fixed;
+  /* Grain is layer 1 (repeat, tiled); every gradient layer after it must be
+     no-repeat/cover. --skin-gradient can hold up to 4 layers (Aurora), so the
+     lists are padded — extra entries are ignored when a skin has fewer. A
+     short list here would cycle and tile the gradients into a grid. */
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat;
+  background-position: 0 0, center top, center top, center top, center top, center top;
+  background-size: 128px 128px, cover, cover, cover, cover, cover;
 }
 
 /* ===================== SOLID DARK VARIANTS ===================== */
@@ -77,9 +83,10 @@
   background-color: var(--atomis-base);
   background-image: var(--atomis-grain),
     radial-gradient(120% 70% at 50% -20%, rgba(16,185,129,0.14), rgba(16,185,129,0.04) 38%, transparent 64%);
-  background-attachment: fixed, fixed;
+  background-attachment: fixed;
   background-repeat: repeat, no-repeat;
-  background-size: 140px 140px, cover;
+  background-position: 0 0, center top;
+  background-size: 128px 128px, cover;
 }
 
 /* ===================== DARK GRADIENT THEMES ===================== */
@@ -140,9 +147,6 @@
     radial-gradient(60% 45% at 72% 4%, rgba(147,51,234,0.16), transparent 58%),
     radial-gradient(55% 40% at 90% 18%, rgba(244,63,94,0.10), transparent 56%);
 }
-/* A touch more grain for Nebula's "cosmic" feel. */
-:root[data-skin="nebula"] body, :root[data-skin="nebula"] body.dark-glass { background-size: 110px 110px, cover; }
-
 /* ===================== LIGHT VARIANTS ===================== */
 
 /* Warm Paper — soft warm off-white instead of cool grey-white. */
