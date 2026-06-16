@@ -12,22 +12,20 @@
 %>
 
 <!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
   <div>
-    <h1 class="text-2xl font-bold text-gray-900">Equipment</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Asset register &middot; deployment &middot; inspections</p>
+    <h1 class="text-2xl font-bold text-gray-900">Equipment / Hire</h1>
+    <p class="text-gray-500 text-sm mt-0.5">Owned asset register &middot; deployment &middot; inspections</p>
   </div>
   <div class="flex items-center gap-2">
-    <a href="/equipment/hire-dockets" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors">
-      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-      Hire Dockets
-    </a>
-    <a href="/equipment/new" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
+    <a href="/equipment/new?ownership=owned" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
       <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-      Add Equipment
+      Add new
     </a>
   </div>
 </div>
+
+<%- include('_tabs', { tabActive: 'owned' }) %>
 
 <!-- Stats Row -->
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
@@ -51,10 +49,10 @@
     <p class="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Poor / Damaged</p>
     <p class="text-xl font-bold <%= stats.poorDamaged > 0 ? 'text-orange-600' : 'text-gray-300' %> mt-0.5"><%= stats.poorDamaged %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4">
-    <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Hired</p>
-    <p class="text-xl font-bold <%= stats.totalHired > 0 ? 'text-amber-600' : 'text-gray-300' %> mt-0.5"><%= stats.totalHired || 0 %></p>
-  </div>
+  <a href="/equipment/hire" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 hover:border-brand-300 transition-colors">
+    <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">On Hire</p>
+    <p class="text-xl font-bold text-amber-600 mt-0.5">View &rarr;</p>
+  </a>
 </div>
 
 <!-- Filter Bar -->

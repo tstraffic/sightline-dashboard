@@ -1,0 +1,232 @@
+<% locals.currentPage = 'equipment' %>
+<%
+  const ownedSel = (typeof ownership !== 'undefined' && ownership === 'owned');
+  const hiredSel = (typeof ownership !== 'undefined' && ownership === 'hired');
+  // Power-kind hint + whether a type is registrable (trailer-ish / plant) for
+  // progressive field reveal — kept small; the canonical types live in
+  // lib/hireDocketConfig.
+  const REGOABLE = ['trailer','traffic_lights_trailer','vms_board','arrow_board','variable_sign','mobile_crash_cushion'];
+%>
+
+<!-- Breadcrumb -->
+<div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
+  <a href="/equipment" class="hover:text-gray-900 transition">Equipment / Hire</a>
+  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+  <span class="text-gray-900">Add new</span>
+</div>
+
+<div class="mb-5">
+  <h1 class="text-2xl font-bold text-gray-900">Add new</h1>
+  <p class="text-gray-500 text-sm mt-0.5">First choose whether it's owned or hired, then the equipment type.</p>
+</div>
+
+<!-- Step 1: Owned or Hired -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mb-5">
+  <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">1 · Ownership</h2>
+  <div class="grid grid-cols-2 gap-3 max-w-md">
+    <button type="button" class="own-pick flex flex-col items-start gap-1 rounded-xl border-2 p-4 text-left transition <%= ownedSel ? 'border-brand-500 ring-2 ring-brand-200' : 'border-gray-200 hover:border-brand-300' %>" data-own="owned">
+      <span class="text-sm font-bold text-gray-900">Owned</span>
+      <span class="text-xs text-gray-500">An asset T&amp;S owns — added to the register.</span>
+    </button>
+    <button type="button" class="own-pick flex flex-col items-start gap-1 rounded-xl border-2 p-4 text-left transition <%= hiredSel ? 'border-brand-500 ring-2 ring-brand-200' : 'border-gray-200 hover:border-brand-300' %>" data-own="hired">
+      <span class="text-sm font-bold text-gray-900">Hired</span>
+      <span class="text-xs text-gray-500">On hire from a company — tracked month-to-month.</span>
+    </button>
+  </div>
+</div>
+
+<!-- OWNED form -->
+<form method="POST" action="/equipment" class="own-form space-y-5 <%= ownedSel ? '' : 'hidden' %>" data-own-form="owned">
+  <%- include('../partials/csrf') %>
+  <input type="hidden" name="ownership_type" value="owned">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">2 · Equipment type &amp; details</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Equipment Type</label>
+        <select name="equipment_type" class="own-type w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">— Select type —</option>
+          <% equipmentTypes.forEach(function (t) { %><option value="<%= t.value %>" data-regoable="<%= REGOABLE.includes(t.value) ? '1' : '' %>"><%= t.label %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Asset Number <span class="text-red-500">*</span></label>
+        <input type="text" name="asset_number" required placeholder="e.g. EQ-0001" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Name <span class="text-red-500">*</span></label>
+        <input type="text" name="name" required placeholder="Equipment name" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Category</label>
+        <select name="category" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="other">— Select —</option>
+          <% (settingsOptions.equipment_category || []).forEach(opt => { %><option value="<%= opt.key %>"><%= opt.label %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Serial Number</label>
+        <input type="text" name="serial_number" placeholder="Manufacturer serial" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div class="own-rego hidden">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Registration</label>
+        <input type="text" name="registration" placeholder="e.g. ABC-123" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Condition</label>
+        <select name="current_condition" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="good">Good</option><option value="fair">Fair</option><option value="poor">Poor</option><option value="damaged">Damaged</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Purchase Date</label>
+        <input type="date" name="purchase_date" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Purchase Cost ($)</label>
+        <input type="number" step="0.01" name="purchase_cost" placeholder="0.00" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Storage Location</label>
+        <input type="text" name="storage_location" placeholder="Depot / yard" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Inspection Interval (days)</label>
+        <input type="number" name="inspection_interval_days" value="90" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+    </div>
+    <div class="mt-4">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</label>
+      <textarea name="notes" rows="2" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-y"></textarea>
+    </div>
+  </div>
+  <div class="flex items-center justify-end gap-2">
+    <a href="/equipment" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg">Cancel</a>
+    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">Add owned equipment</button>
+  </div>
+</form>
+
+<!-- HIRED form -->
+<form method="POST" action="/equipment/hire" class="own-form space-y-5 <%= hiredSel ? '' : 'hidden' %>" data-own-form="hired">
+  <%- include('../partials/csrf') %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">2 · Company, type &amp; rate</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hire Company</label>
+        <select name="company_id" class="hire-company w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">— Select company —</option>
+          <% companies.forEach(function (c) { %><option value="<%= c.id %>"><%= c.name %></option><% }) %>
+        </select>
+        <p class="text-[11px] text-gray-400 mt-1">No company? <a href="/equipment/hire/rates" class="text-brand-600">Add one in Rates</a> to save its rates.</p>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Equipment Type</label>
+        <select name="equipment_type" class="hire-type w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">— Select type —</option>
+          <% equipmentTypes.forEach(function (t) { %><option value="<%= t.value %>"><%= t.label %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Quantity</label>
+        <input type="number" name="quantity" value="1" min="1" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Rate ($) <span class="hire-rate-auto text-emerald-600 normal-case font-medium hidden">· auto-filled</span></label>
+        <input type="number" step="0.01" name="rate" class="hire-rate w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="0.00">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Per</label>
+        <select name="rate_unit" class="hire-unit w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <% rateUnits.forEach(function (u) { %><option value="<%= u %>" <%= u === 'day' ? 'selected' : '' %>><%= u %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Supplier Reference</label>
+        <input type="text" name="reference" placeholder="Hire ref / PO no." class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Start Date</label>
+        <input type="date" name="start_date" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">End Date <span class="text-gray-400 normal-case font-medium">(blank = ongoing)</span></label>
+        <input type="date" name="end_date" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Rego / Serial</label>
+        <input type="text" name="registration" placeholder="If applicable" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+    </div>
+    <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Description</label>
+        <input type="text" name="description" placeholder="e.g. 20kVA towable generator" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</label>
+        <input type="text" name="notes" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+    </div>
+  </div>
+  <div class="flex items-center justify-end gap-2">
+    <a href="/equipment/hire" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg">Cancel</a>
+    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">Add hire</button>
+  </div>
+</form>
+
+<script>
+(function () {
+  // Step 1 toggle
+  var owned = document.querySelector('[data-own-form="owned"]');
+  var hired = document.querySelector('[data-own-form="hired"]');
+  document.querySelectorAll('.own-pick').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var pick = b.getAttribute('data-own');
+      document.querySelectorAll('.own-pick').forEach(function (x) {
+        var on = x === b;
+        x.classList.toggle('border-brand-500', on);
+        x.classList.toggle('ring-2', on);
+        x.classList.toggle('ring-brand-200', on);
+        x.classList.toggle('border-gray-200', !on);
+      });
+      owned.classList.toggle('hidden', pick !== 'owned');
+      hired.classList.toggle('hidden', pick !== 'hired');
+    });
+  });
+
+  // Owned: reveal registration field for trailer-ish types
+  var ownType = owned.querySelector('.own-type');
+  var ownRego = owned.querySelector('.own-rego');
+  if (ownType) ownType.addEventListener('change', function () {
+    var opt = ownType.options[ownType.selectedIndex];
+    ownRego.classList.toggle('hidden', !(opt && opt.getAttribute('data-regoable')));
+  });
+
+  // Hired: auto-apply rate from the company's saved rates
+  var company = hired.querySelector('.hire-company');
+  var hType = hired.querySelector('.hire-type');
+  var rate = hired.querySelector('.hire-rate');
+  var unit = hired.querySelector('.hire-unit');
+  var autoTag = hired.querySelector('.hire-rate-auto');
+  var dirty = false;
+  rate.addEventListener('input', function () { dirty = true; if (autoTag) autoTag.classList.add('hidden'); });
+  function lookup() {
+    if (!company.value || !hType.value) return;
+    if (dirty && rate.value) return; // don't clobber a manual entry
+    fetch('/equipment/hire/rate-lookup?company_id=' + encodeURIComponent(company.value) +
+          '&equipment_type=' + encodeURIComponent(hType.value) +
+          '&rate_unit=' + encodeURIComponent(unit.value))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.found && d.rate != null) {
+          rate.value = d.rate;
+          if (d.rate_unit) unit.value = d.rate_unit;
+          dirty = false;
+          if (autoTag) autoTag.classList.remove('hidden');
+        }
+      }).catch(function () {});
+  }
+  [company, hType, unit].forEach(function (el) { if (el) el.addEventListener('change', lookup); });
+})();
+</script>

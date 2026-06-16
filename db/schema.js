@@ -13182,6 +13182,121 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 276: hire_companies — a fresh, standalone list of equipment-hire
+  // companies (deliberately separate from `clients` and `hire_suppliers`), used
+  // by the Equipment / Hire "Rates" tab and the month-to-month hire register.
+  // =============================================
+  if (!isMigrationApplied.get(276)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS hire_companies (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          name TEXT NOT NULL,
+          contact_person TEXT DEFAULT '',
+          phone TEXT DEFAULT '',
+          email TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          active INTEGER NOT NULL DEFAULT 1,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_hire_companies_name ON hire_companies(name);
+      `);
+      recordMigration.run(276, 'hire_companies table');
+      console.log('Migration 276 applied');
+    } catch (e) {
+      console.error('Migration 276 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 277: equipment_hire_rates — per-company, per-equipment-type rate
+  // card. rate_unit lets a company hold day/week/month rates for one type.
+  // =============================================
+  if (!isMigrationApplied.get(277)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS equipment_hire_rates (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          company_id INTEGER NOT NULL REFERENCES hire_companies(id) ON DELETE CASCADE,
+          equipment_type TEXT NOT NULL,
+          rate REAL NOT NULL DEFAULT 0,
+          rate_unit TEXT NOT NULL DEFAULT 'day' CHECK (rate_unit IN ('hour','day','week','month')),
+          notes TEXT DEFAULT '',
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE (company_id, equipment_type, rate_unit)
+        );
+        CREATE INDEX IF NOT EXISTS idx_equipment_hire_rates_lookup ON equipment_hire_rates(company_id, equipment_type);
+      `);
+      recordMigration.run(277, 'equipment_hire_rates table');
+      console.log('Migration 277 applied');
+    } catch (e) {
+      console.error('Migration 277 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 278: equipment_hires — month-to-month register of equipment on
+  // hire (the "Hired" tab). Optionally links to a detailed hire_dockets row.
+  // company_name is a snapshot so history survives a company rename/delete.
+  // =============================================
+  if (!isMigrationApplied.get(278)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS equipment_hires (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          equipment_type TEXT DEFAULT '',
+          description TEXT DEFAULT '',
+          company_id INTEGER REFERENCES hire_companies(id) ON DELETE SET NULL,
+          company_name TEXT DEFAULT '',
+          reference TEXT DEFAULT '',
+          quantity INTEGER NOT NULL DEFAULT 1,
+          start_date DATE,
+          end_date DATE,
+          rate REAL NOT NULL DEFAULT 0,
+          rate_unit TEXT NOT NULL DEFAULT 'day' CHECK (rate_unit IN ('hour','day','week','month')),
+          monthly_cost REAL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'on_hire' CHECK (status IN ('on_hire','off_hired','cancelled')),
+          hire_docket_id INTEGER REFERENCES hire_dockets(id) ON DELETE SET NULL,
+          power_kind TEXT DEFAULT '',
+          registration TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_equipment_hires_start ON equipment_hires(start_date);
+        CREATE INDEX IF NOT EXISTS idx_equipment_hires_end ON equipment_hires(end_date);
+        CREATE INDEX IF NOT EXISTS idx_equipment_hires_company ON equipment_hires(company_id);
+        CREATE INDEX IF NOT EXISTS idx_equipment_hires_status ON equipment_hires(status);
+      `);
+      recordMigration.run(278, 'equipment_hires table');
+      console.log('Migration 278 applied');
+    } catch (e) {
+      console.error('Migration 278 error:', e.message);
+    }
+  }
+
+  // =============================================
+  // Migration 279: equipment.equipment_type — fine-grained type (matches
+  // lib/hireDocketConfig EQUIPMENT_TYPES) alongside the coarse `category` enum,
+  // so Owned items carry the same taxonomy as hires.
+  // =============================================
+  if (!isMigrationApplied.get(279)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(equipment)").all().map(c => c.name);
+      if (!cols.includes('equipment_type')) {
+        db.exec("ALTER TABLE equipment ADD COLUMN equipment_type TEXT DEFAULT ''");
+      }
+      recordMigration.run(279, 'equipment.equipment_type column');
+      console.log('Migration 279 applied');
+    } catch (e) {
+      console.error('Migration 279 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

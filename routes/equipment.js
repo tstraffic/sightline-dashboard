@@ -2,17 +2,19 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
+const { EQUIPMENT_TYPES } = require('../lib/hireDocketConfig');
 
-// EQUIPMENT LIST
+// EQUIPMENT LIST — the "Owned" tab. Hired gear lives under /equipment/hire.
 router.get('/', (req, res) => {
   const db = getDb();
   let where = [];
   let params = [];
+  // This register is owned equipment only (treat legacy NULL as owned).
+  where.push("(e.ownership_type = 'owned' OR e.ownership_type IS NULL)");
   if (req.query.category) { where.push('e.category = ?'); params.push(req.query.category); }
   if (req.query.condition) { where.push('e.current_condition = ?'); params.push(req.query.condition); }
   if (req.query.status) { where.push('e.status = ?'); params.push(req.query.status); }
   if (req.query.search) { where.push("(e.name LIKE ? OR e.asset_number LIKE ? OR e.serial_number LIKE ?)"); const s = `%${req.query.search}%`; params.push(s, s, s); }
-  if (req.query.ownership) { where.push('e.ownership_type = ?'); params.push(req.query.ownership); }
   if (req.query.active === '0') {
     // Show all including inactive
   } else {
@@ -45,8 +47,9 @@ router.get('/', (req, res) => {
   const totalHired = allActive.filter(e => e.ownership_type === 'hired').length;
 
   res.render('equipment/index', {
-    title: 'Equipment Register',
+    title: 'Equipment / Hire — Owned',
     currentPage: 'equipment',
+    tabActive: 'owned',
     equipment,
     filters: req.query,
     stats: { total: equipment.length, inspectionsDue, totalDeployed, poorDamaged, totalHired },
@@ -56,9 +59,20 @@ router.get('/', (req, res) => {
   });
 });
 
-// NEW EQUIPMENT FORM
+// ADD-NEW WIZARD — step 1 owned/hired, step 2 equipment type, then
+// type-specific fields. Owned posts here (POST /equipment); hired posts to
+// /equipment/hire.
 router.get('/new', (req, res) => {
-  res.render('equipment/form', { title: 'Add Equipment', currentPage: 'equipment', item: null });
+  const db = getDb();
+  const companies = db.prepare('SELECT id, name FROM hire_companies WHERE active = 1 ORDER BY name').all();
+  res.render('equipment/new', {
+    title: 'Add Equipment / Hire',
+    currentPage: 'equipment',
+    equipmentTypes: EQUIPMENT_TYPES,
+    companies,
+    rateUnits: ['hour', 'day', 'week', 'month'],
+    ownership: req.query.ownership === 'hired' ? 'hired' : (req.query.ownership === 'owned' ? 'owned' : ''),
+  });
 });
 
 // CREATE EQUIPMENT
@@ -70,11 +84,11 @@ router.post('/', (req, res) => {
   const equipStatus = validStatuses.includes(b.status) ? b.status : 'available';
 
   const result = db.prepare(`
-    INSERT INTO equipment (asset_number, name, category, description, serial_number, registration, location, purchase_date, purchase_cost, current_condition, storage_location, next_inspection_date, inspection_interval_days, notes, status,
+    INSERT INTO equipment (asset_number, name, category, equipment_type, description, serial_number, registration, location, purchase_date, purchase_cost, current_condition, storage_location, next_inspection_date, inspection_interval_days, notes, status,
       ownership_type, hire_supplier, hire_daily_rate, hire_start_date, hire_end_date, hire_reference)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(b.asset_number, b.name, b.category, b.description || '', b.serial_number || '', b.registration || '', b.location || '', b.purchase_date || null, parseFloat(b.purchase_cost) || 0, b.current_condition || 'good', b.storage_location || '', b.next_inspection_date || null, parseInt(b.inspection_interval_days) || 90, b.notes || '', equipStatus,
-    b.ownership_type === 'hired' ? 'hired' : 'owned', b.hire_supplier || '', parseFloat(b.hire_daily_rate) || 0, b.hire_start_date || null, b.hire_end_date || null, b.hire_reference || '');
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(b.asset_number, b.name, b.category || 'other', b.equipment_type || '', b.description || '', b.serial_number || '', b.registration || '', b.location || '', b.purchase_date || null, parseFloat(b.purchase_cost) || 0, b.current_condition || 'good', b.storage_location || '', b.next_inspection_date || null, parseInt(b.inspection_interval_days) || 90, b.notes || '', equipStatus,
+    'owned', b.hire_supplier || '', parseFloat(b.hire_daily_rate) || 0, b.hire_start_date || null, b.hire_end_date || null, b.hire_reference || '');
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'equipment', entityId: result.lastInsertRowid, entityLabel: `${b.asset_number} - ${b.name}`, ip: req.ip });
   req.flash('success', `Equipment ${b.asset_number} added.`);
@@ -150,7 +164,7 @@ router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const item = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
   if (!item) { req.flash('error', 'Equipment not found.'); return res.redirect('/equipment'); }
-  res.render('equipment/form', { title: `Edit ${item.asset_number}`, currentPage: 'equipment', item });
+  res.render('equipment/form', { title: `Edit ${item.asset_number}`, currentPage: 'equipment', item, equipmentTypes: EQUIPMENT_TYPES });
 });
 
 // UPDATE EQUIPMENT
@@ -162,11 +176,11 @@ router.post('/:id', (req, res) => {
   const equipStatus = validStatuses.includes(b.status) ? b.status : 'available';
 
   db.prepare(`
-    UPDATE equipment SET asset_number=?, name=?, category=?, description=?, serial_number=?, registration=?, location=?, purchase_date=?, purchase_cost=?, current_condition=?, storage_location=?, next_inspection_date=?, inspection_interval_days=?, notes=?, active=?, status=?,
-    ownership_type=?, hire_supplier=?, hire_daily_rate=?, hire_start_date=?, hire_end_date=?, hire_reference=?,
+    UPDATE equipment SET asset_number=?, name=?, category=?, equipment_type=?, description=?, serial_number=?, registration=?, location=?, purchase_date=?, purchase_cost=?, current_condition=?, storage_location=?, next_inspection_date=?, inspection_interval_days=?, notes=?, active=?, status=?,
+    hire_supplier=?, hire_daily_rate=?, hire_start_date=?, hire_end_date=?, hire_reference=?,
     updated_at=CURRENT_TIMESTAMP WHERE id=?
-  `).run(b.asset_number, b.name, b.category, b.description || '', b.serial_number || '', b.registration || '', b.location || '', b.purchase_date || null, parseFloat(b.purchase_cost) || 0, b.current_condition, b.storage_location || '', b.next_inspection_date || null, parseInt(b.inspection_interval_days) || 90, b.notes || '', b.active !== undefined ? (b.active ? 1 : 0) : 1, equipStatus,
-    b.ownership_type === 'hired' ? 'hired' : 'owned', b.hire_supplier || '', parseFloat(b.hire_daily_rate) || 0, b.hire_start_date || null, b.hire_end_date || null, b.hire_reference || '',
+  `).run(b.asset_number, b.name, b.category, b.equipment_type || '', b.description || '', b.serial_number || '', b.registration || '', b.location || '', b.purchase_date || null, parseFloat(b.purchase_cost) || 0, b.current_condition, b.storage_location || '', b.next_inspection_date || null, parseInt(b.inspection_interval_days) || 90, b.notes || '', b.active !== undefined ? (b.active ? 1 : 0) : 1, equipStatus,
+    b.hire_supplier || '', parseFloat(b.hire_daily_rate) || 0, b.hire_start_date || null, b.hire_end_date || null, b.hire_reference || '',
     req.params.id);
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'equipment', entityId: parseInt(req.params.id), entityLabel: `${b.asset_number} - ${b.name}`, ip: req.ip });
