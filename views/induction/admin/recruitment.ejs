@@ -3,22 +3,32 @@
   const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const monthLabel = monthNames[month - 1] + ' ' + year;
 
-  // Status pill colour. -100 bg + -700 text both get the dashboard's dark-glass
-  // auto-overrides, so these read cleanly in both themes. Use purple (not
-  // violet — violet has no dark-glass override and renders washed-out).
-  function statusColor(status) {
-    const s = (status || '').toLowerCase();
-    if (s === 'hired')               return 'bg-emerald-100 text-emerald-700';
-    if (s === 'inducted')             return 'bg-blue-100 text-blue-700';
-    if (s === 'induction scheduled')  return 'bg-purple-100 text-purple-700';
-    if (s === 'contacted')            return 'bg-amber-100 text-amber-700';
-    if (s === 'not suitable' || s === 'withdrew' || s === 'no show')
-                                      return 'bg-gray-200 text-gray-700';
-    return 'bg-gray-100 text-gray-700'; // New
+  // Stage → pill palette. -100 bg + -700 text get the dashboard's dark-glass
+  // auto-overrides, so these read cleanly in both themes.
+  function stageChip(stage) {
+    switch ((stage || '').toUpperCase()) {
+      case 'HIRED':      return 'bg-emerald-100 text-emerald-700';
+      case 'INDUCTED':   return 'bg-blue-100 text-blue-700';
+      case 'BOOKED':     return 'bg-amber-100 text-amber-700';
+      case 'INTERESTED': return 'bg-violet-100 text-violet-700';
+      case 'CALLED':     return 'bg-teal-100 text-teal-700';
+      case 'NO_SHOW':    return 'bg-red-100 text-red-700';
+      case 'DECLINED':   return 'bg-gray-200 text-gray-600';
+      default:           return 'bg-gray-100 text-gray-700'; // NEW
+    }
+  }
+  // Column header accent dot.
+  function stageDot(stage) {
+    switch ((stage || '').toUpperCase()) {
+      case 'HIRED':      return 'bg-emerald-500';
+      case 'INDUCTED':   return 'bg-blue-500';
+      case 'BOOKED':     return 'bg-amber-500';
+      case 'INTERESTED': return 'bg-violet-500';
+      case 'CALLED':     return 'bg-teal-500';
+      default:           return 'bg-gray-400';
+    }
   }
 
-  // Weekly band: keep -700 text + -200 ring so the dark-glass auto-overrides
-  // make the cards readable in dark mode.
   function bandCard(band) {
     if (band === 'on')   return 'bg-emerald-50 ring-emerald-200 text-emerald-700';
     if (band === 'over') return 'bg-red-50 ring-red-200 text-red-700';
@@ -35,37 +45,73 @@
     return                       'Under';
   }
 
-  // Summary cards: each uses a -700 number + neutral label, with a coloured
-  // icon chip. Avoids the dark-on-dark trap that -900 text caused before.
+  function fmtShort(isoDate) {
+    if (!isoDate) return '';
+    return new Date(isoDate + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  }
+  function fmtTime(t) {
+    if (!t) return '';
+    const m = String(t).match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return '';
+    let h = parseInt(m[1], 10); const min = m[2];
+    const ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return h + ':' + min + ' ' + ampm;
+  }
+
+  // forward index for "at or beyond" client filtering.
+  const FWD = forwardStages; // ['NEW',...,'HIRED']
+  function fwdIndex(stage) {
+    const i = FWD.indexOf((stage || '').toUpperCase());
+    return i; // terminal → -1
+  }
+
+  // Summary cards double as filters. `filter` = the stage a card filters to
+  // (everyone at that stage or beyond); null = no filter (Applicants = all).
   const summaryCards = [
-    { k:'total',      label:'Applicants',        icon:'users',     accent:'text-gray-700',     chip:'bg-gray-100 text-gray-700' },
-    { k:'called',     label:'Called',            icon:'phone',     accent:'text-amber-700',    chip:'bg-amber-100 text-amber-700' },
-    { k:'interested', label:'Interested',        icon:'thumb',     accent:'text-purple-700',   chip:'bg-purple-100 text-purple-700' },
-    { k:'booked',     label:'Booked',            icon:'calendar',  accent:'text-blue-700',     chip:'bg-blue-100 text-blue-700' },
-    { k:'hired',      label:'Hired',             icon:'check',     accent:'text-emerald-700',  chip:'bg-emerald-100 text-emerald-700' },
+    { k:'total',      label:'Applicants', filter:null,         icon:'users',     accent:'text-gray-700',    chip:'bg-gray-100 text-gray-700' },
+    { k:'called',     label:'Called',     filter:'CALLED',     icon:'phone',     accent:'text-teal-700',    chip:'bg-teal-100 text-teal-700' },
+    { k:'interested', label:'Interested', filter:'INTERESTED', icon:'thumb',     accent:'text-violet-700',  chip:'bg-violet-100 text-violet-700' },
+    { k:'booked',     label:'Booked',     filter:'BOOKED',     icon:'calendar',  accent:'text-amber-700',   chip:'bg-amber-100 text-amber-700' },
+    { k:'hired',      label:'Hired',      filter:'HIRED',      icon:'check',     accent:'text-emerald-700', chip:'bg-emerald-100 text-emerald-700' },
   ];
+
+  // Per-stage "one relevant date" for the compact card.
+  function cardDate(a) {
+    const s = (a.stage || '').toUpperCase();
+    if (s === 'NEW')                              return a.date_applied ? { label:'Applied', value: fmtShort(a.date_applied) } : null;
+    if (s === 'CALLED' || s === 'INTERESTED')     return a.date_called  ? { label:'Called',  value: fmtShort(a.date_called) }  : null;
+    if (s === 'BOOKED' || s === 'INDUCTED') {
+      if (!a.induction_date) return null;
+      const t = fmtTime(a.induction_time);
+      return { label:'Induction', value: fmtShort(a.induction_date) + (t ? ' · ' + t : '') };
+    }
+    if (s === 'HIRED')                            return a.induction_date ? { label:'Inducted', value: fmtShort(a.induction_date) } : null;
+    // terminal: show induction date for the record if present
+    return a.induction_date ? { label:'Was booked', value: fmtShort(a.induction_date) } : null;
+  }
 %>
 
-<style>
-  /* Make native date pickers readable in dark mode — without this the calendar
-     icon is invisible and the typed-in text is dark grey on dark grey. */
-  body.dark-glass .recruitment-inline input[type="date"] { color-scheme: dark; color: rgba(255,255,255,0.85); }
-  body.dark-glass .recruitment-inline select { color-scheme: dark; color: rgba(255,255,255,0.92); }
-  .recruitment-inline input[type="date"] { color-scheme: light; }
-  .recruitment-inline select.status-pill { font-weight: 600; }
-  /* Highlight the row when the focused cell is being saved */
-  .recruitment-inline tr.saving { opacity: 0.55; }
-</style>
-
-<div class="space-y-5 recruitment-inline">
+<div class="space-y-5" id="rec-root">
 
   <!-- Header -->
   <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
     <div>
       <h1 class="text-2xl font-bold text-gray-900">Recruitment</h1>
-      <p class="text-sm text-gray-500 mt-1">Seek applicant call tracker · target <%= targetMin %>–<%= targetMax %> calls / week</p>
+      <p class="text-sm text-gray-500 mt-1">Hiring pipeline · scoped to applicants who applied in <%= monthLabel %> · call target <%= targetMin %>–<%= targetMax %>/week</p>
     </div>
     <div class="flex flex-wrap items-center gap-2">
+      <!-- Board / List toggle -->
+      <div class="inline-flex rounded-lg border border-gray-300 bg-white p-0.5" role="tablist">
+        <button type="button" id="view-board-btn" class="rec-viewbtn is-active" data-view="board">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5h4v14H4zM10 5h4v14h-4zM16 5h4v9h-4z"/></svg>
+          Board
+        </button>
+        <button type="button" id="view-list-btn" class="rec-viewbtn" data-view="list">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+          List
+        </button>
+      </div>
       <form method="GET" action="/induction/admin/recruitment" class="flex items-center gap-2">
         <select name="year" onchange="this.form.submit()"
           class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
@@ -95,15 +141,53 @@
 
   <%- include('_registry-tabs', { tabActive: 'recruitment' }) %>
 
-  <!-- Monthly summary cards -->
+  <!-- Add-applicant inline form -->
+  <div id="add-applicant-row" class="hidden border border-gray-200 bg-brand-50/40 rounded-xl p-4">
+    <form method="POST" action="/induction/admin/recruitment?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+      <%- include('../../partials/csrf') %>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name <span class="text-red-500">*</span></label>
+        <input type="text" name="applicant_name" required placeholder="Full name"
+          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
+        <input type="text" name="phone" placeholder="04xx xxx xxx"
+          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
+        <input type="email" name="email" placeholder="name@example.com"
+          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Applied</label>
+        <input type="date" name="date_applied" value="<%= today %>"
+          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+      </div>
+      <div class="sm:col-span-3">
+        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
+        <input type="text" name="notes" placeholder="Any context (tickets, availability, etc.)"
+          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+      </div>
+      <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
+        <button type="button" onclick="document.getElementById('add-applicant-row').classList.add('hidden')"
+          class="px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg shadow-sm">Save applicant</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Summary cards (clickable filters) -->
   <div>
     <div class="flex items-baseline justify-between mb-2">
       <h2 class="text-sm font-bold text-gray-700 uppercase tracking-widest"><%= monthLabel %> · Summary</h2>
-      <span class="text-[11px] text-gray-500">Updates live as you log calls</span>
+      <span class="text-[11px] text-gray-500">Tap a card to filter the pipeline · <button type="button" id="clear-filter" class="text-brand-600 font-semibold hidden">Clear filter</button></span>
     </div>
     <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
       <% summaryCards.forEach(s => { %>
-        <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3.5 flex items-center gap-3">
+        <button type="button" class="rec-summary text-left bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3.5 flex items-center gap-3 transition hover:border-brand-300 hover:shadow"
+                data-filter="<%= s.filter || '' %>">
           <div class="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0 <%= s.chip %>">
             <% if (s.icon === 'users') { %>
               <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
@@ -121,7 +205,7 @@
             <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest"><%= s.label %></p>
             <p class="text-2xl font-bold tabular-nums <%= s.accent %>"><%= stats[s.k] %></p>
           </div>
-        </div>
+        </button>
       <% }) %>
     </div>
   </div>
@@ -149,386 +233,264 @@
     </div>
   </div>
 
-  <!-- Applicants table -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-    <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between">
-      <div>
-        <h2 class="text-sm font-bold text-gray-800"><%= monthLabel %> · Applicants</h2>
-        <p class="text-[11px] text-gray-500 mt-0.5">Tip: change a date or dropdown directly in the row — it saves automatically. Use Edit for name / phone / email / notes.</p>
-      </div>
-      <p class="text-xs text-gray-500"><%= applicants.length %> total</p>
-    </div>
-
-    <!-- Add-applicant inline form -->
-    <div id="add-applicant-row" class="hidden border-b border-gray-200 bg-brand-50/40 p-4">
-      <form method="POST" action="/induction/admin/recruitment?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
-        <%- include('../../partials/csrf') %>
-        <div class="sm:col-span-2">
-          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name <span class="text-red-500">*</span></label>
-          <input type="text" name="applicant_name" required placeholder="Full name"
-            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
-        </div>
-        <div>
-          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
-          <input type="text" name="phone" placeholder="04xx xxx xxx"
-            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
-        </div>
-        <div>
-          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
-          <input type="email" name="email" placeholder="name@example.com"
-            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
-        </div>
-        <div>
-          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Applied</label>
-          <input type="date" name="date_applied"
-            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
-        </div>
-        <div class="sm:col-span-3">
-          <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
-          <input type="text" name="notes" placeholder="Any context (tickets, availability, etc.)"
-            class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
-        </div>
-        <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
-          <button type="button" onclick="document.getElementById('add-applicant-row').classList.add('hidden')"
-            class="px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">Cancel</button>
-          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg shadow-sm">Save applicant</button>
-        </div>
-      </form>
-    </div>
-
+  <!-- ================= BOARD VIEW ================= -->
+  <div id="view-board">
     <% if (applicants.length === 0) { %>
-      <div class="p-12 text-center">
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-12 text-center">
         <div class="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-3">
           <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
         </div>
-        <p class="text-sm font-semibold text-gray-700">No applicants logged for <%= monthLabel %> yet</p>
-        <p class="text-xs text-gray-500 mt-1">Hit <strong>Add applicant</strong> above to start tracking.</p>
+        <p class="text-sm font-semibold text-gray-700">No applicants applied in <%= monthLabel %> yet</p>
+        <p class="text-xs text-gray-500 mt-1">Hit <strong>Add applicant</strong> above to start the pipeline.</p>
       </div>
     <% } else { %>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 text-[10px] font-bold uppercase tracking-widest text-gray-500">
-            <tr>
-              <th class="text-left px-3 py-2.5 w-8">#</th>
-              <th class="text-left px-3 py-2.5">Name</th>
-              <th class="text-left px-3 py-2.5">Phone</th>
-              <th class="text-left px-3 py-2.5">Applied</th>
-              <th class="text-left px-3 py-2.5">Called</th>
-              <th class="text-left px-3 py-2.5">Called?</th>
-              <th class="text-left px-3 py-2.5">Interested?</th>
-              <th class="text-left px-3 py-2.5">Booked?</th>
-              <th class="text-left px-3 py-2.5">Induction (date · time)</th>
-              <th class="text-left px-3 py-2.5">Status</th>
-              <th class="text-left px-3 py-2.5 min-w-[160px]">Notes</th>
-              <th class="text-right px-3 py-2.5"></th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <% applicants.forEach((a, i) => { %>
-              <tr id="row-<%= a.id %>" class="hover:bg-gray-50/60 align-middle">
-                <td class="px-3 py-2.5 text-gray-400 tabular-nums"><%= i + 1 %></td>
-                <td class="px-3 py-2.5">
-                  <p class="font-semibold text-gray-900 leading-tight"><%= a.applicant_name %></p>
-                  <% if (a.email) { %><p class="text-[11px] text-gray-500 leading-tight"><%= a.email %></p><% } %>
-                </td>
-                <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap tabular-nums">
-                  <% if (a.phone) { %>
-                    <span class="inline-flex items-center gap-1">
-                      <span><%= a.phone %></span>
-                      <button type="button" data-copy-text="<%= a.phone %>"
-                              class="copy-btn inline-flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-brand-700 hover:bg-brand-50 transition"
-                              title="Copy phone number" aria-label="Copy phone number">
-                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                      </button>
-                    </span>
-                  <% } else { %>—<% } %>
-                </td>
-                <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">
-                  <input type="date" value="<%= a.date_applied || '' %>" data-applicant="<%= a.id %>" data-field="date_applied"
-                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-36" />
-                </td>
-                <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">
-                  <input type="date" value="<%= a.date_called || '' %>" data-applicant="<%= a.id %>" data-field="date_called"
-                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-36" />
-                </td>
-                <td class="px-3 py-2.5">
-                  <select data-applicant="<%= a.id %>" data-field="called"
-                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-2 py-1 text-xs">
-                    <% calledOpts.forEach(o => { %><option value="<%= o %>" <%= a.called === o ? 'selected' : '' %>><%= o || '—' %></option><% }) %>
-                  </select>
-                </td>
-                <td class="px-3 py-2.5">
-                  <select data-applicant="<%= a.id %>" data-field="interested"
-                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-2 py-1 text-xs">
-                    <% interestedOpts.forEach(o => { %><option value="<%= o %>" <%= a.interested === o ? 'selected' : '' %>><%= o || '—' %></option><% }) %>
-                  </select>
-                </td>
-                <td class="px-3 py-2.5">
-                  <select data-applicant="<%= a.id %>" data-field="induction_booked"
-                    class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-2 py-1 text-xs">
-                    <% bookedOpts.forEach(o => { %><option value="<%= o %>" <%= a.induction_booked === o ? 'selected' : '' %>><%= o || '—' %></option><% }) %>
-                  </select>
-                </td>
-                <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap">
-                  <div class="flex items-center gap-1">
-                    <input type="date" value="<%= a.induction_date || '' %>" data-applicant="<%= a.id %>" data-field="induction_date"
-                      class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-36" />
-                    <input type="time" value="<%= a.induction_time || '' %>" data-applicant="<%= a.id %>" data-field="induction_time"
-                      title="Induction time"
-                      class="inline-edit bg-transparent border border-transparent hover:border-gray-300 focus:border-brand-500 focus:ring-1 focus:ring-brand-200 rounded-md px-1.5 py-1 text-xs w-24" />
-                  </div>
-                </td>
-                <td class="px-3 py-2.5">
-                  <select data-applicant="<%= a.id %>" data-field="status"
-                    class="inline-edit status-pill rounded-full px-2.5 py-1 text-[11px] border-0 focus:ring-2 focus:ring-brand-300 <%= statusColor(a.status) %>">
-                    <% statuses.forEach(s => { %><option value="<%= s %>" <%= a.status === s ? 'selected' : '' %>><%= s %></option><% }) %>
-                  </select>
-                </td>
-                <td class="px-3 py-2.5 text-gray-700">
-                  <p class="line-clamp-2 text-xs leading-snug"><%= a.notes || '—' %></p>
-                </td>
-                <td class="px-3 py-2.5 text-right whitespace-nowrap">
-                  <button type="button" onclick="document.getElementById('row-edit-<%= a.id %>').classList.toggle('hidden')"
-                    class="px-2 py-1 text-[11px] font-semibold text-brand-600 hover:bg-brand-50 rounded">Edit</button>
-                  <form method="POST" action="/induction/admin/recruitment/<%= a.id %>/delete?year=<%= year %>&month=<%= month %>" class="inline" onsubmit="return confirm('Remove this applicant?')">
-                    <%- include('../../partials/csrf') %>
-                    <button type="submit" class="px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded">Delete</button>
-                  </form>
-                </td>
-              </tr>
-              <tr id="row-edit-<%= a.id %>" class="hidden bg-brand-50/40">
-                <td colspan="12" class="px-4 py-3">
-                  <form method="POST" action="/induction/admin/recruitment/<%= a.id %>?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
-                    <%- include('../../partials/csrf') %>
-                    <div>
-                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name</label>
-                      <input type="text" name="applicant_name" value="<%= a.applicant_name %>" required
-                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
-                    </div>
-                    <div>
-                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
-                      <input type="text" name="phone" value="<%= a.phone || '' %>"
-                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
-                    </div>
-                    <div class="sm:col-span-2">
-                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
-                      <input type="email" name="email" value="<%= a.email || '' %>"
-                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
-                    </div>
-                    <div class="sm:col-span-4">
-                      <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
-                      <textarea name="notes" rows="2"
-                        class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= a.notes || '' %></textarea>
-                    </div>
-                    <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
-                      <button type="button" onclick="document.getElementById('row-edit-<%= a.id %>').classList.add('hidden')"
-                        class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">Cancel</button>
-                      <button type="submit" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg shadow-sm">Save</button>
-                    </div>
-                  </form>
-                </td>
-              </tr>
+      <div class="rec-board" id="rec-board">
+        <% forwardStages.forEach(function (st) {
+             const cards = byStage[st] || [];
+        %>
+          <section class="rec-col" data-col-stage="<%= st %>">
+            <div class="rec-col-head">
+              <span class="inline-flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full <%= stageDot(st) %>"></span>
+                <%= stageLabels[st] %>
+              </span>
+              <span class="rec-col-count" data-count-for="<%= st %>"><%= cards.length %></span>
+            </div>
+            <div class="rec-col-body" data-drop-stage="<%= st %>">
+              <% cards.forEach(function (a) { %>
+                <%- include('_card', { a, stageChip, cardDate, fmtShort }) %>
+              <% }) %>
+              <div class="rec-col-empty" data-empty>Nothing here</div>
+            </div>
+          </section>
+        <% }); %>
+
+        <!-- Closed column (collapsed NO_SHOW + DECLINED), expandable -->
+        <section class="rec-col rec-col--closed" data-col-stage="CLOSED">
+          <button type="button" class="rec-col-head rec-col-head--btn" id="closed-toggle" aria-expanded="false">
+            <span class="inline-flex items-center gap-2">
+              <svg class="w-3.5 h-3.5 transition-transform" id="closed-caret" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+              Closed
+            </span>
+            <span class="rec-col-count" data-count-for="CLOSED"><%= closed.length %></span>
+          </button>
+          <div class="rec-col-body rec-col-body--closed hidden" data-drop-stage="CLOSED" id="closed-body">
+            <% closed.forEach(function (a) { %>
+              <%- include('_card', { a, stageChip, cardDate, fmtShort }) %>
             <% }) %>
-          </tbody>
-        </table>
+            <div class="rec-col-empty" data-empty>No closed candidates</div>
+          </div>
+        </section>
       </div>
     <% } %>
   </div>
 
+  <!-- ================= LIST VIEW ================= -->
+  <div id="view-list" class="hidden">
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3 flex-wrap">
+        <div>
+          <h2 class="text-sm font-bold text-gray-800"><%= monthLabel %> · Applicants</h2>
+          <p class="text-[11px] text-gray-500 mt-0.5">Change the Stage dropdown to move a candidate. Use Edit for name / phone / email / dates / notes.</p>
+        </div>
+        <label class="inline-flex items-center gap-2 text-xs text-gray-600">
+          <input type="checkbox" id="show-closed-rows" class="rounded border-gray-300">
+          Show closed
+        </label>
+      </div>
+      <% if (applicants.length === 0) { %>
+        <div class="p-10 text-center text-sm text-gray-500">No applicants for <%= monthLabel %>.</div>
+      <% } else { %>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+              <tr>
+                <th class="text-left px-3 py-2.5 w-8">#</th>
+                <th class="text-left px-3 py-2.5">Name</th>
+                <th class="text-left px-3 py-2.5">Phone</th>
+                <th class="text-left px-3 py-2.5">Applied</th>
+                <th class="text-left px-3 py-2.5">Called</th>
+                <th class="text-left px-3 py-2.5">Induction (date · time)</th>
+                <th class="text-left px-3 py-2.5">Stage</th>
+                <th class="text-left px-3 py-2.5 min-w-[160px]">Notes</th>
+                <th class="text-right px-3 py-2.5"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <% applicants.forEach(function (a, i) {
+                   const terminal = terminalStages.indexOf((a.stage||'').toUpperCase()) !== -1;
+              %>
+                <tr id="lrow-<%= a.id %>" class="rec-lrow hover:bg-gray-50/60 align-middle <%= terminal ? 'rec-lrow--closed hidden' : '' %>"
+                    data-id="<%= a.id %>">
+                  <td class="px-3 py-2.5 text-gray-400 tabular-nums"><%= i + 1 %></td>
+                  <td class="px-3 py-2.5">
+                    <p class="font-semibold text-gray-900 leading-tight"><%= a.applicant_name %></p>
+                    <% if (a.email) { %><p class="text-[11px] text-gray-500 leading-tight"><%= a.email %></p><% } %>
+                    <% if (a.needsScheduling) { %>
+                      <span class="rec-badge rec-badge--warn mt-1">Not scheduled</span>
+                    <% } else if (a.isOnCalendar) { %>
+                      <span class="rec-badge rec-badge--ok mt-1">On calendar</span>
+                    <% } %>
+                  </td>
+                  <td class="px-3 py-2.5 text-gray-700 whitespace-nowrap tabular-nums">
+                    <% if (a.phone) { %>
+                      <span class="inline-flex items-center gap-1">
+                        <span><%= a.phone %></span>
+                        <button type="button" data-copy-text="<%= a.phone %>"
+                                class="copy-btn inline-flex items-center justify-center w-6 h-6 rounded text-gray-400 hover:text-brand-700 hover:bg-brand-50 transition"
+                                title="Copy phone number" aria-label="Copy phone number">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+                        </button>
+                      </span>
+                    <% } else { %>—<% } %>
+                  </td>
+                  <td class="px-3 py-2.5 text-gray-600 whitespace-nowrap"><%= fmtShort(a.date_applied) || '—' %></td>
+                  <td class="px-3 py-2.5 text-gray-600 whitespace-nowrap"><%= fmtShort(a.date_called) || '—' %></td>
+                  <td class="px-3 py-2.5 text-gray-600 whitespace-nowrap">
+                    <% if (a.induction_date) { %><%= fmtShort(a.induction_date) %><% if (a.induction_time) { %> · <%= fmtTime(a.induction_time) %><% } %><% } else { %>—<% } %>
+                  </td>
+                  <td class="px-3 py-2.5">
+                    <select class="rec-stage-select status-pill rounded-full px-2.5 py-1 text-[11px] border-0 focus:ring-2 focus:ring-brand-300 <%= stageChip(a.stage) %>"
+                            data-id="<%= a.id %>">
+                      <% forwardStages.concat(terminalStages).forEach(function (st) { %>
+                        <option value="<%= st %>" <%= (a.stage||'').toUpperCase() === st ? 'selected' : '' %>><%= stageLabels[st] %></option>
+                      <% }) %>
+                    </select>
+                  </td>
+                  <td class="px-3 py-2.5 text-gray-700"><p class="line-clamp-2 text-xs leading-snug"><%= a.notes || '—' %></p></td>
+                  <td class="px-3 py-2.5 text-right whitespace-nowrap">
+                    <button type="button" class="rec-edit-btn px-2 py-1 text-[11px] font-semibold text-brand-600 hover:bg-brand-50 rounded" data-id="<%= a.id %>">Edit</button>
+                    <form method="POST" action="/induction/admin/recruitment/<%= a.id %>/delete?year=<%= year %>&month=<%= month %>" class="inline" onsubmit="return confirm('Remove this applicant?')">
+                      <%- include('../../partials/csrf') %>
+                      <button type="submit" class="px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded">Delete</button>
+                    </form>
+                  </td>
+                </tr>
+                <tr id="ledit-<%= a.id %>" class="hidden bg-brand-50/40">
+                  <td colspan="9" class="px-4 py-3">
+                    <form method="POST" action="/induction/admin/recruitment/<%= a.id %>?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                      <%- include('../../partials/csrf') %>
+                      <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name</label>
+                        <input type="text" name="applicant_name" value="<%= a.applicant_name %>" required
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
+                        <input type="text" name="phone" value="<%= a.phone || '' %>"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                      </div>
+                      <div class="sm:col-span-2">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
+                        <input type="email" name="email" value="<%= a.email || '' %>"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Applied</label>
+                        <input type="date" name="date_applied" value="<%= a.date_applied || '' %>"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Called</label>
+                        <input type="date" name="date_called" value="<%= a.date_called || '' %>"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Induction Date</label>
+                        <input type="date" name="induction_date" value="<%= a.induction_date || '' %>"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                      </div>
+                      <div>
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Induction Time</label>
+                        <input type="time" name="induction_time" value="<%= a.induction_time || '' %>"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                      </div>
+                      <div class="sm:col-span-4">
+                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
+                        <textarea name="notes" rows="2"
+                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= a.notes || '' %></textarea>
+                      </div>
+                      <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
+                        <button type="button" class="rec-edit-cancel px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg" data-id="<%= a.id %>">Cancel</button>
+                        <button type="submit" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg shadow-sm">Save</button>
+                      </div>
+                    </form>
+                  </td>
+                </tr>
+              <% }); %>
+            </tbody>
+          </table>
+        </div>
+      <% } %>
+    </div>
+  </div>
+
 </div>
 
-<!-- Floating save bar — appears the moment there's a pending change.
-     Lets the planner make a run of edits without the page reloading
-     after every dropdown. Auto-flushes after 5 unique pending changes
-     or 8 seconds of idle; manual Save / Discard always available. -->
-<div id="rec-savebar" class="rec-savebar" hidden>
-  <span class="rec-savebar-icon" aria-hidden="true">●</span>
-  <span class="rec-savebar-info"><span id="rec-savebar-count">0</span> unsaved change<span id="rec-savebar-s">s</span></span>
-  <button type="button" id="rec-discard" class="rec-savebar-btn rec-savebar-btn--ghost">Discard</button>
-  <button type="button" id="rec-save"    class="rec-savebar-btn rec-savebar-btn--primary">Save</button>
+<!-- Booking modal: prompts for induction date + time when moving to Booked. -->
+<div id="booking-modal" class="rec-modal hidden">
+  <div class="rec-modal-backdrop" data-modal-close></div>
+  <div class="rec-modal-card">
+    <h3 class="rec-modal-title">Book induction</h3>
+    <p class="rec-modal-sub" id="booking-modal-sub">A candidate can't be booked without an induction date.</p>
+    <div class="grid grid-cols-2 gap-3 mt-3">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Induction date <span class="text-red-500">*</span></label>
+        <input type="date" id="booking-date" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Time</label>
+        <input type="time" id="booking-time" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+    </div>
+    <p id="booking-error" class="text-[11px] text-red-600 mt-2 hidden">Please pick an induction date.</p>
+    <div class="flex items-center justify-end gap-2 mt-4">
+      <button type="button" class="rec-btn rec-btn--ghost" data-modal-close>Cancel</button>
+      <button type="button" id="booking-confirm" class="rec-btn rec-btn--primary">Confirm booking</button>
+    </div>
+  </div>
 </div>
 
-<style>
-  /* Dirty cell — subtle amber border so the planner can see what's
-     queued without it being intrusive. */
-  .inline-edit.is-dirty {
-    background-color: #FFFBEB !important;
-    border-color: #F59E0B !important;
-    box-shadow: 0 0 0 2px rgba(245,158,11,0.18);
-  }
-  body.dark-glass .inline-edit.is-dirty {
-    background-color: rgba(245,158,11,0.18) !important;
-    border-color: #F59E0B !important;
-  }
-  /* Floating save bar — pinned bottom-centre. */
-  .rec-savebar {
-    position: fixed; bottom: 22px; left: 50%;
-    transform: translateX(-50%) translateY(8px);
-    display: inline-flex; align-items: center; gap: 12px;
-    padding: 10px 14px;
-    background: #1F2937; color: #F9FAFB;
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 12px;
-    box-shadow: 0 12px 32px rgba(0,0,0,0.35);
-    z-index: 1000;
-    opacity: 0; pointer-events: none;
-    transition: opacity 160ms ease, transform 160ms ease;
-    font-size: 13px;
-  }
-  .rec-savebar.is-visible {
-    opacity: 1; pointer-events: auto;
-    transform: translateX(-50%) translateY(0);
-  }
-  .rec-savebar.is-saving { opacity: 0.7; }
-  .rec-savebar-icon {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: #F59E0B; color: transparent;
-    box-shadow: 0 0 0 4px rgba(245,158,11,0.15);
-  }
-  .rec-savebar-info { font-weight: 500; }
-  .rec-savebar-btn {
-    border: 0; border-radius: 8px; cursor: pointer;
-    padding: 6px 14px; font-size: 12px; font-weight: 600;
-    transition: background 100ms ease;
-  }
-  .rec-savebar-btn--ghost   { background: transparent; color: #CBD5E1; }
-  .rec-savebar-btn--ghost:hover { background: rgba(255,255,255,0.08); color: #fff; }
-  .rec-savebar-btn--primary { background: #10B981; color: #fff; }
-  .rec-savebar-btn--primary:hover { background: #047857; }
-  .rec-savebar-btn:disabled { opacity: 0.55; cursor: not-allowed; }
-</style>
+<!-- Closed-reason modal: pick NO_SHOW vs DECLINED when dropping into Closed. -->
+<div id="closed-modal" class="rec-modal hidden">
+  <div class="rec-modal-backdrop" data-modal-close></div>
+  <div class="rec-modal-card">
+    <h3 class="rec-modal-title">Close candidate</h3>
+    <p class="rec-modal-sub">Why are they leaving the pipeline?</p>
+    <div class="flex flex-col gap-2 mt-3">
+      <button type="button" class="rec-btn rec-btn--outline" data-closed-reason="DECLINED">Declined / Not suitable</button>
+      <button type="button" class="rec-btn rec-btn--outline" data-closed-reason="NO_SHOW">No Show</button>
+    </div>
+    <div class="flex items-center justify-end mt-4">
+      <button type="button" class="rec-btn rec-btn--ghost" data-modal-close>Cancel</button>
+    </div>
+  </div>
+</div>
 
-<script>
-  // ============================================================
-  //  Batched inline-edit save for the Recruitment table.
-  //
-  //  Previously every <select>/<input> change POSTed immediately
-  //  and then reloaded the whole page — confirming one applicant's
-  //  status mid-row would reset the page and lose context. Now:
-  //
-  //    - On change: stash the new value in a pending map, mark the
-  //      cell dirty (amber border), show a floating save bar.
-  //    - User clicks Save in the bar → flush all pending changes,
-  //      then soft-reload so the monthly stats refresh.
-  //    - User clicks Discard → reload, dropping pending changes.
-  //    - Auto-flush triggers after either:
-  //        • 5 unique pending changes (so a run of edits stays
-  //          interactive but doesn't lose work)
-  //        • 8 seconds of no further edits (a "you're done" signal)
-  //    - beforeunload guards against navigating away with unsaved
-  //      changes.
-  // ============================================================
-  (function () {
-    var csrf = (document.querySelector('input[name="_csrf"]') || {}).value || '';
-    var bar = document.getElementById('rec-savebar');
-    if (!bar) return;
-    var countEl = document.getElementById('rec-savebar-count');
-    var sEl     = document.getElementById('rec-savebar-s');
-    var saveBtn = document.getElementById('rec-save');
-    var discardBtn = document.getElementById('rec-discard');
-    var AUTO_THRESHOLD = 5;
-    var IDLE_MS = 8000;
+<!-- Backward-move modal: keep or drop the induction date. -->
+<div id="backward-modal" class="rec-modal hidden">
+  <div class="rec-modal-backdrop" data-modal-close></div>
+  <div class="rec-modal-card">
+    <h3 class="rec-modal-title">Move back before Booked</h3>
+    <p class="rec-modal-sub" id="backward-sub">This candidate has an induction date. Keep it or remove it from the calendar?</p>
+    <div class="flex flex-col gap-2 mt-3">
+      <button type="button" class="rec-btn rec-btn--outline" id="backward-remove">Remove induction date (recommended)</button>
+      <button type="button" class="rec-btn rec-btn--outline" id="backward-keep">Keep the date</button>
+    </div>
+    <div class="flex items-center justify-end mt-4">
+      <button type="button" class="rec-btn rec-btn--ghost" data-modal-close>Cancel</button>
+    </div>
+  </div>
+</div>
 
-    // key = "<applicant_id>:<field>" → { id, field, value, el }
-    var pending = new Map();
-    var idleTimer = null;
-    var isSaving = false;
+<!-- Toast (transient "Saved"). -->
+<div id="rec-toast" class="rec-toast" hidden></div>
 
-    function markDirty(el, on) {
-      if (!el) return;
-      el.classList.toggle('is-dirty', !!on);
-    }
-    function repaintBar() {
-      var n = pending.size;
-      bar.classList.toggle('is-visible', n > 0 || isSaving);
-      bar.classList.toggle('is-saving', isSaving);
-      if (countEl) countEl.textContent = n;
-      if (sEl) sEl.textContent = n === 1 ? '' : 's';
-      saveBtn.disabled = isSaving || n === 0;
-      discardBtn.disabled = isSaving || n === 0;
-    }
-    function scheduleAutoFlush() {
-      if (idleTimer) clearTimeout(idleTimer);
-      idleTimer = setTimeout(function () {
-        if (pending.size > 0) flush({ reloadAfter: true });
-      }, IDLE_MS);
-    }
+<%- include('_recruitment-styles') %>
+<%- include('_recruitment-script', {
+      year, month,
+      forwardStages, terminalStages, stageLabels,
+}) %>
 
-    async function flush(opts) {
-      opts = opts || {};
-      if (isSaving || pending.size === 0) return;
-      if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-      isSaving = true;
-      repaintBar();
-      var jobs = Array.from(pending.values());
-      var failed = [];
-      // Sequential so two edits on the same row don't race each other.
-      for (var i = 0; i < jobs.length; i++) {
-        var c = jobs[i];
-        try {
-          var body = new URLSearchParams();
-          body.set(c.field, c.value == null ? '' : c.value);
-          body.set('_csrf', csrf);
-          var r = await fetch('/induction/admin/recruitment/' + encodeURIComponent(c.id), {
-            method: 'POST',
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/x-www-form-urlencoded',
-              'X-CSRF-Token': csrf,
-            },
-            body: body.toString(),
-          });
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          var data = await r.json().catch(function () { return {}; });
-          if (data && data.ok === false) throw new Error(data.error || 'Save failed');
-          // Clear from pending + drop dirty highlight.
-          pending.delete(c.id + ':' + c.field);
-          markDirty(c.el, false);
-        } catch (err) {
-          console.error('inline-edit save failed for', c.id, c.field, err);
-          failed.push(c);
-        }
-      }
-      isSaving = false;
-      repaintBar();
-      if (failed.length) {
-        alert('Could not save ' + failed.length + ' change(s). The affected cells are still highlighted — try Save again or refresh.');
-        return;
-      }
-      // All saved — reload so monthly summary + weekly stats refresh,
-      // unless the caller asked us not to (no current use, but useful
-      // for future ajax-only flows).
-      if (opts.reloadAfter !== false) window.location.reload();
-    }
-
-    document.querySelectorAll('.inline-edit').forEach(function (el) {
-      el.addEventListener('change', function () {
-        var id = el.dataset.applicant;
-        var field = el.dataset.field;
-        if (!id || !field) return;
-        pending.set(id + ':' + field, { id: id, field: field, value: el.value, el: el });
-        markDirty(el, true);
-        repaintBar();
-        if (pending.size >= AUTO_THRESHOLD) flush();
-        else scheduleAutoFlush();
-      });
-    });
-
-    saveBtn.addEventListener('click', function () { flush(); });
-    discardBtn.addEventListener('click', function () {
-      if (pending.size === 0) return;
-      if (!confirm('Discard ' + pending.size + ' unsaved change(s)?')) return;
-      window.location.reload();
-    });
-
-    // Guard against navigating away with pending edits.
-    window.addEventListener('beforeunload', function (e) {
-      if (pending.size > 0 && !isSaving) {
-        e.preventDefault();
-        e.returnValue = '';
-      }
-    });
-  })();
-</script>
 <!-- Click-to-copy buttons next to phone numbers. -->
 <script src="/js/copy-btn.js?v=1"></script>
