@@ -153,6 +153,21 @@ router.post('/', (req, res) => {
   const jobNumber = generateJobNumber();
   const jobName = `${jobNumber} | ${clientName} | ${b.suburb} | ${b.start_date}`;
 
+  // Clamp the enum-ish fields to the values the jobs-table CHECK constraints
+  // actually allow. These dropdowns are populated from editable system
+  // settings (settingsOptions.job_status / job_stage), so an admin adding a
+  // status whose key isn't in the schema CHECK would otherwise make every
+  // INSERT throw — the job silently failed to create. Anything unrecognised
+  // falls back to a safe in-constraint default so the job always saves.
+  const ALLOWED_STATUS = ['tender', 'won', 'prestart', 'active', 'on_hold', 'completed', 'closed'];
+  const ALLOWED_STAGE = ['tender', 'prestart', 'delivery', 'closeout'];
+  const ALLOWED_HEALTH = ['green', 'amber', 'red'];
+  const ALLOWED_ACCTS = ['na', 'on_track', 'overdue', 'disputed'];
+  const safeStatus = ALLOWED_STATUS.includes(b.status) ? b.status : 'tender';
+  const safeStage = ALLOWED_STAGE.includes(b.stage) ? b.stage : 'tender';
+  const safeHealth = ALLOWED_HEALTH.includes(b.health) ? b.health : 'green';
+  const safeAccts = ALLOWED_ACCTS.includes(b.accounts_status) ? b.accounts_status : 'na';
+
   try {
     db.prepare(`
       INSERT INTO jobs (job_number, job_name, client, client_id, site_address, suburb, status, stage, percent_complete, start_date, end_date, project_manager_id, ops_supervisor_id, planning_owner_id, marketing_owner_id, accounts_owner_id, health, accounts_status, division_tags, notes,
@@ -160,12 +175,14 @@ router.post('/', (req, res) => {
         contract_value, estimated_hours, crew_size, vehicles, rol_required, tmp_required, tgs_required, spa_required, council_approval, bus_approval, sharepoint_url, state, required_tcp_level, priority, created_by_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      jobNumber, jobName, clientName, b.client_id || null, b.site_address, b.suburb,
-      b.status || 'tender', b.stage || 'tender', parseInt(b.percent_complete) || 0,
-      b.start_date, b.end_date || null,
+      jobNumber, jobName, clientName, b.client_id || null, b.site_address || '', b.suburb || '',
+      safeStatus, safeStage, parseInt(b.percent_complete) || 0,
+      // start_date is NOT NULL — never bind null (would throw). Fall back to
+      // today if the field somehow arrives empty.
+      b.start_date || new Date().toISOString().slice(0, 10), b.end_date || null,
       b.project_manager_id || null, b.ops_supervisor_id || null,
       b.planning_owner_id || null, b.marketing_owner_id || null, b.accounts_owner_id || null,
-      b.health || 'green', b.accounts_status || 'na',
+      safeHealth, safeAccts,
       b.division_tags || '', b.notes || '',
       b.client_project_number || '', b.project_name || '', b.principal_contractor || '', b.traffic_supervisor_id || null,
       parseFloat(b.contract_value) || 0, parseFloat(b.estimated_hours) || 0, parseInt(b.crew_size) || 0, parseInt(b.vehicles) || 0,
