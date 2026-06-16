@@ -223,6 +223,8 @@
       var data = await postUpdate(id, payload);
       if (data.becameHired && data.converted) {
         toast(data.converted.employeeName ? (data.converted.employeeName + ' added to roster') : 'Added to roster as ' + (data.converted.employeeCode || ''));
+      } else if (data.inductionEmailed) {
+        toast('Booked — confirmation emailed');
       } else {
         toast('Saved');
       }

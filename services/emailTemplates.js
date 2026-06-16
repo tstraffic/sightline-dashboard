@@ -157,10 +157,27 @@ function toolboxClientEmail(recipientName, toolbox, message, senderName) {
   `);
 }
 
+// Induction booking confirmation sent to a Seek applicant when an induction
+// date is set on the Recruitment board. `whenText` is the pre-formatted
+// "on <date> at <time>" (or just "on <date>") clause.
+function inductionConfirmationEmail(whenText, inductionUrl) {
+  return baseTemplate('Induction Confirmation', `
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Hi,</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">This is Suhail from T&amp;S Traffic Control.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">This is a confirmation for your induction at our depot, located at <strong>9 Epic Place, Villawood</strong>.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">It will take place <strong>${escapeHtml(whenText)}</strong>, for the duration of approximately an hour. Please bring hard copies of your licenses, and keep your superannuation details ready if applicable.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 4px;">Please fill out our induction form before you arrive:</p>
+    ${buttonHtml('Open Induction Form', inductionUrl)}
+    <p style="color:#6B7280;font-size:13px;line-height:1.6;margin:0 0 16px;word-break:break-all;">Or paste this link into your browser: <a href="${inductionUrl}" style="color:#059669;">${inductionUrl}</a></p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0;">Thank you</p>
+  `);
+}
+
 module.exports = {
   adminInviteEmail,
   workerInviteEmail,
   passwordResetEmail,
+  inductionConfirmationEmail,
   pinResetEmail,
   notificationEmail,
   dailyDigestEmail,

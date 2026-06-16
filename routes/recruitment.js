@@ -9,6 +9,11 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { convertSeekApplicantToCrew } = require('../lib/seekApplicantConverter');
 const { sydneyToday } = require('../lib/sydney');
+const { sendEmail } = require('../services/email');
+const { inductionConfirmationEmail } = require('../services/emailTemplates');
+
+// Public induction form the confirmation email points applicants to.
+const INDUCTION_FORM_URL = (process.env.APP_BASE_URL || 'https://tstc.up.railway.app').replace(/\/$/, '') + '/induction';
 const {
   FORWARD_STAGES, TERMINAL_STAGES, ALL_STAGES, STAGE_LABELS,
   isTerminal, isAtOrBeyond, normalizeStage, derive,
@@ -304,7 +309,7 @@ router.post('/', (req, res) => {
 // destroying earlier dates.
 router.post('/:id', (req, res) => {
   const db = getDb();
-  const row = db.prepare('SELECT id, stage, induction_date, applicant_name, linked_crew_member_id FROM seek_applicants WHERE id = ?').get(req.params.id);
+  const row = db.prepare('SELECT id, stage, induction_date, induction_time, applicant_name, email, linked_crew_member_id FROM seek_applicants WHERE id = ?').get(req.params.id);
   if (!row) {
     if (wantsJson(req)) return res.status(404).json({ ok: false, error: 'Applicant not found.' });
     req.flash('error', 'Applicant not found.'); return res.redirect(backUrl(req));
@@ -396,6 +401,39 @@ router.post('/:id', (req, res) => {
     } catch (e) { /* table missing — non-fatal */ }
   }
 
+  // Email the applicant a booking confirmation when an induction date is set
+  // (or changed) and we have an email to send to. Fire-and-forget so a slow
+  // mail API never blocks the drag/save; failures are logged, not surfaced.
+  if (inductionDateChange && row.email && /@/.test(row.email)) {
+    // Final induction time = the incoming value if this request set one,
+    // otherwise whatever was already on the row.
+    let finalTime = row.induction_time || '';
+    if (typeof req.body.induction_time !== 'undefined') {
+      const t = String(req.body.induction_time || '').trim();
+      if (t === '' || /^([01]?\d|2[0-3]):[0-5]\d$/.test(t)) finalTime = t;
+    }
+    const isoDate = inductionDateChange.newDate;
+    const dateStr = new Date(isoDate + 'T00:00:00Z').toLocaleDateString('en-AU', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+    });
+    let timeStr = '';
+    const m = finalTime.match(/^(\d{1,2}):(\d{2})/);
+    if (m) {
+      let h = parseInt(m[1], 10); const min = m[2];
+      const ampm = h >= 12 ? 'pm' : 'am';
+      h = h % 12; if (h === 0) h = 12;
+      timeStr = h + ':' + min + ' ' + ampm;
+    }
+    const whenText = 'on ' + dateStr + (timeStr ? ' at ' + timeStr : '');
+    const replyTo = (req.session.user && req.session.user.email) || undefined;
+    Promise.resolve(
+      sendEmail(row.email, 'Induction Confirmation — T&S Traffic Control',
+        inductionConfirmationEmail(whenText, INDUCTION_FORM_URL), { replyTo })
+    ).then(r => {
+      if (!r) console.warn('[recruitment] induction confirmation email not sent for applicant', row.id, '(email service not configured?)');
+    }).catch(e => console.error('[recruitment] induction confirmation email error:', e.message));
+  }
+
   // Auto-convert to crew_member when the candidate reaches HIRED (idempotent —
   // skips if already linked).
   let converted = null;
@@ -416,7 +454,8 @@ router.post('/:id', (req, res) => {
   }
 
   if (wantsJson(req)) {
-    return res.json({ ok: true, converted, becameHired, stage: newStage });
+    const inductionEmailed = !!(inductionDateChange && row.email && /@/.test(row.email));
+    return res.json({ ok: true, converted, becameHired, stage: newStage, inductionEmailed });
   }
   res.redirect(backUrl(req));
 });
