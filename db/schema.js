@@ -12949,6 +12949,147 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 273: Same idea as 272 — finish syncing the on-shift system
+  // checklists so the admin Forms & Checklists editor matches the worker
+  // portal. This one covers `risk_toolbox` and `tc_prestart`, which had
+  // the same shape mismatch (admin showed a short generic list, worker
+  // showed the full Traffio form). Worker portal is canonical.
+  //
+  // risk_toolbox is fully template-driven on the worker (the view iterates
+  // the published rev items), so this re-seed actually changes what
+  // workers see too — the matching post-migration list is the full
+  // RA_QUESTIONS form. routes/worker/forms.js translates multiple_choice
+  // back to radio/checkbox so admin-editable option lists stay editable.
+  //
+  // tc_prestart's worker view is still hardcoded, so this re-seed is
+  // cosmetic on the worker side but lets admins finally see + edit the
+  // real field list (SWMS dropdown, toolbox y/n, radio channel, assembly
+  // point, declaration + signature).
+  // =============================================
+  if (!isMigrationApplied.get(273)) {
+    try {
+      const adminId = (db.prepare("SELECT id FROM users WHERE LOWER(role) IN ('admin','management') ORDER BY id ASC LIMIT 1").get() || {}).id || null;
+
+      const SWMS_OPTIONS = [
+        'SWMS 01 - National Generic SWMS',
+        'SWMS 01 - T&S National Generic Traffic Operations SWMS',
+        'SWMS 02 - Mobile Plant Spotting',
+        'SWMS 03 - Pedestrian Management',
+        'SWMS 04 - Manual Lane Closures',
+        'Other',
+      ];
+
+      // Helper: build a multi-option element. Worker translation in
+      // routes/worker/forms.js maps multiple_choice → radio/checkbox.
+      const mc = (items, multi) => ({ options: items, multi: !!multi });
+
+      const canonicalTemplates = [
+        {
+          system_key: 'risk_toolbox',
+          name: 'Risk Assessment & Toolbox',
+          description: 'On-site toolbox / risk assessment run with the crew before work commences. Mirrors the Traffio "2. Risk Assessment and Toolbox" form filled in on the worker portal.',
+          require_signature: 1,
+          items: [
+            { section: 'Toolbox',      item_key: 'employee_name',           question: 'Name of Employee conducting the Toolbox',                          response_type: 'text',           required: 1 },
+            { section: 'Site',         item_key: 'works_at_address',        question: 'Is works taking place at the address provided?',                   response_type: 'multiple_choice', required: 1, options: mc(['Yes','No - see notes'], false) },
+            { section: 'Site',         item_key: 'address_override',        question: "If not, what's the actual location?",                              response_type: 'textarea',       required: 0 },
+            { section: 'Scope',        item_key: 'scope_of_works',          question: 'Scope of Works (select all that apply)',                           response_type: 'multiple_choice', required: 0, options: mc(['Utility (Electric, Gas, Telecom, etc)','Civil','Asphalt','School Management','Construction','Telecommunications','Demolition','Other'], true) },
+            { section: 'Scope',        item_key: 'road_hazards',            question: 'Road Hazards',                                                     response_type: 'multiple_choice', required: 0, options: mc(['Hills/Dips/Crests','High Speed Area','Sharp Bends','Roundabouts','Intersections','Schools / Pedestrian Areas','Wet/Slippery Surface','Reduced Visibility','None Identified'], true) },
+            { section: 'Safety',       item_key: 'emergency_assembly',      question: 'Where is the Emergency Assembly Point?',                           response_type: 'text',           required: 1 },
+            { section: 'Safety',       item_key: 'amenities',               question: 'Closest amenities / toilets to the work site',                     response_type: 'text',           required: 0 },
+            { section: 'Safety',       item_key: 'tcs_have_licence',        question: 'Do all Traffic Controllers hold a current Safe Work NSW Licence (TCR & IMP)?', response_type: 'multiple_choice', required: 1, options: mc(['Yes - Sighted and verified by Team Leader','No - notify supervisor'], false) },
+            { section: 'Safety',       item_key: 'swms',                    question: 'Select the relevant Safe Work Method Statement (SWMS)',            response_type: 'multiple_choice', required: 1, options: mc(SWMS_OPTIONS, false) },
+            { section: 'Traffic',      item_key: 'tc_activity',             question: 'Traffic Control Activity (select all that apply)',                 response_type: 'multiple_choice', required: 0, options: mc(['Lane Closure','Pedestrian Management','Mobile Works','Static Works','Stop/Slow','School Crossing','Pilot Vehicle','Other'], true) },
+            { section: 'Traffic',      item_key: 'traffic_volume',          question: 'Traffic Volume',                                                   response_type: 'multiple_choice', required: 0, options: mc(['Low Volume (eg. Local Road)','Moderate Volume (eg. Arterial Road)','High Volume (eg. Motorway/Highway)'], false) },
+            { section: 'Traffic',      item_key: 'speed_limit',             question: 'Normal posted speed limit (km/h)',                                 response_type: 'number',         required: 0 },
+            { section: 'Traffic',      item_key: 'speed_reduced_to',        question: 'Speed being reduced to (km/h)',                                    response_type: 'number',         required: 0 },
+            { section: 'Controls',     item_key: 'struck_by_traffic_controls', question: 'Controls for being struck by traffic',                          response_type: 'multiple_choice', required: 0, options: mc(['Buffer Vehicle','Clear visibility of control points','Clear visibility of signs','Escape Routes','Not turning back to traffic','Remain outside live traffic lanes'], true) },
+            { section: 'Controls',     item_key: 'exclusion_zone_items',    question: 'Items / machinery needing exclusion zones',                        response_type: 'multiple_choice', required: 0, options: mc(['Open excavation, pits and manholes','Overhead Crane or EWP','Mobile Plant','None Identified'], true) },
+            { section: 'Controls',     item_key: 'exclusion_zone_controls', question: 'Controls for exclusion zones',                                     response_type: 'multiple_choice', required: 0, options: mc(['Client mandated exclusion zone','Delineation (cones/Tiger Tails/Bollards/Tape)','Protected pedestrian corridors','Visible contact / confirmation with Plant operators'], true) },
+            { section: 'Controls',     item_key: 'pedestrian_controls',     question: 'Controls for pedestrians being struck by traffic',                 response_type: 'multiple_choice', required: 0, options: mc(['Delineation (cones/tiger tails/bollards/tape)','Escort','Signs','Pedestrian corridor','None - no pedestrians on site'], true) },
+            { section: 'Controls',     item_key: 'slip_trip_controls',      question: 'Controls for slips, trips and falls',                              response_type: 'multiple_choice', required: 0, options: mc(['Boot Safety - Laces tied and zips pulled up',"Don't rush tasks",'Isolate hazardous area','Cones around manholes/trip hazards'], true) },
+            { section: 'Controls',     item_key: 'weather_conditions',      question: 'Adverse weather conditions',                                       response_type: 'multiple_choice', required: 0, options: mc(['N/A - No adverse weather','Heat','Cold','Rain','Strong Wind','Reduced Visibility / Fog','Storm / Lightning'], true) },
+            { section: 'Controls',     item_key: 'manual_handling_controls', question: 'Controls for manual handling',                                    response_type: 'multiple_choice', required: 0, options: mc(['N/A - Not stopping traffic','Two-person lifts','Use of trolley/dolly','Lifting techniques','PPE'], true) },
+            { section: 'Controls',     item_key: 'queue_management',        question: 'How are end-of-queue lengths being managed?',                      response_type: 'multiple_choice', required: 0, options: mc(['N/A - Not stopping traffic','VMS / Arrow Board','Tail-end controller','Queue protection vehicle','Police support'], true) },
+            { section: 'Controls',     item_key: 'other_hazards',           question: 'Other hazards identified',                                         response_type: 'textarea',       required: 0 },
+            { section: 'Go / No-go',   item_key: 'safe_to_proceed',         question: 'With the selected controls in place, can the job be conducted safely?', response_type: 'multiple_choice', required: 1, options: mc(['Yes','No - work must not commence'], false) },
+            { section: 'Communication',item_key: 'communicated_items',      question: 'Items communicated to all staff in the toolbox',                   response_type: 'multiple_choice', required: 0, options: mc(['Breaks','Client Requirements','Emergency Procedures','Exclusion Zones','Golden Rules of Safety','Sequencing','Site Set Up and Pack Up'], true) },
+          ],
+        },
+        {
+          system_key: 'tc_prestart',
+          name: 'TC Prestart Declaration',
+          description: 'Per-Traffic-Controller declaration filed before commencing controlled traffic work. Worker portal collects SWMS, toolbox attendance, radio channel, assembly point, declaration acknowledgement + signature.',
+          require_signature: 1,
+          items: [
+            { section: 'Site Info',    item_key: 'swms',                question: 'SWMS that applies to your site',                response_type: 'multiple_choice', required: 1, options: mc(SWMS_OPTIONS, false) },
+            { section: 'Site Info',    item_key: 'confirm_toolbox',     question: 'Were you part of the toolbox?',                  response_type: 'multiple_choice', required: 1, options: mc(['Yes','No'], false) },
+            { section: 'Site Info',    item_key: 'confirm_radio',       question: 'Confirm radio channel?',                         response_type: 'multiple_choice', required: 1, options: mc(['Yes','No'], false) },
+            { section: 'Site Info',    item_key: 'radio_channel',       question: 'Channel number (e.g. 26)',                       response_type: 'text',            required: 0 },
+            { section: 'Site Info',    item_key: 'confirm_assembly',    question: 'Confirm Emergency Assembly Point?',              response_type: 'multiple_choice', required: 1, options: mc(['Yes','No'], false) },
+            { section: 'Site Info',    item_key: 'assembly_point',      question: 'Where is the assembly point? (e.g. TC ute)',     response_type: 'text',            required: 0 },
+            { section: 'Declaration',  item_key: 'declaration_heading', question: 'By signing, I declare that:',                    response_type: 'heading',         required: 0 },
+            { section: 'Declaration',  item_key: 'declaration_body',    question: 'Declaration',                                    response_type: 'information',     required: 0, options: { body: '1. I am fit for duty, understand the site-specific hazards and controls, and will follow the SWMS.\n2. I will comply with the Golden Rules of Safety.\n3. I am attending free of any trace of alcohol or illicit drugs.\n4. I will drive to conditions and follow safe driving laws.\n5. I will maintain established exclusion and drop zones around mobile plant.\n6. I will not use phones whilst performing Stop / Slow duties.\n7. I will minimise exposure to live traffic.\n8. I will follow all SWMS, SOPs and work instructions.' } },
+            { section: 'Declaration',  item_key: 'declaration_acknowledged', question: 'I have read and agree to the declaration above.', response_type: 'yes_no_na',  required: 1 },
+            { section: 'Sign off',     item_key: 'notes',               question: 'Notes (optional)',                               response_type: 'textarea',        required: 0 },
+            { section: 'Sign off',     item_key: 'signed_name',         question: 'Print name',                                     response_type: 'text',            required: 1 },
+            { section: 'Sign off',     item_key: 'signature',           question: 'Your signature',                                 response_type: 'signature',       required: 1 },
+          ],
+        },
+      ];
+
+      const findByKey  = db.prepare("SELECT id, published_revision FROM checklist_templates WHERE system_key = ?");
+      const wipeItems  = db.prepare("DELETE FROM checklist_template_items WHERE template_id = ?");
+      const updateTpl  = db.prepare("UPDATE checklist_templates SET name = ?, description = ?, require_signature = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+      const insertItem = db.prepare(`
+        INSERT INTO checklist_template_items (template_id, item_order, section, item_key, question, response_type, required, options_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const insertRev  = db.prepare(`
+        INSERT INTO checklist_template_revisions (template_id, revision_number, name, description, require_signature, items_json, published_by_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      const setPublished = db.prepare(`
+        UPDATE checklist_templates SET published_revision = ?, published_at = datetime('now'), published_by_id = ? WHERE id = ?
+      `);
+      const nextRevNumStmt = db.prepare("SELECT COALESCE(MAX(revision_number), 0) + 1 AS n FROM checklist_template_revisions WHERE template_id = ?");
+
+      let resynced = 0;
+      for (const tpl of canonicalTemplates) {
+        const existing = findByKey.get(tpl.system_key);
+        if (!existing) continue;
+        const tplId = existing.id;
+        const tx = db.transaction(() => {
+          updateTpl.run(tpl.name, tpl.description, tpl.require_signature ? 1 : 0, tplId);
+          wipeItems.run(tplId);
+          const itemRows = [];
+          tpl.items.forEach((it, idx) => {
+            const optionsJson = it.options ? JSON.stringify(it.options) : null;
+            insertItem.run(tplId, idx, it.section || '', it.item_key, it.question, it.response_type, it.required ? 1 : 0, optionsJson);
+            itemRows.push({
+              item_order: idx, section: it.section || '', item_key: it.item_key,
+              question: it.question, response_type: it.response_type,
+              required: it.required ? 1 : 0,
+              options: it.options || null,
+            });
+          });
+          const nextRev = nextRevNumStmt.get(tplId).n;
+          insertRev.run(tplId, nextRev, tpl.name, tpl.description, tpl.require_signature ? 1 : 0,
+                        JSON.stringify(itemRows), adminId);
+          setPublished.run(nextRev, adminId, tplId);
+        });
+        tx();
+        resynced++;
+      }
+
+      recordMigration.run(273, 'Re-seed risk_toolbox + tc_prestart admin templates to match worker forms');
+      console.log(`Migration 273 applied: re-synced ${resynced} on-shift admin checklist template(s) to worker portal structure`);
+    } catch (e) {
+      console.error('Migration 273 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

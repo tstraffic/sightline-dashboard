@@ -854,14 +854,45 @@ router.get('/forms/risk-assessment', (req, res) => {
   const sysQ = getSystemItems('risk_toolbox', RA_QUESTIONS.map(q => ({
     item_key: q.key, question: q.label, response_type: q.type, options: q.options, required: q.required ? 1 : 0,
   })));
-  const questions = sysQ.map(it => ({
-    key: it.item_key,
-    label: it.question,
-    type: (it.response_type === 'checkbox' || it.response_type === 'radio' || it.response_type === 'textarea')
-            ? it.response_type : 'checkbox',
-    options: it.options || [],
-    required: !!it.required,
-  }));
+  // Admin editor stores multi-option questions as response_type='multiple_choice'
+  // with options={ options: [...], multi: bool }. Translate back to the
+  // simple {type:'radio'|'checkbox', options: [...]} the view expects.
+  // Display-only items (heading/information/hyperlink/media) and signature
+  // are filtered out — risk-assessment has its own hardcoded signature pad
+  // and section dividers come from `it.section` already.
+  const questions = sysQ
+    .filter(it => !['heading','information','hyperlink','media','signature'].includes(it.response_type))
+    .map(it => {
+      let type = 'text';
+      let options = [];
+      if (it.response_type === 'multiple_choice') {
+        const opts = it.options || {};
+        options = Array.isArray(opts.options) ? opts.options : (Array.isArray(opts) ? opts : []);
+        type = opts.multi ? 'checkbox' : 'radio';
+      } else if (it.response_type === 'checkbox') {
+        type = 'checkbox';
+        options = Array.isArray(it.options) ? it.options : (it.options && it.options.options) || [];
+      } else if (it.response_type === 'radio' || it.response_type === 'yes_no_na' || it.response_type === 'pass_fail' || it.response_type === 'ok_notok_na') {
+        type = 'radio';
+        if (it.response_type === 'yes_no_na')      options = ['Yes', 'No', 'N/A'];
+        else if (it.response_type === 'pass_fail') options = ['Pass', 'Fail'];
+        else if (it.response_type === 'ok_notok_na') options = ['OK', 'Not OK', 'N/A'];
+        else options = Array.isArray(it.options) ? it.options : (it.options && it.options.options) || [];
+      } else if (it.response_type === 'textarea') {
+        type = 'textarea';
+      } else if (it.response_type === 'number' || it.response_type === 'measurement') {
+        type = 'number';
+      } else {
+        type = 'text';
+      }
+      return {
+        key: it.item_key,
+        label: it.question,
+        type,
+        options,
+        required: !!it.required,
+      };
+    });
 
   res.render('worker/forms/risk-assessment', {
     title: 'Risk Assessment & Toolbox',
@@ -889,10 +920,25 @@ router.post('/forms/risk-assessment', (req, res) => {
   }
 
   // Walk every declared question. Pull from the live system template
-  // so admin-added/renamed questions still save cleanly.
+  // so admin-added/renamed questions still save cleanly. Translate
+  // admin-editor response types (multiple_choice / yes_no_na / etc.)
+  // into the same {type: 'checkbox'|'radio'|'number'|'text'|'textarea'}
+  // shape the GET handler builds for the view, so the input names match.
   const liveQ = getSystemItems('risk_toolbox', RA_QUESTIONS.map(q => ({
-    item_key: q.key, response_type: q.type,
-  }))).map(it => ({ key: it.item_key, type: it.response_type }));
+    item_key: q.key, response_type: q.type, options: q.options,
+  })))
+    .filter(it => !['heading','information','hyperlink','media','signature'].includes(it.response_type))
+    .map(it => {
+      let type = 'text';
+      if (it.response_type === 'multiple_choice') {
+        type = (it.options && it.options.multi) ? 'checkbox' : 'radio';
+      } else if (it.response_type === 'checkbox')               type = 'checkbox';
+      else if (it.response_type === 'textarea')                 type = 'textarea';
+      else if (it.response_type === 'number' || it.response_type === 'measurement') type = 'number';
+      else if (it.response_type === 'radio' || it.response_type === 'yes_no_na' ||
+               it.response_type === 'pass_fail' || it.response_type === 'ok_notok_na') type = 'radio';
+      return { key: it.item_key, type };
+    });
   const answers = {};
   for (const q of liveQ) {
     const raw = body['q_' + q.key];
