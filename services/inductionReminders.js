@@ -72,14 +72,14 @@ async function sendInductionReminders() {
   let scanned = 0;
 
   for (const t of targetDates) {
-    // Only remind for applicants still in the pre-induction pipeline. If
-    // they've already been Inducted/Hired/No Show/Withdrew/Not Suitable
-    // the induction either happened or won't, so skip.
+    // Only remind for applicants still in the pre-induction pipeline. Once
+    // they've reached INDUCTED/HIRED, or hit a terminal NO_SHOW/DECLINED, the
+    // induction either happened or won't, so skip.
     const rows = db.prepare(`
-      SELECT id, applicant_name, induction_date, induction_time, status, phone, email
+      SELECT id, applicant_name, induction_date, induction_time, stage, phone, email
       FROM seek_applicants
       WHERE induction_date = ?
-        AND LOWER(COALESCE(status,'')) NOT IN ('inducted','hired','no show','withdrew','not suitable')
+        AND UPPER(COALESCE(stage,'')) NOT IN ('INDUCTED','HIRED','NO_SHOW','DECLINED')
     `).all(t.date);
     scanned += rows.length;
 

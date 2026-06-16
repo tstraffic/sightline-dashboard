@@ -1,0 +1,433 @@
+<script>
+// ============================================================
+//  Recruitment pipeline board — drag-and-drop stage moves,
+//  clickable summary filters, list/board toggle, and the
+//  booking / backward / close modals. Every stage move persists
+//  immediately (one deliberate action = one save) and reflects
+//  optimistically in the DOM, so there's no "0 unsaved changes"
+//  save bar — just a transient "Saved" toast.
+// ============================================================
+(function () {
+  'use strict';
+
+  var FORWARD  = <%- JSON.stringify(forwardStages) %>;
+  var TERMINAL = <%- JSON.stringify(terminalStages) %>;
+  var LABELS   = <%- JSON.stringify(stageLabels) %>;
+  var YEAR = <%= year %>, MONTH = <%= month %>;
+  var csrf = (document.querySelector('input[name="_csrf"]') || {}).value || '';
+
+  function fwdIndex(s) { return FORWARD.indexOf((s || '').toUpperCase()); }
+  function isTerminal(s) { return TERMINAL.indexOf((s || '').toUpperCase()) !== -1; }
+  function atOrBeyond(s, target) {
+    if (isTerminal(s)) return false;
+    return fwdIndex(s) >= fwdIndex(target);
+  }
+  function fmtShort(iso) {
+    if (!iso) return '';
+    return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  }
+  function fmtTime(t) {
+    if (!t) return '';
+    var m = String(t).match(/^(\d{1,2}):(\d{2})/);
+    if (!m) return '';
+    var h = parseInt(m[1], 10), min = m[2];
+    var ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12; if (h === 0) h = 12;
+    return h + ':' + min + ' ' + ampm;
+  }
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c];
+    });
+  }
+
+  // ---- Toast ----
+  var toastEl = document.getElementById('rec-toast');
+  var toastTimer = null;
+  function toast(msg, isError) {
+    if (!toastEl) return;
+    toastEl.textContent = msg;
+    toastEl.className = 'rec-toast is-visible' + (isError ? ' rec-toast--error' : '');
+    toastEl.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function () { toastEl.className = 'rec-toast'; }, 2200);
+  }
+
+  // ---- Persist a partial update ----
+  async function postUpdate(id, payload) {
+    var body = new URLSearchParams();
+    Object.keys(payload).forEach(function (k) { body.set(k, payload[k] == null ? '' : payload[k]); });
+    body.set('_csrf', csrf);
+    var r = await fetch('/induction/admin/recruitment/' + encodeURIComponent(id), {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+      body: body.toString(),
+    });
+    var data = await r.json().catch(function () { return {}; });
+    if (!r.ok || data.ok === false) {
+      var err = new Error(data.message || data.error || ('HTTP ' + r.status));
+      err.code = data.error;
+      throw err;
+    }
+    return data;
+  }
+
+  // ---- Card meta re-render (date line + badges) for a new stage ----
+  function renderCardMeta(card) {
+    var stage = (card.dataset.stage || 'NEW').toUpperCase();
+    var dApplied = card.dataset.dateApplied || '';
+    var dCalled  = card.dataset.dateCalled || '';
+    var iDate    = card.dataset.inductionDate || '';
+    var iTime    = card.dataset.inductionTime || '';
+
+    var dateHtml = '';
+    var cd = null;
+    if (stage === 'NEW' && dApplied)                          cd = { label: 'Applied',   value: fmtShort(dApplied) };
+    else if ((stage === 'CALLED' || stage === 'INTERESTED') && dCalled) cd = { label: 'Called', value: fmtShort(dCalled) };
+    else if ((stage === 'BOOKED' || stage === 'INDUCTED') && iDate)     cd = { label: 'Induction', value: fmtShort(iDate) + (iTime ? ' · ' + fmtTime(iTime) : '') };
+    else if (stage === 'HIRED' && iDate)                      cd = { label: 'Inducted', value: fmtShort(iDate) };
+    else if (isTerminal(stage) && iDate)                      cd = { label: 'Was booked', value: fmtShort(iDate) };
+    if (cd) dateHtml = '<span class="rec-card-date"><span class="rec-card-date-label">' + esc(cd.label) + '</span> ' + esc(cd.value) + '</span>';
+
+    var badgeHtml = '';
+    var needsScheduling = atOrBeyond(stage, 'BOOKED') && !iDate;
+    var onCalendar = !!iDate && !isTerminal(stage);
+    if (needsScheduling)  badgeHtml = '<span class="rec-badge rec-badge--warn">Not scheduled</span>';
+    else if (onCalendar)  badgeHtml = '<span class="rec-badge rec-badge--ok">On calendar</span>';
+
+    var meta = card.querySelector('.rec-card-meta');
+    if (meta) meta.innerHTML = dateHtml + badgeHtml;
+  }
+
+  // ---- Counts ----
+  function recount() {
+    FORWARD.forEach(function (st) {
+      var body = document.querySelector('[data-drop-stage="' + st + '"]');
+      var badge = document.querySelector('[data-count-for="' + st + '"]');
+      if (!body) return;
+      var n = body.querySelectorAll('.rec-card').length;
+      if (badge) badge.textContent = n;
+      toggleEmpty(body);
+    });
+    var closedBody = document.querySelector('[data-drop-stage="CLOSED"]');
+    if (closedBody) {
+      var cn = closedBody.querySelectorAll('.rec-card').length;
+      var cb = document.querySelector('[data-count-for="CLOSED"]');
+      if (cb) cb.textContent = cn;
+      toggleEmpty(closedBody);
+    }
+    // Summary cards (at-or-beyond)
+    var cards = Array.prototype.slice.call(document.querySelectorAll('#rec-board .rec-card'));
+    function countAtOrBeyond(target) { return cards.filter(function (c) { return atOrBeyond(c.dataset.stage, target); }).length; }
+    setSummary('', cards.length);
+    setSummary('CALLED', countAtOrBeyond('CALLED'));
+    setSummary('INTERESTED', countAtOrBeyond('INTERESTED'));
+    setSummary('BOOKED', countAtOrBeyond('BOOKED'));
+    setSummary('HIRED', cards.filter(function (c) { return (c.dataset.stage || '').toUpperCase() === 'HIRED'; }).length);
+  }
+  function setSummary(filter, n) {
+    var btn = document.querySelector('.rec-summary[data-filter="' + filter + '"]');
+    if (btn) { var num = btn.querySelector('.tabular-nums'); if (num) num.textContent = n; }
+  }
+  function toggleEmpty(body) {
+    var hasVisible = body.querySelectorAll('.rec-card:not(.is-hidden)').length > 0;
+    body.classList.toggle('is-empty', !hasVisible);
+  }
+
+  // ---- Modals ----
+  function openModal(el) { el.classList.remove('hidden'); }
+  function closeModal(el) { el.classList.add('hidden'); }
+  document.querySelectorAll('[data-modal-close]').forEach(function (el) {
+    el.addEventListener('click', function () {
+      var modal = el.closest('.rec-modal');
+      if (modal) { closeModal(modal); if (pendingMove) { pendingMove.cancel(); pendingMove = null; } }
+    });
+  });
+
+  var bookingModal  = document.getElementById('booking-modal');
+  var closedModal   = document.getElementById('closed-modal');
+  var backwardModal = document.getElementById('backward-modal');
+  var pendingMove = null; // { id, toStage, card, fromBody, cancel() }
+
+  // ---- The single stage-transition entry point ----
+  // card may be a board card element (optional); fromBody = its previous column.
+  function moveCandidate(id, toStage, card) {
+    toStage = (toStage || '').toUpperCase();
+    var current = card ? (card.dataset.stage || 'NEW').toUpperCase() : null;
+    var iDate = card ? (card.dataset.inductionDate || '') : '';
+    var phone = card ? (card.dataset.phone || '') : '';
+
+    // No-op
+    if (current === toStage) return;
+
+    // Closed column → pick a terminal reason.
+    if (toStage === 'CLOSED') {
+      pendingMove = { id: id, card: card, resolveReason: true };
+      openModal(closedModal);
+      return;
+    }
+
+    // Forward into BOOKED without an induction date → prompt for one.
+    if (toStage === 'BOOKED' && !iDate) {
+      pendingMove = { id: id, card: card, toStage: 'BOOKED' };
+      var sub = document.getElementById('booking-modal-sub');
+      if (sub) sub.textContent = (card ? card.dataset.name : 'This candidate') + ' can’t be booked without an induction date.';
+      document.getElementById('booking-date').value = iDate || '';
+      document.getElementById('booking-time').value = card ? (card.dataset.inductionTime || '') : '';
+      document.getElementById('booking-error').classList.add('hidden');
+      openModal(bookingModal);
+      return;
+    }
+
+    // Moving backward below BOOKED while an induction date exists → keep/remove.
+    var goingBackBeforeBooked = !isTerminal(toStage) && fwdIndex(toStage) < fwdIndex('BOOKED');
+    if (goingBackBeforeBooked && iDate && !isTerminal(current)) {
+      pendingMove = { id: id, card: card, toStage: toStage };
+      var bsub = document.getElementById('backward-sub');
+      if (bsub) bsub.textContent = (card ? card.dataset.name : 'This candidate') + ' has an induction date (' + fmtShort(iDate) + '). Keep it or remove it from the calendar?';
+      openModal(backwardModal);
+      return;
+    }
+
+    // Missing phone warning before Called (non-blocking).
+    if (toStage === 'CALLED' && !phone && current === 'NEW') {
+      if (!window.confirm((card ? card.dataset.name : 'This candidate') + ' has no phone number. Move to Called anyway?')) return;
+    }
+
+    commitMove(id, toStage, card, {});
+  }
+
+  // Persist + reflect a confirmed move. extra = { induction_date, induction_time }.
+  async function commitMove(id, toStage, card, extra) {
+    var payload = { stage: toStage };
+    if (extra && typeof extra.induction_date !== 'undefined') payload.induction_date = extra.induction_date;
+    if (extra && typeof extra.induction_time !== 'undefined') payload.induction_time = extra.induction_time;
+
+    // Optimistic DOM move (board).
+    var prevParent = null, prevNext = null;
+    if (card) {
+      prevParent = card.parentNode; prevNext = card.nextSibling;
+      var targetBody = (toStage === 'CLOSED' || isTerminal(toStage))
+        ? document.querySelector('[data-drop-stage="CLOSED"]')
+        : document.querySelector('[data-drop-stage="' + toStage + '"]');
+      if (targetBody) targetBody.insertBefore(card, targetBody.querySelector('[data-empty]'));
+      card.dataset.stage = toStage;
+      if (extra && typeof extra.induction_date !== 'undefined') card.dataset.inductionDate = extra.induction_date || '';
+      if (extra && typeof extra.induction_time !== 'undefined') card.dataset.inductionTime = extra.induction_time || '';
+      renderCardMeta(card);
+      recount();
+      applyFilter();
+    }
+
+    try {
+      var data = await postUpdate(id, payload);
+      if (data.becameHired && data.converted) {
+        toast(data.converted.employeeName ? (data.converted.employeeName + ' added to roster') : 'Added to roster as ' + (data.converted.employeeCode || ''));
+      } else {
+        toast('Saved');
+      }
+      syncListRow(id, toStage, extra);
+    } catch (err) {
+      // Revert optimistic move.
+      if (card && prevParent) { prevParent.insertBefore(card, prevNext); recount(); }
+      console.error('stage move failed', err);
+      if (err.code === 'needs_induction_date') {
+        toast('Set an induction date before booking.', true);
+      } else {
+        toast('Could not save — ' + err.message, true);
+      }
+      // Hard refresh as a last resort so the UI matches the server.
+      setTimeout(function () { window.location.reload(); }, 1400);
+    }
+  }
+
+  // Keep the list-view row in sync after a board move (and vice-versa).
+  function syncListRow(id, toStage, extra) {
+    var row = document.getElementById('lrow-' + id);
+    if (row) {
+      var sel = row.querySelector('.rec-stage-select');
+      if (sel) { sel.value = toStage; repaintStagePill(sel); }
+      row.classList.toggle('rec-lrow--closed', isTerminal(toStage));
+      var showClosed = document.getElementById('show-closed-rows');
+      if (isTerminal(toStage) && !(showClosed && showClosed.checked)) row.classList.add('hidden');
+      else if (!isTerminal(toStage)) row.classList.remove('hidden');
+    }
+  }
+
+  // ---- Booking modal confirm ----
+  document.getElementById('booking-confirm').addEventListener('click', function () {
+    if (!pendingMove) return;
+    var d = document.getElementById('booking-date').value;
+    var t = document.getElementById('booking-time').value;
+    if (!d) { document.getElementById('booking-error').classList.remove('hidden'); return; }
+    var pm = pendingMove; pendingMove = null;
+    closeModal(bookingModal);
+    commitMove(pm.id, 'BOOKED', pm.card, { induction_date: d, induction_time: t || '' });
+  });
+
+  // ---- Closed reason ----
+  document.querySelectorAll('[data-closed-reason]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      if (!pendingMove) return;
+      var reason = btn.getAttribute('data-closed-reason');
+      var pm = pendingMove; pendingMove = null;
+      closeModal(closedModal);
+      // Keep the induction date for the record; calendar excludes terminal stages.
+      commitMove(pm.id, reason, pm.card, {});
+    });
+  });
+
+  // ---- Backward keep/remove ----
+  document.getElementById('backward-remove').addEventListener('click', function () {
+    if (!pendingMove) return;
+    var pm = pendingMove; pendingMove = null;
+    closeModal(backwardModal);
+    commitMove(pm.id, pm.toStage, pm.card, { induction_date: '', induction_time: '' });
+  });
+  document.getElementById('backward-keep').addEventListener('click', function () {
+    if (!pendingMove) return;
+    var pm = pendingMove; pendingMove = null;
+    closeModal(backwardModal);
+    commitMove(pm.id, pm.toStage, pm.card, {});
+  });
+
+  // ---- Drag and drop ----
+  var dragCard = null;
+  document.querySelectorAll('.rec-card').forEach(bindDrag);
+  function bindDrag(card) {
+    card.addEventListener('dragstart', function () { dragCard = card; card.classList.add('is-dragging'); });
+    card.addEventListener('dragend', function () { card.classList.remove('is-dragging'); dragCard = null; clearDragover(); });
+  }
+  function clearDragover() { document.querySelectorAll('.rec-col-body').forEach(function (b) { b.classList.remove('is-dragover'); }); }
+
+  document.querySelectorAll('.rec-col-body').forEach(function (body) {
+    body.addEventListener('dragover', function (e) { e.preventDefault(); body.classList.add('is-dragover'); });
+    body.addEventListener('dragleave', function () { body.classList.remove('is-dragover'); });
+    body.addEventListener('drop', function (e) {
+      e.preventDefault(); body.classList.remove('is-dragover');
+      if (!dragCard) return;
+      var toStage = body.getAttribute('data-drop-stage');
+      moveCandidate(dragCard.dataset.id, toStage, dragCard);
+    });
+  });
+
+  // ---- Summary card filters ----
+  var activeFilter = '';
+  var clearBtn = document.getElementById('clear-filter');
+  document.querySelectorAll('.rec-summary').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var f = btn.getAttribute('data-filter') || '';
+      activeFilter = (activeFilter === f) ? '' : f; // toggle; Applicants (empty) always clears
+      if (f === '') activeFilter = '';
+      applyFilter();
+    });
+  });
+  if (clearBtn) clearBtn.addEventListener('click', function () { activeFilter = ''; applyFilter(); });
+
+  function applyFilter() {
+    document.querySelectorAll('.rec-summary').forEach(function (b) {
+      b.classList.toggle('is-active', activeFilter !== '' && (b.getAttribute('data-filter') || '') === activeFilter);
+    });
+    if (clearBtn) clearBtn.classList.toggle('hidden', activeFilter === '');
+    document.querySelectorAll('#rec-board .rec-card').forEach(function (card) {
+      var show = activeFilter === '' ? true : atOrBeyond(card.dataset.stage, activeFilter);
+      card.classList.toggle('is-hidden', !show);
+    });
+    document.querySelectorAll('.rec-col-body').forEach(toggleEmpty);
+    // List rows mirror the same filter.
+    document.querySelectorAll('.rec-lrow').forEach(function (row) {
+      var sel = row.querySelector('.rec-stage-select');
+      var stage = sel ? sel.value : '';
+      var terminal = isTerminal(stage);
+      var showClosed = document.getElementById('show-closed-rows');
+      var passFilter = activeFilter === '' ? true : atOrBeyond(stage, activeFilter);
+      var passClosed = !terminal || (showClosed && showClosed.checked);
+      row.classList.toggle('hidden', !(passFilter && passClosed));
+    });
+  }
+
+  // ---- Closed column expand/collapse ----
+  var closedToggle = document.getElementById('closed-toggle');
+  if (closedToggle) {
+    closedToggle.addEventListener('click', function () {
+      var body = document.getElementById('closed-body');
+      var caret = document.getElementById('closed-caret');
+      var open = body.classList.toggle('hidden') === false;
+      closedToggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+      if (caret) caret.style.transform = open ? 'rotate(90deg)' : '';
+    });
+  }
+
+  // ---- Board / List toggle ----
+  var boardView = document.getElementById('view-board');
+  var listView = document.getElementById('view-list');
+  document.querySelectorAll('.rec-viewbtn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var v = btn.getAttribute('data-view');
+      document.querySelectorAll('.rec-viewbtn').forEach(function (b) { b.classList.toggle('is-active', b === btn); });
+      if (v === 'board') { boardView.classList.remove('hidden'); listView.classList.add('hidden'); }
+      else { listView.classList.remove('hidden'); boardView.classList.add('hidden'); }
+    });
+  });
+
+  // ---- List: stage select ----
+  function repaintStagePill(sel) {
+    var classes = ['bg-emerald-100','text-emerald-700','bg-blue-100','text-blue-700','bg-amber-100','text-amber-700',
+                   'bg-violet-100','text-violet-700','bg-teal-100','text-teal-700','bg-red-100','text-red-700','bg-gray-200','text-gray-600','bg-gray-100','text-gray-700'];
+    classes.forEach(function (c) { sel.classList.remove(c); });
+    var v = (sel.value || '').toUpperCase();
+    var map = { HIRED:['bg-emerald-100','text-emerald-700'], INDUCTED:['bg-blue-100','text-blue-700'],
+      BOOKED:['bg-amber-100','text-amber-700'], INTERESTED:['bg-violet-100','text-violet-700'],
+      CALLED:['bg-teal-100','text-teal-700'], NO_SHOW:['bg-red-100','text-red-700'],
+      DECLINED:['bg-gray-200','text-gray-600'] };
+    (map[v] || ['bg-gray-100','text-gray-700']).forEach(function (c) { sel.classList.add(c); });
+  }
+  document.querySelectorAll('.rec-stage-select').forEach(function (sel) {
+    var prev = sel.value;
+    sel.addEventListener('focus', function () { prev = sel.value; });
+    sel.addEventListener('change', function () {
+      var id = sel.dataset.id;
+      var toStage = sel.value;
+      var card = document.getElementById('card-' + id);
+      // Revert the select visually until the move is confirmed; moveCandidate
+      // (and its modals) own the source of truth via the board card dataset.
+      sel.value = prev;
+      repaintStagePill(sel);
+      moveCandidate(id, toStage, card);
+    });
+  });
+
+  // ---- List: edit toggles ----
+  document.querySelectorAll('.rec-edit-btn').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var el = document.getElementById('ledit-' + b.dataset.id);
+      if (el) el.classList.toggle('hidden');
+    });
+  });
+  document.querySelectorAll('.rec-edit-cancel').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var el = document.getElementById('ledit-' + b.dataset.id);
+      if (el) el.classList.add('hidden');
+    });
+  });
+  // Card edit pencil → switch to list & open that row's editor.
+  document.querySelectorAll('.rec-card-edit').forEach(function (b) {
+    b.addEventListener('click', function (e) {
+      e.stopPropagation();
+      document.getElementById('view-list-btn').click();
+      var el = document.getElementById('ledit-' + b.dataset.id);
+      var row = document.getElementById('lrow-' + b.dataset.id);
+      if (row) row.classList.remove('hidden');
+      if (el) { el.classList.remove('hidden'); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    });
+  });
+
+  // ---- Show-closed checkbox (list) ----
+  var showClosed = document.getElementById('show-closed-rows');
+  if (showClosed) showClosed.addEventListener('change', applyFilter);
+
+  // Initial paint.
+  document.querySelectorAll('.rec-stage-select').forEach(repaintStagePill);
+  document.querySelectorAll('.rec-col-body').forEach(toggleEmpty);
+})();
+</script>

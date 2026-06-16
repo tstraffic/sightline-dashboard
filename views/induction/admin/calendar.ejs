@@ -1,16 +1,21 @@
 <% locals.currentPage = 'induction' %>
 <%
   function statusColor(s) {
-    const k = (s || '').toLowerCase();
-    if (k === 'hired')              return { bg: '#ECFDF5', txt: '#047857', ring: '#A7F3D0' };
-    if (k === 'inducted')           return { bg: '#EFF6FF', txt: '#1D4ED8', ring: '#BFDBFE' };
-    if (k === 'induction scheduled')return { bg: '#FFFBEB', txt: '#B45309', ring: '#FDE68A' };
-    if (k === 'no show')            return { bg: '#FEF2F2', txt: '#B91C1C', ring: '#FECACA' };
-    if (k === 'not suitable')       return { bg: '#FAF5FF', txt: '#6B21A8', ring: '#E9D5FF' };
-    if (k === 'withdrew')           return { bg: '#F5F5F4', txt: '#57534E', ring: '#E7E5E4' };
-    if (k === 'contacted')          return { bg: '#F0FDFA', txt: '#0F766E', ring: '#99F6E4' };
+    const k = (s || '').toUpperCase();
+    if (k === 'HIRED')      return { bg: '#ECFDF5', txt: '#047857', ring: '#A7F3D0' };
+    if (k === 'INDUCTED')   return { bg: '#EFF6FF', txt: '#1D4ED8', ring: '#BFDBFE' };
+    if (k === 'BOOKED')     return { bg: '#FFFBEB', txt: '#B45309', ring: '#FDE68A' };
+    if (k === 'NO_SHOW')    return { bg: '#FEF2F2', txt: '#B91C1C', ring: '#FECACA' };
+    if (k === 'DECLINED')   return { bg: '#FAF5FF', txt: '#6B21A8', ring: '#E9D5FF' };
+    if (k === 'INTERESTED') return { bg: '#F5F3FF', txt: '#6D28D9', ring: '#DDD6FE' };
+    if (k === 'CALLED')     return { bg: '#F0FDFA', txt: '#0F766E', ring: '#99F6E4' };
     return { bg: '#F3F4F6', txt: '#374151', ring: '#E5E7EB' };
   }
+  // Stage → human label (mirrors lib/recruitmentStages STAGE_LABELS).
+  const STAGE_LABEL = (typeof stageLabels !== 'undefined' && stageLabels) || {
+    NEW:'New', CALLED:'Called', INTERESTED:'Interested', BOOKED:'Booked',
+    INDUCTED:'Inducted', HIRED:'Hired', NO_SHOW:'No Show', DECLINED:'Declined'
+  };
   function fmtFullDate(iso) {
     return new Date(iso + 'T00:00:00Z').toLocaleDateString('en-AU', {
       weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC'
@@ -255,7 +260,7 @@
             <% } %>
           </div>
           <% c.applicants.slice(0, 3).forEach(function (a) {
-            var col = statusColor(a.status);
+            var col = statusColor(a.stage);
             var timeStr = fmtTime(a.induction_time);
           %>
             <span class="cal-pill" style="background:<%= col.bg %>;color:<%= col.txt %>;border-color:<%= col.ring %>"
@@ -298,7 +303,7 @@
         <% upcoming.forEach(function (a) {
           var d = new Date(a.induction_date + 'T00:00:00Z');
           var isToday = a.induction_date === todayIso;
-          var col = statusColor(a.status);
+          var col = statusColor(a.stage);
           var timeStr = fmtTime(a.induction_time);
           var whenStr = (isToday ? 'TODAY · ' : '') + d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
           if (timeStr) whenStr += ' · ' + timeStr;
@@ -312,7 +317,7 @@
               </div>
             </div>
             <span class="upcoming-status"
-                  style="background:<%= col.bg %>;color:<%= col.txt %>;border-color:<%= col.ring %>"><%= a.status || 'New' %></span>
+                  style="background:<%= col.bg %>;color:<%= col.txt %>;border-color:<%= col.ring %>"><%= STAGE_LABEL[(a.stage||'NEW').toUpperCase()] || 'New' %></span>
           </div>
         <% }); %>
       <% } %>
@@ -343,20 +348,24 @@
   var subEl   = document.getElementById('dayPanelSub');
   var bodyEl  = document.getElementById('dayPanelBody');
 
+  var STAGE_LABEL_JS = {
+    NEW:'New', CALLED:'Called', INTERESTED:'Interested', BOOKED:'Booked',
+    INDUCTED:'Inducted', HIRED:'Hired', NO_SHOW:'No Show', DECLINED:'Declined'
+  };
   function statusBadge(s) {
-    var k = (s || '').toLowerCase();
+    var k = (s || '').toUpperCase();
     var map = {
-      'hired':               ['#ECFDF5','#047857','#A7F3D0'],
-      'inducted':            ['#EFF6FF','#1D4ED8','#BFDBFE'],
-      'induction scheduled': ['#FFFBEB','#B45309','#FDE68A'],
-      'no show':             ['#FEF2F2','#B91C1C','#FECACA'],
-      'not suitable':        ['#FAF5FF','#6B21A8','#E9D5FF'],
-      'withdrew':            ['#F5F5F4','#57534E','#E7E5E4'],
-      'contacted':           ['#F0FDFA','#0F766E','#99F6E4'],
+      'HIRED':      ['#ECFDF5','#047857','#A7F3D0'],
+      'INDUCTED':   ['#EFF6FF','#1D4ED8','#BFDBFE'],
+      'BOOKED':     ['#FFFBEB','#B45309','#FDE68A'],
+      'NO_SHOW':    ['#FEF2F2','#B91C1C','#FECACA'],
+      'DECLINED':   ['#FAF5FF','#6B21A8','#E9D5FF'],
+      'INTERESTED': ['#F5F3FF','#6D28D9','#DDD6FE'],
+      'CALLED':     ['#F0FDFA','#0F766E','#99F6E4'],
     };
     var c = map[k] || ['#F3F4F6','#374151','#E5E7EB'];
     return '<span style="background:' + c[0] + ';color:' + c[1] + ';border:1px solid ' + c[2] +
-           ';padding:2px 8px;border-radius:999px;font-size:10px;font-weight:600">' + (s || 'New') + '</span>';
+           ';padding:2px 8px;border-radius:999px;font-size:10px;font-weight:600">' + (STAGE_LABEL_JS[k] || 'New') + '</span>';
   }
 
   function fmtDate(iso) {
@@ -418,7 +427,7 @@
               '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">' +
                 timeChip +
                 '<span class="day-row-name">' + escapeHtml(a.applicant_name) + '</span>' +
-                statusBadge(a.status) +
+                statusBadge(a.stage) +
               '</div>' +
               '<div class="day-row-line" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:4px 16px;margin-top:6px">' +
                 '<div><b>Phone:</b> ' + phoneHtml + '</div>' +

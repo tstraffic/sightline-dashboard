@@ -13090,6 +13090,81 @@ function runMigrations(db) {
     }
   }
 
+  // =============================================
+  // Migration 274: Recruitment pipeline stage model.
+  // Replace the three redundant boolean columns (called / interested /
+  // induction_booked) AND the free-text status column with a single ordered
+  // `stage` enum. Each forward stage implies all earlier ones, so the booleans
+  // are pure duplication of stage + the date fields. Dates are preserved —
+  // they carry real information and feed the derived flags.
+  // =============================================
+  if (!isMigrationApplied.get(274)) {
+    try {
+      console.log('Running migration 274: seek_applicants single-stage pipeline');
+      const cols = db.prepare("PRAGMA table_info(seek_applicants)").all().map(c => c.name);
+      const hasTable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='seek_applicants'").get();
+
+      if (hasTable) {
+        // 1. Add the stage column (nullable first so the backfill can populate
+        //    it before we rely on it).
+        if (!cols.includes('stage')) {
+          db.exec("ALTER TABLE seek_applicants ADD COLUMN stage TEXT NOT NULL DEFAULT 'NEW'");
+        }
+
+        // 2. Backfill stage from the legacy status + booleans + dates, top-down
+        //    (first match wins). Only run while the legacy columns still exist.
+        const hasLegacy = cols.includes('status') || cols.includes('called')
+          || cols.includes('interested') || cols.includes('induction_booked');
+        if (hasLegacy) {
+          // Build a CASE that only references columns that actually exist, so a
+          // partially-migrated DB doesn't throw.
+          const col = (n) => cols.includes(n) ? n : "''";
+          const statusExpr = cols.includes('status') ? "LOWER(COALESCE(status,''))" : "''";
+          const calledExpr = cols.includes('called') ? "LOWER(COALESCE(called,''))" : "''";
+          const interestedExpr = cols.includes('interested') ? "LOWER(COALESCE(interested,''))" : "''";
+          const bookedExpr = cols.includes('induction_booked') ? "LOWER(COALESCE(induction_booked,''))" : "''";
+          db.exec(`
+            UPDATE seek_applicants SET stage =
+              CASE
+                WHEN ${statusExpr} = 'hired'                       THEN 'HIRED'
+                WHEN ${statusExpr} = 'inducted'                    THEN 'INDUCTED'
+                WHEN ${statusExpr} = 'no show'                     THEN 'NO_SHOW'
+                WHEN ${statusExpr} IN ('not suitable','withdrew')  THEN 'DECLINED'
+                WHEN ${bookedExpr} = 'yes'
+                     OR induction_date IS NOT NULL
+                     OR ${statusExpr} = 'induction scheduled'      THEN 'BOOKED'
+                WHEN ${interestedExpr} = 'yes'                     THEN 'INTERESTED'
+                WHEN ${calledExpr} = 'yes'
+                     OR date_called IS NOT NULL
+                     OR ${statusExpr} = 'contacted'                THEN 'CALLED'
+                ELSE 'NEW'
+              END
+          `);
+        }
+
+        // 3. Drop the legacy columns now that stage carries the truth. SQLite
+        //    refuses to DROP an indexed column, so drop the status index first
+        //    (migration 183 created idx_seek_status on the now-dead column).
+        //    3.35+ supports DROP COLUMN; better-sqlite3 12.x bundles a recent
+        //    SQLite. Each drop is independently guarded so a re-run is safe.
+        try { db.exec("DROP INDEX IF EXISTS idx_seek_status"); } catch (e) { /* non-fatal */ }
+        for (const dead of ['called', 'interested', 'induction_booked', 'status']) {
+          if (cols.includes(dead)) {
+            try { db.exec(`ALTER TABLE seek_applicants DROP COLUMN ${dead}`); }
+            catch (e) { console.warn(`Migration 274: could not drop column ${dead}:`, e.message); }
+          }
+        }
+
+        db.exec("CREATE INDEX IF NOT EXISTS idx_seek_stage ON seek_applicants(stage)");
+      }
+
+      recordMigration.run(274, 'seek_applicants single-stage pipeline (drop called/interested/induction_booked/status)');
+      console.log('Migration 274 applied');
+    } catch (e) {
+      console.error('Migration 274 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
