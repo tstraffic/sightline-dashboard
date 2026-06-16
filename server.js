@@ -341,6 +341,7 @@ app.use('/traffio-imports', requireLogin, requirePermission('traffio_imports'), 
 app.use('/allocations', requireLogin, requirePermission('allocations'), require('./routes/allocations'));
 app.use('/schedule', requireLogin, requirePermission('schedule'), require('./routes/schedule'));
 app.use('/equipment/hire-dockets', requireLogin, requirePermission('equipment'), require('./routes/equipmentHireDockets'));
+app.use('/equipment/hire', requireLogin, requirePermission('equipment'), require('./routes/equipmentHires'));
 app.use('/equipment', requireLogin, requirePermission('equipment'), require('./routes/equipment'));
 app.use('/fleet', requireLogin, requirePermission('fleet'), require('./routes/fleet'));
 app.use('/checklists', requireLogin, requirePermission('checklists'), require('./routes/checklists'));

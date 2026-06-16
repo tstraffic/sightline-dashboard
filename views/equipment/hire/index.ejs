@@ -1,0 +1,117 @@
+<% locals.currentPage = 'equipment' %>
+<%
+  const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function money(n) { return (n == null) ? '—' : '$' + Number(n).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  function fmtDate(d) { return d ? new Date(d + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: '2-digit', timeZone: 'UTC' }) : '—'; }
+  function statusChip(s) {
+    if (s === 'on_hire') return 'bg-amber-100 text-amber-700';
+    if (s === 'off_hired') return 'bg-gray-200 text-gray-600';
+    return 'bg-red-100 text-red-700';
+  }
+  function statusLabel(s) { return s === 'on_hire' ? 'On hire' : (s === 'off_hired' ? 'Off-hired' : 'Cancelled'); }
+%>
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Equipment / Hire</h1>
+    <p class="text-gray-500 text-sm mt-0.5">Hired equipment for <%= monthLabel %> · rates &amp; monthly cost</p>
+  </div>
+  <div class="flex items-center gap-2">
+    <form method="GET" action="/equipment/hire" class="flex items-center gap-2">
+      <select name="year" onchange="this.form.submit()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-brand-500">
+        <% for (let y = year - 2; y <= year + 1; y++) { %><option value="<%= y %>" <%= y === year ? 'selected' : '' %>><%= y %></option><% } %>
+      </select>
+      <select name="month" onchange="this.form.submit()" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-brand-500">
+        <% for (let m = 1; m <= 12; m++) { %><option value="<%= m %>" <%= m === month ? 'selected' : '' %>><%= monthNames[m-1] %></option><% } %>
+      </select>
+    </form>
+    <a href="/equipment/hire/new?year=<%= year %>&month=<%= month %>" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors whitespace-nowrap">
+      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m6-6H6"/></svg>
+      Add hire
+    </a>
+  </div>
+</div>
+
+<%- include('../_tabs', { tabActive: 'hired' }) %>
+
+<!-- Summary -->
+<div class="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Items this month</p>
+    <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= stats.total %></p>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+    <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Currently on hire</p>
+    <p class="text-2xl font-bold text-amber-600 mt-0.5"><%= stats.onHire %></p>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+    <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest"><%= monthNames[month-1] %> cost (est.)</p>
+    <p class="text-2xl font-bold text-emerald-600 mt-0.5 tabular-nums"><%= money(stats.monthCost) %></p>
+  </div>
+</div>
+
+<!-- Hires table -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <% if (hires.length === 0) { %>
+    <div class="p-12 text-center">
+      <p class="text-sm font-semibold text-gray-700">No equipment on hire in <%= monthLabel %></p>
+      <p class="text-xs text-gray-500 mt-1">Use <strong>Add hire</strong> to record one. Rates auto-fill from a company's saved <a href="/equipment/hire/rates" class="text-brand-600">rates</a>.</p>
+    </div>
+  <% } else { %>
+    <div class="overflow-x-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+          <tr>
+            <th class="text-left px-4 py-2.5">Equipment</th>
+            <th class="text-left px-4 py-2.5">Company</th>
+            <th class="text-left px-4 py-2.5">Period</th>
+            <th class="text-right px-4 py-2.5">Rate</th>
+            <th class="text-right px-4 py-2.5"><%= monthNames[month-1] %> cost</th>
+            <th class="text-left px-4 py-2.5">Status</th>
+            <th class="text-right px-4 py-2.5"></th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <% hires.forEach(function (h) { %>
+            <tr class="hover:bg-gray-50/60">
+              <td class="px-4 py-2.5">
+                <p class="font-semibold text-gray-900"><%= h.type_label %><% if (h.quantity > 1) { %> <span class="text-gray-400">×<%= h.quantity %></span><% } %></p>
+                <% if (h.description) { %><p class="text-[11px] text-gray-500"><%= h.description %></p><% } %>
+                <% if (h.registration) { %><p class="text-[11px] text-gray-400 tabular-nums"><%= h.registration %></p><% } %>
+              </td>
+              <td class="px-4 py-2.5 text-gray-700"><%= h.company_label %><% if (h.reference) { %><p class="text-[11px] text-gray-400"><%= h.reference %></p><% } %></td>
+              <td class="px-4 py-2.5 text-gray-600 whitespace-nowrap"><%= fmtDate(h.start_date) %> → <%= h.end_date ? fmtDate(h.end_date) : 'ongoing' %></td>
+              <td class="px-4 py-2.5 text-right text-gray-700 tabular-nums whitespace-nowrap"><%= money(h.rate) %>/<%= h.rate_unit %></td>
+              <td class="px-4 py-2.5 text-right text-gray-900 font-semibold tabular-nums"><%= h.month_cost == null ? '—' : money(h.month_cost) %></td>
+              <td class="px-4 py-2.5"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold <%= statusChip(h.status) %>"><%= statusLabel(h.status) %></span></td>
+              <td class="px-4 py-2.5 text-right whitespace-nowrap">
+                <% if (h.hire_docket_id) { %><a href="/equipment/hire-dockets/<%= h.hire_docket_id %>" class="px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-gray-100 rounded">Docket</a><% } %>
+                <a href="/equipment/hire/<%= h.id %>/edit" class="px-2 py-1 text-[11px] font-semibold text-brand-600 hover:bg-brand-50 rounded">Edit</a>
+                <form method="POST" action="/equipment/hire/<%= h.id %>/delete" class="inline" onsubmit="return confirm('Remove this hire?')">
+                  <%- include('../../partials/csrf') %>
+                  <button type="submit" class="px-2 py-1 text-[11px] font-semibold text-red-600 hover:bg-red-50 rounded">Delete</button>
+                </form>
+              </td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+  <% } %>
+</div>
+
+<% if (byCompany && byCompany.length) { %>
+<div class="mt-5">
+  <h2 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2"><%= monthNames[month-1] %> spend by company</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+    <% byCompany.forEach(function (c) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3">
+        <p class="text-sm font-semibold text-gray-900 truncate"><%= c.name %></p>
+        <p class="text-[11px] text-gray-500"><%= c.count %> item<%= c.count === 1 ? '' : 's' %></p>
+        <p class="text-lg font-bold text-emerald-600 tabular-nums mt-1"><%= money(c.cost) %></p>
+      </div>
+    <% }) %>
+  </div>
+</div>
+<% } %>

@@ -1,0 +1,26 @@
+<%
+  // Tab strip for the Equipment / Hire area. active = 'owned' | 'hired' | 'rates'
+  const active = (typeof tabActive !== 'undefined' && tabActive) || 'owned';
+  const tabs = [
+    { key: 'owned', label: 'Owned', href: '/equipment',
+      icon: 'M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4' },
+    { key: 'hired', label: 'Hired', href: '/equipment/hire',
+      icon: 'M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z' },
+    { key: 'rates', label: 'Rates', href: '/equipment/hire/rates',
+      icon: 'M9 7h6m-6 4h6m-6 4h4M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z' },
+  ];
+%>
+<div class="flex items-center gap-1.5 border-b border-gray-200 mb-5 -mt-1">
+  <% tabs.forEach(function (t) { %>
+    <a href="<%= t.href %>"
+       class="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition <%= active === t.key ? 'border-brand-600 text-brand-700' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300' %>">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="<%= t.icon %>"/></svg>
+      <%= t.label %>
+    </a>
+  <% }) %>
+  <a href="/equipment/hire-dockets"
+     class="inline-flex items-center gap-1.5 px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 transition ml-auto">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+    Hire Dockets
+  </a>
+</div>

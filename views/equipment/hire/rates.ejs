@@ -1,0 +1,138 @@
+<% locals.currentPage = 'equipment' %>
+<%
+  const rm = (typeof rateMap !== 'undefined' && rateMap) ? rateMap : {};
+  function rateVal(type, unit) {
+    return (rm[type] && rm[type][unit] != null) ? rm[type][unit] : '';
+  }
+%>
+
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Equipment / Hire</h1>
+    <p class="text-gray-500 text-sm mt-0.5">Per-company hire rates · auto-applied when you raise a hire</p>
+  </div>
+  <button type="button" onclick="document.getElementById('add-company').classList.toggle('hidden')" class="inline-flex items-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg">
+    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m6-6H6"/></svg>
+    Add company
+  </button>
+</div>
+
+<%- include('../_tabs', { tabActive: 'rates' }) %>
+
+<!-- Add company (collapsible) -->
+<div id="add-company" class="hidden bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-5">
+  <form method="POST" action="/equipment/hire/rates/companies" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+    <%- include('../../partials/csrf') %>
+    <div class="sm:col-span-2">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Company Name <span class="text-red-500">*</span></label>
+      <input type="text" name="name" required placeholder="e.g. Kennards Hire" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Contact</label>
+      <input type="text" name="contact_person" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Phone</label>
+      <input type="text" name="phone" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div class="sm:col-span-4 flex justify-end gap-2">
+      <button type="button" onclick="document.getElementById('add-company').classList.add('hidden')" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-medium rounded-lg">Cancel</button>
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg">Save company</button>
+    </div>
+  </form>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-4 gap-5">
+  <!-- Companies list -->
+  <aside class="lg:col-span-1">
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-4 py-2.5 border-b border-gray-200 text-[10px] font-bold text-gray-500 uppercase tracking-widest">Companies</div>
+      <% if (!companies.length) { %>
+        <div class="p-4 text-xs text-gray-500">No companies yet. Add one to start saving rates.</div>
+      <% } else { %>
+        <div class="divide-y divide-gray-100">
+          <% companies.forEach(function (c) { %>
+            <a href="/equipment/hire/rates?company=<%= c.id %>" class="block px-4 py-2.5 text-sm <%= selected && selected.id === c.id ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-gray-700 hover:bg-gray-50' %>">
+              <%= c.name %><% if (!c.active) { %> <span class="text-[10px] text-gray-400">(inactive)</span><% } %>
+            </a>
+          <% }) %>
+        </div>
+      <% } %>
+    </div>
+  </aside>
+
+  <!-- Rate matrix for selected company -->
+  <section class="lg:col-span-3">
+    <% if (!selected) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-12 text-center text-sm text-gray-500">Select a company (or add one) to set its rates.</div>
+    <% } else { %>
+      <!-- Company details -->
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-4">
+        <form method="POST" action="/equipment/hire/rates/companies" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+          <%- include('../../partials/csrf') %>
+          <input type="hidden" name="id" value="<%= selected.id %>">
+          <div class="sm:col-span-2">
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Company Name</label>
+            <input type="text" name="name" value="<%= selected.name %>" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Contact</label>
+            <input type="text" name="contact_person" value="<%= selected.contact_person || '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div>
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Phone</label>
+            <input type="text" name="phone" value="<%= selected.phone || '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div class="sm:col-span-3">
+            <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Email</label>
+            <input type="email" name="email" value="<%= selected.email || '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          </div>
+          <div class="flex items-end gap-2">
+            <button type="submit" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg">Save details</button>
+          </div>
+        </form>
+        <div class="flex justify-end mt-2">
+          <form method="POST" action="/equipment/hire/rates/companies/<%= selected.id %>/delete" onsubmit="return confirm('Delete this company and all its rates?')">
+            <%- include('../../partials/csrf') %>
+            <button type="submit" class="text-[11px] font-semibold text-red-600 hover:underline">Delete company</button>
+          </form>
+        </div>
+      </div>
+
+      <!-- Rate matrix -->
+      <form method="POST" action="/equipment/hire/rates/companies/<%= selected.id %>/rates" class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <%- include('../../partials/csrf') %>
+        <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between">
+          <div>
+            <h2 class="text-sm font-bold text-gray-800"><%= selected.name %> · rates</h2>
+            <p class="text-[11px] text-gray-500">Leave a cell blank if not offered. These auto-fill when you add a hire.</p>
+          </div>
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg">Save rates</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-[10px] font-bold uppercase tracking-widest text-gray-500">
+              <tr>
+                <th class="text-left px-4 py-2.5">Equipment type</th>
+                <% rateUnits.forEach(function (u) { %><th class="text-right px-3 py-2.5">$ / <%= u %></th><% }) %>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <% equipmentTypes.forEach(function (t) { %>
+                <tr class="hover:bg-gray-50/60">
+                  <td class="px-4 py-2 text-gray-800 font-medium whitespace-nowrap"><%= t.label %></td>
+                  <% rateUnits.forEach(function (u) { %>
+                    <td class="px-3 py-2 text-right">
+                      <input type="number" step="0.01" name="r_<%= t.value %>_<%= u %>" value="<%= rateVal(t.value, u) %>"
+                        class="w-24 px-2 py-1.5 bg-white border border-gray-200 rounded-md text-gray-900 text-sm text-right focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent" placeholder="—">
+                    </td>
+                  <% }) %>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
+        </div>
+      </form>
+    <% } %>
+  </section>
+</div>

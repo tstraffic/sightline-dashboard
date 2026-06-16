@@ -1,0 +1,118 @@
+<% locals.currentPage = 'equipment' %>
+<%
+  const isEdit = hire !== null && typeof hire !== 'undefined';
+  const v = (k, d) => (isEdit && hire[k] != null ? hire[k] : (d || ''));
+  const action = isEdit ? ('/equipment/hire/' + hire.id) : '/equipment/hire';
+%>
+
+<!-- Breadcrumb -->
+<div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
+  <a href="/equipment/hire" class="hover:text-gray-900 transition">Hired</a>
+  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+  <span class="text-gray-900"><%= isEdit ? 'Edit hire' : 'New hire' %></span>
+</div>
+
+<div class="mb-5">
+  <h1 class="text-2xl font-bold text-gray-900"><%= isEdit ? 'Edit hire' : 'New hire' %></h1>
+  <p class="text-gray-500 text-sm mt-0.5">Pick a company and equipment type — the rate auto-fills from saved rates.</p>
+</div>
+
+<form method="POST" action="<%= action %>" class="space-y-5">
+  <%- include('../../partials/csrf') %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hire Company</label>
+        <select name="company_id" class="hire-company w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">— Select company —</option>
+          <% companies.forEach(function (c) { %><option value="<%= c.id %>" <%= String(v('company_id')) === String(c.id) ? 'selected' : '' %>><%= c.name %></option><% }) %>
+        </select>
+        <% if (isEdit && hire.company_name && !hire.company_id) { %><p class="text-[11px] text-gray-400 mt-1">Was: <%= hire.company_name %></p><% } %>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Equipment Type</label>
+        <select name="equipment_type" class="hire-type w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">— Select type —</option>
+          <% equipmentTypes.forEach(function (t) { %><option value="<%= t.value %>" <%= v('equipment_type') === t.value ? 'selected' : '' %>><%= t.label %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Quantity</label>
+        <input type="number" name="quantity" min="1" value="<%= v('quantity', 1) %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Rate ($) <span class="hire-rate-auto text-emerald-600 normal-case font-medium hidden">· auto-filled</span></label>
+        <input type="number" step="0.01" name="rate" value="<%= isEdit ? hire.rate : '' %>" placeholder="0.00" class="hire-rate w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Per</label>
+        <select name="rate_unit" class="hire-unit w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <% rateUnits.forEach(function (u) { %><option value="<%= u %>" <%= v('rate_unit', 'day') === u ? 'selected' : '' %>><%= u %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Status</label>
+        <select name="status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <% [['on_hire','On hire'],['off_hired','Off-hired'],['cancelled','Cancelled']].forEach(function (o) { %><option value="<%= o[0] %>" <%= v('status','on_hire') === o[0] ? 'selected' : '' %>><%= o[1] %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Start Date</label>
+        <input type="date" name="start_date" value="<%= v('start_date') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">End Date <span class="text-gray-400 normal-case font-medium">(blank = ongoing)</span></label>
+        <input type="date" name="end_date" value="<%= v('end_date') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Supplier Reference</label>
+        <input type="text" name="reference" value="<%= v('reference') %>" placeholder="Hire ref / PO no." class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Rego / Serial</label>
+        <input type="text" name="registration" value="<%= v('registration') %>" placeholder="If applicable" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div class="sm:col-span-2 lg:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Description</label>
+        <input type="text" name="description" value="<%= v('description') %>" placeholder="e.g. 20kVA towable generator" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+    </div>
+    <div class="mt-4">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</label>
+      <textarea name="notes" rows="2" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-y"><%= v('notes') %></textarea>
+    </div>
+  </div>
+  <div class="flex items-center justify-end gap-2">
+    <a href="/equipment/hire" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg">Cancel</a>
+    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg"><%= isEdit ? 'Save hire' : 'Add hire' %></button>
+  </div>
+</form>
+
+<script>
+(function () {
+  var company = document.querySelector('.hire-company');
+  var hType = document.querySelector('.hire-type');
+  var rate = document.querySelector('.hire-rate');
+  var unit = document.querySelector('.hire-unit');
+  var autoTag = document.querySelector('.hire-rate-auto');
+  var dirty = <%= isEdit && hire.rate ? 'true' : 'false' %>;
+  rate.addEventListener('input', function () { dirty = true; if (autoTag) autoTag.classList.add('hidden'); });
+  function lookup() {
+    if (!company.value || !hType.value) return;
+    if (dirty && rate.value) return;
+    fetch('/equipment/hire/rate-lookup?company_id=' + encodeURIComponent(company.value) +
+          '&equipment_type=' + encodeURIComponent(hType.value) +
+          '&rate_unit=' + encodeURIComponent(unit.value))
+      .then(function (r) { return r.json(); })
+      .then(function (d) {
+        if (d && d.found && d.rate != null) {
+          rate.value = d.rate;
+          if (d.rate_unit) unit.value = d.rate_unit;
+          dirty = false;
+          if (autoTag) autoTag.classList.remove('hidden');
+        }
+      }).catch(function () {});
+  }
+  [company, hType, unit].forEach(function (el) { if (el) el.addEventListener('change', lookup); });
+})();
+</script>

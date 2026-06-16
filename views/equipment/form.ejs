@@ -44,6 +44,18 @@
           <% }) %>
         </select>
       </div>
+      <% if (typeof equipmentTypes !== 'undefined' && equipmentTypes) { %>
+      <div>
+        <label for="equipment_type" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Equipment Type</label>
+        <select id="equipment_type" name="equipment_type"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">— Select type —</option>
+          <% equipmentTypes.forEach(function (t) { %>
+            <option value="<%= t.value %>" <%= isEdit && item.equipment_type === t.value ? 'selected' : '' %>><%= t.label %></option>
+          <% }) %>
+        </select>
+      </div>
+      <% } %>
       <div>
         <label for="serial_number" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Serial Number</label>
         <input type="text" id="serial_number" name="serial_number"
