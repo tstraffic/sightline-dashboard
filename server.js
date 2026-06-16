@@ -144,6 +144,17 @@ app.use((req, res, next) => {
   res.locals.flash_success = req.flash('success');
   res.locals.flash_error = req.flash('error');
   res.locals.user = req.session.user || null;
+  // Theme preference: lazy-load once per session from users.preferences so the
+  // chosen theme follows the user to a fresh browser/device (localStorage still
+  // takes precedence client-side for instant, FOUC-free application).
+  if (req.session.user && typeof req.session.user.theme === 'undefined') {
+    try {
+      const { getDb } = require('./db/database');
+      const row = getDb().prepare('SELECT preferences FROM users WHERE id = ?').get(req.session.user.id);
+      const prefs = JSON.parse((row && row.preferences) || '{}');
+      req.session.user.theme = (prefs && typeof prefs.theme === 'string') ? prefs.theme : '';
+    } catch (e) { req.session.user.theme = ''; }
+  }
   res.locals.canAccess = canAccess;
   res.locals.canSeeCost = canViewInternalCost(req.session.user);
   res.locals.formatDate = formatDateAU;

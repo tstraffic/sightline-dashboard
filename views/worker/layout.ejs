@@ -6,10 +6,14 @@
     // admin dashboard so a worker who toggles on one side carries it across.
     // Runs before render to prevent FOUC.
     (function () {
+      // Resolve a theme *id* (e.g. 'aurora') from the shared key to its base
+      // mode. The worker portal only uses light/dark, not the skins.
+      var MODE = { daylight:'light', 'warm-paper':'light', 'mint-glass':'light' };
+      function modeOf(id) { return id === 'light' ? 'light' : id === 'dark' ? 'dark' : (MODE[id] || 'dark'); }
       try {
         var saved = localStorage.getItem('atomis-theme');
-        var t = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-        document.documentElement.setAttribute('data-theme', t);
+        var id = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'daylight' : 'slate');
+        document.documentElement.setAttribute('data-theme', modeOf(id));
       } catch (e) {
         document.documentElement.setAttribute('data-theme', 'dark');
       }
@@ -18,7 +22,7 @@
       var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
       var next = cur === 'light' ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', next);
-      try { localStorage.setItem('atomis-theme', next); } catch (e) {}
+      try { localStorage.setItem('atomis-theme', next === 'light' ? 'daylight' : 'slate'); } catch (e) {}
     };
     document.addEventListener('click', function (e) {
       var btn = e.target.closest && e.target.closest('.theme-toggle');

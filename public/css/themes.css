@@ -1,0 +1,181 @@
+/* ============================================================
+   Atomis theme skins.
+   Layered on top of the base light/dark system: `data-theme`
+   (light|dark) drives all existing CSS; `data-skin` re-tints just
+   the background + surface tokens and, for the gradient themes,
+   paints a fixed atmosphere behind the (opaque) cards.
+
+   Discipline (from the theme spec):
+   - Cards never sit on a raw gradient — surfaces stay near-solid so
+     text contrast is constant. The gradient shows in the page
+     background, header, and gutters only.
+   - Every gradient carries a faint grain so it can't band on wide
+     monitors.
+   - Skins touch background/surface/border tokens only. Status
+     badges (green/amber/red) and links are fixed across all themes.
+   Loaded AFTER custom.css so these overrides win.
+   ============================================================ */
+
+:root {
+  /* ~4% fractal-noise tile, reused by every gradient skin to kill banding. */
+  --atomis-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+
+/* Shared helper: paint a fixed background image stack behind everything.
+   Each gradient skin sets --skin-gradient; the grain layers on top of it. */
+:root[data-skin="aurora"] body,        :root[data-skin="aurora"] body.dark-glass,
+:root[data-skin="emerald-dusk"] body,  :root[data-skin="emerald-dusk"] body.dark-glass,
+:root[data-skin="violet-haze"] body,   :root[data-skin="violet-haze"] body.dark-glass,
+:root[data-skin="twilight"] body,      :root[data-skin="twilight"] body.dark-glass,
+:root[data-skin="nebula"] body,        :root[data-skin="nebula"] body.dark-glass,
+:root[data-skin="mint-glass"] body,    :root[data-skin="mint-glass"] body.dark-glass {
+  background-color: var(--atomis-base);
+  background-image: var(--atomis-grain), var(--skin-gradient);
+  background-attachment: fixed, fixed;
+  background-repeat: repeat, no-repeat;
+  background-size: 140px 140px, cover;
+  background-position: 0 0, center top;
+}
+
+/* ===================== SOLID DARK VARIANTS ===================== */
+
+/* Carbon — deeper, near-black. Cards lift to #14181f. */
+:root[data-skin="carbon"] {
+  --atomis-base: #0a0d12;
+  --atomis-surface: #14181f;
+  --dark-surface: #14181f;
+  --dark-surface-hover: #1b212b;
+  --dark-border: rgba(255,255,255,0.07);
+}
+
+/* Midnight Navy — desaturated deep blue base, faint navy card lift. */
+:root[data-skin="navy"] {
+  --atomis-base: #0d1424;
+  --atomis-surface: #141d33;
+  --dark-surface: #141d33;
+  --dark-surface-hover: #1b2742;
+  --dark-border: rgba(148,170,220,0.12);
+}
+
+/* Graphite — mid-tone "dim" theme between light and dark. */
+:root[data-skin="graphite"] {
+  --atomis-base: #2a2f37;
+  --atomis-surface: #343b45;
+  --dark-surface: #343b45;
+  --dark-surface-hover: #3d4550;
+  --dark-border: rgba(255,255,255,0.10);
+}
+
+/* Atomis — on-brand: slate base, faint emerald wash behind the header,
+   green-tinted card borders. Restrained so it doesn't fight status badges. */
+:root[data-skin="atomis"] {
+  --atomis-base: #0F1115;
+  --dark-border: rgba(16,185,129,0.20);
+  --dark-border-strong: rgba(16,185,129,0.30);
+}
+:root[data-skin="atomis"] body, :root[data-skin="atomis"] body.dark-glass {
+  background-color: var(--atomis-base);
+  background-image: var(--atomis-grain),
+    radial-gradient(120% 70% at 50% -20%, rgba(16,185,129,0.14), rgba(16,185,129,0.04) 38%, transparent 64%);
+  background-attachment: fixed, fixed;
+  background-repeat: repeat, no-repeat;
+  background-size: 140px 140px, cover;
+}
+
+/* ===================== DARK GRADIENT THEMES ===================== */
+/* All set a near-solid card surface so text contrast stays constant. */
+
+/* Aurora — teal → violet → magenta wash across the top. */
+:root[data-skin="aurora"] {
+  --atomis-base: #0a0e1a;
+  --dark-surface: rgba(18,22,32,0.90);
+  --dark-surface-hover: rgba(28,33,46,0.92);
+  --dark-border: rgba(255,255,255,0.09);
+  --skin-gradient:
+    radial-gradient(70% 50% at 78% 4%, rgba(217,70,239,0.10), transparent 60%),
+    radial-gradient(90% 55% at 50% -8%, rgba(139,92,246,0.14), transparent 62%),
+    radial-gradient(80% 50% at 18% 2%, rgba(45,212,191,0.16), transparent 58%),
+    radial-gradient(120% 60% at 50% 118%, rgba(45,212,191,0.06), transparent 60%);
+}
+
+/* Emerald Dusk — most on-brand: forest green (top) → near-black (bottom). */
+:root[data-skin="emerald-dusk"] {
+  --atomis-base: #070b09;
+  --dark-surface: rgba(15,22,18,0.92);
+  --dark-surface-hover: rgba(22,32,26,0.94);
+  --dark-border: rgba(16,185,129,0.16);
+  --skin-gradient: linear-gradient(180deg, rgba(6,78,59,0.55) 0%, rgba(6,40,32,0.30) 28%, rgba(7,11,9,0) 62%);
+}
+
+/* Violet Haze — purple → indigo concentrated behind header/KPIs. */
+:root[data-skin="violet-haze"] {
+  --atomis-base: #121019;
+  --dark-surface: rgba(24,21,33,0.91);
+  --dark-surface-hover: rgba(33,29,46,0.93);
+  --dark-border: rgba(167,139,250,0.14);
+  --skin-gradient:
+    radial-gradient(95% 55% at 50% -6%, rgba(124,58,237,0.22), transparent 60%),
+    radial-gradient(70% 40% at 80% 6%, rgba(79,70,229,0.16), transparent 58%);
+}
+
+/* Twilight — diagonal violet (top-left) → emerald (bottom-right). */
+:root[data-skin="twilight"] {
+  --atomis-base: #0c0a13;
+  --dark-surface: rgba(20,18,28,0.92);
+  --dark-surface-hover: rgba(30,27,40,0.94);
+  --dark-border: rgba(255,255,255,0.09);
+  --skin-gradient:
+    radial-gradient(80% 60% at 6% 0%, rgba(124,58,237,0.22), transparent 55%),
+    radial-gradient(85% 70% at 100% 100%, rgba(16,185,129,0.16), transparent 58%);
+}
+
+/* Nebula — richest + darkest: indigo, violet, rose; grain is prominent. */
+:root[data-skin="nebula"] {
+  --atomis-base: #07070e;
+  --dark-surface: rgba(14,14,22,0.93);
+  --dark-surface-hover: rgba(22,22,34,0.95);
+  --dark-border: rgba(255,255,255,0.08);
+  --skin-gradient:
+    radial-gradient(60% 45% at 22% 0%, rgba(79,70,229,0.20), transparent 58%),
+    radial-gradient(60% 45% at 72% 4%, rgba(147,51,234,0.16), transparent 58%),
+    radial-gradient(55% 40% at 90% 18%, rgba(244,63,94,0.10), transparent 56%);
+}
+/* A touch more grain for Nebula's "cosmic" feel. */
+:root[data-skin="nebula"] body, :root[data-skin="nebula"] body.dark-glass { background-size: 110px 110px, cover; }
+
+/* ===================== LIGHT VARIANTS ===================== */
+
+/* Warm Paper — soft warm off-white instead of cool grey-white. */
+:root[data-skin="warm-paper"][data-theme="light"] {
+  --atomis-base: #faf8f4;
+  --atomis-surface: #ffffff;
+}
+:root[data-skin="warm-paper"][data-theme="light"] body,
+:root[data-skin="warm-paper"][data-theme="light"] body.dark-glass {
+  background-color: #faf8f4;
+}
+/* Warm the body text from near-black to warm charcoal. */
+:root[data-skin="warm-paper"][data-theme="light"] body.dark-glass .text-gray-900,
+:root[data-skin="warm-paper"][data-theme="light"] body.dark-glass .text-\[\#111827\] { color: #2c2722 !important; }
+:root[data-skin="warm-paper"][data-theme="light"] body.dark-glass .text-gray-700 { color: #4a443c !important; }
+:root[data-skin="warm-paper"][data-theme="light"] body.dark-glass .bg-white { border-color: #ECE7DE !important; }
+
+/* Mint Glass — pale mint → white gradient with frosted cards. */
+:root[data-skin="mint-glass"][data-theme="light"] {
+  --atomis-base: #eaf6f0;
+  --skin-gradient: linear-gradient(170deg, #e3f5ec 0%, #f4fbf8 34%, #ffffff 72%);
+}
+/* Frosted cards — translucent enough to feel glassy, opaque enough that
+   table text stays crisp (the tricky bit the spec calls out). */
+:root[data-skin="mint-glass"][data-theme="light"] body.dark-glass .bg-white {
+  background: rgba(255,255,255,0.82) !important;
+  backdrop-filter: blur(12px) saturate(150%) !important;
+  -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
+  border-color: rgba(16,185,129,0.16) !important;
+}
+:root[data-skin="mint-glass"][data-theme="light"] body.dark-glass .bg-gray-50 { background: rgba(236,248,242,0.7) !important; }
+
+/* Mobile: fixed backgrounds can stutter on iOS — let them scroll instead. */
+@media (max-width: 768px) {
+  :root[data-skin] body, :root[data-skin] body.dark-glass { background-attachment: scroll, scroll !important; }
+}

@@ -31,6 +31,7 @@ router.get('/', (req, res) => {
     title: 'My Profile',
     profile: user,
     prefs,
+    currentTheme: (prefs && typeof prefs.theme === 'string') ? prefs.theme : '',
     emailEnabled: emailConfigured(),
     flash_success: req.flash('success'),
     flash_error: req.flash('error'),
@@ -75,6 +76,27 @@ router.post('/', (req, res) => {
 
   req.flash('success', 'Profile updated successfully.');
   res.redirect('/profile');
+});
+
+// POST /profile/theme — persist the chosen UI theme to the user's preferences
+// so it follows them across devices. Client-side localStorage still drives the
+// instant, FOUC-free application; this is the durable record.
+const ATOMIS_THEME_IDS = ['slate','carbon','navy','graphite','atomis','aurora','emerald-dusk','violet-haze','twilight','nebula','daylight','warm-paper','mint-glass'];
+router.post('/theme', (req, res) => {
+  const db = getDb();
+  const theme = String(req.body.theme || '').trim();
+  if (!ATOMIS_THEME_IDS.includes(theme)) {
+    return res.status(400).json({ ok: false, error: 'Unknown theme.' });
+  }
+  try {
+    const current = JSON.parse(db.prepare('SELECT preferences FROM users WHERE id = ?').get(req.session.user.id)?.preferences || '{}');
+    current.theme = theme;
+    db.prepare('UPDATE users SET preferences = ? WHERE id = ?').run(JSON.stringify(current), req.session.user.id);
+    req.session.user.theme = theme; // keep session in sync for layout injection
+  } catch (e) {
+    return res.status(500).json({ ok: false, error: 'Could not save theme.' });
+  }
+  res.json({ ok: true, theme });
 });
 
 // POST /profile/change-password — change password directly (must know current)

@@ -2,11 +2,20 @@
 <html lang="en" class="h-full">
 <head>
   <script>
+    // Theme bootstrap — must resolve a theme *id* (e.g. 'aurora') to its base
+    // mode so the login screen's light/dark styles still apply. Mirrors the
+    // registry in the main layout.
     (function () {
+      var MODE = { daylight:'light', 'warm-paper':'light', 'mint-glass':'light' }; // everything else is dark
+      function modeOf(id) {
+        if (id === 'light') return 'light';
+        if (id === 'dark') return 'dark';
+        return MODE[id] || 'dark';
+      }
       try {
         var saved = localStorage.getItem('atomis-theme');
-        var t = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-        document.documentElement.setAttribute('data-theme', t);
+        var id = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'daylight' : 'slate');
+        document.documentElement.setAttribute('data-theme', modeOf(id));
       } catch (e) {
         document.documentElement.setAttribute('data-theme', 'dark');
       }
@@ -15,7 +24,8 @@
       var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
       var next = cur === 'light' ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', next);
-      try { localStorage.setItem('atomis-theme', next); } catch (e) {}
+      // Persist as a baseline id so the main app picks a sensible default.
+      try { localStorage.setItem('atomis-theme', next === 'light' ? 'daylight' : 'slate'); } catch (e) {}
     };
     document.addEventListener('click', function (e) {
       var btn = e.target.closest && e.target.closest('.theme-toggle');

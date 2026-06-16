@@ -2,22 +2,72 @@
 <html lang="en" class="h-full">
 <head>
   <script>
-    // Theme bootstrap — runs before render to prevent FOUC
+    // Theme registry — id → { mode, skin }. A theme is a base mode
+    // (light|dark, which drives all existing CSS) plus an optional skin
+    // (re-tints background/surface tokens; see /css/themes.css).
+    window.ATOMIS_THEMES = {
+      slate:          { mode: 'dark',  skin: '',             label: 'Slate' },
+      carbon:         { mode: 'dark',  skin: 'carbon',       label: 'Carbon' },
+      navy:           { mode: 'dark',  skin: 'navy',         label: 'Midnight Navy' },
+      graphite:       { mode: 'dark',  skin: 'graphite',     label: 'Graphite' },
+      atomis:         { mode: 'dark',  skin: 'atomis',       label: 'Atomis' },
+      aurora:         { mode: 'dark',  skin: 'aurora',       label: 'Aurora' },
+      'emerald-dusk': { mode: 'dark',  skin: 'emerald-dusk', label: 'Emerald Dusk' },
+      'violet-haze':  { mode: 'dark',  skin: 'violet-haze',  label: 'Violet Haze' },
+      twilight:       { mode: 'dark',  skin: 'twilight',     label: 'Twilight' },
+      nebula:         { mode: 'dark',  skin: 'nebula',       label: 'Nebula' },
+      daylight:       { mode: 'light', skin: '',             label: 'Daylight' },
+      'warm-paper':   { mode: 'light', skin: 'warm-paper',   label: 'Warm Paper' },
+      'mint-glass':   { mode: 'light', skin: 'mint-glass',   label: 'Mint Glass' }
+    };
+    // Theme saved server-side for this user (follows them to new devices).
+    window.ATOMIS_SERVER_THEME = '<%= (typeof user !== "undefined" && user && user.theme) ? user.theme : "" %>';
+
+    window.applyAtomisTheme = function (id) {
+      var T = window.ATOMIS_THEMES[id] || window.ATOMIS_THEMES.slate;
+      var root = document.documentElement;
+      root.setAttribute('data-theme', T.mode);
+      if (T.skin) root.setAttribute('data-skin', T.skin);
+      else root.removeAttribute('data-skin');
+      return T;
+    };
+    window.currentAtomisTheme = function () {
+      try { return localStorage.getItem('atomis-theme') || window.ATOMIS_SERVER_THEME || ''; } catch (e) { return ''; }
+    };
+
+    // Bootstrap — runs before render to prevent FOUC.
     (function () {
+      var id;
       try {
-        var saved = localStorage.getItem('atomis-theme');
-        var t = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
-        document.documentElement.setAttribute('data-theme', t);
-      } catch (e) {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      }
+        id = localStorage.getItem('atomis-theme') || window.ATOMIS_SERVER_THEME;
+        if (!id) id = window.matchMedia('(prefers-color-scheme: light)').matches ? 'daylight' : 'slate';
+        // Back-compat: old values were the bare mode 'light'/'dark'.
+        if (id === 'light') id = 'daylight';
+        if (id === 'dark') id = 'slate';
+      } catch (e) { id = 'slate'; }
+      window.applyAtomisTheme(id);
     })();
+
+    // Set + persist a theme. Remembers the last theme picked per mode so the
+    // header sun/moon toggle can flip between a chosen dark and light theme.
+    window.setAtomisTheme = function (id) {
+      var T = window.applyAtomisTheme(id);
+      try {
+        localStorage.setItem('atomis-theme', id);
+        localStorage.setItem('atomis-theme-' + T.mode, id);
+      } catch (e) {}
+      document.dispatchEvent(new CustomEvent('atomis:theme', { detail: id }));
+      return id;
+    };
+
+    // Header toggle — flip to the opposite mode, restoring that side's last pick.
     window.toggleAtomisTheme = function () {
-      var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-      var next = cur === 'light' ? 'dark' : 'light';
-      document.documentElement.setAttribute('data-theme', next);
-      try { localStorage.setItem('atomis-theme', next); } catch (e) {}
-      document.dispatchEvent(new CustomEvent('atomis:theme', { detail: next }));
+      var cur = window.ATOMIS_THEMES[window.currentAtomisTheme()] || window.ATOMIS_THEMES.slate;
+      var want = cur.mode === 'dark' ? 'light' : 'dark';
+      var next;
+      try { next = localStorage.getItem('atomis-theme-' + want); } catch (e) {}
+      if (!next || !window.ATOMIS_THEMES[next]) next = (want === 'light') ? 'daylight' : 'slate';
+      window.setAtomisTheme(next);
     };
     // Delegated click handler — bulletproofs the inline onclick on
     // .theme-toggle. If the inline handler ever fails to fire (stale SW
@@ -107,6 +157,7 @@
     }
   </script>
   <link rel="stylesheet" href="/css/custom.css?v=atomis-10">
+  <link rel="stylesheet" href="/css/themes.css?v=atomis-themes-1">
   <link rel="stylesheet" href="/css/chat.css?v=atomis-1">
   <link rel="stylesheet" href="/css/bookings-v2.css?v=bk2-28">
   <style>/* Hide Tailwind CDN dev indicator */#__tailwind_indicator,div[style*="z-index: 2147483647"]{display:none!important}</style>
