@@ -428,6 +428,52 @@
     });
   });
 
+  // ---- Re-send induction confirmation (card icon + list button) ----
+  function markEmailedBadge(id) {
+    var card = document.getElementById('card-' + id);
+    if (card) {
+      var meta = card.querySelector('.rec-card-meta');
+      if (meta && !meta.querySelector('.rec-badge--mail')) {
+        var s = document.createElement('span');
+        s.className = 'rec-badge rec-badge--mail';
+        s.textContent = 'Emailed';
+        meta.appendChild(s);
+      }
+    }
+    var nameCell = document.querySelector('#lrow-' + id + ' td:nth-child(2)');
+    if (nameCell && !nameCell.querySelector('.rec-badge--mail')) {
+      var s2 = document.createElement('span');
+      s2.className = 'rec-badge rec-badge--mail mt-1';
+      s2.textContent = 'Emailed';
+      nameCell.appendChild(s2);
+    }
+  }
+  async function resendConfirmation(id, btn) {
+    if (btn) btn.classList.add('is-busy');
+    try {
+      var r = await fetch('/induction/admin/recruitment/' + encodeURIComponent(id) + '/resend-confirmation', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': csrf },
+        body: '_csrf=' + encodeURIComponent(csrf),
+      });
+      var data = await r.json().catch(function () { return {}; });
+      if (data.status === 'sent') { toast('Confirmation re-sent'); markEmailedBadge(id); }
+      else if (data.status === 'no_email') { toast('No email on file for this candidate', true); }
+      else if (data.status === 'no_date') { toast('Set an induction date first', true); }
+      else { toast("Couldn't send — try again", true); }
+    } catch (e) {
+      toast("Couldn't send — try again", true);
+    } finally {
+      if (btn) btn.classList.remove('is-busy');
+    }
+  }
+  document.querySelectorAll('.rec-card-resend').forEach(function (b) {
+    b.addEventListener('click', function (e) { e.stopPropagation(); resendConfirmation(b.dataset.id, b); });
+  });
+  document.querySelectorAll('.rec-resend-btn').forEach(function (b) {
+    b.addEventListener('click', function () { resendConfirmation(b.dataset.id, b); });
+  });
+
   // ---- Show-closed checkbox (list) ----
   var showClosed = document.getElementById('show-closed-rows');
   if (showClosed) showClosed.addEventListener('change', applyFilter);

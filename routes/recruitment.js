@@ -14,6 +14,41 @@ const { inductionConfirmationEmail } = require('../services/emailTemplates');
 
 // Public induction form the confirmation email points applicants to.
 const INDUCTION_FORM_URL = (process.env.APP_BASE_URL || 'https://tstc.up.railway.app').replace(/\/$/, '') + '/induction';
+
+// Send (or re-send) the induction booking confirmation to an applicant. Builds
+// the "on <date> at <time>" clause from the applicant's stored induction
+// date/time, sends via the shared mailer, and stamps induction_email_sent_at
+// on success. Returns one of: 'sent' | 'failed' | 'no_email' | 'no_date'.
+// Used by both the booking flow and the manual re-send button.
+async function sendInductionConfirmation(db, applicant, replyTo) {
+  if (!applicant.email || !/@/.test(applicant.email)) return 'no_email';
+  if (!applicant.induction_date) return 'no_date';
+  const dateStr = new Date(applicant.induction_date + 'T00:00:00Z').toLocaleDateString('en-AU', {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
+  });
+  let timeStr = '';
+  const m = String(applicant.induction_time || '').match(/^(\d{1,2}):(\d{2})/);
+  if (m) {
+    let h = parseInt(m[1], 10); const min = m[2];
+    const ampm = h >= 12 ? 'pm' : 'am';
+    h = h % 12; if (h === 0) h = 12;
+    timeStr = h + ':' + min + ' ' + ampm;
+  }
+  const whenText = 'on ' + dateStr + (timeStr ? ' at ' + timeStr : '');
+  try {
+    const result = await sendEmail(applicant.email, 'Induction Confirmation — T&S Traffic Control',
+      inductionConfirmationEmail(whenText, INDUCTION_FORM_URL), { replyTo });
+    if (result) {
+      try { db.prepare('UPDATE seek_applicants SET induction_email_sent_at = CURRENT_TIMESTAMP WHERE id = ?').run(applicant.id); } catch (e) { /* column missing on stale deploy */ }
+      return 'sent';
+    }
+    console.warn('[recruitment] induction confirmation email not sent for applicant', applicant.id, '(email service not configured or rejected)');
+    return 'failed';
+  } catch (e) {
+    console.error('[recruitment] induction confirmation email error:', e.message);
+    return 'failed';
+  }
+}
 const {
   FORWARD_STAGES, TERMINAL_STAGES, ALL_STAGES, STAGE_LABELS,
   isTerminal, isAtOrBeyond, normalizeStage, derive,
@@ -407,45 +442,10 @@ router.post('/:id', async (req, res) => {
   //   inductionEmailed: 'sent' | 'failed' | 'no_email' | null (no booking change)
   let inductionEmailed = null;
   if (inductionDateChange) {
-    if (!row.email || !/@/.test(row.email)) {
-      inductionEmailed = 'no_email';
-    } else {
-      // Final induction time = the incoming value if this request set one,
-      // otherwise whatever was already on the row.
-      let finalTime = row.induction_time || '';
-      if (typeof req.body.induction_time !== 'undefined') {
-        const t = String(req.body.induction_time || '').trim();
-        if (t === '' || /^([01]?\d|2[0-3]):[0-5]\d$/.test(t)) finalTime = t;
-      }
-      const isoDate = inductionDateChange.newDate;
-      const dateStr = new Date(isoDate + 'T00:00:00Z').toLocaleDateString('en-AU', {
-        weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
-      });
-      let timeStr = '';
-      const m = finalTime.match(/^(\d{1,2}):(\d{2})/);
-      if (m) {
-        let h = parseInt(m[1], 10); const min = m[2];
-        const ampm = h >= 12 ? 'pm' : 'am';
-        h = h % 12; if (h === 0) h = 12;
-        timeStr = h + ':' + min + ' ' + ampm;
-      }
-      const whenText = 'on ' + dateStr + (timeStr ? ' at ' + timeStr : '');
-      const replyTo = (req.session.user && req.session.user.email) || undefined;
-      try {
-        const result = await sendEmail(row.email, 'Induction Confirmation — T&S Traffic Control',
-          inductionConfirmationEmail(whenText, INDUCTION_FORM_URL), { replyTo });
-        if (result) {
-          inductionEmailed = 'sent';
-          try { db.prepare('UPDATE seek_applicants SET induction_email_sent_at = CURRENT_TIMESTAMP WHERE id = ?').run(row.id); } catch (e) { /* column missing on stale deploy */ }
-        } else {
-          inductionEmailed = 'failed';
-          console.warn('[recruitment] induction confirmation email not sent for applicant', row.id, '(email service not configured or rejected)');
-        }
-      } catch (e) {
-        inductionEmailed = 'failed';
-        console.error('[recruitment] induction confirmation email error:', e.message);
-      }
-    }
+    // Read back the freshly-persisted date/time so the email matches the row.
+    const fresh = db.prepare('SELECT id, applicant_name, email, induction_date, induction_time FROM seek_applicants WHERE id = ?').get(row.id);
+    const replyTo = (req.session.user && req.session.user.email) || undefined;
+    inductionEmailed = await sendInductionConfirmation(db, fresh, replyTo);
   }
 
   // Auto-convert to crew_member when the candidate reaches HIRED (idempotent —
@@ -471,6 +471,18 @@ router.post('/:id', async (req, res) => {
     return res.json({ ok: true, converted, becameHired, stage: newStage, inductionEmailed });
   }
   res.redirect(backUrl(req));
+});
+
+// POST /induction/admin/recruitment/:id/resend-confirmation — manually re-send
+// the induction confirmation email to an applicant (e.g. it failed, they lost
+// it, or the date changed). Uses the applicant's stored date/time.
+router.post('/:id/resend-confirmation', async (req, res) => {
+  const db = getDb();
+  const a = db.prepare('SELECT id, applicant_name, email, induction_date, induction_time FROM seek_applicants WHERE id = ?').get(req.params.id);
+  if (!a) return res.status(404).json({ ok: false, status: 'not_found', error: 'Applicant not found.' });
+  const replyTo = (req.session.user && req.session.user.email) || undefined;
+  const status = await sendInductionConfirmation(db, a, replyTo);
+  res.json({ ok: status === 'sent', status });
 });
 
 // POST /induction/admin/recruitment/:id/delete — remove a row. Deleting also
