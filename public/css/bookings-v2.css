@@ -517,6 +517,29 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
   display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
   gap: 6px; margin-top: 10px;
 }
+/* Split layout: TC Crew sizes stack vertically in a narrow left column;
+   every other add-on flows into a multi-column grid on the right. Above
+   ~720px viewport width the two sit side-by-side; below that they stack
+   (TC first, then add-ons) so the phone view stays single-column. */
+.bk2-create-reqs--split {
+  display: grid; gap: 16px; margin-top: 10px;
+  grid-template-columns: 1fr;
+}
+@media (min-width: 720px) {
+  .bk2-create-reqs--split { grid-template-columns: minmax(180px, 220px) 1fr; }
+}
+.bk2-create-reqs-tc { display: flex; flex-direction: column; gap: 6px; }
+.bk2-create-reqs-tc .bk2-create-req--tc { width: 100%; }
+.bk2-create-reqs-grouplbl {
+  margin: 0 0 6px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.08em; text-transform: uppercase;
+  color: #6B7280;
+}
+.bk2-create-reqs-addons-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 6px;
+}
 .bk2-create-req {
   display: flex; align-items: center; justify-content: space-between;
   gap: 8px; padding: 6px 10px;

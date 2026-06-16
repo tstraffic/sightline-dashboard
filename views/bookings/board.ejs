@@ -977,14 +977,16 @@
             <h3 class="bk2-create-head" style="margin:0">Booking Requirements</h3>
             <input type="search" class="bk2-create-search" placeholder="Search requirements…">
           </div>
-          <p class="bk2-create-hint">Set the quantity per item — Crew steppers feed into the crew composition, others into add-ons.</p>
-          <div class="bk2-create-reqs">
-            <% [
+          <p class="bk2-create-hint">Set the quantity per item — TC Crew sizes feed into crew composition (stacked, left); everything else is an add-on (grid, right).</p>
+          <%
+            var TC_CREW_REQS = [
               { name: '1x TC Crew',  field: 'crew_size_1' },
               { name: '2x TC Crew',  field: 'crew_size_2', defaultQty: 1 },
               { name: '3x TC Crew',  field: 'crew_size_3' },
               { name: '4x TC Crew',  field: 'crew_size_4' },
               { name: '5x TC Crew',  field: 'crew_size_5' },
+            ];
+            var ADDON_REQS = [
               { name: 'Arrow Board', field: 'addon_arrow' },
               { name: 'Hoist Operator', field: 'addon_hoist' },
               { name: 'Labour', field: 'addon_labour' },
@@ -1005,16 +1007,39 @@
               { name: 'VMS Board', field: 'addon_vms_board' },
               { name: 'VMS Ute', field: 'addon_vms_ute' },
               { name: 'Vehicle', field: 'addon_vehicle' },
-            ].forEach(function (r) { %>
-              <div class="bk2-create-req" data-req-name="<%= r.name.toLowerCase() %>">
-                <span class="bk2-create-req-name"><%= r.name %></span>
-                <div class="bk2-create-stepper" data-stepper-name="<%= r.field %>">
-                  <button type="button" data-step="-1" aria-label="Decrease">−</button>
-                  <input type="number" name="<%= r.field %>" value="<%= r.defaultQty || 0 %>" min="0" max="20" readonly>
-                  <button type="button" data-step="+1" aria-label="Increase">+</button>
+            ];
+          %>
+          <div class="bk2-create-reqs bk2-create-reqs--split">
+            <!-- TC Crew column — stacked vertically, full width of its column. -->
+            <div class="bk2-create-reqs-tc">
+              <p class="bk2-create-reqs-grouplbl">TC Crew</p>
+              <% TC_CREW_REQS.forEach(function (r) { %>
+                <div class="bk2-create-req bk2-create-req--tc" data-req-name="<%= r.name.toLowerCase() %>">
+                  <span class="bk2-create-req-name"><%= r.name %></span>
+                  <div class="bk2-create-stepper" data-stepper-name="<%= r.field %>">
+                    <button type="button" data-step="-1" aria-label="Decrease">−</button>
+                    <input type="number" name="<%= r.field %>" value="<%= r.defaultQty || 0 %>" min="0" max="20" readonly>
+                    <button type="button" data-step="+1" aria-label="Increase">+</button>
+                  </div>
                 </div>
+              <% }); %>
+            </div>
+            <!-- Add-ons — multi-column grid. Auto-fills based on viewport. -->
+            <div class="bk2-create-reqs-addons">
+              <p class="bk2-create-reqs-grouplbl">Add-ons</p>
+              <div class="bk2-create-reqs-addons-grid">
+                <% ADDON_REQS.forEach(function (r) { %>
+                  <div class="bk2-create-req" data-req-name="<%= r.name.toLowerCase() %>">
+                    <span class="bk2-create-req-name"><%= r.name %></span>
+                    <div class="bk2-create-stepper" data-stepper-name="<%= r.field %>">
+                      <button type="button" data-step="-1" aria-label="Decrease">−</button>
+                      <input type="number" name="<%= r.field %>" value="<%= r.defaultQty || 0 %>" min="0" max="20" readonly>
+                      <button type="button" data-step="+1" aria-label="Increase">+</button>
+                    </div>
+                  </div>
+                <% }); %>
               </div>
-            <% }); %>
+            </div>
           </div>
           <p class="bk2-create-reqs-summary">People: <strong id="bk2-create-pp">2</strong> · Vehicles: <strong id="bk2-create-vv">1</strong> · Equipment: <strong id="bk2-create-ee">0</strong></p>
         </div>
