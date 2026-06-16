@@ -28,8 +28,12 @@
     --rec-card-bg: #1B1E26;
     --rec-card-border: rgba(255,255,255,0.08);
     --rec-ink: #F5F5F7;
-    --rec-ink-mute: #9CA3AF;
-    --rec-ink-faint: #6B7280;
+    --rec-ink-mute: #C2C7D0;
+    --rec-ink-faint: #8A909C;
+    --rec-input-bg: rgba(255,255,255,0.06);
+    --rec-input-border: rgba(255,255,255,0.18);
+    --rec-form-bg: rgba(255,255,255,0.04);
+    --rec-form-border: rgba(255,255,255,0.10);
   }
   #rec-root {
     --rec-col-bg: #F8FAFC;
@@ -37,8 +41,12 @@
     --rec-card-bg: #FFFFFF;
     --rec-card-border: #E5E7EB;
     --rec-ink: #0F172A;
-    --rec-ink-mute: #64748B;
+    --rec-ink-mute: #475569;
     --rec-ink-faint: #94A3B8;
+    --rec-input-bg: #FFFFFF;
+    --rec-input-border: #CBD5E1;
+    --rec-form-bg: #F9FAFB;
+    --rec-form-border: #E5E7EB;
   }
 
   /* View toggle */
@@ -163,6 +171,32 @@
   /* List status pill select */
   .status-pill { font-weight: 600; cursor: pointer; }
   :root[data-theme="dark"] .rec-stage-select { color-scheme: dark; }
+
+  /* ── Forms (add applicant + inline edit) ──
+     Scoped under #rec-root so they out-specify the global dark-glass input
+     rule (which forces a near-invisible dark fill on a dark panel). */
+  #rec-root .rec-form-panel {
+    background: var(--rec-form-bg); border: 1px solid var(--rec-form-border);
+    border-radius: var(--rec-radius);
+  }
+  #rec-root .rec-flabel {
+    display: block; font-size: 10px; font-weight: 800; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--rec-ink-mute); margin-bottom: 5px;
+  }
+  #rec-root .rec-input {
+    width: 100%; border-radius: 9px !important;
+    background: var(--rec-input-bg) !important;
+    border: 1px solid var(--rec-input-border) !important;
+    color: var(--rec-ink) !important;
+    padding: 9px 12px; font-size: 13.5px; line-height: 1.3;
+    transition: border-color .15s var(--rec-ease), box-shadow .15s var(--rec-ease);
+  }
+  #rec-root .rec-input::placeholder { color: var(--rec-ink-faint) !important; opacity: 1; }
+  #rec-root .rec-input:focus, #rec-root .rec-input:focus-visible {
+    border-color: #2B7FFF !important;
+    box-shadow: 0 0 0 3px rgba(43,127,255,.22) !important; outline: none !important;
+  }
+  :root[data-theme="dark"] #rec-root .rec-input { color-scheme: dark; }
 
   /* ── Modals ── */
   .rec-modal { position: fixed; inset: 0; z-index: 1100; display: flex; align-items: center; justify-content: center; padding: 16px; }

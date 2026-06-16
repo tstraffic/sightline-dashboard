@@ -142,38 +142,33 @@
   <%- include('_registry-tabs', { tabActive: 'recruitment' }) %>
 
   <!-- Add-applicant inline form -->
-  <div id="add-applicant-row" class="hidden border border-gray-200 bg-brand-50/40 rounded-xl p-4">
+  <div id="add-applicant-row" class="hidden rec-form-panel p-4">
     <form method="POST" action="/induction/admin/recruitment?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
       <%- include('../../partials/csrf') %>
       <div class="sm:col-span-2">
-        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name <span class="text-red-500">*</span></label>
-        <input type="text" name="applicant_name" required placeholder="Full name"
-          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        <label class="rec-flabel">Name <span class="text-red-500">*</span></label>
+        <input type="text" name="applicant_name" required placeholder="Full name" class="rec-input" />
       </div>
       <div>
-        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
-        <input type="text" name="phone" placeholder="04xx xxx xxx"
-          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        <label class="rec-flabel">Phone</label>
+        <input type="text" name="phone" placeholder="04xx xxx xxx" class="rec-input" />
       </div>
       <div>
-        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
-        <input type="email" name="email" placeholder="name@example.com"
-          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        <label class="rec-flabel">Email</label>
+        <input type="email" name="email" placeholder="name@example.com" class="rec-input" />
       </div>
       <div>
-        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Applied</label>
-        <input type="date" name="date_applied" value="<%= today %>"
-          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        <label class="rec-flabel">Date Applied</label>
+        <input type="date" name="date_applied" value="<%= today %>" class="rec-input" />
       </div>
       <div class="sm:col-span-3">
-        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
-        <input type="text" name="notes" placeholder="Any context (tickets, availability, etc.)"
-          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+        <label class="rec-flabel">Notes</label>
+        <input type="text" name="notes" placeholder="Any context (tickets, availability, etc.)" class="rec-input" />
       </div>
       <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
         <button type="button" onclick="document.getElementById('add-applicant-row').classList.add('hidden')"
-          class="px-3.5 py-2 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg">Cancel</button>
-        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold rounded-lg shadow-sm">Save applicant</button>
+          class="rec-btn rec-btn--ghost" style="border:1px solid var(--rec-input-border)">Cancel</button>
+        <button type="submit" class="rec-btn rec-btn--primary">Save applicant</button>
       </div>
     </form>
   </div>
@@ -371,44 +366,44 @@
                     <form method="POST" action="/induction/admin/recruitment/<%= a.id %>?year=<%= year %>&month=<%= month %>" class="grid grid-cols-1 sm:grid-cols-4 gap-3">
                       <%- include('../../partials/csrf') %>
                       <div>
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Name</label>
+                        <label class="rec-flabel">Name</label>
                         <input type="text" name="applicant_name" value="<%= a.applicant_name %>" required
-                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                          class="rec-input" />
                       </div>
                       <div>
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Phone</label>
+                        <label class="rec-flabel">Phone</label>
                         <input type="text" name="phone" value="<%= a.phone || '' %>"
-                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                          class="rec-input" />
                       </div>
                       <div class="sm:col-span-2">
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Email</label>
+                        <label class="rec-flabel">Email</label>
                         <input type="email" name="email" value="<%= a.email || '' %>"
-                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                          class="rec-input" />
                       </div>
                       <div>
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Applied</label>
+                        <label class="rec-flabel">Date Applied</label>
                         <input type="date" name="date_applied" value="<%= a.date_applied || '' %>"
-                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                          class="rec-input" />
                       </div>
                       <div>
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Date Called</label>
+                        <label class="rec-flabel">Date Called</label>
                         <input type="date" name="date_called" value="<%= a.date_called || '' %>"
-                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                          class="rec-input" />
                       </div>
                       <div>
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Induction Date</label>
+                        <label class="rec-flabel">Induction Date</label>
                         <input type="date" name="induction_date" value="<%= a.induction_date || '' %>"
-                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                          class="rec-input" />
                       </div>
                       <div>
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Induction Time</label>
+                        <label class="rec-flabel">Induction Time</label>
                         <input type="time" name="induction_time" value="<%= a.induction_time || '' %>"
-                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent" />
+                          class="rec-input" />
                       </div>
                       <div class="sm:col-span-4">
-                        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Notes</label>
+                        <label class="rec-flabel">Notes</label>
                         <textarea name="notes" rows="2"
-                          class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= a.notes || '' %></textarea>
+                          class="rec-input"><%= a.notes || '' %></textarea>
                       </div>
                       <div class="sm:col-span-4 flex items-center gap-2 justify-end pt-1">
                         <button type="button" class="rec-edit-cancel px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 text-xs font-medium rounded-lg" data-id="<%= a.id %>">Cancel</button>
@@ -425,8 +420,6 @@
     </div>
   </div>
 
-</div>
-
 <!-- Booking modal: prompts for induction date + time when moving to Booked. -->
 <div id="booking-modal" class="rec-modal hidden">
   <div class="rec-modal-backdrop" data-modal-close></div>
@@ -435,12 +428,12 @@
     <p class="rec-modal-sub" id="booking-modal-sub">A candidate can't be booked without an induction date.</p>
     <div class="grid grid-cols-2 gap-3 mt-3">
       <div>
-        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Induction date <span class="text-red-500">*</span></label>
-        <input type="date" id="booking-date" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        <label class="rec-flabel">Induction date <span class="text-red-500">*</span></label>
+        <input type="date" id="booking-date" class="rec-input">
       </div>
       <div>
-        <label class="block text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-1">Time</label>
-        <input type="time" id="booking-time" class="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        <label class="rec-flabel">Time</label>
+        <input type="time" id="booking-time" class="rec-input">
       </div>
     </div>
     <p id="booking-error" class="text-[11px] text-red-600 mt-2 hidden">Please pick an induction date.</p>
@@ -485,6 +478,8 @@
 
 <!-- Toast (transient "Saved"). -->
 <div id="rec-toast" class="rec-toast" hidden></div>
+
+</div><!-- /#rec-root -->
 
 <%- include('_recruitment-styles') %>
 <%- include('_recruitment-script', {
