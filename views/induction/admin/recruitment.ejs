@@ -202,7 +202,7 @@
             <% } %>
           </div>
           <div class="min-w-0">
-            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest"><%= s.label %></p>
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest"><%= s.label %><span class="rec-summary-active">active</span></p>
             <p class="text-2xl font-bold tabular-nums <%= s.accent %>"><%= stats[s.k] %></p>
           </div>
         </button>
@@ -251,7 +251,7 @@
           <section class="rec-col" data-col-stage="<%= st %>">
             <div class="rec-col-head">
               <span class="inline-flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full <%= stageDot(st) %>"></span>
+                <span class="rec-col-dot"></span>
                 <%= stageLabels[st] %>
               </span>
               <span class="rec-col-count" data-count-for="<%= st %>"><%= cards.length %></span>
