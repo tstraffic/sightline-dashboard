@@ -105,15 +105,48 @@ function isConfigured() {
   return getResendConfig() !== null || getSmtpConfig() !== null;
 }
 
+// Derive a readable plain-text version from our HTML emails. Sending a
+// text/plain alternative alongside the HTML is a real deliverability win —
+// HTML-only messages score higher on spam filters. Links are kept inline as
+// "text (url)" so the text part isn't useless.
+function htmlToText(html) {
+  if (!html) return '';
+  return String(html)
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<head[\s\S]*?<\/head>/gi, '')
+    .replace(/<(?:br)\s*\/?>/gi, '\n')
+    .replace(/<\/(?:p|div|tr|h[1-6]|li|td)>/gi, '\n')
+    .replace(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi, (m, href, txt) => {
+      const t = txt.replace(/<[^>]+>/g, '').trim();
+      return (t && t !== href) ? `${t} (${href})` : href;
+    })
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ').replace(/&middot;/g, '·').replace(/&copy;/g, '©')
+    .replace(/&rarr;/g, '→').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, '&')
+    .split('\n').map(l => l.replace(/[ \t]{2,}/g, ' ').trim()).join('\n')
+    .replace(/\n{3,}/g, '\n\n').trim();
+}
+
+let _warnedTestDomain = false;
+function warnIfTestDomain(fromEmail) {
+  if (!_warnedTestDomain && /resend\.dev$/i.test(fromEmail || '')) {
+    _warnedTestDomain = true;
+    console.warn('[Email] Sending from ' + fromEmail + ' — this shared Resend test domain frequently lands in Junk. ' +
+      'Verify tstc.com.au in Resend and set SMTP_FROM_EMAIL to a @tstc.com.au address for proper SPF/DKIM/DMARC.');
+  }
+}
+
 /**
  * Send an email. Uses Resend HTTP API if key starts with re_, otherwise SMTP.
  */
 async function sendEmail(to, subject, html, opts) {
-  // opts: { attachments: [{ filename, content: Buffer|Base64 }], cc, bcc, replyTo }
+  // opts: { attachments: [{ filename, content: Buffer|Base64 }], cc, bcc, replyTo, text }
   const attachments = (opts && opts.attachments) || null;
   const cc = (opts && opts.cc) || undefined;
   const bcc = (opts && opts.bcc) || undefined;
   const replyTo = (opts && opts.replyTo) || undefined;
+  const text = (opts && opts.text) || htmlToText(html);
 
   // Try Resend HTTP API first
   const resendConfig = getResendConfig();
@@ -126,16 +159,18 @@ async function sendEmail(to, subject, html, opts) {
         filename: a.filename,
         content: Buffer.isBuffer(a.content) ? a.content.toString('base64') : a.content,
       }));
+      warnIfTestDomain(resendConfig.fromEmail);
       const payload = {
         from: `${resendConfig.fromName} <${resendConfig.fromEmail}>`,
         to: Array.isArray(to) ? to : [to],
         subject,
         html,
+        text,                                  // plain-text alternative (deliverability)
+        reply_to: replyTo || resendConfig.fromEmail,
       };
       if (resendAttachments && resendAttachments.length) payload.attachments = resendAttachments;
       if (cc) payload.cc = Array.isArray(cc) ? cc : [cc];
       if (bcc) payload.bcc = Array.isArray(bcc) ? bcc : [bcc];
-      if (replyTo) payload.reply_to = replyTo;
       const { data, error } = await client.emails.send(payload);
       if (error) {
         console.error('[Email/Resend] API error:', error.message || JSON.stringify(error));
@@ -158,12 +193,13 @@ async function sendEmail(to, subject, html, opts) {
     return null;
   }
   try {
+    warnIfTestDomain(smtpConfig.fromEmail);
     const transporter = getTransporter();
     const info = await transporter.sendMail({
       from: `"${smtpConfig.fromName}" <${smtpConfig.fromEmail}>`,
-      to, subject, html,
+      to, subject, html, text,
       attachments: attachments || undefined,
-      cc, bcc, replyTo,
+      cc, bcc, replyTo: replyTo || smtpConfig.fromEmail,
     });
     console.log('[Email/SMTP] Sent:', subject);
     return info;
@@ -191,4 +227,4 @@ async function testConnection() {
   return transporter.verify();
 }
 
-module.exports = { sendEmail, testConnection, isConfigured };
+module.exports = { sendEmail, testConnection, isConfigured, htmlToText };

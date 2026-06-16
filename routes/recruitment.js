@@ -344,7 +344,7 @@ router.post('/', (req, res) => {
 // destroying earlier dates.
 router.post('/:id', async (req, res) => {
   const db = getDb();
-  const row = db.prepare('SELECT id, stage, induction_date, induction_time, applicant_name, email, linked_crew_member_id FROM seek_applicants WHERE id = ?').get(req.params.id);
+  const row = db.prepare('SELECT id, stage, date_called, induction_date, induction_time, applicant_name, email, linked_crew_member_id FROM seek_applicants WHERE id = ?').get(req.params.id);
   if (!row) {
     if (wantsJson(req)) return res.status(404).json({ ok: false, error: 'Applicant not found.' });
     req.flash('error', 'Applicant not found.'); return res.redirect(backUrl(req));
@@ -406,6 +406,15 @@ router.post('/:id', async (req, res) => {
       sets.push('stage = ?'); params.push(candidate);
       newStage = candidate;
     }
+  }
+
+  // Reaching CALLED or beyond implies the call happened — if there's no
+  // date_called yet (e.g. dragged straight to Interested/Booked), stamp today
+  // so the Weekly Calls counter reflects it. Skipped for terminal stages and
+  // when this request explicitly sets date_called.
+  if (newStage && isAtOrBeyond(newStage, 'CALLED') && !row.date_called
+      && typeof req.body.date_called === 'undefined') {
+    sets.push('date_called = ?'); params.push(sydneyToday());
   }
 
   if (!sets.length) {

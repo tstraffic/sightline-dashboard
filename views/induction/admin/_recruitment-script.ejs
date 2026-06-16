@@ -214,6 +214,11 @@
       card.dataset.stage = toStage;
       if (extra && typeof extra.induction_date !== 'undefined') card.dataset.inductionDate = extra.induction_date || '';
       if (extra && typeof extra.induction_time !== 'undefined') card.dataset.inductionTime = extra.induction_time || '';
+      // Reaching Called+ implies a call — mirror the server's date_called stamp
+      // so the card shows it immediately (server uses Sydney's today).
+      if (!isTerminal(toStage) && fwdIndex(toStage) >= fwdIndex('CALLED') && !card.dataset.dateCalled) {
+        card.dataset.dateCalled = new Date().toISOString().slice(0, 10);
+      }
       renderCardMeta(card);
       recount();
       applyFilter();
