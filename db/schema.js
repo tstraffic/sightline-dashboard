@@ -12836,6 +12836,119 @@ function runMigrations(db) {
     recordMigration.run(271, 'Expand notifications type CHECK for plan submission events + invoice_ready');
   }
 
+  // =============================================
+  // Migration 272: Re-seed the `team_leader` and `post_shift_vehicle`
+  // system checklist templates so the admin Forms & Checklists editor
+  // matches what workers actually fill in on the portal. The worker
+  // portal forms are canonical — admin previously showed a different
+  // (briefing/PPE-only) set of questions, which confused editors. This
+  // overwrites items + publishes a fresh revision so admins see the
+  // real form structure. The worker views remain hardcoded for now;
+  // routes/worker/forms.js filters PPE-section items only when pulling
+  // the team-leader template to drive the per-worker PPE rows.
+  // =============================================
+  if (!isMigrationApplied.get(272)) {
+    try {
+      const adminId = (db.prepare("SELECT id FROM users WHERE LOWER(role) IN ('admin','management') ORDER BY id ASC LIMIT 1").get() || {}).id || null;
+
+      const canonicalTemplates = [
+        {
+          system_key: 'team_leader',
+          name: 'Team Leader Checklist',
+          description: 'Crew lead / acting TL checklist — runs once the crew is set up. Anyone on the crew can complete it as acting TL.',
+          require_signature: 1,
+          items: [
+            { section: 'Briefing',  item_key: 'tl_briefing_heading', question: 'Team Leader briefing',                                   response_type: 'heading',     required: 0 },
+            { section: 'Briefing',  item_key: 'team_leader_name',    question: "Team Leader's Name",                                     response_type: 'text',        required: 1 },
+            { section: 'Crew',      item_key: 'workers_present',     question: 'Are all workers present and on time?',                   response_type: 'radio',       required: 1, options: ['Yes', 'No'] },
+            { section: 'Crew',      item_key: 'late_notes',          question: 'If anyone was late: who, why, was supervisor notified?', response_type: 'textarea',    required: 0 },
+            { section: 'Photos',    item_key: 'team_photos_heading', question: 'Worker photos',                                          response_type: 'heading',     required: 0 },
+            { section: 'Photos',    item_key: 'team_photos',         question: 'Worker photos (full PPE + radio) — one per worker, max 8', response_type: 'media_upload', required: 0, options: { max: 8 } },
+            { section: 'PPE Check', item_key: 'ppe_heading',         question: 'PPE check (every worker)',                               response_type: 'heading',     required: 0 },
+            { section: 'PPE Check', item_key: 'hi_vis_pants',        question: 'Double Stripe Hi Vis Pants (Navy day / White night)',     response_type: 'yes_no_na',  required: 1 },
+            { section: 'PPE Check', item_key: 'hi_vis_shirt',        question: 'Double Stripe Hi Vis Shirt / Jacket',                     response_type: 'yes_no_na',  required: 1 },
+            { section: 'PPE Check', item_key: 'steel_cap',           question: 'Steel Cap Boots',                                         response_type: 'yes_no_na',  required: 1 },
+            { section: 'PPE Check', item_key: 'hard_hat',            question: 'Hard Hat',                                                response_type: 'yes_no_na',  required: 1 },
+            { section: 'PPE Check', item_key: 'radio',               question: 'Radio',                                                   response_type: 'yes_no_na',  required: 1 },
+            { section: 'PPE Check', item_key: 'night_wands',         question: 'Night Wands (Nights only — N/A for day shift)',           response_type: 'yes_no_na',  required: 0 },
+            { section: 'Setup',     item_key: 'setup_correct',       question: 'Setup correct (TCP & ROL implemented)?',                 response_type: 'radio',       required: 1, options: ['Yes', 'No'] },
+            { section: 'Setup',     item_key: 'setup_photos',        question: 'Setup photos — minimum 5 showing the full setup, max 10', response_type: 'media_upload', required: 1, options: { max: 10 } },
+            { section: 'Sign off',  item_key: 'notes',               question: 'Notes (optional)',                                       response_type: 'textarea',    required: 0 },
+            { section: 'Sign off',  item_key: 'auditor_signature',   question: "Auditor's Signature",                                    response_type: 'signature',   required: 1 },
+          ],
+        },
+        {
+          system_key: 'post_shift_vehicle',
+          name: 'Post-Shift Vehicle Checklist',
+          description: 'End-of-shift vehicle return inspection. Records ODO close, fuel, photos, and any new defects.',
+          require_signature: 0,
+          items: [
+            { section: 'Vehicle',   item_key: 'vehicle_heading',     question: 'Vehicle details',                                        response_type: 'heading',     required: 0 },
+            { section: 'Vehicle',   item_key: 'vehicle',             question: 'Vehicle ID',                                             response_type: 'text',        required: 1 },
+            { section: 'Vehicle',   item_key: 'driver_name',         question: 'Driver Name',                                            response_type: 'text',        required: 1 },
+            { section: 'Vehicle',   item_key: 'odo_end_km',          question: 'Total kms on the vehicle',                               response_type: 'measurement', required: 0, options: { unit: 'km' } },
+            { section: 'Photos',    item_key: 'fuel_gauge_photos',   question: 'Fuel gauge photo (end of shift)',                        response_type: 'media_upload', required: 1, options: { max: 2 } },
+            { section: 'Photos',    item_key: 'interior_photos',     question: 'Vehicle interior photos (min 3)',                        response_type: 'media_upload', required: 1, options: { max: 6 } },
+            { section: 'Photos',    item_key: 'equipment_photos',    question: 'Equipment cage photos (3 angles)',                       response_type: 'media_upload', required: 1, options: { max: 6 } },
+            { section: 'Photos',    item_key: 'arrow_board_photos',  question: 'Arrow board photos — actuator (driver side), front-on, passenger side', response_type: 'media_upload', required: 1, options: { max: 6 } },
+            { section: 'Follow-up', item_key: 'signs_left_behind',   question: 'Signs left behind?',                                     response_type: 'textarea',    required: 0 },
+            { section: 'Follow-up', item_key: 'equipment_damaged_lost', question: 'Equipment damaged or lost?',                          response_type: 'textarea',    required: 0 },
+            { section: 'Follow-up', item_key: 'vehicle_issues',      question: 'Vehicle issues? (lights, arrow board fault, low tyre pressure, etc.)', response_type: 'textarea', required: 0 },
+          ],
+        },
+      ];
+
+      const findByKey  = db.prepare("SELECT id, published_revision FROM checklist_templates WHERE system_key = ?");
+      const wipeItems  = db.prepare("DELETE FROM checklist_template_items WHERE template_id = ?");
+      const updateTpl  = db.prepare("UPDATE checklist_templates SET name = ?, description = ?, require_signature = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+      const insertItem = db.prepare(`
+        INSERT INTO checklist_template_items (template_id, item_order, section, item_key, question, response_type, required, options_json)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      const insertRev  = db.prepare(`
+        INSERT INTO checklist_template_revisions (template_id, revision_number, name, description, require_signature, items_json, published_by_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `);
+      const setPublished = db.prepare(`
+        UPDATE checklist_templates SET published_revision = ?, published_at = datetime('now'), published_by_id = ? WHERE id = ?
+      `);
+      const nextRevNumStmt = db.prepare("SELECT COALESCE(MAX(revision_number), 0) + 1 AS n FROM checklist_template_revisions WHERE template_id = ?");
+
+      let resynced = 0;
+      for (const tpl of canonicalTemplates) {
+        const existing = findByKey.get(tpl.system_key);
+        if (!existing) continue;
+        const tplId = existing.id;
+        const tx = db.transaction(() => {
+          updateTpl.run(tpl.name, tpl.description, tpl.require_signature ? 1 : 0, tplId);
+          wipeItems.run(tplId);
+          const itemRows = [];
+          tpl.items.forEach((it, idx) => {
+            const optionsJson = it.options ? JSON.stringify(it.options) : null;
+            insertItem.run(tplId, idx, it.section || '', it.item_key, it.question, it.response_type, it.required ? 1 : 0, optionsJson);
+            itemRows.push({
+              item_order: idx, section: it.section || '', item_key: it.item_key,
+              question: it.question, response_type: it.response_type,
+              required: it.required ? 1 : 0,
+              options: it.options || null,
+            });
+          });
+          const nextRev = nextRevNumStmt.get(tplId).n;
+          insertRev.run(tplId, nextRev, tpl.name, tpl.description, tpl.require_signature ? 1 : 0,
+                        JSON.stringify(itemRows), adminId);
+          setPublished.run(nextRev, adminId, tplId);
+        });
+        tx();
+        resynced++;
+      }
+
+      recordMigration.run(272, 'Re-seed team_leader + post_shift_vehicle admin templates to match worker forms');
+      console.log(`Migration 272 applied: re-synced ${resynced} admin checklist template(s) to worker portal structure`);
+    } catch (e) {
+      console.error('Migration 272 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

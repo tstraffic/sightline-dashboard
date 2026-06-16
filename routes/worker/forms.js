@@ -1122,10 +1122,15 @@ router.get('/forms/team-leader', (req, res) => {
   const isManager = !!(me && hasPortalRole(me.portal_role, 'team_leader'));
 
   // Resolve from system template; fall back to PPE_ITEMS so the form
-  // always renders even if migration 151 hasn't run yet.
-  const sysPPE = getSystemItems('team_leader',
-    PPE_ITEMS.map(i => ({ item_key: i.key, question: i.label })));
-  const ppeItems = sysPPE.map(toSimpleItem);
+  // always renders even if migration 151 hasn't run yet. From migration
+  // 272 onwards, the team_leader template carries the whole worker
+  // form (name + workers-present + photos + PPE + setup + signature) —
+  // but only the PPE-section rows drive the per-worker yes/no list
+  // here, so filter to those. If the admin template has no PPE rows
+  // (custom edit) fall back to the hardcoded PPE_ITEMS.
+  const sysAll = getSystemItems('team_leader', []);
+  const sysPPE = sysAll.filter(i => /PPE/i.test(i.section || ''));
+  const ppeItems = (sysPPE.length ? sysPPE : PPE_ITEMS.map(i => ({ item_key: i.key, question: i.label }))).map(toSimpleItem);
 
   // Team draft: if anyone on this shift has saved a draft, surface it so
   // the worker can resume + add their own photos / answers on top.
@@ -1175,9 +1180,12 @@ router.post('/forms/team-leader', withPhotoUploadError([
 
   const ppe = {};
   // Pull PPE list from the live system template so admin-renamed
-  // items still capture cleanly. Falls back to hardcoded PPE_ITEMS.
-  const livePPE = getSystemItems('team_leader',
-    PPE_ITEMS.map(i => ({ item_key: i.key })));
+  // items still capture cleanly. Only PPE-section rows count; the rest
+  // of the team_leader template carries name/photos/signature fields
+  // (see migration 272). Fall back to hardcoded PPE_ITEMS if nothing.
+  const liveAll = getSystemItems('team_leader', []);
+  const liveSysPPE = liveAll.filter(i => /PPE/i.test(i.section || ''));
+  const livePPE = liveSysPPE.length ? liveSysPPE : PPE_ITEMS.map(i => ({ item_key: i.key }));
   for (const it of livePPE) ppe[it.item_key] = body['ppe_' + it.item_key] === 'yes';
 
   const data = {
