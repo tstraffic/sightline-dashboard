@@ -609,6 +609,30 @@ textarea {
   border-radius: 6px !important;
 }
 
+/* ===== Modern select — replace the dated native OS chrome (double-arrow
+   spinner / bevel) with a single clean chevron. Applies app-wide; excludes
+   multi/size selects and .crew-chip-role (which has its own tuned chevron).
+   The chevron is a neutral grey that reads on both light and dark fills.
+
+   Scoped under `:root body.dark-glass` (body always carries dark-glass) and
+   the background longhands are !important so the chevron survives the
+   `.dark-glass .bg-white { background: … !important }` shorthand that most
+   filter selects inherit via their `bg-white` class. */
+select:not([multiple]):not([size]):not(.crew-chip-role) {
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  padding-right: 1.9rem;
+  cursor: pointer;
+}
+:root body.dark-glass select:not([multiple]):not([size]):not(.crew-chip-role) {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238B8E95' stroke-width='2.25' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 0.6rem center !important;
+  background-size: 14px 14px !important;
+}
+select:not([multiple]):not([size])::-ms-expand { display: none; }
+
 /* ===== Density â€” Compact Operations UI ===== */
 /* Tighter table rows for data-dense views */
 tbody td { padding-top: 0.5rem; padding-bottom: 0.5rem; }
@@ -3130,7 +3154,9 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 .dark-glass input[type="search"],
 .dark-glass select,
 .dark-glass textarea {
-  background: var(--dark-input-bg) !important;
+  /* background-color (not the `background` shorthand) so the custom select
+     chevron background-image set by the modern-select rule survives. */
+  background-color: var(--dark-input-bg) !important;
   border-color: var(--dark-input-border) !important;
   color: #fff !important;
 }
