@@ -1,5 +1,5 @@
 /**
- * Audit PDF export v5 — professional branded Atomis report (built for T&S Traffic Control).
+ * Audit PDF export v5 — professional branded T&S Traffic Control report.
  *
  * Design: Clean cover page, structured body, proper typography,
  * no blank pages, professional color scheme.
@@ -9,9 +9,9 @@ const path = require('path');
 const fs = require('fs');
 const { AUDIT_SECTIONS, normaliseState } = require('../lib/auditQuestions');
 
-/* ── Brand palette ── */
-const BRAND     = '#10B981';
-const BRAND_BG  = '#ECFDF5';   // light brand tint
+/* ── Brand palette (T&S Traffic Control) ── */
+const BRAND     = '#1F0076';   // T&S deep blue — chrome only
+const BRAND_BG  = '#EEF1FB';   // light blue tint
 const GREEN     = '#059669';
 const GREEN_BG  = '#ECFDF5';
 const RED       = '#DC2626';
@@ -26,7 +26,7 @@ const GRAY_BG   = '#F9FAFB';
 const WHITE     = '#FFFFFF';
 const BLACK     = '#111827';
 
-const LOGO_PATH = path.join(__dirname, '..', 'public', 'images', 'atomis-icon-512.png');
+const LOGO_PATH = path.join(__dirname, '..', 'public', 'images', 'logo-colour.png');
 const ML = 50, MR = 50, MT = 50, MB = 60;
 
 /* ── Helpers ── */
@@ -44,7 +44,7 @@ const RED_BADGE = '#C00000';
 const RED_LIGHT = '#FCE4E4';
 const COMMENT_BG = '#F5F5F5';
 const COMMENT_BORDER = '#DDDDDD';
-const BRAND_DARK = '#047857';
+const BRAND_DARK = '#15005A';
 
 function findingLabel(f) {
   if (f === 'pass') return 'PASS';
@@ -73,7 +73,7 @@ function ucFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
 
 function generateAuditPdf(opts, out) {
   const { audit: a, responses, sectionComments, nonconformances,
-    score, attachmentsByContext, sections } = opts;
+    score, attachmentsByContext, sections, tagsByKey } = opts;
   const ctxMap = attachmentsByContext || {};
 
   // Render from the audit's (template) section list when provided, else fall
@@ -89,7 +89,7 @@ function generateAuditPdf(opts, out) {
     margins: { top: MT, bottom: MB, left: ML, right: MR },
     info: {
       Title: 'Site Audit #' + a.id + ' — ' + (a.project_site || 'Untitled'),
-      Author: 'Atomis',
+      Author: 'T&S Traffic Control',
     },
   });
   doc.pipe(out);
@@ -139,14 +139,14 @@ function generateAuditPdf(opts, out) {
   // Logo
   let logoW = 0;
   if (fs.existsSync(LOGO_PATH)) {
-    try { doc.image(LOGO_PATH, ML, MT, { height: 42 }); logoW = 120; } catch (e) {}
+    try { doc.image(LOGO_PATH, ML, MT, { fit: [120, 46], align: 'left', valign: 'top' }); logoW = 132; } catch (e) {}
   }
 
   // Title block right of logo
   font('Helvetica-Bold', 18, BRAND);
   txt('Site Safety Audit', ML + logoW + 12, MT + 4, { width: pw - logoW - 12 });
   font('Helvetica', 9, GRAY);
-  txt('Atomis  ·  Audit #' + a.id, ML + logoW + 12, MT + 26, { width: pw - logoW - 12 });
+  txt('T&S Traffic Control  ·  Audit #' + a.id, ML + logoW + 12, MT + 26, { width: pw - logoW - 12 });
 
   setY(MT + 52);
   line(ML, curY(), ML + pw, curY(), BRAND, 2);
@@ -612,9 +612,46 @@ function generateAuditPdf(opts, out) {
   }
 
   /* ═══════════════════════════════════════════════════════════
+     PEOPLE FLAGGED — per-person tags written to worker HR Reviews
+     ═══════════════════════════════════════════════════════════ */
+  var peopleTags = [];
+  Object.keys(tagsByKey || {}).forEach(function (k) { (tagsByKey[k] || []).forEach(function (t) { peopleTags.push(t); }); });
+  if (peopleTags.length) {
+    need(50); gap(4);
+    var pfY = curY();
+    roundRect(ML, pfY, pw, 20, 4, BRAND);
+    font('Helvetica-Bold', 9, WHITE);
+    txt('People Flagged  (' + peopleTags.length + ')', ML + 8, pfY + 5, { width: pw - 16 });
+    setY(pfY + 24);
+    var pfThY = curY();
+    rect(ML, pfThY, pw, 13, BRAND_BG);
+    var pfc = { worker: 110, item: 48, risk: 45, shared: 58 };
+    pfc.issue = pw - pfc.worker - pfc.item - pfc.risk - pfc.shared;
+    [['Worker', pfc.worker], ['Item', pfc.item], ['Risk', pfc.risk], ['Issue', pfc.issue], ['Visibility', pfc.shared]]
+      .reduce(function (hx, h) { font('Helvetica-Bold', 5.5, BRAND_DARK); txt(h[0], hx + 2, pfThY + 4, { width: h[1] - 4 }); return hx + h[1]; }, ML);
+    setY(pfThY + 14);
+    peopleTags.forEach(function (t, i) {
+      need(14); var ry2 = curY();
+      if (i % 2 === 0) rect(ML, ry2, pw, 12, GRAY_BG);
+      var rc2 = t.risk_level === 'Critical' ? RED : t.risk_level === 'High' ? '#DC2626' : t.risk_level === 'Medium' ? AMBER : GREEN;
+      var cells2 = [
+        { v: t.worker_name_snapshot || ('Crew #' + t.crew_member_id), w: pfc.worker, c: GRAY_DARK },
+        { v: t.question_key, w: pfc.item, c: GRAY },
+        { v: (t.risk_level || '—').toUpperCase(), w: pfc.risk, c: rc2 },
+        { v: t.issue || '—', w: pfc.issue, c: GRAY_DARK },
+        { v: t.visibility === 'worker' ? 'Shared to worker' : 'Internal', w: pfc.shared, c: GRAY },
+      ];
+      var cx2 = ML;
+      cells2.forEach(function (cell) { font('Helvetica', 6, cell.c); txt(cell.v, cx2 + 2, ry2 + 3, { width: cell.w - 4, height: 9, ellipsis: true }); cx2 += cell.w; });
+      setY(ry2 + 12);
+    });
+    gap(6);
+  }
+
+  /* ═══════════════════════════════════════════════════════════
      SIGNATURES
      ═══════════════════════════════════════════════════════════ */
-  if (a.auditor_signature_text || a.supervisor_signature_text) {
+  if (a.auditor_signature_text || a.supervisor_signature_text || a.auditor_signature_path || a.supervisor_signature_path) {
     // Reserve enough for the whole block (title + gap + two 52pt boxes + trailing gap)
     // so we don't start the section then overflow mid-box onto a new page.
     need(88);
@@ -629,27 +666,36 @@ function generateAuditPdf(opts, out) {
     var sigW = (pw - 14) / 2;
     var sigH = 52;
 
-    function drawSigBox(x, label, name, signedAt) {
+    function drawSigBox(x, label, name, signedAt, sigPath) {
       roundRect(x, sigY, sigW, sigH, 4, WHITE);
       rect(x, sigY, sigW, 2.5, BRAND);
       doc.save().roundedRect(x, sigY, sigW, sigH, 4).strokeColor(GRAY_LINE).lineWidth(0.5).stroke().restore();
       font('Helvetica-Bold', 6, GRAY);
       txt(label, x + 10, sigY + 7, { width: sigW - 20 });
-      // Signature name — italic, sized to fit one line inside the box
-      doc.font('Helvetica-Oblique').fontSize(14).fillColor(GRAY_DARK);
-      txt(name, x + 10, sigY + 18, { width: sigW - 20 });
-      doc.font('Helvetica');
+      // Prefer the captured (drawn) signature image; fall back to the typed name.
+      var drewImg = false;
+      if (sigPath) {
+        try {
+          var ap = path.join(__dirname, '..', 'data', 'uploads', 'audits', String(a.id), 'signatures', sigPath);
+          if (fs.existsSync(ap)) { doc.image(ap, x + 10, sigY + 15, { fit: [sigW - 20, 21], align: 'left', valign: 'center' }); drewImg = true; }
+        } catch (e) { /* fall back to typed name */ }
+      }
+      if (!drewImg && name) {
+        doc.font('Helvetica-Oblique').fontSize(14).fillColor(GRAY_DARK);
+        txt(name, x + 10, sigY + 18, { width: sigW - 20 });
+        doc.font('Helvetica');
+      }
       if (signedAt) {
         font('Helvetica', 6, GREEN);
         txt('Signed  ·  ' + fmtDate(signedAt), x + 10, sigY + 38, { width: sigW - 20 });
       }
     }
 
-    if (a.auditor_signature_text) {
-      drawSigBox(ML, 'AUDITOR', a.auditor_signature_text, a.auditor_signed_at);
+    if (a.auditor_signature_text || a.auditor_signature_path) {
+      drawSigBox(ML, 'AUDITOR', a.auditor_signature_text, a.auditor_signed_at, a.auditor_signature_path);
     }
-    if (a.supervisor_signature_text) {
-      drawSigBox(ML + sigW + 14, 'SUPERVISOR / STMS', a.supervisor_signature_text, a.supervisor_signed_at);
+    if (a.supervisor_signature_text || a.supervisor_signature_path) {
+      drawSigBox(ML + sigW + 14, 'SUPERVISOR / STMS', a.supervisor_signature_text, a.supervisor_signed_at, a.supervisor_signature_path);
     }
     setY(sigY + sigH + 6);
   }
@@ -705,7 +751,7 @@ function generateAuditPdf(opts, out) {
     line(ML, ph - MB + 10, ML + pw, ph - MB + 10, GRAY_LINE, 0.3);
     // Footer text
     font('Helvetica', 5.5, GRAY);
-    txt('Atomis  ·  Site Audit #' + a.id + '  ·  Confidential',
+    txt('T&S Traffic Control  ·  Site Safety Audit #' + a.id + '  ·  Confidential',
       ML, ph - MB + 14, { width: pw - 50 });
     font('Helvetica', 5.5, GRAY);
     txt('Page ' + (p + 1) + ' of ' + totalPages,
@@ -762,7 +808,7 @@ function embedImages(doc, audit, items, label, pw, pageBot, ml, mt) {
     doc.save().roundedRect(ix, rowY, tw, th, 2).strokeColor('#E5E7EB').lineWidth(0.5).stroke().restore();
 
     try {
-      doc.image(img.fp, ix + 1, rowY + 1, { fit: [tw - 2, th - 2], align: 'center', valign: 'center' });
+      doc.image(img.fp, ix + 1, rowY + 1, { cover: [tw - 2, th - 2], align: 'center', valign: 'center' });
     } catch (e) { /* skip corrupt image */ }
 
     // Caption
