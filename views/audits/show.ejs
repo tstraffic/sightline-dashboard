@@ -212,6 +212,34 @@
     </section>
   <% } %>
 
+  <!-- Unified corrective actions (auto-created from this audit's findings) -->
+  <% if (typeof auditActions !== 'undefined' && auditActions && auditActions.length) { %>
+    <section class="bg-white border border-gray-200 rounded-xl overflow-hidden mb-6">
+      <header class="bg-gray-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between">
+        <h2 class="text-sm font-bold text-gray-900">Corrective Actions (<%= auditActions.length %>)</h2>
+        <a href="/actions?status=all" class="text-xs text-brand-600 hover:underline">Open actions register →</a>
+      </header>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50 text-xs uppercase font-semibold text-gray-500"><tr>
+            <th class="px-4 py-2 text-left">Item</th><th class="px-4 py-2 text-left">Action</th><th class="px-4 py-2 text-left">Involved</th><th class="px-4 py-2 text-left">Risk</th><th class="px-4 py-2 text-left">Status</th>
+          </tr></thead>
+          <tbody class="divide-y divide-gray-100">
+            <% auditActions.forEach(function(ca){ const involved = ca.involved_emp_name || ca.involved_crew_name || ca.involved_person_name || '—'; const done=['completed','cancelled'].includes(ca.status); %>
+              <tr>
+                <td class="px-4 py-2 font-mono text-xs text-gray-500"><%= (ca.source_question_key||'').split('#')[0] %></td>
+                <td class="px-4 py-2 text-gray-800"><%= ca.description || '—' %></td>
+                <td class="px-4 py-2 text-gray-700"><%= involved %></td>
+                <td class="px-4 py-2"><%= ca.risk_level || '—' %></td>
+                <td class="px-4 py-2"><span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold <%= done ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700' %>"><%= done ? 'Closed' : 'Open' %></span></td>
+              </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  <% } %>
+
   <!-- General photos & documents (non-contextual) -->
   <% const _generalAtts = (ctxMap['general'] || []); %>
   <section class="bg-white border border-gray-200 rounded-xl p-5 mb-6">

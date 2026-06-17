@@ -7,6 +7,16 @@ const { getDb } = require('../db/database');
 const { SCORE_GROUPS, computeScore } = require('../lib/auditQuestions');
 const { resolveForAudit, getActiveTemplateVersion } = require('../lib/auditTemplate');
 const { getOnSiteCrew, resolveEmployeeForCrew, syncAuditReviews } = require('../lib/auditCrew');
+const { syncCorrectiveActionsFromAudit } = require('../lib/auditActions');
+
+// Build { questionKey: {text, is_critical, risk_band} } from resolved template sections.
+function questionMetaOf(tpl) {
+  const m = {};
+  (tpl.sections || []).forEach(function (s) {
+    (s.questions || []).forEach(function (q) { m[q.key] = { text: q.text, is_critical: q.is_critical, risk_band: q.risk_band }; });
+  });
+  return m;
+}
 const { autoLogDiary } = require('../lib/diary');
 const { generateAuditPdf } = require('../services/auditPdf');
 
@@ -333,9 +343,12 @@ router.post('/', (req, res) => {
     const newId = result.lastInsertRowid;
 
     const crewById = {}; ctx.onSiteCrew.forEach(c => { crewById[c.crew_member_id] = c; });
+    const tags = buildCrewTagsFromBody(b, ctx.tpl.scoringQuestions, crewById);
+    const qMeta = questionMetaOf(ctx.tpl);
     db.transaction(() => {
       persistAuditCrew(db, newId, b, ctx.onSiteCrew);
-      persistAuditTags(db, newId, buildCrewTagsFromBody(b, ctx.tpl.scoringQuestions, crewById), req.session.user.id);
+      persistAuditTags(db, newId, tags, req.session.user.id);
+      syncCorrectiveActionsFromAudit(db, newId, { responses, questionMeta: qMeta, tags, jobId: b.job_id || null, user: req.session.user });
     })();
 
     if (b.job_id && status === 'submitted') {
@@ -381,7 +394,15 @@ function loadAuditView(db, audit) {
   const attachments = db.prepare('SELECT * FROM audit_attachments WHERE audit_id = ? ORDER BY uploaded_at DESC').all(audit.id);
   const attachmentsByContext = {};
   attachments.forEach(att => { const k = att.context_key || 'general'; (attachmentsByContext[k] = attachmentsByContext[k] || []).push(att); });
-  return { responses, sectionComments, nonconformances, tpl, auditCrew, tags, tagsByKey, score, attachments, attachmentsByContext };
+  // Unified corrective actions auto-created from this audit's "No"s + tags
+  const auditActions = db.prepare(`
+    SELECT ca.*, emp.full_name AS involved_emp_name, cm.full_name AS involved_crew_name
+    FROM corrective_actions ca
+    LEFT JOIN employees emp ON ca.involved_employee_id = emp.id
+    LEFT JOIN crew_members cm ON ca.involved_crew_member_id = cm.id
+    WHERE ca.source_audit_id = ? ORDER BY ca.id
+  `).all(audit.id);
+  return { responses, sectionComments, nonconformances, tpl, auditCrew, tags, tagsByKey, score, attachments, attachmentsByContext, auditActions };
 }
 
 // GET /:id/pdf — export branded PDF
@@ -427,7 +448,8 @@ router.get('/:id', (req, res) => {
     responses: v.responses, sectionComments: v.sectionComments, nonconformances: v.nonconformances,
     attachments: v.attachments, attachmentsByContext: v.attachmentsByContext,
     sections: v.tpl.sections, scoreGroups: SCORE_GROUPS, score: v.score,
-    auditCrew: v.auditCrew, tagsByKey: v.tagsByKey, templateDraft: v.tpl.isDraft, templateLegacy: v.tpl.isLegacy,
+    auditCrew: v.auditCrew, tagsByKey: v.tagsByKey, auditActions: v.auditActions,
+    templateDraft: v.tpl.isDraft, templateLegacy: v.tpl.isLegacy,
     user: req.session.user, currentPage: 'audits',
   });
 });
@@ -502,9 +524,12 @@ router.post('/:id', (req, res) => {
     );
 
     const crewById = {}; ctx.onSiteCrew.forEach(c => { crewById[c.crew_member_id] = c; });
+    const tags = buildCrewTagsFromBody(b, ctx.tpl.scoringQuestions, crewById);
+    const qMeta = questionMetaOf(ctx.tpl);
     db.transaction(() => {
       persistAuditCrew(db, existing.id, b, ctx.onSiteCrew);
-      persistAuditTags(db, existing.id, buildCrewTagsFromBody(b, ctx.tpl.scoringQuestions, crewById), req.session.user.id);
+      persistAuditTags(db, existing.id, tags, req.session.user.id);
+      syncCorrectiveActionsFromAudit(db, existing.id, { responses, questionMeta: qMeta, tags, jobId: b.job_id || null, user: req.session.user });
     })();
 
     if (b.job_id && newStatus === 'submitted' && existing.status !== 'submitted') {

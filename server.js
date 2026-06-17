@@ -321,6 +321,8 @@ app.use('/quotes',              requireLogin, requirePermission('quoting'), requ
 app.use('/tasks', requireLogin, requirePermission('tasks'), require('./routes/tasks'));
 app.use('/compliance', requireLogin, requirePermission('compliance'), require('./routes/compliance'));
 app.use('/audits', requireLogin, requirePermission('audits'), require('./routes/audits'));
+// Central cross-audit / cross-incident open-actions register
+app.use('/actions', requireLogin, requirePermission('incidents'), require('./routes/actions'));
 // Job-Pack submission review (workers fill at /w/forms/...; office opens here)
 app.use('/safety-forms', requireLogin, requirePermission('audits'), require('./routes/safety-forms'));
 // Automated Checklist Register (replaces the manual office spreadsheet)

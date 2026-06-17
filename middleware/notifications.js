@@ -340,20 +340,24 @@ function generateNotifications() {
       insertAndTrack(j.project_manager_id, 'missing_update', title, j.job_number + ' has no update in the last 7 days.', '/jobs/' + j.id + '#diary', j.id);
     }
 
-    // 4. Overdue corrective actions
+    // 4. Overdue corrective actions (incident- AND audit-sourced).
+    // LEFT JOINs so audit NCs (no parent incident / no job) still surface.
     const overdueCA = db.prepare(`
-      SELECT ca.id, ca.description, ca.assigned_to_id, ca.job_id, j.job_number, i.incident_number
+      SELECT ca.id, ca.description, ca.assigned_to_id, ca.job_id, ca.incident_id, ca.source_type, ca.source_audit_id,
+             j.job_number, i.incident_number
       FROM corrective_actions ca
-      JOIN incidents i ON ca.incident_id = i.id
-      JOIN jobs j ON ca.job_id = j.id
+      LEFT JOIN incidents i ON ca.incident_id = i.id
+      LEFT JOIN jobs j ON ca.job_id = j.id
       WHERE ca.due_date < ? AND ca.status NOT IN ('completed', 'cancelled')
       AND ca.assigned_to_id IS NOT NULL
     `).all(today);
 
     for (const ca of overdueCA) {
-      const title = 'Corrective Action Overdue: ' + ca.incident_number;
-      const msg = 'Action for ' + ca.incident_number + ' is overdue.';
-      const link = '/incidents/' + ca.id;
+      const ref = ca.incident_number || (ca.source_type === 'audit' && ca.source_audit_id ? ('Audit #' + ca.source_audit_id) : ('Action #' + ca.id));
+      const title = 'Corrective Action Overdue: ' + ref;
+      const msg = 'Action for ' + ref + ' is overdue.';
+      const link = ca.incident_number ? ('/incidents/' + ca.incident_id)
+        : (ca.source_audit_id ? ('/audits/' + ca.source_audit_id) : '/actions');
       const result = insertAndTrack(ca.assigned_to_id, 'corrective_action_due', title, msg, link, ca.job_id);
       if (result.changes > 0) sendTeamsNotification(title, msg, link).catch(() => {});
     }
