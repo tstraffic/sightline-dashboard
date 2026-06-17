@@ -69,6 +69,17 @@ function findingBg(f) {
 }
 function ucFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'; }
 
+// Short evidence reference from an attachment context_key, so a photo caption
+// names the item it proves (e.g. "S5.Q2 — ...", "NC 3 — ..."). Returns '' for
+// non-item contexts (overview / general / annotated_tgs).
+function refFromContext(ck) {
+  if (!ck) return '';
+  if (ck.indexOf('item_') === 0) return ck.slice(5);
+  if (ck.indexOf('section_') === 0) return 'Section ' + ck.slice(8);
+  if (ck.indexOf('nc_') === 0) return 'NC ' + ck.slice(3);
+  return '';
+}
+
 /* ════════════════════════════════════════════════════════ */
 
 function generateAuditPdf(opts, out) {
@@ -178,22 +189,42 @@ function generateAuditPdf(opts, out) {
   font('Helvetica-Bold', 10, WHITE);
   txt(findingLabel(a.overall_finding), badgeX + 10, badgeY + 6, { width: badgeW - 20 });
 
-  // Area scores right side (3 cols)
-  const areaX = badgeX;
-  const areaY = badgeY + 28;
-  const aColW = (pw - 100 + ML - areaX) > 0 ? Math.floor((ML + pw - areaX) / 3) : 100;
-  score.groups.forEach(function (g, i) {
-    const col = i % 3;
-    const row = Math.floor(i / 3);
-    const ax = areaX + col * aColW;
-    const ay = areaY + row * 11;
-    font('Helvetica', 6, GRAY);
-    txt(g.label, ax, ay, { width: aColW - 35 });
-    font('Helvetica-Bold', 6.5, g.percent >= 80 ? GREEN : g.percent >= 50 ? AMBER : RED);
-    txt(g.score + '/' + g.max + ' (' + g.percent + '%)', ax + aColW - 50, ay, { width: 48, align: 'right' });
-  });
+  // Finding detail under the badge (fills the space the old strip occupied)
+  font('Helvetica', 6.5, a.critical_fail ? RED : GRAY);
+  txt(a.critical_fail ? '⚠  Critical item auto-failed'
+      : (a.finding_overridden && a.suggested_finding ? 'Auto-suggested: ' + findingLabel(a.suggested_finding) : 'Risk-weighted score'),
+      badgeX, badgeY + 30, { width: pw - (badgeX - ML) });
 
-  setY(scoreCardY + scoreCardH + 14);
+  setY(scoreCardY + scoreCardH + 12);
+
+  // ── Scoring by area — clean 3×2 card grid ──
+  (function () {
+    var groups = score.groups || [];
+    if (!groups.length) return;
+    var cols = 3, gut = 8;
+    var cardW = Math.floor((pw - gut * (cols - 1)) / cols);
+    var cardH = 36;
+    var gy = curY();
+    groups.forEach(function (g, i) {
+      var col = i % cols, row = Math.floor(i / cols);
+      var cx = ML + col * (cardW + gut);
+      var cyy = gy + row * (cardH + gut);
+      var pc = g.percent >= 80 ? GREEN : g.percent >= 50 ? AMBER : RED;
+      roundRect(cx, cyy, cardW, cardH, 4, GRAY_BG);
+      doc.save().roundedRect(cx, cyy, cardW, cardH, 4).strokeColor(GRAY_LINE).lineWidth(0.5).stroke().restore();
+      font('Helvetica', 6, GRAY);
+      txt(g.label, cx + 8, cyy + 6, { width: cardW - 16, height: 8, ellipsis: true });
+      font('Helvetica-Bold', 13, pc);
+      txt(g.percent + '%', cx + 8, cyy + 15, { width: cardW - 60 });
+      font('Helvetica', 6, GRAY);
+      txt(g.score + ' / ' + g.max, cx + cardW - 52, cyy + 19, { width: 44, align: 'right' });
+      var barY = cyy + cardH - 6, barW = cardW - 16;
+      rect(cx + 8, barY, barW, 2.5, '#E5E7EB');
+      rect(cx + 8, barY, Math.max(0, Math.min(1, (g.percent || 0) / 100)) * barW, 2.5, pc);
+    });
+    var rows = Math.ceil(groups.length / cols);
+    setY(gy + rows * (cardH + gut) + 4);
+  })();
 
   // ── FIX 7: Findings Summary on cover page ──
   var failures = [];
@@ -811,14 +842,17 @@ function embedImages(doc, audit, items, label, pw, pageBot, ml, mt) {
       doc.image(img.fp, ix + 1, rowY + 1, { cover: [tw - 2, th - 2], align: 'center', valign: 'center' });
     } catch (e) { /* skip corrupt image */ }
 
-    // Caption
-    if (img.att.caption) {
+    // Caption — prefixed with the item ref it evidences (e.g. "S5.Q2 — ...")
+    var ref = refFromContext(img.att.context_key);
+    var cap = img.att.caption || '';
+    var capText = ref ? (cap ? ref + ' — ' + cap : ref) : cap;
+    if (capText) {
       doc.font('Helvetica').fontSize(5).fillColor(GRAY);
-      doc.text(img.att.caption, ix, rowY + th + 1, { width: tw, lineBreak: false, height: 7, ellipsis: true });
+      doc.text(capText, ix, rowY + th + 1, { width: tw, lineBreak: false, height: 7, ellipsis: true });
     }
     col++;
   });
-  doc.y = rowY + th + (images[images.length - 1] && images[images.length - 1].att.caption ? captionH : gutter) + gutter;
+  doc.y = rowY + th + captionH + gutter;
   doc.x = ml;
 }
 
