@@ -2,9 +2,14 @@
 <% function val(k, fallback) { return (a && a[k] != null) ? a[k] : (fallback || ''); } %>
 <% function stateOf(r) { if (!r) return ''; if (r.state) return r.state; if (r.na) return 'na'; if (r.checked) return 'yes'; return ''; } %>
 <% const ctxMap = (typeof attachmentsByContext !== 'undefined') ? (attachmentsByContext || {}) : {}; %>
+<% const crew = (typeof onSiteCrew !== 'undefined' ? onSiteCrew : []) || []; %>
+<% const selectedCrewIds = ((typeof auditCrew !== 'undefined' ? auditCrew : []) || []).map(function(c){ return c.crew_member_id; }); %>
+<% const tagMap = (typeof tagsByKey !== 'undefined' ? tagsByKey : {}) || {}; %>
+<% const WORK_TYPES = [['static','Static lane closure'],['mobile','Mobile works'],['shoulder','Shoulder works'],['intersection','Intersection']]; %>
 <%
   const linkedJob = (a && a.job_id) ? (jobs || []).find(function(j){ return String(j.id) === String(a.job_id); }) : null;
   const statusLabel = a && a.status ? a.status.replace('_',' ') : '';
+  const initialOnSite = selectedCrewIds.length || crew.length || 0;
 %>
 
 <div class="px-3 sm:px-4 lg:px-8 py-4 lg:py-6 pb-24">
@@ -22,25 +27,18 @@
         <div class="flex items-center gap-2 mt-0.5 text-[11px] sm:text-xs text-gray-500 min-w-0">
           <span class="flex items-baseline gap-1 flex-shrink-0">
             <span class="uppercase tracking-wide font-semibold text-gray-400">Score</span>
-            <span id="live-percent" class="text-sm sm:text-base font-bold text-gray-900"><%= score.percent %>%</span>
-            <span class="text-gray-400">(<span id="live-score"><%= score.total %></span>/<span id="live-max"><%= score.max %></span>)</span>
+            <span id="live-percent" class="text-sm sm:text-base font-bold text-gray-900"><%= score.percent || 0 %>%</span>
           </span>
+          <span id="live-critical-badge" class="<%= score.criticalFail ? '' : 'hidden' %> inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-600 text-white">CRITICAL FAIL</span>
           <% if (linkedJob) { %>
             <span class="text-gray-300">·</span>
-            <span class="inline-flex items-center gap-1 min-w-0">
-              <svg class="w-3 h-3 text-brand-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-              <span class="truncate"><%= linkedJob.job_number %><%= linkedJob.client ? ' — ' + linkedJob.client : '' %></span>
-            </span>
+            <span class="truncate"><%= linkedJob.job_number %><%= linkedJob.client ? ' — ' + linkedJob.client : '' %></span>
           <% } %>
         </div>
       </div>
       <div class="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-        <button type="submit" form="auditForm" name="submit" value="0" class="px-2.5 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 rounded-lg transition whitespace-nowrap">
-          Save
-        </button>
-        <button type="submit" form="auditForm" name="submit" value="1" class="px-2.5 sm:px-3.5 py-2 text-xs sm:text-sm font-bold text-white bg-brand-600 hover:bg-brand-700 active:bg-brand-800 rounded-lg transition whitespace-nowrap">
-          Submit
-        </button>
+        <button type="submit" form="auditForm" name="submit" value="0" class="px-2.5 sm:px-3.5 py-2 text-xs sm:text-sm font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition whitespace-nowrap">Save</button>
+        <button type="submit" form="auditForm" name="submit" value="1" class="px-2.5 sm:px-3.5 py-2 text-xs sm:text-sm font-bold text-white bg-brand-600 hover:bg-brand-700 rounded-lg transition whitespace-nowrap">Submit</button>
       </div>
     </div>
     <% if (!isEdit) { %>
@@ -48,76 +46,74 @@
     <% } %>
   </div>
 
+  <% if (typeof templateDraft !== 'undefined' && templateDraft) { %>
+    <div class="mb-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 flex items-start gap-2">
+      <svg class="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <p class="text-xs text-amber-800"><span class="font-bold">DRAFT question set.</span> This NSW-aligned template is pending STMS/RTO confirmation against the current TfNSW TCAWS manual. Wording is not yet final.</p>
+    </div>
+  <% } %>
+
   <form method="POST" action="<%= isEdit ? '/audits/' + a.id : '/audits' %>" id="auditForm" class="space-y-5 lg:space-y-6">
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
 
     <!-- Audit details -->
     <section class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
       <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">Audit Details</h2>
-
       <div class="mb-4">
         <label class="block text-xs font-semibold text-gray-700 mb-1">Linked Project (Job) <span class="text-gray-400 font-normal hidden sm:inline">— auto-fills client, site &amp; location</span></label>
         <select name="job_id" id="job-select" class="w-full px-3 py-3 text-base border border-gray-300 rounded-lg bg-white">
           <option value="">— Not linked —</option>
           <% jobs.forEach(function(j) { %>
-            <option value="<%= j.id %>"
-              data-job-number="<%= j.job_number || '' %>"
-              data-job-name="<%= j.job_name || '' %>"
-              data-client="<%= j.client || '' %>"
-              data-site="<%= j.site_address || '' %>"
-              data-suburb="<%= j.suburb || '' %>"
-              <%= String(val('job_id')) === String(j.id) ? 'selected' : '' %>>
+            <option value="<%= j.id %>" data-job-number="<%= j.job_number || '' %>" data-client="<%= j.client || '' %>" data-site="<%= j.site_address || '' %>" data-suburb="<%= j.suburb || '' %>" <%= String(val('job_id')) === String(j.id) ? 'selected' : '' %>>
               <%= j.job_number %><%= j.job_name ? ' — ' + j.job_name : '' %> — <%= j.client %>
             </option>
           <% }) %>
         </select>
       </div>
-
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">Project / Site</label><input id="f-project_site" name="project_site" value="<%= val('project_site') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg" placeholder="e.g. 38 York St"></div>
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">Client</label><input id="f-client" name="client" value="<%= val('client') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg"></div>
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">Location</label><input id="f-location" name="location" value="<%= val('location') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg"></div>
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">Date / Time</label><input type="datetime-local" name="audit_datetime" value="<%= val('audit_datetime') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg"></div>
         <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Project / Site</label>
-          <input id="f-project_site" name="project_site" value="<%= val('project_site') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg" placeholder="e.g. 38 York St">
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Work Type <span class="text-gray-400 font-normal">— filters questions</span></label>
+          <select name="work_type" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg bg-white">
+            <% WORK_TYPES.forEach(function(w){ %><option value="<%= w[0] %>" <%= (typeof workType!=='undefined'?workType:'static') === w[0] ? 'selected' : '' %>><%= w[1] %></option><% }) %>
+          </select>
+          <% if (isEdit) { %><p class="text-[10px] text-gray-400 mt-0.5">Save to refresh which questions apply.</p><% } %>
         </div>
         <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Client</label>
-          <input id="f-client" name="client" value="<%= val('client') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Location</label>
-          <input id="f-location" name="location" value="<%= val('location') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Date / Time</label>
-          <input type="datetime-local" name="audit_datetime" value="<%= val('audit_datetime') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">TGS / TCP / TTM Ref</label>
-          <input name="tgs_ref" value="<%= val('tgs_ref') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Shift</label>
-          <select name="shift" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg bg-white">
-            <% ['day','night'].forEach(function(s){ %>
-              <option value="<%= s %>" <%= val('shift') === s ? 'selected' : '' %>><%= s.charAt(0).toUpperCase() + s.slice(1) %></option>
-            <% }) %>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">Time of Day</label>
+          <select name="time_of_day" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg bg-white">
+            <% ['day','night'].forEach(function(s){ %><option value="<%= s %>" <%= (typeof timeOfDay!=='undefined'?timeOfDay:'day') === s ? 'selected' : '' %>><%= s.charAt(0).toUpperCase()+s.slice(1) %></option><% }) %>
           </select>
         </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Auditor</label>
-          <input name="auditor_name" value="<%= val('auditor_name') || (user && user.full_name) || '' %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg">
-        </div>
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Supervisor / STMS</label>
-          <input name="supervisor_name" value="<%= val('supervisor_name') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg">
-        </div>
-        <div class="sm:col-span-2">
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Weather / Visibility</label>
-          <input name="weather" value="<%= val('weather') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg">
-        </div>
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">TGS / TCP / TTM Ref</label><input name="tgs_ref" value="<%= val('tgs_ref') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg"></div>
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">Auditor</label><input name="auditor_name" value="<%= val('auditor_name') || (user && user.full_name) || '' %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg"></div>
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">Supervisor / STMS</label><input name="supervisor_name" value="<%= val('supervisor_name') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg"></div>
+        <div class="sm:col-span-2"><label class="block text-xs font-semibold text-gray-700 mb-1">Weather / Visibility</label><input name="weather" value="<%= val('weather') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg"></div>
+      </div>
+
+      <!-- Crew on site -->
+      <div class="mt-5 pt-4 border-t border-gray-100">
+        <label class="block text-xs font-semibold text-gray-700 mb-1">Crew on site <span class="text-gray-400 font-normal">— pulled from the roster for this job + date; tick who's present</span></label>
+        <% if (!crew.length) { %>
+          <p class="text-xs text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2">No rostered crew found for this job/date. Link a job and set the date, then save — or add crew via the roster.</p>
+        <% } else { %>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="crew-list">
+            <% crew.forEach(function(c){ const checked = selectedCrewIds.indexOf(c.crew_member_id) !== -1; %>
+              <label class="flex items-center gap-2 px-3 py-2 rounded-lg border <%= c.linked ? 'border-gray-200' : 'border-amber-300 bg-amber-50' %>">
+                <input type="checkbox" class="crew-check w-4 h-4 rounded border-gray-300" name="crew_member_ids" value="<%= c.crew_member_id %>" data-linked="<%= c.linked ? '1':'0' %>" <%= checked ? 'checked' : '' %>>
+                <span class="text-sm text-gray-800 flex-1 min-w-0 truncate"><%= c.full_name %><% if (c.role_on_site) { %> <span class="text-gray-400">· <%= c.role_on_site %></span><% } %></span>
+                <% if (!c.linked) { %><span class="text-[10px] font-semibold text-amber-700 whitespace-nowrap" title="No HR profile linked — can't tag this worker">no HR link</span><% } %>
+              </label>
+            <% }) %>
+          </div>
+          <p class="text-[11px] text-gray-400 mt-1"><span id="crew-count"><%= initialOnSite %></span> on site. Workers without an HR profile link can't be tagged on per-person items.</p>
+        <% } %>
       </div>
     </section>
 
-    <!-- Site Overview Uploads (isEdit only) — TGS PDF, site map/aerial, pre-start, general context photos -->
     <% if (isEdit) { %>
       <section class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
         <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-1">Site Overview Evidence</h2>
@@ -126,89 +122,148 @@
       </section>
     <% } %>
 
-    <!-- Checklist sections -->
+    <!-- Checklist sections (template-driven) -->
     <% sections.forEach(function(section) { %>
       <section class="bg-white border border-gray-200 rounded-xl overflow-hidden" data-section="<%= section.key %>">
         <header class="bg-brand-600 text-white px-4 sm:px-5 py-3 flex items-center justify-between">
           <h2 class="text-sm lg:text-base font-bold"><%= section.key %>. <%= section.title %></h2>
-          <span class="text-xs font-semibold bg-white/20 px-2 py-0.5 rounded-full" data-section-score="<%= section.key %>">0/0</span>
+          <span class="text-xs font-semibold bg-white/20 px-2 py-0.5 rounded-full" data-section-score="<%= section.key %>">—</span>
         </header>
         <div class="divide-y divide-gray-100">
-          <% section.items.forEach(function(item, idx) {
-            const key = section.key + '.' + (idx + 1);
+          <% section.questions.forEach(function(q) {
+            const key = q.key;
             const r = responses[key] || {};
             const currentState = stateOf(r);
+            const perPerson = q.scoring_mode === 'per_person';
+            const exIds = (r.exceptions || []).map(function(e){ return String(e.crew_member_id); });
+            const qtags = tagMap[key] || [];
+            const tagByCrew = {}; qtags.forEach(function(t){ tagByCrew[String(t.crew_member_id)] = t; });
           %>
-            <div class="px-4 py-3 lg:px-5 flex flex-col gap-2.5" data-item="<%= key %>">
-              <p class="text-sm text-gray-800">
-                <span class="font-semibold text-gray-500 mr-1"><%= key %></span><%= item %>
+            <div class="px-4 py-3 lg:px-5 flex flex-col gap-2.5" data-item="<%= key %>" data-mode="<%= q.scoring_mode %>" data-critical="<%= q.is_critical ? '1':'0' %>" data-band="<%= q.risk_band %>" data-group="<%= section.score_group %>">
+              <p class="text-sm text-gray-800 flex items-start gap-1.5 flex-wrap">
+                <span class="font-semibold text-gray-400 mr-0.5"><%= key %></span>
+                <span class="flex-1 min-w-[12rem]"><%= q.text %></span>
+                <% if (q.is_critical) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-red-100 text-red-700">Critical</span><% } %>
+                <% if (perPerson) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-blue-100 text-blue-700">Per-person</span><% } %>
+                <% if (q.competency_check_type) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-gray-100 text-gray-600" title="Cross-checked against the worker's ticket record">ticket-checked</span><% } %>
               </p>
+
+              <!-- Yes / No / N/A pills -->
               <div class="flex flex-col sm:flex-row sm:items-center gap-2">
-                <!-- Yes / No / N/A pills -->
                 <div class="inline-flex rounded-lg overflow-hidden border border-gray-200 bg-gray-50 w-full sm:w-auto" role="radiogroup" data-pillgroup="<%= key %>">
                   <% [['yes','Yes'],['no','No'],['na','N/A']].forEach(function(opt) { %>
                     <label class="relative cursor-pointer flex-1 sm:flex-none">
                       <input type="radio" name="q_<%= key %>_state" value="<%= opt[0] %>" <%= currentState === opt[0] ? 'checked' : '' %> class="sr-only peer q-state">
                       <span class="block text-center px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs font-semibold transition select-none
-                        <%= currentState === opt[0] ? (opt[0]==='yes' ? 'bg-emerald-600 text-white' : opt[0]==='no' ? 'bg-red-600 text-white' : 'bg-gray-500 text-white') : 'text-gray-600 hover:bg-gray-100' %>">
-                        <%= opt[1] %>
-                      </span>
+                        <%= currentState === opt[0] ? (opt[0]==='yes' ? 'bg-emerald-600 text-white' : opt[0]==='no' ? 'bg-red-600 text-white' : 'bg-gray-500 text-white') : 'text-gray-600 hover:bg-gray-100' %>"><%= opt[1] %></span>
                     </label>
                   <% }) %>
                 </div>
                 <input name="q_<%= key %>_notes" value="<%= r.notes || '' %>" placeholder="Notes…" class="text-sm px-3 py-2 border border-gray-200 rounded-md flex-1 min-w-0 <%= currentState === 'no' ? 'hidden' : '' %>" data-notes-for="<%= key %>">
               </div>
-              <!-- FIX 4: NO item structured fields — expand when NO selected -->
-              <div class="no-fields mt-1 bg-red-50 border border-red-200 rounded-lg p-3 space-y-3 <%= currentState === 'no' ? '' : 'hidden' %>" data-no-fields="<%= key %>">
-                <div>
-                  <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Observation <span class="text-red-500">*</span> <span class="text-[10px] font-normal text-gray-400 normal-case ml-1" data-charcount="q_<%= key %>_observation"></span></label>
-                  <textarea name="q_<%= key %>_observation" rows="2" placeholder="Describe what you found, where, and who was involved..." class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-obs" data-minlen="20"><%= r.observation || '' %></textarea>
-                </div>
-                <div class="grid grid-cols-2 gap-3">
-                  <div>
-                    <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Risk Level <span class="text-red-500">*</span></label>
-                    <select name="q_<%= key %>_risk_level" class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-risk">
-                      <option value="">— Select —</option>
-                      <% ['Low','Medium','High','Critical'].forEach(function(rl) { %>
-                        <option value="<%= rl %>" <%= (r.risk_level || '') === rl ? 'selected' : '' %>><%= rl %></option>
-                      <% }) %>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Rectified on Site <span class="text-red-500">*</span></label>
-                    <select name="q_<%= key %>_rectified" class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-rect">
-                      <option value="">— Select —</option>
-                      <option value="yes" <%= r.rectified_on_site === true ? 'selected' : '' %>>Yes</option>
-                      <option value="no" <%= r.rectified_on_site === false ? 'selected' : '' %>>No — escalate</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Corrective Action <span class="text-red-500">*</span> <span class="text-[10px] font-normal text-gray-400 normal-case ml-1" data-charcount="q_<%= key %>_corrective_action"></span></label>
-                  <textarea name="q_<%= key %>_corrective_action" rows="2" placeholder="What specific action is required to fix this..." class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-action" data-minlen="20"><%= r.corrective_action || '' %></textarea>
-                </div>
-                <div>
-                  <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Responsible Person <span class="text-red-500">*</span></label>
-                  <input name="q_<%= key %>_responsible" value="<%= r.responsible || '' %>" placeholder="Name and role" class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-resp">
-                </div>
+
+              <!-- N/A justification (mandatory on critical items) -->
+              <div class="na-reason <%= currentState === 'na' ? '' : 'hidden' %>" data-na-reason-for="<%= key %>">
+                <label class="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1 mt-1">Why is this not applicable?<% if (q.is_critical) { %> <span class="text-red-500">*</span><% } %></label>
+                <input name="q_<%= key %>_na_reason" value="<%= r.na_reason || '' %>" placeholder="e.g. No pedestrian interface on this site" class="w-full px-3 py-2 text-sm border border-gray-200 rounded-md na-reason-input">
               </div>
+
+              <% if (perPerson) { %>
+                <!-- Per-person tagging -->
+                <input type="hidden" name="q_<%= key %>_on_site_count" value="<%= initialOnSite %>" class="pp-onsite">
+                <div class="pp-block bg-blue-50/40 border border-blue-100 rounded-lg p-3" data-pp="<%= key %>">
+                  <% if (!crew.length) { %>
+                    <p class="text-xs text-gray-500 italic">Tick the crew on site above to tag individuals here.</p>
+                  <% } else { %>
+                    <p class="text-[11px] font-semibold text-blue-900 mb-2">Crew compliant by default — tap to single out anyone who wasn't:</p>
+                    <div class="space-y-2">
+                      <% crew.forEach(function(c){
+                           const cid = String(c.crew_member_id);
+                           const tg = tagByCrew[cid];
+                           const tagged = exIds.indexOf(cid) !== -1 || !!tg;
+                           const selected = selectedCrewIds.indexOf(c.crew_member_id) !== -1;
+                      %>
+                        <div class="pp-crew-row <%= selected ? '' : 'hidden' %>" data-crew-row="<%= cid %>">
+                          <label class="flex items-center gap-2">
+                            <input type="checkbox" class="pp-tag-check w-4 h-4 rounded border-gray-300" name="q_<%= key %>_tag_members" value="<%= cid %>" <%= tagged ? 'checked' : '' %> <%= c.linked ? '' : 'disabled' %>>
+                            <span class="text-sm text-gray-800"><%= c.full_name %></span>
+                            <% if (!c.linked) { %><span class="text-[10px] text-amber-700">(link HR profile to tag)</span><% } %>
+                          </label>
+                          <div class="pp-tag-detail mt-1.5 ml-6 grid grid-cols-1 sm:grid-cols-3 gap-2 <%= tagged ? '' : 'hidden' %>">
+                            <input name="q_<%= key %>_tag_<%= cid %>_issue" value="<%= tg ? (tg.issue||'') : '' %>" placeholder="What was wrong" class="text-sm px-2 py-1.5 border border-blue-200 rounded sm:col-span-2">
+                            <select name="q_<%= key %>_tag_<%= cid %>_risk" class="text-sm px-2 py-1.5 border border-blue-200 rounded bg-white">
+                              <% ['Low','Medium','High','Critical'].forEach(function(rl){ %><option value="<%= rl %>" <%= (tg && tg.risk_level===rl) || (!tg && rl==='Medium') ? 'selected' : '' %>><%= rl %></option><% }) %>
+                            </select>
+                            <label class="flex items-center gap-1.5 text-[11px] text-gray-600 sm:col-span-3">
+                              <input type="checkbox" name="q_<%= key %>_tag_<%= cid %>_visibility" value="worker" <%= tg && tg.visibility==='worker' ? 'checked' : '' %> class="w-3.5 h-3.5 rounded border-gray-300">
+                              Share this with the worker (else internal-only)
+                            </label>
+                          </div>
+                        </div>
+                      <% }) %>
+                    </div>
+                  <% } %>
+                </div>
+              <% } else { %>
+                <!-- Site-level NO block -->
+                <div class="no-fields mt-1 bg-red-50 border border-red-200 rounded-lg p-3 space-y-3 <%= currentState === 'no' ? '' : 'hidden' %>" data-no-fields="<%= key %>">
+                  <div>
+                    <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Observation <span class="text-red-500">*</span> <span class="text-[10px] font-normal text-gray-400 normal-case ml-1" data-charcount="q_<%= key %>_observation"></span></label>
+                    <textarea name="q_<%= key %>_observation" rows="2" placeholder="Describe what you found, where..." class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-obs" data-minlen="20"><%= r.observation || '' %></textarea>
+                  </div>
+                  <div class="grid grid-cols-2 gap-3">
+                    <div>
+                      <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Risk Level <span class="text-red-500">*</span></label>
+                      <select name="q_<%= key %>_risk_level" class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-risk">
+                        <option value="">— Select —</option>
+                        <% ['Low','Medium','High','Critical'].forEach(function(rl) { %><option value="<%= rl %>" <%= (r.risk_level || '') === rl ? 'selected' : '' %>><%= rl %></option><% }) %>
+                      </select>
+                    </div>
+                    <div>
+                      <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Rectified on Site <span class="text-red-500">*</span></label>
+                      <select name="q_<%= key %>_rectified" class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-rect">
+                        <option value="">— Select —</option>
+                        <option value="yes" <%= r.rectified_on_site === true ? 'selected' : '' %>>Yes</option>
+                        <option value="no" <%= r.rectified_on_site === false ? 'selected' : '' %>>No — escalate</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Corrective Action <span class="text-red-500">*</span> <span class="text-[10px] font-normal text-gray-400 normal-case ml-1" data-charcount="q_<%= key %>_corrective_action"></span></label>
+                    <textarea name="q_<%= key %>_corrective_action" rows="2" placeholder="What action is required..." class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-action" data-minlen="20"><%= r.corrective_action || '' %></textarea>
+                  </div>
+                  <div>
+                    <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Responsible Person <span class="text-red-500">*</span></label>
+                    <input name="q_<%= key %>_responsible" value="<%= r.responsible || '' %>" placeholder="Name and role" class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-resp">
+                  </div>
+                </div>
+              <% } %>
+
+              <!-- Critical auto-fail override (with justification) -->
+              <% if (q.is_critical) { %>
+                <div class="crit-override hidden bg-amber-50 border border-amber-200 rounded-lg p-3" data-crit-override="<%= key %>">
+                  <label class="flex items-center gap-2 text-xs font-semibold text-amber-900">
+                    <input type="checkbox" name="q_<%= key %>_critical_override" value="1" <%= r.critical_override ? 'checked' : '' %> class="crit-override-check w-4 h-4 rounded border-amber-400">
+                    Override the automatic Fail for this critical item
+                  </label>
+                  <div class="crit-override-reason mt-2 <%= r.critical_override ? '' : 'hidden' %>">
+                    <input name="q_<%= key %>_override_reason" value="<%= r.override_reason || '' %>" placeholder="Justify why this scenario doesn't warrant a Fail (required)" class="w-full px-3 py-2 text-sm border border-amber-300 rounded-md bg-white override-reason-input">
+                  </div>
+                </div>
+              <% } %>
             </div>
           <% }) %>
         </div>
 
-        <!-- Per-section evidence upload (isEdit only) -->
         <% if (isEdit) { %>
           <div class="px-4 sm:px-5 py-3 border-t border-gray-100 bg-blue-50/30">
             <details class="group">
               <summary class="cursor-pointer text-xs font-semibold text-brand-700 hover:text-brand-800 flex items-center gap-1 select-none">
                 <svg class="w-3.5 h-3.5 transition group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 Section <%= section.key %> evidence
-                <% const cnt = (ctxMap['section_' + section.key] || []).length; %>
-                <% if (cnt) { %><span class="ml-1 bg-brand-600 text-white px-1.5 rounded-full text-[10px]"><%= cnt %></span><% } %>
+                <% const cnt = (ctxMap['section_' + section.key] || []).length; %><% if (cnt) { %><span class="ml-1 bg-brand-600 text-white px-1.5 rounded-full text-[10px]"><%= cnt %></span><% } %>
               </summary>
-              <div class="mt-3">
-                <%- include('_upload_block', { auditId: a.id, contextKey: 'section_' + section.key, label: 'Add photos for section ' + section.key, hint: 'Tap to take a photo or choose file', accept: 'image/*,application/pdf', returnTo: '/audits/' + a.id + '/edit#section-' + section.key, items: ctxMap['section_' + section.key] || [], csrfToken: (typeof csrfToken !== 'undefined' ? csrfToken : '') }) %>
-              </div>
+              <div class="mt-3"><%- include('_upload_block', { auditId: a.id, contextKey: 'section_' + section.key, label: 'Add photos for section ' + section.key, hint: 'Tap to take a photo or choose file', accept: 'image/*,application/pdf', returnTo: '/audits/' + a.id + '/edit#section-' + section.key, items: ctxMap['section_' + section.key] || [], csrfToken: (typeof csrfToken !== 'undefined' ? csrfToken : '') }) %></div>
             </details>
           </div>
         <% } %>
@@ -220,509 +275,255 @@
       </section>
     <% }) %>
 
-    <!-- Non-Conformance Register -->
+    <!-- Non-Conformance Register (legacy register retained alongside per-person tags) -->
     <section class="bg-white border border-gray-200 rounded-xl overflow-hidden">
-      <header class="bg-red-600 text-white px-4 sm:px-5 py-3">
-        <h2 class="text-sm lg:text-base font-bold">12. Non-Conformance Register</h2>
-        <% if (isEdit) { %><p class="text-[11px] opacity-90 mt-0.5">Evidence required for each non-conformance (before + after rectification).</p><% } %>
-      </header>
-
-      <!-- Desktop/tablet table view -->
-      <div class="p-3 sm:p-4 overflow-x-auto hidden md:block">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="text-left text-xs font-semibold text-gray-500 uppercase">
-              <th class="py-2 pr-2 w-8">#</th>
-              <th class="py-2 pr-2">Issue Found</th>
-              <th class="py-2 pr-2 w-28">Risk</th>
-              <th class="py-2 pr-2">Action Required</th>
-              <th class="py-2 pr-2 w-36">Responsible</th>
-              <th class="py-2 pr-2 w-36">Due</th>
-              <th class="py-2 pr-2 w-16 text-center">Closed</th>
-              <% if (isEdit) { %><th class="py-2 pr-2 w-24 text-center">Evidence</th><% } %>
-            </tr>
-          </thead>
-          <tbody>
-            <% for (let i = 1; i <= 10; i++) { const nc = (nonconformances || [])[i-1] || {}; %>
-              <tr class="border-t border-gray-100 align-top">
-                <td class="py-2 pr-2 text-xs text-gray-500 pt-3.5"><%= i %></td>
-                <td class="py-2 pr-2"><input name="nc_<%= i %>_issue" value="<%= nc.issue || '' %>" class="w-full px-2 py-2 text-sm border border-gray-200 rounded"></td>
-                <td class="py-2 pr-2">
-                  <select name="nc_<%= i %>_risk" class="w-full px-2 py-2 text-sm border border-gray-200 rounded bg-white">
-                    <option value="">—</option>
-                    <% ['Low','Medium','High','Critical'].forEach(function(r){ %>
-                      <option value="<%= r %>" <%= nc.risk === r ? 'selected' : '' %>><%= r %></option>
-                    <% }) %>
-                  </select>
-                </td>
-                <td class="py-2 pr-2"><input name="nc_<%= i %>_action" value="<%= nc.action || '' %>" class="w-full px-2 py-2 text-sm border border-gray-200 rounded"></td>
-                <td class="py-2 pr-2"><input name="nc_<%= i %>_responsible" value="<%= nc.responsible || '' %>" class="w-full px-2 py-2 text-sm border border-gray-200 rounded"></td>
-                <td class="py-2 pr-2"><input type="date" name="nc_<%= i %>_due" value="<%= nc.due_date || '' %>" class="w-full px-2 py-2 text-sm border border-gray-200 rounded"></td>
-                <td class="py-2 pr-2 text-center pt-3.5"><input type="checkbox" name="nc_<%= i %>_closed" value="1" <%= nc.closed ? 'checked' : '' %> class="w-5 h-5 rounded border-gray-300"></td>
-                <% if (isEdit) { const ncCount = (ctxMap['nc_' + i] || []).length; %>
-                  <td class="py-2 pr-2 text-center pt-2.5">
-                    <a href="#nc-<%= i %>-evidence" class="inline-flex items-center gap-1 text-xs text-brand-700 hover:underline" onclick="document.getElementById('nc-<%= i %>-details').open = true;">
-                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/></svg>
-                      <%= ncCount %>
-                    </a>
-                  </td>
-                <% } %>
-              </tr>
-            <% } %>
-          </tbody>
-        </table>
-      </div>
-
-      <!-- Mobile stacked view -->
+      <header class="bg-red-600 text-white px-4 sm:px-5 py-3"><h2 class="text-sm lg:text-base font-bold">Non-Conformance Register</h2></header>
       <div class="md:hidden divide-y divide-gray-100">
         <% for (let i = 1; i <= 10; i++) { const nc = (nonconformances || [])[i-1] || {}; %>
           <details class="group" <%= nc.issue ? 'open' : '' %>>
-            <summary class="px-4 py-3 cursor-pointer select-none flex items-center justify-between hover:bg-gray-50">
-              <span class="text-sm font-medium text-gray-900">NC #<%= i %><% if (nc.issue) { %> <span class="text-xs text-gray-500 font-normal">— <%= nc.issue.slice(0,40) %><%= nc.issue.length > 40 ? '…' : '' %></span><% } %></span>
-              <svg class="w-4 h-4 text-gray-400 transition group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-            </summary>
+            <summary class="px-4 py-3 cursor-pointer select-none flex items-center justify-between hover:bg-gray-50"><span class="text-sm font-medium text-gray-900">NC #<%= i %><% if (nc.issue) { %> <span class="text-xs text-gray-500 font-normal">— <%= nc.issue.slice(0,40) %></span><% } %></span></summary>
             <div class="px-4 pb-4 space-y-3">
-              <div>
-                <label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Issue Found</label>
-                <input name="nc_<%= i %>_issue" value="<%= nc.issue || '' %>" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg">
-              </div>
+              <div><label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Issue</label><input name="nc_<%= i %>_issue" value="<%= nc.issue || '' %>" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg"></div>
               <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Risk</label>
-                  <select name="nc_<%= i %>_risk" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white">
-                    <option value="">—</option>
-                    <% ['Low','Medium','High','Critical'].forEach(function(r){ %>
-                      <option value="<%= r %>" <%= nc.risk === r ? 'selected' : '' %>><%= r %></option>
-                    <% }) %>
-                  </select>
-                </div>
-                <div class="flex items-end pb-1">
-                  <label class="flex items-center gap-2 text-sm text-gray-700">
-                    <input type="checkbox" name="nc_<%= i %>_closed" value="1" <%= nc.closed ? 'checked' : '' %> class="w-5 h-5 rounded border-gray-300">
-                    Closed
-                  </label>
-                </div>
+                <div><label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Risk</label><select name="nc_<%= i %>_risk" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg bg-white"><option value="">—</option><% ['Low','Medium','High','Critical'].forEach(function(r){ %><option value="<%= r %>" <%= nc.risk === r ? 'selected' : '' %>><%= r %></option><% }) %></select></div>
+                <div class="flex items-end pb-1"><label class="flex items-center gap-2 text-sm text-gray-700"><input type="checkbox" name="nc_<%= i %>_closed" value="1" <%= nc.closed ? 'checked' : '' %> class="w-5 h-5 rounded border-gray-300">Closed</label></div>
               </div>
-              <div>
-                <label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Action Required</label>
-                <input name="nc_<%= i %>_action" value="<%= nc.action || '' %>" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg">
-              </div>
+              <div><label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Action</label><input name="nc_<%= i %>_action" value="<%= nc.action || '' %>" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg"></div>
               <div class="grid grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Responsible</label>
-                  <input name="nc_<%= i %>_responsible" value="<%= nc.responsible || '' %>" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg">
-                </div>
-                <div>
-                  <label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Due</label>
-                  <input type="date" name="nc_<%= i %>_due" value="<%= nc.due_date || '' %>" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg">
-                </div>
+                <div><label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Responsible</label><input name="nc_<%= i %>_responsible" value="<%= nc.responsible || '' %>" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg"></div>
+                <div><label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">Due</label><input type="date" name="nc_<%= i %>_due" value="<%= nc.due_date || '' %>" class="w-full px-3 py-2.5 text-sm border border-gray-200 rounded-lg"></div>
               </div>
             </div>
           </details>
         <% } %>
       </div>
-
-      <!-- Per-NC evidence blocks (isEdit only) -->
-      <% if (isEdit) { %>
-        <div class="border-t border-gray-200 bg-red-50/30 p-4 space-y-2">
-          <p class="text-xs font-semibold text-red-900 uppercase tracking-wide">Non-Conformance Evidence</p>
-          <% for (let i = 1; i <= 10; i++) {
-               const nc = (nonconformances || [])[i-1] || {};
-               const ncItems = ctxMap['nc_' + i] || [];
-               if (!nc.issue && !ncItems.length) continue;
-          %>
-            <details class="bg-white border border-red-200 rounded-lg" id="nc-<%= i %>-details" <%= ncItems.length === 0 ? 'open' : '' %>>
-              <summary id="nc-<%= i %>-evidence" class="px-3 py-2 cursor-pointer text-xs font-semibold text-red-800 flex items-center justify-between select-none">
-                <span>NC #<%= i %> evidence <% if (nc.issue) { %><span class="text-gray-500 font-normal">— <%= nc.issue.slice(0,50) %></span><% } %></span>
-                <span class="bg-red-600 text-white px-2 rounded-full text-[10px]"><%= ncItems.length %></span>
-              </summary>
-              <div class="p-3 border-t border-red-100">
-                <%- include('_upload_block', { auditId: a.id, contextKey: 'nc_' + i, label: 'Add photo for NC #' + i, hint: 'Before + after rectification', accept: 'image/*,application/pdf', returnTo: '/audits/' + a.id + '/edit#nc-' + i + '-evidence', items: ncItems, csrfToken: (typeof csrfToken !== 'undefined' ? csrfToken : '') }) %>
-              </div>
-            </details>
-          <% } %>
-          <p class="text-[11px] text-gray-500 italic">Evidence blocks appear for each NC with an issue logged. Save the form after adding NC rows to upload their photos.</p>
-        </div>
-      <% } %>
+      <div class="p-3 sm:p-4 overflow-x-auto hidden md:block">
+        <table class="w-full text-sm"><thead><tr class="text-left text-xs font-semibold text-gray-500 uppercase"><th class="py-2 pr-2 w-8">#</th><th class="py-2 pr-2">Issue Found</th><th class="py-2 pr-2 w-28">Risk</th><th class="py-2 pr-2">Action Required</th><th class="py-2 pr-2 w-36">Responsible</th><th class="py-2 pr-2 w-36">Due</th><th class="py-2 pr-2 w-16 text-center">Closed</th></tr></thead>
+          <tbody>
+            <% for (let i = 1; i <= 10; i++) { const nc = (nonconformances || [])[i-1] || {}; %>
+              <tr class="border-t border-gray-100 align-top">
+                <td class="py-2 pr-2 text-xs text-gray-500 pt-3.5"><%= i %></td>
+                <td class="py-2 pr-2"><input name="nc_<%= i %>_issue" value="<%= nc.issue || '' %>" class="w-full px-2 py-2 text-sm border border-gray-200 rounded"></td>
+                <td class="py-2 pr-2"><select name="nc_<%= i %>_risk" class="w-full px-2 py-2 text-sm border border-gray-200 rounded bg-white"><option value="">—</option><% ['Low','Medium','High','Critical'].forEach(function(r){ %><option value="<%= r %>" <%= nc.risk === r ? 'selected' : '' %>><%= r %></option><% }) %></select></td>
+                <td class="py-2 pr-2"><input name="nc_<%= i %>_action" value="<%= nc.action || '' %>" class="w-full px-2 py-2 text-sm border border-gray-200 rounded"></td>
+                <td class="py-2 pr-2"><input name="nc_<%= i %>_responsible" value="<%= nc.responsible || '' %>" class="w-full px-2 py-2 text-sm border border-gray-200 rounded"></td>
+                <td class="py-2 pr-2"><input type="date" name="nc_<%= i %>_due" value="<%= nc.due_date || '' %>" class="w-full px-2 py-2 text-sm border border-gray-200 rounded"></td>
+                <td class="py-2 pr-2 text-center pt-3.5"><input type="checkbox" name="nc_<%= i %>_closed" value="1" <%= nc.closed ? 'checked' : '' %> class="w-5 h-5 rounded border-gray-300"></td>
+              </tr>
+            <% } %>
+          </tbody>
+        </table>
+      </div>
     </section>
 
     <!-- Score summary + overall finding -->
     <section class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
-      <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">Audit Scoring Summary</h2>
+      <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">Audit Scoring Summary <span class="text-[11px] font-normal text-gray-400 normal-case">— risk-weighted</span></h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-4" id="score-summary">
-        <% scoreGroups.forEach(function(g, i) { const gr = score.groups[i] || {}; %>
-          <div class="flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-lg" data-group="<%= i %>">
+        <% (scoreGroups||[]).forEach(function(g) { const gr = (score.groups||[]).find(function(x){return x.label===g.label;}) || {}; %>
+          <div class="flex items-center justify-between px-3 py-2.5 bg-gray-50 rounded-lg" data-group-label="<%= g.label %>">
             <span class="text-sm font-medium text-gray-700"><%= g.label %></span>
-            <span class="text-sm font-bold text-gray-900">
-              <span data-g-score><%= gr.score || 0 %></span>/<span data-g-max><%= gr.max || 0 %></span>
-              <span class="text-xs font-semibold text-gray-500 ml-2" data-g-percent><%= gr.percent || 0 %>%</span>
-            </span>
+            <span class="text-sm font-bold text-gray-900"><span data-g-percent><%= gr.percent || 0 %></span>%</span>
           </div>
         <% }) %>
       </div>
-      <div class="pt-3 border-t border-gray-200">
-        <div class="flex items-center justify-between">
-          <span class="text-sm font-bold text-gray-900 uppercase tracking-wide">Overall</span>
-          <span class="text-xl font-bold text-brand-700">
-            <span id="live-score-2"><%= score.total %></span>/<span id="live-max-2"><%= score.max %></span>
-            <span class="text-sm font-semibold text-gray-500 ml-2">(<span id="live-percent-2"><%= score.percent %></span>%)</span>
-          </span>
-        </div>
+      <div class="pt-3 border-t border-gray-200 flex items-center justify-between">
+        <span class="text-sm font-bold text-gray-900 uppercase tracking-wide">Overall (weighted)</span>
+        <span class="text-xl font-bold text-brand-700"><span id="live-percent-2"><%= score.percent || 0 %></span>%</span>
       </div>
+      <div id="crit-fail-banner" class="<%= score.criticalFail ? '' : 'hidden' %> mt-3 rounded-lg bg-red-50 border border-red-300 px-3 py-2 text-xs font-semibold text-red-800">⚠ Critical item failed — this audit auto-fails unless the critical item is overridden with a justification.</div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mt-5">
-        <% ['pass','pass_with_actions','fail'].forEach(function(opt) {
-          const labels = { pass: 'Pass', pass_with_actions: 'Pass with actions', fail: 'Fail' };
-          const colors = { pass: 'emerald', pass_with_actions: 'amber', fail: 'red' };
-          const c = colors[opt];
-        %>
-          <label class="flex items-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer transition
-            <%= val('overall_finding') === opt ? `border-${c}-500 bg-${c}-50` : 'border-gray-200 hover:border-gray-300' %>">
-            <input type="radio" name="overall_finding" value="<%= opt %>" <%= val('overall_finding') === opt ? 'checked' : '' %> class="w-4 h-4 text-<%= c %>-600">
-            <span class="text-sm font-semibold text-gray-800"><%= labels[opt] %></span>
-          </label>
-        <% }) %>
+      <div class="mt-5">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-gray-700 uppercase tracking-wide">Finding</span>
+          <span class="text-[11px] text-gray-500">Suggested: <span id="suggested-finding" class="font-bold"><%= (score.suggestedFinding||'').replace('_',' ') || '—' %></span></span>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+          <% ['pass','pass_with_actions','fail'].forEach(function(opt) { const labels = { pass: 'Pass', pass_with_actions: 'Pass with actions', fail: 'Fail' }; const colors = { pass: 'emerald', pass_with_actions: 'amber', fail: 'red' }; const c = colors[opt]; %>
+            <label class="flex items-center gap-2 px-4 py-3 border-2 rounded-lg cursor-pointer transition <%= val('overall_finding') === opt ? `border-${c}-500 bg-${c}-50` : 'border-gray-200 hover:border-gray-300' %>">
+              <input type="radio" name="overall_finding" value="<%= opt %>" <%= val('overall_finding') === opt ? 'checked' : '' %> class="finding-radio w-4 h-4 text-<%= c %>-600"><span class="text-sm font-semibold text-gray-800"><%= labels[opt] %></span>
+            </label>
+          <% }) %>
+        </div>
+        <div id="finding-override-wrap" class="mt-3 <%= val('finding_overridden') ? '' : 'hidden' %>">
+          <label class="block text-[11px] font-semibold text-gray-600 uppercase tracking-wide mb-1">Reason for overriding the suggested finding <span class="text-red-500">*</span></label>
+          <input name="finding_override_reason" id="finding-override-reason" value="<%= val('finding_override_reason') %>" placeholder="Why the chosen finding differs from the suggestion" class="w-full px-3 py-2 text-sm border border-gray-300 rounded-md">
+        </div>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4 mt-5">
-        <label class="flex items-center gap-2 px-3 py-2.5 bg-gray-50 rounded-lg">
-          <input type="checkbox" name="follow_up_required" value="1" <%= val('follow_up_required') ? 'checked' : '' %> class="w-5 h-5 rounded border-gray-300">
-          <span class="text-sm font-medium text-gray-700">Follow-up required</span>
-        </label>
-        <div>
-          <label class="block text-xs font-semibold text-gray-700 mb-1">Follow-up date</label>
-          <input type="date" name="follow_up_date" value="<%= val('follow_up_date') %>" class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg">
-        </div>
+        <label class="flex items-center gap-2 px-3 py-2.5 bg-gray-50 rounded-lg"><input type="checkbox" name="follow_up_required" value="1" <%= val('follow_up_required') ? 'checked' : '' %> class="w-5 h-5 rounded border-gray-300"><span class="text-sm font-medium text-gray-700">Follow-up required</span></label>
+        <div><label class="block text-xs font-semibold text-gray-700 mb-1">Follow-up date</label><input type="date" name="follow_up_date" value="<%= val('follow_up_date') %>" class="w-full px-3 py-2.5 text-sm border border-gray-300 rounded-lg"></div>
       </div>
     </section>
 
-    <!-- Digital signatures -->
+    <!-- Sign-off (typed; drawn signatures land in a later pass) -->
     <section class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
       <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-1">Sign-off</h2>
       <p class="text-xs text-gray-500 mb-4">Type full name to sign. Timestamp is recorded server-side.</p>
       <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div>
           <label class="block text-xs font-semibold text-gray-700 mb-1">Auditor signature</label>
-          <input name="auditor_signature_text" value="<%= val('auditor_signature_text') %>" placeholder="Type your full name" class="w-full px-3 py-3 text-base border-2 border-gray-300 rounded-lg font-signature italic" style="font-family: 'Brush Script MT', 'Segoe Script', cursive;">
-          <% if (val('auditor_signed_at')) { %>
-            <p class="text-[11px] text-emerald-700 mt-1">✓ Signed <%= new Date(a.auditor_signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) %></p>
-          <% } %>
+          <input name="auditor_signature_text" value="<%= val('auditor_signature_text') %>" placeholder="Type your full name" class="w-full px-3 py-3 text-base border-2 border-gray-300 rounded-lg italic" style="font-family: 'Brush Script MT', 'Segoe Script', cursive;">
+          <% if (val('auditor_signed_at')) { %><p class="text-[11px] text-emerald-700 mt-1">✓ Signed <%= new Date(a.auditor_signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) %></p><% } %>
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-700 mb-1">Supervisor / STMS signature</label>
           <input name="supervisor_signature_text" value="<%= val('supervisor_signature_text') %>" placeholder="Type full name" class="w-full px-3 py-3 text-base border-2 border-gray-300 rounded-lg italic" style="font-family: 'Brush Script MT', 'Segoe Script', cursive;">
-          <% if (val('supervisor_signed_at')) { %>
-            <p class="text-[11px] text-emerald-700 mt-1">✓ Signed <%= new Date(a.supervisor_signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) %></p>
-          <% } %>
+          <% if (val('supervisor_signed_at')) { %><p class="text-[11px] text-emerald-700 mt-1">✓ Signed <%= new Date(a.supervisor_signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) %></p><% } %>
         </div>
       </div>
-
-      <!-- Annotated TGS / close-out sketch upload (isEdit only) -->
-      <% if (isEdit) { %>
-        <div class="mt-5 pt-4 border-t border-gray-100">
-          <p class="text-xs font-semibold text-gray-700 uppercase tracking-wide mb-1">Annotated TGS / Close-out Sketch</p>
-          <p class="text-[11px] text-gray-500 mb-3">Upload a marked-up TGS or hand sketch showing what was actually deployed.</p>
-          <%- include('_upload_block', { auditId: a.id, contextKey: 'annotated_tgs', label: 'Add annotated TGS', hint: 'Image or PDF', accept: 'image/*,application/pdf', returnTo: '/audits/' + a.id + '/edit#signatures', items: ctxMap['annotated_tgs'] || [], csrfToken: (typeof csrfToken !== 'undefined' ? csrfToken : '') }) %>
-        </div>
-      <% } %>
     </section>
 
-    <!-- Actions -->
     <div class="flex flex-col sm:flex-row gap-3 pb-2">
-      <button type="submit" name="submit" value="0" class="flex-1 px-4 py-3.5 bg-gray-100 hover:bg-gray-200 active:bg-gray-300 text-gray-800 font-semibold rounded-xl transition">
-        Save as Draft
-      </button>
-      <button type="submit" name="submit" value="1" class="flex-1 px-4 py-3.5 bg-brand-600 hover:bg-brand-700 active:bg-brand-800 text-white font-bold rounded-xl transition">
-        <%= isEdit ? 'Update & Submit' : 'Submit Audit' %>
-      </button>
+      <button type="submit" name="submit" value="0" class="flex-1 px-4 py-3.5 bg-gray-100 hover:bg-gray-200 text-gray-800 font-semibold rounded-xl transition">Save as Draft</button>
+      <button type="submit" name="submit" value="1" class="flex-1 px-4 py-3.5 bg-brand-600 hover:bg-brand-700 text-white font-bold rounded-xl transition"><%= isEdit ? 'Update & Submit' : 'Submit Audit' %></button>
       <a href="/audits<%= isEdit ? '/' + a.id : '' %>" class="sm:w-auto px-4 py-3 text-center text-gray-600 hover:text-gray-900 font-medium">Cancel</a>
     </div>
   </form>
 </div>
 
-<!-- Pass section structure to client-side scoring -->
 <script>
-  window.AUDIT_SECTIONS = <%- JSON.stringify(sections.map(s => ({ key: s.key, itemCount: s.items.length }))) %>;
-  window.SCORE_GROUPS = <%- JSON.stringify(scoreGroups) %>;
+  window.AUDIT_QUESTIONS = <%- JSON.stringify((sections||[]).flatMap(function(s){ return s.questions.map(function(q){ return { key:q.key, group:s.score_group, mode:q.scoring_mode, critical:!!q.is_critical, band:q.risk_band }; }); })) %>;
+  window.SCORE_WEIGHTS = { Low:1, Medium:3, High:7, Critical:15 };
+  window.FINDING_THRESHOLDS = { failBelow:75, passAtOrAbove:95 };
   window.AUDIT_IS_EDIT = <%= isEdit ? 'true' : 'false' %>;
   window.AUDIT_CSRF = '<%= typeof csrfToken !== "undefined" ? csrfToken : "" %>';
 </script>
 <script>
 (function() {
-  function getState(key) {
-    const el = document.querySelector('input[name="q_' + key + '_state"]:checked');
-    return el ? el.value : '';
-  }
+  var W = window.SCORE_WEIGHTS, QS = window.AUDIT_QUESTIONS, FT = window.FINDING_THRESHOLDS;
+  function wf(band){ return W[band] != null ? W[band] : W.Medium; }
+  function getState(key){ var el = document.querySelector('input[name="q_'+key+'_state"]:checked'); return el ? el.value : ''; }
+  function onSiteCount(){ return document.querySelectorAll('.crew-check:checked').length; }
+  function exceptionsFor(key){ return document.querySelectorAll('input[name="q_'+key+'_tag_members"]:checked'); }
+  function overridden(key){ var el = document.querySelector('input[name="q_'+key+'_critical_override"]'); return !!(el && el.checked); }
+
   function recalc() {
-    const groups = window.SCORE_GROUPS.map(function(g) {
-      let score = 0, max = 0;
-      g.sectionKeys.forEach(function(secKey) {
-        const section = window.AUDIT_SECTIONS.find(function(s) { return s.key === secKey; });
-        if (!section) return;
-        for (let i = 1; i <= section.itemCount; i++) {
-          const state = getState(secKey + '.' + i);
-          if (state === '' || state === 'na') continue;
-          max++;
-          if (state === 'yes') score++;
-        }
-      });
-      return { score: score, max: max, percent: max ? Math.round(score / max * 100) : 0 };
-    });
-    document.querySelectorAll('#score-summary [data-group]').forEach(function(el) {
-      const g = groups[parseInt(el.getAttribute('data-group'), 10)] || { score: 0, max: 0, percent: 0 };
-      el.querySelector('[data-g-score]').textContent = g.score;
-      el.querySelector('[data-g-max]').textContent = g.max;
-      el.querySelector('[data-g-percent]').textContent = g.percent + '%';
-    });
-    const total = groups.reduce(function(a, g) { return a + g.score; }, 0);
-    const max = groups.reduce(function(a, g) { return a + g.max; }, 0);
-    const pct = max ? Math.round(total / max * 100) : 0;
-    ['live-score', 'live-score-2'].forEach(function(id){ const e = document.getElementById(id); if (e) e.textContent = total; });
-    ['live-max', 'live-max-2'].forEach(function(id){ const e = document.getElementById(id); if (e) e.textContent = max; });
-    const p1 = document.getElementById('live-percent'); if (p1) p1.textContent = pct + '%';
-    const p2 = document.getElementById('live-percent-2'); if (p2) p2.textContent = pct;
-    window.AUDIT_SECTIONS.forEach(function(s) {
-      let sScore = 0, sMax = 0;
-      for (let i = 1; i <= s.itemCount; i++) {
-        const st = getState(s.key + '.' + i);
-        if (st === '' || st === 'na') continue;
-        sMax++;
-        if (st === 'yes') sScore++;
-      }
-      const pill = document.querySelector('[data-section-score="' + s.key + '"]');
-      if (pill) pill.textContent = sScore + '/' + sMax;
-    });
-  }
-  function paintPill(groupKey) {
-    const group = document.querySelector('[data-pillgroup="' + groupKey + '"]');
-    if (!group) return;
-    group.querySelectorAll('input[type="radio"]').forEach(function(input) {
-      const span = input.nextElementSibling;
-      if (!span) return;
-      const baseMobile = 'block text-center px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs font-semibold transition select-none';
-      span.className = baseMobile;
-      if (input.checked) {
-        if (input.value === 'yes') span.classList.add('bg-emerald-600', 'text-white');
-        else if (input.value === 'no') span.classList.add('bg-red-600', 'text-white');
-        else span.classList.add('bg-gray-500', 'text-white');
+    var onSite = onSiteCount();
+    var groups = {}; var openActions = 0, criticalFail = false;
+    QS.forEach(function(q){
+      var g = groups[q.group] || (groups[q.group] = { ws:0, wm:0 });
+      var st = getState(q.key);
+      if (q.mode === 'per_person') {
+        if (st === 'na' || onSite <= 0) return;
+        var exs = exceptionsFor(q.key);
+        var compliant = Math.max(0, onSite - exs.length);
+        var frac = onSite > 0 ? compliant/onSite : 1;
+        var wq = wf(q.band); g.wm += wq; g.ws += wq*frac; openActions += exs.length;
+        if (q.critical && !overridden(q.key)) { exs.forEach(function(ex){ var sel = document.querySelector('select[name="q_'+q.key+'_tag_'+ex.value+'_risk"]'); if (sel && sel.value === 'Critical') criticalFail = true; }); }
       } else {
-        span.classList.add('text-gray-600');
+        if (st === '' || st === 'na') return;
+        var band = q.band;
+        if (st === 'no') { var rsel = document.querySelector('select[name="q_'+q.key+'_risk_level"]'); if (rsel && rsel.value) band = rsel.value; }
+        var w = wf(band); g.wm += w;
+        if (st === 'yes') g.ws += w;
+        else { openActions += 1; if (q.critical && !overridden(q.key)) criticalFail = true; }
       }
+    });
+    var totWs = 0, totWm = 0;
+    Object.keys(groups).forEach(function(label){ var g = groups[label]; totWs += g.ws; totWm += g.wm; var pct = g.wm ? Math.round(g.ws/g.wm*100) : 0; var el = document.querySelector('[data-group-label="'+label+'"] [data-g-percent]'); if (el) el.textContent = pct; });
+    var pct = totWm ? Math.round(totWs/totWm*100) : 0;
+    var p1 = document.getElementById('live-percent'); if (p1) p1.textContent = pct + '%';
+    var p2 = document.getElementById('live-percent-2'); if (p2) p2.textContent = pct;
+    document.getElementById('live-critical-badge').classList.toggle('hidden', !criticalFail);
+    document.getElementById('crit-fail-banner').classList.toggle('hidden', !criticalFail);
+    // suggested finding
+    var finding = criticalFail ? 'fail' : (pct < FT.failBelow ? 'fail' : ((openActions > 0 || pct < FT.passAtOrAbove) ? 'pass_with_actions' : 'pass'));
+    var sf = document.getElementById('suggested-finding'); if (sf) sf.textContent = finding.replace('_',' ');
+    // section pills
+    document.querySelectorAll('[data-section] [data-section-score]').forEach(function(pill){
+      var sec = pill.closest('[data-section]'); var items = sec.querySelectorAll('[data-item]'); var done = 0, tot = 0;
+      items.forEach(function(it){ var k = it.getAttribute('data-item'); var s = getState(k); if (it.getAttribute('data-mode')==='per_person') { if (s!=='na') { tot++; if (exceptionsFor(k).length===0) done++; } } else if (s && s!=='na') { tot++; if (s==='yes') done++; } });
+      pill.textContent = done + '/' + tot;
     });
   }
 
-  // Toggle NO fields visibility
-  function toggleNoFields(itemKey, state) {
-    var noBlock = document.querySelector('[data-no-fields="' + itemKey + '"]');
-    var notesInput = document.querySelector('[data-notes-for="' + itemKey + '"]');
-    if (noBlock) {
-      if (state === 'no') { noBlock.classList.remove('hidden'); if (notesInput) notesInput.classList.add('hidden'); }
-      else { noBlock.classList.add('hidden'); if (notesInput) notesInput.classList.remove('hidden'); }
-    }
+  function paintPill(key) {
+    var group = document.querySelector('[data-pillgroup="'+key+'"]'); if (!group) return;
+    group.querySelectorAll('input[type="radio"]').forEach(function(input){ var span = input.nextElementSibling; if (!span) return; span.className = 'block text-center px-4 py-2.5 sm:py-1.5 text-sm sm:text-xs font-semibold transition select-none'; if (input.checked) { if (input.value==='yes') span.classList.add('bg-emerald-600','text-white'); else if (input.value==='no') span.classList.add('bg-red-600','text-white'); else span.classList.add('bg-gray-500','text-white'); } else span.classList.add('text-gray-600'); });
   }
-  // Character count for min-length fields
+  function toggleNoFields(key, state) {
+    var noBlock = document.querySelector('[data-no-fields="'+key+'"]'); var notes = document.querySelector('[data-notes-for="'+key+'"]'); var na = document.querySelector('[data-na-reason-for="'+key+'"]');
+    if (noBlock) { if (state==='no') { noBlock.classList.remove('hidden'); if (notes) notes.classList.add('hidden'); } else { noBlock.classList.add('hidden'); if (notes) notes.classList.remove('hidden'); } }
+    if (na) na.classList.toggle('hidden', state !== 'na');
+    updateCritOverride(key);
+  }
+  function updateCritOverride(key) {
+    var wrap = document.querySelector('[data-crit-override="'+key+'"]'); if (!wrap) return;
+    var st = getState(key);
+    var hasCriticalExc = false; exceptionsFor(key).forEach(function(ex){ var sel = document.querySelector('select[name="q_'+key+'_tag_'+ex.value+'_risk"]'); if (sel && sel.value === 'Critical') hasCriticalExc = true; });
+    wrap.classList.toggle('hidden', !(st === 'no' || hasCriticalExc));
+  }
   function updateCharCount(el) {
-    var minLen = parseInt(el.getAttribute('data-minlen') || '0', 10);
-    if (!minLen) return;
-    var counter = document.querySelector('[data-charcount="' + el.name + '"]');
-    if (!counter) return;
-    var len = (el.value || '').length;
-    if (len < minLen) { counter.textContent = (minLen - len) + ' more chars needed'; counter.className = 'text-[10px] font-normal text-red-500 normal-case ml-1'; }
-    else { counter.textContent = len + ' chars'; counter.className = 'text-[10px] font-normal text-gray-400 normal-case ml-1'; }
+    var minLen = parseInt(el.getAttribute('data-minlen')||'0',10); if (!minLen) return;
+    var counter = document.querySelector('[data-charcount="'+el.name+'"]'); if (!counter) return;
+    var len = (el.value||'').length;
+    if (len < minLen) { counter.textContent = (minLen-len)+' more chars needed'; counter.className='text-[10px] font-normal text-red-500 normal-case ml-1'; }
+    else { counter.textContent = len+' chars'; counter.className='text-[10px] font-normal text-gray-400 normal-case ml-1'; }
+  }
+
+  // crew selection drives per-person taggable rows + on-site count
+  function syncCrewRows() {
+    var checkedIds = Array.prototype.map.call(document.querySelectorAll('.crew-check:checked'), function(c){ return c.value; });
+    document.querySelectorAll('[data-crew-row]').forEach(function(row){ var id = row.getAttribute('data-crew-row'); row.classList.toggle('hidden', checkedIds.indexOf(id) === -1); });
+    document.querySelectorAll('.pp-onsite').forEach(function(h){ h.value = checkedIds.length; });
+    var cc = document.getElementById('crew-count'); if (cc) cc.textContent = checkedIds.length;
   }
 
   document.addEventListener('change', function(e) {
-    if (e.target.matches('.q-state')) {
-      const name = e.target.name;
-      const m = name.match(/^q_(.+)_state$/);
-      if (m) { paintPill(m[1]); toggleNoFields(m[1], e.target.value); }
-      recalc();
-      maybeAutoDraft();
-    }
+    if (e.target.matches('.q-state')) { var m = e.target.name.match(/^q_(.+)_state$/); if (m) { paintPill(m[1]); toggleNoFields(m[1], e.target.value); } recalc(); maybeAutoDraft(); }
+    if (e.target.matches('.crew-check')) { syncCrewRows(); recalc(); maybeAutoDraft(); }
+    if (e.target.matches('.pp-tag-check')) { var d = e.target.closest('[data-crew-row]'); var det = d && d.querySelector('.pp-tag-detail'); if (det) det.classList.toggle('hidden', !e.target.checked); var mm = e.target.name.match(/^q_(.+)_tag_members$/); if (mm) updateCritOverride(mm[1]); recalc(); }
+    if (e.target.matches('select[name$="_risk"]') || e.target.matches('select[name$="_risk_level"]')) { var rk = e.target.name.match(/^q_(.+)_(tag_.+_risk|risk_level)$/); if (rk) updateCritOverride(rk[1]); recalc(); }
+    if (e.target.matches('.crit-override-check')) { var w = e.target.closest('.crit-override'); var rr = w && w.querySelector('.crit-override-reason'); if (rr) rr.classList.toggle('hidden', !e.target.checked); recalc(); }
+    if (e.target.matches('.finding-radio')) { var sf = document.getElementById('suggested-finding'); var wrap = document.getElementById('finding-override-wrap'); if (sf && wrap) wrap.classList.toggle('hidden', e.target.value === sf.textContent.replace(' ','_')); }
   });
   document.addEventListener('input', function(e) {
     if (e.target.closest && e.target.closest('#auditForm')) maybeAutoDraft();
     if (e.target.matches('[data-minlen]')) updateCharCount(e.target);
   });
-  // Init char counts
   document.querySelectorAll('[data-minlen]').forEach(updateCharCount);
 
-  // Form submit validation — block if NO items have incomplete fields
   var auditForm = document.getElementById('auditForm');
-  if (auditForm) {
-    auditForm.addEventListener('submit', function(e) {
-      var submitBtn = e.submitter;
-      if (submitBtn && submitBtn.value === '0') return; // draft = skip validation
-      var errors = [];
-      document.querySelectorAll('[data-no-fields]').forEach(function(block) {
-        if (block.classList.contains('hidden')) return;
-        var key = block.getAttribute('data-no-fields');
-        var obs = block.querySelector('.no-obs'), risk = block.querySelector('.no-risk');
-        var action = block.querySelector('.no-action'), resp = block.querySelector('.no-resp'), rect = block.querySelector('.no-rect');
-        if (obs && obs.value.trim().length < 20) errors.push(key + ': Observation needs at least 20 characters');
-        if (risk && !risk.value) errors.push(key + ': Risk level required');
-        if (action && action.value.trim().length < 20) errors.push(key + ': Corrective action needs at least 20 characters');
-        if (resp && !resp.value.trim()) errors.push(key + ': Responsible person required');
-        if (rect && !rect.value) errors.push(key + ': Rectified on site required');
-      });
-      if (errors.length) {
-        e.preventDefault();
-        alert('Complete all required fields for NO items:\n\n\u2022 ' + errors.join('\n\u2022 '));
-        var firstKey = errors[0].split(':')[0];
-        var firstBlock = document.querySelector('[data-no-fields="' + firstKey + '"]');
-        if (firstBlock) firstBlock.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    });
-  }
+  if (auditForm) auditForm.addEventListener('submit', function(e) {
+    if (e.submitter && e.submitter.value === '0') return; // draft skips validation
+    var errors = [];
+    document.querySelectorAll('[data-no-fields]').forEach(function(block){ if (block.classList.contains('hidden')) return; var key = block.getAttribute('data-no-fields'); var obs=block.querySelector('.no-obs'),risk=block.querySelector('.no-risk'),action=block.querySelector('.no-action'),resp=block.querySelector('.no-resp'),rect=block.querySelector('.no-rect'); if (obs&&obs.value.trim().length<20) errors.push(key+': observation needs 20+ chars'); if (risk&&!risk.value) errors.push(key+': risk level required'); if (action&&action.value.trim().length<20) errors.push(key+': corrective action needs 20+ chars'); if (resp&&!resp.value.trim()) errors.push(key+': responsible person required'); if (rect&&!rect.value) errors.push(key+': rectified on site required'); });
+    // N/A reason required on critical items
+    document.querySelectorAll('[data-na-reason-for]').forEach(function(wrap){ if (wrap.classList.contains('hidden')) return; var key = wrap.getAttribute('data-na-reason-for'); var item = document.querySelector('[data-item="'+key+'"]'); if (item && item.getAttribute('data-critical')==='1') { var inp = wrap.querySelector('.na-reason-input'); if (inp && !inp.value.trim()) errors.push(key+': justification required to mark a critical item N/A'); } });
+    // critical override needs a reason
+    document.querySelectorAll('.crit-override-check:checked').forEach(function(chk){ var w = chk.closest('.crit-override'); var inp = w && w.querySelector('.override-reason-input'); if (inp && !inp.value.trim()) errors.push('A critical override needs a justification'); });
+    // finding override reason
+    var fw = document.getElementById('finding-override-wrap'); if (fw && !fw.classList.contains('hidden')) { var fr = document.getElementById('finding-override-reason'); if (fr && !fr.value.trim()) errors.push('Reason required for overriding the suggested finding'); }
+    if (errors.length) { e.preventDefault(); alert('Please resolve:\n\n• ' + errors.join('\n• ')); }
+  });
 
-  // Auto-fill project fields when a job is selected
-  const jobSelect = document.getElementById('job-select');
-  if (jobSelect) {
-    jobSelect.addEventListener('change', function() {
-      const opt = this.options[this.selectedIndex];
-      if (!opt || !opt.value) return;
-      const n = opt.getAttribute('data-job-name') || '';
-      const num = opt.getAttribute('data-job-number') || '';
-      const client = opt.getAttribute('data-client') || '';
-      const site = opt.getAttribute('data-site') || '';
-      const suburb = opt.getAttribute('data-suburb') || '';
-      // Don't auto-fill from job_name — that's a 4-part pipe-concat
-      // (`J-XXXX | Client | Suburb | Date`) that reads badly as a
-      // Project / Site label. Use a clean `job-number — client` instead.
-      const fields = {
-        'f-project_site': num + (client ? ' — ' + client : ''),
-        'f-client': client,
-        'f-location': [site, suburb].filter(Boolean).join(', '),
-      };
-      Object.keys(fields).forEach(function(id) {
-        const el = document.getElementById(id);
-        if (el && !el.value && fields[id]) el.value = fields[id];
-      });
-    });
-  }
+  var jobSelect = document.getElementById('job-select');
+  if (jobSelect) jobSelect.addEventListener('change', function() { var opt = this.options[this.selectedIndex]; if (!opt||!opt.value) return; var num=opt.getAttribute('data-job-number')||'',client=opt.getAttribute('data-client')||'',site=opt.getAttribute('data-site')||'',suburb=opt.getAttribute('data-suburb')||''; var fields={'f-project_site':num+(client?' — '+client:''),'f-client':client,'f-location':[site,suburb].filter(Boolean).join(', ')}; Object.keys(fields).forEach(function(id){ var el=document.getElementById(id); if (el&&!el.value&&fields[id]) el.value=fields[id]; }); });
 
-  // Auto-draft: on first field interaction, create a draft server-side so uploads can work
-  let draftCreating = false;
+  var draftCreating = false;
   function maybeAutoDraft() {
     if (window.AUDIT_IS_EDIT || draftCreating) return;
     draftCreating = true;
-    const form = document.getElementById('auditForm');
-    const fd = new FormData(form);
-    const body = new URLSearchParams();
-    for (const [k, v] of fd.entries()) body.append(k, v);
+    var form = document.getElementById('auditForm');
+    var fd = new FormData(form); var body = new URLSearchParams();
+    for (var pair of fd.entries()) body.append(pair[0], pair[1]);
     body.set('_csrf', window.AUDIT_CSRF);
-    fetch('/audits/draft', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': window.AUDIT_CSRF, 'Accept': 'application/json' },
-      body: body.toString(),
-      credentials: 'same-origin'
-    }).then(function(r) { return r.json(); })
-      .then(function(data) {
-        if (data && data.ok && data.id) {
-          // Redirect to edit URL so uploads become available. Preserve current scroll roughly.
-          try { sessionStorage.setItem('auditScrollY', String(window.scrollY)); } catch (e) {}
-          window.location.replace('/audits/' + data.id + '/edit');
-        } else {
-          draftCreating = false;
-        }
-      }).catch(function() { draftCreating = false; });
+    fetch('/audits/draft', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':window.AUDIT_CSRF,'Accept':'application/json'}, body: body.toString(), credentials:'same-origin' })
+      .then(function(r){ return r.json(); }).then(function(data){ if (data&&data.ok&&data.id) { try { sessionStorage.setItem('auditScrollY', String(window.scrollY)); } catch(e){} window.location.replace('/audits/'+data.id+'/edit'); } else draftCreating=false; }).catch(function(){ draftCreating=false; });
   }
+  try { var y = sessionStorage.getItem('auditScrollY'); if (y) { window.scrollTo(0, parseInt(y,10)||0); sessionStorage.removeItem('auditScrollY'); } } catch(e){}
 
-  // Restore scroll after auto-draft redirect
-  try {
-    const y = sessionStorage.getItem('auditScrollY');
-    if (y) { window.scrollTo(0, parseInt(y, 10) || 0); sessionStorage.removeItem('auditScrollY'); }
-  } catch (e) {}
-
+  syncCrewRows();
+  document.querySelectorAll('[data-crit-override]').forEach(function(w){ updateCritOverride(w.getAttribute('data-crit-override')); });
   recalc();
 
-  // ---- Upload blocks: fetch-based so we can sit inside the main form ----
-  function uplSetBusy(block, busy, err) {
-    const prog = block.querySelector('.upl-progress');
-    const errEl = block.querySelector('.upl-error');
-    if (prog) prog.classList.toggle('hidden', !busy);
-    if (errEl) {
-      if (err) { errEl.textContent = err; errEl.classList.remove('hidden'); }
-      else { errEl.classList.add('hidden'); errEl.textContent = ''; }
-    }
-  }
-  function uplRenderAttachment(att) {
-    const isImg = (att.mime_type || '').startsWith('image/');
-    const div = document.createElement('div');
-    div.className = 'group relative bg-gray-50 border border-gray-200 rounded-lg overflow-hidden';
-    div.setAttribute('data-att-id', att.id);
-    const eName = (att.original_name || 'file').replace(/"/g, '&quot;');
-    const eMime = (att.mime_type || '').replace(/"/g, '&quot;');
-    const thumb = isImg
-      ? '<a href="' + att.file_path + '" data-lightbox data-lightbox-name="' + eName + '" data-lightbox-mime="' + eMime + '"><img src="' + att.file_path + '" class="w-full h-20 sm:h-24 object-cover"></a>'
-      : '<a href="' + att.file_path + '" data-lightbox data-lightbox-name="' + eName + '" data-lightbox-mime="' + eMime + '" class="flex items-center justify-center h-20 sm:h-24 bg-gray-100 text-xs text-gray-500 px-2 text-center break-words">' + (att.original_name || 'file') + '</a>';
-    const caption = att.caption ? '<p class="text-[10px] text-gray-600 truncate px-1.5 py-1 bg-white border-t border-gray-100">' + att.caption + '</p>' : '';
-    div.innerHTML = thumb + caption + '<button type="button" class="upl-delete absolute top-1 right-1 w-6 h-6 bg-red-600 hover:bg-red-700 text-white rounded-full text-xs font-bold opacity-80 sm:opacity-0 group-hover:opacity-100 focus:opacity-100 transition" title="Delete" data-att-id="' + att.id + '">×</button>';
-    return div;
-  }
-  async function uplDoUpload(block, files) {
-    if (!files || !files.length) return;
-    const auditId = block.getAttribute('data-audit-id');
-    const ctx = block.getAttribute('data-context-key');
-    const captionEl = block.querySelector('.upl-caption');
-    const caption = captionEl ? captionEl.value : '';
-    uplSetBusy(block, true, '');
-    try {
-      const fd = new FormData();
-      fd.append('context_key', ctx);
-      if (caption) fd.append('caption', caption);
-      for (let i = 0; i < files.length; i++) fd.append('files', files[i]);
-      const r = await fetch('/audits/' + auditId + '/attachments?json=1', {
-        method: 'POST',
-        body: fd,
-        credentials: 'same-origin',
-        headers: { 'Accept': 'application/json', 'X-CSRF-Token': window.AUDIT_CSRF }
-      });
-      if (!r.ok) throw new Error('Upload failed (HTTP ' + r.status + ')');
-      const data = await r.json();
-      if (!data.ok) throw new Error(data.error || 'Upload failed');
-      const grid = block.querySelector('.upl-grid');
-      (data.attachments || []).forEach(function(att) { grid.appendChild(uplRenderAttachment(att)); });
-      grid.classList.remove('hidden');
-      if (captionEl) captionEl.value = '';
-    } catch (e) {
-      uplSetBusy(block, false, e.message || 'Upload failed');
-      return;
-    }
-    uplSetBusy(block, false, '');
-  }
-
-  document.addEventListener('change', function(e) {
-    if (e.target.matches('.upl-file') || e.target.matches('.upl-camera')) {
-      const block = e.target.closest('[data-upload-block]');
-      if (!block) return;
-      const files = e.target.files;
-      uplDoUpload(block, files);
-      e.target.value = '';
-    }
-  });
-  document.addEventListener('click', function(e) {
-    const btn = e.target.closest('.upl-delete');
-    if (!btn) return;
-    const block = btn.closest('[data-upload-block]');
-    if (!block) return;
-    if (!confirm('Delete this file?')) return;
-    const auditId = block.getAttribute('data-audit-id');
-    const attId = btn.getAttribute('data-att-id');
-    fetch('/audits/' + auditId + '/attachments/' + attId + '/delete?json=1', {
-      method: 'POST',
-      credentials: 'same-origin',
-      headers: { 'Accept': 'application/json', 'X-CSRF-Token': window.AUDIT_CSRF }
-    }).then(function(r) { return r.json(); }).then(function(data) {
-      if (data && data.ok) {
-        const wrap = btn.closest('[data-att-id]');
-        if (wrap) wrap.remove();
-        const grid = block.querySelector('.upl-grid');
-        if (grid && !grid.children.length) grid.classList.add('hidden');
-      } else {
-        alert((data && data.error) || 'Delete failed');
-      }
-    }).catch(function() { alert('Delete failed'); });
-  });
+  // ---- Upload blocks (fetch-based, sit inside the main form) ----
+  function uplSetBusy(block, busy, err){ var prog=block.querySelector('.upl-progress'),errEl=block.querySelector('.upl-error'); if(prog)prog.classList.toggle('hidden',!busy); if(errEl){ if(err){errEl.textContent=err;errEl.classList.remove('hidden');}else{errEl.classList.add('hidden');errEl.textContent='';}} }
+  function uplRenderAttachment(att){ var isImg=(att.mime_type||'').startsWith('image/'); var div=document.createElement('div'); div.className='group relative bg-gray-50 border border-gray-200 rounded-lg overflow-hidden'; div.setAttribute('data-att-id',att.id); var thumb=isImg?'<a href="'+att.file_path+'"><img src="'+att.file_path+'" class="w-full h-20 sm:h-24 object-cover"></a>':'<a href="'+att.file_path+'" class="flex items-center justify-center h-20 sm:h-24 bg-gray-100 text-xs text-gray-500 px-2 text-center break-words">'+(att.original_name||'file')+'</a>'; div.innerHTML=thumb+'<button type="button" class="upl-delete absolute top-1 right-1 w-6 h-6 bg-red-600 text-white rounded-full text-xs font-bold opacity-80 group-hover:opacity-100 transition" data-att-id="'+att.id+'">×</button>'; return div; }
+  async function uplDoUpload(block, files){ if(!files||!files.length)return; var auditId=block.getAttribute('data-audit-id'),ctx=block.getAttribute('data-context-key'),captionEl=block.querySelector('.upl-caption'),caption=captionEl?captionEl.value:''; uplSetBusy(block,true,''); try { var fd=new FormData(); fd.append('context_key',ctx); if(caption)fd.append('caption',caption); for(var i=0;i<files.length;i++)fd.append('files',files[i]); var r=await fetch('/audits/'+auditId+'/attachments?json=1',{method:'POST',body:fd,credentials:'same-origin',headers:{'Accept':'application/json','X-CSRF-Token':window.AUDIT_CSRF}}); if(!r.ok)throw new Error('Upload failed'); var data=await r.json(); if(!data.ok)throw new Error(data.error||'Upload failed'); var grid=block.querySelector('.upl-grid'); (data.attachments||[]).forEach(function(att){ grid.appendChild(uplRenderAttachment(att)); }); grid.classList.remove('hidden'); if(captionEl)captionEl.value=''; } catch(e){ uplSetBusy(block,false,e.message||'Upload failed'); return; } uplSetBusy(block,false,''); }
+  document.addEventListener('change', function(e){ if(e.target.matches('.upl-file')||e.target.matches('.upl-camera')){ var block=e.target.closest('[data-upload-block]'); if(!block)return; uplDoUpload(block,e.target.files); e.target.value=''; } });
+  document.addEventListener('click', function(e){ var btn=e.target.closest('.upl-delete'); if(!btn)return; var block=btn.closest('[data-upload-block]'); if(!block)return; if(!confirm('Delete this file?'))return; var auditId=block.getAttribute('data-audit-id'),attId=btn.getAttribute('data-att-id'); fetch('/audits/'+auditId+'/attachments/'+attId+'/delete?json=1',{method:'POST',credentials:'same-origin',headers:{'Accept':'application/json','X-CSRF-Token':window.AUDIT_CSRF}}).then(function(r){return r.json();}).then(function(data){ if(data&&data.ok){ var wrap=btn.closest('[data-att-id]'); if(wrap)wrap.remove(); } }); });
 })();
 </script>

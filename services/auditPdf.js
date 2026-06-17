@@ -73,8 +73,15 @@ function ucFirst(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—';
 
 function generateAuditPdf(opts, out) {
   const { audit: a, responses, sectionComments, nonconformances,
-    score, attachmentsByContext } = opts;
+    score, attachmentsByContext, sections } = opts;
   const ctxMap = attachmentsByContext || {};
+
+  // Render from the audit's (template) section list when provided, else fall
+  // back to the legacy AUDIT_SECTIONS catalogue. Normalised to { key, title,
+  // questions:[{key,text}] } so the loops below are template-agnostic.
+  const SECTIONS = (sections && sections.length)
+    ? sections.map(function (s) { return { key: s.key, title: s.title, questions: (s.questions || []).map(function (q) { return { key: q.key, text: q.text }; }) }; })
+    : AUDIT_SECTIONS.map(function (s) { return { key: s.key, title: s.title, questions: s.items.map(function (t, i) { return { key: s.key + '.' + (i + 1), text: t }; }) }; });
 
   const doc = new PDFDocument({
     size: 'A4',
@@ -190,14 +197,12 @@ function generateAuditPdf(opts, out) {
 
   // ── FIX 7: Findings Summary on cover page ──
   var failures = [];
-  AUDIT_SECTIONS.forEach(function (sec) {
-    sec.items.forEach(function (item, idx) {
-      var key = sec.key + '.' + (idx + 1);
-      var r = responses[key] || {};
+  SECTIONS.forEach(function (sec) {
+    sec.questions.forEach(function (q) {
+      var r = responses[q.key] || {};
       if (normaliseState(r) === 'no') {
-        // Keep the full item text — PDFKit's pixel-width ellipsis trims on
-        // render. Hard char truncation was cutting mid-word (e.g. "operatin…").
-        failures.push({ key: key, item: item, section: sec.title });
+        // Keep the full item text — PDFKit's pixel-width ellipsis trims on render.
+        failures.push({ key: q.key, item: q.text, section: sec.title });
       }
     });
   });
@@ -302,7 +307,7 @@ function generateAuditPdf(opts, out) {
   /* ═══════════════════════════════════════════════════════════
      CHECKLIST SECTIONS
      ═══════════════════════════════════════════════════════════ */
-  AUDIT_SECTIONS.forEach(function (section) {
+  SECTIONS.forEach(function (section) {
     need(40);
 
     // Section header bar
@@ -312,8 +317,8 @@ function generateAuditPdf(opts, out) {
     txt(section.key + '.  ' + section.title, ML + 8, hY + 5, { width: pw - 60 });
     // Section score
     var sYes = 0, sMax = 0;
-    section.items.forEach(function (_, idx) {
-      var st = normaliseState(responses[section.key + '.' + (idx + 1)]);
+    section.questions.forEach(function (q) {
+      var st = normaliseState(responses[q.key]);
       if (st === 'yes') { sYes++; sMax++; } else if (st === 'no') { sMax++; }
     });
     var sPct = sMax ? Math.round(sYes / sMax * 100) : 0;
@@ -331,10 +336,9 @@ function generateAuditPdf(opts, out) {
     setY(colHY + 13);
 
     // Collect items with state for N/A collapsing (Fix 5)
-    var items = section.items.map(function (item, idx) {
-      var key = section.key + '.' + (idx + 1);
-      var r = responses[key] || {};
-      return { key: key, item: item, r: r, state: normaliseState(r) };
+    var items = section.questions.map(function (q) {
+      var r = responses[q.key] || {};
+      return { key: q.key, item: q.text, r: r, state: normaliseState(r) };
     });
 
     var ii = 0;
