@@ -123,8 +123,14 @@ app.use(session({
   secret: process.env.SESSION_SECRET || (isProduction ? (() => { console.warn('WARNING: SESSION_SECRET not set in production!'); return require('crypto').randomBytes(32).toString('hex'); })() : 'dev-session-secret'),
   resave: false,
   saveUninitialized: false,
+  // rolling: refresh the cookie's expiry on every response so an active
+  // user is never logged out mid-use. Combined with the 30-day maxAge this
+  // means people only re-login after 30 days of *no* visits — phones and
+  // PCs stay signed in independently. (Sessions surviving restarts also
+  // requires a fixed SESSION_SECRET — see the warning below.)
+  rolling: true,
   cookie: {
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
     httpOnly: true,
     secure: isProduction,
     sameSite: 'lax',
