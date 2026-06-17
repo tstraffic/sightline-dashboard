@@ -8,6 +8,7 @@ const { SCORE_GROUPS, computeScore } = require('../lib/auditQuestions');
 const { resolveForAudit, getActiveTemplateVersion } = require('../lib/auditTemplate');
 const { getOnSiteCrew, resolveEmployeeForCrew, syncAuditReviews } = require('../lib/auditCrew');
 const { syncCorrectiveActionsFromAudit } = require('../lib/auditActions');
+const { decorateCrewCompetency } = require('../lib/auditCompetencyCheck');
 
 // Build { questionKey: {text, is_critical, risk_band} } from resolved template sections.
 function questionMetaOf(tpl) {
@@ -309,6 +310,7 @@ router.get('/new', (req, res) => {
   const db = getDb();
   const jobs = db.prepare("SELECT id, job_number, job_name, client, site_address, suburb FROM jobs WHERE status NOT IN ('closed','completed','cancelled') ORDER BY job_number").all();
   const { tpl, workType, timeOfDay, onSiteCrew } = contextFor(db, { audit: null, b: {} });
+  decorateCrewCompetency(db, onSiteCrew);
   res.render('audits/form', {
     title: 'New Site Audit', audit: null,
     responses: {}, sectionComments: {}, nonconformances: [], attachments: [], attachmentsByContext: {},
@@ -478,6 +480,7 @@ router.get('/:id/edit', (req, res) => {
   const v = loadAuditView(db, audit);
   const jobs = db.prepare("SELECT id, job_number, job_name, client, site_address, suburb FROM jobs ORDER BY job_number").all();
   const onSiteCrew = getOnSiteCrew(db, audit.job_id, dateOf(audit.audit_datetime));
+  decorateCrewCompetency(db, onSiteCrew);
   res.render('audits/form', {
     title: 'Edit Audit #' + audit.id, audit,
     responses: v.responses, sectionComments: v.sectionComments, nonconformances: v.nonconformances,

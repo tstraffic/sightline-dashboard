@@ -102,9 +102,10 @@
         <% } else { %>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="crew-list">
             <% crew.forEach(function(c){ const checked = selectedCrewIds.indexOf(c.crew_member_id) !== -1; %>
-              <label class="flex items-center gap-2 px-3 py-2 rounded-lg border <%= c.linked ? 'border-gray-200' : 'border-amber-300 bg-amber-50' %>">
+              <label class="flex items-center gap-2 px-3 py-2 rounded-lg border <%= c.ticketExpired ? 'border-red-300 bg-red-50' : (c.linked ? 'border-gray-200' : 'border-amber-300 bg-amber-50') %>">
                 <input type="checkbox" class="crew-check w-4 h-4 rounded border-gray-300" name="crew_member_ids" value="<%= c.crew_member_id %>" data-linked="<%= c.linked ? '1':'0' %>" <%= checked ? 'checked' : '' %>>
                 <span class="text-sm text-gray-800 flex-1 min-w-0 truncate"><%= c.full_name %><% if (c.role_on_site) { %> <span class="text-gray-400">· <%= c.role_on_site %></span><% } %></span>
+                <% if (c.ticketExpired) { %><span class="text-[10px] font-semibold text-red-700 whitespace-nowrap" title="<%= c.ticketWarning %>">⚠ ticket</span><% } %>
                 <% if (!c.linked) { %><span class="text-[10px] font-semibold text-amber-700 whitespace-nowrap" title="No HR profile linked — can't tag this worker">no HR link</span><% } %>
               </label>
             <% }) %>

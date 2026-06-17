@@ -362,6 +362,33 @@ function generateNotifications() {
       if (result.changes > 0) sendTeamsNotification(title, msg, link).catch(() => {});
     }
 
+    // 4b. Repeat offenders — workers crossing the per-person audit-tag threshold
+    try {
+      const cfg = db.prepare('SELECT threshold_count, window_days, min_risk_level, enabled FROM audit_repeat_offender_config WHERE id = 1').get()
+        || { threshold_count: 3, window_days: 90, enabled: 1 };
+      if (cfg.enabled) {
+        const offenders = db.prepare(`
+          SELECT t.crew_member_id, COALESCE(cm.full_name, t.worker_name_snapshot) AS name, COUNT(*) AS hits
+          FROM audit_question_tags t
+          JOIN site_audits a ON a.id = t.audit_id
+          LEFT JOIN crew_members cm ON cm.id = t.crew_member_id
+          WHERE t.crew_member_id IS NOT NULL AND a.audit_datetime >= date('now', ?)
+          GROUP BY t.crew_member_id
+          HAVING COUNT(*) >= ?
+        `).all('-' + (cfg.window_days || 90) + ' days', cfg.threshold_count || 3);
+        for (const o of offenders) {
+          const emp = db.prepare('SELECT id FROM employees WHERE linked_crew_member_id = ? ORDER BY id LIMIT 1').get(o.crew_member_id);
+          if (emp) {
+            try { db.prepare('UPDATE employees SET repeat_offender_flagged_at = CURRENT_TIMESTAMP, repeat_offender_count = ? WHERE id = ?').run(o.hits, emp.id); } catch (e) {}
+          }
+          const title = 'Repeat issue: ' + (o.name || ('Crew #' + o.crew_member_id));
+          const msg = (o.name || 'A worker') + ' has ' + o.hits + ' audit non-conformances in the last ' + (cfg.window_days || 90) + ' days — review and consider training.';
+          const link = emp ? ('/hr/employees/' + emp.id) : '/audits/reports';
+          for (const u of mgmtUsers) insertAndTrack(u.id, 'repeat_offender', title, msg, link, null);
+        }
+      }
+    } catch (e) { console.error('[notifications] repeat-offender sweep error:', e.message); }
+
     // 5. Follow-ups due
     const followUps = db.prepare(`
       SELECT cl.id, cl.subject, cl.logged_by_id, cl.job_id, j.job_number
