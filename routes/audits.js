@@ -55,6 +55,18 @@ function firstTrim(v) { return firstVal(v).trim(); }
 function arrayify(v) { return Array.isArray(v) ? v : (v != null && v !== '' ? [v] : []); }
 function dateOf(dt) { return (dt || '').slice(0, 10); }
 
+// Drawn-signature capture (mirrors routes/equipmentHireDockets.js writeSignaturePng).
+const AUDIT_SIG_SLOTS = new Set(['auditor', 'supervisor']);
+function writeSignaturePng(dest, dataUrl) {
+  const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec((dataUrl || '').replace(/\s+/g, ''));
+  if (!m) return false;
+  const buf = Buffer.from(m[1], 'base64');
+  if (buf.length === 0 || buf.length > 500 * 1024) return false;
+  fs.mkdirSync(path.dirname(dest), { recursive: true });
+  fs.writeFileSync(dest, buf);
+  return true;
+}
+
 // ── Build responses_json from the form body, driven by the resolved template
 // question list (so it works for both the new template and legacy fallback). ──
 function buildResponsesFromBody(b, scoringQuestions) {
@@ -586,11 +598,36 @@ router.post('/:id/attachments/:attId/delete', (req, res) => {
   res.redirect(req.body.return_to || ('/audits/' + req.params.id));
 });
 
+// POST /:id/signature/:slot — save a drawn signature (base64 PNG → disk)
+router.post('/:id/signature/:slot', (req, res) => {
+  const wantJson = req.query.json === '1' || (req.headers.accept || '').includes('application/json');
+  const db = getDb();
+  const slot = req.params.slot;
+  if (!AUDIT_SIG_SLOTS.has(slot)) { if (wantJson) return res.status(400).json({ ok: false, error: 'Invalid slot' }); return res.redirect('/audits/' + req.params.id); }
+  const audit = db.prepare('SELECT id FROM site_audits WHERE id = ?').get(req.params.id);
+  if (!audit) { if (wantJson) return res.status(404).json({ ok: false, error: 'Audit not found' }); req.flash('error', 'Audit not found.'); return res.redirect('/audits'); }
+  const filename = slot + '-' + Date.now() + '.png';
+  const dest = path.join(__dirname, '..', 'data', 'uploads', 'audits', String(req.params.id), 'signatures', filename);
+  if (!writeSignaturePng(dest, req.body.signature_data)) {
+    if (wantJson) return res.status(400).json({ ok: false, error: 'Invalid signature image' });
+    req.flash('error', 'Could not save signature.'); return res.redirect('/audits/' + req.params.id + '/edit');
+  }
+  db.prepare(`UPDATE site_audits SET ${slot}_signature_path = ?, ${slot}_signed_at = COALESCE(${slot}_signed_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
+    .run(filename, req.params.id);
+  if (wantJson) return res.json({ ok: true, path: filename });
+  res.redirect('/audits/' + req.params.id + '/edit#signoff');
+});
+
 // POST /:id/sign-off — final sign-off + write tagged exceptions to HR Reviews
 router.post('/:id/sign-off', (req, res) => {
   const db = getDb();
   const audit = db.prepare('SELECT * FROM site_audits WHERE id = ?').get(req.params.id);
   if (!audit) { req.flash('error', 'Audit not found.'); return res.redirect('/audits'); }
+  // Require at least the auditor's signature (drawn or typed) before locking.
+  if (!audit.auditor_signature_path && !audit.auditor_signature_text) {
+    req.flash('error', 'Capture the auditor signature before signing off.');
+    return res.redirect('/audits/' + req.params.id + '/edit#signoff');
+  }
   db.prepare(`UPDATE site_audits SET status='signed_off', signed_off_by_id=?, signed_off_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(req.session.user.id, req.params.id);
 
   let review;

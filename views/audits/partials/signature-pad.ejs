@@ -1,0 +1,22 @@
+<%
+  // args: slot ('auditor'|'supervisor'), label, auditId, currentPath, signedAt, fallbackName
+  const _cur = (typeof currentPath !== 'undefined' && currentPath) ? currentPath : '';
+  const _signed = (typeof signedAt !== 'undefined' && signedAt) ? signedAt : '';
+%>
+<div class="audit-sig" data-slot="<%= slot %>" data-audit-id="<%= auditId %>">
+  <label class="block text-xs font-semibold text-gray-700 mb-1"><%= label %> signature</label>
+  <div class="audit-sig-saved <%= _cur ? '' : 'hidden' %> mb-2">
+    <img class="audit-sig-img h-16 border border-gray-200 rounded bg-white" src="<%= _cur ? '/data/uploads/audits/' + auditId + '/signatures/' + _cur : '' %>" alt="signature">
+    <span class="text-[11px] text-emerald-700 ml-1 align-middle">✓ captured</span>
+  </div>
+  <div class="rounded-lg border-2 border-dashed border-gray-300 bg-white">
+    <canvas class="audit-sig-pad w-full block" style="height:96px; touch-action:none;"></canvas>
+  </div>
+  <div class="flex items-center gap-2 mt-1">
+    <button type="button" class="audit-sig-clear text-xs text-gray-500 hover:text-gray-800">Clear</button>
+    <button type="button" class="audit-sig-save px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg">Save signature</button>
+    <span class="audit-sig-status text-[11px]"></span>
+  </div>
+  <input name="<%= slot %>_signature_text" value="<%= fallbackName || '' %>" placeholder="…or type full name" class="w-full mt-2 px-3 py-2 text-sm border border-gray-300 rounded-lg italic" style="font-family:'Brush Script MT','Segoe Script',cursive;">
+  <% if (_signed) { %><p class="text-[11px] text-emerald-700 mt-1">✓ Signed <%= new Date(_signed).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) %></p><% } %>
+</div>
