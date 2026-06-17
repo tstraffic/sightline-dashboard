@@ -13297,6 +13297,395 @@ function runMigrations(db) {
     }
   }
 
+  // =====================================================================
+  // Migrations 280–293: SAFETY AUDIT REDESIGN — foundation schema
+  // DB-backed versioned question templates, per-person tagging, crew-on-
+  // audit, unified corrective-actions register, audit→incident linkage,
+  // risk-weighted scoring + drawn-signature columns, repeat-offender infra,
+  // and cross-audit reporting indexes. See the audit-redesign plan.
+  // NOTE on ordering: the corrective_actions rebuild (284) runs BEFORE
+  // audit_question_tags (288) so no new table holds an FK to the table
+  // while it is dropped/recreated (avoids the _incidents_old_266-style
+  // dangling-FK bug left by migration 266).
+  // =====================================================================
+
+  // 280: audit templates + immutable published versions
+  if (!isMigrationApplied.get(280)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS audit_templates (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          code TEXT UNIQUE NOT NULL,
+          name TEXT NOT NULL,
+          description TEXT DEFAULT '',
+          is_active INTEGER NOT NULL DEFAULT 1,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS audit_template_versions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          template_id INTEGER NOT NULL REFERENCES audit_templates(id) ON DELETE CASCADE,
+          version_number INTEGER NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','published','archived')),
+          notes TEXT DEFAULT '',
+          published_at DATETIME,
+          published_by_id INTEGER REFERENCES users(id),
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(template_id, version_number)
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_tpl_versions_tpl ON audit_template_versions(template_id, status);
+      `);
+      recordMigration.run(280, 'audit_templates + audit_template_versions');
+      console.log('Migration 280 applied');
+    } catch (e) { console.error('Migration 280 error:', e.message); }
+  }
+
+  // 281: template sections + questions (metadata-bearing)
+  if (!isMigrationApplied.get(281)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS audit_template_sections (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          template_version_id INTEGER NOT NULL REFERENCES audit_template_versions(id) ON DELETE CASCADE,
+          section_key TEXT NOT NULL,
+          title TEXT NOT NULL,
+          score_group TEXT DEFAULT '',
+          sort_order INTEGER DEFAULT 0,
+          UNIQUE(template_version_id, section_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_tpl_sections_ver ON audit_template_sections(template_version_id);
+        CREATE TABLE IF NOT EXISTS audit_template_questions (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          template_version_id INTEGER NOT NULL REFERENCES audit_template_versions(id) ON DELETE CASCADE,
+          section_id INTEGER NOT NULL REFERENCES audit_template_sections(id) ON DELETE CASCADE,
+          question_key TEXT NOT NULL,
+          question_number TEXT DEFAULT '',
+          text TEXT NOT NULL,
+          scoring_mode TEXT NOT NULL DEFAULT 'site_level' CHECK(scoring_mode IN ('site_level','per_person')),
+          risk_weight INTEGER NOT NULL DEFAULT 1,
+          risk_band TEXT NOT NULL DEFAULT 'Low' CHECK(risk_band IN ('Low','Medium','High','Critical')),
+          is_critical INTEGER NOT NULL DEFAULT 0,
+          nsw_reference TEXT DEFAULT '',
+          competency_check_type TEXT DEFAULT '',
+          applies_all INTEGER NOT NULL DEFAULT 1,
+          sort_order INTEGER DEFAULT 0,
+          UNIQUE(template_version_id, question_key)
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_tpl_questions_ver ON audit_template_questions(template_version_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_tpl_questions_sec ON audit_template_questions(section_id);
+      `);
+      recordMigration.run(281, 'audit_template_sections + audit_template_questions');
+      console.log('Migration 281 applied');
+    } catch (e) { console.error('Migration 281 error:', e.message); }
+  }
+
+  // 282: work-type × time-of-day applicability join
+  if (!isMigrationApplied.get(282)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS audit_question_applicability (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          question_id INTEGER NOT NULL REFERENCES audit_template_questions(id) ON DELETE CASCADE,
+          work_type TEXT NOT NULL CHECK(work_type IN ('static','mobile','shoulder','intersection')),
+          time_of_day TEXT NOT NULL CHECK(time_of_day IN ('day','night')),
+          UNIQUE(question_id, work_type, time_of_day)
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_q_applic_q ON audit_question_applicability(question_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_q_applic_match ON audit_question_applicability(work_type, time_of_day);
+      `);
+      recordMigration.run(282, 'audit_question_applicability');
+      console.log('Migration 282 applied');
+    } catch (e) { console.error('Migration 282 error:', e.message); }
+  }
+
+  // 283: pin each audit to its template version + work-type / time-of-day
+  if (!isMigrationApplied.get(283)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(site_audits)").all().map(c => c.name);
+      if (!cols.includes('template_version_id')) db.exec("ALTER TABLE site_audits ADD COLUMN template_version_id INTEGER REFERENCES audit_template_versions(id)");
+      if (!cols.includes('work_type')) db.exec("ALTER TABLE site_audits ADD COLUMN work_type TEXT DEFAULT 'static'");
+      if (!cols.includes('time_of_day')) db.exec("ALTER TABLE site_audits ADD COLUMN time_of_day TEXT DEFAULT 'day'");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_site_audits_tplver ON site_audits(template_version_id)");
+      recordMigration.run(283, 'site_audits: template_version_id + work_type + time_of_day');
+      console.log('Migration 283 applied');
+    } catch (e) { console.error('Migration 283 error:', e.message); }
+  }
+
+  // 284: REBUILD corrective_actions — make incident_id/job_id/due_date nullable
+  // and FIX the dangling FK left by migration 266 (it still references the
+  // dropped _incidents_old_266). Audit-sourced NCs have no parent incident.
+  if (!isMigrationApplied.get(284)) {
+    try {
+      const caInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='corrective_actions'").get();
+      const needsRebuild = caInfo && /incident_id\s+INTEGER\s+NOT\s+NULL/i.test(caInfo.sql);
+      if (needsRebuild) {
+        db.exec('PRAGMA foreign_keys = OFF');
+        db.exec('PRAGMA legacy_alter_table = ON');
+        const tx = db.transaction(() => {
+          db.exec('ALTER TABLE corrective_actions RENAME TO _corrective_actions_old_284');
+          db.exec(`
+            CREATE TABLE corrective_actions (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              incident_id INTEGER REFERENCES incidents(id) ON DELETE SET NULL,
+              job_id INTEGER REFERENCES jobs(id) ON DELETE CASCADE,
+              description TEXT NOT NULL,
+              assigned_to_id INTEGER REFERENCES users(id),
+              due_date DATE,
+              status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','in_progress','completed','overdue','cancelled')),
+              completed_date DATE,
+              completion_notes TEXT DEFAULT '',
+              priority TEXT NOT NULL DEFAULT 'medium' CHECK(priority IN ('low','medium','high','critical')),
+              task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+          `);
+          const cols = 'id, incident_id, job_id, description, assigned_to_id, due_date, status, completed_date, completion_notes, priority, task_id, created_at, updated_at';
+          db.exec(`INSERT INTO corrective_actions (${cols}) SELECT ${cols} FROM _corrective_actions_old_284`);
+          db.exec('DROP TABLE _corrective_actions_old_284');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_corrective_actions_incident ON corrective_actions(incident_id)');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_corrective_actions_status ON corrective_actions(status)');
+          db.exec('CREATE INDEX IF NOT EXISTS idx_corrective_actions_due ON corrective_actions(due_date)');
+        });
+        tx();
+        db.exec('PRAGMA legacy_alter_table = OFF');
+        db.exec('PRAGMA foreign_keys = ON');
+      }
+      recordMigration.run(284, 'corrective_actions: nullable incident_id/job_id/due_date + fix dangling incidents FK');
+      console.log('Migration 284 applied');
+    } catch (e) { console.error('Migration 284 error:', e.message); }
+  }
+
+  // 285: corrective_actions — audit source + involved person + close-out columns
+  if (!isMigrationApplied.get(285)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(corrective_actions)").all().map(c => c.name);
+      const adds = [
+        ['source_type', "ALTER TABLE corrective_actions ADD COLUMN source_type TEXT DEFAULT 'incident'"],
+        ['source_audit_id', "ALTER TABLE corrective_actions ADD COLUMN source_audit_id INTEGER REFERENCES site_audits(id) ON DELETE SET NULL"],
+        ['source_question_key', "ALTER TABLE corrective_actions ADD COLUMN source_question_key TEXT DEFAULT ''"],
+        ['involved_employee_id', "ALTER TABLE corrective_actions ADD COLUMN involved_employee_id INTEGER REFERENCES employees(id)"],
+        ['involved_crew_member_id', "ALTER TABLE corrective_actions ADD COLUMN involved_crew_member_id INTEGER REFERENCES crew_members(id)"],
+        ['involved_person_name', "ALTER TABLE corrective_actions ADD COLUMN involved_person_name TEXT DEFAULT ''"],
+        ['risk_level', "ALTER TABLE corrective_actions ADD COLUMN risk_level TEXT DEFAULT 'Low'"],
+        ['observation', "ALTER TABLE corrective_actions ADD COLUMN observation TEXT DEFAULT ''"],
+        ['closed_at', "ALTER TABLE corrective_actions ADD COLUMN closed_at DATETIME"],
+        ['closed_by_id', "ALTER TABLE corrective_actions ADD COLUMN closed_by_id INTEGER REFERENCES users(id)"],
+        ['verification', "ALTER TABLE corrective_actions ADD COLUMN verification TEXT DEFAULT ''"],
+        ['verified_by_id', "ALTER TABLE corrective_actions ADD COLUMN verified_by_id INTEGER REFERENCES users(id)"],
+        ['verified_at', "ALTER TABLE corrective_actions ADD COLUMN verified_at DATETIME"],
+      ];
+      for (const [name, sql] of adds) if (!cols.includes(name)) db.exec(sql);
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_ca_source_audit_q ON corrective_actions(source_audit_id, source_question_key) WHERE source_audit_id IS NOT NULL");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_ca_source_type ON corrective_actions(source_type)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_ca_source_audit ON corrective_actions(source_audit_id)");
+      db.exec("CREATE INDEX IF NOT EXISTS idx_ca_involved_emp ON corrective_actions(involved_employee_id)");
+      recordMigration.run(285, 'corrective_actions: audit source + involved person + close-out columns');
+      console.log('Migration 285 applied');
+    } catch (e) { console.error('Migration 285 error:', e.message); }
+  }
+
+  // 286: incidents — source linkage for audit-originated incidents (idempotent escalation)
+  if (!isMigrationApplied.get(286)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(incidents)").all().map(c => c.name);
+      if (!cols.includes('source_type')) db.exec("ALTER TABLE incidents ADD COLUMN source_type TEXT DEFAULT 'manual'");
+      if (!cols.includes('source_audit_id')) db.exec("ALTER TABLE incidents ADD COLUMN source_audit_id INTEGER REFERENCES site_audits(id) ON DELETE SET NULL");
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_incidents_source_audit ON incidents(source_audit_id) WHERE source_audit_id IS NOT NULL");
+      recordMigration.run(286, 'incidents: source_type + source_audit_id');
+      console.log('Migration 286 applied');
+    } catch (e) { console.error('Migration 286 error:', e.message); }
+  }
+
+  // 287: crew pinned to an audit (the on-site crew the auditor selects)
+  if (!isMigrationApplied.get(287)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS audit_crew (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          audit_id INTEGER NOT NULL REFERENCES site_audits(id) ON DELETE CASCADE,
+          crew_member_id INTEGER NOT NULL REFERENCES crew_members(id),
+          employee_id INTEGER REFERENCES employees(id),
+          full_name TEXT DEFAULT '',
+          role_on_site TEXT DEFAULT '',
+          source TEXT DEFAULT 'allocation' CHECK(source IN ('allocation','roster','manual')),
+          added_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(audit_id, crew_member_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_audit_crew_audit ON audit_crew(audit_id);
+        CREATE INDEX IF NOT EXISTS idx_audit_crew_crew ON audit_crew(crew_member_id);
+      `);
+      recordMigration.run(287, 'audit_crew');
+      console.log('Migration 287 applied');
+    } catch (e) { console.error('Migration 287 error:', e.message); }
+  }
+
+  // 288: per-person exception tags (corrective_action_id is a SOFT ref to the
+  // already-rebuilt corrective_actions — no hard FK, so we never strand it).
+  if (!isMigrationApplied.get(288)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS audit_question_tags (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          audit_id INTEGER NOT NULL REFERENCES site_audits(id) ON DELETE CASCADE,
+          question_key TEXT NOT NULL,
+          template_question_id INTEGER REFERENCES audit_template_questions(id),
+          crew_member_id INTEGER REFERENCES crew_members(id),
+          employee_id INTEGER REFERENCES employees(id),
+          worker_name_snapshot TEXT DEFAULT '',
+          issue TEXT NOT NULL DEFAULT '',
+          risk_level TEXT NOT NULL DEFAULT 'Low' CHECK(risk_level IN ('Low','Medium','High','Critical')),
+          visibility TEXT NOT NULL DEFAULT 'internal' CHECK(visibility IN ('internal','worker')),
+          employee_review_id INTEGER REFERENCES employee_reviews(id) ON DELETE SET NULL,
+          corrective_action_id INTEGER,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(audit_id, question_key, crew_member_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_aqt_audit ON audit_question_tags(audit_id);
+        CREATE INDEX IF NOT EXISTS idx_aqt_employee ON audit_question_tags(employee_id);
+        CREATE INDEX IF NOT EXISTS idx_aqt_crew ON audit_question_tags(crew_member_id);
+        CREATE INDEX IF NOT EXISTS idx_aqt_question ON audit_question_tags(question_key);
+        CREATE INDEX IF NOT EXISTS idx_aqt_review ON audit_question_tags(employee_review_id);
+      `);
+      recordMigration.run(288, 'audit_question_tags');
+      console.log('Migration 288 applied');
+    } catch (e) { console.error('Migration 288 error:', e.message); }
+  }
+
+  // 289: site_audits — risk-weighted scoring snapshot + drawn-signature paths
+  if (!isMigrationApplied.get(289)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(site_audits)").all().map(c => c.name);
+      const adds = [
+        ['score_json', "ALTER TABLE site_audits ADD COLUMN score_json TEXT DEFAULT NULL"],
+        ['score_weighted_percent', "ALTER TABLE site_audits ADD COLUMN score_weighted_percent REAL DEFAULT NULL"],
+        ['critical_fail', "ALTER TABLE site_audits ADD COLUMN critical_fail INTEGER DEFAULT 0"],
+        ['suggested_finding', "ALTER TABLE site_audits ADD COLUMN suggested_finding TEXT DEFAULT ''"],
+        ['finding_overridden', "ALTER TABLE site_audits ADD COLUMN finding_overridden INTEGER DEFAULT 0"],
+        ['finding_override_reason', "ALTER TABLE site_audits ADD COLUMN finding_override_reason TEXT DEFAULT ''"],
+        ['scoring_model_version', "ALTER TABLE site_audits ADD COLUMN scoring_model_version INTEGER DEFAULT 1"],
+        ['auditor_signature_path', "ALTER TABLE site_audits ADD COLUMN auditor_signature_path TEXT DEFAULT ''"],
+        ['supervisor_signature_path', "ALTER TABLE site_audits ADD COLUMN supervisor_signature_path TEXT DEFAULT ''"],
+      ];
+      for (const [name, sql] of adds) if (!cols.includes(name)) db.exec(sql);
+      recordMigration.run(289, 'site_audits: weighted-score snapshot + signature paths');
+      console.log('Migration 289 applied');
+    } catch (e) { console.error('Migration 289 error:', e.message); }
+  }
+
+  // 290: REBUILD notifications to add 'audit_failed' + 'repeat_offender' types.
+  // SQLite cannot ALTER a CHECK; mirrors the migration-271 rebuild exactly,
+  // appending to the CURRENT (mig-271) type list — do not reconstruct from memory.
+  if (!isMigrationApplied.get(290)) {
+    let needsExpand = true;
+    try {
+      const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='notifications'").get();
+      if (tableInfo && tableInfo.sql && tableInfo.sql.includes("'repeat_offender'")) needsExpand = false;
+    } catch (e) {}
+
+    if (needsExpand) {
+      db.exec('BEGIN TRANSACTION');
+      try {
+        const cols = db.prepare("PRAGMA table_info('notifications')").all();
+        const hasEmailSent = cols.some(c => c.name === 'email_sent_at');
+        const emailSentCol = hasEmailSent ? 'email_sent_at DATETIME,' : '';
+        const emailSentSelect = hasEmailSent ? ',email_sent_at' : '';
+
+        db.exec(`
+          CREATE TABLE notifications_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            type TEXT NOT NULL CHECK(type IN ('overdue_task','expiring_compliance','missing_update','corrective_action_due','follow_up_due','equipment_overdue','critical_defect','rol_pending','ticket_expiry','equipment_inspection_due','induction_overdue','over_budget','deadline_reminder','chat_message','weekly_summary','invoice_ready','plan_submitted','plan_tagged','audit_failed','repeat_offender','general')),
+            title TEXT NOT NULL,
+            message TEXT NOT NULL DEFAULT '',
+            link TEXT DEFAULT '',
+            job_id INTEGER REFERENCES jobs(id),
+            is_read INTEGER NOT NULL DEFAULT 0,
+            ${emailSentCol}
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          INSERT INTO notifications_new (id, user_id, type, title, message, link, job_id, is_read${emailSentSelect}, created_at)
+            SELECT id, user_id, type, title, message, link, job_id, is_read${emailSentSelect}, created_at FROM notifications;
+          DROP TABLE notifications;
+          ALTER TABLE notifications_new RENAME TO notifications;
+          CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+          CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, is_read);
+          CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+        `);
+        db.exec('COMMIT');
+        console.log('Migration 290: Expanded notifications type CHECK for audit_failed/repeat_offender');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch (r) {}
+        console.error('Migration 290 error:', e.message);
+      }
+    }
+    recordMigration.run(290, 'Expand notifications type CHECK for audit_failed + repeat_offender');
+  }
+
+  // 291: employees — repeat-offender flag (cheap HR-profile render + sweep dedupe)
+  if (!isMigrationApplied.get(291)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(employees)").all().map(c => c.name);
+      if (!cols.includes('repeat_offender_flagged_at')) db.exec("ALTER TABLE employees ADD COLUMN repeat_offender_flagged_at DATETIME");
+      if (!cols.includes('repeat_offender_tag_type')) db.exec("ALTER TABLE employees ADD COLUMN repeat_offender_tag_type TEXT DEFAULT ''");
+      if (!cols.includes('repeat_offender_count')) db.exec("ALTER TABLE employees ADD COLUMN repeat_offender_count INTEGER DEFAULT 0");
+      recordMigration.run(291, 'employees: repeat_offender flag columns');
+      console.log('Migration 291 applied');
+    } catch (e) { console.error('Migration 291 error:', e.message); }
+  }
+
+  // 292: repeat-offender threshold config (singleton)
+  if (!isMigrationApplied.get(292)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS audit_repeat_offender_config (
+          id INTEGER PRIMARY KEY CHECK(id = 1),
+          threshold_count INTEGER NOT NULL DEFAULT 3,
+          window_days INTEGER NOT NULL DEFAULT 90,
+          min_risk_level TEXT NOT NULL DEFAULT 'Medium',
+          enabled INTEGER NOT NULL DEFAULT 1,
+          updated_by_id INTEGER REFERENCES users(id),
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        INSERT OR IGNORE INTO audit_repeat_offender_config (id) VALUES (1);
+      `);
+      recordMigration.run(292, 'audit_repeat_offender_config');
+      console.log('Migration 292 applied');
+    } catch (e) { console.error('Migration 292 error:', e.message); }
+  }
+
+  // 293: cross-audit reporting indexes
+  if (!isMigrationApplied.get(293)) {
+    try {
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_site_audits_job_date ON site_audits(job_id, audit_datetime);
+        CREATE INDEX IF NOT EXISTS idx_site_audits_client ON site_audits(client);
+        CREATE INDEX IF NOT EXISTS idx_site_audits_finding ON site_audits(overall_finding);
+        CREATE INDEX IF NOT EXISTS idx_site_audits_created_at ON site_audits(created_at);
+      `);
+      recordMigration.run(293, 'cross-audit reporting indexes');
+      console.log('Migration 293 applied');
+    } catch (e) { console.error('Migration 293 error:', e.message); }
+  }
+
+  // 294: seed the NSW-aligned audit template as version 1 (DRAFT). Idempotent —
+  // does nothing once the version has questions. Wording is confirmed/published
+  // later by the STMS/RTO (see lib/auditTemplateSeed.js caveat).
+  if (!isMigrationApplied.get(294)) {
+    try {
+      const { seedTemplate } = require('../lib/auditTemplateSeed');
+      const adminId = (db.prepare("SELECT id FROM users WHERE LOWER(role) IN ('admin','management') ORDER BY id ASC LIMIT 1").get() || {}).id || null;
+      const r = seedTemplate(db, { createdById: adminId });
+      recordMigration.run(294, 'seed NSW audit template v1 (draft)');
+      console.log('Migration 294 applied — template seeded:', r.seeded);
+    } catch (e) { console.error('Migration 294 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -1,0 +1,94 @@
+<div class="px-3 sm:px-4 lg:px-8 py-4 lg:py-6">
+  <div class="flex flex-wrap items-end justify-between gap-3 mb-4">
+    <div>
+      <h1 class="text-xl lg:text-2xl font-bold text-gray-900">Audit Reports</h1>
+      <p class="text-sm text-gray-500">Cross-audit trends, repeat offenders, most-failed items and open actions.</p>
+    </div>
+    <form method="GET" class="flex items-end gap-2">
+      <div><label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">From</label><input type="date" name="from" value="<%= from %>" class="px-3 py-2 text-sm border border-gray-300 rounded-lg"></div>
+      <div><label class="block text-[11px] font-semibold text-gray-500 uppercase mb-1">To</label><input type="date" name="to" value="<%= to %>" class="px-3 py-2 text-sm border border-gray-300 rounded-lg"></div>
+      <button class="px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-semibold rounded-lg">Apply</button>
+      <a href="/audits" class="px-3 py-2 text-sm text-gray-500 hover:text-gray-800">← Audits</a>
+    </form>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-5">
+    <% const tiles=[['Audits',kpi.total||0,'text-gray-900'],['Avg score',(kpi.avg_score!=null?kpi.avg_score+'%':'—'),'text-brand-700'],['Fails',kpi.fails||0,'text-red-600'],['Critical fails',kpi.critical_fails||0,'text-orange-600'],['Open actions',kpi.open_actions||0,'text-amber-600']]; %>
+    <% tiles.forEach(function(t){ %>
+      <div class="bg-white border border-gray-200 rounded-xl p-3"><p class="text-[11px] font-semibold uppercase tracking-wide text-gray-400"><%= t[0] %></p><p class="text-2xl font-bold mt-0.5 <%= t[2] %>"><%= t[1] %></p></div>
+    <% }) %>
+  </div>
+
+  <!-- Trend -->
+  <div class="bg-white border border-gray-200 rounded-xl p-4 mb-5">
+    <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-3">Score &amp; volume trend</h2>
+    <% if (!trend.length) { %><p class="text-sm text-gray-500">No audits in this range.</p><% } else { %><canvas id="trendChart" height="90"></canvas><% } %>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+    <!-- Repeat offenders -->
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <header class="bg-gray-50 border-b border-gray-200 px-4 py-3"><h2 class="text-sm font-bold text-gray-900">By individual (flagged most)</h2></header>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase font-semibold text-gray-500"><tr><th class="px-4 py-2 text-left">Worker</th><th class="px-4 py-2 text-right">Flags</th><th class="px-4 py-2 text-right">High/Crit</th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+          <% if (!byIndividual.length) { %><tr><td colspan="3" class="px-4 py-6 text-center text-gray-500">No per-person tags in range.</td></tr><% } %>
+          <% byIndividual.forEach(function(r){ %>
+            <tr>
+              <td class="px-4 py-2"><% if (r.employee_id) { %><a href="/hr/employees/<%= r.employee_id %>" class="text-brand-600 hover:underline"><%= r.name %></a><% } else { %><%= r.name %><% } %></td>
+              <td class="px-4 py-2 text-right font-semibold"><%= r.tags %></td>
+              <td class="px-4 py-2 text-right <%= r.high>0?'text-red-600 font-semibold':'text-gray-400' %>"><%= r.high %></td>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Most-failed items -->
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
+      <header class="bg-gray-50 border-b border-gray-200 px-4 py-3"><h2 class="text-sm font-bold text-gray-900">Most-failed items</h2></header>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase font-semibold text-gray-500"><tr><th class="px-4 py-2 text-left">Item</th><th class="px-4 py-2 text-right">Non-conformances</th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+          <% if (!byQuestion.length) { %><tr><td colspan="2" class="px-4 py-6 text-center text-gray-500">No non-conformances in range.</td></tr><% } %>
+          <% byQuestion.forEach(function(r){ %><tr><td class="px-4 py-2 font-mono text-xs"><%= r.qkey %></td><td class="px-4 py-2 text-right font-semibold"><%= r.cnt %></td></tr><% }) %>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- By client -->
+    <div class="bg-white border border-gray-200 rounded-xl overflow-hidden lg:col-span-2">
+      <header class="bg-gray-50 border-b border-gray-200 px-4 py-3"><h2 class="text-sm font-bold text-gray-900">By client</h2></header>
+      <table class="w-full text-sm">
+        <thead class="bg-gray-50 text-xs uppercase font-semibold text-gray-500"><tr><th class="px-4 py-2 text-left">Client</th><th class="px-4 py-2 text-right">Audits</th><th class="px-4 py-2 text-right">Avg score</th><th class="px-4 py-2 text-right">Fails</th></tr></thead>
+        <tbody class="divide-y divide-gray-100">
+          <% if (!byClient.length) { %><tr><td colspan="4" class="px-4 py-6 text-center text-gray-500">No audits in range.</td></tr><% } %>
+          <% byClient.forEach(function(r){ %><tr><td class="px-4 py-2"><%= r.client %></td><td class="px-4 py-2 text-right"><%= r.audits %></td><td class="px-4 py-2 text-right"><%= r.avg_score!=null?r.avg_score+'%':'—' %></td><td class="px-4 py-2 text-right <%= r.fails>0?'text-red-600 font-semibold':'text-gray-400' %>"><%= r.fails %></td></tr><% }) %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<% if (trend.length) { %>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function(){
+  var trend = <%- JSON.stringify(trend) %>;
+  var el = document.getElementById('trendChart'); if (!el || !window.Chart) return;
+  new Chart(el, {
+    data: {
+      labels: trend.map(function(t){ return t.month; }),
+      datasets: [
+        { type:'line', label:'Avg score %', data: trend.map(function(t){ return t.avg_score; }), borderColor:'#1D6AE5', backgroundColor:'rgba(29,106,229,.1)', yAxisID:'y', tension:.3, fill:true },
+        { type:'bar', label:'Audits', data: trend.map(function(t){ return t.audits; }), backgroundColor:'#CBD5E1', yAxisID:'y1' },
+        { type:'bar', label:'Fails', data: trend.map(function(t){ return t.fails; }), backgroundColor:'#DC2626', yAxisID:'y1' }
+      ]
+    },
+    options: { responsive:true, interaction:{mode:'index',intersect:false},
+      scales:{ y:{ position:'left', min:0, max:100, title:{display:true,text:'Score %'} }, y1:{ position:'right', min:0, grid:{drawOnChartArea:false}, title:{display:true,text:'Count'} } } }
+  });
+})();
+</script>
+<% } %>

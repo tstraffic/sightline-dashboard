@@ -320,7 +320,14 @@ app.use('/rate-cards',          requireLogin, requirePermission('quoting'), requ
 app.use('/quotes',              requireLogin, requirePermission('quoting'), require('./routes/quoting/quotes'));
 app.use('/tasks', requireLogin, requirePermission('tasks'), require('./routes/tasks'));
 app.use('/compliance', requireLogin, requirePermission('compliance'), require('./routes/compliance'));
+// Cross-audit reporting dashboard — mounted BEFORE /audits so /audits/reports
+// isn't captured by the /audits/:id show route.
+app.use('/audits/reports', requireLogin, requirePermission('audits'), require('./routes/audit-reports'));
 app.use('/audits', requireLogin, requirePermission('audits'), require('./routes/audits'));
+// Central cross-audit / cross-incident open-actions register
+app.use('/actions', requireLogin, requirePermission('incidents'), require('./routes/actions'));
+// Crew ↔ HR employee linking (bridge for per-person audit tagging)
+app.use('/crew-link', requireLogin, requirePermission('audits'), require('./routes/crew-link'));
 // Job-Pack submission review (workers fill at /w/forms/...; office opens here)
 app.use('/safety-forms', requireLogin, requirePermission('audits'), require('./routes/safety-forms'));
 // Automated Checklist Register (replaces the manual office spreadsheet)
