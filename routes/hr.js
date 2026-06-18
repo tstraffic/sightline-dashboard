@@ -485,25 +485,43 @@ router.get('/roster/duplicates', requirePermission('hr_employees'), (req, res) =
     WHERE e.deleted_at IS NULL
   `).all();
 
-  // Group by normalised phone, then email, then name — each member lands in
-  // only one group (first key wins) so it isn't shown twice.
-  const groups = new Map();
-  const placed = new Set();
-  const addTo = (key, reason, m) => {
-    if (!groups.has(key)) groups.set(key, { key, reason, members: [] });
-    groups.get(key).members.push(m); placed.add(m.id);
-  };
-  rows.forEach(m => { const np = normalizePhone(m.phone); if (np.length >= 8) addTo('p:' + np, 'phone', m); });
-  rows.forEach(m => { if (placed.has(m.id)) return; const e = normalizeEmail(m.email); if (e) addTo('e:' + e, 'email', m); });
-  rows.forEach(m => { if (placed.has(m.id)) return; const n = normalizeName(m.full_name); if (n) addTo('n:' + n, 'name', m); });
+  // Connected-components grouping: two people are duplicates if they share ANY
+  // of phone (last-9) / email / name. Union-find is used so e.g. same-name
+  // people with different phone numbers (Araam) are still grouped — a simple
+  // "first key wins" pass would file each under its own singleton phone group
+  // and never reach the name match.
+  const keyMembers = new Map(); // normalised key -> [ids]
+  const addKey = (k, id) => { if (!k) return; if (!keyMembers.has(k)) keyMembers.set(k, []); keyMembers.get(k).push(id); };
+  rows.forEach(m => {
+    const np = normalizePhone(m.phone); if (np.length >= 8) addKey('p:' + np, m.id);
+    const e = normalizeEmail(m.email); if (e) addKey('e:' + e, m.id);
+    const n = normalizeName(m.full_name); if (n) addKey('n:' + n, m.id);
+  });
+  const parent = {};
+  rows.forEach(m => { parent[m.id] = m.id; });
+  const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  const union = (a, b) => { parent[find(a)] = find(b); };
+  keyMembers.forEach(ids => { for (let i = 1; i < ids.length; i++) union(ids[0], ids[i]); });
 
-  const dupes = Array.from(groups.values())
-    .filter(g => g.members.length > 1)
-    .map(g => {
-      g.members.sort((a, b) =>
+  const byRoot = new Map();
+  rows.forEach(m => { const r = find(m.id); if (!byRoot.has(r)) byRoot.set(r, []); byRoot.get(r).push(m); });
+
+  const reasonsFor = (members) => {
+    const reasons = [];
+    const dupCount = (vals) => { const v = vals.filter(Boolean); return new Set(v).size < v.length; };
+    if (dupCount(members.map(m => normalizePhone(m.phone)).filter(p => p.length >= 8))) reasons.push('phone');
+    if (dupCount(members.map(m => normalizeEmail(m.email)))) reasons.push('email');
+    if (dupCount(members.map(m => normalizeName(m.full_name)))) reasons.push('name');
+    return reasons.join(' / ') || 'match';
+  };
+
+  const dupes = Array.from(byRoot.values())
+    .filter(g => g.length > 1)
+    .map(members => {
+      members.sort((a, b) =>
         (b.has_pin - a.has_pin) || (b.allocations - a.allocations) || (b.inducted - a.inducted) || (a.id - b.id));
-      g.suggestedKeepId = g.members[0].id;
-      return g;
+      const nameVaries = new Set(members.map(m => normalizeName(m.full_name))).size > 1;
+      return { members, reason: reasonsFor(members), suggestedKeepId: members[0].id, nameVaries };
     })
     .sort((a, b) => a.members[0].full_name.localeCompare(b.members[0].full_name));
 

@@ -28,6 +28,12 @@
           <span class="text-sm font-semibold text-gray-800"><%= g.members[0].full_name %></span>
           <span class="text-[11px] text-gray-500 uppercase tracking-widest">Matched by <%= g.reason %></span>
         </div>
+        <% if (g.nameVaries) { %>
+          <div class="px-4 py-2 bg-amber-50 border-b border-amber-200 text-[11px] text-amber-800 flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+            Different names here — they only share a phone or email (e.g. a shared number). Confirm it's really one person before removing.
+          </div>
+        <% } %>
         <input type="hidden" name="members_<%= i %>" value="<%= g.members.map(m => m.id).join(',') %>">
         <div class="divide-y divide-gray-100">
           <% g.members.forEach(function (m) { %>
