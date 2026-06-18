@@ -516,7 +516,7 @@
             <div class="flex justify-between"><dt class="text-xs text-gray-500">Documents</dt><dd class="text-xs font-medium text-gray-900"><%= documents.length %></dd></div>
             <div class="flex justify-between"><dt class="text-xs text-gray-500">Competencies</dt><dd class="text-xs font-medium text-gray-900"><%= competencies.length %></dd></div>
             <% if (crewMember) { %>
-              <div class="flex justify-between"><dt class="text-xs text-gray-500">Crew Member</dt><dd><a href="/crew/<%= crewMember.id %>" class="text-xs text-brand-600 hover:text-brand-700 font-medium"><%= crewMember.full_name %></a></dd></div>
+              <div class="flex justify-between"><dt class="text-xs text-gray-500">Crew Member</dt><dd><a href="/crew/<%= crewMember.id %>?from=/hr/employees/<%= employee.id %>" class="text-xs text-brand-600 hover:text-brand-700 font-medium"><%= crewMember.full_name %></a></dd></div>
             <% } %>
             <div class="flex justify-between"><dt class="text-xs text-gray-500">Created</dt><dd class="text-xs text-gray-500"><%= formatDate(employee.created_at) %></dd></div>
           </dl>
@@ -703,7 +703,7 @@
           <h3 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Links</h3>
           <dl class="space-y-2.5">
             <% if (crewMember) { %>
-              <div class="flex justify-between"><dt class="text-xs text-gray-500">Crew Profile</dt><dd><a href="/crew/<%= crewMember.id %>" class="text-xs text-brand-600 hover:text-brand-700 font-medium">View &rarr;</a></dd></div>
+              <div class="flex justify-between"><dt class="text-xs text-gray-500">Crew Profile</dt><dd><a href="/crew/<%= crewMember.id %>?from=/hr/employees/<%= employee.id %>" class="text-xs text-brand-600 hover:text-brand-700 font-medium">View &rarr;</a></dd></div>
             <% } %>
             <% if (employee.linked_user_id) { %>
               <div class="flex justify-between"><dt class="text-xs text-gray-500">User Account</dt><dd class="text-xs text-gray-900">Linked (ID: <%= employee.linked_user_id %>)</dd></div>
@@ -1018,7 +1018,7 @@
         <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Crew Profile</h2>
-            <a href="/crew/<%= crewMember.id %>" class="text-xs text-brand-600 hover:text-brand-700 font-medium">View Full Profile &rarr;</a>
+            <a href="/crew/<%= crewMember.id %>?from=/hr/employees/<%= employee.id %>" class="text-xs text-brand-600 hover:text-brand-700 font-medium">View Full Profile &rarr;</a>
           </div>
           <div class="flex items-center gap-4 mb-4">
             <div class="w-12 h-12 bg-brand-100 rounded-full flex items-center justify-center text-brand-700 font-bold text-lg">

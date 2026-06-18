@@ -408,10 +408,21 @@ router.get('/:id', (req, res) => {
     ORDER BY j.job_number DESC, s.title
   `).all(member.id);
 
+  // Optional return target so "back" goes where the user came from (e.g. the
+  // HR employee profile) instead of always the Workforce list. Internal paths
+  // only (must start with a single "/") to avoid open-redirects.
+  const rawFrom = (req.query.from || '').toString();
+  const backUrl = /^\/[^/]/.test(rawFrom) ? rawFrom : '/crew';
+  const backLabel = backUrl === '/crew' ? 'Crew Roster'
+    : (backUrl.startsWith('/hr/employees') ? 'Employee Profile'
+    : (backUrl.startsWith('/hr/roster') ? 'Roster' : 'Back'));
+
   res.render('crew/show', {
     title: member.full_name + ' — Worker Profile',
     currentPage: 'crew',
     member,
+    backUrl,
+    backLabel,
     compliance,
     upcomingShifts,
     recentTimesheets,
