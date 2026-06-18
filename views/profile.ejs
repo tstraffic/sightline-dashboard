@@ -24,6 +24,25 @@
     </div>
   <% } %>
 
+  <!-- Worker portal access (only when this admin is linked to a roster profile) -->
+  <% if (typeof workerLink !== 'undefined' && workerLink) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-lg bg-emerald-100 flex items-center justify-center flex-shrink-0">
+          <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 17v-2a4 4 0 014-4h0a4 4 0 014 4v2M7 7a4 4 0 108 0 4 4 0 00-8 0z"/></svg>
+        </div>
+        <div>
+          <h2 class="text-base font-semibold text-gray-900">Worker portal</h2>
+          <p class="text-sm text-gray-500 mt-0.5">Your admin account is linked to roster profile <strong><%= workerLink.full_name %></strong> (<%= workerLink.employee_id %>). Open the crew portal with this login — no separate PIN needed.</p>
+        </div>
+      </div>
+      <a href="/profile/worker-portal" class="inline-flex items-center justify-center px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition whitespace-nowrap">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+        Open worker portal
+      </a>
+    </div>
+  <% } %>
+
   <!-- Profile Info Card -->
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
     <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">

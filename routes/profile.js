@@ -27,15 +27,57 @@ router.get('/', (req, res) => {
     if (parsed && typeof parsed === 'object') prefs = parsed;
   } catch (e) { /* column missing or bad JSON — fall through with empty prefs */ }
 
+  // Is this admin linked to an active roster profile? If so we offer a
+  // one-click "open worker portal" (no PIN needed — they're already signed in).
+  let workerLink = null;
+  try {
+    workerLink = db.prepare(`
+      SELECT cm.id, cm.employee_id, cm.full_name
+      FROM employees e JOIN crew_members cm ON cm.id = e.linked_crew_member_id
+      WHERE e.linked_user_id = ? AND e.deleted_at IS NULL AND cm.active = 1
+      ORDER BY e.id DESC LIMIT 1
+    `).get(req.session.user.id);
+  } catch (e) { /* tables/links may be absent — just hide the option */ }
+
   res.render('profile', {
     title: 'My Profile',
     profile: user,
     prefs,
     currentTheme: (prefs && typeof prefs.theme === 'string') ? prefs.theme : '',
     emailEnabled: emailConfigured(),
+    workerLink,
     flash_success: req.flash('success'),
     flash_error: req.flash('error'),
   });
+});
+
+// GET /profile/worker-portal — an admin who is also on the roster enters the
+// worker portal using their admin session (no PIN). Resolves their linked
+// crew_member via employees.linked_user_id → linked_crew_member_id, sets the
+// worker session (same shape as a PIN login), and lands on /w/home. The admin
+// session stays intact so they can return to the office side anytime.
+router.get('/worker-portal', (req, res) => {
+  const db = getDb();
+  const crew = db.prepare(`
+    SELECT cm.id, cm.full_name, cm.employee_id, cm.role, cm.phone, cm.email
+    FROM employees e JOIN crew_members cm ON cm.id = e.linked_crew_member_id
+    WHERE e.linked_user_id = ? AND e.deleted_at IS NULL AND cm.active = 1
+    ORDER BY e.id DESC LIMIT 1
+  `).get(req.session.user.id);
+  if (!crew) {
+    req.flash('error', "Your account isn't linked to a roster profile yet. An admin can link it on your employee record (Roster → your profile → Edit → Linked user account).");
+    return res.redirect('/profile');
+  }
+  req.session.worker = {
+    id: crew.id, full_name: crew.full_name, employee_id: crew.employee_id,
+    role: crew.role, phone: crew.phone, email: crew.email,
+  };
+  try {
+    db.prepare('UPDATE crew_members SET last_worker_login = CURRENT_TIMESTAMP, worker_login_count = COALESCE(worker_login_count, 0) + 1 WHERE id = ?').run(crew.id);
+  } catch (e) { /* non-fatal */ }
+  // Persist the worker session before redirecting (same store-race guard the
+  // PIN login uses).
+  req.session.save(() => res.redirect('/w/home'));
 });
 
 // POST /profile — update basic info
