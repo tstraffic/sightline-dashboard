@@ -1,0 +1,125 @@
+<% locals.currentPage = 'hr-roster' %>
+<%
+  const winner = preview.winner, loser = preview.loser;
+  const empConflicts = preview.empDiff.conflicts, empAuto = preview.empDiff.autofill;
+  const crewConflicts = preview.crewDiff.conflicts, crewAuto = preview.crewDiff.autofill;
+  // Pretty label from a snake_case column name.
+  const lbl = (c) => c.replace(/_/g, ' ').replace(/\b\w/g, m => m.toUpperCase());
+  const show = (v) => (v === null || v === undefined || v === '') ? '—' : v;
+  const movers = Object.entries(loser.counts).filter(([k, v]) => !k.startsWith('_') && v > 0);
+%>
+
+<div class="space-y-5 max-w-4xl">
+  <div>
+    <a href="/hr/roster" class="text-sm text-brand-600 hover:underline">← Roster</a>
+    <h1 class="text-2xl font-bold text-gray-900 mt-1">Merge duplicate workers</h1>
+    <p class="text-sm text-gray-500 mt-1 max-w-2xl">
+      All records move onto the <strong>survivor</strong>; the duplicate is archived (kept for audit, hidden everywhere else).
+      Resolve any conflicting fields below, then confirm.
+    </p>
+  </div>
+
+  <!-- Survivor vs archived -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+    <% [{w: winner, role: 'survivor'}, {w: loser, role: 'archived'}].forEach(({w, role}) => { %>
+      <div class="bg-white border rounded-xl shadow-sm p-4 <%= role === 'survivor' ? 'border-emerald-300 ring-1 ring-emerald-200' : 'border-gray-200' %>">
+        <div class="flex items-center justify-between gap-2 mb-2">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-widest <%= role === 'survivor' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700' %>">
+            <%= role === 'survivor' ? '✓ Survivor' : 'Archived' %>
+          </span>
+          <span class="text-[10px] font-mono text-gray-400"><%= w.employee.employee_code || ('#' + w.employee.id) %></span>
+        </div>
+        <p class="font-bold text-gray-900"><%= w.employee.full_name %></p>
+        <p class="text-xs text-gray-500 mt-0.5">
+          <%= (w.employee.employment_status || '—') %> ·
+          <%= (w.employee.payment_type || '').toUpperCase() || 'No type' %>
+          <%= w.employee.tier ? (' · Tier ' + w.employee.tier) : '' %>
+        </p>
+        <div class="grid grid-cols-2 gap-x-3 gap-y-0.5 mt-3 text-[11px] text-gray-600">
+          <span>Competencies</span><span class="text-right font-semibold tabular-nums"><%= w.counts.competencies %></span>
+          <span>Documents</span><span class="text-right font-semibold tabular-nums"><%= w.counts.documents %></span>
+          <span>Bank / Super / TFN</span><span class="text-right font-semibold tabular-nums"><%= w.counts.bank_accounts %> / <%= w.counts.super_funds %> / <%= w.counts.tfn_declarations %></span>
+          <span>Payslips / pay lines</span><span class="text-right font-semibold tabular-nums"><%= w.counts.payslips %> / <%= w.counts.pay_run_lines %></span>
+          <span>Allocations</span><span class="text-right font-semibold tabular-nums"><%= w.counts.allocations %></span>
+        </div>
+      </div>
+    <% }) %>
+  </div>
+
+  <div class="flex items-center justify-between gap-2 flex-wrap">
+    <p class="text-xs text-gray-500">Survivor chosen automatically (the profile with competencies + documents). Not right?</p>
+    <a href="/hr/merge?a=<%= winner.employee.id %>&b=<%= loser.employee.id %>&winner=<%= loser.employee.id %>"
+       class="px-3 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg">⇄ Swap survivor</a>
+  </div>
+
+  <form method="POST" action="/hr/merge" onsubmit="return confirm('Merge \'<%= loser.employee.full_name %>\' into \'<%= winner.employee.full_name %>\'? All records move to the survivor and the duplicate is archived. This cannot be auto-undone.')">
+    <%- include('../partials/csrf') %>
+    <input type="hidden" name="winner_emp_id" value="<%= winner.employee.id %>">
+    <input type="hidden" name="loser_emp_id" value="<%= loser.employee.id %>">
+
+    <!-- Conflicting fields -->
+    <% const totalConflicts = empConflicts.length + crewConflicts.length; %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm mt-4">
+      <div class="px-4 py-3 border-b border-gray-100">
+        <h2 class="text-sm font-bold text-gray-800">Resolve conflicts <span class="text-gray-400 font-normal">(<%= totalConflicts %>)</span></h2>
+        <p class="text-[11px] text-gray-500 mt-0.5">Each field below differs between the two profiles. Pick which value the merged worker keeps.</p>
+      </div>
+      <% if (totalConflicts === 0) { %>
+        <p class="px-4 py-4 text-sm text-gray-500">No conflicting fields — the profiles are compatible. Everything from the archived profile fills any blanks on the survivor.</p>
+      <% } else { %>
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-200">
+            <tr>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Field</th>
+              <th class="px-3 py-2 text-left text-[10px] font-bold text-emerald-700 uppercase tracking-widest">Keep survivor</th>
+              <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Use archived</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% function conflictRow(scope, c) { %>
+              <tr>
+                <td class="px-4 py-2 font-medium text-gray-700"><%= lbl(c.col) %></td>
+                <td class="px-3 py-2">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="choice[<%= scope %>][<%= c.col %>]" value="winner" checked class="border-gray-300">
+                    <span class="text-gray-900"><%= show(c.winner) %></span>
+                  </label>
+                </td>
+                <td class="px-3 py-2">
+                  <label class="flex items-center gap-2 cursor-pointer">
+                    <input type="radio" name="choice[<%= scope %>][<%= c.col %>]" value="loser" class="border-gray-300">
+                    <span class="text-gray-900"><%= show(c.loser) %></span>
+                  </label>
+                </td>
+              </tr>
+            <% } %>
+            <% empConflicts.forEach(c => { conflictRow('emp', c); }) %>
+            <% crewConflicts.forEach(c => { conflictRow('crew', c); }) %>
+          </tbody>
+        </table>
+      <% } %>
+    </div>
+
+    <!-- Auto-filled (survivor was blank) -->
+    <% const autos = empAuto.concat(crewAuto); %>
+    <% if (autos.length) { %>
+      <div class="bg-blue-50 border border-blue-200 rounded-xl mt-4 px-4 py-3">
+        <p class="text-xs font-semibold text-blue-900 mb-1">Filled from the archived profile (<%= autos.length %>)</p>
+        <p class="text-[11px] text-blue-800">The survivor is blank for these, so the archived value is copied in (nothing dropped): <%= autos.map(a => lbl(a.col)).join(', ') %>.</p>
+      </div>
+    <% } %>
+
+    <!-- Records that move -->
+    <% if (movers.length) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm mt-4 px-4 py-3">
+        <p class="text-xs font-semibold text-gray-700 mb-1">Records moving from the archived profile</p>
+        <p class="text-[11px] text-gray-600"><%= movers.map(([k, v]) => `${v} ${k.replace(/_/g, ' ')}`).join(' · ') %> — plus all other linked records.</p>
+      </div>
+    <% } %>
+
+    <div class="flex items-center justify-end gap-2 mt-5">
+      <a href="/hr/roster" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg">Cancel</a>
+      <button type="submit" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-semibold rounded-lg">Merge into <%= winner.employee.full_name %></button>
+    </div>
+  </form>
+</div>

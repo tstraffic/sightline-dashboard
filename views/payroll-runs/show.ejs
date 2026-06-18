@@ -394,6 +394,65 @@
   </div>
 </div>
 
+<!-- Worker payroll-details popup (read-only). Opened from a clickable name in
+     the list. Fetches decrypted BSB/account/TFN + super + contact from the
+     gated, audited /payroll/employee/:id/payroll-details.json endpoint. -->
+<div id="payDetailsModal" class="fixed inset-0 z-50 hidden bg-black/50 backdrop-blur-sm overflow-y-auto" onclick="if(event.target===this)closePayrollDetails()">
+  <div class="min-h-full flex items-center justify-center p-4">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
+      <div class="p-5 border-b border-gray-200 flex items-start justify-between gap-2">
+        <div>
+          <h2 class="text-lg font-bold text-gray-900" id="pdName">Worker</h2>
+          <p class="text-xs text-gray-500 mt-0.5" id="pdSub"></p>
+        </div>
+        <button type="button" onclick="closePayrollDetails()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+      </div>
+      <div class="p-5 space-y-4 max-h-[70vh] overflow-y-auto" id="pdBody">
+        <p class="text-sm text-gray-500" id="pdLoading">Loading…</p>
+        <div id="pdContent" class="hidden space-y-4">
+          <div>
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Contact</p>
+            <dl class="grid grid-cols-3 gap-x-3 gap-y-1 text-sm">
+              <dt class="text-gray-400">Phone</dt><dd class="col-span-2 text-gray-900" id="pdPhone">—</dd>
+              <dt class="text-gray-400">Email</dt><dd class="col-span-2 text-gray-900 break-all" id="pdEmail">—</dd>
+              <dt class="text-gray-400">Address</dt><dd class="col-span-2 text-gray-900" id="pdAddress">—</dd>
+              <dt class="text-gray-400">DOB</dt><dd class="col-span-2 text-gray-900" id="pdDob">—</dd>
+            </dl>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Bank</p>
+            <dl class="grid grid-cols-3 gap-x-3 gap-y-1 text-sm">
+              <dt class="text-gray-400">Account name</dt><dd class="col-span-2 text-gray-900" id="pdAcctName">—</dd>
+              <dt class="text-gray-400">BSB</dt><dd class="col-span-2 text-gray-900 font-mono" id="pdBsb">—</dd>
+              <dt class="text-gray-400">Account</dt><dd class="col-span-2 text-gray-900 font-mono" id="pdAcct">—</dd>
+            </dl>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Superannuation</p>
+            <dl class="grid grid-cols-3 gap-x-3 gap-y-1 text-sm" id="pdSuperWrap">
+              <dt class="text-gray-400">Fund</dt><dd class="col-span-2 text-gray-900" id="pdFund">—</dd>
+              <dt class="text-gray-400">USI</dt><dd class="col-span-2 text-gray-900 font-mono" id="pdUsi">—</dd>
+              <dt class="text-gray-400">Member #</dt><dd class="col-span-2 text-gray-900 font-mono" id="pdMember">—</dd>
+            </dl>
+          </div>
+          <div>
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Tax</p>
+            <dl class="grid grid-cols-3 gap-x-3 gap-y-1 text-sm">
+              <dt class="text-gray-400">TFN</dt><dd class="col-span-2 text-gray-900 font-mono" id="pdTfn">—</dd>
+              <dt class="text-gray-400">Residency</dt><dd class="col-span-2 text-gray-900" id="pdResidency">—</dd>
+            </dl>
+          </div>
+          <p class="text-[10px] text-gray-400 pt-1 border-t border-gray-100">These are confidential payroll details. This view is logged.</p>
+        </div>
+        <p class="text-sm text-rose-600 hidden" id="pdError"></p>
+      </div>
+      <div class="p-4 border-t border-gray-200 flex justify-end">
+        <button type="button" onclick="closePayrollDetails()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-semibold rounded-lg">Close</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   const RUN_ID = <%= run.id %>;
   const BUCKET_KEYS = <%- JSON.stringify(bucketKeys) %>;
@@ -951,8 +1010,47 @@
   }
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') { closeEditModal(); closeMatchModal(); closeAddOneOff(); }
+    if (e.key === 'Escape') { closeEditModal(); closeMatchModal(); closeAddOneOff(); closePayrollDetails(); }
   });
+
+  // ---- Worker payroll-details popup -----------------------------------------
+  function closePayrollDetails() {
+    document.getElementById('payDetailsModal').classList.add('hidden');
+  }
+  function setText(id, v) { const el = document.getElementById(id); if (el) el.textContent = (v && String(v).trim()) ? v : '—'; }
+  function openPayrollDetails(empId) {
+    if (!empId) return;
+    const modal = document.getElementById('payDetailsModal');
+    modal.classList.remove('hidden');
+    document.getElementById('pdLoading').classList.remove('hidden');
+    document.getElementById('pdContent').classList.add('hidden');
+    document.getElementById('pdError').classList.add('hidden');
+    setText('pdName', 'Worker'); setText('pdSub', '');
+    fetch('/payroll/employee/' + empId + '/payroll-details.json', { headers: { Accept: 'application/json' } })
+      .then(r => r.ok ? r.json() : r.json().then(j => Promise.reject(j.error || 'Failed to load')))
+      .then(d => {
+        document.getElementById('pdLoading').classList.add('hidden');
+        document.getElementById('pdContent').classList.remove('hidden');
+        setText('pdName', d.full_name);
+        setText('pdSub', [d.employee_code, d.payment_type].filter(Boolean).join(' · '));
+        setText('pdPhone', d.phone); setText('pdEmail', d.email);
+        setText('pdAddress', d.address); setText('pdDob', d.date_of_birth);
+        setText('pdAcctName', d.bank && d.bank.account_name);
+        setText('pdBsb', d.bank && d.bank.bsb);
+        setText('pdAcct', d.bank && d.bank.account);
+        setText('pdFund', d.super && d.super.fund_name);
+        setText('pdUsi', d.super && d.super.usi);
+        setText('pdMember', d.super && d.super.member_number);
+        setText('pdTfn', d.tfn && d.tfn.number);
+        setText('pdResidency', d.tfn && d.tfn.residency_status);
+      })
+      .catch(err => {
+        document.getElementById('pdLoading').classList.add('hidden');
+        const e = document.getElementById('pdError');
+        e.textContent = typeof err === 'string' ? err : 'Could not load payroll details.';
+        e.classList.remove('hidden');
+      });
+  }
 </script>
 
 <% if (flash_success && flash_success.length) { %>

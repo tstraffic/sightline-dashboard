@@ -69,12 +69,22 @@
         <% if (pt === 'cash') { %>
           <%- rateRow('Day / Sat',           employee.rate_day,           'Mon–Sat ordinary') %>
           <%- rateRow('Night / Sun / PH',    employee.rate_night,         'After 6pm, Sun & PH') %>
-          <%- allowanceRow('Travel allowance', employee.rate_fares_daily, 'shift', 'Per shift, flat (not paid when you have a ute)') %>
+          <% if (!employee.block_travel_allowance) { %>
+            <%- allowanceRow('Travel allowance', employee.rate_fares_daily, 'shift', 'Per shift, flat (not paid when you have a ute)') %>
+          <% } %>
+          <% if (parseFloat(employee.rate_meal) > 0 && !employee.block_meal_allowance) { %>
+            <%- allowanceRow('Meal allowance', employee.rate_meal, 'shift', 'Per shift') %>
+          <% } %>
         <% } else if (pt === 'abn') { %>
           <%- rateRow('Day',                 employee.rate_day,           'Mon–Fri ordinary') %>
           <%- rateRow('Sat',                 employee.rate_weekend,       'Saturday') %>
           <%- rateRow('Night / Sun / PH',    employee.rate_night,         'After 6pm, Sun & PH') %>
-          <%- allowanceRow('Travel allowance', employee.rate_fares_daily, 'shift', 'Per shift, flat (not paid when you have a ute)') %>
+          <% if (!employee.block_travel_allowance) { %>
+            <%- allowanceRow('Travel allowance', employee.rate_fares_daily, 'shift', 'Per shift, flat (not paid when you have a ute)') %>
+          <% } %>
+          <% if (parseFloat(employee.rate_meal) > 0 && !employee.block_meal_allowance) { %>
+            <%- allowanceRow('Meal allowance', employee.rate_meal, 'shift', 'Per shift') %>
+          <% } %>
         <% } else if (pt === 'tfn') { %>
           <%- rateRow('Day (base)',          employee.rate_day,           'Mon–Fri ordinary — incl. industry allowance + 25% casual loading') %>
           <% if (parseFloat(employee.rate_ot) > 0) { %>
@@ -115,8 +125,12 @@
           <%- rateRow('Sat ≤2h / before 12pm', employee.rate_weekend_short, 'First 2 hours of a Saturday shift') %>
           <%- rateRow('Sat >2h / after 12pm',  employee.rate_weekend,       'Sat after 2h or starting from 12pm · Sun') %>
           <%- rateRow('Public holiday',        employee.rate_public_holiday) %>
-          <%- allowanceRow('Fares allowance',  employee.rate_fares_daily, 'day', 'Paid each day worked') %>
-          <%- allowanceRow('Meal allowance',   employee.rate_meal,        'meal', 'For travel jobs and shifts 9.5hrs+') %>
+          <% if (!employee.block_travel_allowance) { %>
+            <%- allowanceRow('Fares allowance',  employee.rate_fares_daily, 'day', 'Paid each day worked') %>
+          <% } %>
+          <% if (!employee.block_meal_allowance) { %>
+            <%- allowanceRow('Meal allowance',   employee.rate_meal,        'meal', 'For travel jobs and shifts 9.5hrs+') %>
+          <% } %>
         <% } else { %>
           <p class="text-sm text-gray-500 py-2">No payment type set yet. The office will confirm with you at engagement.</p>
         <% } %>

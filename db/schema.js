@@ -13686,6 +13686,48 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 294 error:', e.message); }
   }
 
+  // 295: wage_tier_presets — per-tier MEAL allowance (alongside the existing
+  // travel_allowance). Cash/ABN now carry both a travel and a meal preset;
+  // the value defaults to 0 so nothing is paid until an admin sets it.
+  if (!isMigrationApplied.get(295)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(wage_tier_presets)").all().map(c => c.name);
+      if (!cols.includes('meal_allowance')) db.exec("ALTER TABLE wage_tier_presets ADD COLUMN meal_allowance REAL NOT NULL DEFAULT 0");
+      recordMigration.run(295, 'wage_tier_presets: meal_allowance');
+      console.log('Migration 295 applied');
+    } catch (e) { console.error('Migration 295 error:', e.message); }
+  }
+
+  // 296: employees — per-worker allowance blocks + rate-override guard.
+  // block_* hide an allowance from the worker app AND exclude it from pay
+  // without destroying the stored rate (unblock restores it). rates_overridden
+  // marks a worker whose rate_* were hand-edited away from the tier preset so
+  // re-stamping a tier doesn't silently clobber the manual values.
+  if (!isMigrationApplied.get(296)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(employees)").all().map(c => c.name);
+      if (!cols.includes('block_travel_allowance')) db.exec("ALTER TABLE employees ADD COLUMN block_travel_allowance INTEGER NOT NULL DEFAULT 0");
+      if (!cols.includes('block_meal_allowance')) db.exec("ALTER TABLE employees ADD COLUMN block_meal_allowance INTEGER NOT NULL DEFAULT 0");
+      if (!cols.includes('rates_overridden')) db.exec("ALTER TABLE employees ADD COLUMN rates_overridden INTEGER NOT NULL DEFAULT 0");
+      recordMigration.run(296, 'employees: block_travel_allowance + block_meal_allowance + rates_overridden');
+      console.log('Migration 296 applied');
+    } catch (e) { console.error('Migration 296 error:', e.message); }
+  }
+
+  // 297: merge audit pointers. When two duplicate profiles are merged, the
+  // loser is soft-deactivated (not deleted, to preserve audit-trail rows that
+  // reference crew_members without a hard FK) and points at the survivor.
+  if (!isMigrationApplied.get(297)) {
+    try {
+      const eCols = db.prepare("PRAGMA table_info(employees)").all().map(c => c.name);
+      if (!eCols.includes('merged_into_id')) db.exec("ALTER TABLE employees ADD COLUMN merged_into_id INTEGER REFERENCES employees(id)");
+      const cCols = db.prepare("PRAGMA table_info(crew_members)").all().map(c => c.name);
+      if (!cCols.includes('merged_into_id')) db.exec("ALTER TABLE crew_members ADD COLUMN merged_into_id INTEGER REFERENCES crew_members(id)");
+      recordMigration.run(297, 'employees + crew_members: merged_into_id');
+      console.log('Migration 297 applied');
+    } catch (e) { console.error('Migration 297 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

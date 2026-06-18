@@ -96,7 +96,11 @@
           <% if (activeKeys.length === 0) { %>
             <tr data-line-id="<%= l.id %>" class="<%= l.paid ? 'opacity-60' : '' %>">
               <td class="px-3 py-2 sticky left-0 bg-white z-[5] <%= l.paid ? 'opacity-100' : '' %>">
-                <p class="font-semibold text-gray-900 text-sm leading-tight"><%= l.full_name %></p>
+                <% if (l.employee_id) { %>
+                  <button type="button" onclick="openPayrollDetails(<%= l.employee_id %>)" class="font-semibold text-brand-700 hover:underline text-sm leading-tight text-left" title="View full payroll details"><%= l.full_name %></button>
+                <% } else { %>
+                  <p class="font-semibold text-gray-900 text-sm leading-tight"><%= l.full_name %></p>
+                <% } %>
                 <% if (l.employee_code) { %>
                   <p class="text-[10px] text-gray-400 font-mono mt-0.5"><%= l.employee_code %></p>
                 <% } else if (!l.employee_id && !runLocked) { %>
@@ -108,7 +112,7 @@
               </td>
               <td class="px-2 py-2 text-[11px] font-mono text-gray-600 leading-tight">
                 <% const _bd = bsbAccFor(l); %>
-                <% if (_bd.bsb || _bd.acc) { %><%= _bd.bsb || '—' %><br><%= _bd.acc || '—' %><% } else { %><span class="text-gray-300">—</span><% } %>
+                <% if (_bd.bsb || _bd.acc) { %><%= _bd.bsb || '—' %><br><%= _bd.acc || '—' %><% } else if (l.employee_id) { %><span class="text-amber-600 font-semibold" title="No bank details on file — collect from worker">⚠ collect</span><% } else { %><span class="text-gray-300">—</span><% } %>
               </td>
               <td colspan="10" class="px-2 py-2 text-xs text-gray-400 italic">No hours</td>
               <% if (showTfnExtras) { %>
@@ -128,7 +132,11 @@
               <tr data-line-id="<%= l.id %>" class="<%= l.paid ? 'opacity-60' : '' %>">
                 <% if (isFirst) { %>
                   <td rowspan="<%= rowSpan %>" class="px-3 py-2 align-top sticky left-0 bg-white z-[5] <%= l.paid ? 'opacity-100' : '' %>">
-                    <p class="font-semibold text-gray-900 text-sm leading-tight"><%= l.full_name %></p>
+                    <% if (l.employee_id) { %>
+                      <button type="button" onclick="openPayrollDetails(<%= l.employee_id %>)" class="font-semibold text-brand-700 hover:underline text-sm leading-tight text-left" title="View full payroll details"><%= l.full_name %></button>
+                    <% } else { %>
+                      <p class="font-semibold text-gray-900 text-sm leading-tight"><%= l.full_name %></p>
+                    <% } %>
                     <% if (l.employee_code) { %>
                       <p class="text-[10px] text-gray-400 font-mono mt-0.5"><%= l.employee_code %></p>
                     <% } else if (!l.employee_id && !runLocked) { %>
@@ -147,6 +155,8 @@
                     <% const _bd = bsbAccFor(l); %>
                     <% if (_bd.bsb || _bd.acc) { %>
                       <%= _bd.bsb || '—' %><br><%= _bd.acc || '—' %>
+                    <% } else if (l.employee_id) { %>
+                      <span class="text-amber-600 font-semibold" title="No bank details on file — collect from worker">⚠ collect</span>
                     <% } else { %>
                       <span class="text-gray-300">—</span>
                     <% } %>

@@ -67,6 +67,14 @@ function fmtMoney(n) {
   return v.toLocaleString('en-AU', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Worker-Rates row diverged from its tier preset? Delegates to the shared
+// helper in lib/wageTiers so the grid + the roster profile agree on when to
+// set employees.rates_overridden.
+function rowDivergesFromPreset(db, r) {
+  const { ratesDivergeFromPreset } = require('../lib/wageTiers');
+  return ratesDivergeFromPreset(db, r);
+}
+
 function periodLabel(start, end) {
   if (!end) return '';
   const d = new Date(end + 'T00:00:00');
@@ -608,6 +616,28 @@ router.get('/runs/:id', requirePermission('payroll'), (req, res) => {
     ORDER BY LOWER(prl.full_name) ASC
   `).all(run.id);
 
+  // Always-visible BSB/Acc: when a line carries no snapshot and the employee
+  // has no plaintext fallback, decrypt the latest bank_accounts row so the
+  // payroll list shows real bank details wherever they exist. Truly-missing
+  // rows render a "collect" marker in the view (never a silent blank).
+  try {
+    const { decrypt } = require('../services/encryption');
+    const latestBank = db.prepare(`
+      SELECT bsb_encrypted, account_number_encrypted FROM bank_accounts
+      WHERE employee_id = ? ORDER BY id DESC LIMIT 1
+    `);
+    for (const l of lines) {
+      if (!l.employee_id) continue;
+      const haveBsb = l.bsb || l.emp_payroll_bsb;
+      const haveAcc = l.acc_number || l.emp_payroll_account;
+      if (haveBsb && haveAcc) continue;
+      const bank = latestBank.get(l.employee_id);
+      if (!bank) continue;
+      if (!haveBsb && bank.bsb_encrypted) { const v = decrypt(bank.bsb_encrypted); if (v) l.emp_payroll_bsb = v; }
+      if (!haveAcc && bank.account_number_encrypted) { const v = decrypt(bank.account_number_encrypted); if (v) l.emp_payroll_account = v; }
+    }
+  } catch (e) { /* encryption/table unavailable — fall back to whatever's on the line */ }
+
   // Load expenses + deductions for every line in this run (one query each)
   const expensesByLine = {}, deductionsByLine = {};
   if (lines.length) {
@@ -700,6 +730,79 @@ router.get('/runs/:id', requirePermission('payroll'), (req, res) => {
     approvedBy: run.approved_by_id ? db.prepare('SELECT full_name, username FROM users WHERE id = ?').get(run.approved_by_id) : null,
     paidBy: run.paid_by_id ? db.prepare('SELECT full_name, username FROM users WHERE id = ?').get(run.paid_by_id) : null,
   });
+});
+
+// ============================================================================
+// GET /payroll/employee/:id/payroll-details.json — full payroll detail for the
+//   clickable-name popup on the pay-run list. Returns decrypted BSB, account,
+//   and TFN alongside super + contact details. Gated to `payroll` permission
+//   and every view is written to the activity log (these are the most
+//   sensitive fields in the system — see services/encryption.js).
+// ============================================================================
+router.get('/employee/:id/payroll-details.json', requirePermission('payroll'), (req, res) => {
+  try {
+    const db = getDb();
+    const empId = parseInt(req.params.id, 10);
+    const e = db.prepare(`
+      SELECT id, employee_code, full_name, email, phone,
+        address, address_line1, address_line2, suburb, state, postcode,
+        date_of_birth, payment_type, payroll_bsb, payroll_account
+      FROM employees WHERE id = ? AND deleted_at IS NULL
+    `).get(empId);
+    if (!e) return res.status(404).json({ error: 'Employee not found.' });
+
+    const { decrypt } = require('../services/encryption');
+    const bank = db.prepare('SELECT * FROM bank_accounts WHERE employee_id = ? ORDER BY id DESC LIMIT 1').get(empId) || null;
+    const sup = db.prepare('SELECT * FROM super_funds WHERE employee_id = ? ORDER BY id DESC LIMIT 1').get(empId) || null;
+    const tfn = db.prepare('SELECT * FROM tfn_declarations WHERE employee_id = ? ORDER BY id DESC LIMIT 1').get(empId) || null;
+
+    // Prefer the encrypted bank row; fall back to the plaintext payroll_*
+    // mirror columns so a worker imported before encryption still shows.
+    const bsb = (bank && bank.bsb_encrypted && decrypt(bank.bsb_encrypted)) || e.payroll_bsb || '';
+    const acc = (bank && bank.account_number_encrypted && decrypt(bank.account_number_encrypted)) || e.payroll_account || '';
+    const tfnNumber = (tfn && tfn.tfn_encrypted && decrypt(tfn.tfn_encrypted)) || '';
+
+    const address = [e.address || e.address_line1, e.address_line2, e.suburb, e.state, e.postcode]
+      .map(s => (s || '').trim()).filter(Boolean).join(', ');
+
+    try {
+      logActivity({
+        user: req.session.user, action: 'view', entityType: 'employee',
+        entityId: empId, entityLabel: e.full_name,
+        details: `Viewed full payroll details (BSB/account/TFN) for ${e.full_name}`,
+        ip: req.ip,
+      });
+    } catch (err) { /* audit shouldn't block the read */ }
+
+    res.json({
+      id: e.id,
+      employee_code: e.employee_code || '',
+      full_name: e.full_name || '',
+      email: e.email || '',
+      phone: e.phone || '',
+      address,
+      date_of_birth: e.date_of_birth || '',
+      payment_type: (e.payment_type || '').toUpperCase(),
+      bank: {
+        account_name: bank ? (bank.account_name || '') : '',
+        bsb, account: acc,
+        missing: !bsb && !acc,
+      },
+      super: sup ? {
+        fund_name: sup.fund_name || '', usi: sup.usi || '',
+        member_number: sup.member_number || '', fund_abn: sup.fund_abn || '',
+        use_default: !!sup.use_default,
+      } : null,
+      tfn: {
+        number: tfnNumber,
+        residency_status: tfn ? (tfn.residency_status || '') : '',
+        missing: !tfnNumber,
+      },
+    });
+  } catch (e) {
+    console.error('[payroll/employee/:id/payroll-details.json]', e);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ============================================================================
@@ -1569,6 +1672,7 @@ router.get('/rates', requirePermission('payroll'), (req, res) => {
       'rate_night', 'rate_night_ot', 'rate_night_dt', 'rate_night_5plus',
       'rate_weekend', 'rate_weekend_short', 'rate_public_holiday',
       'rate_meal', 'rate_fares_daily',
+      'block_travel_allowance', 'block_meal_allowance', 'rates_overridden',
       'payroll_bsb', 'payroll_account',
       'award_classification_id'];
     const cols = WANT.filter(c => empCols.has(c));
@@ -1653,6 +1757,8 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
       { col: 'rate_public_holiday',     kind: 'num'   },
       { col: 'rate_meal',               kind: 'num'   },
       { col: 'rate_fares_daily',        kind: 'num'   },
+      { col: 'block_travel_allowance',  kind: 'bool'  },
+      { col: 'block_meal_allowance',    kind: 'bool'  },
       { col: 'payroll_bsb',             kind: 'str'   },
       { col: 'payroll_account',         kind: 'str'   },
     ].filter(f => empCols.has(f.col));
@@ -1701,11 +1807,21 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
             const np = String(r.night_pattern || 'occasional').toLowerCase();
             return ['occasional', 'permanent', 'continuous_5plus'].includes(np) ? np : 'occasional';
           }
+          if (f.kind === 'bool') return r[f.col] ? 1 : 0;
           if (f.kind === 'num') return toNum(r[f.col]);
           if (f.kind === 'str') return String(r[f.col] || '').trim();
           return null;
         });
         stmt.run(...values, empId);
+
+        // Flag the worker as rate-overridden when the saved rates diverge
+        // from the tier preset for (tier, payment_type, night_pattern). This
+        // guards a later tier re-stamp from silently clobbering hand edits.
+        // Matches the preset (or no tier set) → clears the flag.
+        if (empCols.has('rates_overridden')) {
+          db.prepare('UPDATE employees SET rates_overridden = ? WHERE id = ?')
+            .run(rowDivergesFromPreset(db, r) ? 1 : 0, empId);
+        }
         saved++;
       } catch (e) {
         console.error(`[payroll/rates] Failed to save employee ${empId}: ${e.message}`);
@@ -1804,7 +1920,7 @@ router.post('/wage-tiers', requirePermission('payroll'), (req, res) => {
       'rate_day', 'rate_sat_short', 'rate_sat_long',
       'rate_sun', 'rate_public_holiday',
       'rate_night', 'rate_night_perm', 'rate_night_5plus',
-      'travel_allowance',
+      'travel_allowance', 'meal_allowance',
     ];
     const setClause = PRESET_COLS.map(c => `${c} = ?`).join(', ') + ', updated_at = CURRENT_TIMESTAMP';
     const updatePreset = db.prepare(`UPDATE wage_tier_presets SET ${setClause} WHERE id = ?`);
