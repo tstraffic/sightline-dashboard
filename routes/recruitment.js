@@ -7,7 +7,6 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
-const { convertSeekApplicantToCrew } = require('../lib/seekApplicantConverter');
 const { sydneyToday } = require('../lib/sydney');
 const { sendEmail } = require('../services/email');
 const { inductionConfirmationEmail } = require('../services/emailTemplates');
@@ -457,27 +456,13 @@ router.post('/:id', async (req, res) => {
     inductionEmailed = await sendInductionConfirmation(db, fresh, replyTo);
   }
 
-  // Auto-convert to crew_member when the candidate reaches HIRED (idempotent —
-  // skips if already linked).
-  let converted = null;
-  const becameHired = newStage === 'HIRED' && row.stage !== 'HIRED';
-  if (newStage === 'HIRED' && !row.linked_crew_member_id) {
-    try {
-      const applicant = db.prepare('SELECT * FROM seek_applicants WHERE id = ?').get(row.id);
-      converted = convertSeekApplicantToCrew(db, applicant);
-      if (!wantsJson(req)) {
-        req.flash('success', `${applicant.applicant_name} added to roster as ${converted.employeeCode}.`);
-      }
-    } catch (e) {
-      console.error('Recruitment Hired → crew conversion failed:', e);
-      if (!wantsJson(req)) {
-        req.flash('error', `Marked Hired but failed to add to roster: ${e.message}`);
-      }
-    }
-  }
+  // NOTE: marking a candidate "Hired" deliberately does NOT create a roster
+  // record. Adding someone to the roster is the induction-form approval's job
+  // (routes/induction-admin.js) — auto-creating here as well produced duplicate
+  // crew/employee profiles. Hired is just the final pipeline stage.
 
   if (wantsJson(req)) {
-    return res.json({ ok: true, converted, becameHired, stage: newStage, inductionEmailed });
+    return res.json({ ok: true, stage: newStage, inductionEmailed });
   }
   res.redirect(backUrl(req));
 });
