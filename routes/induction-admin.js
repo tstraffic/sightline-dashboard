@@ -196,21 +196,72 @@ function seedPayrollFromSubmission(db, employeeId, submission) {
 // in crew_members (ignoring non-numeric codes like EMP-TEST) and verify
 // it isn't already taken. Returns a string like "EMP-001".
 function allocateEmployeeId(db) {
-  const rows = db.prepare("SELECT employee_id FROM crew_members WHERE employee_id LIKE 'EMP-%'").all();
+  // Scan BOTH crew_members.employee_id AND employees.employee_code for the
+  // largest numeric suffix, so a code already used by an unlinked employee
+  // record can't be reissued (which would collide on the employees insert).
+  const rows = db.prepare(`
+    SELECT employee_id AS code FROM crew_members WHERE employee_id LIKE 'EMP-%'
+    UNION ALL
+    SELECT employee_code AS code FROM employees WHERE employee_code LIKE 'EMP-%'
+  `).all();
   let maxNum = 0;
   for (const r of rows) {
-    const suffix = (r.employee_id || '').replace(/^EMP-/, '');
+    const suffix = (r.code || '').replace(/^EMP-/, '');
     if (/^\d+$/.test(suffix)) {
       const n = parseInt(suffix, 10);
       if (n > maxNum) maxNum = n;
     }
   }
-  const check = db.prepare('SELECT 1 FROM crew_members WHERE employee_id = ?');
+  const checkCrew = db.prepare('SELECT 1 FROM crew_members WHERE employee_id = ?');
+  const checkEmp = db.prepare('SELECT 1 FROM employees WHERE employee_code = ?');
   for (let tries = 0; tries < 1000; tries++) {
     const candidate = `EMP-${String(maxNum + 1 + tries).padStart(3, '0')}`;
-    if (!check.get(candidate)) return candidate;
+    if (!checkCrew.get(candidate) && !checkEmp.get(candidate)) return candidate;
   }
   throw new Error('Could not allocate a free employee_id after 1000 attempts');
+}
+
+// Find an existing roster member matching an induction submission, so
+// approving/converting LINKS to it instead of minting a duplicate. Matches on
+// email OR digits-only phone OR normalised full name, and searches BOTH
+// crew_members and employees (following employees.linked_crew_member_id back to
+// a crew_member). Deliberately ignores active/deleted_at so an archived or
+// renamed-but-deactivated dupe is still caught — the gap that let the same
+// person land as two profiles with different phone numbers. Returns
+// { id, full_name, employee_id } of a crew_member to link to, or null.
+function findExistingCrewMatch(db, s) {
+  const email = String(s.email || '').trim().toLowerCase();
+  const digits = String(s.phone || '').replace(/\D/g, '');
+  const name = String(s.full_name || '').trim().toLowerCase().replace(/\s+/g, ' ');
+  const PHONE_NORM = "REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', '')";
+  const out = (row) => row ? { id: row.id, full_name: row.full_name, employee_id: row.employee_id } : null;
+  const crewById = db.prepare('SELECT id, full_name, employee_id FROM crew_members WHERE id = ?');
+
+  // 1) crew_members direct — email, then phone, then name.
+  if (email) {
+    const r = db.prepare("SELECT id, full_name, employee_id FROM crew_members WHERE LOWER(TRIM(email)) = ? ORDER BY id DESC LIMIT 1").get(email);
+    if (r) return out(r);
+  }
+  if (digits.length >= 7) {
+    const r = db.prepare(`SELECT id, full_name, employee_id FROM crew_members WHERE ${PHONE_NORM} LIKE '%' || ? || '%' ORDER BY id DESC LIMIT 1`).get(digits);
+    if (r) return out(r);
+  }
+  if (name) {
+    const r = db.prepare("SELECT id, full_name, employee_id FROM crew_members WHERE LOWER(TRIM(full_name)) = ? ORDER BY id DESC LIMIT 1").get(name);
+    if (r) return out(r);
+  }
+
+  // 2) employees side — a worker created via HR without going through induction
+  //    won't have a crew_members row matched above. Follow the link back.
+  let emp = null;
+  if (email) emp = db.prepare("SELECT id, linked_crew_member_id FROM employees WHERE LOWER(TRIM(email)) = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1").get(email);
+  if (!emp && digits.length >= 7) emp = db.prepare(`SELECT id, linked_crew_member_id FROM employees WHERE ${PHONE_NORM} LIKE '%' || ? || '%' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1`).get(digits);
+  if (!emp && name) emp = db.prepare("SELECT id, linked_crew_member_id FROM employees WHERE LOWER(TRIM(full_name)) = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1").get(name);
+  if (emp && emp.linked_crew_member_id) {
+    const r = crewById.get(emp.linked_crew_member_id);
+    if (r) return out(r);
+  }
+  return null;
 }
 
 // Import induction file uploads as employee_documents AND create the matching
@@ -425,28 +476,12 @@ router.post('/submissions/:id/status', (req, res) => {
         db.prepare('UPDATE induction_submissions SET linked_crew_member_id = NULL WHERE id = ?').run(req.params.id);
       }
 
-      // Match by email first (strongest signal), then by digits-only phone.
-      let matched = null;
-      if (s.email) {
-        matched = db.prepare(`
-          SELECT id, full_name, employee_id FROM crew_members
-          WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND active = 1
-          ORDER BY id DESC LIMIT 1
-        `).get(s.email);
-      }
-      if (!matched && s.phone) {
-        const digits = String(s.phone).replace(/\D/g, '');
-        if (digits.length >= 7) {
-          // GLOB pattern on digit-stripped phone — better-sqlite3 doesn't ship
-          // a regexp engine, so we strip via REPLACE chain in SQL.
-          matched = db.prepare(`
-            SELECT id, full_name, employee_id FROM crew_members
-            WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', '') LIKE '%' || ? || '%'
-              AND active = 1
-            ORDER BY id DESC LIMIT 1
-          `).get(digits);
-        }
-      }
+      // Strong dedup: email OR digits-phone OR normalised name, across both
+      // crew_members and employees, regardless of active/deleted_at. This is
+      // the actual fix for the "approve mints a 2nd profile" bug — the old
+      // check only looked at active crew_members by email/phone, so a name
+      // match (different phone) or an archived dupe slipped straight through.
+      const matched = findExistingCrewMatch(db, s);
       if (matched) {
         db.prepare(`
           UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime('now') WHERE id = ?
@@ -580,29 +615,12 @@ router.post('/submissions/:id/convert', (req, res) => {
   if (!s) { req.flash('error', 'Submission not found.'); return res.redirect('/induction/admin/submissions'); }
   if (s.linked_crew_member_id) { req.flash('error', 'Already converted to employee.'); return res.redirect(`/induction/admin/submissions/${req.params.id}`); }
 
-  // Same email/phone dedup as the approve route — link to an existing
-  // roster member instead of minting a duplicate when the worker already
-  // exists (re-submitted induction, manually onboarded earlier, etc.).
+  // Same strong dedup as the approve route — link to an existing roster member
+  // instead of minting a duplicate when the worker already exists (re-submitted
+  // induction, manually onboarded earlier, etc.). Matches email/phone/name
+  // across crew_members + employees regardless of active/deleted_at.
   try {
-    let matched = null;
-    if (s.email) {
-      matched = db.prepare(`
-        SELECT id, full_name, employee_id FROM crew_members
-        WHERE LOWER(TRIM(email)) = LOWER(TRIM(?)) AND active = 1
-        ORDER BY id DESC LIMIT 1
-      `).get(s.email);
-    }
-    if (!matched && s.phone) {
-      const digits = String(s.phone).replace(/\D/g, '');
-      if (digits.length >= 7) {
-        matched = db.prepare(`
-          SELECT id, full_name, employee_id FROM crew_members
-          WHERE REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', '') LIKE '%' || ? || '%'
-            AND active = 1
-          ORDER BY id DESC LIMIT 1
-        `).get(digits);
-      }
-    }
+    const matched = findExistingCrewMatch(db, s);
     if (matched) {
       db.prepare('UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime(\'now\') WHERE id = ?').run(matched.id, req.params.id);
       req.flash('success', `Matched to existing roster member ${matched.full_name} (${matched.employee_id}). No duplicate created.`);

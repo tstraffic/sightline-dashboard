@@ -297,8 +297,14 @@
               <% } else { %>
                 <p class="text-xs text-amber-600 mt-1">No tier assigned — pick one below to stamp rates from the wage panel.</p>
               <% } %>
+              <% if (employee.rates_overridden) { %>
+                <span class="inline-flex items-center gap-1 mt-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">
+                  ● Custom rates — won't auto-update from the tier panel
+                </span>
+              <% } %>
             </div>
             <div class="flex items-center gap-2 flex-shrink-0">
+              <button type="button" onclick="document.getElementById('rateEditForm').classList.toggle('hidden')" class="text-[10px] text-brand-600 hover:underline whitespace-nowrap">Adjust / block</button>
               <% if (employee.tier) { %>
                 <button type="button" onclick="document.getElementById('tierAssignForm').classList.toggle('hidden')" class="text-[10px] text-brand-600 hover:underline whitespace-nowrap">Change tier</button>
               <% } %>
@@ -346,23 +352,73 @@
                 </select>
               </label>
             </div>
+            <% if (employee.rates_overridden) { %>
+              <label class="flex items-start gap-2 mb-2 p-2 rounded bg-amber-50 border border-amber-200">
+                <input type="checkbox" name="force" value="1" class="mt-0.5 rounded border-gray-300">
+                <span class="text-[10px] text-amber-800">This worker has custom rates. Tick to <strong>reset them to the tier defaults</strong> — otherwise the stamp is skipped to protect the manual values.</span>
+              </label>
+            <% } %>
             <div class="flex items-center justify-between gap-2">
               <p class="text-[10px] text-gray-500">Saving stamps the rates from the FY26 panel onto this worker. Changes immediately reflect on Worker Rates, the next pay run, and the worker's portal.</p>
               <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg whitespace-nowrap">Save tier</button>
             </div>
           </form>
 
+          <% const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_5plus:'Night 5+',rate_weekend_short:'Sat ≤2h',rate_weekend:'Sat / Wknd',rate_public_holiday:'PH',rate_fares_daily:'Travel',rate_meal:'Meal'}; %>
           <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
-            <% const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_5plus:'Night 5+',rate_weekend_short:'Sat ≤2h',rate_weekend:'Sat / Wknd',rate_public_holiday:'PH',rate_fares_daily:'Travel',rate_meal:'Meal'}; %>
             <% Object.entries(rateLabels).forEach(([key, label]) => { %>
               <% if (employee[key]) { %>
                 <div>
-                  <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"><%= label %></p>
-                  <p class="text-lg font-bold text-gray-900 mt-0.5">$<%= (employee[key] || 0).toFixed(2) %></p>
+                  <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                    <%= label %>
+                    <% if (key === 'rate_fares_daily' && employee.block_travel_allowance) { %><span class="text-red-500" title="Blocked — not paid, hidden from worker">⊘</span><% } %>
+                    <% if (key === 'rate_meal' && employee.block_meal_allowance) { %><span class="text-red-500" title="Blocked — not paid, hidden from worker">⊘</span><% } %>
+                  </p>
+                  <p class="text-lg font-bold mt-0.5 <%= ((key === 'rate_fares_daily' && employee.block_travel_allowance) || (key === 'rate_meal' && employee.block_meal_allowance)) ? 'text-gray-300 line-through' : 'text-gray-900' %>">$<%= (employee[key] || 0).toFixed(2) %></p>
                 </div>
               <% } %>
             <% }); %>
           </div>
+
+          <!--
+            Inline per-worker rate + allowance-block editor. Writes
+            employees.rate_* / block_* directly via /hr/employees/:id/rates.
+            employees is the single source of truth, so a save here shows up on
+            Worker Rates, the worker's portal "Your rate" card, and the next pay
+            run. Blocking an allowance hides it from the worker AND drops it from
+            their pay. Editing a rate away from the tier preset marks the worker
+            "Custom" so a later tier change won't silently overwrite it.
+          -->
+          <form method="POST" action="/hr/employees/<%= employee.id %>/rates" id="rateEditForm" class="hidden mt-4 p-3 bg-gray-50 border border-gray-200 rounded-lg">
+            <%- include('../partials/csrf') %>
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Adjust rates</p>
+            <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-3">
+              <% Object.entries(rateLabels).forEach(([key, label]) => { %>
+                <label class="block">
+                  <span class="text-[10px] text-gray-500"><%= label %></span>
+                  <div class="mt-0.5 flex items-center">
+                    <span class="text-gray-400 text-xs mr-0.5">$</span>
+                    <input type="number" step="0.01" min="0" name="<%= key %>" value="<%= (parseFloat(employee[key]) || 0).toFixed(2) %>"
+                      class="w-full px-2 py-1 border border-gray-300 rounded text-sm text-right tabular-nums focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
+                  </div>
+                </label>
+              <% }); %>
+            </div>
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Block allowances <span class="font-normal normal-case text-gray-400">(hidden from worker + not paid)</span></p>
+            <div class="flex flex-wrap items-center gap-4 mb-3">
+              <label class="inline-flex items-center gap-2 text-xs text-gray-700">
+                <input type="checkbox" name="block_travel_allowance" value="1" <%= employee.block_travel_allowance ? 'checked' : '' %> class="rounded border-gray-300">
+                Block travel allowance
+              </label>
+              <label class="inline-flex items-center gap-2 text-xs text-gray-700">
+                <input type="checkbox" name="block_meal_allowance" value="1" <%= employee.block_meal_allowance ? 'checked' : '' %> class="rounded border-gray-300">
+                Block meal allowance
+              </label>
+            </div>
+            <div class="flex items-center justify-end">
+              <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg">Save rates & blocks</button>
+            </div>
+          </form>
         </div>
         <% } %>
 

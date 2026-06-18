@@ -8,6 +8,8 @@ const { getDb } = require('../db/database');
 const { requirePermission, canViewSensitiveHR } = require('../middleware/auth');
 const { logActivity } = require('../middleware/audit');
 const { createInvitation, TOKEN_EXPIRY_HOURS } = require('../services/invitations');
+const { createEmployeeReview } = require('../lib/reviews');
+const { refreshCompetencyStatuses, computeReadiness } = require('../lib/competency');
 const { sendEmail } = require('../services/email');
 const { workerInviteEmail, sopSignLinkEmail, pinResetEmail } = require('../services/emailTemplates');
 const { createNotification } = require('../middleware/create-notification');
@@ -47,31 +49,8 @@ const hrFileFilter = (req, file, cb) => {
 };
 const upload = multer({ storage, limits: { fileSize: 50 * 1024 * 1024 }, fileFilter: hrFileFilter });
 
-// --- Readiness computation ---
-function computeReadiness(employee, competencies, documents) {
-  if (employee.employment_status === 'offboarded') return { status: 'offboarded', color: 'gray' };
-  if (employee.employment_status === 'on_leave') return { status: 'on_leave', color: 'blue' };
-  if (employee.employment_status === 'onboarding') return { status: 'onboarding', color: 'purple' };
-  if (employee.employment_status === 'suspended') return { status: 'blocked', color: 'red' };
-  if (employee.blocked_from_allocation) return { status: 'blocked', color: 'red' };
-
-  const expiredMandatory = (competencies || []).filter(c => c.mandatory_for_role && (c.status === 'expired' || c.status === 'missing'));
-  const missingMandatoryDocs = (documents || []).filter(d => d.mandatory && d.verification_status !== 'verified');
-
-  if (expiredMandatory.length > 0 || missingMandatoryDocs.length > 0) return { status: 'non_compliant', color: 'red' };
-
-  const expiringSoon = (competencies || []).filter(c => c.status === 'expiring_soon');
-  if (expiringSoon.length > 0) return { status: 'ready_with_warnings', color: 'amber' };
-
-  return { status: 'ready', color: 'green' };
-}
-
-// Auto-compute competency status based on expiry
-function refreshCompetencyStatuses(db, employeeId) {
-  db.prepare(`UPDATE employee_competencies SET status = 'expired' WHERE employee_id = ? AND expiry_date IS NOT NULL AND expiry_date < DATE('now') AND status != 'suspended'`).run(employeeId);
-  db.prepare(`UPDATE employee_competencies SET status = 'expiring_soon' WHERE employee_id = ? AND expiry_date IS NOT NULL AND expiry_date >= DATE('now') AND expiry_date <= DATE('now', '+30 days') AND status NOT IN ('expired','suspended','missing')`).run(employeeId);
-  db.prepare(`UPDATE employee_competencies SET status = 'valid' WHERE employee_id = ? AND expiry_date IS NOT NULL AND expiry_date > DATE('now', '+30 days') AND status NOT IN ('suspended','missing')`).run(employeeId);
-}
+// computeReadiness + refreshCompetencyStatuses now live in ../lib/competency
+// (shared with the safety-audit ticket-currency check). Imported above.
 
 // ============================================
 // HR DASHBOARD
@@ -1002,16 +981,13 @@ router.post('/employees/:id/reviews', requirePermission('hr_employees'), (req, r
   }
 
   try {
-    db.prepare(`
-      INSERT INTO employee_reviews
-        (employee_id, kind, title, summary, review_date, held_by, visibility,
-         sections_json, peer_comments_json, created_by_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      employee.id, kind, title, summary, reviewDate, heldBy, visibility,
-      JSON.stringify(sections), JSON.stringify(peerComments),
-      req.session.user.id
-    );
+    createEmployeeReview(db, {
+      employeeId: employee.id,
+      kind, title, summary,
+      reviewDate, heldBy, visibility,
+      sections, peerComments,
+      createdById: req.session.user.id,
+    });
     req.flash('success', visibility === 'worker'
       ? `${kind === 'review' ? 'Review' : 'Note'} saved and shared to the worker's portal.`
       : `${kind === 'review' ? 'Review' : 'Note'} saved (internal only).`);
@@ -1471,18 +1447,27 @@ router.post('/employees/:id/assign-tier', requirePermission('hr_employees'), (re
     return res.redirect(`/hr/employees/${empId}`);
   }
 
+  // force = the admin ticked "reset custom rates to tier defaults". Without
+  // it, a worker carrying hand-edited rates (rates_overridden=1) is left alone
+  // and we ask for confirmation rather than silently clobbering their rates.
+  const force = !!req.body.force;
+
   try {
     const { stampEmployeeRates } = require('../lib/wageTiers');
-    const result = stampEmployeeRates(db, empId, tier, pt, { nightPattern });
+    const result = stampEmployeeRates(db, empId, tier, pt, { nightPattern, force });
     if (!result.ok) {
-      req.flash('error', `Tier stamp failed: ${result.error}`);
+      if (result.overridden) {
+        req.flash('error', `${employee.full_name} has custom rates. Tick "Reset custom rates to tier defaults" to overwrite them with the Tier ${tier} (${pt.toUpperCase()}) preset.`);
+      } else {
+        req.flash('error', `Tier stamp failed: ${result.error}`);
+      }
       return res.redirect(`/hr/employees/${empId}`);
     }
     try {
       logActivity({
         user: req.session.user, action: 'update', entityType: 'employee',
         entityId: empId, entityLabel: employee.full_name,
-        details: `Set wage tier to ${tier} (${pt.toUpperCase()}, ${nightPattern}) — rates stamped from FY26 panel`,
+        details: `Set wage tier to ${tier} (${pt.toUpperCase()}, ${nightPattern}) — rates stamped from FY26 panel${force ? ' (custom rates reset)' : ''}`,
         ip: req.ip,
       });
     } catch (e) { /* audit shouldn't block save */ }
@@ -1490,6 +1475,70 @@ router.post('/employees/:id/assign-tier', requirePermission('hr_employees'), (re
   } catch (e) {
     console.error('[/hr/employees/:id/assign-tier]', e);
     req.flash('error', `Could not assign tier: ${e.message}`);
+  }
+  return res.redirect(`/hr/employees/${empId}`);
+});
+
+// POST /employees/:id/rates — adjust an individual worker's rates + allowance
+// blocks straight from their roster profile. Writes employees.rate_* / block_*
+// directly (the single source of truth read by the Worker Rates grid, the
+// worker portal, and the next pay run). When the saved rates diverge from the
+// worker's tier preset we set rates_overridden so a later tier re-stamp won't
+// quietly wipe these hand edits.
+router.post('/employees/:id/rates', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const empId = parseInt(req.params.id, 10);
+  const employee = db.prepare('SELECT id, full_name, tier, payment_type, night_pattern FROM employees WHERE id = ? AND deleted_at IS NULL').get(empId);
+  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+
+  try {
+    const empCols = new Set(db.prepare("PRAGMA table_info(employees)").all().map(c => c.name));
+    const RATE_COLS = [
+      'rate_day', 'rate_ot', 'rate_dt',
+      'rate_night', 'rate_night_5plus',
+      'rate_weekend_short', 'rate_weekend', 'rate_public_holiday',
+      'rate_fares_daily', 'rate_meal',
+    ].filter(c => empCols.has(c));
+
+    const sets = [];
+    const params = [];
+    const submitted = {};
+    for (const col of RATE_COLS) {
+      if (req.body[col] === undefined) continue; // only update posted fields
+      const n = parseFloat(req.body[col]);
+      const v = Number.isFinite(n) && n >= 0 ? Math.round(n * 100) / 100 : 0;
+      sets.push(`${col} = ?`); params.push(v);
+      submitted[col] = v;
+    }
+    // Allowance blocks (unchecked checkbox posts nothing → 0).
+    if (empCols.has('block_travel_allowance')) { sets.push('block_travel_allowance = ?'); params.push(req.body.block_travel_allowance ? 1 : 0); }
+    if (empCols.has('block_meal_allowance')) { sets.push('block_meal_allowance = ?'); params.push(req.body.block_meal_allowance ? 1 : 0); }
+
+    // Decide the override flag from the submitted rates vs the tier preset.
+    if (empCols.has('rates_overridden')) {
+      const { ratesDivergeFromPreset } = require('../lib/wageTiers');
+      const probe = Object.assign({
+        tier: employee.tier, payment_type: employee.payment_type, night_pattern: employee.night_pattern,
+      }, submitted);
+      sets.push('rates_overridden = ?'); params.push(ratesDivergeFromPreset(db, probe) ? 1 : 0);
+    }
+    if (empCols.has('updated_at')) sets.push('updated_at = CURRENT_TIMESTAMP');
+
+    if (!sets.length) { req.flash('error', 'No rate fields submitted.'); return res.redirect(`/hr/employees/${empId}`); }
+    db.prepare(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`).run(...params, empId);
+
+    try {
+      logActivity({
+        user: req.session.user, action: 'update', entityType: 'employee',
+        entityId: empId, entityLabel: employee.full_name,
+        details: `Adjusted individual rates/allowance blocks${req.body.block_travel_allowance ? ' [travel blocked]' : ''}${req.body.block_meal_allowance ? ' [meal blocked]' : ''}`,
+        ip: req.ip,
+      });
+    } catch (e) { /* audit shouldn't block save */ }
+    req.flash('success', `Saved rates for ${employee.full_name}. Changes apply to the Worker Rates grid, their portal, and future pay runs.`);
+  } catch (e) {
+    console.error('[/hr/employees/:id/rates]', e);
+    req.flash('error', `Could not save rates: ${e.message}`);
   }
   return res.redirect(`/hr/employees/${empId}`);
 });
@@ -2520,6 +2569,62 @@ router.post('/management-contacts', requirePermission('hr_dashboard'), (req, res
     req.flash('error', 'Could not save: ' + e.message);
   }
   return res.redirect('/hr/management-contacts');
+});
+
+// ============================================================================
+// Merge duplicate workers
+//   GET  /hr/merge?a=<empId>&b=<empId>  — side-by-side preview + field chooser
+//   POST /hr/merge                       — execute the merge in one transaction
+//
+// A "worker" = employees row + linked crew_members row. The survivor defaults
+// to the profile with competencies + documents; staff resolve any conflicting
+// scalar field, and ALL child records move to the survivor (lib/mergeWorkers).
+// ============================================================================
+router.get('/merge', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const a = parseInt(req.query.a, 10);
+  const b = parseInt(req.query.b, 10);
+  if (!a || !b) { req.flash('error', 'Pick two profiles to merge (select two rows on the roster).'); return res.redirect('/hr/roster'); }
+  const { buildPreview } = require('../lib/mergeWorkers');
+  const preview = buildPreview(db, a, b, req.query.winner);
+  if (preview.error) { req.flash('error', preview.error); return res.redirect('/hr/roster'); }
+  res.render('hr/merge', {
+    title: 'Merge duplicate workers',
+    currentPage: 'hr-roster',
+    preview,
+    user: req.session.user,
+  });
+});
+
+router.post('/merge', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const winnerEmpId = parseInt(req.body.winner_emp_id, 10);
+  const loserEmpId = parseInt(req.body.loser_emp_id, 10);
+  if (!winnerEmpId || !loserEmpId) { req.flash('error', 'Missing merge targets.'); return res.redirect('/hr/roster'); }
+
+  // Field choices arrive as choice[emp][<col>] / choice[crew][<col>] = 'loser'.
+  const raw = req.body.choice || {};
+  const fieldChoices = { emp: raw.emp || {}, crew: raw.crew || {} };
+
+  try {
+    const { executeMerge } = require('../lib/mergeWorkers');
+    const result = executeMerge(db, { winnerEmpId, loserEmpId, fieldChoices, userId: req.session.user.id });
+    const movedTotal = Object.values(result.moved).reduce((s, n) => s + n, 0);
+    try {
+      logActivity({
+        user: req.session.user, action: 'update', entityType: 'employee',
+        entityId: result.winnerEmpId, entityLabel: result.winnerName,
+        details: `Merged duplicate "${result.loserName}" (#${result.loserEmpId}) into "${result.winnerName}" (#${result.winnerEmpId}). Moved ${movedTotal} child record(s) across ${Object.keys(result.moved).length} table(s).`,
+        ip: req.ip,
+      });
+    } catch (e) { /* audit shouldn't block the merge */ }
+    req.flash('success', `Merged ${result.loserName} into ${result.winnerName}. ${movedTotal} record(s) moved; the duplicate is archived.`);
+    return res.redirect(`/hr/employees/${result.winnerEmpId}`);
+  } catch (e) {
+    console.error('[hr/merge]', e);
+    req.flash('error', `Merge failed: ${e.message}`);
+    return res.redirect(`/hr/merge?a=${winnerEmpId}&b=${loserEmpId}`);
+  }
 });
 
 module.exports = router;

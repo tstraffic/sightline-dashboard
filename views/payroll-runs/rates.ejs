@@ -135,6 +135,9 @@
                     <% cols.forEach(c => { %>
                       <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest"><%= c.label %></th>
                     <% }) %>
+                    <% if (tab.key !== 'unclassified') { %>
+                      <th class="px-2 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest" title="Block an allowance: not paid and hidden from the worker's app">Block</th>
+                    <% } %>
                     <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">BSB</th>
                     <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Account</th>
                   </tr>
@@ -206,6 +209,16 @@
                           <% } %>
                         </td>
                       <% }) %>
+                      <% if (tab.key !== 'unclassified') { %>
+                        <td class="px-2 py-1 text-center whitespace-nowrap">
+                          <label class="inline-flex items-center gap-1 text-[10px] text-gray-600 mr-1.5" title="Block travel allowance">
+                            <input type="checkbox" name="rows[emp_<%= e.id %>][block_travel_allowance]" value="1" <%= e.block_travel_allowance ? 'checked' : '' %> class="rounded border-gray-300"> T
+                          </label>
+                          <label class="inline-flex items-center gap-1 text-[10px] text-gray-600" title="Block meal allowance">
+                            <input type="checkbox" name="rows[emp_<%= e.id %>][block_meal_allowance]" value="1" <%= e.block_meal_allowance ? 'checked' : '' %> class="rounded border-gray-300"> M
+                          </label>
+                        </td>
+                      <% } %>
                       <td class="px-2 py-1">
                         <input type="text" name="rows[emp_<%= e.id %>][payroll_bsb]" value="<%= e.payroll_bsb || '' %>" placeholder="000-000" class="w-24 px-2 py-1 border border-gray-300 rounded text-sm font-mono">
                       </td>

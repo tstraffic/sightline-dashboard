@@ -357,6 +357,10 @@
         <button type="submit" id="rosterBulkStatusBtn" disabled class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition">Apply</button>
       </form>
       <span class="text-gray-300">|</span>
+      <button type="button" id="rosterMergeBtn" disabled title="Select exactly two profiles to merge" class="px-3 py-1.5 bg-amber-500 hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-semibold rounded-lg transition">
+        Merge 2
+      </button>
+      <span class="text-gray-300">|</span>
       <button type="button" id="rosterDeleteBtn" class="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-semibold rounded-lg transition">
         Delete
       </button>
@@ -625,6 +629,7 @@ document.addEventListener('DOMContentLoaded', function() {
   var bar       = document.getElementById('rosterBulk');
   var countEl   = document.getElementById('rosterBulkCount');
   var delBtn    = document.getElementById('rosterDeleteBtn');
+  var mergeBtn  = document.getElementById('rosterMergeBtn');
   var modal     = document.getElementById('rosterModal');
   var modalN    = document.getElementById('rosterModalN');
   var modalBg   = document.getElementById('rosterModalBg');
@@ -641,6 +646,18 @@ document.addEventListener('DOMContentLoaded', function() {
       allBox.checked = a > 0 && c === a;
       allBox.indeterminate = c > 0 && c < a;
     }
+    if (mergeBtn) {
+      mergeBtn.disabled = c !== 2;
+      mergeBtn.textContent = c === 2 ? 'Merge these 2' : 'Merge 2';
+    }
+  }
+
+  if (mergeBtn) {
+    mergeBtn.addEventListener('click', function() {
+      var ids = Array.from(checked()).map(function(cb) { return cb.value; });
+      if (ids.length !== 2) return;
+      window.location.href = '/hr/merge?a=' + encodeURIComponent(ids[0]) + '&b=' + encodeURIComponent(ids[1]);
+    });
   }
 
   if (allBox) {
