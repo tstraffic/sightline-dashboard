@@ -9,6 +9,7 @@ const { employeeGuideSlides, tcTrainingSlides } = require('../induction-slides')
 const { encrypt } = require('../services/encryption');
 const { currentVersion: currentSopVersion, ackText: sopAckText, activeDocuments: activeSopDocuments } = require('../lib/sop');
 const { maybeMarkInducted } = require('../lib/induction');
+const { findExistingCrew } = require('../lib/crewDedup');
 
 // SOP document uploads — accept PDFs first, also images/Word docs as a
 // fallback in case the user has an existing file format that's not PDF.
@@ -219,49 +220,6 @@ function allocateEmployeeId(db) {
     if (!checkCrew.get(candidate) && !checkEmp.get(candidate)) return candidate;
   }
   throw new Error('Could not allocate a free employee_id after 1000 attempts');
-}
-
-// Find an existing roster member matching an induction submission, so
-// approving/converting LINKS to it instead of minting a duplicate. Matches on
-// email OR digits-only phone OR normalised full name, and searches BOTH
-// crew_members and employees (following employees.linked_crew_member_id back to
-// a crew_member). Deliberately ignores active/deleted_at so an archived or
-// renamed-but-deactivated dupe is still caught — the gap that let the same
-// person land as two profiles with different phone numbers. Returns
-// { id, full_name, employee_id } of a crew_member to link to, or null.
-function findExistingCrewMatch(db, s) {
-  const email = String(s.email || '').trim().toLowerCase();
-  const digits = String(s.phone || '').replace(/\D/g, '');
-  const name = String(s.full_name || '').trim().toLowerCase().replace(/\s+/g, ' ');
-  const PHONE_NORM = "REPLACE(REPLACE(REPLACE(REPLACE(phone, ' ', ''), '-', ''), '+', ''), '(', '')";
-  const out = (row) => row ? { id: row.id, full_name: row.full_name, employee_id: row.employee_id } : null;
-  const crewById = db.prepare('SELECT id, full_name, employee_id FROM crew_members WHERE id = ?');
-
-  // 1) crew_members direct — email, then phone, then name.
-  if (email) {
-    const r = db.prepare("SELECT id, full_name, employee_id FROM crew_members WHERE LOWER(TRIM(email)) = ? ORDER BY id DESC LIMIT 1").get(email);
-    if (r) return out(r);
-  }
-  if (digits.length >= 7) {
-    const r = db.prepare(`SELECT id, full_name, employee_id FROM crew_members WHERE ${PHONE_NORM} LIKE '%' || ? || '%' ORDER BY id DESC LIMIT 1`).get(digits);
-    if (r) return out(r);
-  }
-  if (name) {
-    const r = db.prepare("SELECT id, full_name, employee_id FROM crew_members WHERE LOWER(TRIM(full_name)) = ? ORDER BY id DESC LIMIT 1").get(name);
-    if (r) return out(r);
-  }
-
-  // 2) employees side — a worker created via HR without going through induction
-  //    won't have a crew_members row matched above. Follow the link back.
-  let emp = null;
-  if (email) emp = db.prepare("SELECT id, linked_crew_member_id FROM employees WHERE LOWER(TRIM(email)) = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1").get(email);
-  if (!emp && digits.length >= 7) emp = db.prepare(`SELECT id, linked_crew_member_id FROM employees WHERE ${PHONE_NORM} LIKE '%' || ? || '%' AND deleted_at IS NULL ORDER BY id DESC LIMIT 1`).get(digits);
-  if (!emp && name) emp = db.prepare("SELECT id, linked_crew_member_id FROM employees WHERE LOWER(TRIM(full_name)) = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1").get(name);
-  if (emp && emp.linked_crew_member_id) {
-    const r = crewById.get(emp.linked_crew_member_id);
-    if (r) return out(r);
-  }
-  return null;
 }
 
 // Import induction file uploads as employee_documents AND create the matching
@@ -476,12 +434,11 @@ router.post('/submissions/:id/status', (req, res) => {
         db.prepare('UPDATE induction_submissions SET linked_crew_member_id = NULL WHERE id = ?').run(req.params.id);
       }
 
-      // Strong dedup: email OR digits-phone OR normalised name, across both
-      // crew_members and employees, regardless of active/deleted_at. This is
-      // the actual fix for the "approve mints a 2nd profile" bug — the old
-      // check only looked at active crew_members by email/phone, so a name
-      // match (different phone) or an archived dupe slipped straight through.
-      const matched = findExistingCrewMatch(db, s);
+      // Strong dedup via the shared matcher (lib/crewDedup): email OR last-9
+      // phone OR normalised name, across crew_members + employees, regardless
+      // of active/deleted_at. One implementation shared with the recruitment
+      // "Hired" conversion so the two paths can't drift apart.
+      const matched = findExistingCrew(db, { email: s.email, phone: s.phone, fullName: s.full_name });
       if (matched) {
         db.prepare(`
           UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime('now') WHERE id = ?
@@ -620,7 +577,7 @@ router.post('/submissions/:id/convert', (req, res) => {
   // induction, manually onboarded earlier, etc.). Matches email/phone/name
   // across crew_members + employees regardless of active/deleted_at.
   try {
-    const matched = findExistingCrewMatch(db, s);
+    const matched = findExistingCrew(db, { email: s.email, phone: s.phone, fullName: s.full_name });
     if (matched) {
       db.prepare('UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime(\'now\') WHERE id = ?').run(matched.id, req.params.id);
       req.flash('success', `Matched to existing roster member ${matched.full_name} (${matched.employee_id}). No duplicate created.`);
