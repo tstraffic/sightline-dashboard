@@ -18,6 +18,7 @@ const crypto = require('crypto');
 const { currentVersion: currentSopVersion } = require('../lib/sop');
 const { REQUIRED_MODULES } = require('../lib/induction');
 const { forCrewMember: trainingRecordsForCrew, distinctNames: distinctTrainingNames } = require('../lib/trainingRecords');
+const { normalizePhone, normalizeEmail, normalizeName } = require('../lib/crewDedup');
 
 // Only admin and finance can see pay rates
 function canViewRates(user) {
@@ -464,6 +465,76 @@ router.post('/roster/restore', requirePermission('hr_employees'), (req, res) => 
     req.flash('error', 'Error restoring employees: ' + err.message);
   }
   res.redirect('/hr/roster?view=deleted');
+});
+
+// ============================================
+// ROSTER DUPLICATES — find people on the roster more than once (e.g. added
+// via recruitment "Hired" AND the induction form). Groups active employees by
+// normalised phone / email / name. Resolving keeps one and soft-deletes the
+// rest (same cascade as /roster/delete: deactivate login + linked crew).
+// ============================================
+router.get('/roster/duplicates', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const rows = db.prepare(`
+    SELECT e.id, e.full_name, e.employee_code, e.employment_status, e.payment_type, e.phone, e.email,
+      e.linked_crew_member_id, (e.inducted_at IS NOT NULL) AS inducted,
+      CASE WHEN cm.pin_hash IS NOT NULL THEN 1 ELSE 0 END AS has_pin,
+      (SELECT COUNT(*) FROM crew_allocations ca WHERE ca.crew_member_id = e.linked_crew_member_id) AS allocations
+    FROM employees e
+    LEFT JOIN crew_members cm ON cm.id = e.linked_crew_member_id
+    WHERE e.deleted_at IS NULL
+  `).all();
+
+  // Group by normalised phone, then email, then name — each member lands in
+  // only one group (first key wins) so it isn't shown twice.
+  const groups = new Map();
+  const placed = new Set();
+  const addTo = (key, reason, m) => {
+    if (!groups.has(key)) groups.set(key, { key, reason, members: [] });
+    groups.get(key).members.push(m); placed.add(m.id);
+  };
+  rows.forEach(m => { const np = normalizePhone(m.phone); if (np.length >= 8) addTo('p:' + np, 'phone', m); });
+  rows.forEach(m => { if (placed.has(m.id)) return; const e = normalizeEmail(m.email); if (e) addTo('e:' + e, 'email', m); });
+  rows.forEach(m => { if (placed.has(m.id)) return; const n = normalizeName(m.full_name); if (n) addTo('n:' + n, 'name', m); });
+
+  const dupes = Array.from(groups.values())
+    .filter(g => g.members.length > 1)
+    .map(g => {
+      g.members.sort((a, b) =>
+        (b.has_pin - a.has_pin) || (b.allocations - a.allocations) || (b.inducted - a.inducted) || (a.id - b.id));
+      g.suggestedKeepId = g.members[0].id;
+      return g;
+    })
+    .sort((a, b) => a.members[0].full_name.localeCompare(b.members[0].full_name));
+
+  res.render('hr/duplicates', { title: 'Duplicate roster records', currentPage: 'hr_employees', dupes });
+});
+
+router.post('/roster/duplicates/resolve', requirePermission('hr_employees'), (req, res) => {
+  const db = getDb();
+  const removeIds = [];
+  Object.keys(req.body).forEach(k => {
+    if (!k.startsWith('keep_')) return;
+    const keepId = parseInt(req.body[k], 10);
+    const ids = String(req.body['members_' + k.slice(5)] || '').split(',').map(n => parseInt(n, 10)).filter(Boolean);
+    ids.forEach(id => { if (id && id !== keepId) removeIds.push(id); });
+  });
+  if (!removeIds.length) { req.flash('error', 'Nothing to resolve.'); return res.redirect('/hr/roster/duplicates'); }
+
+  const ph = removeIds.map(() => '?').join(',');
+  try {
+    const linkedUsers = db.prepare(`SELECT linked_user_id FROM employees WHERE id IN (${ph}) AND linked_user_id IS NOT NULL`).all(...removeIds).map(r => r.linked_user_id).filter(Boolean);
+    if (linkedUsers.length) db.prepare(`UPDATE users SET active = 0 WHERE id IN (${linkedUsers.map(() => '?').join(',')})`).run(...linkedUsers);
+    const linkedCrew = db.prepare(`SELECT linked_crew_member_id FROM employees WHERE id IN (${ph}) AND linked_crew_member_id IS NOT NULL`).all(...removeIds).map(r => r.linked_crew_member_id).filter(Boolean);
+    if (linkedCrew.length) db.prepare(`UPDATE crew_members SET active = 0 WHERE id IN (${linkedCrew.map(() => '?').join(',')})`).run(...linkedCrew);
+    db.prepare(`UPDATE employees SET deleted_at = CURRENT_TIMESTAMP, active = 0, updated_at = CURRENT_TIMESTAMP WHERE id IN (${ph})`).run(...removeIds);
+    try { logActivity({ user: req.session.user, action: 'update', entityType: 'employee', entityLabel: `Resolved duplicates — removed ${removeIds.length} record(s)`, ip: req.ip }); } catch (e) {}
+    req.flash('success', `Resolved duplicates — moved ${removeIds.length} record(s) to Deleted.`);
+  } catch (err) {
+    console.error('Duplicate resolve error:', err);
+    req.flash('error', 'Error resolving duplicates: ' + err.message);
+  }
+  res.redirect('/hr/roster/duplicates');
 });
 
 // ============================================

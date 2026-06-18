@@ -6,7 +6,6 @@ const { logActivity } = require('../middleware/audit');
 const { requireRole, requirePermission } = require('../middleware/auth');
 const { createInvitation, TOKEN_EXPIRY_HOURS } = require('../services/invitations');
 const { sendEmail } = require('../services/email');
-const { normalizePhone, normalizeEmail } = require('../lib/crewDedup');
 const { workerInviteEmail } = require('../services/emailTemplates');
 const {
   getComplianceStatus,
@@ -193,86 +192,6 @@ router.post('/', (req, res) => {
     }
     res.redirect('/crew/new');
   }
-});
-
-// GET /duplicates — find active crew that share a normalised phone or email
-// (the classic "added via recruitment AND via induction form" double-up).
-// MUST be declared before the /:id routes so it isn't captured by GET /:id.
-router.get('/duplicates', (req, res) => {
-  const db = getDb();
-  const rows = db.prepare(`
-    SELECT id, full_name, employee_id, phone, email, status, induction_status, induction_date,
-      (pin_hash IS NOT NULL) AS has_pin,
-      (SELECT COUNT(*) FROM crew_allocations ca WHERE ca.crew_member_id = crew_members.id) AS allocations
-    FROM crew_members WHERE active = 1
-  `).all();
-
-  // Group by normalised phone, then by email. A member can only land in one
-  // group (phone wins) so the same row isn't shown twice.
-  const groups = new Map(); // key -> { key, reason, members[] }
-  const placed = new Set();
-  function addTo(key, reason, m) {
-    if (!groups.has(key)) groups.set(key, { key, reason, members: [] });
-    groups.get(key).members.push(m);
-    placed.add(m.id);
-  }
-  rows.forEach(m => {
-    const np = normalizePhone(m.phone);
-    if (np.length >= 8) addTo('p:' + np, 'phone', m);
-  });
-  rows.forEach(m => {
-    if (placed.has(m.id)) return;
-    const e = normalizeEmail(m.email);
-    if (e) addTo('e:' + e, 'email', m);
-  });
-
-  const dupes = Array.from(groups.values())
-    .filter(g => g.members.length > 1)
-    // Suggest keeping the most-established record: has PIN, then most
-    // allocations, then inducted, then lowest id (oldest).
-    .map(g => {
-      g.members.sort((a, b) =>
-        (b.has_pin - a.has_pin) || (b.allocations - a.allocations) ||
-        ((b.induction_status === 'completed') - (a.induction_status === 'completed')) || (a.id - b.id));
-      g.suggestedKeepId = g.members[0].id;
-      return g;
-    })
-    .sort((a, b) => a.members[0].full_name.localeCompare(b.members[0].full_name));
-
-  res.render('crew/duplicates', { title: 'Duplicate crew', currentPage: 'crew', dupes });
-});
-
-// POST /duplicates/resolve — keep one member per group, deactivate the rest.
-router.post('/duplicates/resolve', (req, res) => {
-  const db = getDb();
-  // Body: keep_<key> = crewId for each resolved group, and groups[] listing the
-  // member ids that belonged to that group (so we know which to deactivate).
-  const keepIds = [];
-  const deactivateIds = [];
-  Object.keys(req.body).forEach(k => {
-    if (!k.startsWith('keep_')) return;
-    const keepId = parseInt(req.body[k], 10);
-    if (!keepId) return;
-    keepIds.push(keepId);
-    const memberField = req.body['members_' + k.slice(5)];
-    const ids = String(memberField || '').split(',').map(n => parseInt(n, 10)).filter(Boolean);
-    ids.forEach(id => { if (id !== keepId) deactivateIds.push(id); });
-  });
-
-  let n = 0;
-  const deact = db.prepare("UPDATE crew_members SET active = 0, status = 'inactive' WHERE id = ?");
-  const deactEmp = db.prepare('UPDATE employees SET active = 0 WHERE linked_crew_member_id = ?');
-  const tx = db.transaction(() => {
-    deactivateIds.forEach(id => {
-      deact.run(id);
-      try { deactEmp.run(id); } catch (e) { /* employees table optional link */ }
-      n++;
-    });
-  });
-  tx();
-  try { logActivity({ user: req.session.user, action: 'update', entityType: 'crew_member', entityLabel: `Deactivated ${n} duplicate crew row(s)`, ip: req.ip }); } catch (e) {}
-  req.flash('success', `Resolved duplicates — deactivated ${n} record(s).`);
-  res.redirect('/crew/duplicates');
 });
 
 // POST /:id/deactivate — Single-row deactivate, redirects back to

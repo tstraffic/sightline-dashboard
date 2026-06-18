@@ -1,14 +1,14 @@
-<% locals.currentPage = 'crew' %>
+<% locals.currentPage = 'hr_employees' %>
 
 <div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
-  <a href="/crew" class="hover:text-gray-900 transition">Roster</a>
+  <a href="/hr/roster" class="hover:text-gray-900 transition">Roster</a>
   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
   <span class="text-gray-900">Duplicates</span>
 </div>
 
 <div class="mb-5">
-  <h1 class="text-2xl font-bold text-gray-900">Duplicate crew</h1>
-  <p class="text-gray-500 text-sm mt-0.5">People who appear more than once (same phone or email) — e.g. added from recruitment <em>and</em> the induction form. Keep one; the rest get deactivated (not deleted).</p>
+  <h1 class="text-2xl font-bold text-gray-900">Duplicate roster records</h1>
+  <p class="text-gray-500 text-sm mt-0.5">People on the roster more than once (same phone, email, or name) — e.g. added from recruitment <em>and</em> the induction form. Keep one; the rest move to <strong>Deleted</strong> (restorable).</p>
 </div>
 
 <% if (!dupes.length) { %>
@@ -17,10 +17,10 @@
       <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
     </div>
     <p class="text-sm font-semibold text-gray-700">No duplicates found</p>
-    <p class="text-xs text-gray-500 mt-1">Every active roster member has a unique phone and email.</p>
+    <p class="text-xs text-gray-500 mt-1">Everyone on the roster has a unique phone, email and name.</p>
   </div>
 <% } else { %>
-  <form method="POST" action="/crew/duplicates/resolve" class="space-y-4">
+  <form method="POST" action="/hr/roster/duplicates/resolve" class="space-y-4">
     <%- include('../partials/csrf') %>
     <% dupes.forEach(function (g, i) { %>
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
@@ -36,27 +36,30 @@
               <div class="flex-1 min-w-0 grid grid-cols-2 sm:grid-cols-6 gap-x-4 gap-y-1 items-center">
                 <div class="sm:col-span-2">
                   <p class="text-sm font-semibold text-gray-900 truncate"><%= m.full_name %></p>
-                  <p class="text-[11px] text-gray-400 tabular-nums"><%= m.employee_id %></p>
+                  <p class="text-[11px] text-gray-400 tabular-nums"><%= m.employee_code %></p>
                 </div>
                 <div class="text-xs text-gray-600 tabular-nums"><%= m.phone || '—' %></div>
                 <div class="text-xs text-gray-600 truncate"><%= m.email || '—' %></div>
-                <div class="text-xs"><span class="inline-flex px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-semibold uppercase"><%= m.status || 'active' %></span></div>
+                <div class="text-xs">
+                  <span class="inline-flex px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 text-[10px] font-semibold uppercase"><%= (m.employment_status || 'active') %></span>
+                  <% if (m.payment_type) { %><span class="inline-flex px-1.5 py-0.5 rounded bg-gray-50 text-gray-500 text-[10px] font-semibold uppercase ml-1"><%= m.payment_type %></span><% } %>
+                </div>
                 <div class="text-[11px] text-gray-500">
-                  <%= m.allocations %> alloc<%= m.allocations === 1 ? '' : 's' %><% if (m.has_pin) { %> · <span class="text-emerald-600 font-semibold">PIN</span><% } %><% if (m.induction_status === 'completed') { %> · <span class="text-blue-600">inducted</span><% } %>
+                  <%= m.allocations %> alloc<%= m.allocations === 1 ? '' : 's' %><% if (m.has_pin) { %> · <span class="text-emerald-600 font-semibold">PIN</span><% } %><% if (m.inducted) { %> · <span class="text-blue-600">inducted</span><% } %>
                 </div>
               </div>
             </label>
           <% }) %>
         </div>
         <div class="px-4 py-2 bg-gray-50/60 border-t border-gray-100 text-[11px] text-gray-500">
-          The selected record is kept; the other<%= g.members.length > 2 ? 's' : '' %> will be deactivated. Suggested keep = most established (PIN / allocations / inducted).
+          The selected record is kept; the other<%= g.members.length > 2 ? 's' : '' %> move to Deleted. Suggested keep = most established (PIN / allocations / inducted).
         </div>
       </div>
     <% }) %>
 
     <div class="flex items-center justify-between gap-2 sticky bottom-0 bg-gray-50/80 backdrop-blur py-3 -mx-1 px-1 rounded-lg">
       <p class="text-xs text-gray-500"><%= dupes.length %> duplicate group<%= dupes.length === 1 ? '' : 's' %> found.</p>
-      <button type="submit" onclick="return confirm('Deactivate the non-selected duplicate records?')" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">Keep selected, deactivate the rest</button>
+      <button type="submit" onclick="return confirm('Move the non-selected duplicate records to Deleted?')" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">Keep selected, remove the rest</button>
     </div>
   </form>
 <% } %>
