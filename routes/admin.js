@@ -8,9 +8,42 @@ const { createInvitation, TOKEN_EXPIRY_HOURS } = require('../services/invitation
 const { sendEmail, isConfigured } = require('../services/email');
 const { adminInviteEmail } = require('../services/emailTemplates');
 const { logActivity } = require('../middleware/audit');
+const { reloadSettings } = require('../middleware/settings');
 
 // Only admin can access admin panel
 router.use(requireRole('admin'));
+
+// ── Global sidebar layout (folders, order, renamed tabs) ──
+// Stored once in system_config and applied for everyone (still filtered by each
+// user's permissions client-side). Body: { layout: <json string|object> } with
+// shape { v, tree:[ {t:'item',key,label?} | {t:'folder',name,collapsed,children:[...]} ] }.
+router.post('/sidebar-layout', (req, res) => {
+  const db = getDb();
+  let parsed;
+  try {
+    parsed = typeof req.body.layout === 'string' ? JSON.parse(req.body.layout) : req.body.layout;
+  } catch (e) { return res.status(400).json({ ok: false, error: 'Invalid JSON.' }); }
+  if (!parsed || !Array.isArray(parsed.tree)) return res.status(400).json({ ok: false, error: 'Invalid layout shape.' });
+  const json = JSON.stringify(parsed);
+  if (json.length > 200000) return res.status(400).json({ ok: false, error: 'Layout too large.' });
+  const exists = db.prepare("SELECT id FROM system_config WHERE config_key = 'sidebar_layout'").get();
+  if (exists) {
+    db.prepare("UPDATE system_config SET config_value = ?, config_type = 'string', updated_at = CURRENT_TIMESTAMP, updated_by_id = ? WHERE config_key = 'sidebar_layout'").run(json, req.session.user.id);
+  } else {
+    db.prepare("INSERT INTO system_config (config_key, config_value, config_type, description, updated_by_id) VALUES ('sidebar_layout', ?, 'string', 'Custom sidebar folders / order / labels (global)', ?)").run(json, req.session.user.id);
+  }
+  try { reloadSettings(); } catch (e) { /* cache reload best-effort */ }
+  try { logActivity({ user: req.session.user, action: 'update', entityType: 'settings', entityLabel: 'Sidebar layout', ip: req.ip }); } catch (e) {}
+  res.json({ ok: true });
+});
+
+// Reset to the default (permission-driven) sidebar for everyone.
+router.post('/sidebar-layout/reset', (req, res) => {
+  const db = getDb();
+  db.prepare("DELETE FROM system_config WHERE config_key = 'sidebar_layout'").run();
+  try { reloadSettings(); } catch (e) {}
+  res.json({ ok: true });
+});
 
 router.get('/users', (req, res) => {
   const db = getDb();

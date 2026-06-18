@@ -1,0 +1,350 @@
+<style>
+  /* ── Custom sidebar layout: folders + edit mode ── */
+  #sidebar .sb-folder { margin-top: 1px; }
+  #sidebar .sb-folder-head {
+    display: flex; align-items: center; gap: 4px; width: 100%;
+    padding: 7px 10px 5px; background: none; border: 0; cursor: pointer;
+    color: rgba(96,154,255,0.5); font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.09em; text-align: left;
+  }
+  #sidebar .sb-folder-head:hover { color: rgba(150,185,255,0.8); }
+  #sidebar .sb-folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #sidebar .sb-caret { width: 12px; height: 12px; flex-shrink: 0; transition: transform .15s ease; }
+  #sidebar .sb-folder.is-collapsed .sb-caret { transform: rotate(-90deg); }
+  #sidebar .sb-folder-items.sb-collapsed { display: none; }
+  #sidebar .sb-folder-items { padding-left: 6px; margin-left: 6px; border-left: 1px solid rgba(255,255,255,0.06); }
+
+  /* Edit mode */
+  #sidebar.sb-editing .sidebar-link { cursor: default; }
+  #sidebar .sb-handle { display: none; flex-shrink: 0; width: 16px; margin-right: 2px; cursor: grab; color: rgba(255,255,255,0.35); }
+  #sidebar.sb-editing .sb-handle { display: inline-flex; align-items: center; justify-content: center; }
+  #sidebar .sb-rename, #sidebar .sb-folder-del { display: none; flex-shrink: 0; padding: 2px; border: 0; background: none; color: rgba(255,255,255,0.4); cursor: pointer; border-radius: 4px; }
+  #sidebar.sb-editing .sb-rename, #sidebar.sb-editing .sb-folder-del { display: inline-flex; }
+  #sidebar .sb-rename:hover { color: #fff; background: rgba(255,255,255,0.1); }
+  #sidebar .sb-folder-del:hover { color: #fca5a5; background: rgba(239,68,68,0.15); }
+  #sidebar.sb-editing .sidebar-link { background: rgba(255,255,255,0.03); }
+
+  /* Sortable feedback */
+  #sidebar .sb-ghost { opacity: 0.4; }
+  #sidebar .sb-chosen { background: rgba(43,127,255,0.18) !important; }
+  #sidebar .sb-folder-items:empty { min-height: 14px; border-radius: 6px; }
+  #sidebar.sb-editing .sb-folder-items { min-height: 14px; }
+
+  /* Edit toolbar */
+  #sidebar .sb-toolbar { display: none; gap: 6px; flex-wrap: wrap; padding: 8px; margin-bottom: 6px; background: rgba(255,255,255,0.04); border-radius: 8px; }
+  #sidebar.sb-editing .sb-toolbar { display: flex; }
+  #sidebar .sb-tbtn { flex: 1 1 auto; min-width: 60px; padding: 6px 8px; font-size: 11px; font-weight: 600; border: 0; border-radius: 6px; cursor: pointer; }
+  #sidebar .sb-tbtn--primary { background: #2B7FFF; color: #fff; }
+  #sidebar .sb-tbtn--ghost { background: rgba(255,255,255,0.08); color: #cbd5e1; }
+  #sidebar .sb-tbtn--danger { background: rgba(239,68,68,0.18); color: #fca5a5; }
+</style>
+
+<script>
+(function () {
+  'use strict';
+  try {
+    var sidebar = document.getElementById('sidebar');
+    var nav = sidebar && sidebar.querySelector('.sidebar-nav');
+    if (!nav) return;
+    var spacer = nav.querySelector('[data-sb-spacer]');
+    var canEdit = !!window.__SIDEBAR_CAN_EDIT__;
+    var layout = window.__SIDEBAR_LAYOUT__ || null;
+
+    // ---- helpers ----
+    function linkKey(a) {
+      try { return new URL(a.getAttribute('href'), location.origin).pathname.replace(/\/$/, '') || '/'; }
+      catch (e) { return a.getAttribute('href') || ''; }
+    }
+    function labelEl(a) {
+      var el = a.querySelector('.sb-label');
+      if (el) return el;
+      el = a.querySelector('span.flex-1');
+      if (el) { el.classList.add('sb-label'); return el; }
+      var span = document.createElement('span');
+      span.className = 'sb-label flex-1';
+      var moved = '';
+      Array.prototype.slice.call(a.childNodes).forEach(function (n) {
+        if (n.nodeType === 3 && n.textContent.trim()) { moved += (moved ? ' ' : '') + n.textContent.trim(); n.remove(); }
+      });
+      span.textContent = moved;
+      a.appendChild(span);
+      return span;
+    }
+    function collapsedStore() { try { return JSON.parse(localStorage.getItem('sbCollapsed') || '{}'); } catch (e) { return {}; } }
+    function saveCollapsed(map) { try { localStorage.setItem('sbCollapsed', JSON.stringify(map)); } catch (e) {} }
+
+    // Map every nav link by key; remove duplicate links (same href appears in
+    // more than one default section) so a custom layout shows each once.
+    function collectItems() {
+      var map = {};
+      Array.prototype.slice.call(nav.querySelectorAll('a.sidebar-link')).forEach(function (a) {
+        labelEl(a); // normalise label element
+        var k = linkKey(a);
+        if (map[k]) { a.parentNode && a.parentNode.removeChild(a); return; }
+        map[k] = a;
+      });
+      return map;
+    }
+
+    var ICON_CARET = '<svg class="sb-caret" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>';
+    var ICON_HANDLE = '<span class="sb-handle"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01"/></svg></span>';
+
+    function buildFolder(name, collapsed, edit) {
+      var f = document.createElement('div');
+      f.className = 'sb-folder' + (collapsed ? ' is-collapsed' : '');
+      f.setAttribute('data-folder', '');
+      var head = document.createElement('div');
+      head.className = 'sb-folder-head';
+      head.innerHTML = (edit ? ICON_HANDLE : '') + ICON_CARET +
+        '<span class="sb-folder-name"></span>' +
+        (edit ? '<button type="button" class="sb-rename" title="Rename folder">✎</button><button type="button" class="sb-folder-del" title="Delete folder">✕</button>' : '');
+      head.querySelector('.sb-folder-name').textContent = name;
+      var items = document.createElement('div');
+      items.className = 'sb-folder-items' + (collapsed ? ' sb-collapsed' : '');
+      f.appendChild(head); f.appendChild(items);
+      return f;
+    }
+
+    function decorateItem(a, edit) {
+      if (edit && !a.querySelector('.sb-handle')) a.insertBefore(makeFrag(ICON_HANDLE), a.firstChild);
+      if (edit && !a.querySelector('.sb-rename')) {
+        var btn = document.createElement('button');
+        btn.type = 'button'; btn.className = 'sb-rename'; btn.title = 'Rename'; btn.textContent = '✎';
+        a.appendChild(btn);
+      }
+      if (!edit) {
+        var h = a.querySelector('.sb-handle'); if (h) h.remove();
+        var r = a.querySelector('.sb-rename'); if (r) r.remove();
+      }
+    }
+    function makeFrag(html) { var d = document.createElement('div'); d.innerHTML = html; return d.firstChild; }
+
+    // Render a tree into a fresh .sb-root, reusing the existing <a> elements.
+    function render(tree, edit) {
+      var pool = collectItems();
+      var root = document.createElement('div');
+      root.className = 'sb-root';
+      var used = {};
+      var col = collapsedStore();
+      function placeItem(node, container) {
+        var a = pool[node.key]; if (!a) return; used[node.key] = 1;
+        if (node.label) { labelEl(a).textContent = node.label; a.setAttribute('data-sb-label', node.label); }
+        decorateItem(a, edit);
+        container.appendChild(a);
+      }
+      (tree || []).forEach(function (node) {
+        if (node.t === 'folder') {
+          var collapsed = (col[node.name] !== undefined) ? col[node.name] : !!node.collapsed;
+          if (edit) collapsed = false; // always open while editing
+          var f = buildFolder(node.name || 'Folder', collapsed, edit);
+          var list = f.querySelector('.sb-folder-items');
+          (node.children || []).forEach(function (ch) { if (ch.t === 'item') placeItem(ch, list); });
+          root.appendChild(f);
+        } else if (node.t === 'item') {
+          placeItem(node, root);
+        }
+      });
+      // Leftover items (new pages not in the saved layout) — keep them visible.
+      Object.keys(pool).forEach(function (k) { if (!used[k]) { decorateItem(pool[k], edit); root.appendChild(pool[k]); } });
+
+      // Swap in: drop old sections / old root / stray links, insert fresh root.
+      nav.querySelectorAll('.sidebar-section, .sb-root').forEach(function (n) { n.remove(); });
+      nav.insertBefore(root, spacer);
+      // Auto-open a folder that holds the active item.
+      root.querySelectorAll('.sb-folder').forEach(function (f) {
+        if (f.querySelector('a.sidebar-link.bg-white\\/15')) {
+          f.classList.remove('is-collapsed');
+          var it = f.querySelector('.sb-folder-items'); if (it) it.classList.remove('sb-collapsed');
+        }
+      });
+      return root;
+    }
+
+    // Build a tree from the current default DOM (sections → folders). Used to
+    // seed the editor the first time, before any layout is saved.
+    function seedFromDom() {
+      var tree = [], folder = null;
+      Array.prototype.slice.call(nav.children).forEach(function (node) {
+        if (node.matches && node.matches('.sidebar-section')) {
+          var p = node.querySelector('p');
+          folder = { t: 'folder', name: (p ? p.textContent.trim() : 'Folder'), collapsed: false, children: [] };
+          tree.push(folder);
+        } else if (node.matches && node.matches('a.sidebar-link')) {
+          var item = { t: 'item', key: linkKey(node) };
+          if (folder) folder.children.push(item); else tree.push(item);
+        }
+      });
+      return tree;
+    }
+
+    function serialize() {
+      var root = nav.querySelector('.sb-root'); var tree = [];
+      if (!root) return { v: 1, tree: tree };
+      function itemNode(a) { var o = { t: 'item', key: linkKey(a) }; var l = a.getAttribute('data-sb-label'); if (l) o.label = l; return o; }
+      Array.prototype.slice.call(root.children).forEach(function (node) {
+        if (node.matches && node.matches('.sb-folder')) {
+          var name = (node.querySelector('.sb-folder-name').textContent || 'Folder').trim();
+          var children = [];
+          node.querySelectorAll('.sb-folder-items > a.sidebar-link').forEach(function (a) { children.push(itemNode(a)); });
+          tree.push({ t: 'folder', name: name, collapsed: node.classList.contains('is-collapsed'), children: children });
+        } else if (node.matches && node.matches('a.sidebar-link')) {
+          tree.push(itemNode(node));
+        }
+      });
+      return { v: 1, tree: tree };
+    }
+
+    // ---- display mode: apply saved layout (everyone) ----
+    if (layout && Array.isArray(layout.tree) && layout.tree.length) {
+      render(layout.tree, false);
+    }
+
+    // Collapse toggle (event delegation, display + edit).
+    nav.addEventListener('click', function (e) {
+      var caretArea = e.target.closest && e.target.closest('.sb-folder-head');
+      if (!caretArea) return;
+      if (e.target.closest('.sb-rename') || e.target.closest('.sb-folder-del') || e.target.closest('.sb-handle')) return;
+      var folder = caretArea.closest('.sb-folder');
+      var items = folder.querySelector('.sb-folder-items');
+      var collapsed = folder.classList.toggle('is-collapsed');
+      items.classList.toggle('sb-collapsed', collapsed);
+      if (!sidebar.classList.contains('sb-editing')) {
+        var name = folder.querySelector('.sb-folder-name').textContent.trim();
+        var map = collapsedStore(); map[name] = collapsed; saveCollapsed(map);
+      }
+    });
+
+    // ===================== EDIT MODE (admin) =====================
+    if (!canEdit) return;
+    var toggleBtn = document.getElementById('sb-edit-toggle');
+    var editLabel = document.getElementById('sb-edit-label');
+    var sortables = [];
+    var toolbar = null;
+
+    function loadSortable(cb) {
+      if (window.Sortable) return cb();
+      var s = document.createElement('script');
+      s.src = 'https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js';
+      s.onload = cb;
+      s.onerror = function () { alert('Could not load the drag-and-drop library (are you offline?).'); exitEdit(); };
+      document.head.appendChild(s);
+    }
+
+    function makeSortable(el) {
+      sortables.push(new window.Sortable(el, {
+        group: 'sbnav', draggable: 'a.sidebar-link, .sb-folder', handle: '.sb-handle',
+        ghostClass: 'sb-ghost', chosenClass: 'sb-chosen', animation: 140, fallbackOnBody: true,
+        // Folders can't nest inside folders.
+        onMove: function (evt) {
+          if (evt.dragged.classList.contains('sb-folder') && evt.to.classList.contains('sb-folder-items')) return false;
+          return true;
+        },
+      }));
+    }
+
+    function buildToolbar() {
+      toolbar = document.createElement('div');
+      toolbar.className = 'sb-toolbar';
+      toolbar.innerHTML =
+        '<button type="button" class="sb-tbtn sb-tbtn--ghost" data-sb="newfolder">+ Folder</button>' +
+        '<button type="button" class="sb-tbtn sb-tbtn--primary" data-sb="save">Save</button>' +
+        '<button type="button" class="sb-tbtn sb-tbtn--ghost" data-sb="cancel">Cancel</button>' +
+        '<button type="button" class="sb-tbtn sb-tbtn--danger" data-sb="reset">Reset</button>';
+      nav.insertBefore(toolbar, nav.firstChild);
+      toolbar.addEventListener('click', onToolbar);
+    }
+
+    function onToolbar(e) {
+      var act = e.target.getAttribute('data-sb'); if (!act) return;
+      if (act === 'newfolder') {
+        var name = prompt('Folder name:', 'New folder'); if (name === null) return;
+        var root = nav.querySelector('.sb-root');
+        var f = buildFolder(name.trim() || 'New folder', false, true);
+        root.insertBefore(f, root.firstChild);
+        makeSortable(f.querySelector('.sb-folder-items'));
+      } else if (act === 'save') {
+        var payload = serialize();
+        var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        e.target.textContent = 'Saving…'; e.target.disabled = true;
+        fetch('/admin/sidebar-layout', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify({ layout: payload }),
+        }).then(function (r) { return r.json(); }).then(function (d) {
+          if (d && d.ok) location.reload(); else { alert('Save failed: ' + ((d && d.error) || '')); e.target.textContent = 'Save'; e.target.disabled = false; }
+        }).catch(function () { alert('Save failed.'); e.target.textContent = 'Save'; e.target.disabled = false; });
+      } else if (act === 'cancel') {
+        location.reload();
+      } else if (act === 'reset') {
+        if (!confirm('Reset the menu to the default for everyone?')) return;
+        var csrf2 = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        fetch('/admin/sidebar-layout/reset', { method: 'POST', headers: { 'X-CSRF-Token': csrf2 } })
+          .then(function () { location.reload(); });
+      }
+    }
+
+    // Rename clicks (items + folders) while editing.
+    nav.addEventListener('click', function (e) {
+      if (!sidebar.classList.contains('sb-editing')) return;
+      var ren = e.target.closest('.sb-rename');
+      if (ren) {
+        e.preventDefault(); e.stopPropagation();
+        var a = ren.closest('a.sidebar-link');
+        if (a) {
+          var cur = a.querySelector('.sb-label').textContent.trim();
+          var nv = prompt('Rename to:', cur); if (nv === null) return;
+          nv = nv.trim(); if (!nv) return;
+          a.querySelector('.sb-label').textContent = nv; a.setAttribute('data-sb-label', nv);
+          return;
+        }
+        var fname = ren.closest('.sb-folder-head').querySelector('.sb-folder-name');
+        var nf = prompt('Rename folder:', fname.textContent.trim()); if (nf === null) return;
+        if (nf.trim()) fname.textContent = nf.trim();
+        return;
+      }
+      var del = e.target.closest('.sb-folder-del');
+      if (del) {
+        e.preventDefault(); e.stopPropagation();
+        var folder = del.closest('.sb-folder');
+        var root = nav.querySelector('.sb-root');
+        // Move the folder's items out to the root before removing it.
+        Array.prototype.slice.call(folder.querySelectorAll('.sb-folder-items > a.sidebar-link')).forEach(function (a) { root.appendChild(a); });
+        folder.remove();
+        return;
+      }
+    }, true);
+
+    // Block navigation while editing (so dragging/clicking links doesn't leave).
+    nav.addEventListener('click', function (e) {
+      if (!sidebar.classList.contains('sb-editing')) return;
+      var a = e.target.closest('a.sidebar-link');
+      if (a && !e.target.closest('.sb-rename')) { e.preventDefault(); }
+    });
+
+    function enterEdit() {
+      var current = nav.querySelector('.sb-root') ? serialize().tree : seedFromDom();
+      render(current, true);
+      sidebar.classList.add('sb-editing');
+      if (editLabel) editLabel.textContent = 'Done';
+      buildToolbar();
+      loadSortable(function () {
+        makeSortable(nav.querySelector('.sb-root'));
+        nav.querySelectorAll('.sb-folder-items').forEach(makeSortable);
+      });
+    }
+    function exitEdit() {
+      sortables.forEach(function (s) { try { s.destroy(); } catch (e) {} }); sortables = [];
+      if (toolbar) { toolbar.remove(); toolbar = null; }
+      sidebar.classList.remove('sb-editing');
+      if (editLabel) editLabel.textContent = 'Customise menu';
+      // Re-render in display mode from the live (unsaved) DOM so handles vanish.
+      render(serialize().tree, false);
+    }
+    if (toggleBtn) toggleBtn.addEventListener('click', function () {
+      if (sidebar.classList.contains('sb-editing')) exitEdit(); else enterEdit();
+    });
+  } catch (err) {
+    // Any failure leaves the default server-rendered sidebar intact.
+    if (window.console) console.error('[sidebar-customise]', err);
+  }
+})();
+</script>

@@ -59,6 +59,15 @@
        then snap back" flash on every navigation. -->
   <nav style="visibility:hidden" class="flex-1 overflow-y-auto overscroll-contain py-3 px-3 space-y-0.5 sidebar-nav">
 
+    <% if (canAccess(user, 'admin')) { %>
+    <div class="sb-edit-bar flex items-center gap-2 mb-1" data-sb-editbar>
+      <button type="button" id="sb-edit-toggle" class="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-[11px] font-semibold text-brand-200 hover:text-white rounded-lg transition" style="background:rgba(255,255,255,0.05)">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+        <span id="sb-edit-label">Customise menu</span>
+      </button>
+    </div>
+    <% } %>
+
     <% if (canAccess(user, 'dashboard')) { %>
     <a href="/dashboard" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'dashboard' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
@@ -86,7 +95,7 @@
 
     <%/* ── PLANNING SECTION (planners + admin) ── */%>
     <% if (canAccess(user, 'planning_plans') || canAccess(user, 'projects') || canAccess(user, 'tenders') || canAccess(user, 'quoting')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Planning</p>
     </div>
     <% if (canAccess(user, 'tenders')) { %>
@@ -132,7 +141,7 @@
          / swms / risk_assessments. Each link inside is still gated by its
          own canAccess so users only see the modules they can open. */%>
     <% if (canAccess(user, 'audits') || canAccess(user, 'incidents') || canAccess(user, 'checklists') || canAccess(user, 'swms') || canAccess(user, 'sop_register') || canAccess(user, 'risk_assessments') || canAccess(user, 'safety_updates') || canAccess(user, 'toolbox_talks') || canAccess(user, 'safety_comments') || canAccess(user, 'safety_quizzes') || canAccess(user, 'safety_reports') || canAccess(user, 'voc')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Safety</p>
     </div>
     <% if (canAccess(user, 'audits')) { %>
@@ -220,7 +229,7 @@
 
     <%/* ── CLIENTS (all roles) ── */%>
     <% if (canAccess(user, 'clients')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Clients</p>
     </div>
     <a href="/clients" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'clients' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
@@ -231,7 +240,7 @@
 
     <%/* ── OPERATIONS SECTION (ops + admin only — planners don't see this) ── */%>
     <% if (canAccess(user, 'ops_final_plans')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Operations</p>
     </div>
     <% if (canAccess(user, 'projects')) { %>
@@ -294,7 +303,7 @@
     <% } %>
 
     <% if (canAccess(user, 'crm')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Sales & CRM</p>
     </div>
     <a href="/crm" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'crm-dashboard' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
@@ -323,7 +332,7 @@
     </a>
     <% } %>
 
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Communications</p>
     </div>
     <a href="/chat" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'chat' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
@@ -338,7 +347,7 @@
 
     <%/* ── FINANCE SECTION (admin/finance/accounts only) ── */%>
     <% if (canAccess(user, 'finance') || canAccess(user, 'payroll') || canAccess(user, 'timesheets') || canAccess(user, 'budgets')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Finance</p>
     </div>
     <% if (canAccess(user, 'payroll')) { %>
@@ -388,7 +397,7 @@
     <% } %>
 
     <% if (canAccess(user, 'induction') || canAccess(user, 'hr_dashboard')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">People / HR</p>
     </div>
     <% } %>
@@ -437,7 +446,7 @@
     <% } %>
 
     <% if (canAccess(user, 'equipment') || canAccess(user, 'fleet') || canAccess(user, 'reports')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Assets & Reports</p>
     </div>
     <% } %>
@@ -466,7 +475,7 @@
     </a>
     <% } %>
     <% if (canAccess(user, 'marketing')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Marketing</p>
     </div>
     <a href="/marketing" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'marketing' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
@@ -476,7 +485,7 @@
     <% } %>
 
     <% if (canAccess(user, 'admin')) { %>
-    <div class="pt-3 mt-2 border-t border-white/10">
+    <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Admin</p>
     </div>
     <a href="/admin/users" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'admin' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
@@ -513,7 +522,7 @@
     <% } %>
 
     <!-- Bottom spacer for safe area + scroll room -->
-    <div class="h-20 lg:h-4"></div>
+    <div class="h-20 lg:h-4" data-sb-spacer></div>
   </nav>
   <!-- Restore sidebar scroll BEFORE the browser paints. The matching save
        handler still lives in app.js (loaded later) — putting just the restore
@@ -531,6 +540,16 @@
     var n = document.querySelector('.sidebar-nav');
     if (n) n.style.visibility = '';
   }})();</script>
+
+  <!-- Custom sidebar layout (global): folders, order, renamed tabs. Applied as
+       a progressive enhancement — if absent or JS fails, the default
+       permission-rendered sidebar above is what shows. -->
+  <% var __sl = (typeof systemConfig !== 'undefined' && systemConfig && systemConfig.sidebar_layout) ? String(systemConfig.sidebar_layout) : 'null'; %>
+  <script>
+    window.__SIDEBAR_LAYOUT__ = <%- __sl.replace(/</g, '\\u003c') %>;
+    window.__SIDEBAR_CAN_EDIT__ = <%= canAccess(user, 'admin') ? 'true' : 'false' %>;
+  </script>
+  <%- include('sidebar-customise') %>
 
   <!-- Mobile sign out — pinned at bottom -->
   <div class="lg:hidden px-4 py-3 border-t border-white/10 bg-brand-950/80 backdrop-blur-sm">
