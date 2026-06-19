@@ -596,6 +596,14 @@ router.get('/:id', (req, res) => {
     console.error('[Jobs] Site Audits Safety tab query failed for job', job.id, ':', e.message);
   }
 
+  // Scoped Safety roll-up for the #safety tab (reuses the Safety Today helpers).
+  let safetyRollup = null;
+  try {
+    safetyRollup = require('./helpers/safety-today-queries').buildScopedRollup(db, { jobId: job.id });
+  } catch (e) {
+    console.error('[Jobs] safety rollup failed for job', job.id, ':', e.message);
+  }
+
   res.render('jobs/show', {
     title: job.job_number,
     job, tasks, complianceItems, subPlansByParent, complianceDocs, deliveryDocs, accountsDocs,
@@ -604,7 +612,7 @@ router.get('/:id', (req, res) => {
     equipmentAssignments, hireDockets, trafficPlans, chatThreadId, diaryEntries, tgsPlans,
     complianceTgsItems, allUsers, diaryAttachments, chatMembers,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
-    swmsForJob, riskAssessmentsForJob, auditsForJob,
+    swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });

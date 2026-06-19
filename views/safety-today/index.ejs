@@ -1,0 +1,319 @@
+<% locals.currentPage = 'safety-today' %>
+<%
+  // Build a /safety-today URL that preserves the active scope, optionally
+  // setting a range. Used by the range selector + clear-filter link.
+  function qsWith(extra) {
+    var params = [];
+    if (scope) { if (scope.bookingId) params.push('booking_id=' + scope.bookingId); else if (scope.jobId) params.push('job_id=' + scope.jobId); }
+    if (extra) Object.keys(extra).forEach(function (k) { params.push(k + '=' + extra[k]); });
+    return '/safety-today' + (params.length ? '?' + params.join('&') : '');
+  }
+  var todayStr = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+%>
+
+<!-- Header -->
+<div class="mb-5">
+  <div class="flex items-start justify-between gap-3 flex-wrap">
+    <div>
+      <h1 class="font-display font-bold text-gray-900" style="font-size:24px;letter-spacing:-0.02em">Safety Today</h1>
+      <p class="text-[12px] font-mono text-gray-500 mt-1" style="letter-spacing:0.04em"><%= todayStr.toUpperCase() %> · ONE SCREEN, THEN CLICK THROUGH</p>
+    </div>
+    <div class="flex items-center gap-2">
+      <% Object.keys(ranges).forEach(function (rk) { %>
+        <a href="<%= qsWith({ range: rk }) %>" class="text-[11px] font-semibold rounded-lg px-2.5 py-1.5 border transition-colors <%= rangeKey === rk ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-50' %>"><%= ranges[rk].label %></a>
+      <% }) %>
+    </div>
+  </div>
+
+  <% if (scope) { %>
+    <div class="mt-3 flex items-center gap-2 bg-brand-50 border border-brand-200 rounded-xl px-3 py-2">
+      <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L14 14.414V19a1 1 0 01-.553.894l-4 2A1 1 0 018 21v-6.586L3.293 6.707A1 1 0 013 6V4z"/></svg>
+      <span class="text-xs text-gray-700">Showing: <span class="font-semibold text-gray-900"><%= scope.label %></span></span>
+      <a href="/safety-today" class="ml-auto text-xs font-semibold text-brand-600 hover:underline">Clear filter ✕</a>
+    </div>
+  <% } %>
+</div>
+
+<!-- HERO: Safety Health gauge + eye counters -->
+<%
+  var ringColor = health.band === 'green' ? '#059669' : health.band === 'red' ? '#DC2626' : health.band === 'amber' ? '#B45309' : '#9CA3AF';
+  var pct = health.score == null ? 0 : health.score;
+  var notMeasured = health.factors.filter(function (f) { return !f.measured; }).map(function (f) { return f.label; });
+  var eyes = [
+    { n: kpis.openIncidents, t: 'Open Incidents', tone: kpis.openIncidents ? 'red' : 'neutral', link: sfx('/incidents?status=reported'), go: 'View register →' },
+    { n: kpis.openActions, t: 'Open Corrective Actions', tone: kpis.openActions ? 'amber' : 'neutral', link: sfx('/actions'), go: 'View actions →' },
+    { n: kpis.swmsExpiring + kpis.expiredDocs, t: 'Docs Expiring / Expired', tone: (kpis.expiredDocs ? 'red' : (kpis.swmsExpiring ? 'amber' : 'neutral')), link: sfx('/swms'), go: 'Review docs →' },
+  ];
+%>
+<div class="grid grid-cols-1 lg:grid-cols-[320px_1fr] gap-4 mb-5">
+  <div class="bg-white border border-gray-200 rounded-2xl p-4 flex items-center gap-4" style="box-shadow:0 1px 2px rgba(16,24,40,.04)">
+    <div style="width:104px;height:104px;border-radius:50%;flex:0 0 104px;background:conic-gradient(<%= ringColor %> <%= pct %>%, #EDEFF2 0);display:flex;align-items:center;justify-content:center">
+      <div style="width:78px;height:78px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center">
+        <span style="font-size:26px;font-weight:800;line-height:1;color:<%= ringColor %>"><%= health.score == null ? '—' : health.score %></span>
+        <span style="font-size:9px;color:#6B7280;letter-spacing:.06em">/ 100</span>
+      </div>
+    </div>
+    <div class="min-w-0">
+      <h3 class="text-sm font-bold text-gray-900">Safety Health</h3>
+      <p class="text-[11px] text-gray-500 mt-0.5">
+        <% if (health.score == null) { %>
+          Not enough data to score yet
+        <% } else { %>
+          Measuring <%= health.measuredCount %> of <%= health.totalFactors %> factors
+          <% if (notMeasured.length) { %><br><span class="text-gray-400">Not set up: <%= notMeasured.join(', ') %></span><% } %>
+        <% } %>
+      </p>
+      <% if (health.score != null) { %>
+        <span class="inline-block mt-2 text-[10px] font-bold px-2 py-0.5 rounded-full <%= health.band === 'green' ? 'bg-emerald-50 text-emerald-700' : health.band === 'red' ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700' %>">
+          <%= health.band === 'green' ? 'Healthy' : health.band === 'red' ? 'Below 60 — needs attention' : 'Watch — under 80' %>
+        </span>
+      <% } %>
+    </div>
+  </div>
+  <div class="grid grid-cols-3 gap-4">
+    <% eyes.forEach(function (e) { %>
+      <a href="<%= e.link %>" class="bg-white border border-gray-200 rounded-2xl p-4 hover:border-gray-300 transition-colors" style="box-shadow:0 1px 2px rgba(16,24,40,.04)">
+        <p class="font-display font-bold <%= e.tone === 'red' ? 'text-red-600' : e.tone === 'amber' ? 'text-amber-600' : 'text-gray-400' %>" style="font-size:30px;letter-spacing:-.02em"><%= e.n %></p>
+        <p class="text-[10px] font-mono text-gray-500 uppercase mt-1" style="letter-spacing:.05em"><%= e.t %></p>
+        <p class="text-[11px] text-brand-600 font-semibold mt-2"><%= e.go %></p>
+      </a>
+    <% }) %>
+  </div>
+</div>
+
+<!-- KPI STRIP -->
+<%
+  function tileBorder(v, tone) {
+    if (!v || v === '—' || v === '0' || v === 0) return 'border-l-gray-200';
+    return tone === 'red' ? 'border-l-red-500' : tone === 'amber' ? 'border-l-amber-500' : tone === 'green' ? 'border-l-emerald-500' : 'border-l-brand-500';
+  }
+  function tileNum(v, tone) {
+    if (!v || v === '—' || v === '0' || v === 0) return 'text-gray-400';
+    return tone === 'red' ? 'text-red-600' : tone === 'amber' ? 'text-amber-600' : tone === 'green' ? 'text-emerald-600' : 'text-gray-900';
+  }
+  var tiles = [
+    { v: kpis.openIncidents, l: 'Open Incidents', link: sfx('/incidents?status=reported'), tone: 'red' },
+    { v: kpis.criticalHigh, l: 'Critical / High', link: sfx('/incidents?severity=high'), tone: 'red' },
+    { v: kpis.openActions, l: 'Open Corrective Actions', link: sfx('/actions'), tone: 'amber' },
+    { v: kpis.swmsExpiring, l: 'SWMS Expiring <30d', link: sfx('/swms'), tone: 'amber' },
+    { v: kpis.expiredDocs, l: 'Expired SWMS/SOP/RA', link: sfx('/swms'), tone: 'red' },
+    { v: kpis.auditsDraft, l: 'Audits Awaiting Sign-off', link: sfx('/audits?status=draft'), tone: 'amber' },
+    { v: (kpis.avgAuditScore == null ? '—' : kpis.avgAuditScore + '%'), l: 'Avg Audit Score', link: sfx('/audits'), tone: 'neutral' },
+    { v: (jobPacks.total ? jobPacks.complete + '/' + jobPacks.total : '—'), l: "Today's Job Packs", link: sfx('/safety-forms?scope=jobpack'), tone: (jobPacks.total && jobPacks.complete < jobPacks.total) ? 'amber' : 'green' },
+    { v: fatigue.count, l: 'Fatigue / Shift-Hours', link: '/safety-today#fatigue', tone: 'amber' },
+    { v: kpis.openComments, l: 'Open Safety Comments', link: sfx('/safety-comments?status=submitted'), tone: 'amber' },
+  ];
+  if (!scope) {
+    tiles.push({ v: (kpis.vocPending == null ? '—' : kpis.vocPending), l: 'VOCs Pending Marking', link: '/voc-assessments', tone: 'amber' });
+    tiles.push({ v: (kpis.toolboxCoverage == null ? '—' : kpis.toolboxCoverage + '%'), l: 'Toolbox Coverage', link: '/safety-reports', tone: 'neutral' });
+    tiles.push({ v: (kpis.swmsAck == null ? '—' : kpis.swmsAck + '%'), l: 'SWMS Acknowledgement', link: '/safety-reports', tone: 'neutral' });
+  }
+%>
+<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2 mb-6">
+  <% tiles.forEach(function (t) { %>
+    <a href="<%= t.link %>" class="group block p-3 bg-white border border-gray-200 border-l-[3px] <%= tileBorder(t.v, t.tone) %> hover:border-gray-300 transition-colors" style="border-radius:8px">
+      <p class="font-display font-medium leading-none <%= tileNum(t.v, t.tone) %>" style="font-size:24px;letter-spacing:-0.03em"><%= t.v %></p>
+      <p class="text-[10px] font-mono text-gray-500 uppercase mt-2" style="letter-spacing:0.08em"><%= t.l %></p>
+    </a>
+  <% }) %>
+</div>
+
+<!-- ATTENTION PANEL -->
+<% if (queue.items.length) { %>
+<div class="border border-red-200 rounded-2xl p-4 mb-6" style="background:linear-gradient(180deg,#FFF7F7,#fff)">
+  <div class="flex items-center gap-2 mb-3">
+    <svg class="w-4 h-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+    <h2 class="text-sm font-bold text-gray-900">Safety — needs attention</h2>
+    <span class="text-[10px] font-bold text-red-700 bg-red-100 px-2 py-0.5 rounded-full"><%= queue.total %></span>
+  </div>
+  <div class="divide-y divide-red-100">
+    <% queue.items.forEach(function (it) { %>
+      <a href="<%= it.link %>" class="flex items-center gap-3 py-2.5 hover:bg-white/60 rounded -mx-1 px-1">
+        <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded shrink-0 <%= it.tone === 'r' ? 'bg-red-50 text-red-600' : it.tone === 'a' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-600' %>"><%= it.tag %></span>
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-semibold text-gray-900 truncate"><%= it.what %></p>
+          <% if (it.meta) { %><p class="text-[11px] text-gray-500 truncate"><%= it.meta %></p><% } %>
+        </div>
+        <span class="text-xs font-semibold text-brand-600 shrink-0"><%= it.action %></span>
+      </a>
+    <% }) %>
+  </div>
+</div>
+<% } %>
+
+<!-- CHECKLIST REGISTER BARS -->
+<%
+  function checkBar(p, required) {
+    if (!required) return 'bg-gray-200';
+    if (p >= 95) return 'bg-emerald-500';
+    if (p >= 75) return 'bg-amber-400';
+    return 'bg-red-500';
+  }
+%>
+<% if (checklist && checklist.month && checklist.month.length) {
+  var ranked = checklist.month.slice().sort(function (a, b) {
+    if (!a.required && b.required) return 1;
+    if (a.required && !b.required) return -1;
+    return (a.completion_pct || 0) - (b.completion_pct || 0);
+  });
+%>
+<div class="bg-white border border-gray-200 p-4 mb-6" style="border-radius:12px">
+  <div class="flex items-baseline justify-between gap-2 mb-4">
+    <div>
+      <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Checklist Register</h2>
+      <p class="text-[11px] font-mono text-gray-500 mt-0.5" style="letter-spacing:0.08em"><%= checklist.monthLabel.toUpperCase() %></p>
+    </div>
+    <a href="/checklist-register" class="text-xs font-medium text-gray-500 hover:text-gray-900">Full breakdown &rarr;</a>
+  </div>
+  <div class="space-y-2">
+    <% ranked.forEach(function (row) { %>
+      <div class="flex items-center gap-3 text-xs">
+        <span class="w-44 truncate text-gray-700 font-medium"><%= row.label %></span>
+        <span class="w-16 text-right tabular-nums font-mono text-[11px] text-gray-400"><%= row.completed %>/<%= row.required %></span>
+        <div class="flex-1 h-1.5 bg-gray-100 overflow-hidden" style="border-radius:6px">
+          <div class="h-full <%= checkBar(row.completion_pct, row.required) %>" style="width: <%= row.required ? row.completion_pct : 0 %>%; border-radius:6px"></div>
+        </div>
+        <span class="w-10 text-right tabular-nums font-mono text-[11px] font-medium <%= !row.required ? 'text-gray-300' : row.completion_pct >= 95 ? 'text-gray-900' : row.completion_pct >= 75 ? 'text-amber-600' : 'text-red-600' %>"><%= row.required ? row.completion_pct + '%' : '—' %></span>
+      </div>
+    <% }) %>
+  </div>
+</div>
+<% } %>
+
+<!-- TABS -->
+<div class="mb-5">
+  <div class="flex gap-1 border-b border-gray-200 mb-4 overflow-x-auto scrollbar-hide">
+    <button data-tab="comp" class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px text-brand-600 border-brand-600">Compliance</button>
+    <button data-tab="eng" class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300">Engagement</button>
+    <button data-tab="field" class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300">Field activity</button>
+    <button data-tab="reg" class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300">Registers</button>
+  </div>
+
+  <!-- COMPLIANCE -->
+  <div data-tab-panel="comp" class="space-y-4">
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div class="bg-white border border-gray-200 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3"><h2 class="text-sm font-bold text-gray-900">Documents</h2><a href="<%= sfx('/swms') %>" class="text-xs text-brand-600 font-semibold">Open →</a></div>
+        <div class="flex items-center justify-between py-1.5 text-sm border-b border-gray-50"><span class="text-gray-600">SWMS expiring &lt;30d</span><span class="font-bold <%= kpis.swmsExpiring ? 'text-amber-600' : 'text-emerald-600' %>"><%= kpis.swmsExpiring %></span></div>
+        <div class="flex items-center justify-between py-1.5 text-sm border-b border-gray-50"><span class="text-gray-600">Expired (SWMS/SOP/RA)</span><span class="font-bold <%= kpis.expiredDocs ? 'text-red-600' : 'text-emerald-600' %>"><%= kpis.expiredDocs %></span></div>
+        <% var docF = health.factors.find(function (f) { return f.key === 'docs'; }); %>
+        <div class="flex items-center justify-between py-1.5 text-sm"><span class="text-gray-600">Currency score</span><span class="font-bold text-gray-900"><%= docF && docF.measured ? docF.score + '%' : '—' %></span></div>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3"><h2 class="text-sm font-bold text-gray-900">Audits</h2><a href="<%= sfx('/audits') %>" class="text-xs text-brand-600 font-semibold">Open →</a></div>
+        <div class="flex items-center justify-between py-1.5 text-sm border-b border-gray-50"><span class="text-gray-600">Avg score</span><span class="font-bold text-gray-900"><%= kpis.avgAuditScore == null ? '—' : kpis.avgAuditScore + '%' %></span></div>
+        <div class="flex items-center justify-between py-1.5 text-sm"><span class="text-gray-600">Awaiting sign-off</span><span class="font-bold <%= kpis.auditsDraft ? 'text-amber-600' : 'text-gray-900' %>"><%= kpis.auditsDraft %></span></div>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3"><h2 class="text-sm font-bold text-gray-900">Incidents</h2><a href="<%= sfx('/incidents') %>" class="text-xs text-brand-600 font-semibold">Open →</a></div>
+        <div class="flex items-center justify-between py-1.5 text-sm border-b border-gray-50"><span class="text-gray-600">Open</span><span class="font-bold <%= kpis.openIncidents ? 'text-red-600' : 'text-emerald-600' %>"><%= kpis.openIncidents %></span></div>
+        <div class="flex items-center justify-between py-1.5 text-sm border-b border-gray-50"><span class="text-gray-600">Critical / high</span><span class="font-bold <%= kpis.criticalHigh ? 'text-red-600' : 'text-gray-900' %>"><%= kpis.criticalHigh %></span></div>
+        <div class="flex items-center justify-between py-1.5 text-sm"><span class="text-gray-600">Open corrective actions</span><span class="font-bold <%= kpis.openActions ? 'text-amber-600' : 'text-gray-900' %>"><%= kpis.openActions %></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ENGAGEMENT -->
+  <div data-tab-panel="eng" class="space-y-4 hidden">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-white border border-gray-200 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3"><h2 class="text-sm font-bold text-gray-900">Lowest-engagement workers</h2><a href="/safety-reports" class="text-xs text-brand-600 font-semibold">Full report →</a></div>
+        <% if (engagement.laggers.length) { %>
+          <table class="w-full text-sm">
+            <thead><tr class="text-[10px] uppercase text-gray-400 font-mono"><th class="text-left font-medium pb-2">Worker</th><th class="text-right font-medium pb-2">SWMS</th><th class="text-right font-medium pb-2">Score</th></tr></thead>
+            <tbody>
+              <% engagement.laggers.forEach(function (w) { %>
+                <tr class="border-t border-gray-50"><td class="py-1.5 text-gray-700"><%= w.full_name %></td><td class="py-1.5 text-right text-gray-500"><%= w.swms.rate == null ? '—' : w.swms.rate + '%' %></td><td class="py-1.5 text-right font-bold <%= w.composite < 60 ? 'text-amber-600' : 'text-gray-900' %>"><%= w.composite %>%</td></tr>
+              <% }) %>
+            </tbody>
+          </table>
+        <% } else { %><p class="text-sm text-gray-400 italic py-2">No engagement data yet.</p><% } %>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3"><h2 class="text-sm font-bold text-gray-900">SWMS with lowest acknowledgement</h2><a href="/safety-reports" class="text-xs text-brand-600 font-semibold">Full report →</a></div>
+        <% if (engagement.insights.swmsLaggers.length) { %>
+          <% engagement.insights.swmsLaggers.forEach(function (s) { %>
+            <div class="flex items-center justify-between py-1.5 text-sm border-t border-gray-50 first:border-0"><span class="text-gray-700 truncate pr-2"><%= s.title %></span><span class="font-bold shrink-0 <%= s.rate < 50 ? 'text-red-600' : 'text-amber-600' %>"><%= s.acked %> / <%= s.total %></span></div>
+          <% }) %>
+        <% } else { %><p class="text-sm text-gray-400 italic py-2">No active SWMS.</p><% } %>
+        <div class="mt-3 pt-3 border-t border-gray-100 space-y-2">
+          <% [['SWMS ack', engagement.stats.swms.rate], ['Toolbox coverage', engagement.stats.toolboxes.rate], ['Quiz pass', engagement.stats.quizzes.rate], ['Update read', engagement.stats.updates.rate]].forEach(function (row) { %>
+            <div class="flex items-center gap-3 text-xs">
+              <span class="w-28 text-gray-600"><%= row[0] %></span>
+              <div class="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden"><div class="h-full rounded-full <%= row[1] == null ? 'bg-gray-200' : row[1] >= 75 ? 'bg-emerald-500' : row[1] >= 40 ? 'bg-amber-400' : 'bg-red-500' %>" style="width:<%= row[1] || 0 %>%"></div></div>
+              <span class="w-10 text-right font-mono font-medium <%= row[1] == null ? 'text-gray-300' : 'text-gray-700' %>"><%= row[1] == null ? '—' : row[1] + '%' %></span>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FIELD ACTIVITY -->
+  <div data-tab-panel="field" class="space-y-4 hidden">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="bg-white border border-gray-200 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3"><h2 class="text-sm font-bold text-gray-900">Recent incidents</h2><a href="<%= sfx('/incidents') %>" class="text-xs text-brand-600 font-semibold">View all →</a></div>
+        <% if (field.recentIncidents.length) { %>
+          <% field.recentIncidents.forEach(function (i) { %>
+            <a href="/incidents/<%= i.id %>" class="flex items-center justify-between py-2 text-sm border-t border-gray-50 first:border-0 hover:bg-gray-50 -mx-1 px-1 rounded">
+              <span class="text-gray-700 truncate pr-2"><%= (i.incident_number ? i.incident_number + ' · ' : '') + (i.title || 'Incident') %></span>
+              <span class="text-[10px] font-bold px-2 py-0.5 rounded shrink-0 <%= ['critical','high'].includes(i.severity) ? 'bg-red-50 text-red-600' : i.severity === 'medium' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-500' %>"><%= (i.severity || '').toUpperCase() %></span>
+            </a>
+          <% }) %>
+        <% } else { %><p class="text-sm text-gray-400 italic py-2">No incidents recorded<%= scope ? ' for this scope' : '' %>.</p><% } %>
+      </div>
+      <div class="bg-white border border-gray-200 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-3"><h2 class="text-sm font-bold text-gray-900">Job-pack submissions (30d)</h2><a href="<%= sfx('/safety-forms') %>" class="text-xs text-brand-600 font-semibold">View feed →</a></div>
+        <% if (field.jobPackFeed.length) { %>
+          <% field.jobPackFeed.forEach(function (f) { %>
+            <div class="flex items-center justify-between py-1.5 text-sm border-t border-gray-50 first:border-0"><span class="text-gray-700"><%= f.label %></span><span class="font-bold text-gray-900"><%= f.count %></span></div>
+          <% }) %>
+        <% } else { %><p class="text-sm text-gray-400 italic py-2">No submissions in range.</p><% } %>
+      </div>
+    </div>
+
+    <div id="fatigue" class="bg-white border border-gray-200 rounded-2xl p-4">
+      <div class="flex items-center gap-2 mb-3"><h2 class="text-sm font-bold text-gray-900">Fatigue / shift-hours watch</h2><span class="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full"><%= fatigue.count %></span></div>
+      <% if (fatigue.list.length) { %>
+        <% fatigue.list.forEach(function (f) { %>
+          <div class="flex items-center justify-between py-2 text-sm border-t border-gray-50 first:border-0">
+            <span class="text-gray-700"><%= f.crew %><% if (f.job_number) { %> <span class="text-gray-400">· Job <%= f.job_number %></span><% } %></span>
+            <span class="text-[11px] text-amber-700 font-medium"><%= f.reasons.join(' · ') %></span>
+          </div>
+        <% }) %>
+      <% } else { %><p class="text-sm text-gray-400 italic py-2">No workers over the fatigue threshold for today/tomorrow.</p><% } %>
+    </div>
+
+    <% if (jobPacks.outstanding && jobPacks.outstanding.length) { %>
+    <div class="bg-white border border-gray-200 rounded-2xl p-4">
+      <h2 class="text-sm font-bold text-gray-900 mb-3">Shifts with outstanding job-pack items</h2>
+      <% jobPacks.outstanding.forEach(function (o) { %>
+        <div class="flex items-center justify-between py-2 text-sm border-t border-gray-50 first:border-0">
+          <span class="text-gray-700 truncate pr-2"><span class="font-medium"><%= o.label %></span> <span class="text-gray-400">· <%= o.crew %></span></span>
+          <span class="text-[11px] text-red-600 font-medium shrink-0"><%= o.missing.join(', ') %></span>
+        </div>
+      <% }) %>
+    </div>
+    <% } %>
+  </div>
+
+  <!-- REGISTERS GRID -->
+  <div data-tab-panel="reg" class="hidden">
+    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+      <% grid.forEach(function (c) { %>
+        <a href="<%= c.link %>" class="bg-white border border-gray-200 rounded-xl p-4 hover:border-gray-300 transition-colors flex flex-col min-h-[104px]">
+          <p class="text-sm font-semibold text-gray-900"><%= c.name %></p>
+          <% if (c.empty && (c.stat == null || c.stat === 0)) { %>
+            <p class="text-[11px] text-gray-400 italic mt-auto"><%= c.note %></p>
+          <% } else { %>
+            <p class="font-display font-bold mt-auto <%= c.statTone === 'red' ? 'text-red-600' : 'text-gray-900' %>" style="font-size:22px"><%= c.stat %></p>
+            <% if (c.sub) { %><p class="text-[11px] text-gray-500"><%= c.sub %></p><% } %>
+          <% } %>
+        </a>
+      <% }) %>
+    </div>
+  </div>
+</div>
+
+<p class="text-[11px] text-gray-400 mt-8">Powered by Atomis · Safety Today</p>

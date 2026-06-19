@@ -1,0 +1,80 @@
+<%# Embeddable scoped safety roll-up. Expects `rollup` = buildScopedRollup() bundle.
+    Used on the job detail Safety tab and the booking detail Forms tab. %>
+<% if (rollup && rollup.health) {
+  function lnk(base) {
+    if (!rollup.scope) return base;
+    var j = base.indexOf('?') >= 0 ? '&' : '?';
+    if (base.indexOf('/safety-forms') === 0 && rollup.scope.bookingId) return base + j + 'booking_id=' + rollup.scope.bookingId;
+    var jid = rollup.scope.jobId || rollup.scope.parentJobId;
+    return jid ? base + j + 'job_id=' + jid : base;
+  }
+  var h = rollup.health, k = rollup.kpis, jp = rollup.jobPacks, fat = rollup.fatigue;
+  var ringColor = h.band === 'green' ? '#059669' : h.band === 'red' ? '#DC2626' : h.band === 'amber' ? '#B45309' : '#9CA3AF';
+  var pct = h.score == null ? 0 : h.score;
+  var notMeasured = h.factors.filter(function (f) { return !f.measured; }).map(function (f) { return f.label; });
+  var fullLink = '/safety-today' + (rollup.scope ? (rollup.scope.bookingId ? '?booking_id=' + rollup.scope.bookingId : '?job_id=' + (rollup.scope.jobId || rollup.scope.parentJobId)) : '');
+  var mini = [
+    { v: k.openIncidents, t: 'Open incidents', tone: k.openIncidents ? 'text-red-600' : 'text-gray-900', link: lnk('/incidents?status=reported') },
+    { v: k.openActions, t: 'Open actions', tone: k.openActions ? 'text-amber-600' : 'text-gray-900', link: lnk('/actions') },
+    { v: k.expiredDocs, t: 'Expired docs', tone: k.expiredDocs ? 'text-red-600' : 'text-gray-900', link: lnk('/swms') },
+    { v: (k.avgAuditScore == null ? '—' : k.avgAuditScore + '%'), t: 'Avg audit', tone: 'text-gray-900', link: lnk('/audits') },
+    { v: (jp.total ? jp.complete + '/' + jp.total : '—'), t: 'Job packs', tone: (jp.total && jp.complete < jp.total) ? 'text-amber-600' : 'text-gray-900', link: lnk('/safety-forms?scope=jobpack') },
+  ];
+%>
+<div class="bg-white border border-gray-200 rounded-2xl p-4 mb-5">
+  <div class="flex items-center justify-between gap-2 mb-3">
+    <h3 class="text-sm font-bold text-gray-900">Safety overview</h3>
+    <a href="<%= fullLink %>" class="text-xs font-semibold text-brand-600 hover:underline">View full safety →</a>
+  </div>
+  <div class="flex items-center gap-5 flex-wrap">
+    <div class="flex items-center gap-3 shrink-0">
+      <div style="width:76px;height:76px;border-radius:50%;flex:0 0 76px;background:conic-gradient(<%= ringColor %> <%= pct %>%, #EDEFF2 0);display:flex;align-items:center;justify-content:center">
+        <div style="width:58px;height:58px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <span style="font-size:20px;font-weight:800;line-height:1;color:<%= ringColor %>"><%= h.score == null ? '—' : h.score %></span>
+          <span style="font-size:8px;color:#6B7280;letter-spacing:.05em">/ 100</span>
+        </div>
+      </div>
+      <div>
+        <p class="text-xs font-bold text-gray-900">Safety Health</p>
+        <p class="text-[11px] text-gray-500">
+          <% if (h.score == null) { %>Not enough data yet<% } else { %>Measuring <%= h.measuredCount %> of <%= h.totalFactors %> factors<% } %>
+        </p>
+      </div>
+    </div>
+    <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 flex-1 min-w-[260px]">
+      <% mini.forEach(function (m) { %>
+        <a href="<%= m.link %>" class="block p-2 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
+          <p class="font-display font-bold <%= m.tone %>" style="font-size:18px;letter-spacing:-.02em"><%= m.v %></p>
+          <p class="text-[9px] font-mono text-gray-500 uppercase mt-0.5" style="letter-spacing:.06em"><%= m.t %></p>
+        </a>
+      <% }) %>
+    </div>
+  </div>
+
+  <% if (jp.outstanding && jp.outstanding.length) { %>
+    <div class="mt-3 pt-3 border-t border-gray-100">
+      <p class="text-[11px] font-semibold text-red-700 mb-1">Job packs — still required</p>
+      <ul class="space-y-1">
+        <% jp.outstanding.slice(0, 4).forEach(function (o) { %>
+          <li class="text-xs text-gray-700 flex items-center justify-between gap-2">
+            <span class="truncate"><span class="font-medium"><%= o.label %></span> <span class="text-gray-400">· <%= o.crew %></span></span>
+            <span class="text-[10px] text-red-600 font-medium shrink-0"><%= o.missing.join(', ') %></span>
+          </li>
+        <% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <% if (rollup.queue && rollup.queue.items.length) { %>
+    <div class="mt-3 pt-3 border-t border-gray-100">
+      <% rollup.queue.items.slice(0, 4).forEach(function (it) { %>
+        <a href="<%= it.link %>" class="flex items-center gap-2 py-1.5 text-xs hover:bg-gray-50 rounded -mx-1 px-1">
+          <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded <%= it.tone === 'r' ? 'bg-red-50 text-red-600' : it.tone === 'a' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-600' %>"><%= it.tag %></span>
+          <span class="font-medium text-gray-800 truncate flex-1"><%= it.what %></span>
+          <span class="text-brand-600 font-semibold shrink-0"><%= it.action %></span>
+        </a>
+      <% }) %>
+    </div>
+  <% } %>
+</div>
+<% } %>

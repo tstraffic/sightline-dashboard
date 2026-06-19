@@ -102,6 +102,10 @@ const PERMISSIONS = {
   //     Safety modules — admin/safety/management only, not ops/planning) ──
   safety_reports: ['admin', 'safety', 'management'],
 
+  // ── Safety Today (cross-module safety command centre; the office safety
+  //     cohort — admins see the full company picture) ──
+  safety_today:  ['admin', 'safety', 'operations', 'management'],
+
 
   // ── Risk Assessment register (same access pattern as SWMS) ──
   risk_assessments: ['admin', 'safety', 'operations', 'planning'],

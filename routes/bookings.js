@@ -1599,6 +1599,14 @@ router.get('/:id', (req, res) => {
     console.error('[bookings.show] job-pack grid error:', e.message);
   }
 
+  // Scoped Safety roll-up for the Forms tab (reuses the Safety Today helpers).
+  let safetyRollup = null;
+  try {
+    safetyRollup = require('./helpers/safety-today-queries').buildScopedRollup(db, { bookingId: booking.id });
+  } catch (e) {
+    console.error('[bookings.show] safety rollup error:', e.message);
+  }
+
   res.render('bookings/show', {
     title: 'Booking ' + booking.booking_number,
     booking: { ...booking, supervisor: booking.supervisor_name, requester_name: requesterName, planner_name: plannerName, site_contact_names: siteContactNames, tags_list: tagsList,
@@ -1632,6 +1640,7 @@ router.get('/:id', (req, res) => {
     user: req.session.user,
     jobPackGrid,
     jobPackTypes: JP_TYPES,
+    safetyRollup,
     shiftTasks: (() => {
       try {
         return db.prepare(`

@@ -320,6 +320,9 @@ app.use('/rate-cards',          requireLogin, requirePermission('quoting'), requ
 app.use('/quotes',              requireLogin, requirePermission('quoting'), require('./routes/quoting/quotes'));
 app.use('/tasks', requireLogin, requirePermission('tasks'), require('./routes/tasks'));
 app.use('/compliance', requireLogin, requirePermission('compliance'), require('./routes/compliance'));
+// Safety command centre — cross-module roll-up; first item in the SAFETY group.
+app.use('/safety-today', requireLogin, requirePermission('safety_today'), require('./routes/safety-today'));
+app.get('/safety', requireLogin, (req, res) => res.redirect('/safety-today'));
 // Cross-audit reporting dashboard — mounted BEFORE /audits so /audits/reports
 // isn't captured by the /audits/:id show route.
 app.use('/audits/reports', requireLogin, requirePermission('audits'), require('./routes/audit-reports'));

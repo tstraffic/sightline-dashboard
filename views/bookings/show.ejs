@@ -703,6 +703,7 @@
         var totalPct = totalSlots ? Math.round(totalDone / totalSlots * 100) : 0;
       %>
       <div id="forms" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="forms">
+        <%- include('../safety-today/_rollup', { rollup: typeof safetyRollup !== 'undefined' ? safetyRollup : null }) %>
         <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Job-Pack completion</h2>
           <span class="text-xs font-semibold <%= totalPct >= 95 ? 'text-emerald-700 bg-emerald-50' : totalPct >= 60 ? 'text-amber-700 bg-amber-50' : 'text-red-700 bg-red-50' %> px-2 py-0.5 rounded">

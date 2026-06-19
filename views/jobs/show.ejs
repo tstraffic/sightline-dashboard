@@ -634,6 +634,7 @@
   <!-- Safety Tab — SWMS attached to this job (replaces the old Compliance tab) -->
   <% if (showTab('safety')) { %>
   <div id="safety" class="tab-content">
+    <%- include('../safety-today/_rollup', { rollup: typeof safetyRollup !== 'undefined' ? safetyRollup : null }) %>
     <div class="flex items-center justify-between mb-4">
       <div>
         <h2 class="text-lg font-semibold text-gray-900">Safety</h2>

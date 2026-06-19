@@ -40,6 +40,7 @@ router.get('/', (req, res) => {
   const formType = (req.query.form_type || '').trim();
   const crewId = req.query.crew_member_id ? Number(req.query.crew_member_id) : null;
   const jobId = req.query.job_id ? Number(req.query.job_id) : null;
+  const bookingId = req.query.booking_id ? Number(req.query.booking_id) : null;
   const since = (req.query.since || '').trim(); // YYYY-MM-DD
   const scope = (req.query.scope || 'jobpack'); // 'jobpack' | 'all'
   const search = (req.query.q || '').trim();
@@ -53,6 +54,7 @@ router.get('/', (req, res) => {
   }
   if (crewId) { where.push('sf.crew_member_id = ?'); params.push(crewId); }
   if (jobId)  { where.push('sf.job_id = ?'); params.push(jobId); }
+  if (bookingId) { where.push('sf.booking_id = ?'); params.push(bookingId); }
   if (since)  { where.push('date(sf.submitted_at) >= date(?)'); params.push(since); }
   if (search) {
     where.push('(cm.full_name LIKE ? OR j.job_number LIKE ? OR j.client LIKE ?)');

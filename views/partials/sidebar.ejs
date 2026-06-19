@@ -140,10 +140,17 @@
          whose role can hit at least one of audits / incidents / checklists
          / swms / risk_assessments. Each link inside is still gated by its
          own canAccess so users only see the modules they can open. */%>
-    <% if (canAccess(user, 'audits') || canAccess(user, 'incidents') || canAccess(user, 'checklists') || canAccess(user, 'swms') || canAccess(user, 'sop_register') || canAccess(user, 'risk_assessments') || canAccess(user, 'safety_updates') || canAccess(user, 'toolbox_talks') || canAccess(user, 'safety_comments') || canAccess(user, 'safety_quizzes') || canAccess(user, 'safety_reports') || canAccess(user, 'voc')) { %>
+    <% if (canAccess(user, 'safety_today') || canAccess(user, 'audits') || canAccess(user, 'incidents') || canAccess(user, 'checklists') || canAccess(user, 'swms') || canAccess(user, 'sop_register') || canAccess(user, 'risk_assessments') || canAccess(user, 'safety_updates') || canAccess(user, 'toolbox_talks') || canAccess(user, 'safety_comments') || canAccess(user, 'safety_quizzes') || canAccess(user, 'safety_reports') || canAccess(user, 'voc')) { %>
     <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Safety</p>
     </div>
+    <% if (canAccess(user, 'safety_today')) { %>
+    <a href="/safety-today" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'safety-today' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      <span class="flex-1">Safety Today</span>
+      <span class="text-[9px] font-bold uppercase tracking-wide bg-brand-500/30 text-brand-100 px-1.5 py-0.5 rounded">New</span>
+    </a>
+    <% } %>
     <% if (canAccess(user, 'audits')) { %>
     <a href="/audits" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'audits' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
