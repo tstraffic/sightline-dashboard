@@ -554,10 +554,18 @@
             var driver = v.crew_member_id ? (b.personnel || []).find(function(p) { return p.id == v.crew_member_id; }) : null;
           %>
             <div class="vehicle-card p-3 rounded-lg bg-gray-50 border-2 border-gray-100 transition" data-vehicle-id="<%= v.id %>">
+              <% var isPlaceholder = !(v.vehicle_name && v.vehicle_name.trim()) && !(v.registration && v.registration.trim()); %>
               <div class="flex items-center justify-between gap-2">
                 <div class="min-w-0 flex-1">
-                  <span class="text-sm font-medium text-gray-900"><%= v.vehicle_name || v.registration || '(unnamed vehicle)' %></span>
-                  <% if (v.vehicle_name && v.registration) { %><span class="text-xs text-gray-400 ml-2"><%= v.registration %></span><% } %>
+                  <% if (isPlaceholder) { %>
+                    <span class="text-sm font-medium text-amber-600 inline-flex items-center gap-1">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.5 0L3.18 16.25A2 2 0 005 19z"/></svg>
+                      Ute — needs a vehicle
+                    </span>
+                  <% } else { %>
+                    <span class="text-sm font-medium text-gray-900"><%= v.vehicle_name || v.registration %></span>
+                    <% if (v.vehicle_name && v.registration) { %><span class="text-xs text-gray-400 ml-2"><%= v.registration %></span><% } %>
+                  <% } %>
                   <% if (v.vehicle_role) { %><span class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-50 text-brand-700"><%= v.vehicle_role %></span><% } %>
                   <% if (v.fleet_vehicle_id && v.fleet_asset_id) { %>
                     <a href="/fleet/<%= v.fleet_vehicle_id %>" class="ml-1 inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100 ring-1 ring-indigo-600/20" title="View in Fleet Register">
@@ -566,11 +574,44 @@
                     </a>
                   <% } %>
                 </div>
-                <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/remove" class="inline shrink-0">
-                  <%- include('../partials/csrf') %>
-                  <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Remove">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <div class="flex items-center gap-1 shrink-0">
+                  <button type="button" class="bv-edit-toggle text-gray-300 hover:text-brand-600 transition" title="<%= isPlaceholder ? 'Set vehicle' : 'Edit vehicle' %>" data-vehicle-id="<%= v.id %>">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                   </button>
+                  <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/remove" class="inline">
+                    <%- include('../partials/csrf') %>
+                    <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Remove">
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                    </button>
+                  </form>
+                </div>
+              </div>
+              <!-- Inline editor — set/replace the vehicle for this row. Open by
+                   default for unnamed placeholder utes so they're never stuck. -->
+              <div class="bv-edit-panel mt-2 <%= isPlaceholder ? '' : 'hidden' %>" data-vehicle-id="<%= v.id %>">
+                <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>" class="space-y-2 p-2 rounded-lg bg-white border border-gray-200">
+                  <%- include('../partials/csrf') %>
+                  <select class="bv-edit-source w-full px-2 py-1.5 bg-white border border-gray-300 rounded text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    onchange="(function(sel){var val=sel.value;var o=sel.options[sel.selectedIndex];var f=sel.closest('form');f.querySelector('[name=fleet_vehicle_id]').value=val.indexOf('fleet:')===0?val.slice(6):'';if(val){f.querySelector('[name=vehicle_name]').value=o.getAttribute('data-name')||o.text.split(' · ')[0];f.querySelector('[name=registration]').value=o.getAttribute('data-rego')||'';}})(this)">
+                    <option value="">— pick from register —</option>
+                    <% if (typeof allFleet !== 'undefined' && allFleet.length) { %>
+                      <optgroup label="Fleet (utes, trucks)">
+                        <% allFleet.forEach(fv => { %>
+                          <option value="fleet:<%= fv.id %>" data-rego="<%= fv.rego || '' %>" data-name="<%= fv.label || fv.asset_id %>" <%= v.fleet_vehicle_id == fv.id ? 'selected' : '' %>><%= fv.asset_id %> · <%= fv.label || '' %><% if (fv.rego) { %> · <%= fv.rego %><% } %></option>
+                        <% }) %>
+                      </optgroup>
+                    <% } %>
+                  </select>
+                  <input type="hidden" name="fleet_vehicle_id" value="<%= v.fleet_vehicle_id || '' %>">
+                  <div class="grid grid-cols-2 gap-2">
+                    <input type="text" name="vehicle_name" value="<%= v.vehicle_name || '' %>" placeholder="Vehicle name" class="px-2 py-1.5 bg-white border border-gray-300 rounded text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <input type="text" name="registration" value="<%= v.registration || '' %>" placeholder="Rego" class="px-2 py-1.5 bg-white border border-gray-300 rounded text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+                  </div>
+                  <input type="hidden" name="vehicle_role" value="<%= v.vehicle_role || 'ute' %>">
+                  <div class="flex items-center gap-2">
+                    <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold rounded-lg transition">Save vehicle</button>
+                    <% if (!isPlaceholder) { %><button type="button" class="bv-edit-cancel px-2 py-1.5 text-gray-500 hover:text-gray-700 text-xs" data-vehicle-id="<%= v.id %>">Cancel</button><% } %>
+                  </div>
                 </form>
               </div>
               <div class="mt-2 flex items-center gap-2 flex-wrap">
@@ -1579,6 +1620,15 @@
       if (clear) {
         e.preventDefault();
         setDriver(clear.dataset.vehicleId, null, null);
+        return;
+      }
+      // Edit / cancel toggle — reveal the inline vehicle editor for a row.
+      var et = e.target.closest('.bv-edit-toggle, .bv-edit-cancel');
+      if (et) {
+        e.preventDefault();
+        var vid = et.getAttribute('data-vehicle-id');
+        var p = vehiclesPanel.querySelector('.bv-edit-panel[data-vehicle-id="' + vid + '"]');
+        if (p) p.classList.toggle('hidden');
       }
     });
   }

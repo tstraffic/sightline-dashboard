@@ -47,26 +47,43 @@ const VALID_STATUSES = ['client_booking', 'unconfirmed', 'confirmed', 'locked', 
 // (Beta flag retired — the day board is now /bookings for everyone.)
 
 // Auto-vehicle sync — every "Nx TC Crew" booking_requirement row carries
-// 1 ute. After requirements are saved we make sure booking_vehicles has
-// at least that many ute-role rows (placeholder rows the allocator can
-// assign from the fleet register). Existing utes the office added by
-// hand are kept; we only top up the difference. Never deletes rows the
-// allocator assigned a driver to.
+// 1 ute (1 ute per package, regardless of crew size N). Standalone
+// "Traffic Controller" add-on rows carry NO ute. After requirements are
+// saved we reconcile the ute-role placeholder rows so the count follows
+// the crew packages: add blank placeholders when we're short, and drop
+// surplus *placeholder* rows when we're over. A ute is PROTECTED (never
+// deleted) when it has a driver (crew_member_id), a fleet vehicle
+// (fleet_vehicle_id), or a typed name/rego — those are real allocations
+// the office set up by hand. Surplus protected utes are simply kept.
 function syncTCCrewVehicles(db, bookingId) {
   try {
     const reqs = db.prepare("SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id = ?").all(bookingId);
     let target = 0;
     for (const r of reqs) {
-      // Match "Nx TC Crew" — 1 ute per package, multiplied by qty.
+      // Match "Nx TC Crew" — 1 ute per package, multiplied by qty. The
+      // crew size N is irrelevant to ute count. Standalone "Traffic
+      // Controller" rows don't match here, so they add no ute.
       const m = /^(\d+)x TC Crew$/.exec(r.resource_type || '');
-      if (m) target += (parseInt(r.quantity_required) || 0); // 1 ute per package, ignore N
+      if (m) target += (parseInt(r.quantity_required) || 0);
     }
-    if (target <= 0) return;
-    const existing = db.prepare("SELECT COUNT(*) AS c FROM booking_vehicles WHERE booking_id = ? AND vehicle_role = 'ute'").get(bookingId).c;
-    const missing = target - existing;
-    if (missing <= 0) return;
-    const ins = db.prepare("INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, vehicle_role) VALUES (?, '', '', 'ute')");
-    for (let i = 0; i < missing; i++) ins.run(bookingId);
+    const utes = db.prepare("SELECT id, vehicle_name, registration, crew_member_id, fleet_vehicle_id FROM booking_vehicles WHERE booking_id = ? AND vehicle_role = 'ute' ORDER BY id").all(bookingId);
+    const isProtected = (v) => !!(v.crew_member_id || v.fleet_vehicle_id ||
+      (v.vehicle_name && String(v.vehicle_name).trim()) ||
+      (v.registration && String(v.registration).trim()));
+    const current = utes.length;
+    if (current < target) {
+      const ins = db.prepare("INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, vehicle_role) VALUES (?, '', '', 'ute')");
+      for (let i = 0; i < target - current; i++) ins.run(bookingId);
+    } else if (current > target) {
+      // Remove only surplus UNPROTECTED placeholders, newest first.
+      const removable = utes.filter(v => !isProtected(v)).map(v => v.id).reverse();
+      const del = db.prepare("DELETE FROM booking_vehicles WHERE id = ?");
+      let toRemove = current - target;
+      for (const id of removable) {
+        if (toRemove <= 0) break;
+        del.run(id); toRemove--;
+      }
+    }
   } catch (e) {
     console.error('[syncTCCrewVehicles]', e.message);
   }
@@ -1224,10 +1241,11 @@ router.post('/quick', (req, res) => {
       totalCrews += qty;
     }
   }
-  // Default to 1× 2-man crew if the user didn't pick anything (brief rule).
-  if (totalCrews === 0) {
-    insertReq.run(newId, '2x TC Crew', 1);
-  }
+  // No default crew package — nothing is pre-ticked. If the user picked
+  // nothing the booking starts with zero crew requirements (and zero
+  // utes); they add packages in the Resources tab. (Previously we forced
+  // a "2x TC Crew" here, which left two requirements ticked when the user
+  // then chose a different size.)
   // Sync ute placeholders for every TC-Crew requirement.
   try { syncTCCrewVehicles(db, newId); } catch (e) { console.error('syncTCCrewVehicles:', e.message); }
 
@@ -1906,9 +1924,18 @@ router.post('/:id/crew', (req, res) => {
     if (isJson) return res.status(400).json({ error: 'Select a crew member' });
     req.flash('error', 'Select a crew member.'); return res.redirect('/bookings/' + req.params.id);
   }
-  if (db.prepare("SELECT id FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, crew_member_id)) {
-    if (isJson) return res.status(409).json({ error: 'Already assigned' });
-    req.flash('error', 'Already assigned.'); return res.redirect('/bookings/' + req.params.id);
+  // Idempotent: if they're already on THIS booking, treat the add as a
+  // harmless no-op rather than an error. The slide-over can re-fire the
+  // same POST (e.g. a double-click or a re-wired listener) and we don't
+  // want a wall of "Already assigned" toasts. Return the crew row so the
+  // UI can render the chip as assigned.
+  const already = db.prepare("SELECT id FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, crew_member_id);
+  if (already) {
+    if (isJson) {
+      const cm = db.prepare("SELECT cm.id, cm.full_name, cm.role, COALESCE(e.employment_status,'active') AS employment_status FROM crew_members cm LEFT JOIN employees e ON e.linked_crew_member_id = cm.id WHERE cm.id = ?").get(crew_member_id);
+      return res.json({ ok: true, crew: cm, alreadyAssigned: true });
+    }
+    req.flash('info', 'Already on this booking.'); return res.redirect('/bookings/' + req.params.id);
   }
 
   // Conflict detection — warn if crew member has overlapping bookings on same
@@ -1938,8 +1965,12 @@ router.post('/:id/crew', (req, res) => {
   // if they're actually not riding in it.
   const defaultVehicle = db.prepare("SELECT id FROM booking_vehicles WHERE booking_id = ? ORDER BY id LIMIT 1").get(req.params.id);
   const defaultVehicleId = defaultVehicle ? defaultVehicle.id : null;
-  db.prepare("INSERT INTO booking_crew (booking_id, crew_member_id, role_on_site, status, assigned_vehicle_id) VALUES (?, ?, ?, 'assigned', ?)")
+  // INSERT OR IGNORE + the unique index (migration 298) makes the add
+  // atomically idempotent even under a race. `inserted` is false if the
+  // row was already there (we'll skip the notification below).
+  const insertResult = db.prepare("INSERT OR IGNORE INTO booking_crew (booking_id, crew_member_id, role_on_site, status, assigned_vehicle_id) VALUES (?, ?, ?, 'assigned', ?)")
     .run(req.params.id, crew_member_id, role_on_site || '', defaultVehicleId);
+  const inserted = insertResult.changes > 0;
 
   // Auto-create crew_allocation so the worker sees this in their portal.
   // job_id is nullable (migration 141) so ad-hoc bookings without a job
@@ -1960,7 +1991,7 @@ router.post('/:id/crew', (req, res) => {
   // Tell the worker they've been put on a shift — but only if the booking is
   // confirmed. On an unconfirmed booking the assignment stays silent; the crew
   // get pushed when the allocator flips it to confirmed (see /:id/status).
-  if (thisBooking && bookingNotify.isNotifiable(thisBooking.status)) {
+  if (inserted && thisBooking && bookingNotify.isNotifiable(thisBooking.status)) {
     bookingNotify.notifyAssigned([crew_member_id], {
       booking_number: thisBooking.booking_number,
       title: (db.prepare('SELECT title FROM bookings WHERE id=?').get(req.params.id) || {}).title,
@@ -2229,6 +2260,43 @@ router.post('/:id/vehicles', (req, res) => {
   if (isJson) return res.json({ ok: true, id: newId, upgraded: !!upgraded, warning: vehicleWarning });
   req.flash('success', upgraded ? 'Vehicle assigned.' : 'Vehicle added.');
   res.redirect('/bookings/' + req.params.id);
+});
+// POST /:id/vehicles/:vehicleId — edit an existing vehicle row in place.
+// Lets a blank "(unnamed vehicle)" placeholder be upgraded to a real ute
+// (fleet vehicle or typed name/rego) without deleting + re-adding, so the
+// reconcile in syncTCCrewVehicles then treats it as protected.
+router.post('/:id/vehicles/:vehicleId', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const row = db.prepare("SELECT * FROM booking_vehicles WHERE id=? AND booking_id=?").get(req.params.vehicleId, req.params.id);
+  if (!row) {
+    if (isJson) return res.status(404).json({ error: 'Vehicle not found' });
+    req.flash('error', 'Not found.'); return res.redirect('/bookings/' + req.params.id);
+  }
+  let vehicle_name = req.body.vehicle_name != null ? req.body.vehicle_name : row.vehicle_name;
+  let registration = req.body.registration != null ? req.body.registration : row.registration;
+  let vehicle_role = req.body.vehicle_role || row.vehicle_role || 'ute';
+  let fleet_vehicle_id = parseInt(req.body.fleet_vehicle_id, 10);
+  if (!Number.isFinite(fleet_vehicle_id) || fleet_vehicle_id <= 0) {
+    // empty string explicitly clears the link; absent keeps the existing one
+    fleet_vehicle_id = (req.body.fleet_vehicle_id === '' ) ? null
+      : (req.body.fleet_vehicle_id === undefined ? row.fleet_vehicle_id : null);
+  }
+  if (fleet_vehicle_id) {
+    try {
+      const fv = db.prepare("SELECT asset_id, rego, make, model FROM vehicles WHERE id = ?").get(fleet_vehicle_id);
+      if (fv) {
+        if (!vehicle_name) vehicle_name = [fv.make, fv.model].filter(Boolean).join(' ') || fv.asset_id;
+        if (!registration && fv.rego) registration = fv.rego;
+      } else { fleet_vehicle_id = null; }
+    } catch (e) { fleet_vehicle_id = null; }
+  }
+  db.prepare("UPDATE booking_vehicles SET vehicle_name=?, registration=?, vehicle_role=?, fleet_vehicle_id=? WHERE id=?")
+    .run(vehicle_name || '', registration || '', vehicle_role, fleet_vehicle_id, row.id);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
+    details: `Edited vehicle #${req.params.vehicleId} on booking`, req });
+  if (isJson) return res.json({ ok: true, id: row.id, vehicle_name: vehicle_name || '', registration: registration || '', vehicle_role, fleet_vehicle_id });
+  req.flash('success', 'Vehicle updated.'); res.redirect('/bookings/' + req.params.id);
 });
 router.post('/:id/vehicles/:vehicleId/remove', (req, res) => {
   const db = getDb();

@@ -13728,6 +13728,19 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 297 error:', e.message); }
   }
 
+  // 298: a crew member should appear at most ONCE per booking. Dedupe any
+  // existing doubled rows (keep the lowest id), then add a unique index so
+  // the crew-add POST is atomically idempotent (INSERT OR IGNORE no-ops the
+  // dupe) — this kills the "Already assigned ×5" toast storm on the board.
+  if (!isMigrationApplied.get(298)) {
+    try {
+      db.exec("DELETE FROM booking_crew WHERE id NOT IN (SELECT MIN(id) FROM booking_crew GROUP BY booking_id, crew_member_id)");
+      db.exec("CREATE UNIQUE INDEX IF NOT EXISTS uniq_booking_crew_member ON booking_crew(booking_id, crew_member_id)");
+      recordMigration.run(298, 'booking_crew: dedupe + unique (booking_id, crew_member_id)');
+      console.log('Migration 298 applied');
+    } catch (e) { console.error('Migration 298 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

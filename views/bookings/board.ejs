@@ -911,9 +911,13 @@
             <input type="hidden" name="latitude">
             <input type="hidden" name="longitude">
             <label class="bk2-create-toggle bk2-create-field--full">
-              <input type="checkbox" name="marker_is_accurate" value="1">
+              <input type="checkbox" name="marker_is_accurate" value="1" data-bk-marker-toggle>
               <span>Marker is accurate — pin can be used to find the site (required for auto travel time calc)</span>
             </label>
+            <div class="bk2-create-field--full" data-bk-map-wrap hidden>
+              <div id="bk2-overview-map" style="height:280px;border-radius:12px;overflow:hidden;border:1px solid #E5E7EB"></div>
+              <p class="bk2-create-hint" style="margin-top:6px">Drag the pin to the exact site. The coordinates save with the booking.</p>
+            </div>
             <label class="bk2-create-field bk2-create-field--full">
               <span class="bk2-create-lbl">Location notes</span>
               <textarea name="location_notes" rows="2" placeholder="Type your location notes here"></textarea>
@@ -981,7 +985,7 @@
           <%
             var TC_CREW_REQS = [
               { name: '1x TC Crew',  field: 'crew_size_1' },
-              { name: '2x TC Crew',  field: 'crew_size_2', defaultQty: 1 },
+              { name: '2x TC Crew',  field: 'crew_size_2' },
               { name: '3x TC Crew',  field: 'crew_size_3' },
               { name: '4x TC Crew',  field: 'crew_size_4' },
               { name: '5x TC Crew',  field: 'crew_size_5' },
@@ -1829,12 +1833,20 @@
       var m = document.querySelector('meta[name="csrf-token"]');
       return m ? m.getAttribute('content') : '';
     }
+    // Read the booking id LIVE rather than capturing it — the slide-over is
+    // reused across bookings, and the once-bound listener below must always
+    // act on whichever booking is currently open.
+    function currentBookingId() {
+      var ed = $('#bk2-editor');
+      return (ed && ed.dataset.bookingId) || bookingId;
+    }
     function refreshPane() {
       // Drop the cached doc so we re-pull fresh server state, then re-load
-      // the fragment into the current pane.
+      // the fragment into the current pane. (Was keyed 'crews' — a no-op,
+      // because TAB_TO_BK_TAB has no such key — so the pane never refreshed.)
       fragmentDocCache = null;
-      fragmentLoaded.crews = false;
-      loadBookingFragment('crews');
+      fragmentLoaded.resources = false;
+      loadBookingFragment('resources');
     }
     function postForm(url, payload) {
       var body = new URLSearchParams();
@@ -1852,56 +1864,75 @@
         });
       });
     }
+    function toast(msg, kind) { if (typeof window.bk2Toast === 'function') window.bk2Toast(msg, kind); }
 
-    pane.addEventListener('click', function (e) {
-      // Remove × on the assigned chip — strips the worker off the booking.
-      var rm = e.target.closest('[data-action="remove"]');
-      if (rm) {
-        e.preventDefault(); e.stopPropagation();
-        var chip = rm.closest('.crew-chip');
-        var cid = chip && chip.getAttribute('data-crew-id');
-        if (!cid) return;
-        postForm('/bookings/' + bookingId + '/crew/' + cid + '/remove', {}).then(function (res) {
-          if (!res.ok) return alert(res.data.error || 'Could not remove crew.');
-          boardDirty = true; refreshPane();
-        });
-        return;
-      }
-      // Driver × — clears the vehicle's driver slot.
-      var cd = e.target.closest('[data-action="clear-driver"]');
-      if (cd) {
-        e.preventDefault(); e.stopPropagation();
-        var vid = cd.getAttribute('data-vehicle-id');
-        if (!vid) return;
-        postForm('/bookings/' + bookingId + '/vehicles/' + vid + '/driver', { crew_member_id: '' }).then(function (res) {
-          if (!res.ok) return alert(res.data.error || 'Could not clear driver.');
-          boardDirty = true; refreshPane();
-        });
-        return;
-      }
-      // Pool chip — clicking adds the worker to the booking.
-      var poolChip = e.target.closest('.crew-chip.pool');
-      if (poolChip && !poolChip.classList.contains('is-assigned')) {
-        e.preventDefault(); e.stopPropagation();
-        var pid = poolChip.getAttribute('data-crew-id');
-        if (!pid) return;
-        var role = poolChip.getAttribute('data-role') || '';
-        postForm('/bookings/' + bookingId + '/crew', { crew_member_id: pid, role_on_site: role }).then(function (res) {
-          if (!res.ok) { alert(res.data.error || 'Could not add crew.'); return; }
-          if (res.data && res.data.warning) {
-            if (typeof window.bk2Toast === 'function') window.bk2Toast(res.data.warning);
-          }
-          boardDirty = true; refreshPane();
-        });
-        return;
-      }
-    });
+    // Bind the delegated click handler to the PANE exactly once. The pane
+    // element survives every innerHTML refresh, so re-binding on each
+    // fragment load stacked listeners — one click then fired N POSTs and
+    // threw up N "Already assigned" toasts. The dataset guard fixes that;
+    // the handler reads the live booking id so it stays correct across
+    // bookings. (Server-side INSERT OR IGNORE is the belt-and-braces.)
+    if (!pane.dataset.brBound) {
+      pane.dataset.brBound = '1';
+      pane.addEventListener('click', function (e) {
+        var bid = currentBookingId();
+        // Vehicle edit toggle / cancel — reveal the inline editor for a row.
+        var et = e.target.closest('.bv-edit-toggle, .bv-edit-cancel');
+        if (et) {
+          e.preventDefault(); e.stopPropagation();
+          var vid = et.getAttribute('data-vehicle-id');
+          var panel = pane.querySelector('.bv-edit-panel[data-vehicle-id="' + vid + '"]');
+          if (panel) panel.classList.toggle('hidden');
+          return;
+        }
+        // Remove × on the assigned chip — strips the worker off the booking.
+        var rm = e.target.closest('[data-action="remove"]');
+        if (rm) {
+          e.preventDefault(); e.stopPropagation();
+          var chip = rm.closest('.crew-chip');
+          var cid = chip && chip.getAttribute('data-crew-id');
+          if (!cid) return;
+          postForm('/bookings/' + bid + '/crew/' + cid + '/remove', {}).then(function (res) {
+            if (!res.ok) return toast(res.data.error || 'Could not remove crew.', 'error');
+            boardDirty = true; refreshPane();
+          });
+          return;
+        }
+        // Driver × — clears the vehicle's driver slot.
+        var cd = e.target.closest('[data-action="clear-driver"]');
+        if (cd) {
+          e.preventDefault(); e.stopPropagation();
+          var vid = cd.getAttribute('data-vehicle-id');
+          if (!vid) return;
+          postForm('/bookings/' + bid + '/vehicles/' + vid + '/driver', { crew_member_id: '' }).then(function (res) {
+            if (!res.ok) return toast(res.data.error || 'Could not clear driver.', 'error');
+            boardDirty = true; refreshPane();
+          });
+          return;
+        }
+        // Pool chip — clicking adds the worker to the booking.
+        var poolChip = e.target.closest('.crew-chip.pool');
+        if (poolChip && !poolChip.classList.contains('is-assigned')) {
+          e.preventDefault(); e.stopPropagation();
+          if (poolChip.dataset.brBusy) return; // guard against a double-click
+          var pid = poolChip.getAttribute('data-crew-id');
+          if (!pid) return;
+          poolChip.dataset.brBusy = '1';
+          var role = poolChip.getAttribute('data-role') || '';
+          postForm('/bookings/' + bid + '/crew', { crew_member_id: pid, role_on_site: role }).then(function (res) {
+            if (!res.ok) { toast(res.data.error || 'Could not add crew.', 'error'); delete poolChip.dataset.brBusy; return; }
+            // alreadyAssigned → silent no-op (no toast); just refresh.
+            if (res.data && res.data.warning) toast('⚠ ' + res.data.warning);
+            boardDirty = true; refreshPane();
+          });
+          return;
+        }
+      });
 
-    // Pool search filter — straightforward client-side narrow.
-    var searchEl = pane.querySelector('#crewPoolSearch');
-    if (searchEl) {
-      searchEl.addEventListener('input', function () {
-        var q = this.value.trim().toLowerCase();
+      // Search filter — also delegated off the pane so it survives refreshes.
+      pane.addEventListener('input', function (e) {
+        if (!e.target.matches('#crewPoolSearch')) return;
+        var q = e.target.value.trim().toLowerCase();
         pane.querySelectorAll('.crew-chip.pool').forEach(function (c) {
           var hay = c.getAttribute('data-search') || (c.getAttribute('data-name') || '').toLowerCase();
           c.style.display = (!q || hay.indexOf(q) !== -1) ? '' : 'none';
@@ -2459,6 +2490,107 @@
   // Bind every flagged input on the page (the Main address field in the
   // editor's Location card + the legacy Quick Book input both opt in).
   $$('input[data-bk-addr-autocomplete]').forEach(bkAddrAttach);
+
+  // ============================================================
+  //  OVERVIEW MAP PIN PICKER — "Marker is accurate"
+  // ============================================================
+  // When the planner ticks "Marker is accurate" we reveal a small Leaflet
+  // map with a draggable pin so they can place the exact site. The pin is
+  // seeded from the booking's saved lat/lng, else geocoded from the typed
+  // address, else Sydney CBD. Dragging the pin writes back into the form's
+  // hidden latitude/longitude fields so the normal save persists it.
+  (function () {
+    var toggle = document.querySelector('[data-bk-marker-toggle]');
+    if (!toggle) return;
+    var wrap = document.querySelector('[data-bk-map-wrap]');
+    var form = toggle.closest('form');
+    if (!wrap || !form) return;
+    var SYDNEY = [-33.8688, 151.2093];
+    var pickMap = null, pickMarker = null;
+
+    function latEl() { return form.querySelector('[name="latitude"]'); }
+    function lngEl() { return form.querySelector('[name="longitude"]'); }
+    function writeLatLng(lat, lng) {
+      if (latEl()) latEl().value = (lat == null) ? '' : String(lat);
+      if (lngEl()) lngEl().value = (lng == null) ? '' : String(lng);
+      // Auto-tick accurate once the planner has actually placed a pin.
+      toggle.checked = true;
+    }
+    function currentLatLng() {
+      var lat = parseFloat(latEl() && latEl().value);
+      var lng = parseFloat(lngEl() && lngEl().value);
+      if (isFinite(lat) && isFinite(lng) && (lat || lng)) return [lat, lng];
+      return null;
+    }
+    function placeMarker(center) {
+      if (!pickMarker) {
+        pickMarker = L.marker(center, { draggable: true }).addTo(pickMap);
+        pickMarker.on('dragend', function () {
+          var ll = pickMarker.getLatLng();
+          writeLatLng(ll.lat.toFixed(6), ll.lng.toFixed(6));
+        });
+      } else {
+        pickMarker.setLatLng(center);
+      }
+    }
+    function ensureMap(center) {
+      if (pickMap) { pickMap.setView(center, 15); placeMarker(center); return; }
+      pickMap = L.map('bk2-overview-map').setView(center, 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19, attribution: '© OpenStreetMap'
+      }).addTo(pickMap);
+      placeMarker(center);
+      // Clicking the map also drops/moves the pin there.
+      pickMap.on('click', function (e) {
+        placeMarker(e.latlng);
+        writeLatLng(e.latlng.lat.toFixed(6), e.latlng.lng.toFixed(6));
+      });
+    }
+    function reveal() {
+      wrap.hidden = false;
+      var seed = currentLatLng();
+      function go(center, isReal) {
+        if (typeof L === 'undefined') { setTimeout(function () { go(center, isReal); }, 200); return; }
+        ensureMap(center);
+        // Leaflet must recompute size now the container is visible.
+        setTimeout(function () { if (pickMap) pickMap.invalidateSize(); }, 60);
+        if (isReal) writeLatLng(center[0], center[1]);
+      }
+      if (seed) { go(seed, false); return; }
+      // No saved pin — try to geocode the typed address.
+      var addrInput = form.querySelector('input[data-bk-addr-autocomplete]');
+      var q = addrInput && addrInput.value.trim();
+      if (q && q.length >= 3) {
+        fetch('/bookings/api/places?q=' + encodeURIComponent(q) + (BK_ADDR_CC ? '&cc=' + encodeURIComponent(BK_ADDR_CC) : ''),
+          { headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            var hit = (data.results || [])[0];
+            if (hit && hit.lat && hit.lng) go([parseFloat(hit.lat), parseFloat(hit.lng)], true);
+            else go(SYDNEY, false);
+          })
+          .catch(function () { go(SYDNEY, false); });
+      } else {
+        go(SYDNEY, false);
+      }
+    }
+    toggle.addEventListener('change', function () {
+      if (toggle.checked) reveal();
+      else wrap.hidden = true;
+    });
+    // If a booking opens already-accurate, show the map straight away.
+    if (toggle.checked) reveal();
+    // Re-centre the pin when a new address is committed (the autocomplete
+    // fires a 'change' on the address input after filling lat/lng).
+    var addrInput = form.querySelector('input[data-bk-addr-autocomplete]');
+    if (addrInput) {
+      addrInput.addEventListener('change', function () {
+        if (!toggle.checked || wrap.hidden) return;
+        var seed = currentLatLng();
+        if (seed && pickMap) { pickMap.setView(seed, 15); placeMarker(seed); }
+      });
+    }
+  })();
 
   // ============================================================
   //  MAP (Leaflet)
@@ -3168,22 +3300,46 @@
 
   // Lightweight toast — used to surface server-side warnings (e.g. crew or
   // vehicle double-booked) that a flash message can't deliver to AJAX flows.
+  var bk2ToastActive = {}; // message → { el, count, hide() } for de-duping
   function bk2Toast(msg, kind) {
+    // De-dupe: an identical message already on screen just bumps a ×N
+    // counter and resets its timer instead of stacking another toast.
+    // (Re-fired POSTs / rapid clicks used to throw up ~5 identical toasts.)
+    var existing = bk2ToastActive[msg];
+    if (existing) {
+      existing.count++;
+      existing.el.querySelector('[data-bk2-count]').textContent = ' ×' + existing.count;
+      existing.reset();
+      return;
+    }
     var el = document.createElement('div');
     // Compose a tick / cross / warning glyph in front of the text so the
     // toast reads at a glance.
     var glyph = kind === 'success' ? '✓ ' : kind === 'error' ? '✕ ' : '';
-    el.textContent = glyph + msg;
+    var txt = document.createElement('span'); txt.textContent = glyph + msg;
+    var cnt = document.createElement('span'); cnt.setAttribute('data-bk2-count', '1'); cnt.style.opacity = '0.8';
+    el.appendChild(txt); el.appendChild(cnt);
     var palette = kind === 'success' ? { bg: '#065F46', fg: '#D1FAE5' }
                 : kind === 'error'   ? { bg: '#7F1D1D', fg: '#FEE2E2' }
                                      : { bg: '#92400E', fg: '#FEF3C7' };
-    el.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);z-index:10100;' +
+    // Stack distinct toasts upward (cap 3 visible), so they don't overlap.
+    var depth = Object.keys(bk2ToastActive).length;
+    var bottom = 24 + Math.min(depth, 3) * 52;
+    el.style.cssText = 'position:fixed;bottom:' + bottom + 'px;left:50%;transform:translateX(-50%) translateY(8px);z-index:10100;' +
       'background:' + palette.bg + ';color:' + palette.fg + ';font-size:13.5px;font-weight:600;padding:11px 18px;border-radius:10px;' +
       'box-shadow:0 8px 28px rgba(0,0,0,0.45);max-width:92vw;opacity:0;transition:opacity .18s ease, transform .18s ease;';
     document.body.appendChild(el);
     requestAnimationFrame(function () { el.style.opacity = '1'; el.style.transform = 'translateX(-50%) translateY(0)'; });
     var ttl = kind === 'success' ? 2500 : 5000;
-    setTimeout(function () { el.style.opacity = '0'; el.style.transform = 'translateX(-50%) translateY(8px)'; setTimeout(function () { el.remove(); }, 250); }, ttl);
+    var entry = { el: el, count: 1 };
+    function dismiss() {
+      el.style.opacity = '0'; el.style.transform = 'translateX(-50%) translateY(8px)';
+      setTimeout(function () { el.remove(); }, 250);
+      delete bk2ToastActive[msg];
+    }
+    entry.reset = function () { clearTimeout(entry.timer); entry.timer = setTimeout(dismiss, ttl); };
+    entry.timer = setTimeout(dismiss, ttl);
+    bk2ToastActive[msg] = entry;
   }
   window.bk2Toast = bk2Toast;
 
