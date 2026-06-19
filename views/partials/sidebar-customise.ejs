@@ -1,8 +1,8 @@
 <style>
-  /* ── Custom sidebar layout: folders + edit mode ── */
+  /* ── Custom sidebar layout: nested folders + edit mode ── */
   #sidebar .sb-folder { margin-top: 1px; }
   #sidebar .sb-folder-head {
-    display: flex; align-items: center; gap: 4px; width: 100%;
+    display: flex; align-items: center; gap: 5px; width: 100%;
     padding: 7px 10px 5px; background: none; border: 0; cursor: pointer;
     color: rgba(96,154,255,0.5); font-size: 10px; font-weight: 700;
     text-transform: uppercase; letter-spacing: 0.09em; text-align: left;
@@ -10,33 +10,68 @@
   #sidebar .sb-folder-head:hover { color: rgba(150,185,255,0.8); }
   #sidebar .sb-folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #sidebar .sb-caret { width: 12px; height: 12px; flex-shrink: 0; transition: transform .15s ease; }
+  #sidebar .sb-folder-ico { width: 13px; height: 13px; flex-shrink: 0; opacity: 0.7; }
   #sidebar .sb-folder.is-collapsed .sb-caret { transform: rotate(-90deg); }
   #sidebar .sb-folder-items.sb-collapsed { display: none; }
   #sidebar .sb-folder-items { padding-left: 6px; margin-left: 6px; border-left: 1px solid rgba(255,255,255,0.06); }
 
-  /* Edit mode */
-  #sidebar.sb-editing .sidebar-link { cursor: default; }
+  /* ── Edit mode ── */
+  #sidebar.sb-editing .sidebar-link {
+    cursor: default; background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.06); margin: 2px 0;
+  }
+  #sidebar.sb-editing .sb-folder { border: 1px dashed rgba(96,154,255,0.25); border-radius: 8px; padding: 2px; margin: 4px 0; }
+  #sidebar.sb-editing .sb-folder-items { min-height: 22px; }
+  /* Empty / drop-target folders get an obvious dashed well. */
+  #sidebar.sb-editing .sb-folder-items:empty::after {
+    content: 'Drop items here'; display: block; padding: 6px 8px; margin: 2px 4px;
+    font-size: 10px; color: rgba(255,255,255,0.3); border: 1px dashed rgba(255,255,255,0.12); border-radius: 6px; text-transform: none; letter-spacing: 0;
+  }
+
+  /* Drag handle — only in edit mode */
   #sidebar .sb-handle { display: none; flex-shrink: 0; width: 16px; margin-right: 2px; cursor: grab; color: rgba(255,255,255,0.35); }
   #sidebar.sb-editing .sb-handle { display: inline-flex; align-items: center; justify-content: center; }
-  #sidebar .sb-rename, #sidebar .sb-folder-del { display: none; flex-shrink: 0; padding: 2px; border: 0; background: none; color: rgba(255,255,255,0.4); cursor: pointer; border-radius: 4px; }
-  #sidebar.sb-editing .sb-rename, #sidebar.sb-editing .sb-folder-del { display: inline-flex; }
-  #sidebar .sb-rename:hover { color: #fff; background: rgba(255,255,255,0.1); }
-  #sidebar .sb-folder-del:hover { color: #fca5a5; background: rgba(239,68,68,0.15); }
-  #sidebar.sb-editing .sidebar-link { background: rgba(255,255,255,0.03); }
+  #sidebar .sb-handle:active { cursor: grabbing; }
+
+  /* Per-row action buttons (rename / add-sub / delete) — reveal on hover in edit */
+  #sidebar .sb-act { display: none; flex-shrink: 0; padding: 2px; border: 0; background: none; color: rgba(255,255,255,0.35); cursor: pointer; border-radius: 4px; line-height: 0; }
+  #sidebar.sb-editing .sb-folder-head .sb-act { display: inline-flex; }
+  #sidebar.sb-editing .sidebar-link .sb-act { display: none; }
+  #sidebar.sb-editing .sidebar-link:hover .sb-act { display: inline-flex; }
+  #sidebar .sb-act:hover { color: #fff; background: rgba(255,255,255,0.12); }
+  #sidebar .sb-act--del:hover { color: #fca5a5; background: rgba(239,68,68,0.18); }
+  #sidebar .sb-act svg { width: 13px; height: 13px; }
+
+  /* Inline rename input */
+  #sidebar .sb-rename-input {
+    flex: 1; min-width: 0; background: rgba(0,0,0,0.35); border: 1px solid #2B7FFF; border-radius: 5px;
+    color: #fff; font-size: inherit; font-weight: inherit; letter-spacing: inherit; text-transform: none;
+    padding: 2px 6px; outline: none;
+  }
 
   /* Sortable feedback */
-  #sidebar .sb-ghost { opacity: 0.4; }
-  #sidebar .sb-chosen { background: rgba(43,127,255,0.18) !important; }
-  #sidebar .sb-folder-items:empty { min-height: 14px; border-radius: 6px; }
-  #sidebar.sb-editing .sb-folder-items { min-height: 14px; }
+  #sidebar .sb-ghost { opacity: 0.35; }
+  #sidebar .sb-chosen { background: rgba(43,127,255,0.22) !important; border-color: rgba(43,127,255,0.5) !important; }
 
-  /* Edit toolbar */
-  #sidebar .sb-toolbar { display: none; gap: 6px; flex-wrap: wrap; padding: 8px; margin-bottom: 6px; background: rgba(255,255,255,0.04); border-radius: 8px; }
-  #sidebar.sb-editing .sb-toolbar { display: flex; }
-  #sidebar .sb-tbtn { flex: 1 1 auto; min-width: 60px; padding: 6px 8px; font-size: 11px; font-weight: 600; border: 0; border-radius: 6px; cursor: pointer; }
+  /* ── Edit toolbar + instructions ── */
+  #sidebar .sb-editpanel { display: none; }
+  #sidebar.sb-editing .sb-editpanel {
+    display: block; position: sticky; top: 0; z-index: 5;
+    margin: -4px -4px 8px; padding: 10px; border-radius: 10px;
+    background: #1b2030; border: 1px solid rgba(96,154,255,0.25);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+  }
+  #sidebar .sb-editpanel-title { font-size: 12px; font-weight: 700; color: #e8eefc; display: flex; align-items: center; gap: 6px; }
+  #sidebar .sb-editpanel-hint { font-size: 10.5px; line-height: 1.5; color: rgba(255,255,255,0.55); margin: 6px 0 9px; }
+  #sidebar .sb-editpanel-hint b { color: rgba(255,255,255,0.8); font-weight: 600; }
+  #sidebar .sb-btnrow { display: flex; gap: 6px; }
+  #sidebar .sb-tbtn { flex: 1 1 auto; padding: 7px 8px; font-size: 11px; font-weight: 700; border: 0; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
   #sidebar .sb-tbtn--primary { background: #2B7FFF; color: #fff; }
+  #sidebar .sb-tbtn--primary:hover { background: #1D6AE5; }
   #sidebar .sb-tbtn--ghost { background: rgba(255,255,255,0.08); color: #cbd5e1; }
-  #sidebar .sb-tbtn--danger { background: rgba(239,68,68,0.18); color: #fca5a5; }
+  #sidebar .sb-tbtn--ghost:hover { background: rgba(255,255,255,0.14); }
+  #sidebar .sb-tbtn--reset { width: 100%; margin-top: 7px; background: none; color: rgba(252,165,165,0.7); font-weight: 600; }
+  #sidebar .sb-tbtn--reset:hover { color: #fca5a5; background: rgba(239,68,68,0.12); }
 </style>
 
 <script>
@@ -49,6 +84,7 @@
     var spacer = nav.querySelector('[data-sb-spacer]');
     var canEdit = !!window.__SIDEBAR_CAN_EDIT__;
     var layout = window.__SIDEBAR_LAYOUT__ || null;
+    var MAX_DEPTH = 3; // how deep folders may nest
 
     // ---- helpers ----
     function linkKey(a) {
@@ -72,13 +108,12 @@
     }
     function collapsedStore() { try { return JSON.parse(localStorage.getItem('sbCollapsed') || '{}'); } catch (e) { return {}; } }
     function saveCollapsed(map) { try { localStorage.setItem('sbCollapsed', JSON.stringify(map)); } catch (e) {} }
+    function makeFrag(html) { var d = document.createElement('div'); d.innerHTML = html; return d.firstChild; }
 
-    // Map every nav link by key; remove duplicate links (same href appears in
-    // more than one default section) so a custom layout shows each once.
     function collectItems() {
       var map = {};
       Array.prototype.slice.call(nav.querySelectorAll('a.sidebar-link')).forEach(function (a) {
-        labelEl(a); // normalise label element
+        labelEl(a);
         var k = linkKey(a);
         if (map[k]) { a.parentNode && a.parentNode.removeChild(a); return; }
         map[k] = a;
@@ -87,7 +122,17 @@
     }
 
     var ICON_CARET = '<svg class="sb-caret" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>';
+    var ICON_FOLDER = '<svg class="sb-folder-ico" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z"/></svg>';
     var ICON_HANDLE = '<span class="sb-handle"><svg width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="M8 6h.01M8 12h.01M8 18h.01M16 6h.01M16 12h.01M16 18h.01"/></svg></span>';
+    var ICON_PENCIL = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>';
+    var ICON_PLUS = '<svg fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 5v14m7-7H5"/></svg>';
+    var ICON_TRASH = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>';
+
+    function actBtn(cls, title, svg) {
+      var b = document.createElement('button');
+      b.type = 'button'; b.className = 'sb-act ' + cls; b.title = title; b.innerHTML = svg;
+      return b;
+    }
 
     function buildFolder(name, collapsed, edit) {
       var f = document.createElement('div');
@@ -95,10 +140,13 @@
       f.setAttribute('data-folder', '');
       var head = document.createElement('div');
       head.className = 'sb-folder-head';
-      head.innerHTML = (edit ? ICON_HANDLE : '') + ICON_CARET +
-        '<span class="sb-folder-name"></span>' +
-        (edit ? '<button type="button" class="sb-rename" title="Rename folder">✎</button><button type="button" class="sb-folder-del" title="Delete folder">✕</button>' : '');
+      head.innerHTML = (edit ? ICON_HANDLE : '') + ICON_CARET + ICON_FOLDER + '<span class="sb-folder-name"></span>';
       head.querySelector('.sb-folder-name').textContent = name;
+      if (edit) {
+        head.appendChild(actBtn('sb-act--addsub', 'Add sub-folder', ICON_PLUS));
+        head.appendChild(actBtn('sb-act--rename', 'Rename folder', ICON_PENCIL));
+        head.appendChild(actBtn('sb-act--del', 'Delete folder', ICON_TRASH));
+      }
       var items = document.createElement('div');
       items.className = 'sb-folder-items' + (collapsed ? ' sb-collapsed' : '');
       f.appendChild(head); f.appendChild(items);
@@ -106,20 +154,16 @@
     }
 
     function decorateItem(a, edit) {
-      if (edit && !a.querySelector('.sb-handle')) a.insertBefore(makeFrag(ICON_HANDLE), a.firstChild);
-      if (edit && !a.querySelector('.sb-rename')) {
-        var btn = document.createElement('button');
-        btn.type = 'button'; btn.className = 'sb-rename'; btn.title = 'Rename'; btn.textContent = '✎';
-        a.appendChild(btn);
-      }
-      if (!edit) {
+      if (edit) {
+        if (!a.querySelector('.sb-handle')) a.insertBefore(makeFrag(ICON_HANDLE), a.firstChild);
+        if (!a.querySelector('.sb-act--rename')) a.appendChild(actBtn('sb-act--rename', 'Rename', ICON_PENCIL));
+      } else {
         var h = a.querySelector('.sb-handle'); if (h) h.remove();
-        var r = a.querySelector('.sb-rename'); if (r) r.remove();
+        Array.prototype.slice.call(a.querySelectorAll('.sb-act')).forEach(function (n) { n.remove(); });
       }
     }
-    function makeFrag(html) { var d = document.createElement('div'); d.innerHTML = html; return d.firstChild; }
 
-    // Render a tree into a fresh .sb-root, reusing the existing <a> elements.
+    // ---- render a tree (recursive) ----
     function render(tree, edit) {
       var pool = collectItems();
       var root = document.createElement('div');
@@ -132,36 +176,36 @@
         decorateItem(a, edit);
         container.appendChild(a);
       }
-      (tree || []).forEach(function (node) {
-        if (node.t === 'folder') {
-          var collapsed = (col[node.name] !== undefined) ? col[node.name] : !!node.collapsed;
-          if (edit) collapsed = false; // always open while editing
-          var f = buildFolder(node.name || 'Folder', collapsed, edit);
-          var list = f.querySelector('.sb-folder-items');
-          (node.children || []).forEach(function (ch) { if (ch.t === 'item') placeItem(ch, list); });
-          root.appendChild(f);
-        } else if (node.t === 'item') {
-          placeItem(node, root);
-        }
-      });
-      // Leftover items (new pages not in the saved layout) — keep them visible.
+      function renderChildren(children, container) {
+        (children || []).forEach(function (node) {
+          if (node.t === 'folder') {
+            var collapsed = (col[node.name] !== undefined) ? col[node.name] : !!node.collapsed;
+            if (edit) collapsed = false;
+            var f = buildFolder(node.name || 'Folder', collapsed, edit);
+            container.appendChild(f);
+            renderChildren(node.children || [], f.querySelector(':scope > .sb-folder-items'));
+          } else if (node.t === 'item') {
+            placeItem(node, container);
+          }
+        });
+      }
+      renderChildren(tree, root);
+      // Leftover items (new pages not in the saved layout) stay visible at the end.
       Object.keys(pool).forEach(function (k) { if (!used[k]) { decorateItem(pool[k], edit); root.appendChild(pool[k]); } });
 
-      // Swap in: drop old sections / old root / stray links, insert fresh root.
       nav.querySelectorAll('.sidebar-section, .sb-root').forEach(function (n) { n.remove(); });
       nav.insertBefore(root, spacer);
-      // Auto-open a folder that holds the active item.
+      // Open every ancestor folder of the active item.
       root.querySelectorAll('.sb-folder').forEach(function (f) {
         if (f.querySelector('a.sidebar-link.bg-white\\/15')) {
           f.classList.remove('is-collapsed');
-          var it = f.querySelector('.sb-folder-items'); if (it) it.classList.remove('sb-collapsed');
+          var it = f.querySelector(':scope > .sb-folder-items'); if (it) it.classList.remove('sb-collapsed');
         }
       });
       return root;
     }
 
-    // Build a tree from the current default DOM (sections → folders). Used to
-    // seed the editor the first time, before any layout is saved.
+    // ---- seed editor from default DOM (sections → folders) ----
     function seedFromDom() {
       var tree = [], folder = null;
       Array.prototype.slice.call(nav.children).forEach(function (node) {
@@ -177,49 +221,52 @@
       return tree;
     }
 
+    // ---- serialize DOM → tree (recursive) ----
     function serialize() {
-      var root = nav.querySelector('.sb-root'); var tree = [];
-      if (!root) return { v: 1, tree: tree };
+      var root = nav.querySelector('.sb-root');
       function itemNode(a) { var o = { t: 'item', key: linkKey(a) }; var l = a.getAttribute('data-sb-label'); if (l) o.label = l; return o; }
-      Array.prototype.slice.call(root.children).forEach(function (node) {
-        if (node.matches && node.matches('.sb-folder')) {
-          var name = (node.querySelector('.sb-folder-name').textContent || 'Folder').trim();
-          var children = [];
-          node.querySelectorAll('.sb-folder-items > a.sidebar-link').forEach(function (a) { children.push(itemNode(a)); });
-          tree.push({ t: 'folder', name: name, collapsed: node.classList.contains('is-collapsed'), children: children });
-        } else if (node.matches && node.matches('a.sidebar-link')) {
-          tree.push(itemNode(node));
-        }
-      });
-      return { v: 1, tree: tree };
-    }
-
-    // ---- display mode: apply saved layout (everyone) ----
-    if (layout && Array.isArray(layout.tree) && layout.tree.length) {
-      render(layout.tree, false);
-    }
-
-    // Collapse toggle (event delegation, display + edit).
-    nav.addEventListener('click', function (e) {
-      var caretArea = e.target.closest && e.target.closest('.sb-folder-head');
-      if (!caretArea) return;
-      if (e.target.closest('.sb-rename') || e.target.closest('.sb-folder-del') || e.target.closest('.sb-handle')) return;
-      var folder = caretArea.closest('.sb-folder');
-      var items = folder.querySelector('.sb-folder-items');
-      var collapsed = folder.classList.toggle('is-collapsed');
-      items.classList.toggle('sb-collapsed', collapsed);
-      if (!sidebar.classList.contains('sb-editing')) {
-        var name = folder.querySelector('.sb-folder-name').textContent.trim();
-        var map = collapsedStore(); map[name] = collapsed; saveCollapsed(map);
+      function walk(container) {
+        var out = [];
+        Array.prototype.slice.call(container.children).forEach(function (node) {
+          if (node.matches && node.matches('.sb-folder')) {
+            var nameEl = node.querySelector(':scope > .sb-folder-head .sb-folder-name');
+            var itemsEl = node.querySelector(':scope > .sb-folder-items');
+            out.push({
+              t: 'folder', name: (nameEl ? nameEl.textContent : 'Folder').trim(),
+              collapsed: node.classList.contains('is-collapsed'),
+              children: itemsEl ? walk(itemsEl) : [],
+            });
+          } else if (node.matches && node.matches('a.sidebar-link')) {
+            out.push(itemNode(node));
+          }
+        });
+        return out;
       }
+      return { v: 1, tree: root ? walk(root) : [] };
+    }
+
+    // ---- DISPLAY MODE: apply saved layout (all users) ----
+    if (layout && Array.isArray(layout.tree) && layout.tree.length) render(layout.tree, false);
+
+    // Collapse toggle (display only — folders stay open while editing).
+    nav.addEventListener('click', function (e) {
+      if (sidebar.classList.contains('sb-editing')) return;
+      var head = e.target.closest && e.target.closest('.sb-folder-head');
+      if (!head) return;
+      var folder = head.closest('.sb-folder');
+      var items = folder.querySelector(':scope > .sb-folder-items');
+      var collapsed = folder.classList.toggle('is-collapsed');
+      if (items) items.classList.toggle('sb-collapsed', collapsed);
+      var name = folder.querySelector('.sb-folder-name').textContent.trim();
+      var map = collapsedStore(); map[name] = collapsed; saveCollapsed(map);
     });
 
-    // ===================== EDIT MODE (admin) =====================
+    // ===================== EDIT MODE (admin only) =====================
     if (!canEdit) return;
     var toggleBtn = document.getElementById('sb-edit-toggle');
     var editLabel = document.getElementById('sb-edit-label');
     var sortables = [];
-    var toolbar = null;
+    var panel = null;
 
     function loadSortable(cb) {
       if (window.Sortable) return cb();
@@ -229,121 +276,172 @@
       s.onerror = function () { alert('Could not load the drag-and-drop library (are you offline?).'); exitEdit(); };
       document.head.appendChild(s);
     }
-
+    function folderDepth(el) { // # of folders between el and root
+      var d = 0, n = el;
+      while (n && !n.classList.contains('sb-root')) { if (n.classList && n.classList.contains('sb-folder')) d++; n = n.parentNode; }
+      return d;
+    }
     function makeSortable(el) {
       sortables.push(new window.Sortable(el, {
         group: 'sbnav', draggable: 'a.sidebar-link, .sb-folder', handle: '.sb-handle',
         ghostClass: 'sb-ghost', chosenClass: 'sb-chosen', animation: 140, fallbackOnBody: true,
-        // Folders can't nest inside folders.
         onMove: function (evt) {
-          if (evt.dragged.classList.contains('sb-folder') && evt.to.classList.contains('sb-folder-items')) return false;
+          if (evt.dragged.classList.contains('sb-folder')) {
+            if (evt.dragged.contains(evt.to)) return false;           // not into itself
+            if (folderDepth(evt.to) >= MAX_DEPTH) return false;       // depth cap
+          }
           return true;
         },
       }));
     }
-
-    function buildToolbar() {
-      toolbar = document.createElement('div');
-      toolbar.className = 'sb-toolbar';
-      toolbar.innerHTML =
-        '<button type="button" class="sb-tbtn sb-tbtn--ghost" data-sb="newfolder">+ Folder</button>' +
-        '<button type="button" class="sb-tbtn sb-tbtn--primary" data-sb="save">Save</button>' +
-        '<button type="button" class="sb-tbtn sb-tbtn--ghost" data-sb="cancel">Cancel</button>' +
-        '<button type="button" class="sb-tbtn sb-tbtn--danger" data-sb="reset">Reset</button>';
-      nav.insertBefore(toolbar, nav.firstChild);
-      toolbar.addEventListener('click', onToolbar);
+    function makeAllSortable() {
+      makeSortable(nav.querySelector('.sb-root'));
+      nav.querySelectorAll('.sb-folder-items').forEach(makeSortable);
     }
 
-    function onToolbar(e) {
-      var act = e.target.getAttribute('data-sb'); if (!act) return;
+    function inlineRename(textEl, onCommit) {
+      if (!textEl || textEl.dataset.renaming) return;
+      var cur = textEl.textContent.trim();
+      var input = document.createElement('input');
+      input.type = 'text'; input.value = cur; input.className = 'sb-rename-input';
+      textEl.dataset.renaming = '1';
+      textEl.style.display = 'none';
+      textEl.parentNode.insertBefore(input, textEl.nextSibling);
+      input.focus(); input.select();
+      var done = false;
+      function finish(commit) {
+        if (done) return; done = true;
+        var v = commit ? (input.value.trim() || cur) : cur;
+        textEl.textContent = v; textEl.style.display = ''; delete textEl.dataset.renaming;
+        input.remove();
+        if (commit) onCommit && onCommit(v);
+      }
+      input.addEventListener('blur', function () { finish(true); });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+        else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+      });
+    }
+
+    function buildPanel() {
+      panel = document.createElement('div');
+      panel.className = 'sb-editpanel';
+      panel.innerHTML =
+        '<div class="sb-editpanel-title">' +
+          '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 14v-6m6 6a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>' +
+          'Customising menu</div>' +
+        '<p class="sb-editpanel-hint">Drag the <b>⠿ handle</b> to move a tab. Drop it <b>onto a folder</b> to nest it. Click a <b>name</b> to rename it. Renames &amp; folders apply to everyone.</p>' +
+        '<div class="sb-btnrow">' +
+          '<button type="button" class="sb-tbtn sb-tbtn--ghost" data-sb="newfolder">+ Folder</button>' +
+          '<button type="button" class="sb-tbtn sb-tbtn--primary" data-sb="save">Save</button>' +
+          '<button type="button" class="sb-tbtn sb-tbtn--ghost" data-sb="cancel">Cancel</button>' +
+        '</div>' +
+        '<button type="button" class="sb-tbtn sb-tbtn--reset" data-sb="reset">Reset to default for everyone</button>';
+      nav.insertBefore(panel, nav.firstChild);
+      panel.addEventListener('click', onPanel);
+    }
+
+    function onPanel(e) {
+      var btn = e.target.closest('[data-sb]'); if (!btn) return;
+      var act = btn.getAttribute('data-sb');
       if (act === 'newfolder') {
-        var name = prompt('Folder name:', 'New folder'); if (name === null) return;
         var root = nav.querySelector('.sb-root');
-        var f = buildFolder(name.trim() || 'New folder', false, true);
+        var f = buildFolder('New folder', false, true);
         root.insertBefore(f, root.firstChild);
-        makeSortable(f.querySelector('.sb-folder-items'));
+        makeSortable(f.querySelector(':scope > .sb-folder-items'));
+        inlineRename(f.querySelector('.sb-folder-name'));
       } else if (act === 'save') {
         var payload = serialize();
         var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-        e.target.textContent = 'Saving…'; e.target.disabled = true;
+        btn.textContent = 'Saving…'; btn.disabled = true;
         fetch('/admin/sidebar-layout', {
           method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
           body: JSON.stringify({ layout: payload }),
         }).then(function (r) { return r.json(); }).then(function (d) {
-          if (d && d.ok) location.reload(); else { alert('Save failed: ' + ((d && d.error) || '')); e.target.textContent = 'Save'; e.target.disabled = false; }
-        }).catch(function () { alert('Save failed.'); e.target.textContent = 'Save'; e.target.disabled = false; });
+          if (d && d.ok) location.reload();
+          else { alert('Save failed: ' + ((d && d.error) || '')); btn.textContent = 'Save'; btn.disabled = false; }
+        }).catch(function () { alert('Save failed.'); btn.textContent = 'Save'; btn.disabled = false; });
       } else if (act === 'cancel') {
         location.reload();
       } else if (act === 'reset') {
         if (!confirm('Reset the menu to the default for everyone?')) return;
         var csrf2 = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-        fetch('/admin/sidebar-layout/reset', { method: 'POST', headers: { 'X-CSRF-Token': csrf2 } })
-          .then(function () { location.reload(); });
+        fetch('/admin/sidebar-layout/reset', { method: 'POST', headers: { 'X-CSRF-Token': csrf2 } }).then(function () { location.reload(); });
       }
     }
 
-    // Rename clicks (items + folders) while editing.
+    // Edit-mode interactions: rename / add-sub / delete (capture phase).
     nav.addEventListener('click', function (e) {
       if (!sidebar.classList.contains('sb-editing')) return;
-      var ren = e.target.closest('.sb-rename');
-      if (ren) {
+      if (e.target.closest('.sb-editpanel')) return;
+
+      var addsub = e.target.closest('.sb-act--addsub');
+      if (addsub) {
         e.preventDefault(); e.stopPropagation();
-        var a = ren.closest('a.sidebar-link');
-        if (a) {
-          var cur = a.querySelector('.sb-label').textContent.trim();
-          var nv = prompt('Rename to:', cur); if (nv === null) return;
-          nv = nv.trim(); if (!nv) return;
-          a.querySelector('.sb-label').textContent = nv; a.setAttribute('data-sb-label', nv);
-          return;
-        }
-        var fname = ren.closest('.sb-folder-head').querySelector('.sb-folder-name');
-        var nf = prompt('Rename folder:', fname.textContent.trim()); if (nf === null) return;
-        if (nf.trim()) fname.textContent = nf.trim();
+        var ph = addsub.closest('.sb-folder');
+        if (folderDepth(ph.querySelector(':scope > .sb-folder-items')) >= MAX_DEPTH) { alert('Folders can only nest ' + MAX_DEPTH + ' levels deep.'); return; }
+        var list = ph.querySelector(':scope > .sb-folder-items');
+        var sub = buildFolder('New folder', false, true);
+        list.insertBefore(sub, list.firstChild);
+        ph.classList.remove('is-collapsed'); list.classList.remove('sb-collapsed');
+        makeSortable(sub.querySelector(':scope > .sb-folder-items'));
+        inlineRename(sub.querySelector('.sb-folder-name'));
         return;
       }
-      var del = e.target.closest('.sb-folder-del');
+      var del = e.target.closest('.sb-act--del');
       if (del) {
         e.preventDefault(); e.stopPropagation();
         var folder = del.closest('.sb-folder');
-        var root = nav.querySelector('.sb-root');
-        // Move the folder's items out to the root before removing it.
-        Array.prototype.slice.call(folder.querySelectorAll('.sb-folder-items > a.sidebar-link')).forEach(function (a) { root.appendChild(a); });
+        var parentList = folder.parentNode; // move children up to the parent container
+        var inner = folder.querySelector(':scope > .sb-folder-items');
+        Array.prototype.slice.call(inner.children).forEach(function (n) { parentList.insertBefore(n, folder); });
         folder.remove();
         return;
       }
-    }, true);
+      var ren = e.target.closest('.sb-act--rename');
+      if (ren) {
+        e.preventDefault(); e.stopPropagation();
+        var a = ren.closest('a.sidebar-link');
+        if (a) { inlineRename(a.querySelector('.sb-label'), function (v) { a.setAttribute('data-sb-label', v); }); return; }
+        var fn = ren.closest('.sb-folder-head').querySelector('.sb-folder-name');
+        inlineRename(fn);
+        return;
+      }
+      // Click a name directly to rename.
+      var lbl = e.target.closest('.sb-label');
+      if (lbl && lbl.closest('a.sidebar-link')) {
+        e.preventDefault(); e.stopPropagation();
+        var link = lbl.closest('a.sidebar-link');
+        inlineRename(lbl, function (v) { link.setAttribute('data-sb-label', v); });
+        return;
+      }
+      var fname = e.target.closest('.sb-folder-name');
+      if (fname) { e.preventDefault(); e.stopPropagation(); inlineRename(fname); return; }
 
-    // Block navigation while editing (so dragging/clicking links doesn't leave).
-    nav.addEventListener('click', function (e) {
-      if (!sidebar.classList.contains('sb-editing')) return;
-      var a = e.target.closest('a.sidebar-link');
-      if (a && !e.target.closest('.sb-rename')) { e.preventDefault(); }
-    });
+      // Otherwise block link navigation while editing.
+      var navlink = e.target.closest('a.sidebar-link');
+      if (navlink) e.preventDefault();
+    }, true);
 
     function enterEdit() {
       var current = nav.querySelector('.sb-root') ? serialize().tree : seedFromDom();
       render(current, true);
       sidebar.classList.add('sb-editing');
       if (editLabel) editLabel.textContent = 'Done';
-      buildToolbar();
-      loadSortable(function () {
-        makeSortable(nav.querySelector('.sb-root'));
-        nav.querySelectorAll('.sb-folder-items').forEach(makeSortable);
-      });
+      buildPanel();
+      loadSortable(makeAllSortable);
     }
     function exitEdit() {
       sortables.forEach(function (s) { try { s.destroy(); } catch (e) {} }); sortables = [];
-      if (toolbar) { toolbar.remove(); toolbar = null; }
+      if (panel) { panel.remove(); panel = null; }
       sidebar.classList.remove('sb-editing');
       if (editLabel) editLabel.textContent = 'Customise menu';
-      // Re-render in display mode from the live (unsaved) DOM so handles vanish.
       render(serialize().tree, false);
     }
     if (toggleBtn) toggleBtn.addEventListener('click', function () {
       if (sidebar.classList.contains('sb-editing')) exitEdit(); else enterEdit();
     });
   } catch (err) {
-    // Any failure leaves the default server-rendered sidebar intact.
     if (window.console) console.error('[sidebar-customise]', err);
   }
 })();
