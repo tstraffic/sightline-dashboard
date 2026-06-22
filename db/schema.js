@@ -13741,6 +13741,29 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 298 error:', e.message); }
   }
 
+  // 299: backfill date_called for recruitment applicants who are already at
+  // Called-or-beyond (Called/Interested/Booked/Inducted/Hired) — or who have
+  // an induction date — but never had a call date stamped. Reaching any of
+  // those stages implies the call happened, and the Weekly Calls counter is
+  // driven off date_called, so these were silently missing from the count.
+  // Stamp with the best available proxy for when the call happened:
+  // date_applied → created date → today. Terminal stages (No Show / Declined)
+  // are left alone. New bookings stamp date_called live in routes/recruitment.
+  if (!isMigrationApplied.get(299)) {
+    try {
+      const info = db.prepare(`
+        UPDATE seek_applicants
+        SET date_called = COALESCE(date_applied, DATE(created_at), DATE('now'))
+        WHERE date_called IS NULL
+          AND UPPER(COALESCE(stage,'')) NOT IN ('NO_SHOW','DECLINED')
+          AND ( UPPER(COALESCE(stage,'')) IN ('CALLED','INTERESTED','BOOKED','INDUCTED','HIRED')
+                OR induction_date IS NOT NULL )
+      `).run();
+      recordMigration.run(299, 'backfill date_called for Called+ recruitment applicants');
+      console.log('Migration 299 applied — backfilled date_called on', info.changes, 'applicant(s)');
+    } catch (e) { console.error('Migration 299 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -407,11 +407,14 @@ router.post('/:id', async (req, res) => {
     }
   }
 
-  // Reaching CALLED or beyond implies the call happened — if there's no
-  // date_called yet (e.g. dragged straight to Interested/Booked), stamp today
-  // so the Weekly Calls counter reflects it. Skipped for terminal stages and
-  // when this request explicitly sets date_called.
-  if (newStage && isAtOrBeyond(newStage, 'CALLED') && !row.date_called
+  // Reaching CALLED or beyond — or booking someone (setting an induction
+  // date) — implies the call happened. If there's no date_called yet (e.g.
+  // dragged straight to Interested/Booked, or booked while the stage was set
+  // separately), stamp today so the Weekly Calls counter reflects it. Skipped
+  // for terminal stages and when this request explicitly sets date_called.
+  const reachedCalled = newStage && isAtOrBeyond(newStage, 'CALLED');
+  const beingBooked = inductionDateChange != null; // induction date newly set/changed
+  if ((reachedCalled || beingBooked) && !row.date_called
       && typeof req.body.date_called === 'undefined') {
     sets.push('date_called = ?'); params.push(sydneyToday());
   }
