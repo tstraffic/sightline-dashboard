@@ -4,7 +4,7 @@
   // logic needs in data-* attributes so no extra round-trip is required.
   const _cd = cardDate(a);
   const _fwdIdx = (typeof forwardStages !== 'undefined' ? forwardStages : ['NEW','CALLED','INTERESTED','BOOKED','INDUCTED','HIRED']).indexOf((a.stage||'').toUpperCase());
-  const _noteLine = (a.notes || '').split(/\r?\n/)[0];
+  const _notes = (a.notes || '').trim();
 %>
 <article class="rec-card" draggable="true"
          id="card-<%= a.id %>"
@@ -54,7 +54,8 @@
     <% } %>
   </div>
 
-  <% if (_noteLine) { %>
-    <p class="rec-card-note"><%= _noteLine %></p>
+  <% if (_notes) { %>
+    <p class="rec-card-note"><%= _notes %></p>
+    <button type="button" class="rec-card-more" aria-expanded="false">More</button>
   <% } %>
 </article>

@@ -161,7 +161,14 @@
   .rec-card-date-label { font-weight: 800; color: var(--st-ink); text-transform: uppercase; font-size: 8.5px; letter-spacing: .05em; }
   :root[data-theme="dark"] .rec-card-date-label { color: color-mix(in srgb, var(--st) 55%, white); }
   .rec-card-note { font-size: 11px; color: var(--rec-ink-mute); margin-top: 8px; line-height: 1.4; padding-top: 7px; border-top: 1px dashed var(--rec-card-border);
-    overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+    white-space: pre-line; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; }
+  /* Click a card to expand it and read the applicant's full experience. */
+  .rec-card.is-expanded .rec-card-note { -webkit-line-clamp: unset; display: block; overflow: visible; }
+  .rec-card-more { display: none; margin-top: 5px; font-size: 9.5px; font-weight: 800; letter-spacing: .04em;
+    text-transform: uppercase; color: var(--st-ink); background: none; border: 0; cursor: pointer; padding: 0; }
+  :root[data-theme="dark"] .rec-card-more { color: color-mix(in srgb, var(--st) 60%, white); }
+  .rec-card.is-expandable .rec-card-more { display: inline-block; }
+  .rec-card-more:hover { text-decoration: underline; }
 
   /* ── Badges ── */
   .rec-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 9.5px; font-weight: 700;

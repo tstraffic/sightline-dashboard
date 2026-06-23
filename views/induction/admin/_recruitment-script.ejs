@@ -309,6 +309,28 @@
   }
   function clearDragover() { document.querySelectorAll('.rec-col-body').forEach(function (b) { b.classList.remove('is-dragover'); }); }
 
+  // ---- Card expand: click a card to reveal the full experience notes ----
+  // The note is clamped to one line by default; flag cards whose note actually
+  // overflows so only those show a More/Less affordance and respond to clicks.
+  function markExpandable(card) {
+    var note = card.querySelector('.rec-card-note');
+    if (!note) return;
+    if (note.scrollHeight - note.clientHeight > 1) card.classList.add('is-expandable');
+  }
+  document.querySelectorAll('#rec-board .rec-card').forEach(markExpandable);
+  var recBoard = document.getElementById('rec-board');
+  if (recBoard) {
+    recBoard.addEventListener('click', function (e) {
+      // Leave the action buttons / phone link / copy / selects alone.
+      if (e.target.closest('a, select, input, .rec-card-edit, .rec-card-resend, .rec-card-copy')) return;
+      var card = e.target.closest('.rec-card');
+      if (!card || !card.classList.contains('is-expandable')) return;
+      var expanded = card.classList.toggle('is-expanded');
+      var more = card.querySelector('.rec-card-more');
+      if (more) { more.textContent = expanded ? 'Less' : 'More'; more.setAttribute('aria-expanded', String(expanded)); }
+    });
+  }
+
   document.querySelectorAll('.rec-col-body').forEach(function (body) {
     body.addEventListener('dragover', function (e) { e.preventDefault(); body.classList.add('is-dragover'); });
     body.addEventListener('dragleave', function () { body.classList.remove('is-dragover'); });
