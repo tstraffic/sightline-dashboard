@@ -505,6 +505,34 @@
   </div>
   <% } %>
 
+  <!-- Suitability — allocator-facing call set during/after the in-person
+       induction. 'Not suitable' also flags them on the roster. -->
+  <% var suitVal = s.suitability || ''; %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <h2 class="text-sm font-bold text-gray-900 mb-1">Suitability</h2>
+    <p class="text-xs text-gray-500 mb-3">Your call on this person for the allocator. "Not suitable" flags them on the roster so they don't get allocated.</p>
+    <form method="POST" action="/induction/admin/submissions/<%= s.id %>/suitability" class="space-y-3">
+      <%- include('../../partials/csrf') %>
+      <div class="flex flex-wrap gap-2">
+        <% [['suitable','Suitable','emerald'],['maybe','Maybe','amber'],['unsuitable','Not suitable','red']].forEach(function (o) { var on = suitVal === o[0]; %>
+          <label class="cursor-pointer">
+            <input type="radio" name="suitability" value="<%= o[0] %>" class="sr-only peer" <%= on ? 'checked' : '' %>>
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border <%= on ? 'bg-' + o[2] + '-50 text-' + o[2] + '-700 border-' + o[2] + '-300 ring-2 ring-' + o[2] + '-400' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100' %>">
+              <span class="w-2 h-2 rounded-full bg-<%= o[2] %>-500"></span><%= o[1] %>
+            </span>
+          </label>
+        <% }) %>
+        <label class="cursor-pointer">
+          <input type="radio" name="suitability" value="" class="sr-only peer" <%= suitVal === '' ? 'checked' : '' %>>
+          <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border <%= suitVal === '' ? 'bg-gray-100 text-gray-700 border-gray-300 ring-2 ring-gray-300' : 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100' %>">Unrated</span>
+        </label>
+      </div>
+      <textarea name="suitability_note" rows="3" placeholder="Comment for the allocator…"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"><%= s.suitability_note || '' %></textarea>
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">Save suitability</button>
+    </form>
+  </div>
+
 </div>
 
 <!-- Approve Modal -->

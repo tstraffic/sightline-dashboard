@@ -391,6 +391,48 @@ router.get('/submissions/:id', (req, res) => {
   });
 });
 
+// Apply a submission's suitability call to its linked employee (if any).
+// 'unsuitable' blocks them from allocation so the roster flags them and the
+// allocator can skip them; flipping to suitable/maybe/cleared lifts a block.
+// Reuses the existing employees.blocked_from_allocation + block_reason fields
+// (same mechanism as the HR block toggle in routes/hr.js). We only clear a
+// block when one is set — manual HR blocks for other reasons are noted as an
+// accepted edge (a re-block in HR is one click).
+function applySuitabilityToEmployee(db, submission) {
+  if (!submission || !submission.linked_crew_member_id) return;
+  const emp = db.prepare('SELECT id, blocked_from_allocation FROM employees WHERE linked_crew_member_id = ? AND deleted_at IS NULL').get(submission.linked_crew_member_id);
+  if (!emp) return;
+  if (submission.suitability === 'unsuitable') {
+    const reason = (submission.suitability_note && submission.suitability_note.trim()) || 'Marked not suitable at induction';
+    db.prepare("UPDATE employees SET blocked_from_allocation = 1, block_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(reason, emp.id);
+  } else if (emp.blocked_from_allocation) {
+    db.prepare("UPDATE employees SET blocked_from_allocation = 0, block_reason = '', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(emp.id);
+  }
+}
+
+// POST /induction/admin/submissions/:id/suitability — set the allocator-facing
+// suitability rating + comment (AJAX, JSON). Persists on the submission and
+// mirrors 'unsuitable' onto the linked employee's block flag for the roster.
+router.post('/submissions/:id/suitability', (req, res) => {
+  const db = getDb();
+  const VALID = ['', 'suitable', 'maybe', 'unsuitable'];
+  let suitability = String(req.body.suitability || '').toLowerCase();
+  if (!VALID.includes(suitability)) suitability = '';
+  const note = String(req.body.suitability_note || '').slice(0, 2000);
+  const s = db.prepare('SELECT id FROM induction_submissions WHERE id = ?').get(req.params.id);
+  if (!s) return res.status(404).json({ ok: false, error: 'Submission not found' });
+  db.prepare(`UPDATE induction_submissions
+      SET suitability = ?, suitability_note = ?, suitability_by_id = ?, suitability_at = datetime('now'), updated_at = datetime('now')
+      WHERE id = ?`)
+    .run(suitability, note, (req.session.user && req.session.user.id) || null, s.id);
+  // Re-read the persisted values, then push the call onto the linked employee.
+  const fresh = db.prepare('SELECT id, linked_crew_member_id, suitability, suitability_note FROM induction_submissions WHERE id = ?').get(s.id);
+  try { applySuitabilityToEmployee(db, fresh); } catch (e) { console.error('[suitability propagate]', e.message); }
+  const wantsJson = req.headers.accept && req.headers.accept.includes('application/json');
+  if (!wantsJson) { req.flash('success', 'Suitability saved.'); return res.redirect(`/induction/admin/submissions/${s.id}`); }
+  return res.json({ ok: true, suitability, suitability_note: note });
+});
+
 // POST /induction/admin/submissions/:id/status — approve/reject
 router.post('/submissions/:id/status', (req, res) => {
   const { status, review_notes } = req.body;
@@ -546,6 +588,14 @@ router.post('/submissions/:id/status', (req, res) => {
         UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime('now') WHERE id = ?
       `).run(crewMemberId, s.id);
 
+      // If a suitability call was already recorded before approval, apply it to
+      // the freshly-created (reserved) employee so a "not suitable" person lands
+      // on the roster already flagged.
+      try {
+        const sf = db.prepare('SELECT linked_crew_member_id, suitability, suitability_note FROM induction_submissions WHERE id = ?').get(s.id);
+        applySuitabilityToEmployee(db, sf);
+      } catch (e) { console.error('[suitability on approve]', e.message); }
+
       // Note: SOP acknowledgement is NOT auto-created from the induction
       // consent signature. The induction-form signature is for the consent
       // agreement, not the SOPs. New starters need to go through the actual
@@ -641,6 +691,12 @@ router.post('/submissions/:id/convert', (req, res) => {
     }
 
     db.prepare("UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime('now') WHERE id = ?").run(crewMemberId, s.id);
+
+    // Carry any pre-set suitability call onto the new employee.
+    try {
+      const sf = db.prepare('SELECT linked_crew_member_id, suitability, suitability_note FROM induction_submissions WHERE id = ?').get(s.id);
+      applySuitabilityToEmployee(db, sf);
+    } catch (e) { console.error('[suitability on convert]', e.message); }
 
     // SOP acknowledgement is intentionally NOT auto-created here — the
     // induction consent signature is for the consent agreement, not the SOPs.

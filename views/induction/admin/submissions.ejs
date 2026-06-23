@@ -14,6 +14,28 @@
     cash: { label: 'Cash', color: 'bg-gray-100 text-gray-600' },
   };
 
+  // Suitability call the allocator reads off this list. Set during/after the
+  // in-person induction. 'unsuitable' also flags the person on the roster.
+  const SUITABILITY = {
+    suitable:   { label: 'Suitable',     dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' },
+    maybe:      { label: 'Maybe',        dot: 'bg-amber-500',   pill: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20' },
+    unsuitable: { label: 'Not suitable', dot: 'bg-red-500',     pill: 'bg-red-50 text-red-700 ring-1 ring-red-600/20' },
+    '':         { label: 'Rate',         dot: 'bg-gray-300',    pill: 'bg-gray-50 text-gray-500 ring-1 ring-gray-300 border border-dashed border-gray-300' },
+  };
+  function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+  // Renders the clickable suitability pill (used in desktop row + mobile card).
+  function suitabilityCell(s) {
+    const cfg = SUITABILITY[s.suitability] || SUITABILITY[''];
+    const note = s.suitability_note || '';
+    const hasNote = note && note.trim();
+    const bubble = hasNote ? ' <svg class="w-3 h-3 opacity-70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>' : '';
+    return '<button type="button" class="suit-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition hover:brightness-95 ' + cfg.pill + '"'
+      + ' data-id="' + s.id + '" data-suitability="' + esc(s.suitability || '') + '" data-note="' + esc(note) + '"'
+      + ' data-name="' + esc(s.full_name || '') + '"'
+      + (hasNote ? ' title="' + esc(note) + '"' : '')
+      + '><span class="w-2 h-2 rounded-full ' + cfg.dot + '"></span>' + esc(cfg.label) + bubble + '</button>';
+  }
+
   function timeAgo(dateStr) {
     if (!dateStr) return '-';
     const now = new Date();
@@ -132,6 +154,25 @@
     </form>
   </div>
 
+  <!-- Suitability quick-filter — client-side narrow so the allocator can jump
+       straight to who he can pick. -->
+  <div class="flex flex-wrap items-center gap-2">
+    <span class="text-[11px] font-bold text-gray-400 uppercase tracking-widest mr-1">Suitability</span>
+    <% const suitFilters = [
+      { key: 'all', label: 'All', dot: 'bg-gray-400' },
+      { key: 'suitable', label: 'Suitable', dot: 'bg-emerald-500' },
+      { key: 'maybe', label: 'Maybe', dot: 'bg-amber-500' },
+      { key: 'unsuitable', label: 'Not suitable', dot: 'bg-red-500' },
+      { key: 'unrated', label: 'Unrated', dot: 'bg-gray-300' },
+    ]; %>
+    <% suitFilters.forEach(function (f) { %>
+      <button type="button" data-suit-filter="<%= f.key %>"
+        class="suit-filter inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition <%= f.key === 'all' ? 'bg-gray-900 text-white border-gray-900' : 'bg-gray-50 text-gray-600 border-gray-200 hover:bg-gray-100' %>">
+        <span class="w-2 h-2 rounded-full <%= f.dot %>"></span><%= f.label %>
+      </button>
+    <% }) %>
+  </div>
+
   <!-- Bulk-delete form lives OUTSIDE the table so it can't nest the per-row
        Approve/Reject forms. Checkboxes below use form="deleteForm" to associate
        with this form. Nesting forms previously caused the outer delete to fire
@@ -180,6 +221,7 @@
               <th class="px-4 py-3 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Can Drive?</th>
               <th class="px-4 py-3 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Documents</th>
               <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+              <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Suitability</th>
               <th class="px-4 py-3 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Submitted</th>
               <th class="px-4 py-3 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Actions</th>
             </tr>
@@ -190,7 +232,7 @@
               const pb = PAYMENT_BADGES[s.payment_type] || { label: s.payment_type, color: 'bg-gray-100 text-gray-600' };
               const docs = docCount(s);
             %>
-              <tr class="hover:bg-gray-50 transition-colors">
+              <tr class="hover:bg-gray-50 transition-colors suit-row" data-suit="<%= s.suitability || '' %>">
                 <!-- Checkbox -->
                 <td class="px-3 py-3">
                   <input type="checkbox" name="ids" value="<%= s.id %>" onchange="updateBulkBar()" form="deleteForm" class="row-check rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer">
@@ -231,6 +273,9 @@
                 <td class="px-4 py-3">
                   <span class="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full <%= sb.color %>"><%= sb.label %></span>
                 </td>
+
+                <!-- Suitability -->
+                <td class="px-4 py-3"><%- suitabilityCell(s) %></td>
 
                 <!-- Submitted -->
                 <td class="px-4 py-3 text-gray-500 text-xs whitespace-nowrap" title="<%= s.submitted_at ? new Date(s.submitted_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney' }) : '' %>">
@@ -277,7 +322,7 @@
           const pb = PAYMENT_BADGES[s.payment_type] || { label: s.payment_type, color: 'bg-gray-100 text-gray-600' };
           const docs = docCount(s);
         %>
-          <div class="flex items-start p-4 hover:bg-gray-50 transition-colors gap-3">
+          <div class="flex items-start p-4 hover:bg-gray-50 transition-colors gap-3 suit-row" data-suit="<%= s.suitability || '' %>">
             <input type="checkbox" name="ids" value="<%= s.id %>" onchange="updateBulkBar()" form="deleteForm" class="row-check mt-1 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer flex-shrink-0">
             <a href="/induction/admin/submissions/<%= s.id %>" class="block min-w-0 flex-1">
             <div class="flex items-start justify-between gap-3">
@@ -299,6 +344,7 @@
               <span>Docs: <span class="<%= docs.filled === docs.total ? 'text-emerald-600' : 'text-amber-600' %> font-medium"><%= docs.filled %>/<%= docs.total %></span></span>
             </div>
             </a>
+            <div class="mt-2"><%- suitabilityCell(s) %></div>
             <% if (s.status === 'submitted') { %>
               <div class="flex gap-2 mt-3">
                 <form method="POST" action="/induction/admin/submissions/<%= s.id %>/status" class="flex-1">
@@ -354,6 +400,25 @@
 <!-- Copy Link Toast -->
 <div id="copyToast" class="fixed bottom-6 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-sm px-4 py-2 rounded-lg shadow-lg transition-all duration-300 opacity-0 pointer-events-none z-50">
   Link copied to clipboard!
+</div>
+
+<!-- Suitability popover — set the allocator-facing rating + comment inline -->
+<div id="suitPop" class="hidden fixed z-[60] w-72 bg-white rounded-xl shadow-2xl ring-1 ring-gray-200 p-3">
+  <p class="text-xs font-bold text-gray-700 mb-2" id="suitPopName">Suitability</p>
+  <div class="grid grid-cols-3 gap-1.5 mb-2">
+    <button type="button" data-rate="suitable"   class="suit-rate text-xs font-semibold px-2 py-1.5 rounded-lg border border-gray-200 hover:bg-emerald-50">Suitable</button>
+    <button type="button" data-rate="maybe"      class="suit-rate text-xs font-semibold px-2 py-1.5 rounded-lg border border-gray-200 hover:bg-amber-50">Maybe</button>
+    <button type="button" data-rate="unsuitable" class="suit-rate text-xs font-semibold px-2 py-1.5 rounded-lg border border-gray-200 hover:bg-red-50">Not&nbsp;suit.</button>
+  </div>
+  <textarea id="suitNote" rows="3" placeholder="Comment for the allocator (e.g. strong TL, or attitude issues)…"
+    class="w-full px-2.5 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"></textarea>
+  <div class="flex items-center justify-between mt-2">
+    <button type="button" id="suitClear" class="text-xs text-gray-400 hover:text-gray-600">Clear rating</button>
+    <div class="flex gap-2">
+      <button type="button" id="suitCancel" class="text-xs font-medium text-gray-500 hover:text-gray-700 px-2 py-1">Cancel</button>
+      <button type="button" id="suitSave" class="text-xs font-semibold text-white bg-brand-600 hover:bg-brand-500 px-3 py-1.5 rounded-lg">Save</button>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -414,4 +479,109 @@
       prompt('Copy this link:', url);
     });
   }
+
+  // ===== Suitability rating + comment (inline popover) =====
+  (function () {
+    var SUIT = {
+      suitable:   { label: 'Suitable',     dot: 'bg-emerald-500', pill: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' },
+      maybe:      { label: 'Maybe',        dot: 'bg-amber-500',   pill: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20' },
+      unsuitable: { label: 'Not suitable', dot: 'bg-red-500',     pill: 'bg-red-50 text-red-700 ring-1 ring-red-600/20' },
+      '':         { label: 'Rate',         dot: 'bg-gray-300',    pill: 'bg-gray-50 text-gray-500 ring-1 ring-gray-300 border border-dashed border-gray-300' },
+    };
+    var BUBBLE = '<svg class="w-3 h-3 opacity-70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l1.3-3.9A7.96 7.96 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>';
+    var PILL_CLASSES = 'suit-btn inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold transition hover:brightness-95';
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+
+    var pop = document.getElementById('suitPop');
+    var noteEl = document.getElementById('suitNote');
+    var nameEl = document.getElementById('suitPopName');
+    var current = null;   // the button being edited
+    var selected = '';    // chosen rating in the popover
+
+    function setSelectedUI() {
+      pop.querySelectorAll('.suit-rate').forEach(function (b) {
+        var on = b.getAttribute('data-rate') === selected;
+        b.classList.toggle('ring-2', on);
+        b.classList.toggle('ring-brand-500', on);
+        b.classList.toggle('bg-gray-50', on);
+      });
+    }
+    function openFor(btn) {
+      current = btn;
+      selected = btn.getAttribute('data-suitability') || '';
+      noteEl.value = btn.getAttribute('data-note') || '';
+      nameEl.textContent = btn.getAttribute('data-name') || 'Suitability';
+      setSelectedUI();
+      pop.classList.remove('hidden');
+      // Position near the button, kept within the viewport.
+      var r = btn.getBoundingClientRect();
+      var top = r.bottom + 6, left = r.left;
+      var pw = pop.offsetWidth || 288, ph = pop.offsetHeight || 200;
+      if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+      if (top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 6);
+      pop.style.left = Math.max(8, left) + 'px';
+      pop.style.top = top + 'px';
+      noteEl.focus();
+    }
+    function close() { pop.classList.add('hidden'); current = null; }
+
+    function applyToButton(btn, suitability, note) {
+      var cfg = SUIT[suitability] || SUIT[''];
+      btn.className = PILL_CLASSES + ' ' + cfg.pill;
+      btn.setAttribute('data-suitability', suitability || '');
+      btn.setAttribute('data-note', note || '');
+      if (note && note.trim()) btn.setAttribute('title', note); else btn.removeAttribute('title');
+      btn.innerHTML = '<span class="w-2 h-2 rounded-full ' + cfg.dot + '"></span>' + cfg.label + (note && note.trim() ? ' ' + BUBBLE : '');
+      var row = btn.closest('.suit-row');
+      if (row) { row.setAttribute('data-suit', suitability || ''); }
+    }
+
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('.suit-btn');
+      if (btn) { e.preventDefault(); e.stopPropagation(); openFor(btn); return; }
+      if (!pop.classList.contains('hidden') && !e.target.closest('#suitPop')) close();
+    });
+    pop.querySelectorAll('.suit-rate').forEach(function (b) {
+      b.addEventListener('click', function () { selected = b.getAttribute('data-rate'); setSelectedUI(); });
+    });
+    document.getElementById('suitClear').addEventListener('click', function () { selected = ''; setSelectedUI(); });
+    document.getElementById('suitCancel').addEventListener('click', close);
+    document.getElementById('suitSave').addEventListener('click', function () {
+      if (!current) return close();
+      var id = current.getAttribute('data-id');
+      var note = noteEl.value;
+      var saveBtn = this; saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
+      var body = new URLSearchParams();
+      body.append('suitability', selected);
+      body.append('suitability_note', note);
+      fetch('/induction/admin/submissions/' + id + '/suitability', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'Accept': 'application/json', 'x-csrf-token': csrf },
+        credentials: 'same-origin',
+        body: body.toString(),
+      }).then(function (r) { return r.json(); }).then(function (d) {
+        if (d && d.ok) { applyToButton(current, d.suitability, d.suitability_note); close(); }
+        else { alert((d && d.error) || 'Could not save.'); }
+      }).catch(function () { alert('Network error — could not save.'); })
+        .finally(function () { saveBtn.disabled = false; saveBtn.textContent = 'Save'; });
+    });
+
+    // Suitability filter chips
+    var filterBtns = document.querySelectorAll('.suit-filter');
+    filterBtns.forEach(function (fb) {
+      fb.addEventListener('click', function () {
+        var key = fb.getAttribute('data-suit-filter');
+        filterBtns.forEach(function (b) {
+          var on = b === fb;
+          b.classList.toggle('bg-gray-900', on); b.classList.toggle('text-white', on); b.classList.toggle('border-gray-900', on);
+          b.classList.toggle('bg-gray-50', !on); b.classList.toggle('text-gray-600', !on); b.classList.toggle('border-gray-200', !on);
+        });
+        document.querySelectorAll('.suit-row').forEach(function (row) {
+          var v = row.getAttribute('data-suit') || '';
+          var show = key === 'all' || (key === 'unrated' ? v === '' : v === key);
+          row.style.display = show ? '' : 'none';
+        });
+      });
+    });
+  })();
 </script>

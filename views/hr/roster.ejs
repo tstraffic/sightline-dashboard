@@ -478,9 +478,12 @@
               </td>
               <td class="px-3 sm:px-4 py-3 hidden lg:table-cell">
                 <% if (emp.readiness) { %>
-                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium <%= rBadges[emp.readiness.status] || 'bg-gray-100 text-gray-500' %>">
-                    <%= rLabels[emp.readiness.status] || emp.readiness.status %>
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium <%= rBadges[emp.readiness.status] || 'bg-gray-100 text-gray-500' %>"<%= emp.blocked_from_allocation && emp.block_reason ? ' title="' + emp.block_reason.replace(/"/g, '&quot;') + '"' : '' %>>
+                    <%= emp.blocked_from_allocation ? 'Not suitable' : (rLabels[emp.readiness.status] || emp.readiness.status) %>
                   </span>
+                  <% if (emp.blocked_from_allocation && emp.block_reason) { %>
+                    <p class="text-[10px] text-red-500 mt-0.5 max-w-[180px] truncate" title="<%= emp.block_reason.replace(/"/g, '&quot;') %>"><%= emp.block_reason %></p>
+                  <% } %>
                 <% } else { %>
                   <span class="text-gray-300 text-xs">-</span>
                 <% } %>

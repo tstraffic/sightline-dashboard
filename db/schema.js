@@ -13764,6 +13764,24 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 299 error:', e.message); }
   }
 
+  // 300: per-person suitability call on induction submissions. The user
+  // accepts everyone for in-person induction, then judges suitability during
+  // it; the allocator (who works off the Inductions list) needs to see who's
+  // pickable. Rating: '' | 'suitable' | 'maybe' | 'unsuitable', plus a free
+  // comment. 'unsuitable' propagates to employees.blocked_from_allocation so
+  // the roster flags them too (see routes/induction-admin.js).
+  if (!isMigrationApplied.get(300)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(induction_submissions)").all().map(c => c.name);
+      if (!cols.includes('suitability'))       db.exec("ALTER TABLE induction_submissions ADD COLUMN suitability TEXT DEFAULT ''");
+      if (!cols.includes('suitability_note'))  db.exec("ALTER TABLE induction_submissions ADD COLUMN suitability_note TEXT DEFAULT ''");
+      if (!cols.includes('suitability_by_id')) db.exec("ALTER TABLE induction_submissions ADD COLUMN suitability_by_id INTEGER");
+      if (!cols.includes('suitability_at'))    db.exec("ALTER TABLE induction_submissions ADD COLUMN suitability_at DATETIME");
+      recordMigration.run(300, 'induction_submissions: suitability rating + note');
+      console.log('Migration 300 applied');
+    } catch (e) { console.error('Migration 300 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
