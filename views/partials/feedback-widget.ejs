@@ -66,14 +66,16 @@
   }
   .fb-fab--admin:hover { background: #1D6AE5; }
   /* Worker: tiny + icon, deliberately subtle so it doesn't eat the
-     small viewport. Tap → opens the same modal. Sits above the
-     worker bottom-nav (40px tall) plus the iOS safe-area inset. */
+     small viewport. Tap → opens the same modal. Pinned to the bottom-
+     LEFT (above the bottom-nav + iOS safe-area) so it never clusters
+     with the right-side action FABs — the home "+" quick-actions, the
+     leave/kudos FABs, and the offline banner all live bottom-right. */
   .fb-fab--worker {
     width: 38px; height: 38px; padding: 0; border-radius: 50%;
     background: rgba(43,127,255,0.92); color: #fff;
     bottom: calc(72px + env(safe-area-inset-bottom, 0px));
-    right: 14px;
-    opacity: 0.78;
+    left: 14px; right: auto;
+    opacity: 0.7;
   }
   .fb-fab--worker:hover, .fb-fab--worker:focus-visible { opacity: 1; }
 
