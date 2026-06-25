@@ -9,28 +9,37 @@
   }
   #sidebar .sb-folder-head:hover { color: rgba(150,185,255,0.8); }
   #sidebar .sb-folder-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  #sidebar .sb-caret { width: 12px; height: 12px; flex-shrink: 0; transition: transform .15s ease; }
+  /* Caret: points DOWN when the folder is open, RIGHT when collapsed. The base
+     icon is a right-chevron, so open = rotate 90° (down), collapsed = 0° (right). */
+  #sidebar .sb-caret { width: 12px; height: 12px; flex-shrink: 0; transform: rotate(90deg); transition: transform .18s ease; }
   #sidebar .sb-folder-ico { width: 13px; height: 13px; flex-shrink: 0; opacity: 0.7; }
-  #sidebar .sb-folder.is-collapsed .sb-caret { transform: rotate(-90deg); }
+  #sidebar .sb-folder.is-collapsed .sb-caret { transform: rotate(0deg); }
   #sidebar .sb-folder-items.sb-collapsed { display: none; }
   #sidebar .sb-folder-items { padding-left: 6px; margin-left: 6px; border-left: 1px solid rgba(255,255,255,0.06); }
 
   /* ── Edit mode ── */
   #sidebar.sb-editing .sidebar-link {
-    cursor: default; background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.06); margin: 2px 0;
+    cursor: default; background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; margin: 3px 0; padding-top: 7px; padding-bottom: 7px;
   }
-  #sidebar.sb-editing .sb-folder { border: 1px dashed rgba(96,154,255,0.25); border-radius: 8px; padding: 2px; margin: 4px 0; }
-  #sidebar.sb-editing .sb-folder-items { min-height: 22px; }
-  /* Empty / drop-target folders get an obvious dashed well. */
+  #sidebar.sb-editing .sidebar-link:hover { background: rgba(255,255,255,0.09); border-color: rgba(96,154,255,0.3); }
+  #sidebar.sb-editing .sb-folder {
+    background: rgba(96,154,255,0.06); border: 1px solid rgba(96,154,255,0.22);
+    border-radius: 10px; padding: 3px 4px 5px; margin: 7px 0;
+  }
+  #sidebar.sb-editing .sb-folder-head { color: rgba(170,200,255,0.95); padding-bottom: 4px; }
+  #sidebar.sb-editing .sb-folder-items { min-height: 20px; border-left-color: rgba(96,154,255,0.18); }
+  /* Empty / drop-target folders get a clear, calm well. */
   #sidebar.sb-editing .sb-folder-items:empty::after {
-    content: 'Drop items here'; display: block; padding: 6px 8px; margin: 2px 4px;
-    font-size: 10px; color: rgba(255,255,255,0.3); border: 1px dashed rgba(255,255,255,0.12); border-radius: 6px; text-transform: none; letter-spacing: 0;
+    content: 'Drag tabs here'; display: block; padding: 7px 8px; margin: 2px 2px;
+    font-size: 10px; color: rgba(255,255,255,0.35); border: 1px dashed rgba(150,185,255,0.25);
+    border-radius: 7px; text-transform: none; letter-spacing: 0; text-align: center;
   }
 
   /* Drag handle — only in edit mode */
-  #sidebar .sb-handle { display: none; flex-shrink: 0; width: 16px; margin-right: 2px; cursor: grab; color: rgba(255,255,255,0.35); }
+  #sidebar .sb-handle { display: none; flex-shrink: 0; width: 16px; margin-right: 2px; cursor: grab; color: rgba(255,255,255,0.3); }
   #sidebar.sb-editing .sb-handle { display: inline-flex; align-items: center; justify-content: center; }
+  #sidebar.sb-editing .sidebar-link:hover .sb-handle, #sidebar.sb-editing .sb-folder-head:hover .sb-handle { color: rgba(255,255,255,0.6); }
   #sidebar .sb-handle:active { cursor: grabbing; }
 
   /* Per-row action buttons (rename / add-sub / delete) — reveal on hover in edit */
@@ -57,20 +66,25 @@
   #sidebar .sb-editpanel { display: none; }
   #sidebar.sb-editing .sb-editpanel {
     display: block; position: sticky; top: 0; z-index: 5;
-    margin: -4px -4px 8px; padding: 10px; border-radius: 10px;
-    background: #1b2030; border: 1px solid rgba(96,154,255,0.25);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.35);
+    margin: -4px -4px 10px; padding: 12px; border-radius: 12px;
+    background: linear-gradient(180deg, #1e2536, #181d2b);
+    border: 1px solid rgba(96,154,255,0.3);
+    box-shadow: 0 8px 22px rgba(0,0,0,0.4);
   }
-  #sidebar .sb-editpanel-title { font-size: 12px; font-weight: 700; color: #e8eefc; display: flex; align-items: center; gap: 6px; }
-  #sidebar .sb-editpanel-hint { font-size: 10.5px; line-height: 1.5; color: rgba(255,255,255,0.55); margin: 6px 0 9px; }
-  #sidebar .sb-editpanel-hint b { color: rgba(255,255,255,0.8); font-weight: 600; }
-  #sidebar .sb-btnrow { display: flex; gap: 6px; }
-  #sidebar .sb-tbtn { flex: 1 1 auto; padding: 7px 8px; font-size: 11px; font-weight: 700; border: 0; border-radius: 7px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 4px; }
-  #sidebar .sb-tbtn--primary { background: #2B7FFF; color: #fff; }
+  #sidebar .sb-editpanel-title { font-size: 12.5px; font-weight: 800; color: #f1f5ff; display: flex; align-items: center; gap: 7px; letter-spacing: .01em; }
+  #sidebar .sb-editpanel-title svg { color: #6ea0ff; }
+  #sidebar .sb-editpanel-hint { list-style: none; padding: 0; margin: 9px 0 11px; display: flex; flex-direction: column; gap: 5px; }
+  #sidebar .sb-editpanel-hint li { font-size: 10.5px; line-height: 1.45; color: rgba(255,255,255,0.6); display: flex; align-items: flex-start; gap: 6px; }
+  #sidebar .sb-editpanel-hint li svg { width: 12px; height: 12px; flex-shrink: 0; margin-top: 1px; color: rgba(150,185,255,0.85); }
+  #sidebar .sb-editpanel-hint b { color: rgba(255,255,255,0.88); font-weight: 700; }
+  #sidebar .sb-btnrow { display: flex; gap: 7px; }
+  #sidebar .sb-tbtn { flex: 1 1 auto; padding: 8px 9px; font-size: 11px; font-weight: 700; border: 0; border-radius: 8px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 5px; transition: background .15s ease, color .15s ease; }
+  #sidebar .sb-tbtn svg { width: 13px; height: 13px; flex-shrink: 0; }
+  #sidebar .sb-tbtn--primary { background: #2B7FFF; color: #fff; box-shadow: 0 2px 8px rgba(43,127,255,0.35); }
   #sidebar .sb-tbtn--primary:hover { background: #1D6AE5; }
   #sidebar .sb-tbtn--ghost { background: rgba(255,255,255,0.08); color: #cbd5e1; }
-  #sidebar .sb-tbtn--ghost:hover { background: rgba(255,255,255,0.14); }
-  #sidebar .sb-tbtn--reset { width: 100%; margin-top: 7px; background: none; color: rgba(252,165,165,0.7); font-weight: 600; }
+  #sidebar .sb-tbtn--ghost:hover { background: rgba(255,255,255,0.15); color: #fff; }
+  #sidebar .sb-tbtn--reset { width: 100%; margin-top: 8px; padding: 6px; font-size: 10.5px; background: none; color: rgba(252,165,165,0.65); font-weight: 600; border-radius: 7px; }
   #sidebar .sb-tbtn--reset:hover { color: #fca5a5; background: rgba(239,68,68,0.12); }
 </style>
 
@@ -326,13 +340,18 @@
     function buildPanel() {
       panel = document.createElement('div');
       panel.className = 'sb-editpanel';
+      var hSvg = function (d) { return '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="' + d + '"/></svg>'; };
       panel.innerHTML =
         '<div class="sb-editpanel-title">' +
-          '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 14v-6m6 6a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/></svg>' +
-          'Customising menu</div>' +
-        '<p class="sb-editpanel-hint">Drag the <b>⠿ handle</b> to move a tab. Drop it <b>onto a folder</b> to nest it. Click a <b>name</b> to rename it. Renames &amp; folders apply to everyone.</p>' +
+          '<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>' +
+          'Customise menu</div>' +
+        '<ul class="sb-editpanel-hint">' +
+          '<li>' + hSvg('M4 8h16M4 16h16') + '<span><b>Drag</b> the handle to reorder tabs.</span></li>' +
+          '<li>' + hSvg('M3 7a2 2 0 012-2h4l2 2h8a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2V7z') + '<span><b>Drop onto a folder</b> to nest a tab inside it.</span></li>' +
+          '<li>' + hSvg('M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z') + '<span><b>Click a name</b> to rename it.</span></li>' +
+        '</ul>' +
         '<div class="sb-btnrow">' +
-          '<button type="button" class="sb-tbtn sb-tbtn--ghost" data-sb="newfolder">+ Folder</button>' +
+          '<button type="button" class="sb-tbtn sb-tbtn--ghost" data-sb="newfolder">' + ICON_PLUS + 'Folder</button>' +
           '<button type="button" class="sb-tbtn sb-tbtn--primary" data-sb="save">Save</button>' +
           '<button type="button" class="sb-tbtn sb-tbtn--ghost" data-sb="cancel">Cancel</button>' +
         '</div>' +
