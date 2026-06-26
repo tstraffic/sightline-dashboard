@@ -918,6 +918,20 @@
               <div id="bk2-overview-map" style="height:280px;border-radius:12px;overflow:hidden;border:1px solid #E5E7EB"></div>
               <p class="bk2-create-hint" style="margin-top:6px">Drag the pin to the exact site. The coordinates save with the booking.</p>
             </div>
+            <style>
+              /* Clear, high-contrast zoom controls for the pin-picker map. The
+                 default Leaflet buttons can wash out against the light basemap /
+                 dark app chrome, so force a clean white tile with a dark +/-. */
+              #bk2-overview-map .leaflet-control-zoom { border: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.18); border-radius: 8px; overflow: hidden; }
+              #bk2-overview-map .leaflet-control-zoom a {
+                width: 32px; height: 32px; line-height: 32px; font-size: 19px; font-weight: 700;
+                color: #1f2937 !important; background: #ffffff !important; border: 0;
+              }
+              #bk2-overview-map .leaflet-control-zoom a:hover { background: #f3f4f6 !important; color: #111827 !important; }
+              #bk2-overview-map .leaflet-control-zoom a.leaflet-disabled { color: #cbd5e1 !important; background: #ffffff !important; }
+              #bk2-overview-map .leaflet-bar a + a { border-top: 1px solid #e5e7eb; }
+              #bk2-overview-map .leaflet-control-attribution { font-size: 9px; background: rgba(255,255,255,0.7); }
+            </style>
             <label class="bk2-create-field bk2-create-field--full">
               <span class="bk2-create-lbl">Location notes</span>
               <textarea name="location_notes" rows="2" placeholder="Type your location notes here"></textarea>
@@ -2535,9 +2549,12 @@
     }
     function ensureMap(center) {
       if (pickMap) { pickMap.setView(center, 15); placeMarker(center); return; }
-      pickMap = L.map('bk2-overview-map').setView(center, 15);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19, attribution: '© OpenStreetMap'
+      pickMap = L.map('bk2-overview-map', { zoomControl: true }).setView(center, 15);
+      // Clean, low-clutter basemap (CARTO Positron) instead of the busy
+      // default OSM tiles — easier to read the street the pin sits on.
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        maxZoom: 20, subdomains: 'abcd',
+        attribution: '© OpenStreetMap © CARTO'
       }).addTo(pickMap);
       placeMarker(center);
       // Clicking the map also drops/moves the pin there.
