@@ -2151,6 +2151,13 @@
       }).then(function (result) {
         if (result.ok && result.data && result.data.ok) {
           var newId = result.data.id || (ed && ed.dataset.bookingId);
+          // The save may have reconciled crew requirements → ute count
+          // server-side (syncTCCrewVehicles). Drop the cached tab fragments so
+          // Resources (and any other lifted tab) refetch fresh state next time
+          // they're opened, instead of showing a stale vehicle count until the
+          // whole editor is closed and reopened.
+          fragmentDocCache = null;
+          fragmentLoaded = {};
           if (isEdit) {
             // Existing booking saved — restore Save label + success toast.
             if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); if (origLabel) btn.innerHTML = origLabel; }
