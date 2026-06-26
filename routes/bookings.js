@@ -1960,16 +1960,15 @@ router.post('/:id/crew', (req, res) => {
     }
   }
 
-  // Auto-assign to the booking's first vehicle so new crew render "in the
-  // ute" by default. The planner can drag them out via the bookings board
-  // if they're actually not riding in it.
-  const defaultVehicle = db.prepare("SELECT id FROM booking_vehicles WHERE booking_id = ? ORDER BY id LIMIT 1").get(req.params.id);
-  const defaultVehicleId = defaultVehicle ? defaultVehicle.id : null;
+  // Deploy new crew OUTSIDE the ute by default (assigned_vehicle_id = NULL) —
+  // they render as standalone traffic controllers. The planner explicitly
+  // drags a worker onto a ute slot to put them in it. (Previously we auto-
+  // assigned the first vehicle, forcing everyone "into the ute" on add.)
   // INSERT OR IGNORE + the unique index (migration 298) makes the add
   // atomically idempotent even under a race. `inserted` is false if the
   // row was already there (we'll skip the notification below).
-  const insertResult = db.prepare("INSERT OR IGNORE INTO booking_crew (booking_id, crew_member_id, role_on_site, status, assigned_vehicle_id) VALUES (?, ?, ?, 'assigned', ?)")
-    .run(req.params.id, crew_member_id, role_on_site || '', defaultVehicleId);
+  const insertResult = db.prepare("INSERT OR IGNORE INTO booking_crew (booking_id, crew_member_id, role_on_site, status, assigned_vehicle_id) VALUES (?, ?, ?, 'assigned', NULL)")
+    .run(req.params.id, crew_member_id, role_on_site || '');
   const inserted = insertResult.changes > 0;
 
   // Auto-create crew_allocation so the worker sees this in their portal.
