@@ -54,6 +54,10 @@
           <span class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ring-1 ring-inset <%= STATUS_BADGE[item.status] || STATUS_BADGE.not_started %>">
             <%= (item.status || 'not_started').replace(/_/g, ' ') %>
           </span>
+          <span id="plan-autosave-status" class="inline-flex items-center gap-1.5 text-xs font-medium text-gray-400" aria-live="polite">
+            <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <span data-autosave-text>All changes saved</span>
+          </span>
         <% } %>
       </div>
     </div>
@@ -458,8 +462,83 @@
          the top get saved together with whatever the user touched in
          the sub-plan grid. -->
     <div class="mt-6 flex items-center justify-end gap-3">
-      <a href="<%= cancelHref %>" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Cancel</a>
-      <button type="submit" form="planForm" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg">Update Plan</button>
+      <a href="<%= cancelHref %>" class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Done</a>
+      <button type="submit" form="planForm" class="px-4 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg">Save &amp; close</button>
     </div>
+
+    <!-- Smart background autosave for the parent plan fields. Edits persist
+         on a short debounce (and on blur) without reloading the page; the
+         header shows the save state. The server returns JSON for these AJAX
+         saves (see POST /compliance/:id parent branch). URL-encoded bodies so
+         express.urlencoded parses them — the parent form has no file inputs. -->
+    <script>
+    (function () {
+      var form = document.getElementById('planForm');
+      if (!form) return;
+      var statusWrap = document.getElementById('plan-autosave-status');
+      var statusText = statusWrap && statusWrap.querySelector('[data-autosave-text]');
+      var icon = statusWrap && statusWrap.querySelector('svg');
+      var cancelHref = <%- JSON.stringify(cancelHref || '/compliance') %>;
+      var timer = null, saving = false, pending = false, dirty = false;
+
+      function setStatus(state, msg) {
+        if (!statusWrap) return;
+        statusWrap.classList.remove('text-gray-400', 'text-amber-600', 'text-red-500', 'text-emerald-600');
+        statusWrap.classList.add(state === 'saving' ? 'text-amber-600' : state === 'error' ? 'text-red-500' : state === 'saved' ? 'text-emerald-600' : 'text-gray-400');
+        if (statusText) statusText.textContent = msg;
+        if (icon) icon.style.display = (state === 'saved' || state === 'idle') ? '' : 'none';
+      }
+
+      function params() {
+        var p = new URLSearchParams();
+        form.querySelectorAll('input[name], select[name], textarea[name]').forEach(function (el) {
+          if (el.type === 'checkbox') { if (el.checked) p.append(el.name, el.value || '1'); }
+          else if (el.type === 'radio') { if (el.checked) p.append(el.name, el.value); }
+          else p.append(el.name, el.value);
+        });
+        return p;
+      }
+
+      function save(opts) {
+        opts = opts || {};
+        if (saving) { pending = true; return; }
+        if (!dirty && !opts.force) { if (opts.then) opts.then(true); return; }
+        saving = true; pending = false; dirty = false;
+        setStatus('saving', 'Saving…');
+        var csrf = (form.querySelector('input[name="_csrf"]') || {}).value || '';
+        fetch(form.action, {
+          method: 'POST',
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
+          body: params().toString(),
+          credentials: 'same-origin',
+          keepalive: !!opts.keepalive,
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d }; }); })
+          .then(function (res) {
+            if (res.ok && res.d && res.d.ok) { setStatus('saved', 'All changes saved'); if (opts.then) opts.then(true); }
+            else { dirty = true; setStatus('error', 'Save failed — will retry'); if (opts.then) opts.then(false); }
+          }).catch(function () { dirty = true; setStatus('error', 'Offline — will retry'); if (opts.then) opts.then(false); })
+          .finally(function () { saving = false; if (pending) save(); });
+      }
+
+      function queue(delay) { dirty = true; setStatus('saving', 'Saving…'); clearTimeout(timer); timer = setTimeout(function () { save(); }, delay); }
+
+      // Debounce free-text; save discrete controls (select/date/checkbox) quickly.
+      form.addEventListener('input', function (e) {
+        queue(e.target.matches('textarea, input[type="text"], input[type="search"], input[type="number"]') ? 900 : 250);
+      });
+      form.addEventListener('change', function () { queue(150); });
+      // Flush a pending change as soon as a field loses focus.
+      form.addEventListener('focusout', function () { if (timer) { clearTimeout(timer); timer = null; save(); } });
+      // Best-effort flush if the user navigates away mid-edit.
+      document.addEventListener('visibilitychange', function () { if (document.visibilityState === 'hidden' && (dirty || timer)) { clearTimeout(timer); timer = null; save({ keepalive: true }); } });
+
+      // Explicit "Save & close" — save, then return where they came from.
+      form.addEventListener('submit', function (e) {
+        e.preventDefault();
+        clearTimeout(timer); timer = null;
+        save({ force: true, then: function (ok) { if (ok) window.location.href = cancelHref; } });
+      });
+    })();
+    </script>
   <% } %>
 </div>

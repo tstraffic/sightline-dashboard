@@ -1206,6 +1206,7 @@ router.post('/:id', (req, res) => {
   // would clobber item_type with empty string and trip the CHECK
   // constraint, so branch early.
   if (oldItem && oldItem.parent_id == null && oldItem.plan_number != null) {
+    const wantsJson = req.headers.accept && req.headers.accept.includes('application/json');
     try {
       let hasTenderCol = false;
       try { hasTenderCol = db.prepare("PRAGMA table_info(compliance)").all().some(c => c.name === 'tender_id'); } catch (e) {}
@@ -1242,9 +1243,11 @@ router.post('/:id', (req, res) => {
           req.params.id
         );
       }
+      if (wantsJson) return res.json({ ok: true, savedAt: new Date().toISOString() });
       req.flash('success', 'Plan updated.');
     } catch (err) {
       console.error('[Compliance] Parent Plan update error:', err.message);
+      if (wantsJson) return res.status(500).json({ ok: false, error: err.message });
       req.flash('error', 'Failed to update Plan: ' + err.message);
     }
     const returnTo = b.return_to && b.return_to !== '/compliance' ? b.return_to : '/compliance/' + req.params.id + '/edit';
