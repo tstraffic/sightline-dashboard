@@ -777,7 +777,9 @@ router.post('/:id/service/:sid', invoiceUpload.array('invoice_file', 10), (req, 
   files.forEach(f => insInv.run(req.params.sid, f.path, f.originalname));
   logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Service record #${req.params.sid}`, ip: req.ip });
   req.flash('success', 'Service record updated.');
-  res.redirect(`/fleet/${req.params.id}?tab=service`);
+  // Stay on the edit page after saving so the user can keep working (add an
+  // invoice, tweak a field) without bouncing back to the history list.
+  res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`);
 });
 
 // ── DELETE SERVICE RECORD ────────────────────────────────────────────
