@@ -1,50 +1,81 @@
 <% locals.currentPage = 'kudos-values' %>
 
-<div class="space-y-5">
-  <div class="flex items-center justify-between">
+<style>
+  /* Theme-aware so the values page reads in both light and night mode. The
+     admin shell can flip data-theme; default Tailwind classes cover light,
+     these overrides cover dark. Scoped to #kv-root so nothing else shifts. */
+  #kv-root .kv-card { background: #fff; border: 1px solid #E5E7EB; }
+  #kv-root .kv-head { color: #111827; }
+  #kv-root .kv-sub { color: #6B7280; }
+  #kv-root .kv-label { color: #9CA3AF; }
+  #kv-root .kv-input { background: #fff; color: #111827; border: 1px solid #D1D5DB; }
+  #kv-root .kv-input:focus { outline: none; border-color: #2B7FFF; box-shadow: 0 0 0 2px rgba(43,127,255,0.25); }
+  #kv-root .kv-divider { border-color: #F3F4F6; }
+  #kv-root .kv-muted { color: #9CA3AF; }
+  :root[data-theme="dark"] #kv-root .kv-card { background: #1B1E26; border-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] #kv-root .kv-head { color: #F1F5FF; }
+  :root[data-theme="dark"] #kv-root .kv-sub,
+  :root[data-theme="dark"] #kv-root .kv-muted { color: rgba(255,255,255,0.55); }
+  :root[data-theme="dark"] #kv-root .kv-label { color: rgba(255,255,255,0.45); }
+  :root[data-theme="dark"] #kv-root .kv-input { background: #0F1218; color: #E8EEFC; border-color: rgba(255,255,255,0.14); }
+  :root[data-theme="dark"] #kv-root .kv-input::placeholder { color: rgba(255,255,255,0.3); }
+  :root[data-theme="dark"] #kv-root .kv-divider { border-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] #kv-root input[type="color"].kv-input { background: #0F1218; }
+  /* The points chip + colour swatch keep contrast in both themes. */
+  #kv-root .kv-pts { background: rgba(43,127,255,0.12); color: #1D6AE5; }
+  :root[data-theme="dark"] #kv-root .kv-pts { background: rgba(43,127,255,0.22); color: #93C5FD; }
+</style>
+
+<div id="kv-root" class="space-y-5">
+  <div class="flex items-center justify-between flex-wrap gap-2">
     <div>
-      <h1 class="text-2xl font-bold text-gray-900">Company values</h1>
-      <p class="text-sm text-gray-500 mt-1">Workers tag kudos with one of these values. Rename, recolour, or deactivate without touching code.</p>
+      <h1 class="text-2xl font-bold kv-head">Company values</h1>
+      <p class="text-sm kv-sub mt-1">Workers tag each kudos with a value. Set how many <b>points</b> each one is worth — the worth shows on the worker's send screen and on every kudos.</p>
     </div>
     <a href="/kudos-admin/queue" class="text-sm text-brand-600 font-medium">Moderation queue →</a>
   </div>
 
   <!-- Existing values -->
   <% if (values.length === 0) { %>
-    <div class="bg-white border border-gray-200 rounded-xl p-6 text-center text-sm text-gray-500">No values yet — add one below.</div>
+    <div class="kv-card rounded-xl p-6 text-center text-sm kv-muted">No values yet — add one below.</div>
   <% } else { %>
     <div class="space-y-3">
-      <% values.forEach(v => { %>
-        <form method="POST" action="/kudos-admin/values/<%= v.id %>" class="bg-white border border-gray-200 rounded-xl p-4 <%= !v.active ? 'opacity-60' : '' %>">
+      <% values.forEach(v => { var pts = (v.points_value == null ? 10 : v.points_value); %>
+        <form method="POST" action="/kudos-admin/values/<%= v.id %>" class="kv-card rounded-xl p-4 <%= !v.active ? 'opacity-60' : '' %>">
           <%- include('../partials/csrf') %>
-          <div class="grid grid-cols-1 sm:grid-cols-[1.5fr_1fr_100px_80px_auto] gap-3 items-center">
-            <div>
-              <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Name</label>
-              <input name="name" value="<%= v.name %>" class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+          <!-- Top line: live preview pill + worth, so it reads at a glance. -->
+          <div class="flex items-center justify-between gap-3 pb-3 mb-3 border-b kv-divider">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style="background: <%= v.colour %>20; color: <%= v.colour %>;">★ <%= v.name %></span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold kv-pts">worth <%= pts %> pts</span>
+          </div>
+          <div class="grid grid-cols-2 sm:grid-cols-[1.4fr_1.4fr_90px_86px_72px_auto] gap-3 items-end">
+            <div class="col-span-2 sm:col-span-1">
+              <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Name</label>
+              <input name="name" value="<%= v.name %>" class="kv-input w-full mt-1 px-3 py-2 rounded-lg text-sm">
+            </div>
+            <div class="col-span-2 sm:col-span-1">
+              <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Description</label>
+              <input name="description" value="<%= v.description %>" class="kv-input w-full mt-1 px-3 py-2 rounded-lg text-sm">
             </div>
             <div>
-              <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Description</label>
-              <input name="description" value="<%= v.description %>" class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+              <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Points</label>
+              <input name="points_value" type="number" min="0" value="<%= pts %>" class="kv-input w-full mt-1 px-2 py-2 rounded-lg text-sm">
             </div>
             <div>
-              <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Colour</label>
-              <input name="colour" type="color" value="<%= v.colour %>" class="w-full mt-1 h-9 rounded border border-gray-300">
+              <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Colour</label>
+              <input name="colour" type="color" value="<%= v.colour %>" class="kv-input w-full mt-1 h-9 rounded">
             </div>
             <div>
-              <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Order</label>
-              <input name="sort_order" type="number" value="<%= v.sort_order %>" class="w-full mt-1 px-2 py-2 border border-gray-300 rounded-lg text-sm">
+              <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Order</label>
+              <input name="sort_order" type="number" value="<%= v.sort_order %>" class="kv-input w-full mt-1 px-2 py-2 rounded-lg text-sm">
             </div>
-            <div class="flex items-center gap-2">
-              <label class="flex items-center gap-1 text-xs font-medium text-gray-600">
+            <div class="col-span-2 sm:col-span-1 flex items-center justify-end gap-2">
+              <label class="flex items-center gap-1 text-xs font-medium kv-sub">
                 <input type="checkbox" name="active" value="1" <%= v.active ? 'checked' : '' %>> Active
               </label>
               <input type="hidden" name="icon" value="<%= v.icon %>">
               <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg">Save</button>
             </div>
-          </div>
-          <div class="mt-3 flex items-center gap-2">
-            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold" style="background: <%= v.colour %>20; color: <%= v.colour %>;">★ <%= v.name %></span>
-            <span class="text-xs text-gray-400">preview</span>
           </div>
         </form>
       <% }) %>
@@ -52,27 +83,31 @@
   <% } %>
 
   <!-- Add new -->
-  <form method="POST" action="/kudos-admin/values" class="bg-white border border-gray-200 rounded-xl p-4">
+  <form method="POST" action="/kudos-admin/values" class="kv-card rounded-xl p-4">
     <%- include('../partials/csrf') %>
-    <h3 class="text-sm font-bold text-gray-900 mb-3">Add a value</h3>
-    <div class="grid grid-cols-1 sm:grid-cols-[1.5fr_1fr_100px_80px_auto] gap-3 items-end">
-      <div>
-        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Name</label>
-        <input name="name" required placeholder="e.g. Customer Focus" class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+    <h3 class="text-sm font-bold kv-head mb-3">Add a value</h3>
+    <div class="grid grid-cols-2 sm:grid-cols-[1.4fr_1.4fr_90px_86px_72px_auto] gap-3 items-end">
+      <div class="col-span-2 sm:col-span-1">
+        <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Name</label>
+        <input name="name" required placeholder="e.g. Customer Focus" class="kv-input w-full mt-1 px-3 py-2 rounded-lg text-sm">
+      </div>
+      <div class="col-span-2 sm:col-span-1">
+        <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Description</label>
+        <input name="description" placeholder="Short line" class="kv-input w-full mt-1 px-3 py-2 rounded-lg text-sm">
       </div>
       <div>
-        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Description</label>
-        <input name="description" placeholder="Short line" class="w-full mt-1 px-3 py-2 border border-gray-300 rounded-lg text-sm">
+        <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Points</label>
+        <input name="points_value" type="number" min="0" value="10" class="kv-input w-full mt-1 px-2 py-2 rounded-lg text-sm">
       </div>
       <div>
-        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Colour</label>
-        <input name="colour" type="color" value="#2B7FFF" class="w-full mt-1 h-9 rounded border border-gray-300">
+        <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Colour</label>
+        <input name="colour" type="color" value="#2B7FFF" class="kv-input w-full mt-1 h-9 rounded">
       </div>
       <div>
-        <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Order</label>
-        <input name="sort_order" type="number" value="100" class="w-full mt-1 px-2 py-2 border border-gray-300 rounded-lg text-sm">
+        <label class="text-[10px] font-bold kv-label uppercase tracking-widest">Order</label>
+        <input name="sort_order" type="number" value="100" class="kv-input w-full mt-1 px-2 py-2 rounded-lg text-sm">
       </div>
-      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">Add</button>
+      <button type="submit" class="col-span-2 sm:col-span-1 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg">Add</button>
     </div>
   </form>
 

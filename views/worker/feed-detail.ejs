@@ -34,7 +34,7 @@
       </div>
     </div>
     <% if (k.value_name) { %>
-      <span class="kd-value" style="background: <%= k.value_colour %>20; color: <%= k.value_colour %>;">★ <%= k.value_name %></span>
+      <span class="kd-value" style="background: <%= k.value_colour %>20; color: <%= k.value_colour %>;">★ <%= k.value_name %><% if (k.value_points != null) { %> · <%= k.value_points %> pts<% } %></span>
     <% } %>
     <p class="kd-msg"><%= k.message %></p>
     <% if (k.photo_url) { %><div class="kd-photo"><img src="<%= k.photo_url %>" alt=""></div><% } %>

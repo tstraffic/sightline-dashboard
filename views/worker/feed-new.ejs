@@ -32,7 +32,7 @@
         <% values.forEach(function (v) { %>
           <label style="cursor: pointer;">
             <input type="radio" name="value_id" value="<%= v.id %>" style="display: none;" class="kd-val">
-            <span data-colour="<%= v.colour %>" style="display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= v.colour %>20; color: <%= v.colour %>; border: 1.5px solid transparent; transition: all 0.15s;">★ <%= v.name %></span>
+            <span data-colour="<%= v.colour %>" style="display: inline-flex; align-items: center; gap: 5px; padding: 6px 12px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= v.colour %>20; color: <%= v.colour %>; border: 1.5px solid transparent; transition: all 0.15s;">★ <%= v.name %><% if (v.points_value != null) { %> <span style="opacity:0.75; font-weight:800;">· <%= v.points_value %> pts</span><% } %></span>
           </label>
         <% }) %>
       </div>

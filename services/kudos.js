@@ -102,7 +102,7 @@ function getFeed({ viewerCrewId, filter = 'all', beforeId = null, limit = 20 }) 
 
   const sql = `
     SELECT k.*, s.full_name as sender_name, s.employee_id as sender_emp_id,
-           v.name as value_name, v.colour as value_colour, v.icon as value_icon, v.slug as value_slug,
+           v.name as value_name, v.colour as value_colour, v.icon as value_icon, v.slug as value_slug, v.points_value as value_points,
            (SELECT COUNT(*) FROM kudos_comments kc WHERE kc.kudos_id = k.id AND kc.hidden_at IS NULL) as comment_count
     FROM kudos k
     JOIN crew_members s ON s.id = k.sender_crew_id
@@ -152,7 +152,7 @@ function getKudosWithComments({ kudosId, viewerCrewId }) {
   const db = getDb();
   const k = db.prepare(`
     SELECT k.*, s.full_name as sender_name, s.employee_id as sender_emp_id,
-      v.name as value_name, v.colour as value_colour, v.slug as value_slug
+      v.name as value_name, v.colour as value_colour, v.slug as value_slug, v.points_value as value_points
     FROM kudos k
     JOIN crew_members s ON s.id = k.sender_crew_id
     LEFT JOIN company_values v ON v.id = k.value_id
@@ -309,7 +309,7 @@ function getProfileSummary({ crewId }) {
     GROUP BY v.id ORDER BY c DESC LIMIT 1
   `).get(crewId);
   const recent = db.prepare(`
-    SELECT k.id, k.message, k.created_at, s.full_name as sender_name, v.name as value_name, v.colour as value_colour
+    SELECT k.id, k.message, k.created_at, s.full_name as sender_name, v.name as value_name, v.colour as value_colour, v.points_value as value_points
     FROM kudos_recipients kr JOIN kudos k ON k.id = kr.kudos_id
     JOIN crew_members s ON s.id = k.sender_crew_id
     LEFT JOIN company_values v ON v.id = k.value_id

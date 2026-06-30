@@ -21,20 +21,22 @@ router.get('/values', requirePermission('hr_employees'), (req, res) => {
 
 router.post('/values', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
-  const { name, colour, icon, description, sort_order } = req.body;
+  const { name, colour, icon, description, sort_order, points_value } = req.body;
   if (!name) { req.flash('error', 'Name required'); return res.redirect('/kudos-admin/values'); }
   const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '-' + Date.now().toString(36).slice(-4);
-  db.prepare('INSERT INTO company_values (name, slug, colour, icon, description, sort_order) VALUES (?, ?, ?, ?, ?, ?)')
-    .run(name, slug, colour || '#2B7FFF', icon || 'star', description || '', parseInt(sort_order, 10) || 0);
+  const pts = Math.max(0, parseInt(points_value, 10) || 0);
+  db.prepare('INSERT INTO company_values (name, slug, colour, icon, description, sort_order, points_value) VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run(name, slug, colour || '#2B7FFF', icon || 'star', description || '', parseInt(sort_order, 10) || 0, pts);
   req.flash('success', 'Value added');
   res.redirect('/kudos-admin/values');
 });
 
 router.post('/values/:id', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
-  const { name, colour, icon, description, sort_order, active } = req.body;
-  db.prepare(`UPDATE company_values SET name = ?, colour = ?, icon = ?, description = ?, sort_order = ?, active = ? WHERE id = ?`)
-    .run(name, colour, icon || 'star', description || '', parseInt(sort_order, 10) || 0, active ? 1 : 0, req.params.id);
+  const { name, colour, icon, description, sort_order, active, points_value } = req.body;
+  const pts = Math.max(0, parseInt(points_value, 10) || 0);
+  db.prepare(`UPDATE company_values SET name = ?, colour = ?, icon = ?, description = ?, sort_order = ?, points_value = ?, active = ? WHERE id = ?`)
+    .run(name, colour, icon || 'star', description || '', parseInt(sort_order, 10) || 0, pts, active ? 1 : 0, req.params.id);
   req.flash('success', 'Value updated');
   res.redirect('/kudos-admin/values');
 });
@@ -76,7 +78,7 @@ router.get('/queue', requirePermission('hr_employees'), (req, res) => {
     GROUP BY cm.id ORDER BY c DESC LIMIT 5
   `).all();
   const valueDist = db.prepare(`
-    SELECT v.name, v.colour, COUNT(*) as c FROM kudos k
+    SELECT v.name, v.colour, v.points_value, COUNT(*) as c, COUNT(*) * COALESCE(v.points_value, 0) AS points_total FROM kudos k
     LEFT JOIN company_values v ON v.id = k.value_id
     WHERE k.hidden_at IS NULL AND k.created_at >= datetime('now','-30 days') AND v.id IS NOT NULL
     GROUP BY v.id ORDER BY c DESC

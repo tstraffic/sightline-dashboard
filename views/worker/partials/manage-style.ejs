@@ -50,4 +50,31 @@
 
   .mg-back { display: inline-flex; align-items: center; gap: 4px; font-size: 0.75rem; color: rgba(255,255,255,0.55); margin: 0.5rem 0 0.25rem; font-weight: 500; }
   .mg-back:hover { color: #fff; }
+
+  /* ── Light ("day") mode — the page was dark-only and unreadable on light
+       themes (white text on white). Flip surfaces + text to light tokens. ── */
+  :root[data-theme="light"] .mg-hero { background: radial-gradient(120% 80% at 0% 0%, rgba(245,158,11,0.14), transparent 55%), linear-gradient(160deg, #FFF7ED, #EFF6FF); border-color: rgba(245,158,11,0.3); }
+  :root[data-theme="light"] .mg-hero-label { color: #B45309; }
+  :root[data-theme="light"] .mg-hero-title { color: #111827; }
+  :root[data-theme="light"] .mg-hero-sub { color: #6B7280; }
+  :root[data-theme="light"] .mg-kpi { background: #fff; border-color: #E5E7EB; }
+  :root[data-theme="light"] .mg-kpi-label { color: #9CA3AF; }
+  :root[data-theme="light"] .mg-kpi-value { color: #111827; }
+  :root[data-theme="light"] .mg-kpi-sub { color: #9CA3AF; }
+  :root[data-theme="light"] .mg-section-title { color: #6B7280; }
+  :root[data-theme="light"] .mg-section-link { color: #2563EB; }
+  :root[data-theme="light"] .mg-row { background: #fff; border-color: #E5E7EB; }
+  :root[data-theme="light"] .mg-row-title { color: #111827; }
+  :root[data-theme="light"] .mg-row-sub { color: #6B7280; }
+  :root[data-theme="light"] .mg-job-block { background: #fff; border-color: #E5E7EB; }
+  :root[data-theme="light"] .mg-job-head { background: #ECFDF5; border-bottom-color: #E5E7EB; }
+  :root[data-theme="light"] .mg-job-client { color: #111827; }
+  :root[data-theme="light"] .mg-job-meta { color: #6B7280; }
+  :root[data-theme="light"] .mg-btn-ghost { background: #F3F4F6; color: #374151; }
+  :root[data-theme="light"] .mg-empty { background: #F9FAFB; border-color: #E5E7EB; color: #6B7280; }
+  :root[data-theme="light"] .mg-quick { background: #fff; border-color: #E5E7EB; }
+  :root[data-theme="light"] .mg-quick-title { color: #111827; }
+  :root[data-theme="light"] .mg-quick-sub { color: #6B7280; }
+  :root[data-theme="light"] .mg-back { color: #6B7280; }
+  :root[data-theme="light"] .mg-back:hover { color: #111827; }
 </style>

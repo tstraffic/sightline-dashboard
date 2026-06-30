@@ -55,9 +55,12 @@
       <p class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Value distribution (30d)</p>
       <% if (valueDist.length === 0) { %><p class="text-sm text-gray-400">No data.</p><% } %>
       <% const maxDist = Math.max(...valueDist.map(v => v.c), 1); %>
-      <% valueDist.forEach(v => { %>
-        <div class="mb-2">
-          <div class="flex justify-between text-xs mb-1"><span class="font-semibold" style="color: <%= v.colour %>;"><%= v.name %></span><span class="text-gray-600"><%= v.c %></span></div>
+      <% valueDist.forEach(v => { var ea = (v.points_value == null ? 10 : v.points_value); %>
+        <div class="mb-2.5">
+          <div class="flex justify-between items-baseline text-xs mb-1">
+            <span class="font-semibold" style="color: <%= v.colour %>;"><%= v.name %> <span class="text-gray-400 font-medium">· <%= ea %> pts ea</span></span>
+            <span class="text-gray-600"><%= v.c %> kudos · <strong class="text-gray-900"><%= v.points_total %></strong> pts</span>
+          </div>
           <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden"><div style="width: <%= (v.c / maxDist * 100) %>%; background: <%= v.colour %>;" class="h-full"></div></div>
         </div>
       <% }) %>

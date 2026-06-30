@@ -13782,6 +13782,19 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 300 error:', e.message); }
   }
 
+  // 301: each company value is worth a configurable number of kudos points so
+  // admins can weight recognition (e.g. Safety First = 50, Teamwork = 10). The
+  // worth shows on the worker send-form + value tags and the admin values page.
+  // Existing rows pick up the DEFAULT (10) automatically.
+  if (!isMigrationApplied.get(301)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(company_values)").all().map(c => c.name);
+      if (!cols.includes('points_value')) db.exec("ALTER TABLE company_values ADD COLUMN points_value INTEGER DEFAULT 10");
+      recordMigration.run(301, 'company_values: points_value');
+      console.log('Migration 301 applied');
+    } catch (e) { console.error('Migration 301 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
