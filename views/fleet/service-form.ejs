@@ -17,7 +17,7 @@
 <h1 class="text-2xl font-bold text-gray-900 mb-1"><%= isEdit ? 'Edit Service Record' : 'New Service Record' %></h1>
 <p class="text-gray-500 text-sm mb-5">For <span class="font-semibold text-gray-700"><%= vehicle.asset_id %></span> <% if (vehicle.rego) { %>· <%= vehicle.rego %><% } %></p>
 
-<form method="POST" action="<%= isEdit ? `/fleet/${vehicle.id}/service/${record.id}` : `/fleet/${vehicle.id}/service` %>" enctype="multipart/form-data" class="space-y-5">
+<form id="svcForm" method="POST" action="<%= isEdit ? `/fleet/${vehicle.id}/service/${record.id}` : `/fleet/${vehicle.id}/service` %>" enctype="multipart/form-data" class="space-y-5">
   <%- include('../partials/csrf') %>
 
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
@@ -71,10 +71,9 @@
                 <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
                 <span class="truncate"><%= inv.file_name || 'Download invoice' %></span>
               </a>
-              <form method="POST" action="/fleet/<%= vehicle.id %>/service/<%= record.id %>/invoice/<%= inv.id %>/delete" onsubmit="return confirm('Remove this invoice file?')" class="shrink-0">
-                <%- include('../partials/csrf') %>
-                <button type="submit" class="text-xs text-red-600 hover:text-red-700 underline">Remove</button>
-              </form>
+              <!-- Targets a standalone form below (NOT nested — nesting forms
+                   would close #svcForm early and break Save Changes). -->
+              <button type="submit" form="rmInv-<%= inv.id %>" class="text-xs text-red-600 hover:text-red-700 underline shrink-0">Remove</button>
             </div>
           <% }) %>
         </div>
@@ -86,10 +85,7 @@
 
   <div class="flex items-center justify-between">
     <% if (isEdit) { %>
-      <form method="POST" action="/fleet/<%= vehicle.id %>/service/<%= record.id %>/delete" onsubmit="return confirm('Delete this service record? This cannot be undone.')">
-        <%- include('../partials/csrf') %>
-        <button type="submit" class="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded-lg border border-red-200">Delete</button>
-      </form>
+      <button type="submit" form="delSvc" class="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded-lg border border-red-200">Delete</button>
     <% } else { %><div></div><% } %>
     <div class="flex items-center gap-2">
       <a href="/fleet/<%= vehicle.id %>" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg">Cancel</a>
@@ -97,3 +93,17 @@
     </div>
   </div>
 </form>
+
+<!-- Standalone destructive-action forms — kept OUTSIDE #svcForm so they don't
+     nest (nested forms close the outer form early and orphaned the Save button).
+     The Delete / Remove buttons above target these via the form= attribute. -->
+<% if (isEdit) { %>
+  <form id="delSvc" method="POST" action="/fleet/<%= vehicle.id %>/service/<%= record.id %>/delete" onsubmit="return confirm('Delete this service record? This cannot be undone.')" class="hidden">
+    <%- include('../partials/csrf') %>
+  </form>
+  <% invs.forEach(function (inv) { %>
+    <form id="rmInv-<%= inv.id %>" method="POST" action="/fleet/<%= vehicle.id %>/service/<%= record.id %>/invoice/<%= inv.id %>/delete" onsubmit="return confirm('Remove this invoice file?')" class="hidden">
+      <%- include('../partials/csrf') %>
+    </form>
+  <% }) %>
+<% } %>
