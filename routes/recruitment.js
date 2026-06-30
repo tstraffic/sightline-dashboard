@@ -364,13 +364,23 @@ router.post('/:id', async (req, res) => {
     }
   }
 
-  // Detect an induction_date change before the UPDATE so we can surface a
-  // notification for newly-set dates.
+  // Detect a booking change before the UPDATE so we can re-send the applicant
+  // a confirmation and surface a notification. Fires whenever the induction
+  // DATE *or* TIME is set or changed — so a reschedule (new date) and a
+  // time-only tweak both trigger a fresh email. Dates are compared by their
+  // YYYY-MM-DD part so a stored timestamp vs a plain date can't cause a false
+  // "no change". Unrelated edits (notes, phone) don't trigger an email.
   let inductionDateChange = null;
-  if (typeof req.body.induction_date !== 'undefined') {
-    const incoming = req.body.induction_date || null;
-    if (incoming && incoming !== row.induction_date) {
-      inductionDateChange = { newDate: incoming, name: row.applicant_name };
+  {
+    const dateProvided = typeof req.body.induction_date !== 'undefined';
+    const timeProvided = typeof req.body.induction_time !== 'undefined';
+    const incomingDate = dateProvided ? (req.body.induction_date || null) : row.induction_date;
+    const incomingTime = timeProvided ? String(req.body.induction_time || '').trim() : (row.induction_time || '');
+    const dpart = (d) => (d ? String(d).slice(0, 10) : '');
+    const dateChanged = dateProvided && dpart(incomingDate) !== dpart(row.induction_date);
+    const timeChanged = timeProvided && incomingTime !== (row.induction_time || '');
+    if (incomingDate && (dateChanged || timeChanged)) {
+      inductionDateChange = { newDate: incomingDate, name: row.applicant_name, timeOnly: !dateChanged && timeChanged };
     }
   }
   for (const k of ['date_applied', 'date_called', 'induction_date']) {
@@ -430,7 +440,7 @@ router.post('/:id', async (req, res) => {
   // Notify the user who set a new induction date.
   if (inductionDateChange && req.session && req.session.user) {
     try {
-      const isoDate = inductionDateChange.newDate;
+      const isoDate = String(inductionDateChange.newDate).slice(0, 10);
       const niceDate = new Date(isoDate + 'T00:00:00Z').toLocaleDateString('en-AU', {
         weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
       });
