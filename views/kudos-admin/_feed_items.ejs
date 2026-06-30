@@ -1,0 +1,41 @@
+<% items.forEach(function (k) {
+  var inits = (k.sender_name || '?').split(/\s+/).map(function (p) { return p[0]; }).join('').slice(0, 2).toUpperCase();
+  var when = '';
+  try { when = new Date(String(k.created_at).replace(' ', 'T') + 'Z').toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Australia/Sydney' }); } catch (e) { when = k.created_at; }
+%>
+  <div class="kf-card <%= k.hidden_at ? 'kf-card--hidden' : '' %>">
+    <div class="kf-avatar" style="background: <%= (k.value_colour || '#2B7FFF') %>22; color: <%= k.value_colour || '#2B7FFF' %>;"><%= inits %></div>
+    <div class="kf-body">
+      <div class="kf-top">
+        <p class="kf-names"><strong><%= k.sender_name %></strong> <span class="kf-arrow">→</span> <%= (k.recipient_names || []).join(', ') || '—' %></p>
+        <span class="kf-time"><%= when %></span>
+      </div>
+      <div class="kf-tags">
+        <% if (k.value_name) { %>
+          <span class="kf-value" style="background: <%= k.value_colour %>20; color: <%= k.value_colour %>;">★ <%= k.value_name %><% if (k.value_points != null) { %> · <%= k.value_points %> pts<% } %></span>
+        <% } %>
+        <% if (k.visibility === 'team') { %><span class="kf-chip">team only</span><% } %>
+        <% if (k.hidden_at) { %><span class="kf-chip kf-chip--red">hidden</span><% } %>
+      </div>
+      <p class="kf-msg"><%= k.message %></p>
+      <% if (k.photo_url) { %><img class="kf-photo" src="<%= k.photo_url %>" alt="kudos photo" loading="lazy"><% } %>
+      <div class="kf-foot">
+        <span class="kf-stat" title="Reactions">👏 <%= k.reaction_count || 0 %></span>
+        <span class="kf-stat" title="Comments">💬 <%= k.comment_count || 0 %></span>
+        <span class="kf-foot-spacer"></span>
+        <% if (k.hidden_at) { %>
+          <form method="POST" action="/kudos-admin/kudos/<%= k.id %>/unhide" class="inline">
+            <%- include('../partials/csrf') %>
+            <button type="submit" class="kf-btn">Restore</button>
+          </form>
+        <% } else { %>
+          <form method="POST" action="/kudos-admin/kudos/<%= k.id %>/hide" class="inline" onsubmit="return confirm('Hide this kudos from the worker feed?')">
+            <%- include('../partials/csrf') %>
+            <button type="submit" class="kf-btn kf-btn--red">Hide</button>
+          </form>
+        <% } %>
+      </div>
+    </div>
+  </div>
+<% }); %>
+<div id="kf-next-marker" data-next="<%= (typeof nextBefore !== 'undefined' && nextBefore) ? nextBefore : '' %>" hidden></div>

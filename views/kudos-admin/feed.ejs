@@ -1,0 +1,154 @@
+<% locals.currentPage = 'kudos-feed' %>
+
+<style>
+  /* Theme-aware: reads in both light and night mode (admin shell can flip
+     data-theme). Default = light; :root[data-theme="dark"] flips surfaces. */
+  #kf-root .kf-panel { background: #fff; border: 1px solid #E5E7EB; }
+  #kf-root .kf-head-t { color: #111827; }
+  #kf-root .kf-sub { color: #6B7280; }
+  #kf-root .kf-kpi-label { color: #9CA3AF; }
+  #kf-root .kf-kpi-val { color: #111827; }
+  #kf-root .kf-select { background: #fff; color: #111827; border: 1px solid #D1D5DB; }
+  #kf-root .kf-card { background: #fff; border: 1px solid #E5E7EB; }
+  #kf-root .kf-names { color: #111827; }
+  #kf-root .kf-arrow { color: #9CA3AF; }
+  #kf-root .kf-time { color: #9CA3AF; }
+  #kf-root .kf-msg { color: #374151; }
+  #kf-root .kf-stat { color: #6B7280; }
+  #kf-root .kf-chip { background: #F3F4F6; color: #6B7280; }
+  #kf-root .kf-btn { background: #F3F4F6; color: #374151; }
+  #kf-root .kf-toggle { background: #fff; color: #4B5563; border: 1px solid #D1D5DB; }
+  #kf-root .kf-toggle.is-on { background: #2B7FFF; color: #fff; border-color: #2B7FFF; }
+  :root[data-theme="dark"] #kf-root .kf-panel { background: #1B1E26; border-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] #kf-root .kf-head-t,
+  :root[data-theme="dark"] #kf-root .kf-kpi-val,
+  :root[data-theme="dark"] #kf-root .kf-names { color: #F1F5FF; }
+  :root[data-theme="dark"] #kf-root .kf-sub,
+  :root[data-theme="dark"] #kf-root .kf-msg { color: rgba(255,255,255,0.7); }
+  :root[data-theme="dark"] #kf-root .kf-kpi-label,
+  :root[data-theme="dark"] #kf-root .kf-time,
+  :root[data-theme="dark"] #kf-root .kf-arrow,
+  :root[data-theme="dark"] #kf-root .kf-stat { color: rgba(255,255,255,0.45); }
+  :root[data-theme="dark"] #kf-root .kf-select { background: #0F1218; color: #E8EEFC; border-color: rgba(255,255,255,0.14); }
+  :root[data-theme="dark"] #kf-root .kf-card { background: #1B1E26; border-color: rgba(255,255,255,0.08); }
+  :root[data-theme="dark"] #kf-root .kf-chip { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+  :root[data-theme="dark"] #kf-root .kf-btn { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.8); }
+  :root[data-theme="dark"] #kf-root .kf-toggle { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); border-color: rgba(255,255,255,0.14); }
+
+  /* Layout — the same regardless of theme. */
+  #kf-root .kf-card { display: flex; gap: 12px; border-radius: 14px; padding: 14px; transition: box-shadow .15s; }
+  #kf-root .kf-card:hover { box-shadow: 0 4px 14px rgba(15,23,42,0.08); }
+  #kf-root .kf-card--hidden { opacity: 0.55; }
+  #kf-root .kf-avatar { flex-shrink: 0; width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px; }
+  #kf-root .kf-body { flex: 1; min-width: 0; }
+  #kf-root .kf-top { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+  #kf-root .kf-names { font-size: 13.5px; line-height: 1.3; min-width: 0; }
+  #kf-root .kf-arrow { margin: 0 2px; }
+  #kf-root .kf-time { font-size: 11px; white-space: nowrap; flex-shrink: 0; }
+  #kf-root .kf-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+  #kf-root .kf-value { display: inline-flex; align-items: center; gap: 4px; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 800; }
+  #kf-root .kf-chip { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .03em; }
+  #kf-root .kf-chip--red { background: #FEE2E2 !important; color: #B91C1C !important; }
+  #kf-root .kf-msg { font-size: 13.5px; line-height: 1.45; margin-top: 7px; white-space: pre-wrap; word-break: break-word; }
+  #kf-root .kf-photo { margin-top: 8px; max-height: 220px; border-radius: 10px; border: 1px solid rgba(0,0,0,0.06); }
+  #kf-root .kf-foot { display: flex; align-items: center; gap: 14px; margin-top: 10px; }
+  #kf-root .kf-stat { font-size: 12px; font-weight: 600; }
+  #kf-root .kf-foot-spacer { flex: 1; }
+  #kf-root .kf-btn { border: 0; cursor: pointer; padding: 5px 12px; border-radius: 8px; font-size: 11px; font-weight: 700; }
+  #kf-root .kf-btn--red { background: #FEE2E2; color: #B91C1C; }
+  #kf-root .inline { display: inline; }
+</style>
+
+<div id="kf-root" class="space-y-5">
+  <!-- Header + sub-nav -->
+  <div class="flex items-center justify-between flex-wrap gap-2">
+    <div>
+      <h1 class="text-2xl font-bold kf-head-t">Kudos feed</h1>
+      <p class="text-sm kf-sub mt-1">Every kudos as it comes in. Hide anything inappropriate straight from here.</p>
+    </div>
+    <div class="flex items-center gap-3 text-sm">
+      <a href="/kudos-admin/queue" class="text-brand-600 font-medium">Moderation →</a>
+      <a href="/kudos-admin/values" class="text-brand-600 font-medium">Values →</a>
+    </div>
+  </div>
+
+  <!-- KPIs -->
+  <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+    <div class="kf-panel rounded-xl p-4">
+      <p class="text-[10px] font-bold kf-kpi-label uppercase tracking-widest">Total kudos</p>
+      <p class="text-2xl font-bold kf-kpi-val mt-1"><%= totalKudos %></p>
+    </div>
+    <div class="kf-panel rounded-xl p-4">
+      <p class="text-[10px] font-bold uppercase tracking-widest" style="color:#10B981">Last 7 days</p>
+      <p class="text-2xl font-bold mt-1" style="color:#059669"><%= last7 %></p>
+    </div>
+    <div class="kf-panel rounded-xl p-4 col-span-2 sm:col-span-1">
+      <p class="text-[10px] font-bold kf-kpi-label uppercase tracking-widest">Filter</p>
+      <div class="flex items-center gap-2 mt-1.5">
+        <select class="kf-select rounded-lg text-sm px-2 py-1.5 flex-1" onchange="kfApplyFilter(this.value)">
+          <option value="">All values</option>
+          <% values.forEach(function (v) { %>
+            <option value="<%= v.id %>" <%= String(valueId) === String(v.id) ? 'selected' : '' %>><%= v.name %></option>
+          <% }) %>
+        </select>
+        <a href="/kudos-admin/feed?<%= valueId ? 'value=' + valueId + '&' : '' %><%= showHidden ? '' : 'hidden=1' %>"
+           class="kf-toggle <%= showHidden ? 'is-on' : '' %> rounded-lg text-xs font-semibold px-2.5 py-1.5 whitespace-nowrap">Hidden</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Feed list -->
+  <% if (items.length === 0) { %>
+    <div class="kf-panel rounded-xl p-8 text-center text-sm kf-sub">No kudos yet<%= valueId ? ' for this value' : '' %>. They'll appear here as crew send them.</div>
+  <% } else { %>
+    <div id="kf-list" class="space-y-3">
+      <%- include('_feed_items', { items: items, nextBefore: nextBefore }) %>
+    </div>
+    <div class="flex justify-center pt-1">
+      <button type="button" id="kf-more" class="px-5 py-2.5 text-sm font-semibold rounded-lg kf-btn" <%= nextBefore ? '' : 'style="display:none"' %>>Load older</button>
+    </div>
+  <% } %>
+
+  <% if (flash_success && flash_success.length) { %>
+    <div class="fixed top-20 right-4 px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold shadow-lg z-50" id="flash"><%= flash_success[0] %></div>
+    <script>setTimeout(function(){var f=document.getElementById('flash'); if(f) f.remove();}, 2800);</script>
+  <% } %>
+</div>
+
+<script>
+  var KF_VALUE = <%- JSON.stringify(valueId || '') %>;
+  var KF_HIDDEN = <%= showHidden ? 'true' : 'false' %>;
+  function kfApplyFilter(v) {
+    var p = new URLSearchParams();
+    if (v) p.set('value', v);
+    if (KF_HIDDEN) p.set('hidden', '1');
+    window.location.href = '/kudos-admin/feed' + (p.toString() ? '?' + p.toString() : '');
+  }
+  (function () {
+    var btn = document.getElementById('kf-more');
+    var list = document.getElementById('kf-list');
+    if (!btn || !list) return;
+    function nextBefore() { var m = list.querySelector('#kf-next-marker'); return m ? (m.getAttribute('data-next') || '') : ''; }
+    btn.addEventListener('click', function () {
+      var before = nextBefore();
+      if (!before) { btn.style.display = 'none'; return; }
+      btn.disabled = true; btn.textContent = 'Loading…';
+      var p = new URLSearchParams({ partial: '1', before: before });
+      if (KF_VALUE) p.set('value', KF_VALUE);
+      if (KF_HIDDEN) p.set('hidden', '1');
+      fetch('/kudos-admin/feed?' + p.toString(), { credentials: 'same-origin' })
+        .then(function (r) { return r.text(); })
+        .then(function (html) {
+          var tmp = document.createElement('div'); tmp.innerHTML = html;
+          var marker = tmp.querySelector('#kf-next-marker');
+          var newNext = marker ? (marker.getAttribute('data-next') || '') : '';
+          // Drop the old marker, append the new cards (incl. fresh marker).
+          var oldMarker = list.querySelector('#kf-next-marker'); if (oldMarker) oldMarker.remove();
+          while (tmp.firstChild) list.appendChild(tmp.firstChild);
+          btn.disabled = false; btn.textContent = 'Load older';
+          if (!newNext) btn.style.display = 'none';
+        })
+        .catch(function () { btn.disabled = false; btn.textContent = 'Load older'; });
+    });
+  })();
+</script>
