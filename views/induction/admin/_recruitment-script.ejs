@@ -203,8 +203,13 @@
     if (extra && typeof extra.induction_date !== 'undefined') payload.induction_date = extra.induction_date;
     if (extra && typeof extra.induction_time !== 'undefined') payload.induction_time = extra.induction_time;
 
-    // Optimistic DOM move (board).
+    // Optimistic DOM move (board). Capture the FULL prior state so a failed
+    // save can be reverted cleanly (not just the DOM position).
     var prevParent = null, prevNext = null;
+    var prevStage = card ? (card.dataset.stage || '') : '';
+    var prevIndDate = card ? (card.dataset.inductionDate || '') : '';
+    var prevIndTime = card ? (card.dataset.inductionTime || '') : '';
+    var prevDateCalled = card ? (card.dataset.dateCalled || '') : '';
     if (card) {
       prevParent = card.parentNode; prevNext = card.nextSibling;
       var targetBody = (toStage === 'CLOSED' || isTerminal(toStage))
@@ -224,8 +229,22 @@
       applyFilter();
     }
 
-    try {
-      var data = await postUpdate(id, payload);
+    // Save with one automatic retry — a transient blip (network, a rotated
+    // CSRF token, a momentary 401) used to silently revert the move and hard-
+    // reload, which looked exactly like "I booked them but it didn't save".
+    var data = null, lastErr = null;
+    for (var attempt = 0; attempt < 2 && !data; attempt++) {
+      try {
+        if (attempt > 0) await new Promise(function (r) { setTimeout(r, 600); });
+        data = await postUpdate(id, payload);
+      } catch (err) {
+        lastErr = err;
+        // Don't retry a deliberate validation rejection — it won't change.
+        if (err.code === 'needs_induction_date') break;
+      }
+    }
+
+    if (data) {
       if (data.inductionEmailed === 'sent') {
         toast('Booked — confirmation emailed');
       } else if (data.inductionEmailed === 'failed') {
@@ -236,17 +255,27 @@
         toast('Saved');
       }
       syncListRow(id, toStage, extra);
-    } catch (err) {
-      // Revert optimistic move.
-      if (card && prevParent) { prevParent.insertBefore(card, prevNext); recount(); }
-      console.error('stage move failed', err);
-      if (err.code === 'needs_induction_date') {
-        toast('Set an induction date before booking.', true);
-      } else {
-        toast('Could not save — ' + err.message, true);
-      }
-      // Hard refresh as a last resort so the UI matches the server.
-      setTimeout(function () { window.location.reload(); }, 1400);
+      return;
+    }
+
+    // Real failure: restore the card to exactly where it was so the board
+    // matches the server, and keep a clear, actionable error on screen (no
+    // silent auto-reload that hides what happened).
+    console.error('stage move failed', lastErr);
+    if (card) {
+      card.dataset.stage = prevStage;
+      card.dataset.inductionDate = prevIndDate;
+      card.dataset.inductionTime = prevIndTime;
+      card.dataset.dateCalled = prevDateCalled;
+      if (prevParent) prevParent.insertBefore(card, prevNext);
+      renderCardMeta(card); recount(); applyFilter();
+    }
+    if (lastErr && lastErr.code === 'needs_induction_date') {
+      toast('Set an induction date before booking.', true);
+    } else if (lastErr && /40[13]|auth|csrf/i.test(String(lastErr.message))) {
+      toast('Your session expired — refresh the page, then try again.', true);
+    } else {
+      toast('Couldn’t save — nothing was changed. Check your connection and try again.', true);
     }
   }
 
