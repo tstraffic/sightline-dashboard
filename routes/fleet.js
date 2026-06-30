@@ -535,6 +535,9 @@ router.get('/:id', (req, res) => {
     SELECT * FROM service_records WHERE vehicle_id = ?
     ORDER BY COALESCE(service_date, '0000-00-00') DESC, id DESC
   `).all(vehicle.id);
+  // Attach all invoice attachments (multiple per record, migration 302).
+  const invStmt = db.prepare('SELECT id, file_name FROM service_record_invoices WHERE service_record_id = ? ORDER BY id');
+  services.forEach(s => { s.invoices = invStmt.all(s.id); });
 
   const { incidents, equipmentChecks } = lookupRelatedReports(db, vehicle);
   const initialTab = ['overview','service','incidents','equipment'].includes(req.query.tab) ? req.query.tab : 'overview';
@@ -574,6 +577,38 @@ router.post('/:id/service/:sid/invoice/delete', (req, res) => {
     logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Invoice removed from #${req.params.sid}`, ip: req.ip });
   }
   res.redirect('/fleet/' + req.params.id + '?tab=service');
+});
+
+// ── DOWNLOAD a specific invoice attachment (multiple per record) ─────
+router.get('/:id/service/:sid/invoice/:invId', (req, res) => {
+  const db = getDb();
+  const inv = db.prepare(`
+    SELECT sri.file_path, sri.file_name FROM service_record_invoices sri
+    JOIN service_records sr ON sr.id = sri.service_record_id
+    WHERE sri.id = ? AND sri.service_record_id = ? AND sr.vehicle_id = ?
+  `).get(req.params.invId, req.params.sid, req.params.id);
+  if (!inv || !inv.file_path) { req.flash('error', 'Invoice file not found.'); return res.redirect('/fleet/' + req.params.id); }
+  const abs = path.resolve(inv.file_path);
+  if (!abs.startsWith(path.resolve(INVOICE_UPLOAD_DIR))) { return res.status(403).send('Forbidden'); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'Invoice file missing on disk.'); return res.redirect('/fleet/' + req.params.id); }
+  res.download(abs, inv.file_name || path.basename(abs));
+});
+
+// ── DELETE a specific invoice attachment (keep the service record) ───
+router.post('/:id/service/:sid/invoice/:invId/delete', (req, res) => {
+  const db = getDb();
+  const inv = db.prepare(`
+    SELECT sri.id, sri.file_path FROM service_record_invoices sri
+    JOIN service_records sr ON sr.id = sri.service_record_id
+    WHERE sri.id = ? AND sri.service_record_id = ? AND sr.vehicle_id = ?
+  `).get(req.params.invId, req.params.sid, req.params.id);
+  if (inv) {
+    try { if (inv.file_path && fs.existsSync(inv.file_path)) fs.unlinkSync(inv.file_path); } catch (e) { /* ignore */ }
+    db.prepare('DELETE FROM service_record_invoices WHERE id = ?').run(inv.id);
+    logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Invoice removed from #${req.params.sid}`, ip: req.ip });
+  }
+  const back = req.get('Referer') || ('/fleet/' + req.params.id + '?tab=service');
+  res.redirect(back);
 });
 
 // ── EDIT VEHICLE FORM ────────────────────────────────────────────────
@@ -658,23 +693,25 @@ router.get('/:id/service/new', (req, res) => {
 });
 
 // ── CREATE SERVICE RECORD ────────────────────────────────────────────
-router.post('/:id/service', invoiceUpload.single('invoice_file'), (req, res) => {
+router.post('/:id/service', invoiceUpload.array('invoice_file', 10), (req, res) => {
   const db = getDb();
   const vehicle = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
   if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
   const b = req.body;
   const serviceType = SERVICE_TYPES.includes(b.service_type) ? b.service_type : 'Other';
-  const file = req.file || null;
+  const files = req.files || [];
 
   const result = db.prepare(`
-    INSERT INTO service_records (vehicle_id, service_date, odometer_km, work_performed, service_type, performed_by, cost, invoice_number, notes, invoice_file_path, invoice_file_name)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO service_records (vehicle_id, service_date, odometer_km, work_performed, service_type, performed_by, cost, invoice_number, notes)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     vehicle.id, orNull(b.service_date), intOrNull(b.odometer_km),
     orNull(b.work_performed), serviceType, orNull(b.performed_by),
-    numOrNull(b.cost), orNull(b.invoice_number), orNull(b.notes),
-    file ? file.path : null, file ? file.originalname : null
+    numOrNull(b.cost), orNull(b.invoice_number), orNull(b.notes)
   );
+  // Store every uploaded invoice as its own attachment row.
+  const insInv = db.prepare('INSERT INTO service_record_invoices (service_record_id, file_path, file_name) VALUES (?, ?, ?)');
+  files.forEach(f => insInv.run(result.lastInsertRowid, f.path, f.originalname));
   logActivity({
     user: req.session.user, action: 'create', entityType: 'service_record',
     entityId: result.lastInsertRowid,
@@ -691,6 +728,7 @@ router.get('/:id/service/:sid/edit', (req, res) => {
   const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id);
   const record  = db.prepare('SELECT * FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
   if (!vehicle || !record) { req.flash('error', 'Service record not found.'); return res.redirect('/fleet'); }
+  record.invoices = db.prepare('SELECT id, file_name FROM service_record_invoices WHERE service_record_id = ? ORDER BY id').all(record.id);
   res.render('fleet/service-form', {
     title: `Edit Service Record — ${vehicle.asset_id}`,
     currentPage: 'fleet',
@@ -701,41 +739,27 @@ router.get('/:id/service/:sid/edit', (req, res) => {
 });
 
 // ── UPDATE SERVICE RECORD ────────────────────────────────────────────
-router.post('/:id/service/:sid', invoiceUpload.single('invoice_file'), (req, res) => {
+router.post('/:id/service/:sid', invoiceUpload.array('invoice_file', 10), (req, res) => {
   const db = getDb();
-  const record = db.prepare('SELECT id, invoice_file_path FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
+  const record = db.prepare('SELECT id FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
   if (!record) { req.flash('error', 'Service record not found.'); return res.redirect(`/fleet/${req.params.id}`); }
   const b = req.body;
   const serviceType = SERVICE_TYPES.includes(b.service_type) ? b.service_type : 'Other';
-  const file = req.file || null;
+  const files = req.files || [];
 
-  // If a new file came in, drop the old one off disk so we don't leak.
-  if (file && record.invoice_file_path) {
-    try { if (fs.existsSync(record.invoice_file_path)) fs.unlinkSync(record.invoice_file_path); } catch (e) { /* ignore */ }
-  }
-
-  if (file) {
-    db.prepare(`
-      UPDATE service_records SET service_date=?, odometer_km=?, work_performed=?, service_type=?, performed_by=?, cost=?, invoice_number=?, notes=?, invoice_file_path=?, invoice_file_name=?, updated_at=CURRENT_TIMESTAMP
-      WHERE id=?
-    `).run(
-      orNull(b.service_date), intOrNull(b.odometer_km), orNull(b.work_performed),
-      serviceType, orNull(b.performed_by), numOrNull(b.cost),
-      orNull(b.invoice_number), orNull(b.notes),
-      file.path, file.originalname,
-      req.params.sid
-    );
-  } else {
-    db.prepare(`
-      UPDATE service_records SET service_date=?, odometer_km=?, work_performed=?, service_type=?, performed_by=?, cost=?, invoice_number=?, notes=?, updated_at=CURRENT_TIMESTAMP
-      WHERE id=?
-    `).run(
-      orNull(b.service_date), intOrNull(b.odometer_km), orNull(b.work_performed),
-      serviceType, orNull(b.performed_by), numOrNull(b.cost),
-      orNull(b.invoice_number), orNull(b.notes),
-      req.params.sid
-    );
-  }
+  db.prepare(`
+    UPDATE service_records SET service_date=?, odometer_km=?, work_performed=?, service_type=?, performed_by=?, cost=?, invoice_number=?, notes=?, updated_at=CURRENT_TIMESTAMP
+    WHERE id=?
+  `).run(
+    orNull(b.service_date), intOrNull(b.odometer_km), orNull(b.work_performed),
+    serviceType, orNull(b.performed_by), numOrNull(b.cost),
+    orNull(b.invoice_number), orNull(b.notes),
+    req.params.sid
+  );
+  // Newly-dropped invoices are ADDED (existing ones are kept; remove via the
+  // per-attachment delete link).
+  const insInv = db.prepare('INSERT INTO service_record_invoices (service_record_id, file_path, file_name) VALUES (?, ?, ?)');
+  files.forEach(f => insInv.run(req.params.sid, f.path, f.originalname));
   logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Service record #${req.params.sid}`, ip: req.ip });
   req.flash('success', 'Service record updated.');
   res.redirect(`/fleet/${req.params.id}?tab=service`);

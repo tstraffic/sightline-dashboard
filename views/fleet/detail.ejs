@@ -195,16 +195,16 @@
         <div class="sm:col-span-2 lg:col-span-3">
           <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Invoice attachment</label>
           <label class="invoice-drop" id="invoiceDrop">
-            <input type="file" name="invoice_file" id="invoiceFile" accept=".pdf,image/*" class="invoice-drop-input">
+            <input type="file" name="invoice_file" id="invoiceFile" accept=".pdf,image/*" multiple class="invoice-drop-input">
             <div class="invoice-drop-body">
-              <svg class="w-7 h-7 text-gray-400 mb-1" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12"/></svg>
-              <p class="text-sm font-medium text-gray-700"><strong>Drag &amp; drop</strong> the workshop invoice — or click to choose a file</p>
-              <p class="text-[11px] text-gray-500 mt-0.5">PDF or image · 15 MB max</p>
+              <svg class="invoice-drop-ico w-7 h-7 text-gray-400 mb-1" fill="none" stroke="currentColor" stroke-width="1.7" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12"/></svg>
+              <p class="invoice-drop-lead text-sm font-medium text-gray-700"><strong>Drag &amp; drop</strong> invoices — or click to choose. You can add several.</p>
+              <p class="invoice-drop-hint text-[11px] text-gray-500 mt-0.5">PDF or image · 15 MB each</p>
             </div>
             <div class="invoice-drop-chosen" hidden>
-              <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+              <svg class="w-5 h-5 text-emerald-600 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
               <span class="invoice-drop-name text-sm font-medium text-gray-800"></span>
-              <button type="button" class="invoice-drop-clear text-xs text-red-600 hover:text-red-700 underline ml-2">Remove</button>
+              <button type="button" class="invoice-drop-clear text-xs text-red-600 hover:text-red-700 underline ml-2">Clear</button>
             </div>
           </label>
         </div>
@@ -250,12 +250,17 @@
                 <td class="px-3 py-2 hidden lg:table-cell text-xs text-gray-600"><%= s.performed_by || '—' %></td>
                 <td class="px-3 py-2 text-right text-xs font-mono <%= s.cost == null ? 'text-amber-600' : 'text-gray-800' %>"><%= s.cost == null ? '—' : AUD(s.cost) %></td>
                 <td class="px-3 py-2 text-xs">
-                  <% if (s.invoice_file_path) { %>
-                    <a href="/fleet/<%= vehicle.id %>/service/<%= s.id %>/invoice" class="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700 font-medium" title="<%= s.invoice_file_name || 'Invoice' %>">
-                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-                      File
-                    </a>
-                    <% if (s.invoice_number) { %><span class="text-gray-400 ml-1">#<%= s.invoice_number %></span><% } %>
+                  <% var invs = s.invoices || []; %>
+                  <% if (invs.length) { %>
+                    <span class="inline-flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                      <% invs.forEach(function (inv, i) { %>
+                        <a href="/fleet/<%= vehicle.id %>/service/<%= s.id %>/invoice/<%= inv.id %>" class="inline-flex items-center gap-1 text-brand-600 hover:text-brand-700 font-medium" title="<%= inv.file_name || 'Invoice' %>">
+                          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                          <%= invs.length > 1 ? 'File ' + (i + 1) : 'File' %>
+                        </a>
+                      <% }) %>
+                      <% if (s.invoice_number) { %><span class="text-gray-400">#<%= s.invoice_number %></span><% } %>
+                    </span>
                   <% } else if (s.invoice_number) { %>
                     <span class="text-gray-500 font-mono">#<%= s.invoice_number %></span>
                   <% } else { %>
@@ -400,10 +405,18 @@
   .invoice-drop:hover, .invoice-drop.is-drag { border-color: #2B7FFF; background: #EFF6FF; }
   .invoice-drop-input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
   .invoice-drop-body { pointer-events: none; }
-  .invoice-drop-chosen { display: none; align-items: center; justify-content: center; gap: 8px; }
+  .invoice-drop-chosen { display: none; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; }
   .invoice-drop.is-chosen .invoice-drop-body { display: none; }
   .invoice-drop.is-chosen .invoice-drop-chosen { display: flex; }
   .invoice-drop-clear { pointer-events: auto; cursor: pointer; background: none; border: 0; padding: 0; }
+  /* Dark ("night") mode — the drop box + its text were near-invisible on a
+     dark background (faint dashed border, grey-on-dark text). Lift contrast. */
+  :root[data-theme="dark"] .invoice-drop { border-color: rgba(255,255,255,0.28); background: rgba(255,255,255,0.05); }
+  :root[data-theme="dark"] .invoice-drop:hover, :root[data-theme="dark"] .invoice-drop.is-drag { border-color: #60A5FA; background: rgba(96,154,255,0.14); }
+  :root[data-theme="dark"] .invoice-drop .invoice-drop-lead { color: #F1F5FF; }
+  :root[data-theme="dark"] .invoice-drop .invoice-drop-hint { color: rgba(255,255,255,0.6); }
+  :root[data-theme="dark"] .invoice-drop .invoice-drop-ico { color: rgba(255,255,255,0.55); }
+  :root[data-theme="dark"] .invoice-drop .invoice-drop-name { color: #E8EEFC; }
 </style>
 
 <script>
@@ -430,28 +443,32 @@
   if (drop && input) {
     var nameEl = drop.querySelector('.invoice-drop-name');
     var clearBtn = drop.querySelector('.invoice-drop-clear');
-    function setFile(file) {
-      if (!file) { drop.classList.remove('is-chosen'); input.value = ''; return; }
-      if (nameEl) nameEl.textContent = file.name + ' (' + Math.round(file.size / 1024) + ' KB)';
+    function render() {
+      var files = input.files;
+      if (!files || !files.length) { drop.classList.remove('is-chosen'); return; }
+      var names = Array.prototype.map.call(files, function (f) { return f.name; });
+      if (nameEl) nameEl.textContent = files.length === 1
+        ? (files[0].name + ' (' + Math.round(files[0].size / 1024) + ' KB)')
+        : (files.length + ' files: ' + names.join(', '));
       drop.classList.add('is-chosen');
     }
-    input.addEventListener('change', function () { setFile(input.files && input.files[0]); });
+    input.addEventListener('change', render);
     drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('is-drag'); });
     drop.addEventListener('dragleave', function () { drop.classList.remove('is-drag'); });
     drop.addEventListener('drop', function (e) {
       e.preventDefault();
       drop.classList.remove('is-drag');
       if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
-        // assign the dropped file into the input so it submits with the form
+        // Assign ALL dropped files into the input so they submit with the form.
         try {
           var dt = new DataTransfer();
-          dt.items.add(e.dataTransfer.files[0]);
+          Array.prototype.forEach.call(e.dataTransfer.files, function (f) { dt.items.add(f); });
           input.files = dt.files;
         } catch (err) { /* old browser — fall back to no-op */ }
-        setFile(e.dataTransfer.files[0]);
+        render();
       }
     });
-    if (clearBtn) clearBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); setFile(null); });
+    if (clearBtn) clearBtn.addEventListener('click', function (e) { e.preventDefault(); e.stopPropagation(); input.value = ''; drop.classList.remove('is-chosen'); });
   }
 })();
 </script>

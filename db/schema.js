@@ -13795,6 +13795,29 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 301 error:', e.message); }
   }
 
+  // 302: a vehicle service record can have MULTIPLE invoice attachments. Move
+  // from the single invoice_file_path/_name columns to a child table; backfill
+  // any existing single attachment so nothing is lost. The legacy columns are
+  // left in place (read-compat) but new uploads land in the table.
+  if (!isMigrationApplied.get(302)) {
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS service_record_invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        service_record_id INTEGER NOT NULL REFERENCES service_records(id) ON DELETE CASCADE,
+        file_path TEXT NOT NULL,
+        file_name TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sri_record ON service_record_invoices(service_record_id)');
+      db.exec(`INSERT INTO service_record_invoices (service_record_id, file_path, file_name)
+        SELECT id, invoice_file_path, invoice_file_name FROM service_records
+        WHERE invoice_file_path IS NOT NULL AND TRIM(invoice_file_path) != ''
+          AND NOT EXISTS (SELECT 1 FROM service_record_invoices x WHERE x.service_record_id = service_records.id)`);
+      recordMigration.run(302, 'service_record_invoices: multiple invoice attachments');
+      console.log('Migration 302 applied');
+    } catch (e) { console.error('Migration 302 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
