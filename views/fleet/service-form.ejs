@@ -77,19 +77,36 @@
             </div>
           <% }) %>
         </div>
-        <p class="text-[10px] text-gray-400 mb-1">Add more files below — existing ones are kept.</p>
+        <p class="text-[10px] text-gray-400 mb-1">Existing files are kept. Add more below.</p>
       <% } %>
-      <input type="file" name="invoice_file" accept=".pdf,image/*" multiple class="sf-file block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
+      <% if (isEdit) { %>
+        <!-- The picker + Add button belong to a separate form (#invForm,
+             below) so files attach immediately — no need to Save the record.
+             form= associates them even though they sit inside #svcForm. -->
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2">
+          <input type="file" name="invoice_file" form="invForm" accept=".pdf,image/*" multiple class="sf-file block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
+          <button type="submit" form="invForm" class="shrink-0 inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold rounded-lg">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+            Add file<span class="hidden sm:inline">(s)</span>
+          </button>
+        </div>
+        <p class="text-[10px] text-gray-400 mt-1">Pick file(s) and press <b>Add</b> — they attach straight away.</p>
+      <% } else { %>
+        <input type="file" name="invoice_file" accept=".pdf,image/*" multiple class="sf-file block w-full text-sm text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded-md file:border-0 file:text-xs file:font-semibold file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
+        <p class="text-[10px] text-gray-400 mt-1">Attached when you save the record.</p>
+      <% } %>
     </div>
   </div>
 
-  <div class="flex items-center justify-between">
+  <!-- Action row sits a little in from the right + has clearance below so it
+       never hides under the floating "+ New" / Feedback buttons in the corner. -->
+  <div class="flex items-center justify-between gap-3 sm:pr-28 pb-24">
     <% if (isEdit) { %>
       <button type="submit" form="delSvc" class="px-3 py-2 bg-red-50 hover:bg-red-100 text-red-600 text-sm font-medium rounded-lg border border-red-200">Delete</button>
     <% } else { %><div></div><% } %>
     <div class="flex items-center gap-2">
       <a href="/fleet/<%= vehicle.id %>" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg">Cancel</a>
-      <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg"><%= isEdit ? 'Save Changes' : 'Add Record' %></button>
+      <button type="submit" class="px-5 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-bold rounded-lg shadow-sm"><%= isEdit ? 'Save changes' : 'Add Record' %></button>
     </div>
   </div>
 </form>
@@ -98,6 +115,10 @@
      nest (nested forms close the outer form early and orphaned the Save button).
      The Delete / Remove buttons above target these via the form= attribute. -->
 <% if (isEdit) { %>
+  <!-- Add-invoice form: the picker + Add button above submit to this via form=. -->
+  <form id="invForm" method="POST" action="/fleet/<%= vehicle.id %>/service/<%= record.id %>/invoices/add" enctype="multipart/form-data" class="hidden">
+    <%- include('../partials/csrf') %>
+  </form>
   <form id="delSvc" method="POST" action="/fleet/<%= vehicle.id %>/service/<%= record.id %>/delete" onsubmit="return confirm('Delete this service record? This cannot be undone.')" class="hidden">
     <%- include('../partials/csrf') %>
   </form>

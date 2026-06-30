@@ -579,6 +579,21 @@ router.post('/:id/service/:sid/invoice/delete', (req, res) => {
   res.redirect('/fleet/' + req.params.id + '?tab=service');
 });
 
+// ── ADD invoice attachment(s) to an existing record (explicit button) ─
+// Lets the user attach files immediately from the edit page without saving
+// the whole record. Appends; existing attachments are kept.
+router.post('/:id/service/:sid/invoices/add', invoiceUpload.array('invoice_file', 10), (req, res) => {
+  const db = getDb();
+  const record = db.prepare('SELECT id FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
+  if (!record) { req.flash('error', 'Service record not found.'); return res.redirect('/fleet/' + req.params.id); }
+  const files = req.files || [];
+  if (!files.length) { req.flash('error', 'Choose a file first.'); return res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`); }
+  const insInv = db.prepare('INSERT INTO service_record_invoices (service_record_id, file_path, file_name) VALUES (?, ?, ?)');
+  files.forEach(f => insInv.run(req.params.sid, f.path, f.originalname));
+  req.flash('success', files.length === 1 ? 'Invoice added.' : (files.length + ' invoices added.'));
+  res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`);
+});
+
 // ── DOWNLOAD a specific invoice attachment (multiple per record) ─────
 router.get('/:id/service/:sid/invoice/:invId', (req, res) => {
   const db = getDb();
