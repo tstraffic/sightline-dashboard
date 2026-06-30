@@ -92,6 +92,7 @@ const SERVICE_TYPES = [
   'Repairs / Accident',
   'Inspection / Slip',
   'Safety Equipment',
+  'Cosmetic Repairs',
   'Other',
 ];
 
