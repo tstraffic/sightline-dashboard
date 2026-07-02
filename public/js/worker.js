@@ -21,6 +21,35 @@ function confirmAction(message) {
   return confirm(message || 'Are you sure?');
 }
 
+// Double-submit guard for every form in the portal. Field crew on patchy
+// signal tap Submit again when nothing seems to happen — for docket signing
+// that meant duplicate signature rows. Once a form ACTUALLY submits (the
+// submit event fired and nothing preventDefault'd it), disable its submit
+// buttons on the next tick (next tick so the submitter's name/value still
+// makes it into the POST body). pageshow re-enables them when the page is
+// restored from the back/forward cache.
+document.addEventListener('submit', function (e) {
+  var form = e.target;
+  if (e.defaultPrevented || !form || form.hasAttribute('data-allow-resubmit')) return;
+  setTimeout(function () {
+    var btns = form.querySelectorAll('button[type="submit"], input[type="submit"], button:not([type])');
+    btns.forEach(function (b) {
+      if (b.disabled) return;
+      b.disabled = true;
+      b.setAttribute('data-submit-guard', '1');
+      b.style.opacity = '0.6';
+    });
+  }, 0);
+});
+window.addEventListener('pageshow', function (e) {
+  if (!e.persisted) return;
+  document.querySelectorAll('[data-submit-guard]').forEach(function (b) {
+    b.disabled = false;
+    b.style.opacity = '';
+    b.removeAttribute('data-submit-guard');
+  });
+});
+
 // Register service worker for PWA + subscribe to push for shift reminders.
 // Workers get a 24-hour heads-up push for every upcoming shift.
 if ('serviceWorker' in navigator) {

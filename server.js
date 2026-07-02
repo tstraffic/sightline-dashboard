@@ -215,6 +215,9 @@ const loginLimiter = rateLimit({
   message: 'Too many login attempts, please try again in 15 minutes.',
   standardHeaders: true,
   legacyHeaders: false,
+  // The e2e suite logs in dozens of times per run from one IP — without
+  // this skip the later specs 429 and fail order-dependently.
+  skip: () => process.env.NODE_ENV === 'test',
 });
 app.post('/login', loginLimiter);
 app.post('/w/login', loginLimiter);

@@ -3,7 +3,11 @@ const bcrypt = require('bcryptjs');
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = path.join(__dirname, '..', 'data', 'tstraffic.db');
+// DB_PATH env var override supports isolated test/audit runs against a copy
+// of the database (documented in CLAUDE.md); default is the real data dir.
+const DB_PATH = process.env.DB_PATH
+  ? path.resolve(process.env.DB_PATH)
+  : path.join(__dirname, '..', 'data', 'tstraffic.db');
 
 function runMigrations(db) {
   // Create migration tracking table

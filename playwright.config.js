@@ -39,7 +39,12 @@ module.exports = {
     reuseExistingServer: false,
     env: {
       PORT: '3101',
+      // The app reads DB_PATH (db/schema.js). DATABASE_PATH alone was set
+      // here historically but never read by the app — the suite silently ran
+      // against the dev DB. DB_PATH now does the real isolation.
+      DB_PATH: testDbPath,
       DATABASE_PATH: testDbPath,
+      SEED_TEST_USERS: 'true',
       SESSION_SECRET: 'test-suite-session-secret',
       // Keep the seed script quiet; it's already side-effect-free for tests.
       NODE_ENV: 'test',

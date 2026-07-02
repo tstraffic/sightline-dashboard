@@ -3,6 +3,34 @@ const router = express.Router();
 const { getDb } = require('../../db/database');
 const { findOrCreateDM, getTotalUnreadCount } = require('../../lib/chat');
 
+// ─────────────────────────────────────────────────────────────────────────
+// Worker chat is DISABLED until it is properly built for crew identities.
+//
+// The chat schema keys membership/senders on users.id, but worker sessions
+// carry crew_members.id. Consequences of leaving these routes live:
+//   1. GET /w/chat/dm/:userId → findOrCreateDM inserts the crew id into
+//      chat_thread_members.user_id → FK constraint → 500 for most workers.
+//   2. If a crew id NUMERICALLY COLLIDES with a users.id, the inbox query
+//      (WHERE ctm.user_id = <crew id>) lists that admin user's threads —
+//      a cross-identity privacy leak.
+//   3. Even inside a thread, the message API lives under /chat (admin
+//      requireLogin), which redirects worker sessions away — workers can
+//      never load or send messages.
+//
+// So every /w/chat* route short-circuits to a friendly placeholder. The
+// original handlers are preserved below (dead code path) as the starting
+// point for the future crew-aware build.
+const CHAT_ENABLED_FOR_WORKERS = false;
+
+router.use('/chat', (req, res, next) => {
+  if (CHAT_ENABLED_FOR_WORKERS) return next();
+  res.render('worker/chat-unavailable', {
+    title: 'Messages',
+    currentPage: 'chat',
+    worker: req.session.worker,
+  });
+});
+
 // Worker Chat Inbox
 router.get('/chat', (req, res) => {
   const db = getDb();

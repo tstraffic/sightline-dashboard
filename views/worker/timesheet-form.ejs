@@ -26,16 +26,23 @@
         <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Date</label>
         <input type="date" name="work_date" value="<%= today %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-500">
       </div>
+      <%# Only prefill times from real clock events. The old 06:00/14:00
+          fallbacks looked authoritative — a worker whose clock events hadn't
+          synced could submit a timesheet with silently wrong hours. Blank +
+          required forces a conscious entry instead. %>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Start Time</label>
-          <input type="time" name="start_time" value="<%= todayClocks.length > 0 ? new Date(todayClocks[0].event_time).toTimeString().slice(0,5) : '06:00' %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-500">
+          <input type="time" name="start_time" value="<%= todayClocks.length > 0 ? new Date(todayClocks[0].event_time).toTimeString().slice(0,5) : '' %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-500">
         </div>
         <div>
           <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">End Time</label>
-          <input type="time" name="end_time" value="<%= todayClocks.length > 1 ? new Date(todayClocks[todayClocks.length-1].event_time).toTimeString().slice(0,5) : '14:00' %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-500">
+          <input type="time" name="end_time" value="<%= todayClocks.length > 1 ? new Date(todayClocks[todayClocks.length-1].event_time).toTimeString().slice(0,5) : '' %>" required class="w-full border border-gray-300 rounded-lg px-3 py-2.5 text-sm focus:ring-2 focus:ring-brand-500">
         </div>
       </div>
+      <% if (todayClocks.length === 0) { %>
+        <p class="text-xs text-gray-500 -mt-1">We couldn't find clock events for today — enter your start and end times manually.</p>
+      <% } %>
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-semibold text-gray-500 uppercase mb-1">Break (minutes)</label>

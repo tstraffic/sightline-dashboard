@@ -150,8 +150,9 @@
     .field label {
       display: block;
       font-family: var(--font-mono);
-      font-size: 10px;
-      letter-spacing: 0.14em;
+      /* 12px minimum — 10px mono labels were hard to read in sun glare */
+      font-size: 12px;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       color: var(--text-mute);
       margin-bottom: 8px;

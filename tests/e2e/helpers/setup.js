@@ -19,6 +19,26 @@ function resetTestDb() {
     const p = TEST_DB + suffix;
     try { fs.unlinkSync(p); } catch (e) { /* not present → fine */ }
   }
+
+  // Build the fresh DB with test fixtures BEFORE the webServer boots.
+  // Historic bug: the config set DATABASE_PATH, which the app never read —
+  // so this suite silently ran against the developer's dev DB, and the
+  // accounts it relies on (a usable admin/admin123, the EMP-TEST worker)
+  // only existed there. On a genuinely fresh DB:
+  //   - migration 114 seeds EMP-TEST only when SEED_TEST_USERS=true
+  //   - the seeded admin gets must_change_password=1, which diverts the
+  //     login happy-path to the change-password screen
+  // So initialise here with the right flags, then clear the flag for the
+  // test admin. The server (booted with the same DB_PATH) finds users
+  // already present and skips re-seeding.
+  process.env.DB_PATH = TEST_DB;
+  process.env.SEED_TEST_USERS = 'true';
+  const { initializeDatabase } = require('../../../db/schema');
+  initializeDatabase();
+  const Database = require('better-sqlite3');
+  const db = new Database(TEST_DB);
+  db.prepare("UPDATE users SET must_change_password = 0 WHERE username = 'admin'").run();
+  db.close();
 }
 
 async function loginAs(page, username = 'admin', password = 'admin123') {
