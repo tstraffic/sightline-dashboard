@@ -4,6 +4,7 @@
  */
 const webpush = require('web-push');
 const { getDb } = require('../db/database');
+const apns = require('./apns');
 
 let vapidConfigured = false;
 
@@ -183,6 +184,47 @@ function removeWorkerSubscription(endpoint) {
 }
 
 /**
+ * Native app (Capacitor/iOS) device tokens — parallel channel to web-push.
+ */
+function saveWorkerDeviceToken(crewMemberId, token, platform) {
+  const db = getDb();
+  db.prepare(`
+    INSERT INTO worker_device_tokens (crew_member_id, platform, token)
+    VALUES (?, ?, ?)
+    ON CONFLICT(token) DO UPDATE SET crew_member_id=excluded.crew_member_id, platform=excluded.platform, updated_at=CURRENT_TIMESTAMP
+  `).run(crewMemberId, platform || 'ios', token);
+}
+
+function removeWorkerDeviceToken(token) {
+  const db = getDb();
+  db.prepare('DELETE FROM worker_device_tokens WHERE token = ?').run(token);
+}
+
+/**
+ * Send to a crew member's native app devices via APNs. Same payload shape as
+ * web-push. No-ops (with a reason) when APNS_* env vars aren't set.
+ */
+async function sendNativeToCrew(crewMemberId, payload) {
+  if (!apns.isApnsConfigured()) return { sent: 0, failed: 0, reason: 'apns-not-configured' };
+  const db = getDb();
+  const tokens = db.prepare("SELECT token FROM worker_device_tokens WHERE crew_member_id = ? AND platform = 'ios'").all(crewMemberId);
+  if (tokens.length === 0) return { sent: 0, failed: 0, reason: 'no-device-tokens' };
+  let sent = 0, failed = 0, lastError = null;
+  for (const t of tokens) {
+    const result = await apns.sendToDevice(t.token, payload);
+    if (result.ok) { sent++; continue; }
+    failed++;
+    lastError = result.reason;
+    if (apns.isDeadTokenReason(result.reason)) {
+      removeWorkerDeviceToken(t.token);
+    } else {
+      console.error('[Push] APNs error crew', crewMemberId, ':', result.status, result.reason);
+    }
+  }
+  return { sent, failed, lastError };
+}
+
+/**
  * Worker-side per-category opt-in/out. Returns true unless the worker has
  * explicitly disabled this category in worker_notification_prefs. A category
  * of null/undefined is always allowed (back-compat with old call sites that
@@ -205,34 +247,48 @@ function isWorkerCategoryEnabled(db, crewMemberId, category) {
  * mute toggles). If not set, the push always fires (back-compat).
  */
 async function sendPushToCrew(crewMemberId, payload) {
-  if (!vapidConfigured) {
-    console.warn('[Push] sendPushToCrew called but VAPID not configured');
-    return { sent: 0, failed: 0, reason: 'vapid-not-configured' };
-  }
   const db = getDb();
   if (!isWorkerCategoryEnabled(db, crewMemberId, payload && payload.category)) {
     return { sent: 0, failed: 0, reason: 'category-muted' };
   }
-  const subs = db.prepare('SELECT * FROM worker_push_subscriptions WHERE crew_member_id = ?').all(crewMemberId);
-  if (subs.length === 0) return { sent: 0, failed: 0, reason: 'no-subscriptions' };
-  const payloadStr = JSON.stringify(payload);
-  console.log('[Push] -> crew', crewMemberId, '(' + subs.length + ' device(s)):', payload.title);
+
   let sent = 0, failed = 0, lastError = null;
-  for (const sub of subs) {
-    const pushSub = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
-    try {
-      await webpush.sendNotification(pushSub, payloadStr);
-      sent++;
-    } catch (err) {
-      failed++;
-      lastError = err.statusCode ? `HTTP ${err.statusCode} ${err.body || ''}`.trim() : err.message;
-      if (err.statusCode === 410 || err.statusCode === 404) {
-        removeWorkerSubscription(sub.endpoint);
-      } else {
-        console.error('[Push] Crew send error', crewMemberId, ':', err.statusCode || err.message, err.body || '');
+
+  // Channel 1: web-push (browser / installed PWA)
+  if (vapidConfigured) {
+    const subs = db.prepare('SELECT * FROM worker_push_subscriptions WHERE crew_member_id = ?').all(crewMemberId);
+    if (subs.length > 0) {
+      const payloadStr = JSON.stringify(payload);
+      console.log('[Push] -> crew', crewMemberId, '(' + subs.length + ' device(s)):', payload.title);
+      for (const sub of subs) {
+        const pushSub = { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } };
+        try {
+          await webpush.sendNotification(pushSub, payloadStr);
+          sent++;
+        } catch (err) {
+          failed++;
+          lastError = err.statusCode ? `HTTP ${err.statusCode} ${err.body || ''}`.trim() : err.message;
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            removeWorkerSubscription(sub.endpoint);
+          } else {
+            console.error('[Push] Crew send error', crewMemberId, ':', err.statusCode || err.message, err.body || '');
+          }
+        }
       }
     }
   }
+
+  // Channel 2: native app (APNs). Category prefs already honoured above.
+  try {
+    const native = await sendNativeToCrew(crewMemberId, payload);
+    sent += native.sent;
+    failed += native.failed;
+    if (native.lastError) lastError = native.lastError;
+  } catch (e) {
+    console.error('[Push] APNs channel error crew', crewMemberId, ':', e.message);
+  }
+
+  if (sent === 0 && failed === 0) return { sent, failed, reason: 'no-subscriptions' };
   return { sent, failed, lastError };
 }
 
@@ -244,9 +300,14 @@ async function sendPushToCrew(crewMemberId, payload) {
  * the crew count climbs above ~500.
  */
 async function sendPushToAllActiveCrew(payload) {
-  if (!vapidConfigured) return;
   const db = getDb();
-  const rows = db.prepare('SELECT DISTINCT crew_member_id FROM worker_push_subscriptions').all();
+  // Union of web-push subscribers and native-app devices — a crew member may
+  // have either or both; sendPushToCrew handles each channel's availability.
+  const rows = db.prepare(`
+    SELECT crew_member_id FROM worker_push_subscriptions
+    UNION
+    SELECT crew_member_id FROM worker_device_tokens
+  `).all();
   for (const r of rows) {
     try { await sendPushToCrew(r.crew_member_id, payload); /* category honoured inside */ }
     catch (e) { console.error('[Push] fan-out crew', r.crew_member_id, e.message); }
@@ -283,6 +344,9 @@ module.exports = {
   sendPushForNotifications,
   saveWorkerSubscription,
   removeWorkerSubscription,
+  saveWorkerDeviceToken,
+  removeWorkerDeviceToken,
+  sendNativeToCrew,
   sendPushToCrew,
   sendPushToAllActiveCrew,
   isWorkerCategoryEnabled,

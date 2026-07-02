@@ -85,6 +85,10 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 async function setupWorkerPush(registration) {
+  // Inside the native iOS app (Capacitor shell) push goes via APNs —
+  // worker-native.js handles it. WKWebView has no service-worker push, so
+  // subscribing here would just throw.
+  if (window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()) return;
   // CSRF token from the layout's <meta name="csrf-token"> — every
   // state-changing POST to /w/notifications/push/* must include it or
   // the global CSRF middleware silently 403s the request.

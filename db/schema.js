@@ -13818,6 +13818,25 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 302 error:', e.message); }
   }
 
+  // 303: native device tokens for the iOS worker app (Capacitor shell).
+  // Parallel to worker_push_subscriptions (web-push) — a crew member can have
+  // both a browser subscription and a native app token.
+  if (!isMigrationApplied.get(303)) {
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS worker_device_tokens (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        crew_member_id INTEGER NOT NULL REFERENCES crew_members(id) ON DELETE CASCADE,
+        platform TEXT NOT NULL DEFAULT 'ios',
+        token TEXT NOT NULL UNIQUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_wdt_crew ON worker_device_tokens(crew_member_id)');
+      recordMigration.run(303, 'worker_device_tokens: native APNs/FCM tokens for the iOS worker app');
+      console.log('Migration 303 applied');
+    } catch (e) { console.error('Migration 303 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

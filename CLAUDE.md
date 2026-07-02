@@ -225,9 +225,17 @@ SMTP_FROM_EMAIL=onboarding@resend.dev # change after domain verification
 SMTP_FROM_NAME=T&S Traffic Control
 # VAPID keys auto-generated and stored in system_config DB
 # Optional: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_EMAIL
+# Native iOS push (APNs) — channel no-ops until set. See docs/APP_STORE.md
+# APNS_TEAM_ID, APNS_KEY_ID, APNS_KEY_BASE64, APNS_BUNDLE_ID=au.com.atomis.crew, APNS_ENV=production
 ```
+
+## Native iOS app (Capacitor)
+- `mobile/` — Capacitor shell ("Atomis Crew", bundle id `au.com.atomis.crew`, SPM not CocoaPods). WKWebView loads the live portal via `server.url`; most updates ship by deploying `main`, no app release needed.
+- Server push is dual-channel: web-push (browsers/PWA) + APNs (`services/apns.js`, `worker_device_tokens` table, migration 303). `sendPushToCrew` fans out to both.
+- `public/js/worker-native.js` runs only inside the shell: APNs token registration, notification-tap deep links, Face ID lock.
+- Full build/submission runbook: `docs/APP_STORE.md`.
 
 ## Known Issues / TODO
 - **Default admin password**: Still `admin/admin123` on production — needs changing
 - **Resend domain**: Using `onboarding@resend.dev` — need to verify `tstc.com.au` domain in Resend for custom from address
-- **iOS push**: Limited support (iOS 16.4+ Safari only, must add to home screen)
+- **iOS push**: Web-push limited (iOS 16.4+ Safari, must add to home screen). Native app (mobile/) uses APNs instead — needs APNS_* env vars on Railway once the Apple Developer account exists.

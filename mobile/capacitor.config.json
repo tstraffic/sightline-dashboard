@@ -1,0 +1,19 @@
+{
+  "appId": "au.com.atomis.crew",
+  "appName": "Atomis Crew",
+  "webDir": "www",
+  "server": {
+    "url": "https://tstc.up.railway.app/w/home",
+    "allowNavigation": ["tstc.up.railway.app", "*.atomis.com.au"]
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#0f172a",
+    "scrollEnabled": true
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}
