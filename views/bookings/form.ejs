@@ -52,6 +52,8 @@
   ];
 %>
 
+<%- include('_backbar') %>
+
 <!-- Breadcrumb -->
 <div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
   <a href="/bookings" class="hover:text-gray-900 transition">Bookings</a>
@@ -173,19 +175,27 @@
         </select>
       </div>
       <div>
-        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Job / Project</label>
-        <select name="job_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-          <option value="">-- Select Job --</option>
-          <% if (typeof jobs !== 'undefined' && jobs.length) { jobs.forEach(j => { %>
-            <option value="<%= j.id %>" <%= isEdit && booking.job_id == j.id ? 'selected' : '' %>><%= j.job_number ? j.job_number + ' — ' : '' %><%= j.job_name %></option>
-          <% }); } %>
+        <div class="flex items-center justify-between mb-1">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Job / Project</label>
+          <button type="button" data-bk-project-new hidden class="text-xs font-semibold text-brand-600 hover:text-brand-700">+ New project</button>
+        </div>
+        <select name="job_id" data-bk-project-select class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">-- Select a client first --</option>
         </select>
+        <input type="text" name="site_label" data-bk-project-newinput placeholder="New project name" autocomplete="off" hidden
+          class="w-full mt-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
       <div>
-        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Location Context</label>
-        <input type="text" name="location_context" value="<%= val('location_context') %>"
-          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-          placeholder="e.g. Near intersection of Main & George">
+        <div class="flex items-center justify-between mb-1">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Location Context</label>
+          <button type="button" data-bk-loc-add class="text-xs font-semibold text-brand-600 hover:text-brand-700">+ Add</button>
+        </div>
+        <select name="location_context" data-bk-loc-select class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">Select Location Context</option>
+          <% var _lcCur = val('location_context'); var _lcs = (typeof locationContexts !== 'undefined' ? locationContexts : []); var _lcHas = false; %>
+          <% _lcs.forEach(function (lc) { _lcHas = _lcHas || (lc === _lcCur); %><option value="<%= lc %>" <%= lc === _lcCur ? 'selected' : '' %>><%= lc %></option><% }); %>
+          <% if (_lcCur && !_lcHas) { %><option value="<%= _lcCur %>" selected><%= _lcCur %></option><% } %>
+        </select>
       </div>
       <div>
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Order Number</label>
@@ -793,6 +803,32 @@
       <span>Equipment: <strong id="total-equipment" class="text-gray-900">0</strong></span>
     </div>
 
+    <!-- Hired equipment & suppliers — tick any gear hired in from another
+         company and pick its supplier. Only ticked items record a supplier. -->
+    <div class="mt-5 border-t border-gray-100 pt-4">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hired equipment &amp; suppliers</label>
+      <p class="text-xs text-gray-500 mb-2">Tick anything hired in from another company and choose the supplier.</p>
+      <div class="space-y-1.5">
+        <% var _hi = (typeof hireItems !== 'undefined' ? hireItems : {}); %>
+        <% (typeof hireableItems !== 'undefined' ? hireableItems : []).forEach(function (h) { var hk = h[0], hl = h[1]; var saved = _hi[hk]; %>
+          <div class="bk-hire-row flex flex-wrap items-center gap-2" data-hire-key="<%= hk %>">
+            <label class="inline-flex items-center gap-2 text-sm text-gray-800 min-w-[190px]">
+              <input type="checkbox" name="hired_<%= hk %>" value="1" class="bk-hire-check w-4 h-4 rounded border-gray-300" <%= saved ? 'checked' : '' %>>
+              <span><%= hl %></span>
+            </label>
+            <span class="bk-hire-supplier flex items-center gap-2 flex-1 min-w-[200px]" <%= saved ? '' : 'hidden' %>>
+              <select name="supplier_id_<%= hk %>" class="bk-hire-supsel flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm">
+                <option value="">— supplier —</option>
+                <% (typeof hireCompanies !== 'undefined' ? hireCompanies : []).forEach(function (hc) { %><option value="<%= hc.id %>" <%= saved && String(saved.hire_company_id) === String(hc.id) ? 'selected' : '' %>><%= hc.name %></option><% }); %>
+                <option value="__new">+ Add new…</option>
+              </select>
+              <input type="text" name="supplier_name_<%= hk %>" class="bk-hire-supnew flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm" placeholder="New supplier name" autocomplete="off" hidden>
+            </span>
+          </div>
+        <% }); %>
+      </div>
+    </div>
+
     <!-- Existing requirements_text field for free-text instructions -->
     <div class="mt-4">
       <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Requirements / Special Instructions</label>
@@ -1208,6 +1244,89 @@
         });
       });
     }
+  })();
+</script>
+
+<script>
+  // Client-scoped Project dropdown + add-new · location-context inline add ·
+  // hired-equipment supplier reveal. All on the full booking form.
+  (function () {
+    var clientSel = document.querySelector('select[name="client_id"]');
+    var projSel = document.querySelector('[data-bk-project-select]');
+    var projNewBtn = document.querySelector('[data-bk-project-new]');
+    var projNewInput = document.querySelector('[data-bk-project-newinput]');
+    var initialJob = <%- (isEdit && booking.job_id) ? JSON.stringify(String(booking.job_id)) : 'null' %>;
+
+    function setProjects(list, selId) {
+      if (!projSel) return;
+      projSel.innerHTML = '<option value="">— none —</option>';
+      (list || []).forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = p.id;
+        o.textContent = (p.job_number ? p.job_number + ' — ' : '') + (p.job_name || ('Project ' + p.id));
+        projSel.appendChild(o);
+      });
+      projSel.disabled = false;
+      if (projNewBtn) projNewBtn.hidden = false;
+      if (selId) projSel.value = String(selId);
+    }
+    function clearProjects() {
+      if (!projSel) return;
+      projSel.innerHTML = '<option value="">-- Select a client first --</option>';
+      projSel.disabled = true;
+      if (projNewBtn) projNewBtn.hidden = true;
+      if (projNewInput) { projNewInput.hidden = true; projNewInput.value = ''; }
+    }
+    function loadProjects(clientId, selId) {
+      if (!clientId) { clearProjects(); return; }
+      fetch('/bookings/api/projects?client_id=' + encodeURIComponent(clientId), { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { setProjects((j && j.projects) || [], selId); })
+        .catch(function () { setProjects([], selId); });
+    }
+    if (clientSel && projSel) {
+      clientSel.addEventListener('change', function () { loadProjects(this.value, null); });
+      if (clientSel.value) loadProjects(clientSel.value, initialJob); else clearProjects();
+    }
+    if (projNewBtn) projNewBtn.addEventListener('click', function () {
+      if (!projNewInput) return;
+      var showing = !projNewInput.hidden;
+      projNewInput.hidden = showing;
+      if (!showing) { if (projSel) projSel.value = ''; projNewInput.focus(); } else projNewInput.value = '';
+    });
+
+    // Location context inline add.
+    var locBtn = document.querySelector('[data-bk-loc-add]');
+    var locSel = document.querySelector('[data-bk-loc-select]');
+    if (locBtn && locSel) locBtn.addEventListener('click', function () {
+      var label = (window.prompt('New location context (e.g. Northern Compound):') || '').trim();
+      if (!label) return;
+      var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      fetch('/bookings/api/location-contexts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'x-csrf-token': csrf }, credentials: 'same-origin',
+        body: JSON.stringify({ label: label })
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || !j.ok) return;
+        locSel.innerHTML = '<option value="">Select Location Context</option>';
+        (j.items || []).forEach(function (lc) { var o = document.createElement('option'); o.value = lc; o.textContent = lc; locSel.appendChild(o); });
+        locSel.value = j.added || '';
+      }).catch(function () {});
+    });
+
+    // Hired equipment → supplier reveal.
+    document.addEventListener('change', function (e) {
+      if (e.target.classList && e.target.classList.contains('bk-hire-check')) {
+        var row = e.target.closest('.bk-hire-row');
+        var sup = row && row.querySelector('.bk-hire-supplier');
+        if (sup) sup.hidden = !e.target.checked;
+      }
+      if (e.target.classList && e.target.classList.contains('bk-hire-supsel')) {
+        var wrap = e.target.closest('.bk-hire-supplier');
+        var isNew = e.target.value === '__new';
+        var txt = wrap && wrap.querySelector('.bk-hire-supnew');
+        if (txt) { txt.hidden = !isNew; if (!isNew) txt.value = ''; }
+      }
+    });
   })();
 </script>
 

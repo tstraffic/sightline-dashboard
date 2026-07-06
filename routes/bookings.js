@@ -396,7 +396,7 @@ router.get('/new', (req, res) => {
     let supervisors = []; try { supervisors = db.prepare("SELECT id, full_name FROM crew_members WHERE active = 1 ORDER BY full_name").all(); } catch (e) {}
     let contacts = []; try { contacts = db.prepare("SELECT id, full_name, position, phone, mobile, email, company_id FROM client_contacts ORDER BY full_name").all(); } catch (e) {}
     let crewForSelect = []; try { crewForSelect = db.prepare("SELECT id, full_name, role, portal_role FROM crew_members WHERE active = 1 ORDER BY full_name").all(); } catch (e) {}
-    res.render('bookings/form', { title: 'New Booking', booking: null, jobs, clients, supervisors, contacts, crewForSelect, depots: getDepots(), user: req.session.user });
+    res.render('bookings/form', { title: 'New Booking', booking: null, jobs, clients, supervisors, contacts, crewForSelect, depots: getDepots(), hireableItems: HIREABLE_ITEMS, hireCompanies: getHireCompanies(db), locationContexts: getLocationContexts(db), hireItems: {}, user: req.session.user });
   } catch (err) {
     console.error('Bookings /new error:', err);
     req.flash('error', 'Failed to load form: ' + err.message);
@@ -478,6 +478,7 @@ router.post('/', (req, res) => {
     }
   }
   syncTCCrewVehicles(db, bookingId);
+  try { persistBookingHireItems(db, bookingId, b, req.session.user.id); } catch (e) { console.error('[bookings create] hire items failed:', e.message); }
 
   // Assign crew from form crew selector + auto-create allocations for worker portal.
   // Per-crew on-site role comes from `crew_role_<id>` (TC / TL / Supervisor —
@@ -823,6 +824,9 @@ router.get('/', (req, res) => {
     depots: getDepots(),
     statuses: VALID_STATUSES,
     addons: QUICK_ADDONS,
+    hireableItems: HIREABLE_ITEMS,
+    hireCompanies: getHireCompanies(db),
+    locationContexts: getLocationContexts(db),
     filters: { depot: filterDepot, status: filterStatus, q: req.query.q || '' },
     openBookingId,
     user: req.session.user,
@@ -882,6 +886,109 @@ const QUICK_REQ_FIELDS = [
 ];
 const QUICK_REQ_LABEL_TO_FIELD = QUICK_REQ_FIELDS.reduce((m, [f, l]) => { m[l] = f; return m; }, {});
 
+// Equipment add-ons that can be hired in from an external supplier — the
+// physical gear subset of QUICK_REQ_FIELDS (not people / permits / plans).
+// item_key matches the stepper field name so it's stable across the
+// delete-and-reinsert of booking_requirements.
+const HIREABLE_ITEMS = [
+  ['addon_arrow', 'Arrow Board'],
+  ['addon_light_tower', 'Light Tower'],
+  ['addon_pod_truck', 'Pod Truck'],
+  ['addon_portaboom', 'Portaboom'],
+  ['addon_speed_advisory', 'Speed Advisory Sign'],
+  ['addon_tma_dry', 'TMA (dry hire)'],
+  ['addon_tma_wet', 'TMA (wet hire)'],
+  ['addon_vms_board', 'VMS Board'],
+  ['addon_vms_ute', 'VMS Ute'],
+  ['addon_vehicle', 'Vehicle'],
+];
+const HIREABLE_KEYS = new Set(HIREABLE_ITEMS.map(([k]) => k));
+
+// Pick-lists for the booking forms.
+function getHireCompanies(db) {
+  try { return db.prepare("SELECT id, name FROM hire_companies WHERE active = 1 ORDER BY name").all(); } catch (e) { return []; }
+}
+function getLocationContexts(db) {
+  try { return db.prepare("SELECT label FROM location_contexts WHERE active = 1 ORDER BY label").all().map(r => r.label); } catch (e) { return []; }
+}
+
+// Resolve a supplier from posted fields: prefer an explicit hire_company_id,
+// else a typed company name (find-or-create in hire_companies). Returns
+// { hire_company_id, company_name } or null when nothing supplied.
+function resolveHireCompany(db, idVal, nameVal, userId) {
+  const id = idVal ? parseInt(idVal, 10) : null;
+  const name = (nameVal || '').trim();
+  if (id) {
+    const row = db.prepare('SELECT id, name FROM hire_companies WHERE id = ?').get(id);
+    if (row) return { hire_company_id: row.id, company_name: row.name };
+  }
+  if (name) {
+    const ex = db.prepare('SELECT id, name FROM hire_companies WHERE LOWER(name) = LOWER(?)').get(name);
+    if (ex) return { hire_company_id: ex.id, company_name: ex.name };
+    try {
+      const ins = db.prepare("INSERT INTO hire_companies (name, created_by_id, created_at) VALUES (?, ?, CURRENT_TIMESTAMP)").run(name, userId || null);
+      return { hire_company_id: Number(ins.lastInsertRowid), company_name: name };
+    } catch (e) { return { hire_company_id: null, company_name: name }; }
+  }
+  return null;
+}
+
+// Persist hired-item → supplier rows for a booking (delete-then-reinsert).
+// Per hireable item toggled on (hired_<key>=1), reads supplier from
+// supplier_id_<key> / supplier_name_<key>. Only call when the requirements
+// grid was actually submitted so partial POSTs never wipe existing rows.
+function persistBookingHireItems(db, bookingId, b, userId) {
+  const del = db.prepare('DELETE FROM booking_hire_items WHERE booking_id = ?');
+  const ins = db.prepare('INSERT OR IGNORE INTO booking_hire_items (booking_id, item_key, item_label, hire_company_id, company_name) VALUES (?, ?, ?, ?, ?)');
+  db.transaction(() => {
+    del.run(bookingId);
+    for (const [key, label] of HIREABLE_ITEMS) {
+      const raw = b['hired_' + key];
+      const hired = raw === '1' || raw === 'on' || raw === 'true';
+      if (!hired) continue;
+      const sup = resolveHireCompany(db, b['supplier_id_' + key], b['supplier_name_' + key], userId);
+      ins.run(bookingId, key, label, sup ? sup.hire_company_id : null, sup ? sup.company_name : '');
+    }
+  })();
+}
+
+// GET /api/projects?client_id= — client-scoped project (job) list for the
+// dependent Project dropdown. Empty list when no client. Mirrors the query
+// in routes/clients.js.
+router.get('/api/projects', (req, res) => {
+  const db = getDb();
+  const clientId = parseInt(req.query.client_id, 10);
+  if (!clientId) return res.json({ ok: true, projects: [] });
+  let projects = [];
+  try {
+    projects = db.prepare(`
+      SELECT id, job_number, job_name FROM jobs
+      WHERE client_id = ? AND status NOT IN ('closed','completed','cancelled')
+      ORDER BY job_name
+    `).all(clientId);
+  } catch (e) { /* jobs table shape */ }
+  res.json({ ok: true, projects });
+});
+
+// GET /api/location-contexts — the reusable label pick-list.
+router.get('/api/location-contexts', (req, res) => {
+  const db = getDb();
+  let items = [];
+  try { items = db.prepare('SELECT label FROM location_contexts WHERE active = 1 ORDER BY label').all().map(r => r.label); } catch (e) {}
+  res.json({ ok: true, items });
+});
+
+// POST /api/location-contexts — add a new reusable label (inline add).
+router.post('/api/location-contexts', (req, res) => {
+  const db = getDb();
+  const label = (req.body.label || '').trim();
+  if (!label) return res.status(400).json({ error: 'Label required' });
+  try { db.prepare('INSERT OR IGNORE INTO location_contexts (label) VALUES (?)').run(label); }
+  catch (e) { return res.status(500).json({ error: 'Could not save' }); }
+  const items = db.prepare('SELECT label FROM location_contexts WHERE active = 1 ORDER BY label').all().map(r => r.label);
+  res.json({ ok: true, items, added: label });
+});
+
 // GET /api/:id/edit-data — JSON snapshot of a booking's editable fields,
 // shaped to populate the Quick Book form (date / start_time / end_time split
 // out from the start_datetime / end_datetime stored on the row, etc.) so the
@@ -926,9 +1033,17 @@ router.get('/api/:id/edit-data', (req, res) => {
         if (field) requirements[field] = r.quantity_required;
       });
   } catch (e) {}
+  // Hired-item → supplier rows, keyed by item_key for easy prefill.
+  const hireItems = {};
+  try {
+    db.prepare('SELECT item_key, hire_company_id, company_name FROM booking_hire_items WHERE booking_id = ?')
+      .all(b.id)
+      .forEach(r => { hireItems[r.item_key] = { hire_company_id: r.hire_company_id, company_name: r.company_name }; });
+  } catch (e) {}
   res.json({
     ok: true,
     requirements,
+    hireItems,
     booking: {
       id: b.id, booking_number: b.booking_number,
       client_id: b.client_id, client_name: b.client_name || '',
@@ -1061,6 +1176,8 @@ router.post('/:id/quick-update', (req, res) => {
       // Keep ute placeholders in step with the TC-Crew requirement rows.
       try { syncTCCrewVehicles(db, parseInt(req.params.id, 10)); } catch (e) { console.error('syncTCCrewVehicles:', e.message); }
     } catch (e) { console.error('[bookings/quick-update] requirements rebuild failed:', e.message); }
+    // Hired-item suppliers ride with the grid.
+    try { persistBookingHireItems(db, parseInt(req.params.id, 10), b, req.session.user.id); } catch (e) { console.error('[bookings/quick-update] hire items failed:', e.message); }
   }
 
   // Move crew allocations along with any date/time change.
@@ -1257,6 +1374,7 @@ router.post('/quick', (req, res) => {
       try { insertEq.run(newId, a.label, a.category, qty); } catch (e) { /* swallow */ }
     }
   });
+  try { persistBookingHireItems(db, newId, b, req.session.user.id); } catch (e) { console.error('[bookings/quick] hire items failed:', e.message); }
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: newId, details: `Quick-created booking ${bookingNumber}`, req });
 
@@ -1625,8 +1743,11 @@ router.get('/:id', (req, res) => {
     console.error('[bookings.show] safety rollup error:', e.message);
   }
 
+  let hireSuppliers = [];
+  try { hireSuppliers = db.prepare('SELECT item_key, item_label, company_name FROM booking_hire_items WHERE booking_id = ? ORDER BY item_label').all(booking.id); } catch (e) {}
   res.render('bookings/show', {
     title: 'Booking ' + booking.booking_number,
+    hireSuppliers,
     booking: { ...booking, supervisor: booking.supervisor_name, requester_name: requesterName, planner_name: plannerName, site_contact_names: siteContactNames, tags_list: tagsList,
       project: { name: booking.title || (booking.job ? booking.job.job_name : ''), client: booking.client ? booking.client.company_name : (booking.job ? booking.job.client : ''), address: booking.site_address || (booking.job ? booking.job.site_address : ''), orderNumber: booking.order_number, billingCode: booking.billing_code },
       startDateTime: booking.start_datetime, endDateTime: booking.end_datetime,
@@ -1706,11 +1827,19 @@ router.get('/:id/edit', (req, res) => {
       WHERE bd.booking_id = ? ORDER BY bd.created_at DESC
     `).all(req.params.id);
   } catch (e) { /* legacy DB without booking_documents */ }
+  const hireItems = {};
+  try {
+    db.prepare('SELECT item_key, hire_company_id, company_name FROM booking_hire_items WHERE booking_id = ?')
+      .all(req.params.id)
+      .forEach(r => { hireItems[r.item_key] = { hire_company_id: r.hire_company_id, company_name: r.company_name }; });
+  } catch (e) {}
   res.render('bookings/form', {
     title: 'Edit Booking ' + booking.booking_number,
     booking, jobs, clients, supervisors, contacts, crewForSelect,
     depots: getDepots(), user: req.session.user,
     bookingDocuments,
+    hireableItems: HIREABLE_ITEMS, hireCompanies: getHireCompanies(db),
+    locationContexts: getLocationContexts(db), hireItems,
   });
 });
 
@@ -1748,6 +1877,7 @@ router.post('/:id', (req, res) => {
     }
   }
   syncTCCrewVehicles(db, req.params.id);
+  try { persistBookingHireItems(db, parseInt(req.params.id, 10), b, req.session.user.id); } catch (e) { console.error('[bookings update] hire items failed:', e.message); }
 
   // Update crew assignments — but ONLY when the form actually contained a
   // crew picker. Without the explicit `crew_ids_present` flag we leave the

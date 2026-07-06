@@ -252,11 +252,24 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
    ───────────────────────────────────────────────────────────── */
 .bk2-edit-backdrop {
   position: fixed; inset: 0;
-  background: rgba(0,0,0,0.45); backdrop-filter: blur(2px);
+  /* No blur and only the faintest dim — the planner keeps full sight of the
+     board on the left while editing; the edited card is highlighted instead
+     (see .bk2-card.is-editing). Still catches clicks to close. */
+  background: rgba(15,23,42,0.06);
   opacity: 0; transition: opacity 200ms ease;
   z-index: 1000;
 }
 .bk2-edit-backdrop.is-open { opacity: 1; }
+/* The booking currently open in the quick-edit slide-over — ringed + glowing
+   so it stands out on the un-dimmed board. */
+.bk2-card.is-editing {
+  position: relative;
+  z-index: 1002;
+  outline: 2px solid #2B7FFF;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 4px rgba(43,127,255,0.20), 0 0 20px 2px rgba(43,127,255,0.55);
+  border-radius: 10px;
+}
 .bk2-editor {
   position: fixed; top: 0; right: 0; bottom: 0;
   width: min(92vw, 1200px);

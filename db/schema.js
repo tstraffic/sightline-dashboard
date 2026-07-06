@@ -13841,6 +13841,44 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 303 error:', e.message); }
   }
 
+  // 304: per-booking hired equipment → supplier mapping. Bookings have no
+  // supplier column, and equipment add-ons live in booking_requirements which
+  // is wiped + rebuilt on every save — so supplier is keyed by item_key here
+  // (stable across req reinserts). One row per hired item on a booking.
+  if (!isMigrationApplied.get(304)) {
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS booking_hire_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+        item_key TEXT NOT NULL,
+        item_label TEXT DEFAULT '',
+        hire_company_id INTEGER REFERENCES hire_companies(id) ON DELETE SET NULL,
+        company_name TEXT DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(booking_id, item_key)
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_bhi_booking ON booking_hire_items(booking_id)');
+      recordMigration.run(304, 'booking_hire_items: hired equipment → supplier per booking');
+      console.log('Migration 304 applied');
+    } catch (e) { console.error('Migration 304 error:', e.message); }
+  }
+
+  // 305: reusable location-context labels (e.g. "Northern Compound") that can
+  // be applied to any booking. The chosen label is stored on
+  // bookings.location_context (existing column); this is the pick-list master.
+  if (!isMigrationApplied.get(305)) {
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS location_contexts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        label TEXT NOT NULL UNIQUE,
+        active INTEGER NOT NULL DEFAULT 1,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      recordMigration.run(305, 'location_contexts: reusable location-context labels');
+      console.log('Migration 305 applied');
+    } catch (e) { console.error('Migration 305 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

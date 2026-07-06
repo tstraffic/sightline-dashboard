@@ -794,10 +794,8 @@
                 <% depots.forEach(function (d) { %><option value="<%= d %>"><%= d %></option><% }); %>
               </select>
             </label>
-            <label class="bk2-create-field">
-              <span class="bk2-create-lbl">Supplier</span>
-              <input type="text" name="supplier_name" placeholder="Select Supplier">
-            </label>
+            <%# Supplier is captured per hired item in "Hired equipment & suppliers" below,
+                and only when a hire item is actually on the booking. %>
           </div>
         </div>
 
@@ -814,12 +812,24 @@
               <input type="hidden" name="client_id" id="bk2c-client-id">
             </div>
             <label class="bk2-create-field">
-              <span class="bk2-create-lbl">Project</span>
-              <input list="bk2-jobs" name="site_label" placeholder="Select Project" autocomplete="off">
+              <span class="bk2-create-lbl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span>Project</span>
+                <button type="button" class="bk2c-mini-add" data-bk-project-new hidden>+ New project</button>
+              </span>
+              <select name="job_id" data-bk-project-select disabled>
+                <option value="">Select a client first</option>
+              </select>
+              <input type="text" name="site_label" data-bk-project-newinput placeholder="New project name" autocomplete="off" hidden style="margin-top:6px;">
             </label>
             <label class="bk2-create-field">
-              <span class="bk2-create-lbl">Location Context</span>
-              <select name="location_context"><option value="">Select Location Context</option></select>
+              <span class="bk2-create-lbl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span>Location Context</span>
+                <button type="button" class="bk2c-mini-add" data-bk-loc-add>+ Add</button>
+              </span>
+              <select name="location_context" data-bk-loc-select>
+                <option value="">Select Location Context</option>
+                <% (typeof locationContexts !== 'undefined' ? locationContexts : []).forEach(function (lc) { %><option value="<%= lc %>"><%= lc %></option><% }); %>
+              </select>
             </label>
             <label class="bk2-create-field">
               <span class="bk2-create-lbl">Purchase Order / Client job number</span>
@@ -1060,6 +1070,31 @@
             </div>
           </div>
           <p class="bk2-create-reqs-summary">People: <strong id="bk2-create-pp">2</strong> · Vehicles: <strong id="bk2-create-vv">1</strong> · Equipment: <strong id="bk2-create-ee">0</strong></p>
+        </div>
+
+        <!-- HIRED EQUIPMENT & SUPPLIERS — only shows rows for equipment that's
+             on the booking; mark a row "hired in" to record its supplier. -->
+        <div class="bk2-create-card" data-bk-hire-card hidden>
+          <h3 class="bk2-create-head">Hired equipment &amp; suppliers</h3>
+          <p class="bk2-create-hint">For any item hired in from another company, tick it and pick the supplier.</p>
+          <div class="bk2-hire-list">
+            <% (typeof hireableItems !== 'undefined' ? hireableItems : []).forEach(function (hi) { var hkey = hi[0], hlabel = hi[1]; %>
+              <div class="bk2-hire-row" data-hire-key="<%= hkey %>" hidden style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #EEF0F3;">
+                <label style="display:flex;align-items:center;gap:6px;min-width:180px;font-size:13px;">
+                  <input type="checkbox" name="hired_<%= hkey %>" value="1" class="bk2-hire-check">
+                  <span><%= hlabel %> — hired in</span>
+                </label>
+                <span class="bk2-hire-supplier" hidden style="display:flex;align-items:center;gap:6px;flex:1;min-width:200px;">
+                  <select name="supplier_id_<%= hkey %>" class="bk2-hire-supsel" style="flex:1;">
+                    <option value="">— supplier —</option>
+                    <% (typeof hireCompanies !== 'undefined' ? hireCompanies : []).forEach(function (hc) { %><option value="<%= hc.id %>"><%= hc.name %></option><% }); %>
+                    <option value="__new">+ Add new…</option>
+                  </select>
+                  <input type="text" name="supplier_name_<%= hkey %>" class="bk2-hire-supnew" placeholder="New supplier name" autocomplete="off" hidden style="flex:1;">
+                </span>
+              </div>
+            <% }); %>
+          </div>
         </div>
 
         <!-- BOOKING POOL -->
@@ -1330,6 +1365,8 @@
       var id = byName[nm.toLowerCase()] || '';
       curClientId = id || null;
       idInput.value = id || '';
+      // Let the project dropdown react (client-scoped projects).
+      try { document.dispatchEvent(new CustomEvent('bk2-client-changed', { detail: { clientId: curClientId } })); } catch (e) {}
       addContactBtn.disabled = !curClientId;
       if (!curClientId) { setHint(nm ? 'Create this client (“+ New client”) to add its contacts.' : 'Pick a client first to choose or add site contacts.'); return; }
       // Load this client's contacts.
@@ -1630,6 +1667,8 @@
     ed.classList.remove('is-open'); bd.classList.remove('is-open');
     setTimeout(function () { ed.hidden = true; bd.hidden = true; }, 220);
     document.body.style.overflow = '';
+    // Drop the board-card highlight.
+    try { document.querySelectorAll('.bk2-card.is-editing').forEach(function (c) { c.classList.remove('is-editing'); }); } catch (e) {}
     // A booking was created while the editor was open — the board behind
     // doesn't show the new card yet. Refresh it now (on close) instead of
     // yanking the planner out mid-edit with a reload right after Create.
@@ -1663,6 +1702,12 @@
     var created = $('#bk2-edit-created'); if (created) created.hidden = true;
     ed.dataset.existing = '1';
     ed.dataset.bookingId = id;
+    // Highlight the card being edited on the (un-dimmed) board + bring it into view.
+    try {
+      document.querySelectorAll('.bk2-card.is-editing').forEach(function (c) { c.classList.remove('is-editing'); });
+      var card = document.querySelector('.bk2-card[data-booking-id="' + id + '"]');
+      if (card) { card.classList.add('is-editing'); card.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    } catch (e) {}
     setEditorMode('edit');
     var t = $('#bk2-edit-title');
     if (t) t.textContent = (number ? ('#' + number) : ('Booking ' + id)) + (title ? ' · ' + title : '');
@@ -1744,6 +1789,13 @@
           inp.value = (saved != null) ? String(saved) : '0';
           inp.dispatchEvent(new Event('input', { bubbles: true }));
         });
+
+        // Client-scoped Project dropdown: load this client's projects then
+        // select the saved one. Then apply saved hired-item suppliers (after
+        // the steppers above have revealed the relevant hire rows).
+        try { if (window.bk2LoadProjects) window.bk2LoadProjects(b.client_id, b.job_id); } catch (e) {}
+        try { if (window.bk2RefreshHireRows) window.bk2RefreshHireRows(); } catch (e) {}
+        try { if (window.bk2ApplyHireItems) window.bk2ApplyHireItems(data.hireItems || {}); } catch (e) {}
 
         // Booking type / callout / status side-effects.
         var statusPill = document.querySelector('.bk2-edit-statuspill[data-status-set="' + (b.status || '') + '"]');
@@ -2028,6 +2080,130 @@
   }
   $$('.bk2-create-req input[type="number"]').forEach(function (i) { i.addEventListener('input', reqRepaint); });
   reqRepaint();
+
+  // ── Hired equipment + suppliers · client-scoped projects · location-context
+  //    add — all scoped to the quick-edit slide-over form (#bk2-edit-form). ──
+  (function () {
+    var form = document.getElementById('bk2-edit-form'); if (!form) return;
+    var hireCard = form.querySelector('[data-bk-hire-card]');
+
+    // Show a hire row only when its equipment stepper qty > 0; show the card
+    // when at least one row is visible.
+    function refreshHireRows() {
+      if (!hireCard) return;
+      var anyVisible = false;
+      hireCard.querySelectorAll('.bk2-hire-row').forEach(function (row) {
+        var key = row.getAttribute('data-hire-key');
+        var inp = form.querySelector('input[name="' + key + '"]');
+        var qty = inp ? (parseInt(inp.value, 10) || 0) : 0;
+        var show = qty > 0;
+        row.hidden = !show;
+        if (show) { anyVisible = true; }
+        else {
+          var chk = row.querySelector('.bk2-hire-check'); if (chk) chk.checked = false;
+          var sup = row.querySelector('.bk2-hire-supplier'); if (sup) sup.hidden = true;
+        }
+      });
+      hireCard.hidden = !anyVisible;
+    }
+    window.bk2RefreshHireRows = refreshHireRows;
+
+    form.addEventListener('change', function (e) {
+      if (e.target.classList && e.target.classList.contains('bk2-hire-check')) {
+        var row = e.target.closest('.bk2-hire-row');
+        var sup = row && row.querySelector('.bk2-hire-supplier');
+        if (sup) sup.hidden = !e.target.checked;
+      }
+      if (e.target.classList && e.target.classList.contains('bk2-hire-supsel')) {
+        var wrap = e.target.closest('.bk2-hire-supplier');
+        var isNew = e.target.value === '__new';
+        var txt = wrap && wrap.querySelector('.bk2-hire-supnew');
+        if (txt) { txt.hidden = !isNew; if (!isNew) txt.value = ''; }
+      }
+    });
+    form.querySelectorAll('.bk2-create-stepper input[type="number"]').forEach(function (i) { i.addEventListener('input', refreshHireRows); });
+    refreshHireRows();
+
+    // Prefill saved hired items (edit mode).
+    window.bk2ApplyHireItems = function (map) {
+      refreshHireRows();
+      Object.keys(map || {}).forEach(function (key) {
+        var row = hireCard && hireCard.querySelector('.bk2-hire-row[data-hire-key="' + key + '"]');
+        if (!row) return;
+        var chk = row.querySelector('.bk2-hire-check'); if (chk) chk.checked = true;
+        var sup = row.querySelector('.bk2-hire-supplier'); if (sup) sup.hidden = false;
+        var sel = row.querySelector('.bk2-hire-supsel');
+        var rec = map[key] || {};
+        if (sel && rec.hire_company_id) {
+          sel.value = String(rec.hire_company_id);
+          if (sel.value !== String(rec.hire_company_id)) { // company deactivated → name fallback
+            sel.value = '__new';
+            var txt = row.querySelector('.bk2-hire-supnew'); if (txt) { txt.hidden = false; txt.value = rec.company_name || ''; }
+          }
+        }
+      });
+    };
+
+    // ── Client-scoped Project dropdown ──
+    var projSel = form.querySelector('[data-bk-project-select]');
+    var projNewBtn = form.querySelector('[data-bk-project-new]');
+    var projNewInput = form.querySelector('[data-bk-project-newinput]');
+    function setProjects(list, selectId) {
+      if (!projSel) return;
+      projSel.innerHTML = '<option value="">— none —</option>';
+      (list || []).forEach(function (p) {
+        var o = document.createElement('option');
+        o.value = p.id;
+        o.textContent = (p.job_number ? p.job_number + ' — ' : '') + (p.job_name || ('Project ' + p.id));
+        projSel.appendChild(o);
+      });
+      projSel.disabled = false;
+      if (projNewBtn) projNewBtn.hidden = false;
+      if (selectId) projSel.value = String(selectId);
+    }
+    function clearProjects() {
+      if (!projSel) return;
+      projSel.innerHTML = '<option value="">Select a client first</option>';
+      projSel.disabled = true;
+      if (projNewBtn) projNewBtn.hidden = true;
+      if (projNewInput) { projNewInput.hidden = true; projNewInput.value = ''; }
+    }
+    window.bk2LoadProjects = function (clientId, selectId) {
+      if (!clientId) { clearProjects(); return; }
+      fetch('/bookings/api/projects?client_id=' + encodeURIComponent(clientId), { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) { setProjects((j && j.projects) || [], selectId); })
+        .catch(function () { setProjects([], selectId); });
+    };
+    document.addEventListener('bk2-client-changed', function (e) {
+      var cid = e.detail && e.detail.clientId;
+      if (cid) window.bk2LoadProjects(cid); else clearProjects();
+    });
+    if (projNewBtn) projNewBtn.addEventListener('click', function () {
+      if (!projNewInput) return;
+      var showing = !projNewInput.hidden;
+      projNewInput.hidden = showing;
+      if (!showing) { if (projSel) projSel.value = ''; projNewInput.focus(); } else projNewInput.value = '';
+    });
+
+    // ── Location context: inline add ──
+    var locBtn = form.querySelector('[data-bk-loc-add]');
+    var locSel = form.querySelector('[data-bk-loc-select]');
+    if (locBtn && locSel) locBtn.addEventListener('click', function () {
+      var label = (window.prompt('New location context (e.g. Northern Compound):') || '').trim();
+      if (!label) return;
+      var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      fetch('/bookings/api/location-contexts', {
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'x-csrf-token': csrf }, credentials: 'same-origin',
+        body: JSON.stringify({ label: label })
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (!j || !j.ok) return;
+        locSel.innerHTML = '<option value="">Select Location Context</option>';
+        (j.items || []).forEach(function (lc) { var o = document.createElement('option'); o.value = lc; o.textContent = lc; locSel.appendChild(o); });
+        locSel.value = j.added || '';
+      }).catch(function () {});
+    });
+  })();
 
   // Search filter for the requirements list.
   var reqSearch = $('.bk2-create-search');

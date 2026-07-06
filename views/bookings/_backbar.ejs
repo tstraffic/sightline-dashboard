@@ -1,0 +1,10 @@
+<%# Shared "back" affordance for bookings full pages. Defaults to the day
+    board; pass { backHref, backLabel } to point somewhere more specific. %>
+<% var _bh = (typeof backHref !== 'undefined' && backHref) ? backHref : '/bookings'; %>
+<% var _bl = (typeof backLabel !== 'undefined' && backLabel) ? backLabel : 'Back to board'; %>
+<div class="mb-4">
+  <a href="<%= _bh %>" class="inline-flex items-center gap-1.5 text-xs font-semibold text-gray-500 hover:text-brand-600 transition">
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+    <%= _bl %>
+  </a>
+</div>
