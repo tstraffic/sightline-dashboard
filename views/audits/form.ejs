@@ -2,8 +2,31 @@
 <% function val(k, fallback) { return (a && a[k] != null) ? a[k] : (fallback || ''); } %>
 <% function stateOf(r) { if (!r) return ''; if (r.state) return r.state; if (r.na) return 'na'; if (r.checked) return 'yes'; return ''; } %>
 <% const ctxMap = (typeof attachmentsByContext !== 'undefined') ? (attachmentsByContext || {}) : {}; %>
-<% const crew = (typeof onSiteCrew !== 'undefined' ? onSiteCrew : []) || []; %>
-<% const selectedCrewIds = ((typeof auditCrew !== 'undefined' ? auditCrew : []) || []).map(function(c){ return c.crew_member_id; }); %>
+<% const _onSite = (typeof onSiteCrew !== 'undefined' ? onSiteCrew : []) || []; %>
+<% const _auditCrew = (typeof auditCrew !== 'undefined' ? auditCrew : []) || []; %>
+<% const selectedCrewIds = _auditCrew.map(function(c){ return c.crew_member_id; }); %>
+<% const _anySaved = selectedCrewIds.length > 0; %>
+<% function _isPresent(cmId){ return _anySaved ? (selectedCrewIds.indexOf(cmId) !== -1) : true; } %>
+<%
+  // Effective site roster = auto-pulled on-site crew ∪ any workers already
+  // saved on this audit (so manually-added workers survive edits). Rendered
+  // everywhere crew appears (roster + per-person tagging).
+  const _crewMap = {};
+  _onSite.forEach(function(c){ _crewMap[c.crew_member_id] = c; });
+  _auditCrew.forEach(function(ac){
+    if (!_crewMap[ac.crew_member_id]) _crewMap[ac.crew_member_id] = {
+      crew_member_id: ac.crew_member_id, full_name: ac.full_name,
+      role_on_site: ac.role_on_site || '', employee_id: ac.employee_id || null,
+      linked: !!ac.employee_id, source: ac.source || 'manual',
+    };
+  });
+  const crew = Object.keys(_crewMap).map(function(k){ return _crewMap[k]; })
+    .sort(function(a,b){ return (a.full_name||'').localeCompare(b.full_name||''); });
+  // Crew available to add = all active crew not already on the roster.
+  const _onIds = {}; crew.forEach(function(c){ _onIds[c.crew_member_id] = true; });
+  const addableCrew = ((typeof allCrew !== 'undefined' ? allCrew : []) || [])
+    .filter(function(c){ return !_onIds[c.crew_member_id]; });
+%>
 <% const tagMap = (typeof tagsByKey !== 'undefined' ? tagsByKey : {}) || {}; %>
 <% const WORK_TYPES = [['static','Static lane closure'],['mobile','Mobile works'],['shoulder','Shoulder works'],['intersection','Intersection']]; %>
 <%
@@ -94,24 +117,37 @@
         <div class="sm:col-span-2"><label class="block text-xs font-semibold text-gray-700 mb-1">Weather / Visibility</label><input name="weather" value="<%= val('weather') %>" class="w-full px-3 py-2.5 text-base border border-gray-300 rounded-lg"></div>
       </div>
 
-      <!-- Crew on site -->
+      <!-- Workers on site -->
       <div class="mt-5 pt-4 border-t border-gray-100">
-        <label class="block text-xs font-semibold text-gray-700 mb-1">Crew on site <span class="text-gray-400 font-normal">— pulled from the roster for this job + date; tick who's present</span></label>
+        <div class="flex items-center justify-between mb-2">
+          <label class="block text-sm font-bold text-gray-900">Workers on site <span class="text-gray-400 font-normal text-xs">— everyone being audited</span></label>
+          <span class="text-[11px] text-gray-500"><span id="crew-count"><%= initialOnSite %></span> listed</span>
+        </div>
+        <p class="text-[11px] text-gray-500 mb-2">Rostered crew for this job &amp; date are pre-filled — untick anyone not present, or add others below. These are the workers you can flag on the PPE section.</p>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="crew-list">
+          <% crew.forEach(function(c){ const checked = _isPresent(c.crew_member_id); %>
+            <label class="flex items-center gap-2 px-3 py-2 rounded-lg border <%= c.ticketExpired ? 'border-red-300 bg-red-50' : (c.linked ? 'border-gray-200' : 'border-amber-300 bg-amber-50') %>" data-crew-label="<%= c.crew_member_id %>">
+              <input type="checkbox" class="crew-check w-4 h-4 rounded border-gray-300" name="crew_member_ids" value="<%= c.crew_member_id %>" data-linked="<%= c.linked ? '1':'0' %>" data-name="<%= c.full_name %>" <%= checked ? 'checked' : '' %>>
+              <span class="text-sm text-gray-800 flex-1 min-w-0 truncate"><%= c.full_name %><% if (c.role_on_site) { %> <span class="text-gray-400">· <%= c.role_on_site %></span><% } %></span>
+              <% if (c.ticketExpired) { %><span class="text-[10px] font-semibold text-red-700 whitespace-nowrap" title="<%= c.ticketWarning %>">⚠ ticket</span><% } %>
+              <% if (!c.linked) { %><span class="text-[10px] font-semibold text-amber-700 whitespace-nowrap" title="No HR profile linked — can't push a note to this worker's review">no HR link</span><% } %>
+            </label>
+          <% }) %>
+        </div>
         <% if (!crew.length) { %>
-          <p class="text-xs text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2">No rostered crew found for this job/date. Link a job and set the date, then save — or add crew via the roster.</p>
-        <% } else { %>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2" id="crew-list">
-            <% crew.forEach(function(c){ const checked = selectedCrewIds.indexOf(c.crew_member_id) !== -1; %>
-              <label class="flex items-center gap-2 px-3 py-2 rounded-lg border <%= c.ticketExpired ? 'border-red-300 bg-red-50' : (c.linked ? 'border-gray-200' : 'border-amber-300 bg-amber-50') %>">
-                <input type="checkbox" class="crew-check w-4 h-4 rounded border-gray-300" name="crew_member_ids" value="<%= c.crew_member_id %>" data-linked="<%= c.linked ? '1':'0' %>" <%= checked ? 'checked' : '' %>>
-                <span class="text-sm text-gray-800 flex-1 min-w-0 truncate"><%= c.full_name %><% if (c.role_on_site) { %> <span class="text-gray-400">· <%= c.role_on_site %></span><% } %></span>
-                <% if (c.ticketExpired) { %><span class="text-[10px] font-semibold text-red-700 whitespace-nowrap" title="<%= c.ticketWarning %>">⚠ ticket</span><% } %>
-                <% if (!c.linked) { %><span class="text-[10px] font-semibold text-amber-700 whitespace-nowrap" title="No HR profile linked — can't tag this worker">no HR link</span><% } %>
-              </label>
-            <% }) %>
-          </div>
-          <p class="text-[11px] text-gray-400 mt-1"><span id="crew-count"><%= initialOnSite %></span> on site. Workers without an HR profile link can't be tagged on per-person items.</p>
+          <p id="crew-empty" class="text-xs text-gray-500 italic bg-gray-50 rounded-lg px-3 py-2 mt-1">No rostered crew found for this job/date — add the workers on site below.</p>
         <% } %>
+        <!-- Add a worker not on the roster -->
+        <div class="mt-3 flex items-center gap-2">
+          <select id="add-worker-select" class="flex-1 px-3 py-2.5 text-sm border border-gray-300 rounded-lg bg-white">
+            <option value="">＋ Add a worker on site…</option>
+            <% addableCrew.forEach(function(c){ %>
+              <option value="<%= c.crew_member_id %>" data-name="<%= c.full_name %>" data-linked="<%= c.linked ? '1':'0' %>"><%= c.full_name %><%= c.linked ? '' : ' (no HR link)' %></option>
+            <% }) %>
+          </select>
+          <button type="button" id="add-worker-btn" class="px-3.5 py-2.5 text-sm font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-lg whitespace-nowrap">Add</button>
+        </div>
+        <p class="text-[11px] text-gray-400 mt-1">Workers without an HR profile link can be listed, but a flag won't push to their review.</p>
       </div>
     </section>
 
@@ -125,6 +161,7 @@
 
     <!-- Checklist sections (template-driven) -->
     <% sections.forEach(function(section) { %>
+      <% const isPPESection = section.key === 'S3'; %>
       <section class="bg-white border border-gray-200 rounded-xl overflow-hidden" data-section="<%= section.key %>">
         <header class="bg-brand-600 text-white px-4 sm:px-5 py-3 flex items-center justify-between">
           <h2 class="text-sm lg:text-base font-bold"><%= section.key %>. <%= section.title %></h2>
@@ -170,19 +207,22 @@
               </div>
 
               <% if (perPerson) { %>
-                <!-- Per-person tagging -->
+                <!-- Per-person tagging. In Section 3 (PPE) this box is hidden
+                     until "No" is pressed, so the auditor picks WHO was
+                     non-compliant. Elsewhere it stays visible (compliant-by-
+                     default single-out). -->
                 <input type="hidden" name="q_<%= key %>_on_site_count" value="<%= initialOnSite %>" class="pp-onsite">
-                <div class="pp-block bg-blue-50/40 border border-blue-100 rounded-lg p-3" data-pp="<%= key %>">
+                <div class="pp-block bg-blue-50/40 border border-blue-100 rounded-lg p-3 <%= (isPPESection && currentState !== 'no') ? 'hidden' : '' %>" data-pp="<%= key %>" data-ppreveal="<%= isPPESection ? '1' : '' %>">
                   <% if (!crew.length) { %>
-                    <p class="text-xs text-gray-500 italic">Tick the crew on site above to tag individuals here.</p>
-                  <% } else { %>
-                    <p class="text-[11px] font-semibold text-blue-900 mb-2">Crew compliant by default — tap to single out anyone who wasn't:</p>
-                    <div class="space-y-2">
+                    <p class="text-xs text-gray-500 italic" data-pp-empty>Add the workers on site above to tag individuals here.</p>
+                  <% } %>
+                  <p class="text-[11px] font-semibold text-blue-900 mb-2 <%= crew.length ? '' : 'hidden' %>" data-pp-intro><%= isPPESection ? 'Who was missing this? Tap each worker it applied to:' : 'Crew compliant by default — tap to single out anyone who wasn\'t:' %></p>
+                  <div class="space-y-2 pp-rows" data-rows-key="<%= key %>">
                       <% crew.forEach(function(c){
                            const cid = String(c.crew_member_id);
                            const tg = tagByCrew[cid];
                            const tagged = exIds.indexOf(cid) !== -1 || !!tg;
-                           const selected = selectedCrewIds.indexOf(c.crew_member_id) !== -1;
+                           const selected = _isPresent(c.crew_member_id);
                       %>
                         <div class="pp-crew-row <%= selected ? '' : 'hidden' %>" data-crew-row="<%= cid %>">
                           <label class="flex items-center gap-2">
@@ -203,7 +243,6 @@
                         </div>
                       <% }) %>
                     </div>
-                  <% } %>
                 </div>
               <% } else { %>
                 <!-- Site-level NO block -->
@@ -237,6 +276,40 @@
                     <label class="block text-[11px] font-semibold text-red-900 uppercase tracking-wide mb-1">Responsible Person <span class="text-red-500">*</span></label>
                     <input name="q_<%= key %>_responsible" value="<%= r.responsible || '' %>" placeholder="Name and role" class="w-full px-3 py-2 text-sm border border-red-200 rounded-md bg-white no-resp">
                   </div>
+                  <% if (isPPESection) { %>
+                    <!-- Optional: attribute this to specific workers → adds a
+                         note to their HR review. Does not change the score. -->
+                    <div class="pp-affected pt-3 border-t border-red-200" data-affected="<%= key %>">
+                      <p class="text-[11px] font-semibold text-red-900 mb-2">Which worker(s) did this affect? <span class="font-normal text-red-700/70">(optional — adds a note to their review)</span></p>
+                      <p class="text-xs text-gray-500 italic <%= crew.length ? 'hidden' : '' %>" data-pp-empty>Add the workers on site above to attribute individuals here.</p>
+                      <div class="space-y-2 pp-rows" data-rows-key="<%= key %>">
+                        <% crew.forEach(function(c){
+                             const cid = String(c.crew_member_id);
+                             const tg = tagByCrew[cid];
+                             const tagged = !!tg;
+                             const selected = _isPresent(c.crew_member_id);
+                        %>
+                          <div class="pp-crew-row <%= selected ? '' : 'hidden' %>" data-crew-row="<%= cid %>">
+                            <label class="flex items-center gap-2">
+                              <input type="checkbox" class="pp-tag-check w-4 h-4 rounded border-gray-300" name="q_<%= key %>_tag_members" value="<%= cid %>" <%= tagged ? 'checked' : '' %> <%= c.linked ? '' : 'disabled' %>>
+                              <span class="text-sm text-gray-800"><%= c.full_name %></span>
+                              <% if (!c.linked) { %><span class="text-[10px] text-amber-700">(link HR profile to tag)</span><% } %>
+                            </label>
+                            <div class="pp-tag-detail mt-1.5 ml-6 grid grid-cols-1 sm:grid-cols-3 gap-2 <%= tagged ? '' : 'hidden' %>">
+                              <input name="q_<%= key %>_tag_<%= cid %>_issue" value="<%= tg ? (tg.issue||'') : '' %>" placeholder="What was wrong" class="text-sm px-2 py-1.5 border border-red-200 rounded sm:col-span-2">
+                              <select name="q_<%= key %>_tag_<%= cid %>_risk" class="text-sm px-2 py-1.5 border border-red-200 rounded bg-white">
+                                <% ['Low','Medium','High','Critical'].forEach(function(rl){ %><option value="<%= rl %>" <%= (tg && tg.risk_level===rl) || (!tg && rl==='Medium') ? 'selected' : '' %>><%= rl %></option><% }) %>
+                              </select>
+                              <label class="flex items-center gap-1.5 text-[11px] text-gray-600 sm:col-span-3">
+                                <input type="checkbox" name="q_<%= key %>_tag_<%= cid %>_visibility" value="worker" <%= tg && tg.visibility==='worker' ? 'checked' : '' %> class="w-3.5 h-3.5 rounded border-gray-300">
+                                Share this with the worker (else internal-only)
+                              </label>
+                            </div>
+                          </div>
+                        <% }) %>
+                      </div>
+                    </div>
+                  <% } %>
                 </div>
               <% } %>
 
@@ -448,6 +521,16 @@
     var noBlock = document.querySelector('[data-no-fields="'+key+'"]'); var notes = document.querySelector('[data-notes-for="'+key+'"]'); var na = document.querySelector('[data-na-reason-for="'+key+'"]');
     if (noBlock) { if (state==='no') { noBlock.classList.remove('hidden'); if (notes) notes.classList.add('hidden'); } else { noBlock.classList.add('hidden'); if (notes) notes.classList.remove('hidden'); } }
     if (na) na.classList.toggle('hidden', state !== 'na');
+    // Section 3 PPE: the per-person "who?" box only appears on No. Leaving No
+    // clears any flagged workers so the score reflects "all compliant".
+    var ppReveal = document.querySelector('[data-pp="'+key+'"][data-ppreveal="1"]');
+    if (ppReveal) {
+      if (state === 'no') { ppReveal.classList.remove('hidden'); if (notes) notes.classList.add('hidden'); }
+      else {
+        ppReveal.classList.add('hidden');
+        ppReveal.querySelectorAll('.pp-tag-check:checked').forEach(function(chk){ chk.checked = false; var d = chk.closest('[data-crew-row]'); var det = d && d.querySelector('.pp-tag-detail'); if (det) det.classList.add('hidden'); });
+      }
+    }
     updateCritOverride(key);
   }
   function updateCritOverride(key) {
@@ -471,6 +554,56 @@
     document.querySelectorAll('.pp-onsite').forEach(function(h){ h.value = checkedIds.length; });
     var cc = document.getElementById('crew-count'); if (cc) cc.textContent = checkedIds.length;
   }
+
+  // ---- Add a worker to the on-site roster (not on the auto-pulled roster) ----
+  function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+  function ppRowHtml(key, cid, name, linked, red) {
+    var bd = red ? 'border-red-200' : 'border-blue-200';
+    var risk = ['Low','Medium','High','Critical'].map(function(rl){ return '<option value="'+rl+'"'+(rl==='Medium'?' selected':'')+'>'+rl+'</option>'; }).join('');
+    return '<div class="pp-crew-row" data-crew-row="'+cid+'">'
+      + '<label class="flex items-center gap-2">'
+      + '<input type="checkbox" class="pp-tag-check w-4 h-4 rounded border-gray-300" name="q_'+key+'_tag_members" value="'+cid+'"'+(linked?'':' disabled')+'>'
+      + '<span class="text-sm text-gray-800">'+esc(name)+'</span>'
+      + (linked?'':'<span class="text-[10px] text-amber-700">(link HR profile to tag)</span>')
+      + '</label>'
+      + '<div class="pp-tag-detail mt-1.5 ml-6 grid grid-cols-1 sm:grid-cols-3 gap-2 hidden">'
+      + '<input name="q_'+key+'_tag_'+cid+'_issue" placeholder="What was wrong" class="text-sm px-2 py-1.5 border '+bd+' rounded sm:col-span-2">'
+      + '<select name="q_'+key+'_tag_'+cid+'_risk" class="text-sm px-2 py-1.5 border '+bd+' rounded bg-white">'+risk+'</select>'
+      + '<label class="flex items-center gap-1.5 text-[11px] text-gray-600 sm:col-span-3"><input type="checkbox" name="q_'+key+'_tag_'+cid+'_visibility" value="worker" class="w-3.5 h-3.5 rounded border-gray-300">Share this with the worker (else internal-only)</label>'
+      + '</div></div>';
+  }
+  function addWorker(cid, name, linked) {
+    cid = String(cid);
+    var list = document.getElementById('crew-list'); if (!list) return;
+    if (list.querySelector('.crew-check[value="'+cid+'"]')) return; // already listed
+    var lbl = document.createElement('label');
+    lbl.className = 'flex items-center gap-2 px-3 py-2 rounded-lg border ' + (linked ? 'border-gray-200' : 'border-amber-300 bg-amber-50');
+    lbl.setAttribute('data-crew-label', cid);
+    lbl.innerHTML = '<input type="checkbox" class="crew-check w-4 h-4 rounded border-gray-300" name="crew_member_ids" value="'+cid+'" data-linked="'+(linked?'1':'0')+'" data-name="'+esc(name)+'" checked>'
+      + '<span class="text-sm text-gray-800 flex-1 min-w-0 truncate">'+esc(name)+'</span>'
+      + (linked?'':'<span class="text-[10px] font-semibold text-amber-700 whitespace-nowrap" title="No HR profile linked — a flag won\'t push to their review">no HR link</span>');
+    list.appendChild(lbl);
+    var emptyNote = document.getElementById('crew-empty'); if (emptyNote) emptyNote.remove();
+    // Inject a taggable row into every per-person + affected checklist.
+    document.querySelectorAll('.pp-rows').forEach(function(container){
+      if (container.querySelector('[data-crew-row="'+cid+'"]')) return;
+      var key = container.getAttribute('data-rows-key');
+      var red = !!container.closest('.pp-affected');
+      container.insertAdjacentHTML('beforeend', ppRowHtml(key, cid, name, linked, red));
+      var wrap = container.closest('.pp-block, .pp-affected');
+      if (wrap) { var emp = wrap.querySelector('[data-pp-empty]'); if (emp) emp.classList.add('hidden'); var intro = wrap.querySelector('[data-pp-intro]'); if (intro) intro.classList.remove('hidden'); }
+    });
+    syncCrewRows(); recalc();
+  }
+  (function(){
+    var addBtn = document.getElementById('add-worker-btn'); var addSel = document.getElementById('add-worker-select');
+    if (!addBtn || !addSel) return;
+    addBtn.addEventListener('click', function(){
+      var opt = addSel.options[addSel.selectedIndex]; if (!opt || !opt.value) return;
+      addWorker(opt.value, opt.getAttribute('data-name') || opt.textContent, opt.getAttribute('data-linked') === '1');
+      opt.remove(); addSel.value = '';
+    });
+  })();
 
   document.addEventListener('change', function(e) {
     if (e.target.matches('.q-state')) { var m = e.target.name.match(/^q_(.+)_state$/); if (m) { paintPill(m[1]); toggleNoFields(m[1], e.target.value); } recalc(); maybeAutoDraft(); }
@@ -517,6 +650,12 @@
   try { var y = sessionStorage.getItem('auditScrollY'); if (y) { window.scrollTo(0, parseInt(y,10)||0); sessionStorage.removeItem('auditScrollY'); } } catch(e){}
 
   syncCrewRows();
+  // Reveal any Section-3 "who?" box that already has flagged workers (older
+  // audits saved per-person flags with state 'yes', so the No-gated block
+  // would otherwise hide them).
+  document.querySelectorAll('[data-pp][data-ppreveal="1"]').forEach(function(pp){
+    if (pp.querySelector('.pp-tag-check:checked')) pp.classList.remove('hidden');
+  });
   document.querySelectorAll('[data-crit-override]').forEach(function(w){ updateCritOverride(w.getAttribute('data-crit-override')); });
   recalc();
 

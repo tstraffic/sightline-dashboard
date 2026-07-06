@@ -10,6 +10,31 @@ const { getOnSiteCrew, resolveEmployeeForCrew, syncAuditReviews } = require('../
 const { syncCorrectiveActionsFromAudit } = require('../lib/auditActions');
 const { decorateCrewCompetency } = require('../lib/auditCompetencyCheck');
 
+// All active crew, for the "add a worker" picker in the on-site roster.
+// The auto-pulled roster (getOnSiteCrew) only covers crew allocated to the
+// linked job+date; this lets the auditor add anyone actually on site.
+function getAllActiveCrew(db) {
+  return db.prepare(`
+    SELECT cm.id AS crew_member_id, cm.full_name, e.id AS employee_id
+    FROM crew_members cm
+    LEFT JOIN employees e ON e.linked_crew_member_id = cm.id
+    WHERE cm.active = 1
+    ORDER BY cm.full_name
+  `).all().map(function (r) {
+    return { crew_member_id: r.crew_member_id, full_name: r.full_name, employee_id: r.employee_id || null, linked: !!r.employee_id, role_on_site: '' };
+  });
+}
+
+// crew_member_id → {full_name, employee_id, ...} for tag resolution. Seeded
+// from ALL active crew so manually-added workers (not in the auto-pulled
+// roster) still resolve to a name + HR profile; on-site rows overlay role.
+function crewByIdFor(db, onSiteCrew) {
+  const map = {};
+  getAllActiveCrew(db).forEach(function (c) { map[c.crew_member_id] = c; });
+  (onSiteCrew || []).forEach(function (c) { map[c.crew_member_id] = Object.assign({}, map[c.crew_member_id], c); });
+  return map;
+}
+
 // Build { questionKey: {text, is_critical, risk_band} } from resolved template sections.
 function questionMetaOf(tpl) {
   const m = {};
@@ -131,11 +156,15 @@ function buildResponsesFromBody(b, scoringQuestions) {
   return { responses, sectionComments };
 }
 
-// Per-person tags for persistence into audit_question_tags
+// Per-person tags for persistence into audit_question_tags.
+// Reads tag_members for EVERY question, not just per_person ones: Section 3's
+// two site-level equipment items (bats, night wands) also let the auditor
+// attribute affected workers so it flows to their HR review. Scoring is
+// untouched — buildResponsesFromBody only turns tag_members into scoring
+// exceptions for per_person questions.
 function buildCrewTagsFromBody(b, scoringQuestions, crewById) {
   const tags = [];
   for (const q of scoringQuestions) {
-    if (q.scoring_mode !== 'per_person') continue;
     const key = q.key;
     const members = arrayify(b[`q_${key}_tag_members`]).map(String).filter(Boolean);
     for (const cmId of members) {
@@ -316,7 +345,7 @@ router.get('/new', (req, res) => {
     responses: {}, sectionComments: {}, nonconformances: [], attachments: [], attachmentsByContext: {},
     sections: tpl.sections, scoreGroups: SCORE_GROUPS, score: scoreFor(tpl, {}, onSiteCrew.length),
     templateDraft: tpl.isDraft, templateLegacy: tpl.isLegacy,
-    workType, timeOfDay, onSiteCrew, auditCrew: [], tagsByKey: {},
+    workType, timeOfDay, onSiteCrew, auditCrew: [], tagsByKey: {}, allCrew: getAllActiveCrew(db),
     jobs, user: req.session.user, currentPage: 'audits', isEdit: false,
   });
 });
@@ -356,7 +385,7 @@ router.post('/', (req, res) => {
     );
     const newId = result.lastInsertRowid;
 
-    const crewById = {}; ctx.onSiteCrew.forEach(c => { crewById[c.crew_member_id] = c; });
+    const crewById = crewByIdFor(db, ctx.onSiteCrew);
     const tags = buildCrewTagsFromBody(b, ctx.tpl.scoringQuestions, crewById);
     const qMeta = questionMetaOf(ctx.tpl);
     db.transaction(() => {
@@ -488,7 +517,7 @@ router.get('/:id/edit', (req, res) => {
     sections: v.tpl.sections, scoreGroups: SCORE_GROUPS, score: v.score,
     templateDraft: v.tpl.isDraft, templateLegacy: v.tpl.isLegacy,
     workType: audit.work_type || 'static', timeOfDay: audit.time_of_day || 'day',
-    onSiteCrew, auditCrew: v.auditCrew, tagsByKey: v.tagsByKey,
+    onSiteCrew, auditCrew: v.auditCrew, tagsByKey: v.tagsByKey, allCrew: getAllActiveCrew(db),
     jobs, user: req.session.user, currentPage: 'audits', isEdit: true,
   });
 });
@@ -538,7 +567,7 @@ router.post('/:id', (req, res) => {
       req.params.id
     );
 
-    const crewById = {}; ctx.onSiteCrew.forEach(c => { crewById[c.crew_member_id] = c; });
+    const crewById = crewByIdFor(db, ctx.onSiteCrew);
     const tags = buildCrewTagsFromBody(b, ctx.tpl.scoringQuestions, crewById);
     const qMeta = questionMetaOf(ctx.tpl);
     db.transaction(() => {
