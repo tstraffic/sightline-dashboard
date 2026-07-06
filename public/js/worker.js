@@ -1,5 +1,47 @@
 // Worker Portal — Client-side JavaScript
 
+// ── Bottom-nav reliability in the installed (standalone) PWA ──
+// In an iOS/Android home-screen PWA, taps on plain <a> nav links are
+// intermittently swallowed — the tap registers but the in-app navigation
+// never fires, so the tab "does nothing" (worked fine in every normal
+// browser, which is why this was so hard to pin down). Force the
+// navigation ourselves: on a tab tap, cancel the default and drive the
+// location directly. Bound in the capture phase so it runs before any
+// other handler, and it fires on pointerup too (some standalone webviews
+// don't emit a reliable click after a touch).
+(function () {
+  function navFromTab(target) {
+    var a = target && target.closest && target.closest('.wh-tabnav a[href], a.wh-header-brand[href]');
+    if (!a) return null;
+    var href = a.getAttribute('href');
+    return (href && href.charAt(0) === '/') ? href : null;
+  }
+  function go(href) {
+    // Same page → refresh to top; different page → navigate.
+    if (href === location.pathname) { window.scrollTo(0, 0); location.reload(); }
+    else { window.location.assign(href); }
+  }
+  function modified(e) { return e.metaKey || e.ctrlKey || e.shiftKey || e.altKey; }
+  var handled = false; // de-dupe pointerup + click for one tap
+  document.addEventListener('pointerup', function (e) {
+    if ((e.button && e.button !== 0) || modified(e)) return; // let cmd/ctrl-click open a new tab
+    var href = navFromTab(e.target);
+    if (!href) return;
+    handled = true;
+    setTimeout(function () { handled = false; }, 700);
+    e.preventDefault();
+    go(href);
+  }, true);
+  document.addEventListener('click', function (e) {
+    if (modified(e)) return;
+    var href = navFromTab(e.target);
+    if (!href) return;
+    e.preventDefault();
+    if (handled) return; // pointerup already navigated
+    go(href);
+  }, true);
+})();
+
 // Auto-dismiss flash messages after 5 seconds
 document.addEventListener('DOMContentLoaded', function() {
   const flashMessages = document.querySelectorAll('[class*="bg-emerald-50"], [class*="bg-red-50"]');
