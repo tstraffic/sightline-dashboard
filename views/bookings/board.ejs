@@ -198,6 +198,10 @@
     <div class="bk2-fs-toolbar">
       <button type="button" class="bk2-fs-tool" id="bk2-fs-togmenus" title="Hide/show the filter strip">Toggle menus</button>
       <button type="button" class="bk2-fs-tool" id="bk2-fs-togpanel" title="Hide/show the resource panel">Toggle resource panel</button>
+      <button type="button" class="bk2-fs-tool" id="bk2-fs-density" title="Switch between comfortable and compact card density">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+        <span data-density-label>Compact view</span>
+      </button>
       <button type="button" class="bk2-fs-tool" data-fs-sort="depot">
         <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4h13M3 8h9M3 12h5M21 18l-3 3m0 0l-3-3m3 3V8"/></svg>
         Sort by depot name
@@ -305,7 +309,22 @@
                   <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span><%= b.site_address %><%= b.suburb ? ', ' + b.suburb : '' %><%= b.state ? ' ' + b.state : '' %></span></div>
                 <% } %>
                 <% if (b.requester_name) { %>
-                  <div><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg><span>Requester: <%= b.requester_name %></span></div>
+                  <div class="bk2-meta-requester"><svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg><span>Requester: <%= b.requester_name %></span></div>
+                <% } %>
+              </div>
+
+              <%# Compact crew summary — shown only in compact density, in place
+                  of the full drag-drop crew blocks below. %>
+              <% var _cfw = []; var _cutes = 0; (b.crew_blocks || []).forEach(function (blk) { (blk.worker_slots || []).forEach(function (s) { if (s.filled) _cfw.push(s.name); }); if (blk.vehicle_slot && blk.vehicle_slot.filled) _cutes++; }); %>
+              <div class="bk2-card-crewsum">
+                <% if (_cfw.length || _cutes) { %>
+                  <span class="bk2-crewsum-avatars">
+                    <% _cfw.slice(0, 6).forEach(function (n) { %><span class="bk2-crewsum-av"><%= initials(n) %></span><% }); %>
+                    <% if (_cfw.length > 6) { %><span class="bk2-crewsum-av bk2-crewsum-more">+<%= _cfw.length - 6 %></span><% } %>
+                  </span>
+                  <span class="bk2-crewsum-counts"><%= _cfw.length %> crew<% if (_cutes) { %> · <%= _cutes %> ute<%= _cutes > 1 ? 's' : '' %><% } %></span>
+                <% } else { %>
+                  <span class="bk2-crewsum-counts bk2-crewsum-empty">No crew assigned</span>
                 <% } %>
               </div>
 
@@ -1667,8 +1686,8 @@
     ed.classList.remove('is-open'); bd.classList.remove('is-open');
     setTimeout(function () { ed.hidden = true; bd.hidden = true; }, 220);
     document.body.style.overflow = '';
-    // Drop the board-card highlight.
-    try { document.querySelectorAll('.bk2-card.is-editing').forEach(function (c) { c.classList.remove('is-editing'); }); } catch (e) {}
+    // Return the floated card to the board + drop its highlight.
+    try { unfloatCard(); } catch (e) {}
     // A booking was created while the editor was open — the board behind
     // doesn't show the new card yet. Refresh it now (on close) instead of
     // yanking the planner out mid-edit with a reload right after Create.
@@ -1691,6 +1710,64 @@
     var a2 = $('#bk2-edit-qv-fulledit'); if (a2) a2.setAttribute('href', href);
   }
 
+  // ── Float the edited card beside the editor (FLIP glide) ──
+  // Lifts the selected card out of the (now blurred) board and glides it to a
+  // vertically-centred spot just left of the slide-over, keeping its glow.
+  var floatingCard = null;
+  function floatCardBesideEditor(card) {
+    if (!card) return;
+    var r = card.getBoundingClientRect();
+    // Reparent to <body> so position:fixed is viewport-relative — the board
+    // sits inside transformed/contained panes that would otherwise become the
+    // containing block for a fixed element. Remember where it came from.
+    card.__bkOrigStyle = card.getAttribute('style') || '';
+    card.__bkParent = card.parentNode;
+    card.__bkNext = card.nextSibling;
+    document.body.appendChild(card);
+    card.classList.add('is-editing', 'bk2-card--floating');
+    // 1) freeze at current on-board position (no visual jump). Inline
+    //    position:fixed beats .bk2-card.is-editing's position:relative.
+    card.style.position = 'fixed';
+    card.style.top = r.top + 'px';
+    card.style.left = r.left + 'px';
+    card.style.width = r.width + 'px';
+    card.style.margin = '0';
+    // 2) target: a taller panel docked to the editor's left edge, sitting
+    //    slightly IN FRONT of it (the edit page reads as being behind the
+    //    booking panel) so the two look like one connected unit.
+    var edW = Math.min(window.innerWidth * 0.92, 1200);
+    var editorLeft = window.innerWidth - edW;
+    var overlap = 18;                 // card sits 18px over the editor's edge
+    var cardW = 360;
+    var targetLeft = editorLeft - cardW + overlap;
+    if (targetLeft < 12) targetLeft = 12; // narrow screens: clamp, more overlap
+    var maxH = Math.round(window.innerHeight * 0.86);
+    var targetTop = Math.max(20, Math.round((window.innerHeight - Math.min(maxH, Math.max(r.height, 420))) / 2));
+    card.style.maxHeight = maxH + 'px';
+    // 3) next frame, glide to target (CSS transition on top/left/width).
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        card.style.top = targetTop + 'px';
+        card.style.left = targetLeft + 'px';
+        card.style.width = cardW + 'px';
+      });
+    });
+    floatingCard = card;
+  }
+  function unfloatCard() {
+    document.querySelectorAll('.bk2-card--floating, .bk2-card.is-editing').forEach(function (c) {
+      c.classList.remove('bk2-card--floating', 'is-editing');
+      // Put it back where it was on the board.
+      if (c.__bkParent) {
+        try { c.__bkParent.insertBefore(c, c.__bkNext || null); } catch (e) {}
+        delete c.__bkParent; delete c.__bkNext;
+      }
+      if (c.__bkOrigStyle != null) { c.setAttribute('style', c.__bkOrigStyle); delete c.__bkOrigStyle; }
+      else c.removeAttribute('style');
+    });
+    floatingCard = null;
+  }
+
   // Open the editor in edit mode for an EXISTING booking (board "Open").
   // The Overview tab opens prefilled with the booking's data (same form as
   // New Booking, just populated); Resources + Tasks lazy-load fragments from
@@ -1702,11 +1779,10 @@
     var created = $('#bk2-edit-created'); if (created) created.hidden = true;
     ed.dataset.existing = '1';
     ed.dataset.bookingId = id;
-    // Highlight the card being edited on the (un-dimmed) board + bring it into view.
+    // Float the edited card beside the editor; blur the rest of the board.
     try {
-      document.querySelectorAll('.bk2-card.is-editing').forEach(function (c) { c.classList.remove('is-editing'); });
-      var card = document.querySelector('.bk2-card[data-booking-id="' + id + '"]');
-      if (card) { card.classList.add('is-editing'); card.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+      unfloatCard();
+      floatCardBesideEditor(document.querySelector('.bk2-card[data-booking-id="' + id + '"]'));
     } catch (e) {}
     setEditorMode('edit');
     var t = $('#bk2-edit-title');
@@ -3143,6 +3219,30 @@
     if (typeof rpSetCollapsed === 'function') rpSetCollapsed(on);
     else { pane.classList.toggle('is-collapsed'); }
   });
+
+  // Density toggle — comfortable (full crew slots) ↔ compact (fits ~20-30).
+  // Persisted per-browser; defaults to compact so busy days fit at a glance.
+  (function () {
+    var btn = $('#bk2-fs-density');
+    var board = document.querySelector('.bk2-board');
+    if (!board) return;
+    function apply(compact) {
+      board.classList.toggle('bk2-density-compact', compact);
+      if (btn) {
+        btn.classList.toggle('is-active', compact);
+        var lbl = btn.querySelector('[data-density-label]');
+        if (lbl) lbl.textContent = compact ? 'Comfortable view' : 'Compact view';
+      }
+    }
+    var saved;
+    try { saved = localStorage.getItem('bk2-density'); } catch (e) {}
+    apply(saved ? saved === 'compact' : true); // default compact
+    if (btn) btn.addEventListener('click', function () {
+      var compact = !board.classList.contains('bk2-density-compact');
+      apply(compact);
+      try { localStorage.setItem('bk2-density', compact ? 'compact' : 'comfortable'); } catch (e) {}
+    });
+  })();
 
   // Initial paint
   fsApplySort();
