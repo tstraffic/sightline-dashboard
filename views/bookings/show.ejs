@@ -1400,11 +1400,16 @@
             </div>
           </div>
         <% } %>
-        <% if (b.site_contact_names && b.site_contact_names.length > 0) { %>
+        <% var _scd = (b.site_contact_details && b.site_contact_details.length) ? b.site_contact_details : (b.site_contact_names || []).map(function (n) { return { full_name: n }; }); %>
+        <% if (_scd.length > 0) { %>
           <div class="pt-2 border-t border-gray-100">
-            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Site Contacts</p>
-            <% b.site_contact_names.forEach(name => { %>
-              <p class="text-sm text-gray-700"><%= name %></p>
+            <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Site Contacts (<%= _scd.length %>)</p>
+            <% _scd.forEach(function (c) { %>
+              <div class="text-sm text-gray-700 flex items-baseline gap-2 flex-wrap">
+                <span class="font-medium"><%= c.full_name %></span>
+                <% if (c.position) { %><span class="text-xs text-gray-400"><%= c.position %></span><% } %>
+                <% if (c.phone) { %><a href="tel:<%= c.phone %>" class="text-xs text-brand-600 hover:underline"><%= c.phone %></a><% } %>
+              </div>
             <% }); %>
           </div>
         <% } %>

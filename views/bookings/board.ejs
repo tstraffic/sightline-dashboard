@@ -903,10 +903,14 @@
             </label>
             <div class="bk2-create-field bk2-create-field--required bk2-create-field--full">
               <span class="bk2-create-lbl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                <span>Site contacts *</span>
+                <span>Site contacts * <span id="bk2c-contact-count" class="bk2c-contact-count"></span></span>
                 <button type="button" id="bk2c-add-contact" class="bk2c-mini-add" disabled>+ Add contact</button>
               </span>
-              <div id="bk2c-contacts" class="bk2c-contacts">
+              <!-- Selected contacts (source of truth for what submits) -->
+              <div id="bk2c-contact-chips" class="bk2c-contact-chips"></div>
+              <!-- Search + scrollable toggle list (scales to 50+ contacts) -->
+              <input type="text" id="bk2c-contact-search" class="bk2c-contact-search" placeholder="Search contacts…" autocomplete="off" disabled>
+              <div id="bk2c-contact-results" class="bk2c-contact-results">
                 <span id="bk2c-contacts-hint" class="bk2c-contacts-hint">Pick a client first to choose or add site contacts.</span>
               </div>
             </div>
@@ -1387,10 +1391,25 @@
   .bk2c-mini-add { font-size: 11px; font-weight: 700; color: #2B7FFF; background: none; border: 0; cursor: pointer; padding: 0; }
   .bk2c-mini-add:hover { text-decoration: underline; }
   .bk2c-mini-add:disabled { color: #6B7280; cursor: not-allowed; text-decoration: none; }
-  .bk2c-contacts { border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 9px 10px; min-height: 42px; display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
-  .bk2c-contacts-hint { font-size: 12px; color: #9CA3AF; }
-  .bk2c-contact { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #E5E7EB; cursor: pointer; }
-  .bk2c-contact input { width: 15px; height: 15px; accent-color: #2B7FFF; }
+  .bk2c-contacts-hint { font-size: 12px; color: #9CA3AF; padding: 4px 2px; display: block; }
+  .bk2c-contact-count { font-size: 11px; font-weight: 600; color: #9CA3AF; }
+  /* Selected contacts as removable chips (source of truth for submit). */
+  .bk2c-contact-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .bk2c-contact-chips.is-empty { display: none; }
+  .bk2c-chip { display: inline-flex; align-items: center; gap: 6px; background: rgba(43,127,255,0.16); border: 1px solid rgba(43,127,255,0.45); color: #DBEAFE; border-radius: 999px; padding: 4px 6px 4px 10px; font-size: 12.5px; }
+  .bk2c-chip-sub { color: #93C5FD; font-size: 11px; }
+  .bk2c-chip-x { border: 0; background: none; color: #93C5FD; font-size: 16px; line-height: 1; cursor: pointer; padding: 0 2px; }
+  .bk2c-chip-x:hover { color: #fff; }
+  /* Search + scrollable results list. */
+  .bk2c-contact-search { width: 100%; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 8px 10px; background: rgba(255,255,255,0.04); color: #E5E7EB; font-size: 13px; margin-bottom: 6px; }
+  .bk2c-contact-search::placeholder { color: #6B7280; }
+  .bk2c-contact-search:disabled { opacity: 0.5; }
+  .bk2c-contact-results { border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; max-height: 200px; overflow-y: auto; padding: 4px; display: flex; flex-direction: column; gap: 2px; }
+  .bk2c-result { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; background: none; border: 0; color: #E5E7EB; font-size: 13px; padding: 7px 8px; border-radius: 6px; cursor: pointer; }
+  .bk2c-result:hover { background: rgba(255,255,255,0.06); }
+  .bk2c-result.is-selected { background: rgba(43,127,255,0.12); }
+  .bk2c-result-tick { flex: 0 0 14px; color: #2B7FFF; font-weight: 700; }
+  .bk2c-result-sub { color: #9CA3AF; font-size: 11px; }
   /* Above the create slide-over (.bk2-editor is z-index 1001) so the
      new-client / new-contact modals aren't hidden behind the panel. */
   .bk2c-modal { display: none; position: fixed; inset: 0; z-index: 1100; background: rgba(0,0,0,0.55); align-items: center; justify-content: center; padding: 16px; }
@@ -1461,28 +1480,109 @@
     var nameInput = document.getElementById('bk2c-client-name');
     var idInput = document.getElementById('bk2c-client-id');
     var addContactBtn = document.getElementById('bk2c-add-contact');
-    var contactsBox = document.getElementById('bk2c-contacts');
-    var hint = document.getElementById('bk2c-contacts-hint');
-    if (!nameInput || !contactsBox) return; // create form not on this page
+    var chipsBox = document.getElementById('bk2c-contact-chips');
+    var searchInput = document.getElementById('bk2c-contact-search');
+    var resultsBox = document.getElementById('bk2c-contact-results');
+    var countEl = document.getElementById('bk2c-contact-count');
+    var form = document.getElementById('bk2-edit-form');
+    if (!nameInput || !resultsBox) return; // create form not on this page
 
-    function setHint(t) { contactsBox.innerHTML = ''; var s = document.createElement('span'); s.className = 'bk2c-contacts-hint'; s.textContent = t; contactsBox.appendChild(s); }
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+    function setHint(t) { resultsBox.innerHTML = ''; var s = document.createElement('span'); s.className = 'bk2c-contacts-hint'; s.textContent = t; resultsBox.appendChild(s); }
 
-    function renderContacts(list) {
-      contactsBox.innerHTML = '';
-      if (!list.length) { setHint('No contacts yet for this client — use “Add contact”.'); return; }
-      list.forEach(function (c) { addContactChip(c, false); });
+    // ── Searchable client-scoped picker (scales to 50+ contacts) ──
+    // allContacts holds the currently-loaded client's contacts; `selected`
+    // is the source of truth for what submits (hidden inputs rendered per id).
+    var allContacts = [];
+    var byId = {};
+    var selected = new Set();
+
+    function renderChips() {
+      chipsBox.innerHTML = '';
+      if (!selected.size) { chipsBox.classList.add('is-empty'); }
+      else { chipsBox.classList.remove('is-empty'); }
+      selected.forEach(function (id) {
+        var c = byId[id] || { id: id, full_name: 'Contact #' + id };
+        var chip = document.createElement('span');
+        chip.className = 'bk2c-chip';
+        chip.innerHTML = '<span class="bk2c-chip-name">' + esc(c.full_name) + (c.position ? ' <span class="bk2c-chip-sub">· ' + esc(c.position) + '</span>' : '') + '</span>'
+          + '<button type="button" class="bk2c-chip-x" data-remove="' + esc(String(id)) + '" aria-label="Remove">&times;</button>'
+          + '<input type="hidden" name="site_contacts" value="' + esc(String(id)) + '">';
+        chipsBox.appendChild(chip);
+      });
     }
-    function addContactChip(c, checked) {
-      // Drop the hint if present.
-      var h = contactsBox.querySelector('.bk2c-contacts-hint'); if (h) h.remove();
-      if (contactsBox.querySelector('input[value="' + c.id + '"]')) {
-        var ex = contactsBox.querySelector('input[value="' + c.id + '"]'); ex.checked = true; return;
-      }
-      var lbl = document.createElement('label');
-      lbl.className = 'bk2c-contact';
-      lbl.innerHTML = '<input type="checkbox" name="site_contacts" value="' + c.id + '"' + (checked ? ' checked' : '') + '><span>' + esc(c.full_name) + (c.position ? ' <span style="color:#9CA3AF;font-size:11px;">· ' + esc(c.position) + '</span>' : '') + '</span>';
-      contactsBox.appendChild(lbl);
+
+    function renderResults(filter) {
+      filter = (filter || '').trim().toLowerCase();
+      resultsBox.innerHTML = '';
+      if (!allContacts.length) { setHint('No contacts yet for this client — use “Add contact”.'); updateCount(0); return; }
+      var shown = 0;
+      allContacts.forEach(function (c) {
+        var hay = (c.full_name + ' ' + (c.position || '') + ' ' + (c.phone || '')).toLowerCase();
+        if (filter && hay.indexOf(filter) === -1) return;
+        shown++;
+        var isSel = selected.has(String(c.id));
+        var row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'bk2c-result' + (isSel ? ' is-selected' : '');
+        row.setAttribute('data-toggle', String(c.id));
+        row.innerHTML = '<span class="bk2c-result-tick">' + (isSel ? '✓' : '') + '</span>'
+          + '<span class="bk2c-result-name">' + esc(c.full_name) + (c.position ? ' <span class="bk2c-result-sub">· ' + esc(c.position) + '</span>' : '') + '</span>';
+        resultsBox.appendChild(row);
+      });
+      if (!shown) { setHint(filter ? 'No contacts match “' + filter + '”.' : 'No contacts yet for this client — use “Add contact”.'); }
+      updateCount(shown);
+    }
+
+    function updateCount(shown) {
+      if (!countEl) return;
+      var n = allContacts.length;
+      countEl.textContent = selected.size
+        ? (selected.size + ' selected · ' + shown + ' of ' + n + ' shown')
+        : (n ? (shown + ' of ' + n + ' shown') : '');
+    }
+
+    function toggle(id) {
+      id = String(id);
+      if (selected.has(id)) selected.delete(id); else selected.add(id);
+      renderChips();
+      renderResults(searchInput.value);
+    }
+    // Delegated toggle (results) + remove (chips).
+    resultsBox.addEventListener('click', function (e) {
+      var r = e.target.closest('[data-toggle]');
+      if (r) { e.preventDefault(); toggle(r.getAttribute('data-toggle')); }
+    });
+    chipsBox.addEventListener('click', function (e) {
+      var x = e.target.closest('[data-remove]');
+      if (x) { e.preventDefault(); toggle(x.getAttribute('data-remove')); }
+    });
+    searchInput.addEventListener('input', function () { renderResults(searchInput.value); });
+
+    // Merge a contact into the loaded pool (used by inline-add + prefill).
+    function ingest(list) {
+      (list || []).forEach(function (c) {
+        var key = String(c.id);
+        if (!byId[key]) { byId[key] = c; allContacts.push(c); }
+        else { byId[key] = c; }
+      });
+      allContacts.sort(function (a, b) { return (a.full_name || '').localeCompare(b.full_name || ''); });
+    }
+
+    function loadContacts(clientId, cb) {
+      searchInput.disabled = true;
+      setHint('Loading contacts…');
+      fetch('/contacts/api/by-client/' + clientId, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+          allContacts = []; byId = {};
+          ingest((j && j.contacts) || []);
+          searchInput.disabled = false;
+          renderChips();
+          renderResults('');
+          if (cb) cb();
+        })
+        .catch(function () { setHint('Could not load contacts.'); });
     }
 
     var curClientId = null, curClientName = '';
@@ -1495,16 +1595,31 @@
       // Let the project dropdown react (client-scoped projects).
       try { document.dispatchEvent(new CustomEvent('bk2-client-changed', { detail: { clientId: curClientId } })); } catch (e) {}
       addContactBtn.disabled = !curClientId;
-      if (!curClientId) { setHint(nm ? 'Create this client (“+ New client”) to add its contacts.' : 'Pick a client first to choose or add site contacts.'); return; }
-      // Load this client's contacts.
-      setHint('Loading contacts…');
-      fetch('/contacts/api/by-client/' + curClientId, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
-        .then(function (r) { return r.json(); })
-        .then(function (j) { renderContacts((j && j.contacts) || []); })
-        .catch(function () { setHint('Could not load contacts.'); });
+      if (!curClientId) {
+        allContacts = []; byId = {}; selected.clear();
+        searchInput.disabled = true; searchInput.value = '';
+        renderChips(); updateCount(0);
+        setHint(nm ? 'Create this client (“+ New client”) to add its contacts.' : 'Pick a client first to choose or add site contacts.');
+        return;
+      }
+      // Changing to a different client clears prior selections.
+      selected.clear();
+      searchInput.value = '';
+      loadContacts(curClientId);
     }
     nameInput.addEventListener('change', resolveClient);
     nameInput.addEventListener('blur', resolveClient);
+
+    // ── Prefill hook (edit) — load the booking's client contacts then mark
+    // the saved ids selected. Called from the editor prefill. ──
+    window.bk2ApplySiteContacts = function (clientId, ids) {
+      selected = new Set((ids || []).map(String));
+      searchInput.value = '';
+      if (!clientId) { renderChips(); return; }
+      curClientId = clientId; idInput.value = clientId;
+      addContactBtn.disabled = false;
+      loadContacts(clientId);
+    };
 
     // ---- Modal helpers ----
     function openModal(id) { document.getElementById(id).classList.add('is-open'); }
@@ -1573,7 +1688,10 @@
         .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
         .then(function (res) {
           if (!res.ok || !res.body.success || !res.body.contact) throw new Error((res.body && res.body.error) || 'Failed to save contact.');
-          addContactChip(res.body.contact, true);
+          ingest([res.body.contact]);
+          selected.add(String(res.body.contact.id));
+          renderChips();
+          renderResults(searchInput.value);
           closeModal('bk2c-modal-contact');
         })
         .catch(function (e) { err.textContent = e.message; err.style.display = 'block'; })
@@ -2022,6 +2140,8 @@
         // Mobile-works legs + meeting point (added with the doc/legs feature).
         try { if (window.bk2ApplyMobileLegs) window.bk2ApplyMobileLegs(data.mobileLegs || [], data.hasMobileWorks); } catch (e) {}
         try { if (window.bk2ApplyMeetingPoint) window.bk2ApplyMeetingPoint(data.meetingPoint || {}); } catch (e) {}
+        // Site contacts — load this client's contacts then re-select the saved ids.
+        try { if (window.bk2ApplySiteContacts) window.bk2ApplySiteContacts(b.client_id, b.site_contacts || []); } catch (e) {}
         try { document.dispatchEvent(new CustomEvent('bk2:prefilled')); } catch (e) {}
 
         // Booking type / callout / status side-effects.

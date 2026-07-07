@@ -231,14 +231,19 @@
     <!-- Site Contacts — scoped to the selected client, with inline add -->
     <div class="mt-4" id="siteContactsBlock">
       <div class="flex items-center justify-between mb-2">
-        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Site Contacts</label>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Site Contacts <span id="siteContactsCount" class="text-gray-400 normal-case tracking-normal font-medium"></span></label>
         <button type="button" id="addSiteContactBtn" disabled
           class="inline-flex items-center gap-1 text-xs font-semibold text-brand-600 hover:text-brand-700 disabled:text-gray-300 disabled:cursor-not-allowed">
           <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
           Add contact
         </button>
       </div>
-      <div id="siteContactsList" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-32 overflow-y-auto border border-gray-200 rounded-lg p-3"></div>
+      <!-- Selected contacts as removable chips (source of truth for submit) -->
+      <div id="siteContactsChips" class="flex flex-wrap gap-2 mb-2 hidden"></div>
+      <!-- Search + scrollable toggle list (scales to 50+ contacts) -->
+      <input type="text" id="siteContactsSearch" placeholder="Search contacts…" autocomplete="off" disabled
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400">
+      <div id="siteContactsList" class="max-h-40 overflow-y-auto border border-gray-200 rounded-lg p-1 flex flex-col gap-0.5"></div>
       <p id="siteContactsHint" class="text-xs text-gray-400 mt-2">Select a client above to choose or add site contacts.</p>
     </div>
   </div>
@@ -331,31 +336,70 @@
       var listEl = document.getElementById('siteContactsList');
       var hintEl = document.getElementById('siteContactsHint');
       var addBtn = document.getElementById('addSiteContactBtn');
+      var chipsEl = document.getElementById('siteContactsChips');
+      var searchEl = document.getElementById('siteContactsSearch');
+      var countEl = document.getElementById('siteContactsCount');
 
       function esc(s) {
         return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
           return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
         });
       }
+      function byId(id) {
+        id = String(id);
+        for (var i = 0; i < ALL_CONTACTS.length; i++) { if (String(ALL_CONTACTS[i].id) === id) return ALL_CONTACTS[i]; }
+        return { id: id, full_name: 'Contact #' + id };
+      }
+      function clientRows() {
+        // Contacts for this client, plus any already-selected ones (so an
+        // existing selection is never silently dropped on edit).
+        var clientId = clientSelect.value;
+        return ALL_CONTACTS.filter(function (c) {
+          return String(c.company_id) === String(clientId) || selectedIds.indexOf(String(c.id)) !== -1;
+        });
+      }
+      function toggle(id) {
+        id = String(id);
+        if (selectedIds.indexOf(id) === -1) selectedIds.push(id);
+        else selectedIds = selectedIds.filter(function (x) { return x !== id; });
+        renderChips(); renderResults();
+      }
 
-      function renderList() {
+      function renderChips() {
+        // Hidden inputs named site_contacts carry the selection on submit.
+        if (!selectedIds.length) { chipsEl.innerHTML = ''; chipsEl.classList.add('hidden'); return; }
+        chipsEl.classList.remove('hidden');
+        chipsEl.innerHTML = selectedIds.map(function (id) {
+          var c = byId(id);
+          return '<span class="inline-flex items-center gap-1.5 bg-brand-50 border border-brand-200 text-brand-700 rounded-full pl-3 pr-1.5 py-1 text-xs">' +
+            '<span>' + esc(c.full_name) + (c.position ? ' <span class="text-brand-400">· ' + esc(c.position) + '</span>' : '') + '</span>' +
+            '<button type="button" data-remove="' + esc(String(id)) + '" class="text-brand-400 hover:text-brand-700 text-sm leading-none px-0.5" aria-label="Remove">&times;</button>' +
+            '<input type="hidden" name="site_contacts" value="' + esc(String(id)) + '">' +
+            '</span>';
+        }).join('');
+      }
+
+      function renderResults() {
         var clientId = clientSelect.value;
         addBtn.disabled = !clientId;
-
         if (!clientId) {
-          listEl.innerHTML = '';
-          listEl.classList.add('hidden');
+          listEl.innerHTML = ''; listEl.classList.add('hidden');
+          searchEl.disabled = true; searchEl.classList.add('hidden');
+          if (countEl) countEl.textContent = '';
           hintEl.textContent = 'Select a client above to choose or add site contacts.';
           hintEl.classList.remove('hidden');
           return;
         }
-
-        // Contacts for this client, plus any already-selected ones (so an
-        // existing selection is never silently dropped on edit).
-        var rows = ALL_CONTACTS.filter(function (c) {
-          return String(c.company_id) === String(clientId) || selectedIds.indexOf(String(c.id)) !== -1;
+        searchEl.disabled = false; searchEl.classList.remove('hidden');
+        var rows = clientRows();
+        var filter = (searchEl.value || '').trim().toLowerCase();
+        var shown = rows.filter(function (c) {
+          if (!filter) return true;
+          return (c.full_name + ' ' + (c.position || '') + ' ' + (c.phone || '')).toLowerCase().indexOf(filter) !== -1;
         });
-
+        if (countEl) countEl.textContent = selectedIds.length
+          ? '(' + selectedIds.length + ' selected · ' + shown.length + ' of ' + rows.length + ')'
+          : (rows.length ? '(' + shown.length + ' of ' + rows.length + ')' : '');
         listEl.classList.remove('hidden');
         if (!rows.length) {
           listEl.innerHTML = '';
@@ -363,30 +407,36 @@
           hintEl.classList.remove('hidden');
           return;
         }
+        if (!shown.length) {
+          listEl.innerHTML = '';
+          hintEl.textContent = 'No contacts match “' + filter + '”.';
+          hintEl.classList.remove('hidden');
+          return;
+        }
         hintEl.classList.add('hidden');
-
-        listEl.innerHTML = rows.map(function (c) {
+        listEl.innerHTML = shown.map(function (c) {
           var idStr = String(c.id);
-          var checked = selectedIds.indexOf(idStr) !== -1 ? 'checked' : '';
+          var sel = selectedIds.indexOf(idStr) !== -1;
           var sub = c.position || c.phone || '';
-          return '<label class="flex items-center gap-2 text-sm text-gray-700">' +
-            '<input type="checkbox" name="site_contacts" value="' + idStr + '" ' + checked +
-            ' class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">' +
-            '<span>' + esc(c.full_name) + (sub ? ' <span class="text-gray-400 text-xs">· ' + esc(sub) + '</span>' : '') + '</span>' +
-            '</label>';
+          return '<button type="button" data-toggle="' + idStr + '" class="flex items-center gap-2 w-full text-left text-sm px-2 py-1.5 rounded ' + (sel ? 'bg-brand-50' : 'hover:bg-gray-50') + '">' +
+            '<span class="w-4 text-brand-600 font-bold">' + (sel ? '✓' : '') + '</span>' +
+            '<span class="text-gray-700">' + esc(c.full_name) + (sub ? ' <span class="text-gray-400 text-xs">· ' + esc(sub) + '</span>' : '') + '</span>' +
+            '</button>';
         }).join('');
-
-        // Keep selectedIds in sync with manual checkbox toggles.
-        listEl.querySelectorAll('input[name="site_contacts"]').forEach(function (cb) {
-          cb.addEventListener('change', function () {
-            var v = cb.value;
-            if (cb.checked) { if (selectedIds.indexOf(v) === -1) selectedIds.push(v); }
-            else { selectedIds = selectedIds.filter(function (x) { return x !== v; }); }
-          });
-        });
       }
 
-      clientSelect.addEventListener('change', renderList);
+      function renderList() { renderChips(); renderResults(); }
+
+      listEl.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-toggle]');
+        if (b) { e.preventDefault(); toggle(b.getAttribute('data-toggle')); }
+      });
+      chipsEl.addEventListener('click', function (e) {
+        var x = e.target.closest('[data-remove]');
+        if (x) { e.preventDefault(); toggle(x.getAttribute('data-remove')); }
+      });
+      searchEl.addEventListener('input', renderResults);
+      clientSelect.addEventListener('change', function () { searchEl.value = ''; renderList(); });
       renderList();
 
       // ---- Modal ----

@@ -1700,12 +1700,22 @@ router.get('/:id', (req, res) => {
   let requesterName = '', plannerName = '';
   if (booking.requester_id) { const r = db.prepare("SELECT full_name FROM crew_members WHERE id = ?").get(booking.requester_id); if (r) requesterName = r.full_name; }
   if (booking.planner_id) { const p = db.prepare("SELECT full_name FROM crew_members WHERE id = ?").get(booking.planner_id); if (p) plannerName = p.full_name; }
-  // Parse site contacts JSON → resolve names
+  // Parse site contacts JSON → resolve names/details in one batched query
+  // (was N+1: one SELECT per id — slow on major projects with many contacts).
   let siteContactNames = [];
   let siteContactIds = [];
+  let siteContactDetails = [];
   try {
     siteContactIds = JSON.parse(booking.site_contacts || '[]');
-    if (siteContactIds.length) { siteContactNames = siteContactIds.map(id => { const c = db.prepare("SELECT full_name FROM client_contacts WHERE id = ?").get(id); return c ? c.full_name : null; }).filter(Boolean); }
+    if (siteContactIds.length) {
+      const placeholders = siteContactIds.map(() => '?').join(',');
+      const rows = db.prepare(`SELECT id, full_name, position, phone FROM client_contacts WHERE id IN (${placeholders})`).all(...siteContactIds);
+      const byId = {};
+      rows.forEach(r => { byId[String(r.id)] = r; });
+      // Preserve the stored order.
+      siteContactDetails = siteContactIds.map(id => byId[String(id)]).filter(Boolean);
+      siteContactNames = siteContactDetails.map(c => c.full_name);
+    }
   } catch (e) {}
   // Parse booking tags
   let tagsList = [];
@@ -1827,7 +1837,7 @@ router.get('/:id', (req, res) => {
   res.render('bookings/show', {
     title: 'Booking ' + booking.booking_number,
     hireSuppliers, mobileLegs,
-    booking: { ...booking, supervisor: booking.supervisor_name, requester_name: requesterName, planner_name: plannerName, site_contact_names: siteContactNames, tags_list: tagsList,
+    booking: { ...booking, supervisor: booking.supervisor_name, requester_name: requesterName, planner_name: plannerName, site_contact_names: siteContactNames, site_contact_details: siteContactDetails, tags_list: tagsList,
       project: { name: booking.title || (booking.job ? booking.job.job_name : ''), client: booking.client ? booking.client.company_name : (booking.job ? booking.job.client : ''), address: booking.site_address || (booking.job ? booking.job.site_address : ''), orderNumber: booking.order_number, billingCode: booking.billing_code },
       startDateTime: booking.start_datetime, endDateTime: booking.end_datetime,
       personnel: booking.crew.map(c => ({ id: c.crew_member_id, name: c.full_name || 'Unknown', role: c.role_on_site || '', confirmed: c.status === 'confirmed', bcStatus: c.status })),
