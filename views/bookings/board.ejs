@@ -313,18 +313,51 @@
                 <% } %>
               </div>
 
-              <%# Compact crew summary — shown only in compact density, in place
-                  of the full drag-drop crew blocks below. %>
-              <% var _cfw = []; var _cutes = 0; (b.crew_blocks || []).forEach(function (blk) { (blk.worker_slots || []).forEach(function (s) { if (s.filled) _cfw.push(s.name); }); if (blk.vehicle_slot && blk.vehicle_slot.filled) _cutes++; }); %>
+              <%# Compact composition — shown only in compact density, in place
+                  of the full drag-drop crew blocks. Accurately counts workers
+                  slotted into crews AND those on the booking but not in any
+                  vehicle, and shows who's in which ute + the equipment. %>
+              <%
+                var _blocks = Array.isArray(b.crew_blocks) ? b.crew_blocks : [];
+                var _un = (b.crew_blocks && b.crew_blocks.unassigned) || [];
+                var _workers = _un.length, _utes = 0, _equip = {};
+                _blocks.forEach(function (blk) {
+                  (blk.worker_slots || []).forEach(function (s) { if (s.filled) _workers++; });
+                  if (blk.vehicle_slot && blk.vehicle_slot.filled) _utes++;
+                  (blk.addons || []).forEach(function (a) { var t = a.type || 'Equipment'; _equip[t] = (_equip[t] || 0) + 1; });
+                });
+                var _equipKeys = Object.keys(_equip);
+                var _equipTotal = _equipKeys.reduce(function (n, k) { return n + _equip[k]; }, 0);
+              %>
               <div class="bk2-card-crewsum">
-                <% if (_cfw.length || _cutes) { %>
-                  <span class="bk2-crewsum-avatars">
-                    <% _cfw.slice(0, 6).forEach(function (n) { %><span class="bk2-crewsum-av"><%= initials(n) %></span><% }); %>
-                    <% if (_cfw.length > 6) { %><span class="bk2-crewsum-av bk2-crewsum-more">+<%= _cfw.length - 6 %></span><% } %>
-                  </span>
-                  <span class="bk2-crewsum-counts"><%= _cfw.length %> crew<% if (_cutes) { %> · <%= _cutes %> ute<%= _cutes > 1 ? 's' : '' %><% } %></span>
-                <% } else { %>
-                  <span class="bk2-crewsum-counts bk2-crewsum-empty">No crew assigned</span>
+                <div class="bk2-csum-head">
+                  <span><%= _workers %> crew</span>
+                  <% if (_utes) { %><span>· <%= _utes %> ute<%= _utes > 1 ? 's' : '' %></span><% } %>
+                  <% if (_equipTotal) { %><span>· <%= _equipTotal %> equip</span><% } %>
+                </div>
+                <% _blocks.forEach(function (blk) {
+                     var ws = (blk.worker_slots || []).filter(function (s) { return s.filled; });
+                     var openN = (blk.worker_slots || []).filter(function (s) { return !s.filled; }).length;
+                     var veh = (blk.vehicle_slot && blk.vehicle_slot.filled) ? (blk.vehicle_slot.name || blk.vehicle_slot.registration || 'UTE') : null;
+                     if (!ws.length && !veh && !openN) return;
+                %>
+                  <div class="bk2-csum-row">
+                    <span class="bk2-csum-veh <%= veh ? '' : 'bk2-csum-veh--empty' %>"><%= veh || ((blk.role || 'TC') + ' ' + (blk.size || '') + '-man') %></span>
+                    <span class="bk2-csum-avs">
+                      <% ws.forEach(function (w) { %><span class="bk2-crewsum-av" title="<%= w.name %>"><%= initials(w.name) %></span><% }); %>
+                      <% if (openN) { %><span class="bk2-csum-open"><%= openN %> open</span><% } %>
+                    </span>
+                  </div>
+                <% }); %>
+                <% if (_un.length) { %>
+                  <div class="bk2-csum-row">
+                    <span class="bk2-csum-veh bk2-csum-veh--none">No vehicle</span>
+                    <span class="bk2-csum-avs"><% _un.forEach(function (w) { %><span class="bk2-crewsum-av" title="<%= w.name %>"><%= initials(w.name) %></span><% }); %></span>
+                  </div>
+                <% } %>
+                <% if (!_workers && !_utes) { %><div class="bk2-csum-none">No crew assigned yet</div><% } %>
+                <% if (_equipKeys.length) { %>
+                  <div class="bk2-csum-equip"><% _equipKeys.forEach(function (k) { %><span class="bk2-csum-eqtag"><%= _equip[k] %>× <%= k %></span><% }); %></div>
                 <% } %>
               </div>
 
@@ -1714,8 +1747,28 @@
   // Lifts the selected card out of the (now blurred) board and glides it to a
   // vertically-centred spot just left of the slide-over, keeping its glow.
   var floatingCard = null;
+  // Compute the side-by-side layout: the editor narrows so the booking card
+  // sits cleanly to its LEFT with no overlap (so nothing is squished), on any
+  // screen wide enough. Returns null on small screens (then the editor takes
+  // its normal width and no card is floated).
+  function bkFloatLayout() {
+    var vw = window.innerWidth, vh = window.innerHeight;
+    if (vw < 1100) return null;                 // too narrow — don't float
+    var outer = 20, gap = 20;
+    var cardW = Math.min(360, Math.round(vw * 0.30));
+    var editorW = Math.min(1200, vw - cardW - gap - outer * 2);
+    var cardLeft = Math.max(outer, vw - editorW - gap - cardW);
+    return { vw: vw, vh: vh, cardW: cardW, editorW: editorW, cardLeft: cardLeft };
+  }
   function floatCardBesideEditor(card) {
     if (!card) return;
+    var L = bkFloatLayout();
+    var ed = $('#bk2-editor');
+    if (ed) {
+      if (L) { ed.style.width = L.editorW + 'px'; ed.dataset.bkNarrowed = '1'; }
+      else if (ed.dataset.bkNarrowed) { ed.style.width = ''; delete ed.dataset.bkNarrowed; }
+    }
+    if (!L) return; // small screen: editor full width, no floating card
     var r = card.getBoundingClientRect();
     // Reparent to <body> so position:fixed is viewport-relative — the board
     // sits inside transformed/contained panes that would otherwise become the
@@ -1732,29 +1785,23 @@
     card.style.left = r.left + 'px';
     card.style.width = r.width + 'px';
     card.style.margin = '0';
-    // 2) target: a taller panel docked to the editor's left edge, sitting
-    //    slightly IN FRONT of it (the edit page reads as being behind the
-    //    booking panel) so the two look like one connected unit.
-    var edW = Math.min(window.innerWidth * 0.92, 1200);
-    var editorLeft = window.innerWidth - edW;
-    var overlap = 18;                 // card sits 18px over the editor's edge
-    var cardW = 360;
-    var targetLeft = editorLeft - cardW + overlap;
-    if (targetLeft < 12) targetLeft = 12; // narrow screens: clamp, more overlap
-    var maxH = Math.round(window.innerHeight * 0.86);
-    var targetTop = Math.max(20, Math.round((window.innerHeight - Math.min(maxH, Math.max(r.height, 420))) / 2));
+    // 2) target: a taller panel beside (left of) the narrowed editor.
+    var maxH = Math.round(L.vh * 0.86);
+    var targetTop = Math.max(20, Math.round((L.vh - Math.min(maxH, Math.max(r.height, 420))) / 2));
     card.style.maxHeight = maxH + 'px';
     // 3) next frame, glide to target (CSS transition on top/left/width).
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
         card.style.top = targetTop + 'px';
-        card.style.left = targetLeft + 'px';
-        card.style.width = cardW + 'px';
+        card.style.left = L.cardLeft + 'px';
+        card.style.width = L.cardW + 'px';
       });
     });
     floatingCard = card;
   }
   function unfloatCard() {
+    var ed = $('#bk2-editor');
+    if (ed && ed.dataset.bkNarrowed) { ed.style.width = ''; delete ed.dataset.bkNarrowed; }
     document.querySelectorAll('.bk2-card--floating, .bk2-card.is-editing').forEach(function (c) {
       c.classList.remove('bk2-card--floating', 'is-editing');
       // Put it back where it was on the board.

@@ -2065,8 +2065,15 @@ body.bk2-date-loading::before {
    grid, tightening cards, and collapsing the full drag-drop crew
    blocks into a one-line summary (.bk2-card-crewsum).
    ───────────────────────────────────────────────────────────── */
-.bk2-card-crewsum { display: none; align-items: center; gap: 8px; flex-wrap: wrap; }
-.bk2-crewsum-avatars { display: inline-flex; align-items: center; }
+.bk2-card-crewsum { display: none; flex-direction: column; align-items: stretch; gap: 5px; }
+.bk2-csum-head { display: flex; gap: 5px; font-size: 11px; font-weight: 700; color: #94A3B8; letter-spacing: 0.01em; }
+.bk2-csum-row { display: flex; align-items: center; gap: 8px; }
+.bk2-csum-veh {
+  flex-shrink: 0; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px;
+  background: #1E293B; color: #CBD5E1; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+}
+.bk2-csum-veh--empty, .bk2-csum-veh--none { background: transparent; color: #64748B; font-weight: 600; padding-left: 0; }
+.bk2-csum-avs { display: inline-flex; align-items: center; flex-wrap: wrap; row-gap: 3px; }
 .bk2-crewsum-av {
   width: 22px; height: 22px; margin-left: -6px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
@@ -2074,12 +2081,14 @@ body.bk2-date-loading::before {
   background: #334155; border: 2px solid #0F172A;
 }
 .bk2-crewsum-av:first-child { margin-left: 0; }
-.bk2-crewsum-more { background: #1E293B; color: #94A3B8; }
-.bk2-crewsum-counts { font-size: 12px; font-weight: 600; color: #94A3B8; }
-.bk2-crewsum-empty { color: #64748B; font-style: italic; }
+.bk2-csum-open { font-size: 10px; color: #64748B; margin-left: 6px; white-space: nowrap; }
+.bk2-csum-none { font-size: 12px; color: #64748B; font-style: italic; }
+.bk2-csum-equip { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 1px; }
+.bk2-csum-eqtag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: rgba(43,127,255,0.12); color: #93C5FD; }
+:root[data-theme="light"] .bk2-csum-head { color: #64748B; }
+:root[data-theme="light"] .bk2-csum-veh { background: #F1F5F9; color: #334155; }
 :root[data-theme="light"] .bk2-crewsum-av { background: #E2E8F0; color: #334155; border-color: #fff; }
-:root[data-theme="light"] .bk2-crewsum-more { background: #F1F5F9; color: #64748B; }
-:root[data-theme="light"] .bk2-crewsum-counts { color: #64748B; }
+:root[data-theme="light"] .bk2-csum-eqtag { background: #EFF6FF; color: #1D4ED8; }
 
 /* Compact mode */
 .bk2-board.bk2-density-compact {
