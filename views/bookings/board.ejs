@@ -21,7 +21,7 @@
     if (!name) return '?';
     return name.split(/\s+/).map(function (n) { return n[0]; }).join('').substring(0, 2).toUpperCase();
   }
-  function statusLabel(s) { return (s || 'unconfirmed').replace(/_/g, ' '); }
+  function statusLabel(s) { return s === 'in_progress' ? 'ongoing' : (s || 'unconfirmed').replace(/_/g, ' '); }
   function roleAbbr(r) {
     if (!r) return 'TC';
     if (/team[_ ]?lead/i.test(r)) return 'TL';
@@ -320,9 +320,9 @@
               <%
                 var _blocks = Array.isArray(b.crew_blocks) ? b.crew_blocks : [];
                 var _un = (b.crew_blocks && b.crew_blocks.unassigned) || [];
-                var _workers = _un.length, _utes = 0, _equip = {};
+                var _workers = _un.length, _utes = 0, _equip = {}, _needed = 0;
                 _blocks.forEach(function (blk) {
-                  (blk.worker_slots || []).forEach(function (s) { if (s.filled) _workers++; });
+                  (blk.worker_slots || []).forEach(function (s) { if (s.filled) _workers++; else _needed++; });
                   if (blk.vehicle_slot && blk.vehicle_slot.filled) _utes++;
                   (blk.addons || []).forEach(function (a) { var t = a.type || 'Equipment'; _equip[t] = (_equip[t] || 0) + 1; });
                 });
@@ -334,6 +334,7 @@
                   <span><%= _workers %> crew</span>
                   <% if (_utes) { %><span>· <%= _utes %> ute<%= _utes > 1 ? 's' : '' %></span><% } %>
                   <% if (_equipTotal) { %><span>· <%= _equipTotal %> equip</span><% } %>
+                  <% if (_needed > 0) { %><span class="bk2-need-badge bk2-need-badge--short" title="Requirements not yet fully staffed — you can still confirm &amp; send">Needs <%= _needed %> more</span><% } %>
                 </div>
                 <% function _csumPerson(w) { %>
                   <div class="bk2-csum-person">
@@ -350,7 +351,7 @@
                      if (!ws.length && !veh && !openN) return;
                 %>
                   <div class="bk2-csum-grp">
-                    <div class="bk2-csum-veh <%= veh ? '' : 'bk2-csum-veh--empty' %>"><%= veh || ((blk.role || 'TC') + ' ' + (blk.size || '') + '-man crew') %></div>
+                    <div class="bk2-csum-veh <%= veh ? '' : 'bk2-csum-veh--empty' %>"><%= veh || (blk.no_vehicle ? ((blk.role || 'Crew') + ' ×' + (blk.size || 1)) : ((blk.role || 'TC') + ' ' + (blk.size || '') + '-man crew')) %></div>
                     <% ws.forEach(function (w) { _csumPerson(w); }); %>
                     <% if (openN) { %><div class="bk2-csum-openrow"><%= openN %> open <%= (blk.role || 'TC') %> slot<%= openN > 1 ? 's' : '' %></div><% } %>
                   </div>
@@ -378,16 +379,17 @@
                   %>
                     <div class="bk2-crew">
                       <div class="bk2-crew-head">
-                        <span class="bk2-crew-label">Crew <%= blk.ordinal %></span>
-                        <span class="bk2-crew-size"><%= blk.size %>-man · <%= blk.role || 'TC' %></span>
+                        <span class="bk2-crew-label"><%= blk.no_vehicle ? (blk.role || 'Crew') : ('Crew ' + blk.ordinal) %></span>
+                        <span class="bk2-crew-size"><%= blk.no_vehicle ? ('×' + (blk.size || 1)) : ((blk.size || '') + '-man · ' + (blk.role || 'TC')) %></span>
                       </div>
 
                       <!-- Vehicle slot rendered FIRST so workers visually sit
                            "under" the ute they're riding in. The filled
                            vehicle slot is ALSO a drop target for workers —
                            dropping a worker on it sets their
-                           assigned_vehicle_id, moving them under that ute. -->
-                      <% if (hasVehicle) { %>
+                           assigned_vehicle_id, moving them under that ute.
+                           People add-on blocks are vehicle-less — skip it. -->
+                      <% if (blk.no_vehicle) { /* no vehicle slot */ } else if (hasVehicle) { %>
                         <div class="bk2-veh-slot bk2-slot--drop bk2-slot--drop-veh-assign"
                              data-booking-id="<%= b.id %>"
                              data-vehicle-id="<%= blk.vehicle_slot.vehicle_id %>">
@@ -771,6 +773,7 @@
       { k: 'locked',         short: 'Locked',     icon: 'M12 11v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z' },
       { k: 'conflict',       short: 'Conflict',   icon: 'M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z' },
       { k: 'green_to_go',    short: 'G T G',      icon: 'M5 13l4 4L19 7' },
+      { k: 'in_progress',    short: 'Ongoing',    icon: 'M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
       { k: 'complete',       short: 'Complete',   icon: 'M5 4h14M5 4v8a7 7 0 0014 0V4M9 21h6m-3 0v-4m-1.5-9h3l1 5h-5l1-5z' },
       { k: 'finalised',      short: 'Finalised',  icon: 'M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9' },
       { k: 'cancelled',      short: 'Cancel',     icon: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636' },
@@ -888,6 +891,12 @@
                 <option value="">Select Location Context</option>
                 <% (typeof locationContexts !== 'undefined' ? locationContexts : []).forEach(function (lc) { %><option value="<%= lc %>"><%= lc %></option><% }); %>
               </select>
+              <!-- Inline add row (replaces window.prompt) -->
+              <div class="bk2-loc-addrow" data-bk-loc-addrow hidden>
+                <input type="text" data-bk-loc-input placeholder="New context, e.g. Northern Compound" autocomplete="off">
+                <button type="button" class="bk2-loc-save" data-bk-loc-save>Save</button>
+                <button type="button" class="bk2-loc-cancel" data-bk-loc-cancel aria-label="Cancel">×</button>
+              </div>
             </label>
             <label class="bk2-create-field">
               <span class="bk2-create-lbl">Client Billing Code</span>
@@ -933,8 +942,8 @@
               <textarea name="description" id="bk2-desc-textarea" rows="6" placeholder="Scope of works and minimum requirements…"></textarea>
             </label>
             <div class="bk2-create-field bk2-create-field--full bk2-dt-presets">
-              <button type="button" class="bk2-dt-preset" data-dt-preset="day">Day 07:00–15:00</button>
-              <button type="button" class="bk2-dt-preset" data-dt-preset="night">Night 19:00–05:00</button>
+              <button type="button" class="bk2-dt-preset" data-dt-preset="day">Day 06:00–18:00</button>
+              <button type="button" class="bk2-dt-preset" data-dt-preset="night">Night 18:00–06:00</button>
             </div>
             <label class="bk2-create-field bk2-create-field--required">
               <span class="bk2-create-lbl">Date * <span class="bk2-dow" id="bk2-start-dow"></span></span>
@@ -1052,21 +1061,11 @@
               <div data-bk-legs-list></div>
               <template data-bk-leg-template>
                 <div class="bk2-leg" data-bk-leg>
-                  <div class="bk2-leg-grid">
-                    <label class="bk2-leg-f bk2-leg-f--time">
-                      <span class="bk2-create-lbl">Start time</span>
-                      <input type="time" name="mobile_leg_start_time[]">
-                    </label>
-                    <label class="bk2-leg-f bk2-leg-f--addr">
-                      <span class="bk2-create-lbl">Address</span>
-                      <input type="text" name="mobile_leg_address[]" placeholder="Location address">
-                    </label>
-                    <button type="button" class="bk2-leg-del" data-bk-leg-del aria-label="Remove location">×</button>
-                  </div>
-                  <label class="bk2-leg-f bk2-leg-f--notes">
-                    <span class="bk2-create-lbl">Notes</span>
-                    <input type="text" name="mobile_leg_notes[]" placeholder="Access, hazards, contact…">
-                  </label>
+                  <span class="bk2-leg-num" data-bk-leg-num>1</span>
+                  <div class="bk2-leg-time"><input type="time" name="mobile_leg_start_time[]" aria-label="Start time"></div>
+                  <div class="bk2-leg-addr"><input type="text" name="mobile_leg_address[]" placeholder="Address" aria-label="Address"></div>
+                  <div class="bk2-leg-notes"><input type="text" name="mobile_leg_notes[]" placeholder="Notes (access, hazards…)" aria-label="Notes"></div>
+                  <button type="button" class="bk2-leg-del" data-bk-leg-del aria-label="Remove location">×</button>
                 </div>
               </template>
             </div>
@@ -1118,27 +1117,35 @@
               { name: '4x TC Crew',  field: 'crew_size_4' },
               { name: '5x TC Crew',  field: 'crew_size_5' },
             ];
-            var ADDON_REQS = [
-              { name: 'Arrow Board', field: 'addon_arrow' },
-              { name: 'Hoist Operator', field: 'addon_hoist' },
-              { name: 'Labour', field: 'addon_labour' },
-              { name: 'Light Tower', field: 'addon_light_tower' },
-              { name: 'Permit', field: 'addon_permit' },
-              { name: 'Pod Truck', field: 'addon_pod_truck' },
-              { name: 'Portaboom', field: 'addon_portaboom' },
-              { name: 'Security', field: 'addon_security' },
-              { name: 'Speed Advisory Sign', field: 'addon_speed_advisory' },
-              { name: 'Spotter', field: 'addon_spotter' },
-              { name: 'TMA (dry hire)', field: 'addon_tma_dry' },
-              { name: 'TMA (wet hire)', field: 'addon_tma_wet' },
-              { name: 'TMP', field: 'addon_tmp' },
-              { name: 'TMP with Traffic Management', field: 'addon_tmp_tm' },
-              { name: 'Traffic Controller', field: 'addon_tc' },
-              { name: 'Traffic Guidance Scheme', field: 'addon_tgs' },
-              { name: 'Trainee', field: 'addon_trainee' },
-              { name: 'VMS Board', field: 'addon_vms_board' },
-              { name: 'VMS Ute', field: 'addon_vms_ute' },
-              { name: 'Vehicle', field: 'addon_vehicle' },
+            // Grouped so the grid reads clearly: People (become assignable
+            // crew slots), Vehicles, then Equipment & Plans.
+            var ADDON_GROUPS = [
+              { group: 'People', items: [
+                { name: 'Traffic Controller', field: 'addon_tc' },
+                { name: 'Spotter', field: 'addon_spotter' },
+                { name: 'Hoist Operator', field: 'addon_hoist' },
+                { name: 'Labour', field: 'addon_labour' },
+                { name: 'Trainee', field: 'addon_trainee' },
+                { name: 'Security', field: 'addon_security' },
+              ] },
+              { group: 'Vehicles', items: [
+                { name: 'Pod Truck', field: 'addon_pod_truck' },
+                { name: 'VMS Ute', field: 'addon_vms_ute' },
+                { name: 'Vehicle', field: 'addon_vehicle' },
+                { name: 'TMA (dry hire)', field: 'addon_tma_dry' },
+                { name: 'TMA (wet hire)', field: 'addon_tma_wet' },
+              ] },
+              { group: 'Equipment & Plans', items: [
+                { name: 'Arrow Board', field: 'addon_arrow' },
+                { name: 'Light Tower', field: 'addon_light_tower' },
+                { name: 'Portaboom', field: 'addon_portaboom' },
+                { name: 'VMS Board', field: 'addon_vms_board' },
+                { name: 'Speed Advisory Sign', field: 'addon_speed_advisory' },
+                { name: 'Traffic Guidance Scheme', field: 'addon_tgs' },
+                { name: 'TMP', field: 'addon_tmp' },
+                { name: 'TMP with Traffic Management', field: 'addon_tmp_tm' },
+                { name: 'Permit', field: 'addon_permit' },
+              ] },
             ];
           %>
           <div class="bk2-create-reqs bk2-create-reqs--split">
@@ -1160,15 +1167,18 @@
             <div class="bk2-create-reqs-addons">
               <p class="bk2-create-reqs-grouplbl">Add-ons</p>
               <div class="bk2-create-reqs-addons-grid">
-                <% ADDON_REQS.forEach(function (r) { %>
-                  <div class="bk2-create-req" data-req-name="<%= r.name.toLowerCase() %>">
-                    <span class="bk2-create-req-name"><%= r.name %></span>
-                    <div class="bk2-create-stepper" data-stepper-name="<%= r.field %>">
-                      <button type="button" data-step="-1" aria-label="Decrease">−</button>
-                      <input type="number" name="<%= r.field %>" value="<%= r.defaultQty || 0 %>" min="0" max="20" readonly>
-                      <button type="button" data-step="+1" aria-label="Increase">+</button>
+                <% ADDON_GROUPS.forEach(function (g) { %>
+                  <p class="bk2-addon-group-h" data-addon-group="<%= g.group.toLowerCase() %>"><%= g.group %></p>
+                  <% g.items.forEach(function (r) { %>
+                    <div class="bk2-create-req" data-req-name="<%= r.name.toLowerCase() %>">
+                      <span class="bk2-create-req-name"><%= r.name %></span>
+                      <div class="bk2-create-stepper" data-stepper-name="<%= r.field %>">
+                        <button type="button" data-step="-1" aria-label="Decrease">−</button>
+                        <input type="number" name="<%= r.field %>" value="<%= r.defaultQty || 0 %>" min="0" max="20" readonly>
+                        <button type="button" data-step="+1" aria-label="Increase">+</button>
+                      </div>
                     </div>
-                  </div>
+                  <% }); %>
                 <% }); %>
               </div>
             </div>
@@ -1971,48 +1981,25 @@
     card.__bkNext = card.nextSibling;
     document.body.appendChild(card);
     card.classList.add('is-editing', 'bk2-card--floating');
-    // 1) freeze at current on-board position (no visual jump). Inline
-    //    position:fixed beats .bk2-card.is-editing's position:relative.
-    card.style.position = 'fixed';
-    card.style.top = r.top + 'px';
-    card.style.left = r.left + 'px';
-    card.style.width = r.width + 'px';
-    card.style.margin = '0';
-    // 2) target: a taller panel beside (left of) the narrowed editor.
-    //    The floated card leaves the compact board and expands to full
-    //    detail, so its rendered height is NOT the frozen compact height
-    //    (r.height). Centre provisionally, then re-measure once it has
-    //    reflowed at the target width and re-centre on the real height.
+    // Place the panel at its target spot IMMEDIATELY (no freeze→glide) so it
+    // just appears beside the editor with the glow — no visible jump. The CSS
+    // transition on top/left/width has been removed for the same reason.
     var maxH = Math.round(L.vh * 0.86);
+    card.style.position = 'fixed';
+    card.style.margin = '0';
     card.style.maxHeight = maxH + 'px';
     card.style.overflowY = 'auto';
+    card.style.left = L.cardLeft + 'px';
+    card.style.width = L.cardW + 'px';
+    // Provisional centre from the frozen compact height, then re-centre on the
+    // real expanded height once it has reflowed at the target width.
+    card.style.top = Math.max(20, Math.round((L.vh - Math.min(maxH, Math.max(r.height, 420))) / 2)) + 'px';
     function recentre() {
       var actualH = Math.min(maxH, card.offsetHeight);
-      var top = Math.max(20, Math.round((L.vh - actualH) / 2));
-      card.style.top = top + 'px';
+      card.style.top = Math.max(20, Math.round((L.vh - actualH) / 2)) + 'px';
     }
-    var provisionalTop = Math.max(20, Math.round((L.vh - Math.min(maxH, Math.max(r.height, 420))) / 2));
-    function glideToTarget() {
-      card.style.top = provisionalTop + 'px';
-      card.style.left = L.cardLeft + 'px';
-      card.style.width = L.cardW + 'px';
-    }
-    // 3) next frame, glide to target (CSS transition on top/left/width).
-    requestAnimationFrame(function () {
-      requestAnimationFrame(function () {
-        glideToTarget();
-        // Re-centre on the real, expanded height once the width transition
-        // settles (multiple passes catch late detail/font reflow).
-        setTimeout(recentre, 60);
-        setTimeout(recentre, 260);
-      });
-    });
-    // Fallback via setTimeout — requestAnimationFrame is throttled/paused when
-    // the tab is backgrounded, which would otherwise leave the card frozen at
-    // its on-board position. setTimeout still fires, so the panel always ends
-    // up beside the editor and vertically centred on its real height.
-    setTimeout(function () { glideToTarget(); recentre(); }, 80);
-    setTimeout(recentre, 300);
+    requestAnimationFrame(recentre);
+    setTimeout(recentre, 80);   // fallback: rAF is paused on backgrounded tabs
     floatingCard = card;
   }
   function unfloatCard() {
@@ -2534,23 +2521,41 @@
       if (!showing) { if (projSel) projSel.value = ''; projNewInput.focus(); } else projNewInput.value = '';
     });
 
-    // ── Location context: inline add ──
+    // ── Location context: inline add row (no window.prompt) ──
     var locBtn = form.querySelector('[data-bk-loc-add]');
     var locSel = form.querySelector('[data-bk-loc-select]');
-    if (locBtn && locSel) locBtn.addEventListener('click', function () {
-      var label = (window.prompt('New location context (e.g. Northern Compound):') || '').trim();
-      if (!label) return;
-      var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-      fetch('/bookings/api/location-contexts', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'x-csrf-token': csrf }, credentials: 'same-origin',
-        body: JSON.stringify({ label: label })
-      }).then(function (r) { return r.json(); }).then(function (j) {
-        if (!j || !j.ok) return;
-        locSel.innerHTML = '<option value="">Select Location Context</option>';
-        (j.items || []).forEach(function (lc) { var o = document.createElement('option'); o.value = lc; o.textContent = lc; locSel.appendChild(o); });
-        locSel.value = j.added || '';
-      }).catch(function () {});
-    });
+    var locRow = form.querySelector('[data-bk-loc-addrow]');
+    var locInput = form.querySelector('[data-bk-loc-input]');
+    var locSave = form.querySelector('[data-bk-loc-save]');
+    var locCancel = form.querySelector('[data-bk-loc-cancel]');
+    if (locBtn && locSel && locRow && locInput) {
+      function openLocRow() { locRow.hidden = false; locInput.value = ''; setTimeout(function () { locInput.focus(); }, 20); }
+      function closeLocRow() { locRow.hidden = true; locInput.value = ''; }
+      function saveLoc() {
+        var label = (locInput.value || '').trim();
+        if (!label) { closeLocRow(); return; }
+        var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+        locSave.disabled = true;
+        fetch('/bookings/api/location-contexts', {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json', 'x-csrf-token': csrf }, credentials: 'same-origin',
+          body: JSON.stringify({ label: label })
+        }).then(function (r) { return r.json(); }).then(function (j) {
+          if (j && j.ok) {
+            locSel.innerHTML = '<option value="">Select Location Context</option>';
+            (j.items || []).forEach(function (lc) { var o = document.createElement('option'); o.value = lc; o.textContent = lc; locSel.appendChild(o); });
+            locSel.value = j.added || '';
+          }
+          closeLocRow();
+        }).catch(function () { closeLocRow(); }).finally(function () { locSave.disabled = false; });
+      }
+      locBtn.addEventListener('click', function () { locRow.hidden ? openLocRow() : closeLocRow(); });
+      if (locSave) locSave.addEventListener('click', saveLoc);
+      if (locCancel) locCancel.addEventListener('click', closeLocRow);
+      locInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); saveLoc(); }
+        else if (e.key === 'Escape') { e.preventDefault(); closeLocRow(); }
+      });
+    }
   })();
 
   // Search filter for the requirements list.
@@ -2618,6 +2623,52 @@
   if (saveBtn2) {
     saveBtn2.removeAttribute('disabled');
     saveBtn2.addEventListener('click', forceSubmit);
+  }
+
+  // ── Clone (edit mode) — offers a with-crew / setup-only choice, then
+  // POSTs to /bookings/:id/clone and opens the new booking. ──
+  var cloneBtn = $('#bk2-edit-clone');
+  if (cloneBtn) {
+    function doClone(includeCrew) {
+      var ed = $('#bk2-editor'); var id = ed && ed.dataset.bookingId;
+      if (!id) return;
+      var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      var body = new URLSearchParams(); body.append('_csrf', csrf); body.append('include_crew', includeCrew ? '1' : '0');
+      cloneBtn.disabled = true;
+      fetch('/bookings/' + id + '/clone', {
+        method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body, credentials: 'same-origin',
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Clone failed');
+          if (typeof window.bk2Toast === 'function') window.bk2Toast('Cloned as ' + res.body.booking_number, 'success');
+          window.location.href = '/bookings/' + res.body.id;
+        })
+        .catch(function (e) { if (typeof window.bk2Toast === 'function') window.bk2Toast(e.message, 'error'); else alert(e.message); })
+        .finally(function () { cloneBtn.disabled = false; });
+    }
+    // Small choice popover anchored under the Clone button.
+    var cloneMenu = null;
+    function closeCloneMenu() { if (cloneMenu) { cloneMenu.remove(); cloneMenu = null; document.removeEventListener('click', onDocClickClone, true); } }
+    function onDocClickClone(e) { if (cloneMenu && !cloneMenu.contains(e.target) && e.target !== cloneBtn) closeCloneMenu(); }
+    cloneBtn.addEventListener('click', function () {
+      if (cloneMenu) { closeCloneMenu(); return; }
+      cloneMenu = document.createElement('div');
+      cloneMenu.className = 'bk2-clone-menu';
+      cloneMenu.innerHTML = '<button type="button" data-clone-crew="1">Clone with crew</button>'
+        + '<button type="button" data-clone-crew="0">Clone setup only</button>';
+      var r = cloneBtn.getBoundingClientRect();
+      cloneMenu.style.position = 'fixed';
+      cloneMenu.style.top = (r.bottom + 6) + 'px';
+      cloneMenu.style.left = Math.max(12, r.right - 200) + 'px';
+      document.body.appendChild(cloneMenu);
+      cloneMenu.addEventListener('click', function (e) {
+        var b = e.target.closest('[data-clone-crew]'); if (!b) return;
+        var inc = b.getAttribute('data-clone-crew') === '1';
+        closeCloneMenu(); doClone(inc);
+      });
+      setTimeout(function () { document.addEventListener('click', onDocClickClone, true); }, 0);
+    });
   }
 
   if (createForm) {
@@ -3301,8 +3352,12 @@
     form.querySelectorAll('[data-dt-preset]').forEach(function (btn) {
       btn.addEventListener('click', function () {
         var p = btn.getAttribute('data-dt-preset');
-        if (startTimeEl) startTimeEl.value = (p === 'night') ? '19:00' : '07:00';
-        if (endTimeEl) endTimeEl.value = (p === 'night') ? '05:00' : '15:00';
+        if (startTimeEl) startTimeEl.value = (p === 'night') ? '18:00' : '06:00';
+        if (endTimeEl) endTimeEl.value = (p === 'night') ? '06:00' : '18:00';
+        // Fire 'input' on the end field FIRST so the create-form auto-end
+        // (+8h on start change) treats the end as user-set and won't clobber
+        // the preset's end time.
+        if (endTimeEl) endTimeEl.dispatchEvent(new Event('input', { bubbles: true }));
         if (startTimeEl) startTimeEl.dispatchEvent(new Event('change', { bubbles: true }));
         if (endTimeEl) endTimeEl.dispatchEvent(new Event('change', { bubbles: true }));
         refreshOvernight();
@@ -3325,11 +3380,16 @@
         var n = node.querySelector('[name="mobile_leg_notes[]"]'); if (n) n.value = data.notes || '';
       }
       legsList.appendChild(node);
+      renumberLegs();
+    }
+    function renumberLegs() {
+      if (!legsList) return;
+      Array.prototype.forEach.call(legsList.querySelectorAll('[data-bk-leg-num]'), function (el, i) { el.textContent = i + 1; });
     }
     if (legsList) {
       legsList.addEventListener('click', function (e) {
         var del = e.target.closest('[data-bk-leg-del]');
-        if (del) { var leg = del.closest('[data-bk-leg]'); if (leg) leg.remove(); }
+        if (del) { var leg = del.closest('[data-bk-leg]'); if (leg) { leg.remove(); renumberLegs(); } }
       });
     }
     var legAddBtn = form.querySelector('[data-bk-leg-add]');
@@ -3788,25 +3848,34 @@
   // Density toggle — comfortable (full crew slots) ↔ compact (fits ~20-30).
   // Persisted per-browser; defaults to compact so busy days fit at a glance.
   (function () {
-    var btn = $('#bk2-fs-density');
-    var board = document.querySelector('.bk2-board');
-    if (!board) return;
+    function isCompact() {
+      var saved; try { saved = localStorage.getItem('bk2-density'); } catch (e) {}
+      return saved ? saved === 'compact' : true; // default compact
+    }
+    // Re-queries .bk2-board every call — the board element is replaced on AJAX
+    // date-nav / back navigation, so a captured reference would go stale and
+    // the swapped-in board would render in the wrong (comfortable) density.
     function apply(compact) {
-      board.classList.toggle('bk2-density-compact', compact);
+      var board = document.querySelector('.bk2-board');
+      if (board) board.classList.toggle('bk2-density-compact', compact);
+      var btn = $('#bk2-fs-density');
       if (btn) {
         btn.classList.toggle('is-active', compact);
         var lbl = btn.querySelector('[data-density-label]');
         if (lbl) lbl.textContent = compact ? 'Comfortable view' : 'Compact view';
       }
     }
-    var saved;
-    try { saved = localStorage.getItem('bk2-density'); } catch (e) {}
-    apply(saved ? saved === 'compact' : true); // default compact
+    window.bk2ApplyDensity = function () { apply(isCompact()); };
+    window.bk2ApplyDensity();
+    var btn = $('#bk2-fs-density');
     if (btn) btn.addEventListener('click', function () {
-      var compact = !board.classList.contains('bk2-density-compact');
-      apply(compact);
+      var board = document.querySelector('.bk2-board');
+      var compact = !(board && board.classList.contains('bk2-density-compact'));
       try { localStorage.setItem('bk2-density', compact ? 'compact' : 'comfortable'); } catch (e) {}
+      apply(compact);
     });
+    // bfcache restore (browser Back) doesn't re-run this IIFE — re-apply.
+    window.addEventListener('pageshow', function (e) { if (e.persisted) window.bk2ApplyDensity(); });
   })();
 
   // Initial paint
@@ -5158,6 +5227,10 @@
           if (newBtn) newBtn.click();
         });
       }
+      // The swapped-in board is a fresh element with no density class — the
+      // toggle is applied by JS, so re-apply it or old dates flash the big
+      // (comfortable) layout until a hard refresh.
+      try { if (window.bk2ApplyDensity) window.bk2ApplyDensity(); } catch (e) {}
     }
 
     // Expose a soft board refresh (re-fetch current URL, swap panes) so the

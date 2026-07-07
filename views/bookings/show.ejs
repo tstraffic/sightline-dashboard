@@ -143,7 +143,7 @@
       <%- include('../partials/csrf') %>
       <select name="status" onchange="this.form.submit()" class="text-sm font-medium rounded-lg px-3 py-2 border border-gray-300 bg-white text-gray-700 focus:ring-2 focus:ring-brand-500 cursor-pointer">
         <% ['client_booking','unconfirmed','confirmed','locked','conflict','green_to_go','in_progress','complete','finalised','cancelled','late_cancellation','on_hold'].forEach(s => { %>
-          <option value="<%= s %>" <%= b.status === s ? 'selected' : '' %>><%= s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) %></option>
+          <option value="<%= s %>" <%= b.status === s ? 'selected' : '' %>><%= s === 'in_progress' ? 'Ongoing' : s.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) %></option>
         <% }); %>
       </select>
     </form>
@@ -160,7 +160,7 @@
       { key: 'confirmed',         label: 'Confirmed', short: 'CF' },
       { key: 'locked',            label: 'Locked',    short: 'LK' },
       { key: 'green_to_go',       label: 'GTG',       short: 'G' },
-      { key: 'in_progress',       label: 'In Prog.',  short: 'IP' },
+      { key: 'in_progress',       label: 'Ongoing',   short: 'ON' },
       { key: 'complete',          label: 'Complete',  short: 'CP' },
       { key: 'finalised',         label: 'Finalised', short: 'F' },
     ];

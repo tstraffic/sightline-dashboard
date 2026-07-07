@@ -6,7 +6,7 @@ const multer = require('multer');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { requireRole } = require('../middleware/auth');
-const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew } = require('../lib/bookingLifecycle');
+const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew, autoAdvanceOngoing } = require('../lib/bookingLifecycle');
 const { getDocketCrew } = require('../lib/shiftDocket');
 const { getConfig } = require('../middleware/settings');
 const bookingNotify = require('../services/bookingNotify');
@@ -540,6 +540,19 @@ const V2_LIFECYCLE = [
   { key: 'complete',       label: 'Complete',       tone: 'gray' },
 ];
 
+// Standalone people add-ons that should render as assignable (vehicle-less)
+// crew slots — resource_type label → short role label. Without this, e.g. a
+// "Traffic Controller" or "Spotter" requirement never showed a slot to drop
+// people onto (only "Nx TC Crew" did).
+const PEOPLE_ADDON_ROLES = {
+  'Traffic Controller': 'TC',
+  'Spotter': 'Spotter',
+  'Hoist Operator': 'Hoist',
+  'Labour': 'Labour',
+  'Trainee': 'Trainee',
+  'Security': 'Security',
+};
+
 // Build crew_blocks for one booking — derives N-man crew composites from
 // booking_requirements rows matching /^(\d+)x TC Crew$/, then fans the
 // flat booking_crew + booking_vehicles arrays into them in assignment
@@ -565,6 +578,23 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       });
     }
   }
+  // Standalone people add-ons → vehicle-less blocks so they show open slots
+  // the planner can assign people to. One block per requirement, sized to qty.
+  for (const r of (requirementRows || [])) {
+    const role = PEOPLE_ADDON_ROLES[String(r.resource_type || '').trim()];
+    if (!role) continue;
+    const n = Math.max(0, parseInt(r.quantity_required, 10) || 0);
+    if (!n) continue;
+    blocks.push({
+      ordinal: blocks.length + 1,
+      size: n,
+      role,
+      worker_slots: Array.from({ length: n }, () => ({ filled: false })),
+      vehicle_slot: null,
+      no_vehicle: true,
+      addons: [],
+    });
+  }
   // If there are crew members on the booking but no "Nx TC Crew" rows,
   // synthesise a single block sized to the assigned crew so they still
   // render. Defensive fallback for legacy bookings.
@@ -586,6 +616,7 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
   // from the resource panel.
   const vehicles = (vehicleRows || []).slice();
   for (const blk of blocks) {
+    if (blk.no_vehicle) continue; // people add-on block — no vehicle slot
     const v = vehicles.shift();
     if (v) {
       const hasName = v.vehicle_name && String(v.vehicle_name).trim() !== '';
@@ -605,7 +636,7 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
   // ute they were dragged onto).
   const blockByVehicle = new Map();
   for (const blk of blocks) {
-    if (blk.vehicle_slot.vehicle_id) blockByVehicle.set(blk.vehicle_slot.vehicle_id, blk);
+    if (blk.vehicle_slot && blk.vehicle_slot.vehicle_id) blockByVehicle.set(blk.vehicle_slot.vehicle_id, blk);
   }
 
   function fillSlot(slot, c) {
@@ -693,6 +724,8 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
 // the same page. /bookings/board is kept as a redirect alias below.
 router.get('/', (req, res) => {
   const db = getDb();
+  // Flip any live shift to "Ongoing" before we render the board.
+  try { autoAdvanceOngoing(db); } catch (e) {}
   const dateStr = req.query.date || new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
   const filterDepot = req.query.depot || '';
   const filterStatus = req.query.status || '';
@@ -1689,6 +1722,8 @@ router.get('/:id', (req, res) => {
   let db, booking;
   try {
     db = getDb();
+    // Reflect a live shift as "Ongoing" before loading the booking.
+    try { autoAdvanceOngoing(db); } catch (e) {}
     booking = loadBookingDetail(db, req.params.id);
   } catch (err) {
     console.error('[GET /bookings/:id] loadBookingDetail threw:', err.message, err.stack);
@@ -2833,21 +2868,29 @@ router.post('/:id/clone', (req, res) => {
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   if (!source) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Not found.'); return res.redirect('/bookings'); }
   const bookingNumber = generateBookingNumber(db);
+  // Default to including crew for backward-compat; the UI passes an explicit
+  // choice (setup-only avoids double-booking workers on the clone).
+  const includeCrew = !(req.body && (req.body.include_crew === '0' || req.body.include_crew === false || req.body.include_crew === 'false'));
   function addDay(dt) { if (!dt) return dt; const d = new Date(dt); d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}T${(dt.split('T')[1] || '00:00:00')}`; }
   const result = db.prepare(`INSERT INTO bookings (booking_number, job_id, client_id, title, description, status, depot, start_datetime, end_datetime, site_address, suburb, state, postcode, order_number, billing_code, client_contact, supervisor_id, requirements_text, is_emergency, is_callout, billable, invoiced, notes, created_by_id,
-    site_contacts, depot_meeting_time, straight_to_site_time, booking_tags, latitude, longitude, marker_is_accurate, location_notes, worksite_location, works_direction, chainage_from, chainage_to, has_mobile_works, booking_type, is_booking_pool, requester_id, planner_id, location_context)
+    site_contacts, depot_meeting_time, straight_to_site_time, booking_tags, latitude, longitude, marker_is_accurate, location_notes, worksite_location, works_direction, chainage_from, chainage_to, has_mobile_works, booking_type, is_booking_pool, requester_id, planner_id, location_context,
+    meeting_point_latitude, meeting_point_longitude, meeting_point_note)
     VALUES (?, ?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?,
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+    ?, ?, ?)`).run(
     bookingNumber, source.job_id, source.client_id, source.title, source.description, source.depot, addDay(source.start_datetime), addDay(source.end_datetime),
     source.site_address, source.suburb, source.state, source.postcode, source.order_number, source.billing_code, source.client_contact, source.supervisor_id,
     source.requirements_text, source.is_emergency, source.is_callout, source.billable, source.notes, req.session.user.id,
     source.site_contacts || '[]', source.depot_meeting_time || '', source.straight_to_site_time || '', source.booking_tags || '[]',
     source.latitude, source.longitude, source.marker_is_accurate || 0, source.location_notes || '', source.worksite_location || '', source.works_direction || '',
     source.chainage_from || '', source.chainage_to || '', source.has_mobile_works || 0, source.booking_type || 'regular', source.is_booking_pool || 0,
-    source.requester_id, source.planner_id, source.location_context || '');
+    source.requester_id, source.planner_id, source.location_context || '',
+    source.meeting_point_latitude != null ? source.meeting_point_latitude : null,
+    source.meeting_point_longitude != null ? source.meeting_point_longitude : null,
+    source.meeting_point_note || '');
   const newId = result.lastInsertRowid;
   const newStart = addDay(source.start_datetime) || '';
-  for (const c of db.prepare("SELECT crew_member_id, role_on_site FROM booking_crew WHERE booking_id=?").all(source.id)) {
+  if (includeCrew) for (const c of db.prepare("SELECT crew_member_id, role_on_site FROM booking_crew WHERE booking_id=?").all(source.id)) {
     db.prepare("INSERT INTO booking_crew (booking_id, crew_member_id, role_on_site, status) VALUES (?, ?, ?, 'assigned')").run(newId, c.crew_member_id, c.role_on_site);
     // Allocation too — without it the cloned shift never appears in the
     // worker portal until the worker happens to open the booking page.
@@ -2867,7 +2910,10 @@ router.post('/:id/clone', (req, res) => {
   // them too (tasks reset to pending; equipment as-is).
   try { for (const eq of db.prepare("SELECT equipment_id, equipment_name, equipment_type, quantity, notes FROM booking_equipment WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_equipment (booking_id, equipment_id, equipment_name, equipment_type, quantity, notes) VALUES (?, ?, ?, ?, ?, ?)").run(newId, eq.equipment_id, eq.equipment_name, eq.equipment_type, eq.quantity, eq.notes); } catch(e) {}
   try { for (const t of db.prepare("SELECT title, description, crew_member_id, priority, due_at FROM shift_tasks WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO shift_tasks (booking_id, title, description, crew_member_id, priority, due_at, status, created_by_user_id) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)").run(newId, t.title, t.description, t.crew_member_id, t.priority, t.due_at, req.session.user.id); } catch(e) {}
-  logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: newId, details: `Cloned ${source.booking_number} → ${bookingNumber}`, req });
+  // Hired-item suppliers + mobile-works legs (previously dropped by clone).
+  try { for (const h of db.prepare("SELECT item_key, item_label, hire_company_id, company_name FROM booking_hire_items WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_hire_items (booking_id, item_key, item_label, hire_company_id, company_name) VALUES (?, ?, ?, ?, ?)").run(newId, h.item_key, h.item_label, h.hire_company_id, h.company_name); } catch(e) {}
+  try { for (const lg of db.prepare("SELECT seq, start_time, address, notes FROM booking_mobile_legs WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_mobile_legs (booking_id, seq, start_time, address, notes) VALUES (?, ?, ?, ?, ?)").run(newId, lg.seq, lg.start_time, lg.address, lg.notes); } catch(e) {}
+  logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: newId, details: `Cloned ${source.booking_number} → ${bookingNumber}${includeCrew ? '' : ' (setup only)'}`, req });
   if (isJson) return res.json({ ok: true, id: newId, booking_number: bookingNumber });
   req.flash('success', `Cloned as ${bookingNumber}.`); res.redirect('/bookings/' + newId);
 });
