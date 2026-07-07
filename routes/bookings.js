@@ -396,7 +396,7 @@ router.get('/new', (req, res) => {
     let supervisors = []; try { supervisors = db.prepare("SELECT id, full_name FROM crew_members WHERE active = 1 ORDER BY full_name").all(); } catch (e) {}
     let contacts = []; try { contacts = db.prepare("SELECT id, full_name, position, phone, mobile, email, company_id FROM client_contacts ORDER BY full_name").all(); } catch (e) {}
     let crewForSelect = []; try { crewForSelect = db.prepare("SELECT id, full_name, role, portal_role FROM crew_members WHERE active = 1 ORDER BY full_name").all(); } catch (e) {}
-    res.render('bookings/form', { title: 'New Booking', booking: null, jobs, clients, supervisors, contacts, crewForSelect, depots: getDepots(), hireableItems: HIREABLE_ITEMS, hireCompanies: getHireCompanies(db), locationContexts: getLocationContexts(db), hireItems: {}, user: req.session.user });
+    res.render('bookings/form', { title: 'New Booking', booking: null, jobs, clients, supervisors, contacts, crewForSelect, depots: getDepots(), hireableItems: HIREABLE_ITEMS, hireCompanies: getHireCompanies(db), locationContexts: getLocationContexts(db), hireItems: {}, mobileLegs: [], user: req.session.user });
   } catch (err) {
     console.error('Bookings /new error:', err);
     req.flash('error', 'Failed to load form: ' + err.message);
@@ -479,6 +479,8 @@ router.post('/', (req, res) => {
   }
   syncTCCrewVehicles(db, bookingId);
   try { persistBookingHireItems(db, bookingId, b, req.session.user.id); } catch (e) { console.error('[bookings create] hire items failed:', e.message); }
+  try { persistBookingMobileLegs(db, bookingId, b); } catch (e) { console.error('[bookings create] mobile legs failed:', e.message); }
+  try { persistMeetingPoint(db, bookingId, b); } catch (e) {}
 
   // Assign crew from form crew selector + auto-create allocations for worker portal.
   // Per-crew on-site role comes from `crew_role_<id>` (TC / TL / Supervisor —
@@ -912,6 +914,52 @@ function getLocationContexts(db) {
   try { return db.prepare("SELECT label FROM location_contexts WHERE active = 1 ORDER BY label").all().map(r => r.label); } catch (e) { return []; }
 }
 
+// Mobile-works location legs — parallel arrays from the form
+// (mobile_leg_start_time[], mobile_leg_address[], mobile_leg_notes[]).
+// Delete-then-reinsert. Only writes legs that have at least an address or a
+// time. Skips entirely when the form didn't carry the legs at all (so a
+// partial POST never wipes existing legs).
+function arrify(v) { return Array.isArray(v) ? v : (v == null ? [] : [v]); }
+function persistBookingMobileLegs(db, bookingId, b) {
+  var addrs = arrify(b.mobile_leg_address);
+  var times = arrify(b.mobile_leg_start_time);
+  var notes = arrify(b.mobile_leg_notes);
+  // Presence of the mobile-works flag OR any legs field means the block was
+  // on the submitted form.
+  var hasBlock = b.mobile_works !== undefined || b.has_mobile_works !== undefined
+    || b.mobile_leg_address !== undefined || b.mobile_leg_start_time !== undefined;
+  if (!hasBlock) return;
+  var del = db.prepare('DELETE FROM booking_mobile_legs WHERE booking_id = ?');
+  var ins = db.prepare('INSERT INTO booking_mobile_legs (booking_id, seq, start_time, address, notes) VALUES (?, ?, ?, ?, ?)');
+  db.transaction(function () {
+    del.run(bookingId);
+    var n = Math.max(addrs.length, times.length, notes.length);
+    var seq = 0;
+    for (var i = 0; i < n; i++) {
+      var addr = (addrs[i] || '').trim();
+      var time = (times[i] || '').trim();
+      var note = (notes[i] || '').trim();
+      if (!addr && !time && !note) continue;
+      ins.run(bookingId, seq++, time, addr, note);
+    }
+  })();
+}
+function getMobileLegs(db, bookingId) {
+  try { return db.prepare('SELECT seq, start_time, address, notes FROM booking_mobile_legs WHERE booking_id = ? ORDER BY seq, id').all(bookingId); } catch (e) { return []; }
+}
+
+// Optional crew meeting point (a map pin distinct from the site pin) + note.
+// Only writes when the form actually carried the fields.
+function persistMeetingPoint(db, bookingId, b) {
+  if (b.meeting_point_latitude === undefined && b.meeting_point_longitude === undefined && b.meeting_point_note === undefined) return;
+  var lat = b.meeting_point_latitude ? parseFloat(b.meeting_point_latitude) : null;
+  var lng = b.meeting_point_longitude ? parseFloat(b.meeting_point_longitude) : null;
+  try {
+    db.prepare("UPDATE bookings SET meeting_point_latitude = ?, meeting_point_longitude = ?, meeting_point_note = ? WHERE id = ?")
+      .run(isFinite(lat) ? lat : null, isFinite(lng) ? lng : null, b.meeting_point_note || '', bookingId);
+  } catch (e) { console.error('[bookings] meeting point save failed:', e.message); }
+}
+
 // Resolve a supplier from posted fields: prefer an explicit hire_company_id,
 // else a typed company name (find-or-create in hire_companies). Returns
 // { hire_company_id, company_name } or null when nothing supplied.
@@ -1040,10 +1088,25 @@ router.get('/api/:id/edit-data', (req, res) => {
       .all(b.id)
       .forEach(r => { hireItems[r.item_key] = { hire_company_id: r.hire_company_id, company_name: r.company_name }; });
   } catch (e) {}
+  // Mobile-works legs (one row per stop) for the slide-over to prefill.
+  let mobileLegs = [];
+  try { mobileLegs = getMobileLegs(db, b.id); } catch (e) {}
+  // Meeting-point pin + note (columns added in migration 307).
+  let meetingPoint = { latitude: '', longitude: '', note: '' };
+  try {
+    const mp = db.prepare('SELECT meeting_point_latitude AS latitude, meeting_point_longitude AS longitude, meeting_point_note AS note FROM bookings WHERE id = ?').get(b.id);
+    if (mp) meetingPoint = { latitude: mp.latitude || '', longitude: mp.longitude || '', note: mp.note || '' };
+  } catch (e) {}
+  // Mobile-works flag lives on the bookings row.
+  let hasMobileWorks = false;
+  try { const mw = db.prepare('SELECT has_mobile_works FROM bookings WHERE id = ?').get(b.id); hasMobileWorks = !!(mw && mw.has_mobile_works); } catch (e) {}
   res.json({
     ok: true,
     requirements,
     hireItems,
+    mobileLegs,
+    meetingPoint,
+    hasMobileWorks,
     booking: {
       id: b.id, booking_number: b.booking_number,
       client_id: b.client_id, client_name: b.client_name || '',
@@ -1179,6 +1242,18 @@ router.post('/:id/quick-update', (req, res) => {
     // Hired-item suppliers ride with the grid.
     try { persistBookingHireItems(db, parseInt(req.params.id, 10), b, req.session.user.id); } catch (e) { console.error('[bookings/quick-update] hire items failed:', e.message); }
   }
+
+  // Fields the base quick-update statement doesn't cover but the slide-over
+  // now carries: description + mobile-works flag (only when submitted).
+  try {
+    const bid = parseInt(req.params.id, 10);
+    if (b.description !== undefined) db.prepare('UPDATE bookings SET description = ? WHERE id = ?').run(b.description || '', bid);
+    if (b.mobile_works !== undefined || b.has_mobile_works !== undefined) {
+      db.prepare('UPDATE bookings SET has_mobile_works = ? WHERE id = ?').run((b.mobile_works || b.has_mobile_works) ? 1 : 0, bid);
+    }
+  } catch (e) { console.error('[bookings/quick-update] extra fields failed:', e.message); }
+  try { persistBookingMobileLegs(db, parseInt(req.params.id, 10), b); } catch (e) { console.error('[bookings/quick-update] mobile legs failed:', e.message); }
+  try { persistMeetingPoint(db, parseInt(req.params.id, 10), b); } catch (e) {}
 
   // Move crew allocations along with any date/time change.
   try { syncAllocationsToBooking(db, parseInt(req.params.id, 10)); } catch (e) {}
@@ -1375,6 +1450,8 @@ router.post('/quick', (req, res) => {
     }
   });
   try { persistBookingHireItems(db, newId, b, req.session.user.id); } catch (e) { console.error('[bookings/quick] hire items failed:', e.message); }
+  try { persistBookingMobileLegs(db, newId, b); } catch (e) { console.error('[bookings/quick] mobile legs failed:', e.message); }
+  try { persistMeetingPoint(db, newId, b); } catch (e) {}
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: newId, details: `Quick-created booking ${bookingNumber}`, req });
 
@@ -1745,9 +1822,11 @@ router.get('/:id', (req, res) => {
 
   let hireSuppliers = [];
   try { hireSuppliers = db.prepare('SELECT item_key, item_label, company_name FROM booking_hire_items WHERE booking_id = ? ORDER BY item_label').all(booking.id); } catch (e) {}
+  let mobileLegs = [];
+  try { mobileLegs = getMobileLegs(db, booking.id); } catch (e) {}
   res.render('bookings/show', {
     title: 'Booking ' + booking.booking_number,
-    hireSuppliers,
+    hireSuppliers, mobileLegs,
     booking: { ...booking, supervisor: booking.supervisor_name, requester_name: requesterName, planner_name: plannerName, site_contact_names: siteContactNames, tags_list: tagsList,
       project: { name: booking.title || (booking.job ? booking.job.job_name : ''), client: booking.client ? booking.client.company_name : (booking.job ? booking.job.client : ''), address: booking.site_address || (booking.job ? booking.job.site_address : ''), orderNumber: booking.order_number, billingCode: booking.billing_code },
       startDateTime: booking.start_datetime, endDateTime: booking.end_datetime,
@@ -1833,11 +1912,13 @@ router.get('/:id/edit', (req, res) => {
       .all(req.params.id)
       .forEach(r => { hireItems[r.item_key] = { hire_company_id: r.hire_company_id, company_name: r.company_name }; });
   } catch (e) {}
+  let mobileLegs = [];
+  try { mobileLegs = getMobileLegs(db, booking.id); } catch (e) {}
   res.render('bookings/form', {
     title: 'Edit Booking ' + booking.booking_number,
     booking, jobs, clients, supervisors, contacts, crewForSelect,
     depots: getDepots(), user: req.session.user,
-    bookingDocuments,
+    bookingDocuments, mobileLegs,
     hireableItems: HIREABLE_ITEMS, hireCompanies: getHireCompanies(db),
     locationContexts: getLocationContexts(db), hireItems,
   });
@@ -1878,6 +1959,8 @@ router.post('/:id', (req, res) => {
   }
   syncTCCrewVehicles(db, req.params.id);
   try { persistBookingHireItems(db, parseInt(req.params.id, 10), b, req.session.user.id); } catch (e) { console.error('[bookings update] hire items failed:', e.message); }
+  try { persistBookingMobileLegs(db, parseInt(req.params.id, 10), b); } catch (e) { console.error('[bookings update] mobile legs failed:', e.message); }
+  try { persistMeetingPoint(db, parseInt(req.params.id, 10), b); } catch (e) {}
 
   // Update crew assignments — but ONLY when the form actually contained a
   // crew picker. Without the explicit `crew_ids_present` flag we leave the
@@ -2582,17 +2665,43 @@ router.post('/:id/dockets/:docketId/delete', (req, res) => {
 // ===========================================================================
 
 // POST /:id/documents — Upload document
+// GET /:id/documents.json — booking's attached documents, for the slide-over
+// Req. Plans / Req. Permits panes to list + attach inline. Returns every doc;
+// the client filters by type (Plans vs Permits).
+router.get('/:id/documents.json', (req, res) => {
+  const db = getDb();
+  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) return res.status(404).json({ error: 'Booking not found' });
+  let docs = [];
+  try {
+    docs = db.prepare(`
+      SELECT bd.id, bd.document_type, bd.title, bd.original_name, bd.file_size, bd.created_at,
+             u.full_name AS uploader_name
+      FROM booking_documents bd LEFT JOIN users u ON u.id = bd.uploaded_by_id
+      WHERE bd.booking_id = ? ORDER BY bd.created_at DESC
+    `).all(req.params.id);
+  } catch (e) {}
+  res.json({ ok: true, documents: docs });
+});
+
 router.post('/:id/documents', uploadDoc.single('file'), (req, res) => {
   const db = getDb();
-  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) { req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
-  if (!req.file) { req.flash('error', 'No file selected.'); return res.redirect('/bookings/' + req.params.id); }
+  const wantsJson = req.headers.accept && req.headers.accept.includes('application/json');
+  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) {
+    if (wantsJson) return res.status(404).json({ error: 'Booking not found' });
+    req.flash('error', 'Booking not found.'); return res.redirect('/bookings');
+  }
+  if (!req.file) {
+    if (wantsJson) return res.status(400).json({ error: 'No file selected' });
+    req.flash('error', 'No file selected.'); return res.redirect('/bookings/' + req.params.id);
+  }
   const b = req.body;
-  db.prepare(`
+  const info = db.prepare(`
     INSERT INTO booking_documents (booking_id, document_type, title, description, filename, original_name, file_path, file_size, uploaded_by_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(req.params.id, b.document_type || 'other', b.title || req.file.originalname, b.description || '',
     req.file.filename, req.file.originalname, req.file.path, req.file.size, req.session.user.id);
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking_document', entityId: req.params.id, details: `Uploaded ${req.file.originalname}`, req });
+  if (wantsJson) return res.json({ ok: true, id: info.lastInsertRowid, document_type: b.document_type || 'other', original_name: req.file.originalname });
   req.flash('success', 'Document uploaded.');
   res.redirect('/bookings/' + req.params.id);
 });

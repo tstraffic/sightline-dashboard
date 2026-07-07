@@ -890,10 +890,6 @@
               </select>
             </label>
             <label class="bk2-create-field">
-              <span class="bk2-create-lbl">Purchase Order / Client job number</span>
-              <input type="text" name="order_number">
-            </label>
-            <label class="bk2-create-field">
               <span class="bk2-create-lbl">Client Billing Code</span>
               <input type="text" name="client_billing_code">
             </label>
@@ -926,23 +922,30 @@
               <input type="text" name="title" placeholder="Optional — defaults to the project name">
             </label>
             <label class="bk2-create-field bk2-create-field--full">
-              <span class="bk2-create-lbl">Booking description</span>
-              <textarea name="description" rows="2"></textarea>
+              <span class="bk2-create-lbl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                <span>Booking description</span>
+                <button type="button" class="bk2c-mini-add" id="bk2-desc-template">Use template</button>
+              </span>
+              <textarea name="description" id="bk2-desc-textarea" rows="6" placeholder="Scope of works and minimum requirements…"></textarea>
             </label>
-            <label class="bk2-create-field bk2-create-field--full">
-              <span class="bk2-create-lbl">Booking tags</span>
-              <input type="text" name="tags" placeholder="Select one or more tags">
-            </label>
+            <div class="bk2-create-field bk2-create-field--full bk2-dt-presets">
+              <button type="button" class="bk2-dt-preset" data-dt-preset="day">Day 07:00–15:00</button>
+              <button type="button" class="bk2-dt-preset" data-dt-preset="night">Night 19:00–05:00</button>
+            </div>
             <label class="bk2-create-field bk2-create-field--required">
-              <span class="bk2-create-lbl">Date *</span>
-              <input type="date" name="start_date" value="" required data-bk-autofill="start_date">
+              <span class="bk2-create-lbl">Date * <span class="bk2-dow" id="bk2-start-dow"></span></span>
+              <div class="bk2-date-row">
+                <button type="button" class="bk2-date-step" data-date-step="-1" data-date-target="start_date" aria-label="Previous day">‹</button>
+                <input type="date" name="start_date" value="" required data-bk-autofill="start_date">
+                <button type="button" class="bk2-date-step" data-date-step="1" data-date-target="start_date" aria-label="Next day">›</button>
+              </div>
             </label>
             <label class="bk2-create-field bk2-create-field--required">
               <span class="bk2-create-lbl">Start time *</span>
               <input type="time" name="start_time" value="" required data-bk-autofill="start_time">
             </label>
             <label class="bk2-create-field">
-              <span class="bk2-create-lbl">Approximate end time</span>
+              <span class="bk2-create-lbl">Approximate end time <span class="bk2-dow" id="bk2-overnight-flag"></span></span>
               <input type="time" name="end_time" value="" data-bk-autofill="end_time">
             </label>
             <label class="bk2-create-field">
@@ -984,7 +987,20 @@
             </label>
             <div class="bk2-create-field--full" data-bk-map-wrap hidden>
               <div id="bk2-overview-map" style="height:280px;border-radius:12px;overflow:hidden;border:1px solid #E5E7EB"></div>
-              <p class="bk2-create-hint" style="margin-top:6px">Drag the pin to the exact site. The coordinates save with the booking.</p>
+              <p class="bk2-create-hint" style="margin-top:6px">Drag the blue pin to the exact site. The coordinates save with the booking.</p>
+              <div class="bk2-mp-controls">
+                <label class="bk2-create-toggle" style="margin:0">
+                  <input type="checkbox" id="bk2-mp-enable" data-bk-mp-toggle>
+                  <span>Add a crew meeting point (green pin)</span>
+                </label>
+                <p class="bk2-create-hint" data-bk-mp-hint hidden style="margin:4px 0 0">Drag the green pin to where crew should meet.</p>
+              </div>
+              <input type="hidden" name="meeting_point_latitude">
+              <input type="hidden" name="meeting_point_longitude">
+              <label class="bk2-create-field bk2-create-field--full" data-bk-mp-note-wrap hidden style="margin-top:8px">
+                <span class="bk2-create-lbl">Meeting point notes</span>
+                <input type="text" name="meeting_point_note" placeholder="e.g. Meet at the depot gate on Smith St">
+              </label>
             </div>
             <style>
               /* Clear, high-contrast zoom controls for the pin-picker map. The
@@ -1021,9 +1037,35 @@
               <input type="text" name="chainage_to">
             </label>
             <label class="bk2-create-toggle bk2-create-field--full">
-              <input type="checkbox" name="mobile_works" value="1">
+              <input type="checkbox" name="mobile_works" value="1" data-bk-mobile-toggle>
               <span>This booking has mobile works</span>
             </label>
+            <div class="bk2-create-field--full bk2-legs" data-bk-legs-wrap hidden>
+              <div class="bk2-legs-head">
+                <span class="bk2-create-lbl">Mobile work locations</span>
+                <button type="button" class="bk2c-mini-add" data-bk-leg-add>+ Add location</button>
+              </div>
+              <div data-bk-legs-list></div>
+              <template data-bk-leg-template>
+                <div class="bk2-leg" data-bk-leg>
+                  <div class="bk2-leg-grid">
+                    <label class="bk2-leg-f bk2-leg-f--time">
+                      <span class="bk2-create-lbl">Start time</span>
+                      <input type="time" name="mobile_leg_start_time[]">
+                    </label>
+                    <label class="bk2-leg-f bk2-leg-f--addr">
+                      <span class="bk2-create-lbl">Address</span>
+                      <input type="text" name="mobile_leg_address[]" placeholder="Location address">
+                    </label>
+                    <button type="button" class="bk2-leg-del" data-bk-leg-del aria-label="Remove location">×</button>
+                  </div>
+                  <label class="bk2-leg-f bk2-leg-f--notes">
+                    <span class="bk2-create-lbl">Notes</span>
+                    <input type="text" name="mobile_leg_notes[]" placeholder="Access, hazards, contact…">
+                  </label>
+                </div>
+              </template>
+            </div>
           </div>
         </div>
 
@@ -1188,14 +1230,41 @@
       { k: 'reqperm',   l: 'Req. Permits' },
       { k: 'invoices',  l: 'Invoices' },
       { k: 'print',     l: 'Print' },
-    ].forEach(function (t) { %>
+    ].forEach(function (t) {
+      if (t.k === 'reqplans' || t.k === 'reqperm') { %>
+      <section class="bk2-edit-pane" data-edit-pane="<%= t.k %>" hidden>
+        <div class="bk2-docpane" data-bk-docpane="<%= t.k %>"
+             data-doc-types="<%= t.k === 'reqplans' ? 'tgs,tmp,ctmp,stage_plan,rol,rol_day,rol_night' : 'permit' %>"
+             data-doc-default="<%= t.k === 'reqplans' ? 'tmp' : 'permit' %>">
+          <h3 class="bk2-create-head"><%= t.l %></h3>
+          <div class="bk2-docpane-list" data-bk-docpane-list>
+            <p class="bk2-create-hint" data-bk-docpane-empty>Loading…</p>
+          </div>
+          <form class="bk2-docpane-upload" data-bk-docpane-upload enctype="multipart/form-data">
+            <span class="bk2-create-lbl"><%= t.k === 'reqplans' ? 'Attach a plan' : 'Attach a permit' %></span>
+            <div class="bk2-docpane-uprow">
+              <select name="document_type" data-bk-docpane-type>
+                <% (t.k === 'reqplans'
+                     ? [['tgs','TGS'],['tmp','TMP'],['ctmp','CTMP'],['stage_plan','Stage plan'],['rol','ROL'],['rol_day','ROL (day)'],['rol_night','ROL (night)']]
+                     : [['permit','Permit']]
+                   ).forEach(function (o) { %><option value="<%= o[0] %>"><%= o[1] %></option><% }); %>
+              </select>
+              <input type="file" name="file" data-bk-docpane-file required>
+              <button type="submit" class="bk2c-mini-add">Upload</button>
+            </div>
+            <p class="bk2-create-hint" data-bk-docpane-msg hidden></p>
+          </form>
+        </div>
+      </section>
+      <% } else { %>
       <section class="bk2-edit-pane" data-edit-pane="<%= t.k %>" hidden>
         <div class="bk2-edit-placeholder">
           <h3><%= t.l %></h3>
           <p class="bk2-edit-spec">Tell me what this tab should do, or whether to drop it.</p>
         </div>
       </section>
-    <% }); %>
+      <% }
+    }); %>
   </div>
 </aside>
 
@@ -1792,17 +1861,40 @@
     card.style.width = r.width + 'px';
     card.style.margin = '0';
     // 2) target: a taller panel beside (left of) the narrowed editor.
+    //    The floated card leaves the compact board and expands to full
+    //    detail, so its rendered height is NOT the frozen compact height
+    //    (r.height). Centre provisionally, then re-measure once it has
+    //    reflowed at the target width and re-centre on the real height.
     var maxH = Math.round(L.vh * 0.86);
-    var targetTop = Math.max(20, Math.round((L.vh - Math.min(maxH, Math.max(r.height, 420))) / 2));
     card.style.maxHeight = maxH + 'px';
+    card.style.overflowY = 'auto';
+    function recentre() {
+      var actualH = Math.min(maxH, card.offsetHeight);
+      var top = Math.max(20, Math.round((L.vh - actualH) / 2));
+      card.style.top = top + 'px';
+    }
+    var provisionalTop = Math.max(20, Math.round((L.vh - Math.min(maxH, Math.max(r.height, 420))) / 2));
+    function glideToTarget() {
+      card.style.top = provisionalTop + 'px';
+      card.style.left = L.cardLeft + 'px';
+      card.style.width = L.cardW + 'px';
+    }
     // 3) next frame, glide to target (CSS transition on top/left/width).
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
-        card.style.top = targetTop + 'px';
-        card.style.left = L.cardLeft + 'px';
-        card.style.width = L.cardW + 'px';
+        glideToTarget();
+        // Re-centre on the real, expanded height once the width transition
+        // settles (multiple passes catch late detail/font reflow).
+        setTimeout(recentre, 60);
+        setTimeout(recentre, 260);
       });
     });
+    // Fallback via setTimeout — requestAnimationFrame is throttled/paused when
+    // the tab is backgrounded, which would otherwise leave the card frozen at
+    // its on-board position. setTimeout still fires, so the panel always ends
+    // up beside the editor and vertically centred on its real height.
+    setTimeout(function () { glideToTarget(); recentre(); }, 80);
+    setTimeout(recentre, 300);
     floatingCard = card;
   }
   function unfloatCard() {
@@ -1860,6 +1952,7 @@
     // booking and would otherwise leak across opens.
     fragmentLoaded = {};
     fragmentDocCache = null;
+    try { if (window.bk2ResetDocPanes) window.bk2ResetDocPanes(); } catch (e) {}
   }
 
   // ── Prefill the Overview form from a booking's edit-data JSON ──
@@ -1925,6 +2018,11 @@
         try { if (window.bk2LoadProjects) window.bk2LoadProjects(b.client_id, b.job_id); } catch (e) {}
         try { if (window.bk2RefreshHireRows) window.bk2RefreshHireRows(); } catch (e) {}
         try { if (window.bk2ApplyHireItems) window.bk2ApplyHireItems(data.hireItems || {}); } catch (e) {}
+
+        // Mobile-works legs + meeting point (added with the doc/legs feature).
+        try { if (window.bk2ApplyMobileLegs) window.bk2ApplyMobileLegs(data.mobileLegs || [], data.hasMobileWorks); } catch (e) {}
+        try { if (window.bk2ApplyMeetingPoint) window.bk2ApplyMeetingPoint(data.meetingPoint || {}); } catch (e) {}
+        try { document.dispatchEvent(new CustomEvent('bk2:prefilled')); } catch (e) {}
 
         // Booking type / callout / status side-effects.
         var statusPill = document.querySelector('.bk2-edit-statuspill[data-status-set="' + (b.status || '') + '"]');
@@ -2158,7 +2256,8 @@
     // Tabs in TAB_TO_BK_TAB lift their section; others stay placeholder.
     var ed = $('#bk2-editor');
     if (ed && ed.dataset.existing === '1' && name !== 'overview') {
-      loadBookingFragment(name);
+      if (name === 'reqplans' || name === 'reqperm') { try { if (window.bk2LoadDocPanes) window.bk2LoadDocPanes(); } catch (e) {} }
+      else loadBookingFragment(name);
     }
   }
   $$('.bk2-edit-tab').forEach(function (t) {
@@ -2919,6 +3018,299 @@
         if (seed && pickMap) { pickMap.setView(seed, 15); placeMarker(seed); }
       });
     }
+
+    // ── Meeting point — a SECOND, green draggable marker (distinct from the
+    // blue site pin). Revealed by its own checkbox; writes into hidden
+    // meeting_point_latitude/longitude. Shares pickMap with the site pin. ──
+    var mpToggle = document.querySelector('[data-bk-mp-toggle]');
+    var mpNoteWrap = document.querySelector('[data-bk-mp-note-wrap]');
+    var mpHint = document.querySelector('[data-bk-mp-hint]');
+    var mpMarker = null;
+    var GREEN_ICON = (typeof L !== 'undefined') ? L.divIcon({
+      className: 'bk2-mp-icon',
+      html: '<div class="bk2-mp-pin"></div>',
+      iconSize: [22, 22], iconAnchor: [11, 22]
+    }) : null;
+    function mpLatEl() { return form.querySelector('[name="meeting_point_latitude"]'); }
+    function mpLngEl() { return form.querySelector('[name="meeting_point_longitude"]'); }
+    function writeMp(lat, lng) {
+      if (mpLatEl()) mpLatEl().value = (lat == null) ? '' : String(lat);
+      if (mpLngEl()) mpLngEl().value = (lng == null) ? '' : String(lng);
+    }
+    function mpCurrent() {
+      var lat = parseFloat(mpLatEl() && mpLatEl().value);
+      var lng = parseFloat(mpLngEl() && mpLngEl().value);
+      if (isFinite(lat) && isFinite(lng) && (lat || lng)) return [lat, lng];
+      return null;
+    }
+    function placeMp(center) {
+      if (!pickMap) return;
+      if (!mpMarker) {
+        mpMarker = L.marker(center, { draggable: true, icon: GREEN_ICON || undefined }).addTo(pickMap);
+        mpMarker.on('dragend', function () {
+          var ll = mpMarker.getLatLng();
+          writeMp(ll.lat.toFixed(6), ll.lng.toFixed(6));
+        });
+      } else {
+        mpMarker.setLatLng(center);
+      }
+    }
+    function revealMp(seedOverride) {
+      // The site map must be up first (meeting point rides on the same map).
+      if (!wrap.hidden === false || wrap.hidden) { wrap.hidden = false; }
+      if (!pickMap) { reveal(); }
+      if (mpNoteWrap) mpNoteWrap.hidden = false;
+      if (mpHint) mpHint.hidden = false;
+      function go() {
+        if (!pickMap) { setTimeout(go, 150); return; }
+        var seed = seedOverride || mpCurrent() || currentLatLng() || SYDNEY;
+        // Nudge the seed slightly off the site pin so both are visible.
+        if (!mpCurrent() && !seedOverride) seed = [seed[0] + 0.0012, seed[1] + 0.0012];
+        placeMp(seed);
+        writeMp(seed[0].toFixed ? seed[0].toFixed(6) : seed[0], seed[1].toFixed ? seed[1].toFixed(6) : seed[1]);
+        setTimeout(function () { if (pickMap) pickMap.invalidateSize(); }, 60);
+      }
+      go();
+    }
+    function hideMp(clear) {
+      if (mpNoteWrap) mpNoteWrap.hidden = true;
+      if (mpHint) mpHint.hidden = true;
+      if (mpMarker && pickMap) { pickMap.removeLayer(mpMarker); mpMarker = null; }
+      if (clear) {
+        writeMp('', '');
+        var note = form.querySelector('[name="meeting_point_note"]'); if (note) note.value = '';
+      }
+    }
+    if (mpToggle) {
+      mpToggle.addEventListener('change', function () {
+        if (mpToggle.checked) revealMp();
+        else hideMp(true);
+      });
+    }
+
+    // Prefill hook used by the editor when opening an existing booking.
+    window.bk2ApplyMeetingPoint = function (mp) {
+      mp = mp || {};
+      var hasPin = mp.latitude !== '' && mp.latitude != null && mp.longitude !== '' && mp.longitude != null;
+      var note = form.querySelector('[name="meeting_point_note"]');
+      if (note) note.value = mp.note || '';
+      if (hasPin) {
+        writeMp(mp.latitude, mp.longitude);
+        if (mpToggle) mpToggle.checked = true;
+        revealMp([parseFloat(mp.latitude), parseFloat(mp.longitude)]);
+      } else if (mp.note) {
+        // Note but no pin — still surface the note field.
+        if (mpToggle) mpToggle.checked = true;
+        revealMp();
+      } else {
+        if (mpToggle) mpToggle.checked = false;
+        hideMp(false);
+      }
+    };
+  })();
+
+  // ============================================================
+  //  DESCRIPTION TEMPLATE + DATE/TIME HELPERS + MOBILE LEGS
+  // ============================================================
+  (function () {
+    var form = document.getElementById('bk2-edit-form');
+    if (!form) return;
+
+    // ── "Use template" — fills the description ONLY when it's empty, so we
+    // never clobber a planner's typed scope. Editable afterwards. ──
+    var DESC_TEMPLATE = [
+      'SCOPE OF WORKS:',
+      '',
+      'MINIMUM REQUIREMENTS',
+      '• PPE: hi-vis (Class D/N), hard hat, steel-capped boots',
+      '• Plant / equipment:',
+      '• Site access / parking:',
+      '• Key hazards:',
+      '• Plans / permits on site:'
+    ].join('\n');
+    var tmplBtn = document.getElementById('bk2-desc-template');
+    var descBox = document.getElementById('bk2-desc-textarea');
+    if (tmplBtn && descBox) {
+      tmplBtn.addEventListener('click', function () {
+        if (descBox.value.trim()) {
+          if (typeof window.bk2Toast === 'function') window.bk2Toast('Description already has content — cleared it out first to use the template.', 'info');
+          else if (!confirm('Replace the current description with the template?')) return;
+        }
+        descBox.value = DESC_TEMPLATE;
+        descBox.focus();
+        descBox.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+    }
+
+    // ── Date/time helpers: day-of-week label, ±1 day, presets, overnight ──
+    var startDateEl = form.querySelector('[name="start_date"]');
+    var startTimeEl = form.querySelector('[name="start_time"]');
+    var endTimeEl = form.querySelector('[name="end_time"]');
+    var dowEl = document.getElementById('bk2-start-dow');
+    var overnightEl = document.getElementById('bk2-overnight-flag');
+    var DOW = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+    function refreshDow() {
+      if (!dowEl) return;
+      var v = startDateEl && startDateEl.value;
+      if (!v) { dowEl.textContent = ''; return; }
+      var d = new Date(v + 'T00:00:00');
+      dowEl.textContent = isNaN(d) ? '' : '· ' + DOW[d.getDay()];
+    }
+    function refreshOvernight() {
+      if (!overnightEl) return;
+      var s = startTimeEl && startTimeEl.value, e = endTimeEl && endTimeEl.value;
+      overnightEl.textContent = (s && e && e <= s) ? '· next day' : '';
+    }
+    if (startDateEl) startDateEl.addEventListener('change', function () { refreshDow(); });
+    if (startTimeEl) startTimeEl.addEventListener('change', refreshOvernight);
+    if (endTimeEl) endTimeEl.addEventListener('change', refreshOvernight);
+    // ±1-day arrows on the date field.
+    form.querySelectorAll('[data-date-step]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var target = form.querySelector('[name="' + btn.getAttribute('data-date-target') + '"]');
+        if (!target) return;
+        var base = target.value ? new Date(target.value + 'T00:00:00') : new Date();
+        if (isNaN(base)) base = new Date();
+        base.setDate(base.getDate() + (parseInt(btn.getAttribute('data-date-step'), 10) || 0));
+        target.value = base.getFullYear() + '-' + String(base.getMonth() + 1).padStart(2, '0') + '-' + String(base.getDate()).padStart(2, '0');
+        target.dispatchEvent(new Event('change', { bubbles: true }));
+        refreshDow();
+      });
+    });
+    // Day / Night presets fill start + end times.
+    form.querySelectorAll('[data-dt-preset]').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var p = btn.getAttribute('data-dt-preset');
+        if (startTimeEl) startTimeEl.value = (p === 'night') ? '19:00' : '07:00';
+        if (endTimeEl) endTimeEl.value = (p === 'night') ? '05:00' : '15:00';
+        if (startTimeEl) startTimeEl.dispatchEvent(new Event('change', { bubbles: true }));
+        if (endTimeEl) endTimeEl.dispatchEvent(new Event('change', { bubbles: true }));
+        refreshOvernight();
+      });
+    });
+    // Keep labels in sync when the editor prefills the form.
+    document.addEventListener('bk2:prefilled', function () { refreshDow(); refreshOvernight(); });
+
+    // ── Mobile-works legs: reveal on toggle, add/remove rows ──
+    var mobileToggle = form.querySelector('[data-bk-mobile-toggle]');
+    var legsWrap = form.querySelector('[data-bk-legs-wrap]');
+    var legsList = form.querySelector('[data-bk-legs-list]');
+    var legTemplate = form.querySelector('[data-bk-leg-template]');
+    function addLeg(data) {
+      if (!legTemplate || !legsList) return;
+      var node = legTemplate.content.firstElementChild.cloneNode(true);
+      if (data) {
+        var t = node.querySelector('[name="mobile_leg_start_time[]"]'); if (t) t.value = data.start_time || '';
+        var a = node.querySelector('[name="mobile_leg_address[]"]'); if (a) a.value = data.address || '';
+        var n = node.querySelector('[name="mobile_leg_notes[]"]'); if (n) n.value = data.notes || '';
+      }
+      legsList.appendChild(node);
+    }
+    if (legsList) {
+      legsList.addEventListener('click', function (e) {
+        var del = e.target.closest('[data-bk-leg-del]');
+        if (del) { var leg = del.closest('[data-bk-leg]'); if (leg) leg.remove(); }
+      });
+    }
+    var legAddBtn = form.querySelector('[data-bk-leg-add]');
+    if (legAddBtn) legAddBtn.addEventListener('click', function () { addLeg(); });
+    function showLegs(show) {
+      if (!legsWrap) return;
+      legsWrap.hidden = !show;
+      if (show && legsList && !legsList.children.length) addLeg();
+    }
+    if (mobileToggle) {
+      mobileToggle.addEventListener('change', function () { showLegs(mobileToggle.checked); });
+    }
+    // Prefill hook used by the editor when opening an existing booking.
+    window.bk2ApplyMobileLegs = function (legs, hasMobile) {
+      if (legsList) legsList.innerHTML = '';
+      var on = !!hasMobile || (legs && legs.length);
+      if (mobileToggle) mobileToggle.checked = !!on;
+      if (on && legs && legs.length) {
+        legs.forEach(function (l) { addLeg(l); });
+        if (legsWrap) legsWrap.hidden = false;
+      } else {
+        showLegs(!!on);
+      }
+    };
+  })();
+
+  // ============================================================
+  //  REQ. PLANS / REQ. PERMITS — document list + inline attach
+  // ============================================================
+  (function () {
+    var docsCache = null; // {id, docs:[...]}
+    function editorBookingId() { var ed = document.getElementById('bk2-editor'); return ed && ed.dataset.bookingId; }
+    function fmtSize(n) { n = parseInt(n, 10) || 0; if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(0) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
+    function csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.getAttribute('content') : ''; }
+
+    function renderPane(pane, docs) {
+      var types = (pane.getAttribute('data-doc-types') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+      var list = pane.querySelector('[data-bk-docpane-list]');
+      var id = editorBookingId();
+      var matching = (docs || []).filter(function (d) { return types.indexOf(d.document_type) !== -1; });
+      if (!matching.length) {
+        list.innerHTML = '<p class="bk2-create-hint">No documents attached yet. Use the control below to add one.</p>';
+        return;
+      }
+      list.innerHTML = '';
+      matching.forEach(function (d) {
+        var row = document.createElement('div');
+        row.className = 'bk2-docrow';
+        row.innerHTML =
+          '<div class="bk2-docrow-main">'
+          + '<span class="bk2-docrow-name">' + (d.title || d.original_name || 'Document') + '</span>'
+          + '<span class="bk2-docrow-meta">' + (d.document_type || '') + ' · ' + fmtSize(d.file_size) + '</span>'
+          + '</div>'
+          + '<a class="bk2-docrow-dl" href="/bookings/' + id + '/documents/' + d.id + '/download">Download</a>';
+        list.appendChild(row);
+      });
+    }
+
+    function loadDocs(force) {
+      var id = editorBookingId();
+      if (!id) return;
+      var panes = document.querySelectorAll('[data-bk-docpane]');
+      if (docsCache && docsCache.id === id && !force) {
+        panes.forEach(function (p) { renderPane(p, docsCache.docs); });
+        return;
+      }
+      fetch('/bookings/' + id + '/documents.json', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+        .then(function (data) {
+          docsCache = { id: id, docs: data.documents || [] };
+          panes.forEach(function (p) { renderPane(p, docsCache.docs); });
+        })
+        .catch(function () {
+          panes.forEach(function (p) { var l = p.querySelector('[data-bk-docpane-list]'); if (l) l.innerHTML = '<p class="bk2-create-hint">Couldn’t load documents.</p>'; });
+        });
+    }
+
+    // Inline upload — posts multipart to the existing /:id/documents route
+    // with the tab's document_type, then refreshes both doc panes.
+    document.querySelectorAll('[data-bk-docpane-upload]').forEach(function (frm) {
+      frm.addEventListener('submit', function (e) {
+        e.preventDefault();
+        var id = editorBookingId(); if (!id) return;
+        var fileEl = frm.querySelector('[data-bk-docpane-file]');
+        var msg = frm.querySelector('[data-bk-docpane-msg]');
+        if (!fileEl || !fileEl.files.length) return;
+        var fd = new FormData();
+        fd.append('file', fileEl.files[0]);
+        fd.append('document_type', frm.querySelector('[data-bk-docpane-type]').value);
+        fd.append('_csrf', csrf());
+        if (msg) { msg.hidden = false; msg.textContent = 'Uploading…'; }
+        fetch('/bookings/' + id + '/documents', { method: 'POST', body: fd, credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
+          .then(function () { if (msg) { msg.textContent = 'Uploaded.'; setTimeout(function () { msg.hidden = true; }, 1500); } fileEl.value = ''; loadDocs(true); })
+          .catch(function () { if (msg) msg.textContent = 'Upload failed.'; });
+      });
+    });
+
+    // Expose so the tab switcher can trigger a load when a doc tab opens.
+    window.bk2LoadDocPanes = loadDocs;
+    window.bk2ResetDocPanes = function () { docsCache = null; };
   })();
 
   // ============================================================

@@ -2109,3 +2109,72 @@ body.bk2-date-loading::before {
 .bk2-density-compact .bk2-card-h3 { font-size: 14px; line-height: 1.25; }
 .bk2-density-compact .bk2-meta-list { font-size: 11.5px; gap: 3px; }
 .bk2-density-compact .bk2-meta-list svg { width: 13px; height: 13px; }
+
+/* ==========================================================================
+   Bookings editor v34 — date/time helpers, mobile legs, meeting point,
+   Req. Plans / Req. Permits doc panes.
+   ========================================================================== */
+
+/* Day/Night presets row */
+.bk2-dt-presets { display: flex; gap: 8px; flex-wrap: wrap; }
+.bk2-dt-preset {
+  border: 1px solid #D1D5DB; background: #fff; color: #374151;
+  border-radius: 8px; padding: 6px 12px; font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: background .12s, border-color .12s;
+}
+.bk2-dt-preset:hover { background: #F3F4F6; border-color: #9CA3AF; }
+
+/* Day-of-week + overnight flag chips beside labels */
+.bk2-dow { color: #2B7FFF; font-weight: 600; font-size: 11.5px; margin-left: 4px; }
+
+/* Date field with ±1-day arrows */
+.bk2-date-row { display: flex; align-items: stretch; gap: 6px; }
+.bk2-date-row input[type="date"] { flex: 1 1 auto; }
+.bk2-date-step {
+  flex: 0 0 auto; width: 34px; border: 1px solid #D1D5DB; background: #fff;
+  border-radius: 8px; font-size: 18px; line-height: 1; color: #374151;
+  cursor: pointer; transition: background .12s;
+}
+.bk2-date-step:hover { background: #F3F4F6; }
+
+/* Mobile-works legs */
+.bk2-legs { border: 1px dashed #D1D5DB; border-radius: 10px; padding: 12px; background: #FAFAFA; }
+.bk2-legs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.bk2-leg { border: 1px solid #E5E7EB; background: #fff; border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+.bk2-leg:last-child { margin-bottom: 0; }
+.bk2-leg-grid { display: flex; gap: 8px; align-items: flex-end; }
+.bk2-leg-f { display: flex; flex-direction: column; gap: 3px; }
+.bk2-leg-f--time { flex: 0 0 110px; }
+.bk2-leg-f--addr { flex: 1 1 auto; }
+.bk2-leg-f--notes { display: flex; flex-direction: column; gap: 3px; margin-top: 8px; }
+.bk2-leg-del {
+  flex: 0 0 auto; width: 32px; height: 32px; border: 1px solid #FCA5A5; background: #FEF2F2;
+  color: #DC2626; border-radius: 8px; font-size: 18px; line-height: 1; cursor: pointer;
+}
+.bk2-leg-del:hover { background: #FEE2E2; }
+
+/* Meeting-point map controls + green pin */
+.bk2-mp-controls { margin-top: 8px; }
+.bk2-mp-icon { background: transparent; border: 0; }
+.bk2-mp-pin {
+  width: 18px; height: 18px; border-radius: 50% 50% 50% 0;
+  background: #16A34A; border: 2px solid #fff; transform: rotate(-45deg);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+}
+
+/* Req. Plans / Req. Permits doc panes */
+.bk2-docpane { padding: 4px 2px; }
+.bk2-docpane-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0 16px; }
+.bk2-docrow {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px 12px; background: #fff;
+}
+.bk2-docrow-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.bk2-docrow-name { font-weight: 600; font-size: 13.5px; color: #111827; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk2-docrow-meta { font-size: 11.5px; color: #6B7280; text-transform: uppercase; letter-spacing: .02em; }
+.bk2-docrow-dl { flex: 0 0 auto; color: #2B7FFF; font-weight: 600; font-size: 12.5px; text-decoration: none; }
+.bk2-docrow-dl:hover { text-decoration: underline; }
+.bk2-docpane-upload { border-top: 1px solid #E5E7EB; padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.bk2-docpane-uprow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.bk2-docpane-uprow select { flex: 0 0 auto; }
+.bk2-docpane-uprow input[type="file"] { flex: 1 1 auto; font-size: 12.5px; }

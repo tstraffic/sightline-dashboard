@@ -13879,6 +13879,38 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 305 error:', e.message); }
   }
 
+  // 306: per-booking mobile-works locations (legs). One row per stop with a
+  // start time, address and notes. Only used when a booking has_mobile_works.
+  if (!isMigrationApplied.get(306)) {
+    try {
+      db.exec(`CREATE TABLE IF NOT EXISTS booking_mobile_legs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+        seq INTEGER NOT NULL DEFAULT 0,
+        start_time TEXT DEFAULT '',
+        address TEXT DEFAULT '',
+        notes TEXT DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_bml_booking ON booking_mobile_legs(booking_id)');
+      recordMigration.run(306, 'booking_mobile_legs: mobile-works locations per booking');
+      console.log('Migration 306 applied');
+    } catch (e) { console.error('Migration 306 error:', e.message); }
+  }
+
+  // 307: optional crew meeting point on a booking — a map pin (distinct from
+  // the work-site pin) plus a free-text note.
+  if (!isMigrationApplied.get(307)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(bookings)").all().map(c => c.name);
+      if (!cols.includes('meeting_point_latitude')) db.exec("ALTER TABLE bookings ADD COLUMN meeting_point_latitude REAL");
+      if (!cols.includes('meeting_point_longitude')) db.exec("ALTER TABLE bookings ADD COLUMN meeting_point_longitude REAL");
+      if (!cols.includes('meeting_point_note')) db.exec("ALTER TABLE bookings ADD COLUMN meeting_point_note TEXT DEFAULT ''");
+      recordMigration.run(307, 'bookings: meeting_point_latitude/longitude/note');
+      console.log('Migration 307 applied');
+    } catch (e) { console.error('Migration 307 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

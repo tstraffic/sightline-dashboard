@@ -445,6 +445,47 @@
 </div>
 <% } %>
 
+<!-- Meeting point + mobile work locations (read-only) -->
+<%
+  var _hasMp = (b.meeting_point_latitude && b.meeting_point_longitude) || b.meeting_point_note;
+  var _legs = (typeof mobileLegs !== 'undefined' && mobileLegs) ? mobileLegs : [];
+%>
+<% if (_hasMp || _legs.length) { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-5" data-bk-tab="overview">
+  <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Meeting Point &amp; Mobile Locations</h2>
+  <% if (_hasMp) { %>
+    <div class="mb-3">
+      <span class="inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700">
+        <span style="display:inline-block;width:12px;height:12px;border-radius:50% 50% 50% 0;background:#16A34A;transform:rotate(-45deg)"></span>
+        Crew meeting point
+      </span>
+      <% if (b.meeting_point_note) { %><p class="text-sm text-gray-700 mt-1 whitespace-pre-wrap"><%= b.meeting_point_note %></p><% } %>
+      <% if (b.meeting_point_latitude && b.meeting_point_longitude) { %>
+        <p class="text-xs font-mono text-gray-500 mt-1"><%= b.meeting_point_latitude %>, <%= b.meeting_point_longitude %></p>
+      <% } %>
+    </div>
+  <% } %>
+  <% if (_legs.length) { %>
+    <div class="<%= _hasMp ? 'pt-3 border-t border-gray-100' : '' %>">
+      <span class="text-gray-400 text-xs uppercase tracking-widest font-bold">Mobile work locations (<%= _legs.length %>)</span>
+      <ol class="mt-2 space-y-2">
+        <% _legs.forEach(function (lg, i) { %>
+          <li class="flex gap-3 items-start">
+            <span class="flex-none w-6 h-6 rounded-full bg-brand-50 text-brand-700 text-xs font-bold flex items-center justify-center mt-0.5"><%= i + 1 %></span>
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-gray-800">
+                <% if (lg.start_time) { %><span class="text-brand-600"><%= lg.start_time %></span> · <% } %><%= lg.address || '(no address)' %>
+              </p>
+              <% if (lg.notes) { %><p class="text-xs text-gray-500 mt-0.5 whitespace-pre-wrap"><%= lg.notes %></p><% } %>
+            </div>
+          </li>
+        <% }); %>
+      </ol>
+    </div>
+  <% } %>
+</div>
+<% } %>
+
 <!-- ====================================================================
      CREW & VEHICLES — the heart of every booking. Lives at the top of
      the page so it's the first thing a planner sees after creating a
