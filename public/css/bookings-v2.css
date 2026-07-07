@@ -2065,29 +2065,32 @@ body.bk2-date-loading::before {
    grid, tightening cards, and collapsing the full drag-drop crew
    blocks into a one-line summary (.bk2-card-crewsum).
    ───────────────────────────────────────────────────────────── */
-.bk2-card-crewsum { display: none; flex-direction: column; align-items: stretch; gap: 5px; }
+.bk2-card-crewsum { display: none; flex-direction: column; align-items: stretch; gap: 8px; }
 .bk2-csum-head { display: flex; gap: 5px; font-size: 11px; font-weight: 700; color: #94A3B8; letter-spacing: 0.01em; }
-.bk2-csum-row { display: flex; align-items: center; gap: 8px; }
+.bk2-csum-grp { display: flex; flex-direction: column; gap: 2px; }
 .bk2-csum-veh {
-  flex-shrink: 0; font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 5px;
-  background: #1E293B; color: #CBD5E1; white-space: nowrap; max-width: 130px; overflow: hidden; text-overflow: ellipsis;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  color: #7C8BA1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 1px;
 }
-.bk2-csum-veh--empty, .bk2-csum-veh--none { background: transparent; color: #64748B; font-weight: 600; padding-left: 0; }
-.bk2-csum-avs { display: inline-flex; align-items: center; flex-wrap: wrap; row-gap: 3px; }
+.bk2-csum-veh--none, .bk2-csum-veh--empty { color: #64748B; }
+/* One worker per line: avatar + full name + role, left-aligned and orderly. */
+.bk2-csum-person { display: flex; align-items: center; gap: 7px; font-size: 12.5px; color: #E2E8F0; line-height: 1.5; }
 .bk2-crewsum-av {
-  width: 22px; height: 22px; margin-left: -6px; border-radius: 50%;
+  flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700; color: #E2E8F0;
-  background: #334155; border: 2px solid #0F172A;
+  font-size: 9px; font-weight: 700; color: #E2E8F0; background: #334155;
 }
-.bk2-crewsum-av:first-child { margin-left: 0; }
-.bk2-csum-open { font-size: 10px; color: #64748B; margin-left: 6px; white-space: nowrap; }
+.bk2-csum-nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk2-csum-rl { flex-shrink: 0; font-size: 9px; font-weight: 700; padding: 0 4px; border-radius: 3px; background: rgba(148,163,184,0.18); color: #94A3B8; }
+.bk2-csum-rl--tl { background: rgba(43,127,255,0.2); color: #93C5FD; }
+.bk2-csum-openrow { font-size: 11px; color: #64748B; padding-left: 27px; font-style: italic; }
 .bk2-csum-none { font-size: 12px; color: #64748B; font-style: italic; }
 .bk2-csum-equip { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 1px; }
 .bk2-csum-eqtag { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; background: rgba(43,127,255,0.12); color: #93C5FD; }
 :root[data-theme="light"] .bk2-csum-head { color: #64748B; }
-:root[data-theme="light"] .bk2-csum-veh { background: #F1F5F9; color: #334155; }
-:root[data-theme="light"] .bk2-crewsum-av { background: #E2E8F0; color: #334155; border-color: #fff; }
+:root[data-theme="light"] .bk2-csum-veh { color: #6B7280; }
+:root[data-theme="light"] .bk2-csum-person { color: #374151; }
+:root[data-theme="light"] .bk2-crewsum-av { background: #E2E8F0; color: #334155; }
 :root[data-theme="light"] .bk2-csum-eqtag { background: #EFF6FF; color: #1D4ED8; }
 
 /* Compact mode */

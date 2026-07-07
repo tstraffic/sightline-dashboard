@@ -335,24 +335,30 @@
                   <% if (_utes) { %><span>· <%= _utes %> ute<%= _utes > 1 ? 's' : '' %></span><% } %>
                   <% if (_equipTotal) { %><span>· <%= _equipTotal %> equip</span><% } %>
                 </div>
+                <% function _csumPerson(w) { %>
+                  <div class="bk2-csum-person">
+                    <span class="bk2-crewsum-av"><%= initials(w.name) %></span>
+                    <span class="bk2-csum-nm"><%= w.name %></span>
+                    <% if (w.role) { %><span class="bk2-csum-rl"><%= roleAbbr(w.role) %></span><% } %>
+                    <% if (w.is_team_leader) { %><span class="bk2-csum-rl bk2-csum-rl--tl">TL</span><% } %>
+                  </div>
+                <% } %>
                 <% _blocks.forEach(function (blk) {
                      var ws = (blk.worker_slots || []).filter(function (s) { return s.filled; });
                      var openN = (blk.worker_slots || []).filter(function (s) { return !s.filled; }).length;
                      var veh = (blk.vehicle_slot && blk.vehicle_slot.filled) ? (blk.vehicle_slot.name || blk.vehicle_slot.registration || 'UTE') : null;
                      if (!ws.length && !veh && !openN) return;
                 %>
-                  <div class="bk2-csum-row">
-                    <span class="bk2-csum-veh <%= veh ? '' : 'bk2-csum-veh--empty' %>"><%= veh || ((blk.role || 'TC') + ' ' + (blk.size || '') + '-man') %></span>
-                    <span class="bk2-csum-avs">
-                      <% ws.forEach(function (w) { %><span class="bk2-crewsum-av" title="<%= w.name %>"><%= initials(w.name) %></span><% }); %>
-                      <% if (openN) { %><span class="bk2-csum-open"><%= openN %> open</span><% } %>
-                    </span>
+                  <div class="bk2-csum-grp">
+                    <div class="bk2-csum-veh <%= veh ? '' : 'bk2-csum-veh--empty' %>"><%= veh || ((blk.role || 'TC') + ' ' + (blk.size || '') + '-man crew') %></div>
+                    <% ws.forEach(function (w) { _csumPerson(w); }); %>
+                    <% if (openN) { %><div class="bk2-csum-openrow"><%= openN %> open <%= (blk.role || 'TC') %> slot<%= openN > 1 ? 's' : '' %></div><% } %>
                   </div>
                 <% }); %>
                 <% if (_un.length) { %>
-                  <div class="bk2-csum-row">
-                    <span class="bk2-csum-veh bk2-csum-veh--none">No vehicle</span>
-                    <span class="bk2-csum-avs"><% _un.forEach(function (w) { %><span class="bk2-crewsum-av" title="<%= w.name %>"><%= initials(w.name) %></span><% }); %></span>
+                  <div class="bk2-csum-grp">
+                    <div class="bk2-csum-veh bk2-csum-veh--none">No vehicle</div>
+                    <% _un.forEach(function (w) { _csumPerson(w); }); %>
                   </div>
                 <% } %>
                 <% if (!_workers && !_utes) { %><div class="bk2-csum-none">No crew assigned yet</div><% } %>
