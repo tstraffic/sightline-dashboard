@@ -2914,8 +2914,10 @@ router.post('/:id/clone', (req, res) => {
   try { for (const h of db.prepare("SELECT item_key, item_label, hire_company_id, company_name FROM booking_hire_items WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_hire_items (booking_id, item_key, item_label, hire_company_id, company_name) VALUES (?, ?, ?, ?, ?)").run(newId, h.item_key, h.item_label, h.hire_company_id, h.company_name); } catch(e) {}
   try { for (const lg of db.prepare("SELECT seq, start_time, address, notes FROM booking_mobile_legs WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_mobile_legs (booking_id, seq, start_time, address, notes) VALUES (?, ?, ?, ?, ?)").run(newId, lg.seq, lg.start_time, lg.address, lg.notes); } catch(e) {}
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: newId, details: `Cloned ${source.booking_number} → ${bookingNumber}${includeCrew ? '' : ' (setup only)'}`, req });
-  if (isJson) return res.json({ ok: true, id: newId, booking_number: bookingNumber });
-  req.flash('success', `Cloned as ${bookingNumber}.`); res.redirect('/bookings/' + newId);
+  // Land on the board for the cloned shift's day (not the full edit page).
+  const cloneDate = (newStart || '').slice(0, 10);
+  if (isJson) return res.json({ ok: true, id: newId, booking_number: bookingNumber, date: cloneDate });
+  req.flash('success', `Cloned as ${bookingNumber}.`); res.redirect('/bookings' + (cloneDate ? '?date=' + cloneDate : ''));
 });
 
 // =============================================

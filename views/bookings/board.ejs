@@ -2659,7 +2659,8 @@
         .then(function (res) {
           if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Clone failed');
           if (typeof window.bk2Toast === 'function') window.bk2Toast('Cloned as ' + res.body.booking_number, 'success');
-          window.location.href = '/bookings/' + res.body.id;
+          // Open the board for the cloned shift's day (not the full edit page).
+          window.location.href = '/bookings' + (res.body.date ? '?date=' + encodeURIComponent(res.body.date) : '');
         })
         .catch(function (e) { if (typeof window.bk2Toast === 'function') window.bk2Toast(e.message, 'error'); else alert(e.message); })
         .finally(function () { cloneBtn.disabled = false; });
