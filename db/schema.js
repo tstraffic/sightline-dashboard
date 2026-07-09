@@ -13923,6 +13923,16 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 308 error:', e.message); }
   }
 
+  // 309 — the generic "Vehicle" requirement label is now "Traffic Ute"
+  // (the fleet is classified as pod trucks / VMS utes / traffic utes).
+  if (!isMigrationApplied.get(309)) {
+    try {
+      db.exec("UPDATE booking_requirements SET resource_type = 'Traffic Ute' WHERE resource_type = 'Vehicle'");
+      recordMigration.run(309, "booking_requirements: rename 'Vehicle' to 'Traffic Ute'");
+      console.log('Migration 309 applied');
+    } catch (e) { console.error('Migration 309 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

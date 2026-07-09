@@ -233,17 +233,21 @@ function loadBookingDetail(db, bookingId) {
   // resource_type, weird quantity) must NOT crash the whole response —
   // that's how the slide-over was getting stuck on "Loading…".
   const totalCrewAssigned = crew.length;
-  // Standalone vehicles = filled booking_vehicles beyond the utes the "Nx TC
-  // Crew" packages already imply — these are what a "Vehicle" requirement
-  // represents. Without this, vehicle requirements always showed 0/x red
-  // (fulfilment only ever counted crew), so a dragged-on vehicle looked
-  // unfulfilled.
-  const vehFilled = (vehicles || []).filter(v =>
-    (v.vehicle_name && String(v.vehicle_name).trim()) ||
-    (v.registration && String(v.registration).trim())).length;
+  // Vehicles on the shift, counted PER CLASS (traffic ute / pod truck / VMS
+  // ute / TMA / truck) so each requirement row is filled by its own kind.
+  // Crew-ute units implied by "Nx TC Crew" packages consume traffic utes
+  // first — only the surplus counts toward a standalone Traffic Ute row.
+  const vehClassCounts = {};
+  (vehicles || []).forEach(v => {
+    const filled = (v.vehicle_name && String(v.vehicle_name).trim()) ||
+                   (v.registration && String(v.registration).trim());
+    if (!filled) return;
+    const c = classifyBookingVehicle(v);
+    vehClassCounts[c] = (vehClassCounts[c] || 0) + 1;
+  });
   let crewUteUnits = 0;
   requirements.forEach(r => { const m = String(r.resource_type || '').trim().match(/^(\d+)x TC Crew$/i); if (m) crewUteUnits += Math.max(1, parseInt(r.quantity_required, 10) || 1); });
-  const spareVehicles = Math.max(0, vehFilled - crewUteUnits);
+  vehClassCounts.ute = Math.max(0, (vehClassCounts.ute || 0) - crewUteUnits);
   // Actual equipment on the shift, tallied against the requirement label it
   // maps to (so an added Arrow Board / VMS etc. counts toward its row).
   const equipByLabel = {};
@@ -260,8 +264,8 @@ function loadBookingDetail(db, bookingId) {
       if (!resType) { r.quantity_assigned = 0; r.status = 'unfulfilled'; return; }
       if (resType.includes('tc crew') || resType.includes('traffic controller') || resType.includes('hoist') || resType.includes('ip')) {
         r.quantity_assigned = totalCrewAssigned;
-      } else if (VEHICLE_REQ_LABELS.has(label)) {
-        r.quantity_assigned = spareVehicles;
+      } else if (REQ_LABEL_TO_VEHICLE_CLASS[resType]) {
+        r.quantity_assigned = vehClassCounts[REQ_LABEL_TO_VEHICLE_CLASS[resType]] || 0;
       } else if (equipByLabel[label.toLowerCase()] != null) {
         r.quantity_assigned = equipByLabel[label.toLowerCase()];
       } else {
@@ -611,10 +615,43 @@ function requiredCrewCapacity(db, bookingId) {
   return cap;
 }
 
-// Vehicle-type requirement labels (standalone vehicles, as opposed to the
-// utes implied by "Nx TC Crew" packages). Used both to bump on add and to
-// count fulfilment against actual booking_vehicles.
-const VEHICLE_REQ_LABELS = new Set(['Vehicle', 'VMS Ute', 'Pod Truck', 'TMA (dry hire)', 'TMA (wet hire)']);
+// ── Vehicle classification ───────────────────────────────────────────────
+// The fleet is thought of as pod trucks / VMS utes / traffic utes (plus the
+// odd TMA and plain truck). One classifier is shared by the resource-panel
+// feed, the drop-to-add requirement bump, and requirement fulfilment so the
+// three always agree. Input: any name/category/asset text about the vehicle.
+function classifyVehicle(text) {
+  const s = String(text || '').toLowerCase();
+  if (s.indexOf('pod') !== -1) return 'pod';
+  if (s.indexOf('vms') !== -1) return 'vms';
+  if (s.indexOf('tma') !== -1) return 'tma';
+  if (s.indexOf('truck') !== -1 || s.indexOf('heavy') !== -1 || s.indexOf('npr') !== -1) return 'truck';
+  return 'ute'; // traffic ute — the default class
+}
+// class → requirement label bumped/counted for that class.
+const VEHICLE_CLASS_REQ_LABEL = {
+  pod: 'Pod Truck',
+  vms: 'VMS Ute',
+  tma: 'TMA (wet hire)',
+  truck: 'Truck',
+  ute: 'Traffic Ute',
+};
+// requirement label → class it counts (legacy 'Vehicle' folds into utes).
+const REQ_LABEL_TO_VEHICLE_CLASS = {
+  'pod truck': 'pod',
+  'vms ute': 'vms',
+  'tma (wet hire)': 'tma',
+  'tma (dry hire)': 'tma',
+  'truck': 'truck',
+  'traffic ute': 'ute',
+  'vehicle': 'ute',
+};
+// Class of a booking_vehicles row: explicit role wins, else classify by text.
+function classifyBookingVehicle(v) {
+  const role = String(v.vehicle_role || '').toLowerCase();
+  if (VEHICLE_CLASS_REQ_LABEL[role]) return role;
+  return classifyVehicle([v.vehicle_name, v.registration, v.vehicle_role].filter(Boolean).join(' '));
+}
 
 // Equipment register category → the requirement label it should count against
 // when a piece of gear is dropped on from the resource panel.
@@ -622,7 +659,7 @@ const EQUIP_CATEGORY_TO_REQ = {
   arrow_board: 'Arrow Board',
   vms: 'VMS Board',
   lighting: 'Light Tower',
-  vehicle: 'Vehicle',
+  vehicle: 'Traffic Ute',
 };
 // Best-effort mapping of an added equipment item → a requirement label: an
 // exact name match against a known requirement label wins, else its category,
@@ -1029,9 +1066,12 @@ const QUICK_REQ_FIELDS = [
   ['addon_trainee', 'Trainee'],
   ['addon_vms_board', 'VMS Board'],
   ['addon_vms_ute', 'VMS Ute'],
-  ['addon_vehicle', 'Vehicle'],
+  ['addon_vehicle', 'Traffic Ute'],
 ];
 const QUICK_REQ_LABEL_TO_FIELD = QUICK_REQ_FIELDS.reduce((m, [f, l]) => { m[l] = f; return m; }, {});
+// Legacy label — migration 309 renames stored rows, but keep the prefill
+// mapping tolerant of any strays (e.g. a restore from an old backup).
+QUICK_REQ_LABEL_TO_FIELD['Vehicle'] = 'addon_vehicle';
 
 // Equipment add-ons that can be hired in from an external supplier — the
 // physical gear subset of QUICK_REQ_FIELDS (not people / permits / plans).
@@ -1047,7 +1087,7 @@ const HIREABLE_ITEMS = [
   ['addon_tma_wet', 'TMA (wet hire)'],
   ['addon_vms_board', 'VMS Board'],
   ['addon_vms_ute', 'VMS Ute'],
-  ['addon_vehicle', 'Vehicle'],
+  ['addon_vehicle', 'Traffic Ute'],
 ];
 const HIREABLE_KEYS = new Set(HIREABLE_ITEMS.map(([k]) => k));
 
@@ -1789,6 +1829,13 @@ router.get('/api/resources', (req, res) => {
         return { ...v, assigned_today: !!assigned };
       });
     } catch (e) {}
+    // Classify every vehicle (pod truck / VMS ute / traffic ute / TMA /
+    // truck) — the panel shows the class tag, filters by it, and the drag
+    // payload carries it so drop-to-add bumps the right requirement.
+    vehicles = vehicles.map(v => ({
+      ...v,
+      vehicle_class: classifyVehicle([v.name, v.category, v.asset_number].filter(Boolean).join(' ')),
+    }));
 
     // EQUIPMENT — non-vehicle assets.
     let equipment = [];
@@ -2615,11 +2662,21 @@ router.post('/:id/vehicles', (req, res) => {
     if (isJson) return res.status(400).json({ error: 'Name or rego required' });
     req.flash('error', 'Name or rego required.'); return res.redirect('/bookings/' + req.params.id);
   }
+  // Classify what's being added — explicit role from the drag payload wins,
+  // else derive from the vehicle's own text. Drives both the placeholder rule
+  // and which requirement label gets bumped.
+  const vehClass = (function () {
+    const role = String(req.body.vehicle_role || '').toLowerCase();
+    if (VEHICLE_CLASS_REQ_LABEL[role]) return role;
+    return classifyVehicle([vehicle_name, registration, role].filter(Boolean).join(' '));
+  })();
   // If there's an empty placeholder (no name & no rego, vehicle_role=ute),
   // upgrade it rather than appending another row — keeps the ute count
-  // matching the requirement.
+  // matching the requirement. Placeholders are crew utes, so ONLY a traffic
+  // ute may fill one — a pod truck / VMS ute / TMA is its own resource and
+  // must not swallow the crew's ute slot.
   let upgraded = false;
-  if (req.body.upgrade_placeholder !== '0') {
+  if (req.body.upgrade_placeholder !== '0' && vehClass === 'ute') {
     const placeholder = db.prepare("SELECT id FROM booking_vehicles WHERE booking_id = ? AND (vehicle_name IS NULL OR vehicle_name = '') AND (registration IS NULL OR registration = '') ORDER BY id LIMIT 1").get(req.params.id);
     if (placeholder) {
       db.prepare("UPDATE booking_vehicles SET vehicle_name = ?, registration = ?, vehicle_role = COALESCE(NULLIF(?, ''), vehicle_role), fleet_vehicle_id = ? WHERE id = ?")
@@ -2637,12 +2694,13 @@ router.post('/:id/vehicles', (req, res) => {
     const r = db.prepare(`
       INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, vehicle_role, crew_member_id, fleet_vehicle_id)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(req.params.id, vehicle_name, registration, req.body.vehicle_role || '', driverId, fleet_vehicle_id);
+    `).run(req.params.id, vehicle_name, registration, vehClass, driverId, fleet_vehicle_id);
     newId = r.lastInsertRowid;
     // A brand-new vehicle (we didn't upgrade an empty ute placeholder that a
     // requirement already accounted for) is one more than the shift asked for
-    // — bump the Vehicle requirement so the Overview reflects it.
-    try { bumpRequirement(db, req.params.id, 'Vehicle', 1); } catch (e) { console.error('[bookings.vehicles] requirement bump failed:', e.message); }
+    // — bump the matching class requirement (Traffic Ute / Pod Truck / VMS
+    // Ute / …) so the Overview reflects what was actually added.
+    try { bumpRequirement(db, req.params.id, VEHICLE_CLASS_REQ_LABEL[vehClass] || 'Traffic Ute', 1); } catch (e) { console.error('[bookings.vehicles] requirement bump failed:', e.message); }
   }
   // Vehicle double-booking warning — same fleet vehicle or rego on another
   // live booking the same day. Crew get this check; vehicles never did.

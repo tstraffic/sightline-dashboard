@@ -685,9 +685,10 @@
         <div class="bk2-rp-chipset" data-rp-chipset="vehicles" hidden>
           <span class="bk2-rp-chipset-label">Show/Hide</span>
           <div class="bk2-rp-chips">
-            <button type="button" class="bk2-rp-chip" data-rp-filter="trucks"   title="Trucks only">Only Trucks</button>
-            <button type="button" class="bk2-rp-chip" data-rp-filter="utes"     title="Utes only">Only Utes</button>
-            <button type="button" class="bk2-rp-chip" data-rp-filter="vms"      title="VMS only">Only VMS</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="utes"     title="Traffic utes only">Traffic Utes</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="pods"     title="Pod trucks only">Pod Trucks</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="vms"      title="VMS utes only">VMS Utes</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="trucks"   title="Trucks / TMA only">Trucks &amp; TMA</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="fleet"    title="Fleet register only">Fleet only</button>
           </div>
         </div>
@@ -1216,7 +1217,7 @@
               { group: 'Vehicles', items: [
                 { name: 'Pod Truck', field: 'addon_pod_truck' },
                 { name: 'VMS Ute', field: 'addon_vms_ute' },
-                { name: 'Vehicle', field: 'addon_vehicle' },
+                { name: 'Traffic Ute', field: 'addon_vehicle' },
                 { name: 'TMA (dry hire)', field: 'addon_tma_dry' },
                 { name: 'TMA (wet hire)', field: 'addon_tma_wet' },
               ] },
@@ -4223,11 +4224,12 @@
   }
   function rpVehicleOk(v) {
     var f = rpFilters.vehicles;
-    var cat = (v.category || '').toLowerCase();
-    var name = (v.name || '').toLowerCase();
-    if (f.trucks && !(rpCatHas(cat, ['truck']) || name.indexOf('truck') !== -1 || name.indexOf('isuzu') !== -1 || name.indexOf('npr') !== -1)) return false;
-    if (f.utes   && !(rpCatHas(cat, ['ute']) || name.indexOf('ute') !== -1 || name.indexOf('hilux') !== -1)) return false;
-    if (f.vms    && !(rpCatHas(cat, ['vms']) || name.indexOf('vms') !== -1)) return false;
+    // Filters key off the server-side classification (vehicle_class).
+    var c = v.vehicle_class || 'ute';
+    if (f.utes   && c !== 'ute') return false;
+    if (f.pods   && c !== 'pod') return false;
+    if (f.vms    && c !== 'vms') return false;
+    if (f.trucks && c !== 'truck' && c !== 'tma') return false;
     if (f.fleet  && v.source !== 'fleet') return false;
     return true;
   }
@@ -4334,12 +4336,23 @@
     }).join('');
   }
 
+  // Vehicle class (from /api/resources) → display tag + drag role. The role
+  // rides in the drag payload so drop-to-add bumps the matching requirement
+  // (Traffic Ute / Pod Truck / VMS Ute / …) on the server.
+  var VEH_CLASS_TAG = {
+    ute:   { label: 'TRAFFIC UTE', cls: 'ute' },
+    pod:   { label: 'POD TRUCK',   cls: 'pod' },
+    vms:   { label: 'VMS UTE',     cls: 'vms' },
+    tma:   { label: 'TMA',         cls: 'tma' },
+    truck: { label: 'TRUCK',       cls: 'truck' },
+  };
   function rpRenderVehicles(list) {
     if (!list.length) return '<li class="bk2-rp-empty">No vehicles match.</li>';
     return list.map(function (v) {
       var rego = v.licence_plate || v.rego || '';
       var sub = [v.category, rego, v.asset_number].filter(Boolean).join(' · ');
-      var badges = [];
+      var tag = VEH_CLASS_TAG[v.vehicle_class] || VEH_CLASS_TAG.ute;
+      var badges = ['<span class="bk2-rp-vtag bk2-rp-vtag--' + tag.cls + '">' + tag.label + '</span>'];
       if (v.source === 'fleet') badges.push('<svg class="bk2-rp-badge bk2-rp-badge--fleet" viewBox="0 0 24 24" fill="currentColor" width="12" height="12" title="Fleet register">' + ICON_LICENCE + '</svg>');
       var ok = rpVehicleOkFlag(v);
       return rpRow({
@@ -4351,10 +4364,10 @@
         ok: ok,
         okTitle: 'Active in fleet',
         notOkTitle: v.status || 'Not active',
-        tooltip: (v.name || '') + (rego ? ' · ' + rego : '') + (sub ? ' — ' + sub : ''),
+        tooltip: (v.name || '') + (rego ? ' · ' + rego : '') + (sub ? ' — ' + sub : '') + ' — ' + tag.label,
         source: v.source || 'equipment',
         rego: rego,
-        role: (v.category || '').toLowerCase().indexOf('truck') !== -1 ? 'truck' : 'ute',
+        role: v.vehicle_class || 'ute',
       });
     }).join('');
   }
@@ -4648,7 +4661,7 @@
     var row = e.target && e.target.closest && e.target.closest('.bk2-rp-item');
     if (row) row.classList.remove('is-dragging');
     // Remove any leftover drag-over highlights
-    document.querySelectorAll('.bk2-slot--drop.is-drag-over, .bk2-card-teambox.is-drag-over, .bk2-restab-dropstrip.is-drag-over').forEach(function (el) {
+    document.querySelectorAll('.bk2-slot--drop.is-drag-over, .bk2-card-teambox.is-drag-over, .bk2-restab-dropstrip.is-drag-over, .bk2-card--floating.is-drag-over').forEach(function (el) {
       el.classList.remove('is-drag-over');
     });
   });
@@ -4697,11 +4710,14 @@
 
     // Non-crew-move drags use the simple drop-class match (resource
     // panel → empty crew/UTE slot), else the card's team box (drop-to-add),
-    // else the Resources tab's narrow-screen drop strip.
+    // else ANYWHERE on the floating (glowing) card, else the Resources tab's
+    // narrow-screen drop strip.
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
     if (!slot) {
       var box = e.target && e.target.closest &&
-        (e.target.closest('.bk2-card-teambox') || e.target.closest('.bk2-restab-dropstrip[data-booking-id]'));
+        (e.target.closest('.bk2-card-teambox') ||
+         e.target.closest('.bk2-card--floating[data-booking-id]') ||
+         e.target.closest('.bk2-restab-dropstrip[data-booking-id]'));
       if (box) { e.preventDefault(); try { e.dataTransfer.dropEffect = 'copy'; } catch (err) {} box.classList.add('is-drag-over'); }
       return;
     }
@@ -4786,9 +4802,11 @@
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
     if (!slot) {
       var box = e.target && e.target.closest &&
-        (e.target.closest('.bk2-card-teambox') || e.target.closest('.bk2-restab-dropstrip[data-booking-id]'));
-      // The teambox lives inside a card; the Resources-tab drop strip carries
-      // its own data-booking-id (set by loadResourcesTab).
+        (e.target.closest('.bk2-card-teambox') ||
+         e.target.closest('.bk2-card--floating[data-booking-id]') ||
+         e.target.closest('.bk2-restab-dropstrip[data-booking-id]'));
+      // The teambox lives inside a card; the floating card and the Resources
+      // tab drop strip carry their own data-booking-id.
       var cardEl = box && (box.closest('.bk2-card[data-booking-id]') || box);
       if (box && cardEl && cardEl.getAttribute('data-booking-id')) {
         e.preventDefault(); e.stopPropagation();
@@ -4844,6 +4862,15 @@
         slot.classList.remove('is-saving');
         alert('Could not assign vehicle — network error.');
       });
+      return;
+    }
+
+    // ── VEHICLE DROP on any OTHER slot (filled worker slot, vehicle chip,
+    // empty TC slot…) — the planner aimed at the card, not a precise gap.
+    // Treat it as "add this vehicle to the shift" (card-level add). Without
+    // this, a vehicle only landed when dropped exactly on an empty UTE gap.
+    if (vehiclePayload) {
+      bk2AddVehicleToBooking(bookingId, vehiclePayload);
       return;
     }
 

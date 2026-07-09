@@ -2451,3 +2451,31 @@ body.bk2-rp-size-l .bk2-rp-item::after { content: attr(data-resource-role); marg
       "search" "chips-p" "list-p" "chips-v" "list-v" "chips-e" "list-e";
   }
 }
+
+/* ============================================================
+   Bookings v43 — vehicle classes + drop-anywhere on glowing card.
+   Every pool vehicle carries a class tag (Traffic Ute / Pod Truck /
+   VMS Ute / TMA / Truck); the whole floating card accepts vehicle &
+   worker drops, not just the precise gaps.
+   ============================================================ */
+.bk2-rp-vtag {
+  flex: 0 0 auto;
+  font-size: 8.5px; font-weight: 800; letter-spacing: 0.04em;
+  padding: 1px 5px; border-radius: 4px; line-height: 1.5;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.bk2-rp-vtag--ute   { background: rgba(43,127,255,0.16);  color: #7EB2FF; border-color: rgba(43,127,255,0.35); }
+.bk2-rp-vtag--pod   { background: rgba(245,158,11,0.16);  color: #FBBF24; border-color: rgba(245,158,11,0.35); }
+.bk2-rp-vtag--vms   { background: rgba(168,85,247,0.16);  color: #C4A2F7; border-color: rgba(168,85,247,0.35); }
+.bk2-rp-vtag--tma   { background: rgba(239,68,68,0.16);   color: #F87171; border-color: rgba(239,68,68,0.35); }
+.bk2-rp-vtag--truck { background: rgba(20,184,166,0.16);  color: #5EEAD4; border-color: rgba(20,184,166,0.35); }
+:root[data-theme="light"] .bk2-rp-vtag--ute   { background: #EFF6FF; color: #1D6AE5; border-color: #BFDBFE; }
+:root[data-theme="light"] .bk2-rp-vtag--pod   { background: #FFFBEB; color: #B45309; border-color: #FDE68A; }
+:root[data-theme="light"] .bk2-rp-vtag--vms   { background: #FAF5FF; color: #7E22CE; border-color: #E9D5FF; }
+:root[data-theme="light"] .bk2-rp-vtag--tma   { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
+:root[data-theme="light"] .bk2-rp-vtag--truck { background: #F0FDFA; color: #0F766E; border-color: #99F6E4; }
+
+/* Whole-card drop affordance while dragging over the glowing card. */
+.bk2-card--floating.is-drag-over {
+  outline: 2px dashed #2B7FFF; outline-offset: 3px;
+}
