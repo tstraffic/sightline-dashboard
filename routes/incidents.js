@@ -15,6 +15,22 @@ function nextIncidentNumber(db) {
   return 'INC-' + String(num).padStart(5, '0');
 }
 
+// Fleet vehicles for the incident's "vehicle involved" picker. Labelled by
+// ASSET NAME (asset_id) first — never just the make/model — with make/model +
+// rego as secondary detail. Retired vehicles included last so an incident can
+// still reference a since-retired vehicle. Guarded for legacy DBs w/o fleet.
+function incidentVehicleList(db) {
+  try {
+    return db.prepare(`
+      SELECT id, asset_id, rego,
+             NULLIF(TRIM(COALESCE(make,'') || ' ' || COALESCE(model,'')), '') AS model_label,
+             status
+      FROM vehicles
+      ORDER BY CASE WHEN status = 'Retired' THEN 1 ELSE 0 END, asset_id
+    `).all();
+  } catch (e) { return []; }
+}
+
 // LIST
 router.get('/', (req, res) => {
   const db = getDb();
@@ -34,18 +50,22 @@ router.get('/', (req, res) => {
   const order = req.query.order === 'asc' ? 'ASC' : 'DESC';
   const orderByCol = allowedSorts[sort] || 'i.incident_date';
 
+  // LEFT JOIN jobs — job is now optional, so an incident with no job must
+  // still appear (an inner join silently dropped them).
   const incidents = db.prepare(`
     SELECT i.*, j.job_number, j.client, u.full_name as reported_by_name,
+      veh.asset_id AS vehicle_asset,
       (SELECT COUNT(*) FROM corrective_actions ca WHERE ca.incident_id = i.id) as corrective_action_count,
       (SELECT COUNT(*) FROM corrective_actions ca2 WHERE ca2.incident_id = i.id AND ca2.status != 'completed') as open_actions
     FROM incidents i
-    JOIN jobs j ON i.job_id = j.id
+    LEFT JOIN jobs j ON i.job_id = j.id
+    LEFT JOIN vehicles veh ON i.vehicle_id = veh.id
     JOIN users u ON i.reported_by_id = u.id
     ${whereClause}
     ORDER BY ${orderByCol} ${order}
   `).all(...params);
 
-  const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs WHERE status IN ('active','on_hold','won') ORDER BY job_number").all();
+  const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs ORDER BY job_number DESC").all();
 
   const today = new Date().toISOString().split('T')[0];
 
@@ -86,14 +106,16 @@ router.post('/:id/status', (req, res) => {
 // NEW FORM
 router.get('/new', (req, res) => {
   const db = getDb();
-  const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs WHERE status IN ('active','on_hold','won') ORDER BY job_number").all();
+  const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs ORDER BY job_number DESC").all();
   const crewMembers = db.prepare("SELECT id, full_name, role FROM crew_members WHERE active = 1 ORDER BY full_name").all();
+  const vehicles = incidentVehicleList(db);
   res.render('incidents/form', {
     title: 'Report Incident',
     currentPage: 'incidents',
     incident: null,
     jobs,
     crewMembers,
+    vehicles,
     linkedCrew: [],
     preselectedJobId: req.query.job_id || ''
   });
@@ -102,15 +124,19 @@ router.get('/new', (req, res) => {
 // CREATE
 router.post('/', upload.single('photo'), (req, res) => {
   const db = getDb();
-  const { job_id, incident_type, severity, title, description, location, incident_date, incident_time, persons_involved, witnesses, immediate_actions, notifiable_incident, traffic_disruption, police_notified, client_notified, close_out_date } = req.body;
+  const { incident_type, severity, title, description, location, incident_date, incident_time, persons_involved, witnesses, immediate_actions, notifiable_incident, traffic_disruption, police_notified, client_notified, close_out_date } = req.body;
+  // Job is optional now. Empty string → NULL (an incident can be logged before
+  // it's tied to a job, or for something with no job at all).
+  const jobId = req.body.job_id ? parseInt(req.body.job_id, 10) || null : null;
+  const vehicleId = req.body.vehicle_id ? parseInt(req.body.vehicle_id, 10) || null : null;
   const incident_number = nextIncidentNumber(db);
-  const job = db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(job_id);
+  const job = jobId ? db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(jobId) : null;
   const photo_path = req.file ? '/uploads/' + req.file.filename : '';
 
   const result = db.prepare(`
-    INSERT INTO incidents (job_id, incident_number, incident_type, severity, title, description, location, incident_date, incident_time, reported_by_id, persons_involved, witnesses, immediate_actions, notifiable_incident, traffic_disruption, police_notified, client_notified, close_out_date, photo_path)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(job_id, incident_number, incident_type, severity || 'low', title, description, location || '', incident_date, incident_time || '', req.session.user.id, persons_involved || '', witnesses || '', immediate_actions || '', notifiable_incident ? 1 : 0, traffic_disruption ? 1 : 0, police_notified ? 1 : 0, client_notified ? 1 : 0, close_out_date || null, photo_path);
+    INSERT INTO incidents (job_id, vehicle_id, incident_number, incident_type, severity, title, description, location, incident_date, incident_time, reported_by_id, persons_involved, witnesses, immediate_actions, notifiable_incident, traffic_disruption, police_notified, client_notified, close_out_date, photo_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(jobId, vehicleId, incident_number, incident_type, severity || 'low', title, description, location || '', incident_date, incident_time || '', req.session.user.id, persons_involved || '', witnesses || '', immediate_actions || '', notifiable_incident ? 1 : 0, traffic_disruption ? 1 : 0, police_notified ? 1 : 0, client_notified ? 1 : 0, close_out_date || null, photo_path);
 
   const incidentId = result.lastInsertRowid;
 
@@ -124,11 +150,11 @@ router.post('/', upload.single('photo'), (req, res) => {
     }
   }
 
-  logActivity({ user: req.session.user, action: 'create', entityType: 'incident', entityId: incidentId, entityLabel: `${incident_number} - ${title}`, jobId: parseInt(job_id), jobNumber: job ? job.job_number : '', details: `Severity: ${severity}, Type: ${incident_type}`, ip: req.ip });
+  logActivity({ user: req.session.user, action: 'create', entityType: 'incident', entityId: incidentId, entityLabel: `${incident_number} - ${title}`, jobId: jobId || null, jobNumber: job ? job.job_number : '', details: `Severity: ${severity}, Type: ${incident_type}`, ip: req.ip });
 
   // Auto-create chat thread for this incident
   const threadId = ensureThreadForEntity('incident', incidentId, `Incident ${incident_number}`, req.session.user.id);
-  const jobDetails = db.prepare('SELECT project_manager_id, ops_supervisor_id FROM jobs WHERE id = ?').get(job_id);
+  const jobDetails = jobId ? db.prepare('SELECT project_manager_id, ops_supervisor_id FROM jobs WHERE id = ?').get(jobId) : null;
   const memberIds = [...new Set([req.session.user.id,
     jobDetails ? jobDetails.project_manager_id : null,
     jobDetails ? jobDetails.ops_supervisor_id : null
@@ -144,9 +170,12 @@ router.post('/', upload.single('photo'), (req, res) => {
 router.get('/:id', (req, res) => {
   const db = getDb();
   const incident = db.prepare(`
-    SELECT i.*, j.job_number, j.client, u.full_name as reported_by_name
+    SELECT i.*, j.job_number, j.client, u.full_name as reported_by_name,
+      veh.asset_id AS vehicle_asset, veh.rego AS vehicle_rego,
+      NULLIF(TRIM(COALESCE(veh.make,'') || ' ' || COALESCE(veh.model,'')), '') AS vehicle_model
     FROM incidents i
-    JOIN jobs j ON i.job_id = j.id
+    LEFT JOIN jobs j ON i.job_id = j.id
+    LEFT JOIN vehicles veh ON i.vehicle_id = veh.id
     JOIN users u ON i.reported_by_id = u.id
     WHERE i.id = ?
   `).get(req.params.id);
@@ -214,8 +243,9 @@ router.get('/:id/edit', (req, res) => {
     req.flash('error', 'Incident not found.');
     return res.redirect('/incidents');
   }
-  const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs WHERE status IN ('active','on_hold','won') ORDER BY job_number").all();
+  const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs ORDER BY job_number DESC").all();
   const crewMembers = db.prepare("SELECT id, full_name, role FROM crew_members WHERE active = 1 ORDER BY full_name").all();
+  const vehicles = incidentVehicleList(db);
   const linkedCrew = db.prepare(`
     SELECT icm.crew_member_id, icm.involvement_type
     FROM incident_crew_members icm
@@ -227,6 +257,7 @@ router.get('/:id/edit', (req, res) => {
     incident,
     jobs,
     crewMembers,
+    vehicles,
     linkedCrew,
     preselectedJobId: ''
   });
@@ -235,17 +266,19 @@ router.get('/:id/edit', (req, res) => {
 // UPDATE
 router.post('/:id', upload.single('photo'), (req, res) => {
   const db = getDb();
-  const { job_id, incident_type, severity, title, description, location, incident_date, incident_time, persons_involved, witnesses, immediate_actions, root_cause, investigation_status, notifiable_incident, traffic_disruption, police_notified, client_notified, close_out_date } = req.body;
-  const job = db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(job_id);
+  const { incident_type, severity, title, description, location, incident_date, incident_time, persons_involved, witnesses, immediate_actions, root_cause, investigation_status, notifiable_incident, traffic_disruption, police_notified, client_notified, close_out_date } = req.body;
+  const jobId = req.body.job_id ? parseInt(req.body.job_id, 10) || null : null;
+  const vehicleId = req.body.vehicle_id ? parseInt(req.body.vehicle_id, 10) || null : null;
+  const job = jobId ? db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(jobId) : null;
   const existing = db.prepare('SELECT incident_number, photo_path FROM incidents WHERE id = ?').get(req.params.id);
 
   // Use new photo if uploaded, otherwise keep existing
   const photo_path = req.file ? '/uploads/' + req.file.filename : (existing ? existing.photo_path : '');
 
   db.prepare(`
-    UPDATE incidents SET job_id=?, incident_type=?, severity=?, title=?, description=?, location=?, incident_date=?, incident_time=?, persons_involved=?, witnesses=?, immediate_actions=?, root_cause=?, investigation_status=?, notifiable_incident=?, traffic_disruption=?, police_notified=?, client_notified=?, close_out_date=?, photo_path=?, updated_at=CURRENT_TIMESTAMP
+    UPDATE incidents SET job_id=?, vehicle_id=?, incident_type=?, severity=?, title=?, description=?, location=?, incident_date=?, incident_time=?, persons_involved=?, witnesses=?, immediate_actions=?, root_cause=?, investigation_status=?, notifiable_incident=?, traffic_disruption=?, police_notified=?, client_notified=?, close_out_date=?, photo_path=?, updated_at=CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(job_id, incident_type, severity, title, description, location || '', incident_date, incident_time || '', persons_involved || '', witnesses || '', immediate_actions || '', root_cause || '', investigation_status, notifiable_incident ? 1 : 0, traffic_disruption ? 1 : 0, police_notified ? 1 : 0, client_notified ? 1 : 0, close_out_date || null, photo_path, req.params.id);
+  `).run(jobId, vehicleId, incident_type, severity, title, description, location || '', incident_date, incident_time || '', persons_involved || '', witnesses || '', immediate_actions || '', root_cause || '', investigation_status, notifiable_incident ? 1 : 0, traffic_disruption ? 1 : 0, police_notified ? 1 : 0, client_notified ? 1 : 0, close_out_date || null, photo_path, req.params.id);
 
   // Sync linked crew members: delete existing, re-insert
   db.prepare('DELETE FROM incident_crew_members WHERE incident_id = ?').run(req.params.id);
@@ -258,7 +291,7 @@ router.post('/:id', upload.single('photo'), (req, res) => {
     }
   }
 
-  logActivity({ user: req.session.user, action: 'update', entityType: 'incident', entityId: parseInt(req.params.id), entityLabel: existing ? existing.incident_number : title, jobId: parseInt(job_id), jobNumber: job ? job.job_number : '', ip: req.ip });
+  logActivity({ user: req.session.user, action: 'update', entityType: 'incident', entityId: parseInt(req.params.id), entityLabel: existing ? existing.incident_number : title, jobId: jobId || null, jobNumber: job ? job.job_number : '', ip: req.ip });
 
   // Archive chat thread when incident is closed
   if (investigation_status === 'closed') {

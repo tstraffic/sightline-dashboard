@@ -61,8 +61,22 @@
     <div>
       <p class="text-xs text-gray-400 uppercase tracking-wide">Job</p>
       <p class="text-sm mt-1">
-        <a href="/projects/<%= incident.job_id %>" class="text-brand-600 hover:text-brand-700 hover:underline"><%= incident.job_number %></a>
-        <span class="text-gray-400"> - <%= incident.client %></span>
+        <% if (incident.job_id && incident.job_number) { %>
+          <a href="/projects/<%= incident.job_id %>" class="text-brand-600 hover:text-brand-700 hover:underline"><%= incident.job_number %></a>
+          <span class="text-gray-400"> - <%= incident.client %></span>
+        <% } else { %>
+          <span class="text-gray-400">— No job</span>
+        <% } %>
+      </p>
+    </div>
+    <div>
+      <p class="text-xs text-gray-400 uppercase tracking-wide">Vehicle</p>
+      <p class="text-sm mt-1">
+        <% if (incident.vehicle_asset) { %>
+          <span class="text-gray-800 font-medium"><%= incident.vehicle_asset %></span><% if (incident.vehicle_model) { %> <span class="text-gray-400">· <%= incident.vehicle_model %></span><% } %><% if (incident.vehicle_rego) { %> <span class="text-gray-400">· <%= incident.vehicle_rego %></span><% } %>
+        <% } else { %>
+          <span class="text-gray-400">—</span>
+        <% } %>
       </p>
     </div>
     <div>

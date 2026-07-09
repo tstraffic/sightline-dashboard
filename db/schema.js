@@ -13960,6 +13960,57 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 310 error:', e.message); }
   }
 
+  // 311 — incidents can be allocated to a fleet vehicle (nullable). Lets an
+  // incident be tied to the ute/truck involved, picked from the fleet register.
+  if (!isMigrationApplied.get(311)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(incidents)").all().map(c => c.name);
+      if (!cols.includes('vehicle_id')) db.exec("ALTER TABLE incidents ADD COLUMN vehicle_id INTEGER REFERENCES vehicles(id)");
+      recordMigration.run(311, 'incidents: vehicle_id (fleet vehicle) column');
+      console.log('Migration 311 applied');
+    } catch (e) { console.error('Migration 311 error:', e.message); }
+  }
+
+  // 312 — repair incident_crew_members' dangling foreign key. Migration 266's
+  // incidents rebuild left this child table's incident_id FK pointing at the
+  // temp table "_incidents_old_266", which was dropped — so any FK-checked
+  // write (or even preparing an INSERT) fails with "no such table:
+  // _incidents_old_266", silently breaking incident crew-member linking.
+  // Rebuild the table with the correct FK to incidents(id), preserving rows.
+  if (!isMigrationApplied.get(312)) {
+    try {
+      const cm = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'incident_crew_members'").get();
+      if (cm && /_incidents_old_266/.test(cm.sql || '')) {
+        db.pragma('foreign_keys = OFF');
+        db.exec(`
+          CREATE TABLE incident_crew_members__fix (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            incident_id INTEGER NOT NULL REFERENCES incidents(id) ON DELETE CASCADE,
+            crew_member_id INTEGER NOT NULL REFERENCES crew_members(id),
+            involvement_type TEXT NOT NULL DEFAULT 'involved'
+              CHECK(involvement_type IN ('involved','witness','injured','reporting')),
+            notes TEXT DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(incident_id, crew_member_id)
+          );
+          INSERT INTO incident_crew_members__fix (id, incident_id, crew_member_id, involvement_type, notes, created_at)
+            SELECT id, incident_id, crew_member_id, involvement_type, notes, created_at FROM incident_crew_members;
+          DROP TABLE incident_crew_members;
+          ALTER TABLE incident_crew_members__fix RENAME TO incident_crew_members;
+          CREATE INDEX IF NOT EXISTS idx_incident_crew_incident ON incident_crew_members(incident_id);
+          CREATE INDEX IF NOT EXISTS idx_incident_crew_member ON incident_crew_members(crew_member_id);
+        `);
+        db.pragma('foreign_keys = ON');
+        console.log('Migration 312: rebuilt incident_crew_members with correct incidents(id) FK');
+      }
+      recordMigration.run(312, 'incident_crew_members: repair dangling FK (_incidents_old_266 -> incidents)');
+      console.log('Migration 312 applied');
+    } catch (e) {
+      try { db.pragma('foreign_keys = ON'); } catch (re) {}
+      console.error('Migration 312 error:', e.message);
+    }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

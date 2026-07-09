@@ -4350,7 +4350,10 @@
     if (!list.length) return '<li class="bk2-rp-empty">No vehicles match.</li>';
     return list.map(function (v) {
       var rego = v.licence_plate || v.rego || '';
-      var sub = [v.category, rego, v.asset_number].filter(Boolean).join(' · ');
+      // Lead with the ASSET NAME (asset_id via v.name for fleet); show the
+      // make/model + rego as secondary detail rather than as the label.
+      var assetName = v.name || v.asset_number || rego || 'Vehicle';
+      var sub = [v.model_label, rego, v.category].filter(Boolean).join(' · ');
       var tag = VEH_CLASS_TAG[v.vehicle_class] || VEH_CLASS_TAG.ute;
       var badges = ['<span class="bk2-rp-vtag bk2-rp-vtag--' + tag.cls + '">' + tag.label + '</span>'];
       if (v.source === 'fleet') badges.push('<svg class="bk2-rp-badge bk2-rp-badge--fleet" viewBox="0 0 24 24" fill="currentColor" width="12" height="12" title="Fleet register">' + ICON_LICENCE + '</svg>');
@@ -4358,13 +4361,13 @@
       return rpRow({
         type: 'vehicle',
         id: v.id,
-        name: v.name || rego || 'Vehicle',
+        name: assetName,
         icon: ICON_TRUCK,
         badges: badges,
         ok: ok,
         okTitle: 'Active in fleet',
         notOkTitle: v.status || 'Not active',
-        tooltip: (v.name || '') + (rego ? ' · ' + rego : '') + (sub ? ' — ' + sub : '') + ' — ' + tag.label,
+        tooltip: assetName + (v.model_label ? ' · ' + v.model_label : '') + (rego ? ' · ' + rego : '') + ' — ' + tag.label,
         source: v.source || 'equipment',
         rego: rego,
         role: v.vehicle_class || 'ute',

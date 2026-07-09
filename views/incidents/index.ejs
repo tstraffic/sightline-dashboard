@@ -143,7 +143,7 @@
         <td class="px-3 py-2.5">
           <a href="/incidents/<%= incident.id %>" class="text-brand-600 hover:text-brand-700 font-semibold text-sm hover:underline"><%= incident.incident_number %></a>
           <p class="text-gray-400 text-xs truncate max-w-[180px]"><%= incident.title %></p>
-          <p class="text-gray-400 text-[10px] lg:hidden"><%= incident.job_number %></p>
+          <p class="text-gray-400 text-[10px] lg:hidden"><%= incident.job_number || (incident.vehicle_asset ? incident.vehicle_asset : '—') %></p>
         </td>
         <td class="px-3 py-2.5 text-gray-500 text-xs hidden sm:table-cell"><%= formatShortDate(incident.incident_date) %></td>
         <td class="px-3 py-2.5 hidden md:table-cell">
@@ -165,7 +165,9 @@
             <%= (incident.severity || 'low').toUpperCase() %>
           </span>
         </td>
-        <td class="px-3 py-2.5 text-gray-600 text-xs hidden lg:table-cell"><%= incident.job_number %></td>
+        <td class="px-3 py-2.5 text-gray-600 text-xs hidden lg:table-cell">
+          <% if (incident.job_number) { %><%= incident.job_number %><% } else if (incident.vehicle_asset) { %><span class="text-gray-500"><%= incident.vehicle_asset %></span><% } else { %><span class="text-gray-300">—</span><% } %>
+        </td>
         <td class="px-3 py-2.5">
           <form method="POST" action="/incidents/<%= incident.id %>/status" class="inline">
             <%- include('../partials/csrf') %>

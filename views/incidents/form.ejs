@@ -24,15 +24,25 @@
     <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Incident Details</h2>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
       <div>
-        <label for="job_id" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Job <span class="text-red-500">*</span></label>
-        <select id="job_id" name="job_id" required
+        <label for="job_id" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Job <span class="text-gray-300 normal-case font-medium">(optional)</span></label>
+        <select id="job_id" name="job_id"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-          <option value="">-- Select Job --</option>
+          <option value="">-- No job / not job-related --</option>
           <% jobs.forEach(j => { %>
             <option value="<%= j.id %>"
               <%= isEdit && incident.job_id == j.id ? 'selected' : '' %>
               <%= !isEdit && preselectedJobId == j.id ? 'selected' : '' %>
             ><%= j.job_number %> - <%= j.project_name ? j.project_name + ' (' + j.client + ')' : j.client %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label for="vehicle_id" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Vehicle involved <span class="text-gray-300 normal-case font-medium">(optional)</span></label>
+        <select id="vehicle_id" name="vehicle_id"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">-- No vehicle --</option>
+          <% (typeof vehicles !== 'undefined' ? vehicles : []).forEach(v => { %>
+            <option value="<%= v.id %>" <%= isEdit && incident.vehicle_id == v.id ? 'selected' : '' %>><%= v.asset_id %><% if (v.model_label) { %> · <%= v.model_label %><% } %><% if (v.rego) { %> · <%= v.rego %><% } %><% if (v.status && v.status !== 'Active') { %> (<%= v.status %>)<% } %></option>
           <% }) %>
         </select>
       </div>

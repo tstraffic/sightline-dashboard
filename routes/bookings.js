@@ -1787,7 +1787,8 @@ router.get('/api/resources', (req, res) => {
     try {
       const fleetRows = db.prepare(`
         SELECT id, asset_id AS asset_number, rego AS licence_plate,
-               COALESCE(NULLIF(TRIM(make || ' ' || model), ''), asset_id) AS name,
+               asset_id AS name,
+               NULLIF(TRIM(make || ' ' || model), '') AS model_label,
                vehicle_type AS category, status, traffic_class
         FROM vehicles
         WHERE status IN ('Active','Spare')
@@ -2649,7 +2650,7 @@ router.post('/:id/vehicles', (req, res) => {
     try {
       const fv = db.prepare("SELECT asset_id, rego, make, model FROM vehicles WHERE id = ?").get(fleet_vehicle_id);
       if (fv) {
-        if (!vehicle_name) vehicle_name = [fv.make, fv.model].filter(Boolean).join(' ') || fv.asset_id;
+        if (!vehicle_name) vehicle_name = fv.asset_id || [fv.make, fv.model].filter(Boolean).join(' ');
         if (!registration && fv.rego) registration = fv.rego;
       } else {
         fleet_vehicle_id = null; // bogus id — ignore the link
@@ -2760,7 +2761,7 @@ router.post('/:id/vehicles/:vehicleId', (req, res) => {
     try {
       const fv = db.prepare("SELECT asset_id, rego, make, model FROM vehicles WHERE id = ?").get(fleet_vehicle_id);
       if (fv) {
-        if (!vehicle_name) vehicle_name = [fv.make, fv.model].filter(Boolean).join(' ') || fv.asset_id;
+        if (!vehicle_name) vehicle_name = fv.asset_id || [fv.make, fv.model].filter(Boolean).join(' ');
         if (!registration && fv.rego) registration = fv.rego;
       } else { fleet_vehicle_id = null; }
     } catch (e) { fleet_vehicle_id = null; }
