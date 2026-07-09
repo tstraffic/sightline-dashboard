@@ -365,25 +365,27 @@
     /* ── PPE Grid ── */
     .ppe-grid {
       display: flex;
-      gap: 2rem;
+      gap: 1rem;
       justify-content: center;
-      flex-wrap: wrap;
+      flex-wrap: nowrap;
       margin-top: 2.5rem;
     }
     .ppe-item {
-      width: 130px;
+      flex: 1 1 0;
+      min-width: 0;
+      max-width: 140px;
       text-align: center;
     }
     .ppe-slot {
-      height: 140px;
+      height: 120px;
       display: flex;
       align-items: flex-end;
       justify-content: center;
       margin-bottom: 1rem;
     }
     .ppe-img {
-      max-height: 130px !important;
-      max-width: 110px !important;
+      max-height: 110px !important;
+      max-width: 96px !important;
       width: auto !important;
       height: auto !important;
       object-fit: contain;
@@ -395,13 +397,18 @@
     }
     .ppe-label {
       font-weight: 600;
-      font-size: 15px;
+      font-size: 14px;
       color: #fff;
     }
     .ppe-sub {
-      font-size: 13px;
+      font-size: 12px;
       color: rgba(255,255,255,0.45);
       margin-top: 2px;
+    }
+    /* Narrow screens can't fit all six across — let them wrap again. */
+    @media (max-width: 720px) {
+      .ppe-grid { flex-wrap: wrap; gap: 1.5rem; }
+      .ppe-item { flex: 0 0 auto; width: 120px; }
     }
 
     /* ── Founders: circular images ── */
