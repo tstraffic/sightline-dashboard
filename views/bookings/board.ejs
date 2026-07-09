@@ -5431,11 +5431,18 @@
   // + clears stale driver/flag state when leaving a vehicle.
   function relocateCrewSlot(payload, newVehicleId) {
     var bookingCrewId = String(payload.booking_crew_id);
+    // Any case this in-place mover can't cleanly handle (worker moved onto a
+    // standalone/spare vehicle chip, which lives outside a .bk2-crew block, or
+    // a stale DOM) must NOT do a full page reload — that closes the quick-edit
+    // editor and dumps the planner back on the board (the "glitched me back"
+    // bug). Re-render just this card from server truth instead; the caller's
+    // bk2:alloc-changed refreshes the glowing card + Resources tab.
+    var bookingId = String(payload.booking_id);
     var slot = document.querySelector('.bk2-slot--filled[data-booking-crew-id="' + bookingCrewId + '"]');
-    if (!slot) { console.warn('[bk2 relocate] slot not found, falling back to reload'); location.reload(); return; }
+    if (!slot) { console.warn('[bk2 relocate] slot not found, refreshing card in place'); bk2RefreshCard(bookingId); return; }
 
     var card = slot.closest('.bk2-card');
-    if (!card) { location.reload(); return; }
+    if (!card) { bk2RefreshCard(bookingId); return; }
 
     var sourceBlock      = slot.closest('.bk2-crew');
     var sourceUnassigned = slot.closest('.bk2-unassigned');
@@ -5448,7 +5455,11 @@
     } else {
       destUnassigned = card.querySelector('.bk2-unassigned');
     }
-    if (!destBlock && !destUnassigned) { location.reload(); return; }
+    // Destination is a standalone/spare vehicle chip (not inside a crew block)
+    // or otherwise not a place we can splice into — re-render the card from
+    // server truth (which already has the new assigned_vehicle_id) rather than
+    // reloading the whole page and closing the editor.
+    if (!destBlock && !destUnassigned) { bk2RefreshCard(bookingId); return; }
 
     // ── Detach the slot from its current parent ─────────────────
     var parentBefore = slot.parentNode;

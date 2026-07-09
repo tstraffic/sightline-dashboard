@@ -233,12 +233,37 @@ function loadBookingDetail(db, bookingId) {
   // resource_type, weird quantity) must NOT crash the whole response —
   // that's how the slide-over was getting stuck on "Loading…".
   const totalCrewAssigned = crew.length;
+  // Standalone vehicles = filled booking_vehicles beyond the utes the "Nx TC
+  // Crew" packages already imply — these are what a "Vehicle" requirement
+  // represents. Without this, vehicle requirements always showed 0/x red
+  // (fulfilment only ever counted crew), so a dragged-on vehicle looked
+  // unfulfilled.
+  const vehFilled = (vehicles || []).filter(v =>
+    (v.vehicle_name && String(v.vehicle_name).trim()) ||
+    (v.registration && String(v.registration).trim())).length;
+  let crewUteUnits = 0;
+  requirements.forEach(r => { const m = String(r.resource_type || '').trim().match(/^(\d+)x TC Crew$/i); if (m) crewUteUnits += Math.max(1, parseInt(r.quantity_required, 10) || 1); });
+  const spareVehicles = Math.max(0, vehFilled - crewUteUnits);
+  // Actual equipment on the shift, tallied against the requirement label it
+  // maps to (so an added Arrow Board / VMS etc. counts toward its row).
+  const equipByLabel = {};
+  (equipmentList || []).forEach(e => {
+    const lbl = equipmentReqLabel(e.equipment_name || e.asset_name || '', e.equipment_type || e.eq_category || '');
+    if (!lbl) return;
+    const k = lbl.toLowerCase();
+    equipByLabel[k] = (equipByLabel[k] || 0) + (parseInt(e.quantity, 10) || 1);
+  });
   try {
     requirements.forEach(r => {
-      const resType = String(r.resource_type || '').toLowerCase().replace(/_/g, ' ');
+      const label = String(r.resource_type || '').trim();
+      const resType = label.toLowerCase().replace(/_/g, ' ');
       if (!resType) { r.quantity_assigned = 0; r.status = 'unfulfilled'; return; }
       if (resType.includes('tc crew') || resType.includes('traffic controller') || resType.includes('hoist') || resType.includes('ip')) {
         r.quantity_assigned = totalCrewAssigned;
+      } else if (VEHICLE_REQ_LABELS.has(label)) {
+        r.quantity_assigned = spareVehicles;
+      } else if (equipByLabel[label.toLowerCase()] != null) {
+        r.quantity_assigned = equipByLabel[label.toLowerCase()];
       } else {
         const assigned = crew.filter(c => {
           const role = String(c.role_on_site || c.crew_role || '').toLowerCase().replace(/_/g, ' ');
@@ -552,6 +577,63 @@ const PEOPLE_ADDON_ROLES = {
   'Trainee': 'Trainee',
   'Security': 'Security',
 };
+
+// Increment (or create) a booking_requirements row. Used when a planner drops
+// a resource straight onto a shift from the board's resource panel beyond what
+// the requirements already call for, so the Overview "Requirements" list grows
+// to match what's actually on the shift (add another TC / vehicle / item).
+function bumpRequirement(db, bookingId, resourceType, by = 1) {
+  const label = String(resourceType || '').trim();
+  if (!label || by <= 0) return;
+  const existing = db.prepare("SELECT id, quantity_required FROM booking_requirements WHERE booking_id = ? AND resource_type = ?").get(bookingId, label);
+  if (existing) {
+    db.prepare("UPDATE booking_requirements SET quantity_required = ? WHERE id = ?")
+      .run((parseInt(existing.quantity_required, 10) || 0) + by, existing.id);
+  } else {
+    db.prepare("INSERT INTO booking_requirements (booking_id, resource_type, quantity_required) VALUES (?, ?, ?)")
+      .run(bookingId, label, by);
+  }
+}
+
+// How many crew "slots" the current requirements call for: N per unit of an
+// "Nx TC Crew" package plus one per people add-on unit (Traffic Controller,
+// Spotter, …). Lets the crew-add endpoint tell a surplus (extra person dropped
+// on) apart from filling a slot the shift already needed.
+function requiredCrewCapacity(db, bookingId) {
+  let cap = 0;
+  const rows = db.prepare("SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id = ?").all(bookingId);
+  for (const r of rows) {
+    const qty = Math.max(0, parseInt(r.quantity_required, 10) || 0);
+    const m = String(r.resource_type || '').trim().match(/^(\d+)x TC Crew$/i);
+    if (m) { cap += (parseInt(m[1], 10) || 0) * qty; continue; }
+    if (PEOPLE_ADDON_ROLES[String(r.resource_type || '').trim()]) cap += qty;
+  }
+  return cap;
+}
+
+// Vehicle-type requirement labels (standalone vehicles, as opposed to the
+// utes implied by "Nx TC Crew" packages). Used both to bump on add and to
+// count fulfilment against actual booking_vehicles.
+const VEHICLE_REQ_LABELS = new Set(['Vehicle', 'VMS Ute', 'Pod Truck', 'TMA (dry hire)', 'TMA (wet hire)']);
+
+// Equipment register category → the requirement label it should count against
+// when a piece of gear is dropped on from the resource panel.
+const EQUIP_CATEGORY_TO_REQ = {
+  arrow_board: 'Arrow Board',
+  vms: 'VMS Board',
+  lighting: 'Light Tower',
+  vehicle: 'Vehicle',
+};
+// Best-effort mapping of an added equipment item → a requirement label: an
+// exact name match against a known requirement label wins, else its category,
+// else the raw name (so it still shows up as its own requirement line).
+function equipmentReqLabel(name, category) {
+  const n = String(name || '').trim();
+  for (const [, l] of QUICK_REQ_FIELDS) { if (l.toLowerCase() === n.toLowerCase()) return l; }
+  const c = String(category || '').trim().toLowerCase();
+  if (EQUIP_CATEGORY_TO_REQ[c]) return EQUIP_CATEGORY_TO_REQ[c];
+  return n || null;
+}
 
 // Build crew_blocks for one booking — derives N-man crew composites from
 // booking_requirements rows matching /^(\d+)x TC Crew$/, then fans the
@@ -2313,6 +2395,17 @@ router.post('/:id/crew', (req, res) => {
     });
   }
 
+  // Keep the Overview requirements in step: if the shift now carries more crew
+  // than the requirements call for, the just-added person was dropped on as an
+  // extra — add a Traffic Controller so the requirement reflects the headcount.
+  if (inserted) {
+    try {
+      const totalCrew = db.prepare("SELECT COUNT(*) AS n FROM booking_crew WHERE booking_id = ?").get(req.params.id).n;
+      const surplus = totalCrew - requiredCrewCapacity(db, req.params.id);
+      if (surplus > 0) bumpRequirement(db, req.params.id, 'Traffic Controller', surplus);
+    } catch (e) { console.error('[bookings.crew] requirement bump failed:', e.message); }
+  }
+
   // Audit trail — who put whom on the shift.
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
     details: `Added crew #${crew_member_id} to ${thisBooking ? thisBooking.booking_number : 'booking'}`, req });
@@ -2546,6 +2639,10 @@ router.post('/:id/vehicles', (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?)
     `).run(req.params.id, vehicle_name, registration, req.body.vehicle_role || '', driverId, fleet_vehicle_id);
     newId = r.lastInsertRowid;
+    // A brand-new vehicle (we didn't upgrade an empty ute placeholder that a
+    // requirement already accounted for) is one more than the shift asked for
+    // — bump the Vehicle requirement so the Overview reflects it.
+    try { bumpRequirement(db, req.params.id, 'Vehicle', 1); } catch (e) { console.error('[bookings.vehicles] requirement bump failed:', e.message); }
   }
   // Vehicle double-booking warning — same fleet vehicle or rego on another
   // live booking the same day. Crew get this check; vehicles never did.
@@ -2863,18 +2960,31 @@ router.post('/:id/equipment', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const b = req.body;
+  const qty = parseInt(b.quantity) || 1;
   let newId = null;
+  let addedName = '', addedCategory = '';
   if (b.equipment_id) {
     const eq = db.prepare("SELECT * FROM equipment WHERE id = ?").get(b.equipment_id);
     if (eq) {
+      addedName = eq.name || eq.asset_name || '';
+      addedCategory = eq.category || '';
       const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_id, equipment_name, equipment_type, quantity) VALUES (?, ?, ?, ?, ?)")
-        .run(req.params.id, eq.id, eq.name || eq.asset_name || '', eq.category || '', parseInt(b.quantity) || 1);
+        .run(req.params.id, eq.id, addedName, addedCategory, qty);
       newId = r.lastInsertRowid;
     }
   } else if (b.equipment_name) {
+    addedName = b.equipment_name;
+    addedCategory = b.equipment_type || '';
     const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_name, equipment_type, quantity) VALUES (?, ?, ?, ?)")
-      .run(req.params.id, b.equipment_name, b.equipment_type || '', parseInt(b.quantity) || 1);
+      .run(req.params.id, addedName, addedCategory, qty);
     newId = r.lastInsertRowid;
+  }
+  // Reflect the added gear in the Overview requirements list too.
+  if (newId) {
+    try {
+      const label = equipmentReqLabel(addedName, addedCategory);
+      if (label) bumpRequirement(db, req.params.id, label, qty);
+    } catch (e) { console.error('[bookings.equipment] requirement bump failed:', e.message); }
   }
   if (isJson) return res.json({ ok: true, id: newId });
   req.flash('success', 'Equipment added.');
