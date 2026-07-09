@@ -3214,11 +3214,20 @@
     var mpNoteWrap = document.querySelector('[data-bk-mp-note-wrap]');
     var mpHint = document.querySelector('[data-bk-mp-hint]');
     var mpMarker = null;
-    var GREEN_ICON = (typeof L !== 'undefined') ? L.divIcon({
-      className: 'bk2-mp-icon',
-      html: '<div class="bk2-mp-pin"></div>',
-      iconSize: [22, 22], iconAnchor: [11, 22]
-    }) : null;
+    // Build the green divIcon LAZILY — Leaflet (L) loads with `defer`, so it's
+    // undefined when this IIFE first runs; computing the icon up-front left it
+    // null and the marker fell back to the (blue, often missing) default icon.
+    var _greenIcon = null;
+    function greenIcon() {
+      if (!_greenIcon && typeof L !== 'undefined') {
+        _greenIcon = L.divIcon({
+          className: 'bk2-mp-icon',
+          html: '<div class="bk2-mp-pin"></div>',
+          iconSize: [22, 22], iconAnchor: [11, 22]
+        });
+      }
+      return _greenIcon || undefined;
+    }
     function mpLatEl() { return form.querySelector('[name="meeting_point_latitude"]'); }
     function mpLngEl() { return form.querySelector('[name="meeting_point_longitude"]'); }
     function writeMp(lat, lng) {
@@ -3234,7 +3243,7 @@
     function placeMp(center) {
       if (!pickMap) return;
       if (!mpMarker) {
-        mpMarker = L.marker(center, { draggable: true, icon: GREEN_ICON || undefined }).addTo(pickMap);
+        mpMarker = L.marker(center, { draggable: true, icon: greenIcon() }).addTo(pickMap);
         mpMarker.on('dragend', function () {
           var ll = mpMarker.getLatLng();
           writeMp(ll.lat.toFixed(6), ll.lng.toFixed(6));
