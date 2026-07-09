@@ -579,8 +579,17 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
     const clientRequestDate = req.body.client_request_date || sub.client_request_date || null;
     const notes = req.body.notes || sub.notes || '';
     const hoursSpent = hoursSpentParsed;
-    const chargeClient = (req.body.charge_client === '1' || req.body.charge_client === 1 || req.body.charge_client === true || req.body.charge_client === 'on') ? 1 : 0;
-    const chargeAmount = parseFloat(req.body.charge_amount) || 0;
+    // Charging is now handled by the always-available inline "Charge client"
+    // editor (POST /sub-plans/:subId/charge), decoupled from submission so it
+    // works before AND after a plan is put in. Submitting must therefore NOT
+    // clobber a charge set there — preserve the existing value when the submit
+    // form doesn't carry the field (it no longer does).
+    const chargeClient = (req.body.charge_client !== undefined)
+      ? ((req.body.charge_client === '1' || req.body.charge_client === 1 || req.body.charge_client === true || req.body.charge_client === 'on') ? 1 : 0)
+      : (sub.charge_client ? 1 : 0);
+    const chargeAmount = (req.body.charge_amount !== undefined)
+      ? (parseFloat(req.body.charge_amount) || 0)
+      : (parseFloat(sub.charge_amount) || 0);
     // Council cost/fee is no longer captured here — it's driven by the itemised
     // Fees section (compliance_fees), which rolls up into council_fee_amount.
 
@@ -723,6 +732,24 @@ router.post('/sub-plans/:subId/details', (req, res) => {
     .run(req.body.job_date || null, req.body.council_plan_type || '', req.body.client_request_date || null, sub.id);
   if (wantsJson(req)) return res.json({ success: true });
   req.flash('success', 'Details saved.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// Charge the client — set/clear the charge flag + amount independently of the
+// upload/submit flow, so it can be edited at ANY status (before submitting,
+// after submitting, even once approved). This is its own dedicated form, so an
+// unchecked box (charge_client absent from the body) correctly means "don't
+// charge".
+router.post('/sub-plans/:subId/charge', subPlanUpload.none(), (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  const chargeClient = (req.body.charge_client === '1' || req.body.charge_client === 1 || req.body.charge_client === true || req.body.charge_client === 'on') ? 1 : 0;
+  const chargeAmount = chargeClient ? (parseFloat(req.body.charge_amount) || 0) : 0;
+  db.prepare("UPDATE compliance SET charge_client = ?, charge_amount = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+    .run(chargeClient, chargeAmount, sub.id);
+  if (wantsJson(req)) return res.json({ success: true, charge_client: chargeClient, charge_amount: chargeAmount });
+  req.flash('success', 'Charge updated.');
   res.redirect('/compliance/' + sub.parent_id + '/edit');
 });
 
