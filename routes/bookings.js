@@ -1466,6 +1466,16 @@ router.post('/quick', (req, res) => {
       totalCrews += qty;
     }
   }
+  // Standalone PEOPLE add-ons (Traffic Controller, Spotter, Hoist Operator,
+  // Labour, Trainee, Security) are assignable crew slots — store them as
+  // booking_requirements like /:id/quick-update does, NOT as equipment.
+  // Without this they were silently dropped on create (QUICK_ADDONS below is
+  // equipment-only), so a "3 solo Traffic Controllers" booking lost them.
+  for (const [field, label] of QUICK_REQ_FIELDS) {
+    if (!PEOPLE_ADDON_ROLES[label]) continue; // people add-ons only
+    const qty = parseInt(b[field], 10);
+    if (Number.isFinite(qty) && qty > 0) insertReq.run(newId, label, qty);
+  }
   // No default crew package — nothing is pre-ticked. If the user picked
   // nothing the booking starts with zero crew requirements (and zero
   // utes); they add packages in the Resources tab. (Previously we forced
