@@ -708,13 +708,20 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
     fillSlot(slot, c);
     return slot;
   });
-  // Stragglers (extra vehicles beyond what blocks needed) collect on the
-  // first block as "extras" — render them at the bottom of that block.
-  if (vehicles.length && blocks.length) {
-    blocks[0].extra_vehicles = vehicles.map(v => ({
-      vehicle_id: v.id, name: v.vehicle_name, registration: v.registration, role: v.vehicle_role || 'ute',
-    }));
-  }
+  // Every vehicle NOT slotted into a crew block (stragglers beyond the block
+  // count, or all of them when the booking has no TC-Crew blocks) is exposed
+  // as `blocks.spare_vehicles` — parallel to `blocks.unassigned` for crew — so
+  // the overview summary + floated card can show/count ALL booking_vehicles
+  // and stay in sync with the Resources tab (which lists them raw). Previously
+  // these were dumped on blocks[0].extra_vehicles, which nothing rendered.
+  blocks.spare_vehicles = vehicles.map(v => ({
+    vehicle_id: v.id,
+    name: v.vehicle_name,
+    registration: v.registration,
+    role: v.vehicle_role || 'ute',
+    driver_id: v.driver_id || null,
+    filled: !!((v.vehicle_name && String(v.vehicle_name).trim()) || (v.registration && String(v.registration).trim())),
+  }));
   return blocks;
 }
 

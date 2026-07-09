@@ -330,12 +330,15 @@
               <%
                 var _blocks = Array.isArray(b.crew_blocks) ? b.crew_blocks : [];
                 var _un = (b.crew_blocks && b.crew_blocks.unassigned) || [];
+                var _spareVeh = (b.crew_blocks && b.crew_blocks.spare_vehicles) || [];
                 var _workers = _un.length, _utes = 0, _equip = {}, _needed = 0;
                 _blocks.forEach(function (blk) {
                   (blk.worker_slots || []).forEach(function (s) { if (s.filled) _workers++; else _needed++; });
                   if (blk.vehicle_slot && blk.vehicle_slot.filled) _utes++;
                   (blk.addons || []).forEach(function (a) { var t = a.type || 'Equipment'; _equip[t] = (_equip[t] || 0) + 1; });
                 });
+                // Vehicles on the booking but not in a crew block still count.
+                _utes += _spareVeh.filter(function (v) { return v.filled; }).length;
                 var _equipKeys = Object.keys(_equip);
                 var _equipTotal = _equipKeys.reduce(function (n, k) { return n + _equip[k]; }, 0);
               %>
@@ -372,15 +375,22 @@
                     <% _un.forEach(function (w) { _csumPerson(w); }); %>
                   </div>
                 <% } %>
+                <% _spareVeh.forEach(function (v) { %>
+                  <div class="bk2-csum-grp">
+                    <div class="bk2-csum-veh"><%= (v.role || 'ute').toUpperCase().slice(0,3) %> · <%= v.name || v.registration || 'Vehicle' %></div>
+                  </div>
+                <% }); %>
                 <% if (!_workers && !_utes) { %><div class="bk2-csum-none">No crew assigned yet</div><% } %>
                 <% if (_equipKeys.length) { %>
                   <div class="bk2-csum-equip"><% _equipKeys.forEach(function (k) { %><span class="bk2-csum-eqtag"><%= _equip[k] %>× <%= k %></span><% }); %></div>
                 <% } %>
               </div>
 
-              <% if (b.crew_blocks && b.crew_blocks.length) {
-                // Count empty worker slots in each block for the "N more
-                // TC slots · drop workers here" hint that the mockup shows.
+              <% if (b.crew_blocks && (b.crew_blocks.length || (b.crew_blocks.spare_vehicles || []).length || (b.crew_blocks.unassigned || []).length)) {
+                // Render the expanded crew/vehicle area whenever there are
+                // blocks OR loose vehicles OR unassigned crew — so spare
+                // vehicles (booking with no TC-Crew block) still show + can be
+                // removed, matching the Resources tab.
               %>
                 <div class="bk2-crews">
                   <% b.crew_blocks.forEach(function (blk) {
@@ -529,6 +539,28 @@
                           <% if (slot.is_first_aid)     { %><span class="bk2-flag bk2-flag--fa"  title="First Aid">FA</span><% } %>
                           <% if (slot.straight_to_site) { %><span class="bk2-flag bk2-flag--sts" title="Straight to Site">STS</span><% } %>
                           <% if (slot.non_billable)     { %><span class="bk2-flag bk2-flag--nb"  title="Non-Billable">NB</span><% } %>
+                        </div>
+                      <% }); %>
+                    </div>
+                  <% } %>
+
+                  <!-- Spare vehicles: booking_vehicles not tied to a crew
+                       block (or all of them when there are no TC-Crew blocks).
+                       Shown so the card matches the Resources tab; each is a
+                       real vehicle row so it can be removed inline. -->
+                  <% var _spare = (b.crew_blocks && b.crew_blocks.spare_vehicles) || []; %>
+                  <% if (_spare.length) { %>
+                    <div class="bk2-spareveh">
+                      <div class="bk2-spareveh-head">
+                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 17h8m-8 0a2 2 0 11-4 0 2 2 0 014 0zm8 0a2 2 0 104 0 2 2 0 00-4 0zm-9-5h10l-1-4H4v4zm10 0h3l3 3v2h-2"/></svg>
+                        <span>Vehicles</span>
+                      </div>
+                      <% _spare.forEach(function (v) { %>
+                        <div class="bk2-veh-slot bk2-veh-slot--spare" data-booking-id="<%= b.id %>" data-vehicle-id="<%= v.vehicle_id %>">
+                          <span class="bk2-veh-tag"><%= (v.role || 'ute').toUpperCase().slice(0,3) %></span>
+                          <span class="bk2-veh-slot-name"><%= v.name || v.registration || '(unnamed)' %></span>
+                          <% if (v.name && v.registration) { %><span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8"><%= v.registration %></span><% } %>
+                          <button type="button" class="bk2-veh-remove" data-action="remove-vehicle" data-vehicle-id="<%= v.vehicle_id %>" title="Remove vehicle" aria-label="Remove vehicle">×</button>
                         </div>
                       <% }); %>
                     </div>
@@ -1990,9 +2022,49 @@
     if (vw < 1100) return null;                 // too narrow — don't float
     var outer = 20, gap = 20;
     var cardW = Math.min(360, Math.round(vw * 0.30));
+    // Wide screens: dock the resource panel to the LEFT of the card so you can
+    // drag people/vehicles straight onto the floated card — [panel][card][editor].
+    var sizeMap = { s: 280, m: 340, l: 480 };
+    var sz = 'm'; try { sz = localStorage.getItem('bk2.rp.size') || 'm'; } catch (e) {}
+    var panelW = sizeMap[sz] || 340;
+    var dGap = 16, dOuter = 16;
+    var dockCardLeft = dOuter + panelW + dGap;
+    var dockEditorW = vw - dockCardLeft - cardW - dGap - dOuter;
+    if (vw >= 1360 && dockEditorW >= 600) {
+      return { vw: vw, vh: vh, dock: true, panelW: panelW, panelLeft: dOuter,
+        cardW: cardW, cardLeft: dockCardLeft, editorW: dockEditorW };
+    }
+    // Fallback (narrower): editor + card only, panel stays behind (toggle in editor).
     var editorW = Math.min(1200, vw - cardW - gap - outer * 2);
     var cardLeft = Math.max(outer, vw - editorW - gap - cardW);
-    return { vw: vw, vh: vh, cardW: cardW, editorW: editorW, cardLeft: cardLeft };
+    return { vw: vw, vh: vh, dock: false, cardW: cardW, editorW: editorW, cardLeft: cardLeft };
+  }
+  // Dock / undock the resource panel above the editor backdrop. Reparented to
+  // <body> so position:fixed is viewport-relative (a transformed/contained
+  // board ancestor would otherwise become its containing block).
+  function bkDockPanel(L) {
+    var panel = document.getElementById('bk2-resourcepanel');
+    if (!panel || !L || !L.dock) { bkUndockPanel(); return; }
+    if (!panel.__bkParent) {
+      panel.__bkParent = panel.parentNode;
+      panel.__bkNext = panel.nextSibling;
+      document.body.appendChild(panel);
+    }
+    panel.classList.add('bk2-resourcepanel--docked');
+    panel.style.left = L.panelLeft + 'px';
+    panel.style.width = L.panelW + 'px';
+    panel.style.top = '12px';
+    panel.style.height = (L.vh - 24) + 'px';
+  }
+  function bkUndockPanel() {
+    var panel = document.getElementById('bk2-resourcepanel');
+    if (!panel) return;
+    panel.classList.remove('bk2-resourcepanel--docked');
+    panel.style.left = ''; panel.style.width = ''; panel.style.top = ''; panel.style.height = '';
+    if (panel.__bkParent) {
+      try { panel.__bkParent.insertBefore(panel, panel.__bkNext || null); } catch (e) {}
+      panel.__bkParent = null; panel.__bkNext = null;
+    }
   }
   function floatCardBesideEditor(card) {
     if (!card) return;
@@ -2031,11 +2103,15 @@
     }
     requestAnimationFrame(recentre);
     setTimeout(recentre, 80);   // fallback: rAF is paused on backgrounded tabs
+    // Dock the resource panel beside the card (wide screens) so it's reachable
+    // above the backdrop for drag-and-drop onto this card.
+    bkDockPanel(L);
     floatingCard = card;
   }
   function unfloatCard() {
     var ed = $('#bk2-editor');
     if (ed && ed.dataset.bkNarrowed) { ed.style.width = ''; delete ed.dataset.bkNarrowed; }
+    try { bkUndockPanel(); } catch (e) {}
     document.querySelectorAll('.bk2-card--floating, .bk2-card.is-editing').forEach(function (c) {
       c.classList.remove('bk2-card--floating', 'is-editing');
       // Put it back where it was on the board.
@@ -4410,6 +4486,27 @@
   // ==========================================================
   var csrfMeta = document.querySelector('meta[name="csrf-token"]');
   var CSRF_TOKEN = csrfMeta ? csrfMeta.getAttribute('content') : '';
+
+  // Remove a spare vehicle straight from the card/floated summary — AJAX so
+  // we never leave the board, then refresh the floated card + board.
+  document.addEventListener('click', function (e) {
+    var rm = e.target.closest && e.target.closest('[data-action="remove-vehicle"]');
+    if (!rm) return;
+    e.preventDefault(); e.stopPropagation();
+    var card = rm.closest('.bk2-card, [data-booking-id]');
+    var bid = card && card.getAttribute('data-booking-id');
+    var vid = rm.getAttribute('data-vehicle-id');
+    if (!bid || !vid) return;
+    var body = new URLSearchParams(); body.append('_csrf', CSRF_TOKEN);
+    fetch('/bookings/' + bid + '/vehicles/' + vid + '/remove', {
+      method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body, credentials: 'same-origin',
+    }).then(function () {
+      var chip = rm.closest('.bk2-veh-slot'); if (chip) chip.remove();
+      boardDirty = true;
+      try { if (typeof refreshFloatCard === 'function') refreshFloatCard(); } catch (er) {}
+    }).catch(function () { if (typeof bk2Toast === 'function') bk2Toast('Could not remove vehicle.', 'error'); });
+  });
 
   // Lightweight toast — used to surface server-side warnings (e.g. crew or
   // vehicle double-booked) that a flash message can't deliver to AJAX flows.
