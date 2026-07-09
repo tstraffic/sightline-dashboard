@@ -2141,11 +2141,11 @@ body.bk2-date-loading::before {
 /* Mobile-works legs — compact single row per stop */
 .bk2-legs { margin-top: 8px; }
 .bk2-legs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
-.bk2-leg { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid #EEF0F2; }
+.bk2-leg { display: flex; align-items: center; gap: 8px; padding: 7px 0; border-top: 1px solid rgba(255,255,255,0.08); }
 .bk2-leg:first-child { border-top: 0; }
-.bk2-leg-num { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; background: #EFF6FF; color: #2563EB; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
-.bk2-leg input { width: 100%; box-sizing: border-box; border: 1px solid #D1D5DB; border-radius: 7px; padding: 6px 9px; background: #fff; color: #111827; font-size: 12.5px; }
-.bk2-leg input::placeholder { color: #9CA3AF; }
+.bk2-leg-num { flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; background: rgba(43,127,255,0.20); color: #93C5FD; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.bk2-leg input { width: 100%; box-sizing: border-box; border: 1px solid rgba(255,255,255,0.14); border-radius: 7px; padding: 6px 9px; background: rgba(0,0,0,0.20); color: rgba(255,255,255,0.9); font-size: 12.5px; }
+.bk2-leg input::placeholder { color: #6B7280; }
 .bk2-leg-time { flex: 0 0 96px; }
 .bk2-leg-addr { flex: 1 1 42%; min-width: 0; }
 .bk2-leg-notes { flex: 1 1 42%; min-width: 0; }
@@ -2190,12 +2190,12 @@ body.bk2-date-loading::before {
 
 /* Inline location-context add row (light create-form theme) */
 .bk2-loc-addrow { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
-.bk2-loc-addrow input { flex: 1 1 auto; min-width: 0; border: 1px solid #D1D5DB; border-radius: 8px; padding: 7px 10px; background: #fff; color: #111827; font-size: 13px; }
-.bk2-loc-addrow input::placeholder { color: #9CA3AF; }
+.bk2-loc-addrow input { flex: 1 1 auto; min-width: 0; border: 1px solid rgba(255,255,255,0.14); border-radius: 8px; padding: 7px 10px; background: rgba(0,0,0,0.20); color: rgba(255,255,255,0.9); font-size: 13px; }
+.bk2-loc-addrow input::placeholder { color: #6B7280; }
 .bk2-loc-save { flex: 0 0 auto; border: 0; border-radius: 8px; background: #2B7FFF; color: #fff; font-size: 12.5px; font-weight: 700; padding: 7px 12px; cursor: pointer; }
 .bk2-loc-save:disabled { opacity: 0.6; cursor: default; }
-.bk2-loc-cancel { flex: 0 0 auto; border: 1px solid #D1D5DB; background: #fff; color: #6B7280; border-radius: 8px; width: 32px; height: 32px; font-size: 16px; line-height: 1; cursor: pointer; }
-.bk2-loc-cancel:hover { color: #111827; background: #F3F4F6; }
+.bk2-loc-cancel { flex: 0 0 auto; border: 1px solid rgba(255,255,255,0.14); background: none; color: #9CA3AF; border-radius: 8px; width: 32px; height: 32px; font-size: 16px; line-height: 1; cursor: pointer; }
+.bk2-loc-cancel:hover { color: #fff; background: rgba(255,255,255,0.06); }
 
 /* Add-on group sub-headings in the requirements grid */
 .bk2-addon-group-h { grid-column: 1 / -1; font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: #64748B; margin: 8px 0 2px; }
@@ -2210,3 +2210,13 @@ body.bk2-date-loading::before {
 .bk2-clone-menu { z-index: 1300; background: #fff; border: 1px solid #E5E7EB; border-radius: 10px; box-shadow: 0 10px 30px rgba(0,0,0,0.18); padding: 6px; min-width: 190px; display: flex; flex-direction: column; gap: 2px; }
 .bk2-clone-menu button { text-align: left; background: none; border: 0; border-radius: 7px; padding: 9px 11px; font-size: 13px; color: #111827; cursor: pointer; }
 .bk2-clone-menu button:hover { background: #F3F4F6; }
+
+/* Light-mode overrides for mobile legs + inline location-context add. */
+:root[data-theme="light"] .bk2-leg { border-top-color: #EEF0F2; }
+:root[data-theme="light"] .bk2-leg-num { background: #EFF6FF; color: #2563EB; }
+:root[data-theme="light"] .bk2-leg input { border-color: #D1D5DB; background: #fff; color: #111827; }
+:root[data-theme="light"] .bk2-leg input::placeholder { color: #9CA3AF; }
+:root[data-theme="light"] .bk2-loc-addrow input { border-color: #D1D5DB; background: #fff; color: #111827; }
+:root[data-theme="light"] .bk2-loc-addrow input::placeholder { color: #9CA3AF; }
+:root[data-theme="light"] .bk2-loc-cancel { border-color: #D1D5DB; background: #fff; color: #6B7280; }
+:root[data-theme="light"] .bk2-loc-cancel:hover { color: #111827; background: #F3F4F6; }
