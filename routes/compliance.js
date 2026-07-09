@@ -739,8 +739,9 @@ router.post('/sub-plans/:subId/details', (req, res) => {
 // upload/submit flow, so it can be edited at ANY status (before submitting,
 // after submitting, even once approved). This is its own dedicated form, so an
 // unchecked box (charge_client absent from the body) correctly means "don't
-// charge".
-router.post('/sub-plans/:subId/charge', subPlanUpload.none(), (req, res) => {
+// charge". Body arrives urlencoded (see __subPlanAjaxSave), so the global
+// express.urlencoded parser handles it — no per-route body middleware needed.
+router.post('/sub-plans/:subId/charge', (req, res) => {
   const db = getDb();
   const sub = getSubPlan(db, req.params.subId);
   if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }

@@ -388,12 +388,19 @@
           if (!form || form.__saving) return false;
           form.__saving = true;
           form.classList.add('opacity-60');
-          const fd = new FormData(form);
           const csrf = (form.querySelector('input[name="_csrf"]') || {}).value || '';
+          // Serialise as application/x-www-form-urlencoded. The app registers
+          // only express.urlencoded()/express.json() globally — there is NO
+          // multipart parser — so a FormData (multipart) body arrives empty on
+          // these routes and the save is silently dropped (owner nulled,
+          // extension/QA/charge stuck at their defaults). None of these inline
+          // forms carry files, so urlencoded is both correct and parseable.
+          const body = new URLSearchParams();
+          new FormData(form).forEach((v, k) => { body.append(k, v); });
           fetch(form.action, {
             method: 'POST',
             headers: { 'Accept': 'application/json', 'x-csrf-token': csrf },
-            body: fd,
+            body,
             credentials: 'same-origin',
           }).then(r => r.json().catch(() => ({}))).then(data => {
             // Sync defaultValue so subsequent onblur doesn't re-submit the
