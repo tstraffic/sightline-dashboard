@@ -730,6 +730,17 @@
   <header class="bk2-edit-titlebar">
     <span class="bk2-edit-cal"><svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></span>
     <h2 id="bk2-edit-title" class="bk2-edit-title">New Booking</h2>
+    <!-- Primary actions pinned to the always-visible top bar: the Create/Save
+         submit button (relabelled "Save" in edit mode) with Clone right next
+         to it, so Clone is reachable without scrolling the status row. -->
+    <button type="submit" form="bk2-edit-form" class="bk2-edit-titlebtn bk2-edit-titlebtn--save" id="bk2-edit-create" data-mode-only="create">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      Create
+    </button>
+    <button type="button" class="bk2-edit-titlebtn bk2-edit-titlebtn--primary" id="bk2-edit-clone" data-mode-only="edit">
+      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      Clone
+    </button>
     <button type="button" class="bk2-edit-iconbtn" id="bk2-edit-collapse" title="Dock to side / expand" aria-label="Collapse">
       <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 19l-7-7 7-7M21 12H3"/></svg>
     </button>
@@ -785,11 +796,7 @@
       </button>
     <% }); %>
     <span class="bk2-edit-spacer"></span>
-    <!-- Create button — visible only in create mode. -->
-    <button type="submit" form="bk2-edit-form" class="bk2-edit-actbtn bk2-edit-actbtn--create" id="bk2-edit-create" data-mode-only="create">
-      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
-      Create
-    </button>
+    <!-- Create/Save + Clone now live in the top title bar (always visible). -->
     <!-- Open full edit page — visible only in edit mode (i.e. once a booking
          exists). Takes the planner to the whole-screen /bookings/:id editor
          where every tab is live. -->
@@ -797,15 +804,6 @@
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
       Open full edit page
     </a>
-    <!-- Save & Clone — visible only in edit mode. -->
-    <button type="button" class="bk2-edit-actbtn" id="bk2-edit-save" data-mode-only="edit" disabled>
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-      Save
-    </button>
-    <button type="button" class="bk2-edit-actbtn bk2-edit-actbtn--primary" id="bk2-edit-clone" data-mode-only="edit">
-      <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-      Clone
-    </button>
   </div>
 
   <!-- Tab content panels. Only the active one is visible. -->
