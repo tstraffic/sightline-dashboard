@@ -99,6 +99,18 @@ const SERVICE_TYPES = [
 const VEHICLE_STATUSES = ['Active', 'Spare', 'Retired', 'Verify'];
 const VEHICLE_TYPES   = ['Light Vehicle', 'Heavy Vehicle'];
 
+// Traffic classification — what a vehicle counts as when put on a booking.
+// The value maps 1:1 to the booking requirement labels (see routes/bookings.js
+// VEHICLE_CLASS_REQ_LABEL). Ordered with the three the yard uses most first.
+const TRAFFIC_CLASSES = [
+  { value: 'ute',   label: 'Traffic Ute' },
+  { value: 'vms',   label: 'VMS Ute' },
+  { value: 'pod',   label: 'Pod Truck' },
+  { value: 'tma',   label: 'TMA' },
+  { value: 'truck', label: 'Truck' },
+];
+const TRAFFIC_CLASS_VALUES = new Set(TRAFFIC_CLASSES.map(c => c.value));
+
 // Normalise an empty / blank form value into NULL for nullable DB columns
 // — passing '' into a DATE / INTEGER column would store the empty string
 // instead of NULL, which then breaks the status logic and the aggregates.
@@ -293,6 +305,7 @@ router.get('/', (req, res) => {
     serviceTypes: SERVICE_TYPES,
     vehicleStatuses: VEHICLE_STATUSES,
     vehicleTypes: VEHICLE_TYPES,
+    trafficClasses: TRAFFIC_CLASSES,
     badgesFor,
   });
 });
@@ -487,6 +500,7 @@ router.get('/new', (req, res) => {
     vehicle: null,
     vehicleStatuses: VEHICLE_STATUSES,
     vehicleTypes: VEHICLE_TYPES,
+    trafficClasses: TRAFFIC_CLASSES,
   });
 });
 
@@ -500,17 +514,18 @@ router.post('/', (req, res) => {
   }
   const status = VEHICLE_STATUSES.includes(b.status) ? b.status : 'Active';
   const vehicleType = VEHICLE_TYPES.includes(b.vehicle_type) ? b.vehicle_type : null;
+  const trafficClass = TRAFFIC_CLASS_VALUES.has(b.traffic_class) ? b.traffic_class : 'ute';
 
   try {
     const result = db.prepare(`
       INSERT INTO vehicles (
-        asset_id, fleet_id, rego, make, model, year, vin, vehicle_type, toll_tag, assigned_to, status,
+        asset_id, fleet_id, rego, make, model, year, vin, vehicle_type, traffic_class, toll_tag, assigned_to, status,
         registration_expiry, ctp_expiry, insurance_renewal, inspection_due,
         next_service_date, next_service_km, fire_extinguisher_expiry, notes
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       b.asset_id.trim(), orNull(b.fleet_id), orNull(b.rego), orNull(b.make), orNull(b.model),
-      intOrNull(b.year), orNull(b.vin), vehicleType, orNull(b.toll_tag), orNull(b.assigned_to), status,
+      intOrNull(b.year), orNull(b.vin), vehicleType, trafficClass, orNull(b.toll_tag), orNull(b.assigned_to), status,
       orNull(b.registration_expiry), orNull(b.ctp_expiry), orNull(b.insurance_renewal), orNull(b.inspection_due),
       orNull(b.next_service_date), intOrNull(b.next_service_km), orNull(b.fire_extinguisher_expiry), orNull(b.notes)
     );
@@ -552,6 +567,7 @@ router.get('/:id', (req, res) => {
     equipmentChecks,
     initialTab,
     serviceTypes: SERVICE_TYPES,
+    trafficClasses: TRAFFIC_CLASSES,
     badges: badgesFor(vehicle),
     today: todayISO(),
   });
@@ -638,6 +654,7 @@ router.get('/:id/edit', (req, res) => {
     vehicle,
     vehicleStatuses: VEHICLE_STATUSES,
     vehicleTypes: VEHICLE_TYPES,
+    trafficClasses: TRAFFIC_CLASSES,
   });
 });
 
@@ -653,11 +670,12 @@ router.post('/:id', (req, res) => {
   }
   const status = VEHICLE_STATUSES.includes(b.status) ? b.status : 'Active';
   const vehicleType = VEHICLE_TYPES.includes(b.vehicle_type) ? b.vehicle_type : null;
+  const trafficClass = TRAFFIC_CLASS_VALUES.has(b.traffic_class) ? b.traffic_class : 'ute';
 
   try {
     db.prepare(`
       UPDATE vehicles SET
-        asset_id=?, fleet_id=?, rego=?, make=?, model=?, year=?, vin=?, vehicle_type=?,
+        asset_id=?, fleet_id=?, rego=?, make=?, model=?, year=?, vin=?, vehicle_type=?, traffic_class=?,
         toll_tag=?, assigned_to=?, status=?,
         registration_expiry=?, ctp_expiry=?, insurance_renewal=?, inspection_due=?,
         next_service_date=?, next_service_km=?, fire_extinguisher_expiry=?, notes=?,
@@ -665,7 +683,7 @@ router.post('/:id', (req, res) => {
       WHERE id=?
     `).run(
       b.asset_id.trim(), orNull(b.fleet_id), orNull(b.rego), orNull(b.make), orNull(b.model),
-      intOrNull(b.year), orNull(b.vin), vehicleType, orNull(b.toll_tag), orNull(b.assigned_to), status,
+      intOrNull(b.year), orNull(b.vin), vehicleType, trafficClass, orNull(b.toll_tag), orNull(b.assigned_to), status,
       orNull(b.registration_expiry), orNull(b.ctp_expiry), orNull(b.insurance_renewal), orNull(b.inspection_due),
       orNull(b.next_service_date), intOrNull(b.next_service_km), orNull(b.fire_extinguisher_expiry), orNull(b.notes),
       req.params.id
@@ -681,6 +699,24 @@ router.post('/:id', (req, res) => {
     }
     res.redirect(`/fleet/${req.params.id}/edit`);
   }
+});
+
+// ── SET TRAFFIC CLASS (inline from the list / detail) ────────────────
+// JSON-aware so the list can auto-save on <select> change without a reload.
+router.post('/:id/traffic-class', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const v = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
+  if (!v) { if (isJson) return res.status(404).json({ error: 'Vehicle not found' }); req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  if (!TRAFFIC_CLASS_VALUES.has(req.body.traffic_class)) {
+    if (isJson) return res.status(400).json({ error: 'Invalid class' });
+    req.flash('error', 'Invalid class.'); return res.redirect('/fleet/' + req.params.id);
+  }
+  db.prepare('UPDATE vehicles SET traffic_class = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.body.traffic_class, v.id);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'vehicle', entityId: v.id, entityLabel: v.asset_id, ip: req.ip });
+  if (isJson) return res.json({ ok: true, traffic_class: req.body.traffic_class });
+  req.flash('success', `${v.asset_id} classified.`);
+  res.redirect('/fleet/' + req.params.id);
 });
 
 // ── DELETE VEHICLE ───────────────────────────────────────────────────

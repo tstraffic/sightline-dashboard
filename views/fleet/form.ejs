@@ -56,6 +56,13 @@
         </select>
       </div>
       <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Traffic Class</label>
+        <select name="traffic_class" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% const _tc = val('traffic_class') || 'ute'; (typeof trafficClasses !== 'undefined' ? trafficClasses : []).forEach(c => { %><option value="<%= c.value %>" <%= _tc === c.value ? 'selected' : '' %>><%= c.label %></option><% }) %>
+        </select>
+        <p class="text-[10px] text-gray-400 mt-1">How this vehicle counts in booking requirements.</p>
+      </div>
+      <div>
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Toll Tag #</label>
         <input type="text" name="toll_tag" value="<%= val('toll_tag') %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
       </div>

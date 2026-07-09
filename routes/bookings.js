@@ -1788,7 +1788,7 @@ router.get('/api/resources', (req, res) => {
       const fleetRows = db.prepare(`
         SELECT id, asset_id AS asset_number, rego AS licence_plate,
                COALESCE(NULLIF(TRIM(make || ' ' || model), ''), asset_id) AS name,
-               vehicle_type AS category, status
+               vehicle_type AS category, status, traffic_class
         FROM vehicles
         WHERE status IN ('Active','Spare')
         ORDER BY asset_id
@@ -1831,10 +1831,15 @@ router.get('/api/resources', (req, res) => {
     } catch (e) {}
     // Classify every vehicle (pod truck / VMS ute / traffic ute / TMA /
     // truck) — the panel shows the class tag, filters by it, and the drag
-    // payload carries it so drop-to-add bumps the right requirement.
+    // payload carries it so drop-to-add bumps the right requirement. Fleet
+    // vehicles carry a stored, hand-set traffic_class (fleet register) which
+    // is the source of truth; equipment-register vehicles fall back to a
+    // name-derived guess.
     vehicles = vehicles.map(v => ({
       ...v,
-      vehicle_class: classifyVehicle([v.name, v.category, v.asset_number].filter(Boolean).join(' ')),
+      vehicle_class: (v.traffic_class && VEHICLE_CLASS_REQ_LABEL[v.traffic_class])
+        ? v.traffic_class
+        : classifyVehicle([v.name, v.category, v.asset_number].filter(Boolean).join(' ')),
     }));
 
     // EQUIPMENT — non-vehicle assets.

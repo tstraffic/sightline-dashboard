@@ -13933,6 +13933,33 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 309 error:', e.message); }
   }
 
+  // 310 — persistent per-vehicle traffic classification on the fleet register
+  // (traffic ute / VMS ute / pod truck / TMA / truck). Drives what requirement
+  // a vehicle counts against when it's put on a booking. Backfilled from the
+  // vehicle's own text so the existing fleet is pre-classified.
+  if (!isMigrationApplied.get(310)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(vehicles)").all().map(c => c.name);
+      if (!cols.includes('traffic_class')) db.exec("ALTER TABLE vehicles ADD COLUMN traffic_class TEXT");
+      const classOf = (s) => {
+        s = String(s || '').toLowerCase();
+        if (s.indexOf('pod') !== -1) return 'pod';
+        if (s.indexOf('vms') !== -1) return 'vms';
+        if (s.indexOf('tma') !== -1) return 'tma';
+        if (s.indexOf('truck') !== -1 || s.indexOf('heavy') !== -1 || s.indexOf('npr') !== -1) return 'truck';
+        return 'ute';
+      };
+      const rows = db.prepare("SELECT id, asset_id, make, model, vehicle_type FROM vehicles WHERE traffic_class IS NULL OR traffic_class = ''").all();
+      const upd = db.prepare("UPDATE vehicles SET traffic_class = ? WHERE id = ?");
+      const tx = db.transaction(() => {
+        for (const r of rows) upd.run(classOf([r.make, r.model, r.asset_id, r.vehicle_type].filter(Boolean).join(' ')), r.id);
+      });
+      tx();
+      recordMigration.run(310, 'vehicles: traffic_class column + backfill');
+      console.log('Migration 310 applied (' + rows.length + ' vehicles classified)');
+    } catch (e) { console.error('Migration 310 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

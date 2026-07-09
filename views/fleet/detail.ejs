@@ -49,6 +49,12 @@
         <% } else { %>bg-blue-50 text-blue-700 ring-1 ring-blue-600/20<% } %>"><%= vehicle.status %></span>
       <% if (vehicle.vehicle_type) { %><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"><%= vehicle.vehicle_type %></span><% } %>
       <% if (vehicle.rego) { %><span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-mono bg-blue-50 text-blue-800 ring-1 ring-blue-600/20"><%= vehicle.rego %></span><% } %>
+      <% const _tcList = (typeof trafficClasses !== 'undefined' ? trafficClasses : []);
+         const _tcLabel = (_tcList.find(c => c.value === (vehicle.traffic_class || 'ute')) || {}).label || 'Traffic Ute'; %>
+      <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-brand-50 text-brand-700 ring-1 ring-brand-600/20" title="How this vehicle counts in booking requirements">
+        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 17h8m-8 0a2 2 0 11-4 0 2 2 0 014 0zm8 0a2 2 0 104 0 2 2 0 00-4 0zm-9-5h10l-1-4H4v4z"/></svg>
+        <%= _tcLabel %>
+      </span>
     </div>
   </div>
   <div class="flex items-center gap-2">
@@ -125,6 +131,17 @@
         <div><dt class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Toll Tag</dt><dd class="text-gray-900 mt-0.5"><%= vehicle.toll_tag || '—' %></dd></div>
         <div><dt class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Assigned To</dt><dd class="text-gray-900 mt-0.5"><%= vehicle.assigned_to || '—' %></dd></div>
         <div><dt class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Vehicle Type</dt><dd class="text-gray-900 mt-0.5"><%= vehicle.vehicle_type || '—' %></dd></div>
+        <div>
+          <dt class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Traffic Class</dt>
+          <dd class="mt-0.5">
+            <form method="POST" action="/fleet/<%= vehicle.id %>/traffic-class" class="inline-flex">
+              <%- include('../partials/csrf') %>
+              <select name="traffic_class" onchange="this.form.submit()" class="px-2 py-1 bg-white border border-gray-300 rounded-md text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <% (typeof trafficClasses !== 'undefined' ? trafficClasses : []).forEach(c => { %><option value="<%= c.value %>" <%= (vehicle.traffic_class || 'ute') === c.value ? 'selected' : '' %>><%= c.label %></option><% }) %>
+              </select>
+            </form>
+          </dd>
+        </div>
         <div><dt class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">CTP Expiry</dt><dd class="text-gray-900 mt-0.5"><%= vehicle.ctp_expiry ? formatDate(vehicle.ctp_expiry) : '—' %></dd></div>
         <div><dt class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Insurance Renewal</dt><dd class="text-gray-900 mt-0.5"><%= vehicle.insurance_renewal ? formatDate(vehicle.insurance_renewal) : '—' %></dd></div>
         <div><dt class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Next Service km</dt><dd class="text-gray-900 mt-0.5"><%= vehicle.next_service_km ? KM(vehicle.next_service_km) : '—' %></dd></div>
