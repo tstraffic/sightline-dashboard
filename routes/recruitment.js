@@ -48,6 +48,52 @@ async function sendInductionConfirmation(db, applicant, replyTo) {
     return 'failed';
   }
 }
+// Human "on <date> at <time>" for notifications/flash. Mirrors the email's
+// wording so what the admin is told matches what the applicant received.
+function inductionWhenText(isoDateRaw, timeRaw) {
+  const iso = String(isoDateRaw || '').slice(0, 10);
+  if (!iso) return '';
+  const niceDate = new Date(iso + 'T00:00:00Z').toLocaleDateString('en-AU', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  });
+  let timeStr = '';
+  const m = String(timeRaw || '').match(/^(\d{1,2}):(\d{2})/);
+  if (m) { let h = parseInt(m[1], 10); const min = m[2]; const ap = h >= 12 ? 'pm' : 'am'; h = h % 12 || 12; timeStr = ' at ' + h + ':' + min + ' ' + ap; }
+  return niceDate + timeStr;
+}
+
+// Record a bell notification for the acting user about an induction email that
+// just went out (or didn't), so a re-email is never silent. `outcome` is the
+// sendInductionConfirmation return; `reEmail` distinguishes a resend from the
+// first confirmation.
+function notifyInductionEmail(db, userId, applicant, outcome, reEmail) {
+  if (!userId) return;
+  const when = inductionWhenText(applicant.induction_date, applicant.induction_time);
+  const name = applicant.applicant_name || 'Applicant';
+  let title, message;
+  if (outcome === 'sent') {
+    title = reEmail ? 'Induction re-emailed' : 'Induction confirmation emailed';
+    message = `${name} — ${when}${reEmail ? ' (re-sent)' : ''}`;
+  } else if (outcome === 'failed') {
+    title = 'Induction email failed';
+    message = `${name} — ${when}. The confirmation didn't send; try Re-send.`;
+  } else if (outcome === 'no_email') {
+    title = 'Induction time changed — no email on file';
+    message = `${name} — ${when}. No email address, so nothing was sent.`;
+  } else { return; }
+  const iso = String(applicant.induction_date || '').slice(0, 10);
+  const link = iso
+    ? `/induction/admin/recruitment/calendar?year=${iso.slice(0,4)}&month=${parseInt(iso.slice(5,7),10)}&id=${applicant.id}`
+    : '/induction/admin/recruitment';
+  try {
+    // 'general' is the whitelisted catch-all type (the notifications.type CHECK
+    // constraint rejects anything off its list — an induction-specific type
+    // would silently fail to insert). The title carries the meaning.
+    db.prepare(`INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, 'general', ?, ?, ?)`)
+      .run(userId, title, message, link);
+  } catch (e) { /* notifications table missing — non-fatal */ }
+}
+
 const {
   FORWARD_STAGES, TERMINAL_STAGES, ALL_STAGES, STAGE_LABELS,
   isTerminal, isAtOrBeyond, normalizeStage, derive,
@@ -343,7 +389,7 @@ router.post('/', (req, res) => {
 // destroying earlier dates.
 router.post('/:id', async (req, res) => {
   const db = getDb();
-  const row = db.prepare('SELECT id, stage, date_called, induction_date, induction_time, applicant_name, email, linked_crew_member_id FROM seek_applicants WHERE id = ?').get(req.params.id);
+  const row = db.prepare('SELECT id, stage, date_called, induction_date, induction_time, applicant_name, email, linked_crew_member_id, induction_email_sent_at FROM seek_applicants WHERE id = ?').get(req.params.id);
   if (!row) {
     if (wantsJson(req)) return res.status(404).json({ ok: false, error: 'Applicant not found.' });
     req.flash('error', 'Applicant not found.'); return res.redirect(backUrl(req));
@@ -380,7 +426,11 @@ router.post('/:id', async (req, res) => {
     const dateChanged = dateProvided && dpart(incomingDate) !== dpart(row.induction_date);
     const timeChanged = timeProvided && incomingTime !== (row.induction_time || '');
     if (incomingDate && (dateChanged || timeChanged)) {
-      inductionDateChange = { newDate: incomingDate, name: row.applicant_name, timeOnly: !dateChanged && timeChanged };
+      inductionDateChange = {
+        newDate: incomingDate, name: row.applicant_name,
+        timeOnly: !dateChanged && timeChanged,
+        wasEmailed: !!row.induction_email_sent_at, // prior confirmation → this is a RE-email
+      };
     }
   }
   for (const k of ['date_applied', 'date_called', 'induction_date']) {
@@ -437,36 +487,31 @@ router.post('/:id', async (req, res) => {
   params.push(row.id);
   db.prepare(`UPDATE seek_applicants SET ${sets.join(', ')} WHERE id = ?`).run(...params);
 
-  // Notify the user who set a new induction date.
-  if (inductionDateChange && req.session && req.session.user) {
-    try {
-      const isoDate = String(inductionDateChange.newDate).slice(0, 10);
-      const niceDate = new Date(isoDate + 'T00:00:00Z').toLocaleDateString('en-AU', {
-        weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
-      });
-      const link = `/induction/admin/recruitment/calendar?year=${isoDate.slice(0,4)}&month=${parseInt(isoDate.slice(5,7),10)}&id=${row.id}`;
-      db.prepare(`
-        INSERT INTO notifications (user_id, type, title, message, link)
-        VALUES (?, 'induction_scheduled', ?, ?, ?)
-      `).run(
-        req.session.user.id,
-        'Induction scheduled',
-        `${inductionDateChange.name} — ${niceDate}`,
-        link
-      );
-    } catch (e) { /* table missing — non-fatal */ }
-  }
-
   // Email the applicant a booking confirmation when an induction date is set
   // (or changed) and we have an email to send to. Awaited so we can report the
   // real outcome and stamp `induction_email_sent_at` for a durable record.
   //   inductionEmailed: 'sent' | 'failed' | 'no_email' | null (no booking change)
   let inductionEmailed = null;
+  const wasReEmail = !!(inductionDateChange && inductionDateChange.wasEmailed);
   if (inductionDateChange) {
     // Read back the freshly-persisted date/time so the email matches the row.
     const fresh = db.prepare('SELECT id, applicant_name, email, induction_date, induction_time FROM seek_applicants WHERE id = ?').get(row.id);
     const replyTo = (req.session.user && req.session.user.email) || undefined;
     inductionEmailed = await sendInductionConfirmation(db, fresh, replyTo);
+
+    // Tell the acting user what happened — a bell notification (durable, shows
+    // regardless of which edit surface was used) that reflects the ACTUAL
+    // email outcome and calls out a re-email vs the first confirmation. Also a
+    // flash so the plain list-form edit (a full-page POST) says it inline.
+    if (req.session && req.session.user) {
+      notifyInductionEmail(db, req.session.user.id, fresh, inductionEmailed, wasReEmail);
+    }
+    if (!wantsJson(req)) {
+      const when = inductionWhenText(fresh.induction_date, fresh.induction_time);
+      if (inductionEmailed === 'sent') req.flash('success', `${fresh.applicant_name} ${wasReEmail ? 're-emailed' : 'emailed'} their induction confirmation — ${when}.`);
+      else if (inductionEmailed === 'failed') req.flash('error', `Induction time saved, but the confirmation email to ${fresh.applicant_name} didn't send — use Re-send.`);
+      else if (inductionEmailed === 'no_email') req.flash('warning', `Induction time saved for ${fresh.applicant_name}, but there's no email on file so nothing was sent.`);
+    }
   }
 
   // NOTE: marking a candidate "Hired" deliberately does NOT create a roster
@@ -475,7 +520,7 @@ router.post('/:id', async (req, res) => {
   // crew/employee profiles. Hired is just the final pipeline stage.
 
   if (wantsJson(req)) {
-    return res.json({ ok: true, stage: newStage, inductionEmailed });
+    return res.json({ ok: true, stage: newStage, inductionEmailed, reEmail: wasReEmail });
   }
   res.redirect(backUrl(req));
 });
@@ -485,11 +530,15 @@ router.post('/:id', async (req, res) => {
 // it, or the date changed). Uses the applicant's stored date/time.
 router.post('/:id/resend-confirmation', async (req, res) => {
   const db = getDb();
-  const a = db.prepare('SELECT id, applicant_name, email, induction_date, induction_time FROM seek_applicants WHERE id = ?').get(req.params.id);
+  const a = db.prepare('SELECT id, applicant_name, email, induction_date, induction_time, induction_email_sent_at FROM seek_applicants WHERE id = ?').get(req.params.id);
   if (!a) return res.status(404).json({ ok: false, status: 'not_found', error: 'Applicant not found.' });
   const replyTo = (req.session.user && req.session.user.email) || undefined;
+  const wasReEmail = !!a.induction_email_sent_at; // already emailed once → this is a re-send
   const status = await sendInductionConfirmation(db, a, replyTo);
-  res.json({ ok: status === 'sent', status });
+  // Log a bell notification so a manual re-send is surfaced the same way an
+  // auto re-email on a time change is.
+  if (req.session && req.session.user) notifyInductionEmail(db, req.session.user.id, a, status, wasReEmail);
+  res.json({ ok: status === 'sent', status, reEmail: wasReEmail });
 });
 
 // POST /induction/admin/recruitment/:id/delete — remove a row. Deleting also

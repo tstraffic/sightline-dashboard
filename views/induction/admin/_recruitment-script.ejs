@@ -246,11 +246,11 @@
 
     if (data) {
       if (data.inductionEmailed === 'sent') {
-        toast('Booked — confirmation emailed');
+        toast(data.reEmail ? 'Saved — confirmation re-emailed' : 'Booked — confirmation emailed');
       } else if (data.inductionEmailed === 'failed') {
-        toast("Booked, but the confirmation email didn't send", true);
+        toast("Saved, but the confirmation email didn't send", true);
       } else if (data.inductionEmailed === 'no_email') {
-        toast('Booked — no email on file, so no confirmation sent');
+        toast('Saved — no email on file, so no confirmation sent');
       } else {
         toast('Saved');
       }
@@ -511,7 +511,7 @@
         body: '_csrf=' + encodeURIComponent(csrf),
       });
       var data = await r.json().catch(function () { return {}; });
-      if (data.status === 'sent') { toast('Confirmation re-sent'); markEmailedBadge(id); }
+      if (data.status === 'sent') { toast(data.reEmail ? 'Confirmation re-emailed' : 'Confirmation sent'); markEmailedBadge(id); }
       else if (data.status === 'no_email') { toast('No email on file for this candidate', true); }
       else if (data.status === 'no_date') { toast('Set an induction date first', true); }
       else { toast("Couldn't send — try again", true); }
