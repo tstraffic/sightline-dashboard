@@ -337,12 +337,14 @@
                   if (blk.vehicle_slot && blk.vehicle_slot.filled) _utes++;
                   (blk.addons || []).forEach(function (a) { var t = a.type || 'Equipment'; _equip[t] = (_equip[t] || 0) + 1; });
                 });
-                // Vehicles on the booking but not in a crew block still count.
+                // Vehicles on the booking but not in a crew block still count,
+                // and so do any workers assigned to them.
                 _utes += _spareVeh.filter(function (v) { return v.filled; }).length;
+                _spareVeh.forEach(function (v) { _workers += (v.workers || []).length; });
                 var _equipKeys = Object.keys(_equip);
                 var _equipTotal = _equipKeys.reduce(function (n, k) { return n + _equip[k]; }, 0);
               %>
-              <div class="bk2-card-crewsum">
+              <div class="bk2-card-crewsum bk2-card-teambox" data-booking-id="<%= b.id %>">
                 <div class="bk2-csum-head">
                   <span><%= _workers %> crew</span>
                   <% if (_utes) { %><span>· <%= _utes %> ute<%= _utes > 1 ? 's' : '' %></span><% } %>
@@ -378,6 +380,7 @@
                 <% _spareVeh.forEach(function (v) { %>
                   <div class="bk2-csum-grp">
                     <div class="bk2-csum-veh"><%= (v.role || 'ute').toUpperCase().slice(0,3) %> · <%= v.name || v.registration || 'Vehicle' %></div>
+                    <% (v.workers || []).forEach(function (w) { _csumPerson(w); }); %>
                   </div>
                 <% }); %>
                 <% if (!_workers && !_utes) { %><div class="bk2-csum-none">No crew assigned yet</div><% } %>
@@ -392,7 +395,7 @@
                 // vehicles (booking with no TC-Crew block) still show + can be
                 // removed, matching the Resources tab.
               %>
-                <div class="bk2-crews">
+                <div class="bk2-crews bk2-card-teambox" data-booking-id="<%= b.id %>">
                   <% b.crew_blocks.forEach(function (blk) {
                     var emptyWorkerCount = blk.worker_slots.filter(function (s) { return !s.filled; }).length;
                     var hasVehicle = blk.vehicle_slot && blk.vehicle_slot.filled;
@@ -556,12 +559,38 @@
                         <span>Vehicles</span>
                       </div>
                       <% _spare.forEach(function (v) { %>
-                        <div class="bk2-veh-slot bk2-veh-slot--spare" data-booking-id="<%= b.id %>" data-vehicle-id="<%= v.vehicle_id %>">
+                        <!-- Spare/standalone vehicle. It's a crew-move drop
+                             target (bk2-slot--drop-veh-assign) so any worker —
+                             incl. a standalone TC — can be assigned to it. -->
+                        <div class="bk2-veh-slot bk2-veh-slot--spare bk2-slot--drop bk2-slot--drop-veh-assign" data-booking-id="<%= b.id %>" data-vehicle-id="<%= v.vehicle_id %>">
                           <span class="bk2-veh-tag"><%= (v.role || 'ute').toUpperCase().slice(0,3) %></span>
                           <span class="bk2-veh-slot-name"><%= v.name || v.registration || '(unnamed)' %></span>
                           <% if (v.name && v.registration) { %><span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8"><%= v.registration %></span><% } %>
                           <button type="button" class="bk2-veh-remove" data-action="remove-vehicle" data-vehicle-id="<%= v.vehicle_id %>" title="Remove vehicle" aria-label="Remove vehicle">×</button>
                         </div>
+                        <% (v.workers || []).forEach(function (slot) { %>
+                          <div class="bk2-slot bk2-slot--filled bk2-slot--click<%= slot.is_driver ? ' is-driver' : '' %>"
+                               draggable="true" data-bk-crew-drag="1"
+                               data-booking-id="<%= b.id %>"
+                               data-booking-crew-id="<%= slot.booking_crew_id || '' %>"
+                               data-crew-member-id="<%= slot.crew_member_id %>"
+                               data-crew-name="<%= slot.name %>"
+                               data-assigned-vehicle-id="<%= v.vehicle_id %>"
+                               data-flag-tl="<%= slot.is_team_leader ? '1' : '0' %>"
+                               data-flag-fa="<%= slot.is_first_aid ? '1' : '0' %>"
+                               data-flag-sts="<%= slot.straight_to_site ? '1' : '0' %>"
+                               data-flag-nb="<%= slot.non_billable ? '1' : '0' %>"
+                               data-flag-driver="<%= slot.is_driver ? '1' : '0' %>">
+                            <span class="bk2-slot-avatar"><%= initials(slot.name) %></span>
+                            <span class="bk2-slot-role-tag"><%= roleAbbr(slot.role) %></span>
+                            <span class="bk2-slot-name"><%= slot.name %></span>
+                            <% if (slot.is_team_leader)   { %><span class="bk2-flag bk2-flag--tl"  title="Team Leader">TL</span><% } %>
+                            <% if (slot.is_first_aid)     { %><span class="bk2-flag bk2-flag--fa"  title="First Aid">FA</span><% } %>
+                            <% if (slot.is_driver)        { %><span class="bk2-flag bk2-flag--drv" title="Driver">DRV</span><% } %>
+                            <% if (slot.straight_to_site) { %><span class="bk2-flag bk2-flag--sts" title="Straight to Site">STS</span><% } %>
+                            <% if (slot.non_billable)     { %><span class="bk2-flag bk2-flag--nb"  title="Non-Billable">NB</span><% } %>
+                          </div>
+                        <% }); %>
                       <% }); %>
                     </div>
                   <% } %>
@@ -1268,12 +1297,17 @@
       </form>
     </section>
 
-    <!-- RESOURCES — placeholder mirroring the right-panel pattern. -->
-    <section class="bk2-edit-pane" data-edit-pane="resources" hidden>
-      <div class="bk2-edit-placeholder">
-        <h3>Resources</h3>
-        <p>This tab will overlay the People / Vehicles / Towed Equipment list and let you drag rows onto the booking's crew slots — or click a row to assign it.</p>
-        <p class="bk2-edit-spec">Tell me: should it use the same list as the right-side panel, or a separate scoped list (e.g. filtered to the booking's depot)?</p>
+    <!-- RESOURCES — self-contained allocation workspace: this shift's team +
+         vehicles (drop targets) on the left, the full resource pool (Workers +
+         filters / Vehicles / Towed) reparented in on the right. Built by
+         loadResourcesTab(). -->
+    <section class="bk2-edit-pane bk2-edit-pane--resources" data-edit-pane="resources" hidden>
+      <div class="bk2-restab">
+        <div class="bk2-restab-shift" data-restab-shift>
+          <div class="bk2-restab-shift-head">This shift — drag people &amp; vehicles from the pool →</div>
+          <div data-restab-shift-body><div class="bk2-edit-placeholder"><p>Loading…</p></div></div>
+        </div>
+        <div class="bk2-restab-pool" data-restab-pool></div>
       </div>
     </section>
 
@@ -2022,49 +2056,30 @@
     if (vw < 1100) return null;                 // too narrow — don't float
     var outer = 20, gap = 20;
     var cardW = Math.min(360, Math.round(vw * 0.30));
-    // Wide screens: dock the resource panel to the LEFT of the card so you can
-    // drag people/vehicles straight onto the floated card — [panel][card][editor].
-    var sizeMap = { s: 280, m: 340, l: 480 };
-    var sz = 'm'; try { sz = localStorage.getItem('bk2.rp.size') || 'm'; } catch (e) {}
-    var panelW = sizeMap[sz] || 340;
-    var dGap = 16, dOuter = 16;
-    var dockCardLeft = dOuter + panelW + dGap;
-    var dockEditorW = vw - dockCardLeft - cardW - dGap - dOuter;
-    if (vw >= 1360 && dockEditorW >= 600) {
-      return { vw: vw, vh: vh, dock: true, panelW: panelW, panelLeft: dOuter,
-        cardW: cardW, cardLeft: dockCardLeft, editorW: dockEditorW };
-    }
-    // Fallback (narrower): editor + card only, panel stays behind (toggle in editor).
     var editorW = Math.min(1200, vw - cardW - gap - outer * 2);
     var cardLeft = Math.max(outer, vw - editorW - gap - cardW);
-    return { vw: vw, vh: vh, dock: false, cardW: cardW, editorW: editorW, cardLeft: cardLeft };
+    return { vw: vw, vh: vh, cardW: cardW, editorW: editorW, cardLeft: cardLeft };
   }
-  // Dock / undock the resource panel above the editor backdrop. Reparented to
-  // <body> so position:fixed is viewport-relative (a transformed/contained
-  // board ancestor would otherwise become its containing block).
-  function bkDockPanel(L) {
+  // Move the resource pool panel INTO the Resources tab (its pool column) and
+  // back to the board. The pool now lives in the self-contained Resources tab
+  // rather than docking beside the card.
+  function bkPoolToTab() {
     var panel = document.getElementById('bk2-resourcepanel');
-    if (!panel || !L || !L.dock) { bkUndockPanel(); return; }
-    if (!panel.__bkParent) {
-      panel.__bkParent = panel.parentNode;
-      panel.__bkNext = panel.nextSibling;
-      document.body.appendChild(panel);
-    }
-    panel.classList.add('bk2-resourcepanel--docked');
-    panel.style.left = L.panelLeft + 'px';
-    panel.style.width = L.panelW + 'px';
-    panel.style.top = '12px';
-    panel.style.height = (L.vh - 24) + 'px';
+    var slot = document.querySelector('[data-restab-pool]');
+    if (!panel || !slot || panel.parentNode === slot) return;
+    if (!panel.__poolHome) { panel.__poolHome = panel.parentNode; panel.__poolNext = panel.nextSibling; }
+    panel.classList.add('bk2-resourcepanel--intab');
+    // Never collapsed while it's the tab's pool.
+    try { var pane = document.querySelector('.bk2-pane--with-panel'); if (pane) pane.classList.remove('is-collapsed'); } catch (e) {}
+    slot.appendChild(panel);
+    try { if (window.bk2ReloadResources) window.bk2ReloadResources((window.BK2_DATA && window.BK2_DATA.dateStr) || undefined); } catch (e) {}
   }
-  function bkUndockPanel() {
+  function bkPoolToBoard() {
     var panel = document.getElementById('bk2-resourcepanel');
-    if (!panel) return;
-    panel.classList.remove('bk2-resourcepanel--docked');
-    panel.style.left = ''; panel.style.width = ''; panel.style.top = ''; panel.style.height = '';
-    if (panel.__bkParent) {
-      try { panel.__bkParent.insertBefore(panel, panel.__bkNext || null); } catch (e) {}
-      panel.__bkParent = null; panel.__bkNext = null;
-    }
+    if (!panel || !panel.__poolHome) return;
+    panel.classList.remove('bk2-resourcepanel--intab');
+    try { panel.__poolHome.insertBefore(panel, panel.__poolNext || null); } catch (e) {}
+    panel.__poolHome = null; panel.__poolNext = null;
   }
   function floatCardBesideEditor(card) {
     if (!card) return;
@@ -2103,15 +2118,12 @@
     }
     requestAnimationFrame(recentre);
     setTimeout(recentre, 80);   // fallback: rAF is paused on backgrounded tabs
-    // Dock the resource panel beside the card (wide screens) so it's reachable
-    // above the backdrop for drag-and-drop onto this card.
-    bkDockPanel(L);
     floatingCard = card;
   }
   function unfloatCard() {
     var ed = $('#bk2-editor');
     if (ed && ed.dataset.bkNarrowed) { ed.style.width = ''; delete ed.dataset.bkNarrowed; }
-    try { bkUndockPanel(); } catch (e) {}
+    try { bkPoolToBoard(); } catch (e) {}
     document.querySelectorAll('.bk2-card--floating, .bk2-card.is-editing').forEach(function (c) {
       c.classList.remove('bk2-card--floating', 'is-editing');
       // Put it back where it was on the board.
@@ -2355,6 +2367,39 @@
       .catch(function () {});
   }
 
+  // ── Self-contained Resources tab ──
+  // Left column = this booking's live allocation (the board card's .bk2-crews
+  // block — real drop targets using the board's drag/drop). Right column = the
+  // resource pool panel, reparented in. Both use the same board drag protocol.
+  function loadResourcesTab() {
+    var ed = $('#bk2-editor'); var id = ed && ed.dataset.bookingId;
+    if (!id) return;
+    bkPoolToTab();                    // move the pool into the tab
+    refreshResTab();                  // fill the shift (targets) column
+  }
+  function refreshResTab() {
+    var ed = $('#bk2-editor'); var id = ed && ed.dataset.bookingId;
+    var body = document.querySelector('[data-restab-shift-body]');
+    if (!id || !body) return;
+    fetch(location.pathname + location.search, { credentials: 'same-origin', headers: { 'Accept': 'text/html', 'X-Requested-With': 'fetch' } })
+      .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var card = doc.querySelector('.bk2-card[data-booking-id="' + id + '"]');
+        var crews = card && card.querySelector('.bk2-crews');
+        if (crews) { body.innerHTML = ''; body.appendChild(document.importNode(crews, true)); }
+        else { body.innerHTML = '<div class="bk2-restab-empty bk2-slot--drop bk2-slot--drop-crewadd" data-booking-id="' + id + '">Drop workers &amp; vehicles here to add them to this shift.</div>'; }
+      })
+      .catch(function () { body.innerHTML = '<div class="bk2-edit-placeholder"><p>Couldn’t load — try reopening.</p></div>'; });
+  }
+  // After any allocation change (drop / remove / assign), keep the tab's shift
+  // column + the glowing card in sync.
+  document.addEventListener('bk2:alloc-changed', function () {
+    try { refreshFloatCard(); } catch (e) {}
+    var pane = document.querySelector('[data-edit-pane="resources"]');
+    if (pane && !pane.hidden) { try { refreshResTab(); } catch (e) {} }
+  });
+
   // ── Wire interactivity on the lifted Resources fragment ──
   // The crew chips in /bookings/:id get their click/drag handlers from a
   // script on that page. Since we lifted the HTML via innerHTML those
@@ -2535,8 +2580,11 @@
     var ed = $('#bk2-editor');
     if (ed && ed.dataset.existing === '1' && name !== 'overview') {
       if (name === 'reqplans' || name === 'reqperm') { try { if (window.bk2LoadDocPanes) window.bk2LoadDocPanes(); } catch (e) {} }
+      else if (name === 'resources') { try { loadResourcesTab(); } catch (e) {} }
       else loadBookingFragment(name);
     }
+    // Leaving the Resources tab returns the reparented pool panel to the board.
+    if (name !== 'resources') { try { bkPoolToBoard(); } catch (e) {} }
   }
   $$('.bk2-edit-tab').forEach(function (t) {
     t.addEventListener('click', function () { setEditorTab(t.dataset.editTab); });
@@ -4587,7 +4635,7 @@
     var row = e.target && e.target.closest && e.target.closest('.bk2-rp-item');
     if (row) row.classList.remove('is-dragging');
     // Remove any leftover drag-over highlights
-    document.querySelectorAll('.bk2-slot--drop.is-drag-over').forEach(function (el) {
+    document.querySelectorAll('.bk2-slot--drop.is-drag-over, .bk2-card-teambox.is-drag-over').forEach(function (el) {
       el.classList.remove('is-drag-over');
     });
   });
@@ -4610,7 +4658,10 @@
       var unassignZone = e.target.closest && e.target.closest('.bk2-slot--drop-unassign');
       var crewBlock    = e.target.closest && e.target.closest('.bk2-crew');
       var crewBlockHasVehicle = crewBlock && crewBlock.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
-      if (unassignZone || crewBlockHasVehicle) {
+      // A standalone/spare vehicle chip is a valid assign target on its own
+      // (not inside a .bk2-crew) — lets any worker go onto any shift vehicle.
+      var spareVehChip = e.target.closest && e.target.closest('.bk2-veh-slot--spare.bk2-slot--drop-veh-assign[data-vehicle-id]');
+      if (unassignZone || crewBlockHasVehicle || spareVehChip) {
         e.preventDefault();
         e.stopPropagation();
         try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
@@ -4632,9 +4683,13 @@
     }
 
     // Non-crew-move drags use the simple drop-class match (resource
-    // panel → empty crew/UTE slot).
+    // panel → empty crew/UTE slot), else the card's team box (drop-to-add).
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
-    if (!slot) return;
+    if (!slot) {
+      var box = e.target && e.target.closest && e.target.closest('.bk2-card-teambox');
+      if (box) { e.preventDefault(); try { e.dataTransfer.dropEffect = 'copy'; } catch (err) {} box.classList.add('is-drag-over'); }
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     try { e.dataTransfer.dropEffect = 'copy'; } catch (err) {}
@@ -4672,10 +4727,12 @@
       var unassignZone = e.target.closest && e.target.closest('.bk2-slot--drop-unassign');
       var crewBlock    = e.target.closest && e.target.closest('.bk2-crew');
       var vehSlotInBlock = crewBlock ? crewBlock.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]') : null;
+      // Standalone/spare vehicle chip is its own assign target.
+      var spareVehChip = e.target.closest && e.target.closest('.bk2-veh-slot--spare.bk2-slot--drop-veh-assign[data-vehicle-id]');
       // If we landed inside the unassigned pool, prefer that intent.
       // Otherwise, if there's a crew block with a vehicle anywhere on
-      // our drop path, use it.
-      var target = unassignZone || vehSlotInBlock;
+      // our drop path, use it; else a spare vehicle chip.
+      var target = unassignZone || vehSlotInBlock || spareVehChip;
       if (!target) {
         console.debug('[bk2 drop] crew-move dropped outside any crew-move target — ignoring');
         return;
@@ -4702,15 +4759,28 @@
         return;
       }
       var isAssign = !unassignZone;
-      var vehicleId = isAssign ? (vehSlotInBlock.getAttribute('data-vehicle-id') || '') : '';
+      var vehicleId = isAssign ? ((vehSlotInBlock || spareVehChip).getAttribute('data-vehicle-id') || '') : '';
       console.debug('[bk2 drop] crew-move →', { isAssign: isAssign, vehicleId: vehicleId, booking_crew_id: payload.booking_crew_id });
       assignCrewToVehicle(payload, vehicleId);
       return;
     }
 
-    // Non-crew-move drag — must land on a .bk2-slot--drop target.
+    // Non-crew-move drag — land on a .bk2-slot--drop target, OR anywhere on a
+    // card's team box (drop-to-add). The box path only fires when NOT over a
+    // specific slot, so slot-level drops keep their precise behaviour.
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
-    if (!slot) return;
+    if (!slot) {
+      var box = e.target && e.target.closest && e.target.closest('.bk2-card-teambox');
+      var cardEl = box && box.closest('.bk2-card[data-booking-id]');
+      if (box && cardEl) {
+        e.preventDefault(); e.stopPropagation();
+        box.classList.remove('is-drag-over');
+        var bId = cardEl.getAttribute('data-booking-id');
+        if (personId) bk2AddPersonToBooking(bId, personId);
+        else if (vehiclePayload) bk2AddVehicleToBooking(bId, vehiclePayload);
+      }
+      return;
+    }
     e.preventDefault();
     e.stopPropagation();
     slot.classList.remove('is-drag-over');
@@ -4971,6 +5041,7 @@
         if (p) p.assigned_today = true;
       }
     } catch (e) {}
+    try { document.dispatchEvent(new CustomEvent('bk2:alloc-changed')); } catch (e) {}
   }
   // Same for vehicles — once on a booking, out of the pool.
   function rpMarkVehicleAssigned(vehicleId) {
@@ -4985,6 +5056,48 @@
         if (v) v.assigned_today = true;
       }
     } catch (e) {}
+    try { document.dispatchEvent(new CustomEvent('bk2:alloc-changed')); } catch (e) {}
+  }
+
+  // ── Drop-to-add on a board card's team box (booking not opened) ──
+  // Dropping a pool worker/vehicle anywhere on a card's team area adds them to
+  // that booking, then refreshes the card in place.
+  function bk2RefreshCard(bookingId) {
+    fetch(location.pathname + location.search, { credentials: 'same-origin', headers: { 'Accept': 'text/html', 'X-Requested-With': 'fetch' } })
+      .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var fresh = doc.querySelector('.bk2-card[data-booking-id="' + bookingId + '"]');
+        var cur = document.querySelector('.bk2-card[data-booking-id="' + bookingId + '"]:not(.bk2-card--floating)');
+        if (fresh && cur) cur.innerHTML = fresh.innerHTML;
+      }).catch(function () {});
+  }
+  function bk2AddPersonToBooking(bookingId, personId) {
+    var body = new URLSearchParams(); body.append('crew_member_id', personId); if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
+    fetch('/bookings/' + encodeURIComponent(bookingId) + '/crew', {
+      method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': CSRF_TOKEN || '' },
+      body: body, credentials: 'same-origin',
+    }).then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        if (j && j.warning && typeof bk2Toast === 'function') bk2Toast('⚠ ' + j.warning);
+        flashAssigned(personId); bk2RefreshCard(bookingId);
+      }).catch(function () { if (typeof bk2Toast === 'function') bk2Toast('Could not add worker.', 'error'); });
+  }
+  function bk2AddVehicleToBooking(bookingId, vehiclePayload) {
+    var v; try { v = JSON.parse(vehiclePayload); } catch (e) { return; }
+    if (!v || !v.id) return;
+    var body = new URLSearchParams();
+    if (v.source === 'fleet') body.append('fleet_vehicle_id', v.id); else body.append('equipment_id', v.id);
+    body.append('vehicle_role', v.role || 'ute');
+    if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
+    fetch('/bookings/' + encodeURIComponent(bookingId) + '/vehicles', {
+      method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': CSRF_TOKEN || '' },
+      body: body, credentials: 'same-origin',
+    }).then(function (r) { return r.json().catch(function () { return {}; }); })
+      .then(function (j) {
+        if (j && j.warning && typeof bk2Toast === 'function') bk2Toast('⚠ ' + j.warning);
+        rpMarkVehicleAssigned(v.id); bk2RefreshCard(bookingId);
+      }).catch(function () { if (typeof bk2Toast === 'function') bk2Toast('Could not add vehicle.', 'error'); });
   }
 
   // ==========================================================
@@ -5305,6 +5418,7 @@
         // resource panel scroll, the slide-over editor state, and
         // any other open card popovers untouched.
         relocateCrewSlot(payload, vehicleId);
+        try { document.dispatchEvent(new CustomEvent('bk2:alloc-changed')); } catch (e) {}
       }).catch(function (err) {
         console.warn('[bk2 assignCrewToVehicle] fetch failed', err);
         alert('Could not move that worker — network error.');

@@ -2328,3 +2328,30 @@ body.bk2-rp-size-l .bk2-rp-item::after { content: attr(data-resource-role); marg
 #assignedCrew.drop-hover { background: #eff6ff; border-color: #93c5fd; border-style: solid; }
 .crew-chip-flash { animation: chip-flash 0.6s ease; }
 @keyframes chip-flash { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,0.6); } 100% { box-shadow: 0 0 0 12px rgba(34,197,94,0); } }
+
+/* ==========================================================================
+   Bookings v41 — self-contained Resources tab (shift targets + pool),
+   board card team box (drop-to-add), spare-vehicle drop target.
+   ========================================================================== */
+
+/* Resources tab: two columns — shift targets (left) + pool (right). */
+.bk2-edit-pane--resources { padding: 0 !important; height: 100%; }
+.bk2-restab { display: flex; gap: 14px; height: 100%; min-height: 420px; align-items: stretch; padding: 12px; box-sizing: border-box; }
+.bk2-restab-shift { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; }
+.bk2-restab-shift-head { padding: 10px 14px; font-size: 12px; font-weight: 700; color: #6B7280; border-bottom: 1px solid #EEF0F3; }
+[data-restab-shift-body] { padding: 12px; overflow-y: auto; }
+.bk2-restab-pool { flex: 0 0 340px; min-width: 0; display: flex; }
+.bk2-restab-empty { border: 2px dashed #CBD5E1; border-radius: 12px; padding: 28px 16px; text-align: center; color: #6B7280; font-size: 13px; }
+@media (max-width: 900px) { .bk2-restab { flex-direction: column; } .bk2-restab-pool { flex: 1 1 auto; } }
+
+/* The pool panel, reparented into the tab: fill its column (not sticky/fixed). */
+.bk2-resourcepanel--intab { position: static !important; top: auto !important; max-height: none !important; height: 100% !important; width: 100% !important; margin: 0 !important; }
+
+/* Board card team box — drop-to-add target (booking not opened). */
+.bk2-card-teambox { border: 1px solid transparent; border-radius: 10px; transition: background .12s, border-color .12s, box-shadow .12s; }
+.bk2-card-teambox.is-drag-over { border-color: #2B7FFF; background: rgba(43,127,255,0.08); box-shadow: inset 0 0 0 1px rgba(43,127,255,0.35); }
+:root[data-theme="light"] .bk2-card-teambox.is-drag-over { background: #EFF6FF; }
+
+/* Spare/standalone vehicle chip as a drop target (crew-move assign). */
+.bk2-veh-slot--spare.bk2-slot--drop { cursor: default; }
+.bk2-veh-slot--spare.is-drag-over { outline: 2px solid #2B7FFF; outline-offset: 1px; background: rgba(43,127,255,0.12); }

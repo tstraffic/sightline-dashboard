@@ -638,6 +638,21 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
   for (const blk of blocks) {
     if (blk.vehicle_slot && blk.vehicle_slot.vehicle_id) blockByVehicle.set(blk.vehicle_slot.vehicle_id, blk);
   }
+  // Spare vehicles (not tied to any crew block) are ALSO valid homes for a
+  // worker via assigned_vehicle_id — so a standalone TC can be dropped onto a
+  // standalone vehicle. Each spare vehicle becomes a lightweight group with a
+  // dynamic worker list; `spareByVehicle` routes assigned workers into it.
+  const spareGroups = vehicles.map(v => ({
+    vehicle_id: v.id,
+    name: v.vehicle_name,
+    registration: v.registration,
+    role: v.vehicle_role || 'ute',
+    driver_id: v.driver_id || null,
+    filled: !!((v.vehicle_name && String(v.vehicle_name).trim()) || (v.registration && String(v.registration).trim())),
+    workers: [],
+  }));
+  const spareByVehicle = new Map();
+  for (const g of spareGroups) spareByVehicle.set(g.vehicle_id, g);
 
   function fillSlot(slot, c) {
     slot.filled = true;
@@ -670,6 +685,14 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       const slot = blk.worker_slots.find(s => !s.filled);
       if (slot) { fillSlot(slot, c); continue; }
       // overflow — fall through
+    }
+    // Worker assigned to a standalone/spare vehicle → render under it.
+    if (c.assigned_vehicle_id && spareByVehicle.has(c.assigned_vehicle_id)) {
+      const g = spareByVehicle.get(c.assigned_vehicle_id);
+      const slot = { filled: true };
+      fillSlot(slot, c);
+      g.workers.push(slot);
+      continue;
     }
     if (c.assigned_vehicle_id == null) {
       // Workers explicitly with no vehicle assignment. If the booking
@@ -712,16 +735,16 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
   // count, or all of them when the booking has no TC-Crew blocks) is exposed
   // as `blocks.spare_vehicles` — parallel to `blocks.unassigned` for crew — so
   // the overview summary + floated card can show/count ALL booking_vehicles
-  // and stay in sync with the Resources tab (which lists them raw). Previously
-  // these were dumped on blocks[0].extra_vehicles, which nothing rendered.
-  blocks.spare_vehicles = vehicles.map(v => ({
-    vehicle_id: v.id,
-    name: v.vehicle_name,
-    registration: v.registration,
-    role: v.vehicle_role || 'ute',
-    driver_id: v.driver_id || null,
-    filled: !!((v.vehicle_name && String(v.vehicle_name).trim()) || (v.registration && String(v.registration).trim())),
-  }));
+  // and stay in sync. Each carries its assigned `workers` (see spareByVehicle)
+  // and is a drop target so a worker can be assigned to any shift vehicle.
+  // Mark the driver among a spare vehicle's workers.
+  for (const g of spareGroups) {
+    if (g.driver_id) {
+      const d = g.workers.find(s => s.filled && s.crew_member_id == g.driver_id);
+      if (d) d.is_driver = true;
+    }
+  }
+  blocks.spare_vehicles = spareGroups;
   return blocks;
 }
 
