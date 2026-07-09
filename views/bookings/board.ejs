@@ -259,8 +259,13 @@
       </div>
     <% } else { %>
       <div class="bk2-board">
-        <% bookings.forEach(function (b) { %>
-          <a class="bk2-card bk2-status-tone-<%= b.status %>" href="/bookings/<%= b.id %>"
+        <% bookings.forEach(function (b) {
+             // Day vs night classification: shifts starting 05:00–17:59 are
+             // day; everything else (incl. 18:00 starts) is night.
+             var _sh = parseInt(String(b.start_datetime || '').slice(11, 13), 10);
+             var _isNight = !(Number.isFinite(_sh) && _sh >= 5 && _sh < 18);
+        %>
+          <a class="bk2-card bk2-status-tone-<%= b.status %> <%= _isNight ? 'bk2-card--night' : 'bk2-card--day' %>" href="/bookings/<%= b.id %>"
              draggable="false"
              data-booking-id="<%= b.id %>"
              data-booking-number="<%= b.booking_number || b.id %>"
@@ -290,8 +295,13 @@
                  across all cards so the start→end time always reads
                  in the same spot at a glance. -->
             <div class="bk2-card-timeband">
-              <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <% if (_isNight) { %>
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+              <% } else { %>
+                <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+              <% } %>
               <span><%= fmtTime(b.start_datetime) %> → <%= fmtTime(b.end_datetime) %></span>
+              <span class="bk2-shift-chip <%= _isNight ? 'bk2-shift-chip--night' : 'bk2-shift-chip--day' %>"><%= _isNight ? 'NIGHT' : 'DAY' %></span>
             </div>
 
             <div class="bk2-card-body">
@@ -586,6 +596,10 @@
               <span>Towed</span>
             </button>
           </div>
+          <button type="button" id="bk2-rp-size" class="bk2-rp-iconbtn" title="Panel size" aria-label="Cycle panel size">
+            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
+            <span data-rp-size-label style="font-size:10px;font-weight:700;margin-left:2px">M</span>
+          </button>
           <button type="button" id="bk2-rp-toggle" class="bk2-rp-iconbtn" title="Hide panel" aria-label="Hide panel">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
           </button>
@@ -788,7 +802,7 @@
       { k: 'complete',       short: 'Complete',   icon: 'M5 4h14M5 4v8a7 7 0 0014 0V4M9 21h6m-3 0v-4m-1.5-9h3l1 5h-5l1-5z' },
       { k: 'finalised',      short: 'Finalised',  icon: 'M3 21v-4m0 0V5a2 2 0 012-2h6.5l1 1H21l-3 6 3 6h-8.5l-1-1H5a2 2 0 00-2 2zm9-13.5V9' },
       { k: 'cancelled',      short: 'Cancel',     icon: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636' },
-      { k: 'late_cancelled', short: 'Late Cancl.',icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
+      { k: 'late_cancellation', short: 'Late Cancl.',icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
     ].forEach(function (s) { %>
       <button type="button" class="bk2-edit-statuspill bk2-status--<%= s.k %><%= s.active ? ' is-active' : '' %>" data-status-set="<%= s.k %>" title="<%= s.short %>">
         <svg class="bk2-edit-statuspill-icon" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="<%= s.icon %>"/></svg>
@@ -2225,6 +2239,19 @@
         pane.appendChild(document.importNode(node, true));
       });
       fragmentLoaded[tab] = true;
+      // Inline `onchange="this.form.submit()"` (the driver <select>) bypasses
+      // submit listeners and navigates to the full page. Rewire those to
+      // requestSubmit() so the pane's AJAX submit interception catches them.
+      pane.querySelectorAll('select[onchange]').forEach(function (sel) {
+        var oc = sel.getAttribute('onchange') || '';
+        if (oc.indexOf('form.submit') === -1) return;
+        sel.removeAttribute('onchange');
+        sel.addEventListener('change', function () {
+          var f = sel.closest('form'); if (!f) return;
+          if (typeof f.requestSubmit === 'function') f.requestSubmit();
+          else f.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+        });
+      });
       // The full /bookings/:id page wires the crew chips on DOMContentLoaded
       // via a script that doesn't run when we lift the node by innerHTML.
       // Bind the same interactions in the overlay so the chips are live.
@@ -2232,6 +2259,24 @@
     }).catch(function () {
       pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Couldn’t load</h3><p>Try the full edit page.</p></div>';
     });
+  }
+
+  // ── Refresh the floating (glowing) card's content in place ──
+  // Re-fetches the board HTML for the current date and swaps the floated
+  // card's innerHTML with the fresh render, so crew/vehicle changes made in
+  // the Resources tab show up immediately in the summary panel.
+  function refreshFloatCard() {
+    var ed = $('#bk2-editor');
+    var id = ed && ed.dataset.bookingId;
+    if (!id || !floatingCard) return;
+    fetch(location.pathname + location.search, { credentials: 'same-origin', headers: { 'Accept': 'text/html', 'X-Requested-With': 'fetch' } })
+      .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
+      .then(function (html) {
+        var doc = new DOMParser().parseFromString(html, 'text/html');
+        var fresh = doc.querySelector('.bk2-card[data-booking-id="' + id + '"]');
+        if (fresh && floatingCard) floatingCard.innerHTML = fresh.innerHTML;
+      })
+      .catch(function () {});
   }
 
   // ── Wire interactivity on the lifted Resources fragment ──
@@ -2264,6 +2309,8 @@
       fragmentDocCache = null;
       fragmentLoaded.resources = false;
       loadBookingFragment('resources');
+      // Keep the floating summary card in step with crew/vehicle changes.
+      try { refreshFloatCard(); } catch (e) {}
     }
     function postForm(url, payload) {
       var body = new URLSearchParams();
@@ -2291,8 +2338,39 @@
     // bookings. (Server-side INSERT OR IGNORE is the belt-and-braces.)
     if (!pane.dataset.brBound) {
       pane.dataset.brBound = '1';
+      // ── Never leave the quick-edit panel. The lifted fragment's vehicle
+      // forms POST + redirect to the full page; intercept every submit and
+      // AJAX it instead, then refresh the pane + the floating card. ──
+      function ajaxPaneForm(form) {
+        var body = new URLSearchParams();
+        try { new FormData(form).forEach(function (v, k) { body.append(k, typeof v === 'string' ? v : ''); }); } catch (e) {}
+        if (!body.has('_csrf')) body.append('_csrf', csrf());
+        return fetch(form.getAttribute('action') || location.pathname, {
+          method: (form.getAttribute('method') || 'POST').toUpperCase(),
+          headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: body, credentials: 'same-origin',
+        }).then(function () {
+          boardDirty = true;
+          refreshPane();
+          try { if (typeof refreshFloatCard === 'function') refreshFloatCard(); } catch (e) {}
+        }).catch(function () { toast('Could not save — try again.', 'error'); });
+      }
+      pane.addEventListener('submit', function (e) {
+        var form = e.target.closest && e.target.closest('form');
+        if (!form) return;
+        e.preventDefault(); e.stopPropagation();
+        ajaxPaneForm(form);
+      }, true);
       pane.addEventListener('click', function (e) {
         var bid = currentBookingId();
+        // Block page-navigating links inside the pane — the quick editor must
+        // never bounce to the full edit page (only the explicit button does).
+        var nav = e.target.closest && e.target.closest('a[href]');
+        if (nav) {
+          var href = nav.getAttribute('href') || '';
+          if (/^\/bookings\/\d+/.test(href)) { e.preventDefault(); e.stopPropagation(); return; }
+          if (/^\//.test(href) && !nav.target) { e.preventDefault(); e.stopPropagation(); window.open(href, '_blank'); return; }
+        }
         // Vehicle edit toggle / cancel — reveal the inline editor for a row.
         var et = e.target.closest('.bv-edit-toggle, .bv-edit-cancel');
         if (et) {
@@ -2586,13 +2664,36 @@
     });
   }
 
-  // Status pill clicks — set the displayed-active pill in create mode.
-  // (Wired client-side; the actual booking status flip is server-side
-  // and comes online when the user maps the lifecycle controls.)
+  // Status pill clicks. In EDIT mode the pill actually saves the status via
+  // POST /bookings/:id/status (previously it only toggled the CSS class, so
+  // "Confirmed"/"Locked" etc. silently never saved). In create mode it stays
+  // visual-only (no booking exists yet; /quick creates as unconfirmed).
   $$('.bk2-edit-statuspill').forEach(function (p) {
     p.addEventListener('click', function () {
+      var prev = document.querySelector('.bk2-edit-statuspill.is-active');
       $$('.bk2-edit-statuspill').forEach(function (x) { x.classList.remove('is-active'); });
       p.classList.add('is-active');
+      var ed = $('#bk2-editor');
+      var id = ed && ed.dataset.existing === '1' && ed.dataset.bookingId;
+      if (!id) return; // create mode — nothing to persist yet
+      var status = p.getAttribute('data-status-set');
+      var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      var body = new URLSearchParams(); body.append('_csrf', csrf); body.append('status', status);
+      fetch('/bookings/' + id + '/status', {
+        method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body, credentials: 'same-origin',
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Could not update status');
+          if (typeof window.bk2Toast === 'function') window.bk2Toast('Status → ' + (p.querySelector('.bk2-edit-statuspill-lbl') || p).textContent.trim(), 'success');
+          boardDirty = true;
+        })
+        .catch(function (e) {
+          // Revert the visual state so the pills never lie about what saved.
+          p.classList.remove('is-active');
+          if (prev) prev.classList.add('is-active');
+          if (typeof window.bk2Toast === 'function') window.bk2Toast(e.message, 'error'); else alert(e.message);
+        });
     });
   });
 
@@ -2833,6 +2934,13 @@
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     var card = e.target.closest && e.target.closest('.bk2-card');
     if (!card || !card.getAttribute('data-booking-id')) return;
+    // The floated summary beside the editor is interactable (slots, drag
+    // targets) but must never navigate or re-open the editor.
+    if (card.classList.contains('bk2-card--floating')) {
+      var hitF = e.target.closest(CARD_INTERACTIVE);
+      if (!hitF || hitF === card) e.preventDefault();
+      return;
+    }
     var hit = e.target.closest(CARD_INTERACTIVE);
     if (hit && hit !== card && card.contains(hit)) return; // real control — leave it
     e.preventDefault();
@@ -3802,10 +3910,29 @@
     var container = document.querySelector('.bk2-board'); if (!container) return;
     var cards = Array.from(container.querySelectorAll('.bk2-card'));
     cards.sort(function (a, b) {
+      // Day shifts group before night shifts when sorting by time, so the
+      // two halves of the day read separately on the board.
+      if (by === 'time') {
+        var na = a.classList.contains('bk2-card--night') ? 1 : 0;
+        var nb = b.classList.contains('bk2-card--night') ? 1 : 0;
+        if (na !== nb) return na - nb;
+      }
       var ka = fsSortKey(a, by), kb = fsSortKey(b, by);
       return ka < kb ? -1 : ka > kb ? 1 : 0;
     });
     cards.forEach(function (c) { container.appendChild(c); });
+    // Divider between the day and night groups (time sort only).
+    var oldDiv = container.querySelector('.bk2-shift-divider'); if (oldDiv) oldDiv.remove();
+    if (by === 'time') {
+      var firstNight = cards.find(function (c) { return c.classList.contains('bk2-card--night') && c.style.display !== 'none'; });
+      var hasDay = cards.some(function (c) { return c.classList.contains('bk2-card--day') && c.style.display !== 'none'; });
+      if (firstNight && hasDay) {
+        var div = document.createElement('div');
+        div.className = 'bk2-shift-divider';
+        div.innerHTML = '<span>☾ Night shifts</span>';
+        container.insertBefore(div, firstNight);
+      }
+    }
     $$('[data-fs-sort]').forEach(function (b) {
       b.classList.toggle('is-active', b.getAttribute('data-fs-sort') === by);
     });
@@ -4124,8 +4251,10 @@
   function rpRepaint() {
     if (!rpData) return;
     var meta = $('#bk2-rp-meta');
-    var ppl = (rpData.people    || []).filter(rpSearchHit).filter(rpPersonOk);
-    var veh = (rpData.vehicles  || []).filter(rpSearchHit).filter(rpVehicleOk);
+    // Anyone/anything already allocated on the viewed day leaves the pool —
+    // a worker or ute can't be picked twice for the same day.
+    var ppl = (rpData.people    || []).filter(function (p) { return !p.assigned_today; }).filter(rpSearchHit).filter(rpPersonOk);
+    var veh = (rpData.vehicles  || []).filter(function (v) { return !v.assigned_today; }).filter(rpSearchHit).filter(rpVehicleOk);
     var eqp = (rpData.equipment || []).filter(rpSearchHit).filter(rpEquipmentOk);
     var pList = $('#bk2-rp-list-people');     if (pList) pList.innerHTML = rpRenderPeople(ppl);
     var vList = $('#bk2-rp-list-vehicles');   if (vList) vList.innerHTML = rpRenderVehicles(veh);
@@ -4238,6 +4367,29 @@
     // Restore last collapsed state
     var saved = '0'; try { saved = localStorage.getItem(RP_STATE_KEY) || '0'; } catch (e) {}
     if (saved === '1') rpSetCollapsed(true);
+
+    // ── Panel size — S / M / L, cycled from the header, persisted. The class
+    // lives on <body> so it survives AJAX date-nav board swaps. ──
+    var RP_SIZES = ['s', 'm', 'l'];
+    function rpApplySize(sz) {
+      if (RP_SIZES.indexOf(sz) === -1) sz = 'm';
+      RP_SIZES.forEach(function (s) { document.body.classList.toggle('bk2-rp-size-' + s, s === sz); });
+      var lbl = document.querySelector('[data-rp-size-label]');
+      if (lbl) lbl.textContent = sz.toUpperCase();
+      try { localStorage.setItem('bk2.rp.size', sz); } catch (e) {}
+    }
+    var rpSizeBtn = $('#bk2-rp-size');
+    if (rpSizeBtn && !rpSizeBtn.dataset.bkBound) {
+      rpSizeBtn.dataset.bkBound = '1';
+      rpSizeBtn.addEventListener('click', function () {
+        // Read current from the body class (not localStorage) so a stacked
+        // listener can never double-advance the cycle.
+        var cur = RP_SIZES.find(function (s) { return document.body.classList.contains('bk2-rp-size-' + s); }) || 'm';
+        rpApplySize(RP_SIZES[(RP_SIZES.indexOf(cur) + 1) % RP_SIZES.length]);
+      });
+    }
+    var savedSize = 'm'; try { savedSize = localStorage.getItem('bk2.rp.size') || 'm'; } catch (e) {}
+    rpApplySize(savedSize);
 
     rpLoad();
 
@@ -4499,7 +4651,7 @@
         slot.classList.remove('is-saving');
         if (result.ok && (!result.json || result.json.ok !== false)) {
           replaceVehicleSlot(slot, v);
-          flashAssigned(v.id);
+          rpMarkVehicleAssigned(v.id);
         } else {
           alert((result.json && result.json.error) || ('Could not assign vehicle (HTTP ' + result.status + ')'));
         }
@@ -4708,13 +4860,34 @@
     }
   }
 
-  // Briefly mark the resource-panel row as "just assigned" so the
-  // planner gets visual confirmation without a page reload.
+  // Briefly mark the resource-panel row as "just assigned", then drop it
+  // from the pool — an allocated worker can't be picked twice for the day.
   function flashAssigned(personId) {
     var row = document.querySelector('.bk2-rp-item[data-resource-type="person"][data-resource-id="' + personId + '"]');
-    if (!row) return;
-    row.classList.add('is-just-assigned');
-    setTimeout(function () { row.classList.remove('is-just-assigned'); }, 1400);
+    if (row) {
+      row.classList.add('is-just-assigned');
+      setTimeout(function () { row.remove(); }, 900);
+    }
+    try {
+      if (rpData && rpData.people) {
+        var p = rpData.people.find(function (x) { return String(x.id) === String(personId); });
+        if (p) p.assigned_today = true;
+      }
+    } catch (e) {}
+  }
+  // Same for vehicles — once on a booking, out of the pool.
+  function rpMarkVehicleAssigned(vehicleId) {
+    var row = document.querySelector('.bk2-rp-item[data-resource-type="vehicle"][data-resource-id="' + vehicleId + '"]');
+    if (row) {
+      row.classList.add('is-just-assigned');
+      setTimeout(function () { row.remove(); }, 900);
+    }
+    try {
+      if (rpData && rpData.vehicles) {
+        var v = rpData.vehicles.find(function (x) { return String(x.id) === String(vehicleId); });
+        if (v) v.assigned_today = true;
+      }
+    } catch (e) {}
   }
 
   // ==========================================================

@@ -8,12 +8,14 @@
 const { sendPushToCrew } = require('./pushNotification');
 
 // Workers must not hear about a shift until the allocator has committed it.
-// A booking is only "notifiable" once it reaches 'confirmed' or any later
-// lifecycle state. Before that (client_booking / unconfirmed / on_hold) the
-// shift is still being worked up, so assignment/reschedule/removal pushes are
-// suppressed. Callers gate on this so the policy lives in one place.
+// Per the office's lifecycle: LOCKED is the moment the allocation notice goes
+// out (confirmed is still internal working state), then workers confirm →
+// green_to_go → ongoing → complete → finalised. So a booking is "notifiable"
+// only from 'locked' onward. Before that (client_booking / unconfirmed /
+// confirmed / on_hold) assignment/reschedule/removal pushes are suppressed.
+// Callers gate on this so the policy lives in one place.
 const NOTIFIABLE_STATUSES = new Set([
-  'confirmed', 'locked', 'conflict', 'green_to_go', 'in_progress', 'complete', 'finalised',
+  'locked', 'conflict', 'green_to_go', 'in_progress', 'complete', 'finalised',
 ]);
 function isNotifiable(status) {
   return NOTIFIABLE_STATUSES.has(String(status || ''));

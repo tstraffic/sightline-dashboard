@@ -1661,6 +1661,23 @@ router.get('/api/resources', (req, res) => {
       vehicles = vehicles.concat(eqRows);
     } catch (e) {}
 
+    // Vehicles already on a booking this date — flagged so the panel can
+    // drop them from the pool (a ute can't be in two places at once).
+    try {
+      const bvRows = db.prepare(`
+        SELECT bv.fleet_vehicle_id, bv.registration, bv.vehicle_name
+        FROM booking_vehicles bv JOIN bookings b ON b.id = bv.booking_id
+        WHERE DATE(b.start_datetime) = ? AND b.status NOT IN ('cancelled','complete','late_cancellation','finalised') AND b.deleted_at IS NULL
+      `).all(date);
+      const fleetIds = new Set(bvRows.map(r => r.fleet_vehicle_id).filter(Boolean));
+      const regos = new Set(bvRows.map(r => String(r.registration || '').trim().toUpperCase()).filter(Boolean));
+      vehicles = vehicles.map(v => {
+        const rego = String(v.licence_plate || '').trim().toUpperCase();
+        const assigned = (v.source === 'fleet' && fleetIds.has(v.id)) || (rego && regos.has(rego));
+        return { ...v, assigned_today: !!assigned };
+      });
+    } catch (e) {}
+
     // EQUIPMENT — non-vehicle assets.
     let equipment = [];
     try {

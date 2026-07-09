@@ -416,4 +416,41 @@ router.get('/:id', (req, res) => {
   });
 });
 
+// POST /dockets/:id/signoff — office sign-off. The final lifecycle step:
+// stamps the docket as signed off and moves its booking complete → finalised.
+router.post('/:id/signoff', (req, res) => {
+  const db = getDb();
+  const docket = db.prepare('SELECT * FROM docket_signatures WHERE id = ?').get(req.params.id);
+  if (!docket) { req.flash('error', 'Docket not found.'); return res.redirect('/dockets'); }
+  if ((docket.status || 'current') !== 'current') {
+    req.flash('error', 'Only the current docket can be signed off.');
+    return res.redirect('/dockets/' + docket.id);
+  }
+  db.prepare("UPDATE docket_signatures SET office_signed_off_at = datetime('now'), office_signed_off_by_id = ? WHERE id = ?")
+    .run(req.session.user.id, docket.id);
+  // Finalise the booking this docket belongs to (via its allocation). Never
+  // override a cancellation; anything else that has reached the docket stage
+  // is safe to finalise.
+  let bookingId = null;
+  try {
+    if (docket.allocation_id) {
+      const al = db.prepare('SELECT booking_id FROM crew_allocations WHERE id = ?').get(docket.allocation_id);
+      bookingId = al && al.booking_id;
+    }
+  } catch (e) {}
+  if (bookingId) {
+    try {
+      db.prepare("UPDATE bookings SET status = 'finalised', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status NOT IN ('cancelled','late_cancellation')")
+        .run(bookingId);
+    } catch (e) { console.error('[dockets/signoff] finalise booking failed:', e.message); }
+  }
+  logActivity({
+    user: req.session.user, action: 'update', entityType: 'docket', entityId: docket.id,
+    entityLabel: 'Docket #' + docket.id,
+    details: 'Office sign-off' + (bookingId ? ' — booking #' + bookingId + ' finalised' : ''), ip: req.ip,
+  });
+  req.flash('success', 'Docket signed off' + (bookingId ? ' — booking finalised.' : '.'));
+  res.redirect('/dockets/' + docket.id);
+});
+
 module.exports = router;

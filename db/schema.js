@@ -13911,6 +13911,18 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 307 error:', e.message); }
   }
 
+  // 308 — office sign-off on shift dockets. Signing a docket off from the
+  // dashboard finalises its booking (the last lifecycle step).
+  if (!isMigrationApplied.get(308)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(docket_signatures)").all().map(c => c.name);
+      if (!cols.includes('office_signed_off_at')) db.exec("ALTER TABLE docket_signatures ADD COLUMN office_signed_off_at DATETIME");
+      if (!cols.includes('office_signed_off_by_id')) db.exec("ALTER TABLE docket_signatures ADD COLUMN office_signed_off_by_id INTEGER REFERENCES users(id)");
+      recordMigration.run(308, 'docket_signatures: office sign-off columns');
+      console.log('Migration 308 applied');
+    } catch (e) { console.error('Migration 308 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

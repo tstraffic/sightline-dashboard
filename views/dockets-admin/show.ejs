@@ -54,6 +54,17 @@
           <%- include('../partials/csrf') %>
           <button type="submit" class="px-4 py-2 rounded-lg bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700">Adjust</button>
         </form>
+        <% if (docket.office_signed_off_at) { %>
+          <span class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 text-sm font-semibold ring-1 ring-indigo-600/20" title="Signed off <%= docket.office_signed_off_at %>">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            Signed off
+          </span>
+        <% } else { %>
+          <form method="POST" action="/dockets/<%= docket.id %>/signoff" onsubmit="return confirm('Sign this docket off? The booking will be marked Finalised.');">
+            <%- include('../partials/csrf') %>
+            <button type="submit" class="px-4 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700">Sign off</button>
+          </form>
+        <% } %>
       <% } %>
     </div>
   </div>

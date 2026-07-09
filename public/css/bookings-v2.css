@@ -278,7 +278,9 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
   z-index: 1002;
   margin: 0 !important;
   min-height: 380px;                 /* a proper side panel, not a stub */
-  pointer-events: none;
+  /* Interactable: drag-drop targets, slot popover (TL/remove), etc. work on
+     the floated summary. Navigation is suppressed in JS instead. */
+  pointer-events: auto;
   overflow: auto;
   box-shadow: 0 0 0 2px #2B7FFF, 0 0 0 6px rgba(43,127,255,0.18), 0 30px 70px rgba(0,0,0,0.55), 0 0 30px 6px rgba(43,127,255,0.45);
   /* No position transition — the panel appears in place beside the editor
@@ -2235,3 +2237,45 @@ body.bk2-date-loading::before {
 :root[data-theme="light"] .bk2-loc-addrow input::placeholder { color: #9CA3AF; }
 :root[data-theme="light"] .bk2-loc-cancel { border-color: #D1D5DB; background: #fff; color: #6B7280; }
 :root[data-theme="light"] .bk2-loc-cancel:hover { color: #111827; background: #F3F4F6; }
+
+/* ==========================================================================
+   Bookings v39 — day/night shift distinction, resource-panel sizes,
+   interactive floating card, quick-edit Resources polish.
+   ========================================================================== */
+
+/* Day vs night shift cards — the timeband carries the tone + a chip. */
+.bk2-shift-chip { margin-left: auto; font-size: 9.5px; font-weight: 800; letter-spacing: 0.08em; border-radius: 999px; padding: 1px 7px; }
+.bk2-shift-chip--day   { background: rgba(251,191,36,0.22); color: #FCD34D; }
+.bk2-shift-chip--night { background: rgba(129,140,248,0.25); color: #C7D2FE; }
+.bk2-card--night .bk2-card-timeband { background: rgba(67,56,202,0.28); color: #C7D2FE; }
+:root[data-theme="light"] .bk2-shift-chip--day   { background: #FEF3C7; color: #92400E; }
+:root[data-theme="light"] .bk2-shift-chip--night { background: #E0E7FF; color: #3730A3; }
+:root[data-theme="light"] .bk2-card--night .bk2-card-timeband { background: #EEF2FF; color: #3730A3; }
+
+/* Divider between day and night groups (time sort only). */
+.bk2-shift-divider { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; margin: 6px 0 2px; color: #818CF8; font-size: 11px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; }
+.bk2-shift-divider::before, .bk2-shift-divider::after { content: ''; flex: 1; height: 1px; background: rgba(129,140,248,0.35); }
+:root[data-theme="light"] .bk2-shift-divider { color: #4F46E5; }
+:root[data-theme="light"] .bk2-shift-divider::before, :root[data-theme="light"] .bk2-shift-divider::after { background: #C7D2FE; }
+
+/* Resource panel sizes — class on <body> so it survives AJAX board swaps. */
+body.bk2-rp-size-s .bk2-pane--with-panel { grid-template-columns: minmax(0, 1fr) 280px; }
+body.bk2-rp-size-l .bk2-pane--with-panel { grid-template-columns: minmax(0, 1fr) 480px; }
+/* At L, surface each row's role/rego detail inline. */
+body.bk2-rp-size-l .bk2-rp-item::after { content: attr(data-resource-role); margin-left: 4px; font-size: 10px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.04em; }
+@media (max-width: 1100px) {
+  body.bk2-rp-size-s .bk2-pane--with-panel, body.bk2-rp-size-l .bk2-pane--with-panel { grid-template-columns: 1fr; }
+}
+
+/* Quick-edit Resources pane — interactivity affordances + themed surface. */
+.bk2-edit-pane[data-edit-pane="resources"] { padding: 10px; }
+.bk2-edit-pane[data-edit-pane="resources"] .crew-chip { cursor: grab; transition: transform 100ms ease, box-shadow 100ms ease; }
+.bk2-edit-pane[data-edit-pane="resources"] .crew-chip:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
+.bk2-edit-pane[data-edit-pane="resources"] [data-bk-tab] { border-radius: 12px; }
+/* The lifted fragment is authored light (bg-white/text-gray) — pin a light
+   surface behind it in BOTH themes so it never sits illegible on the dark
+   editor chrome (dark-glass skins override .bg-white to a dark surface). */
+.bk2-edit-pane[data-edit-pane="resources"] section[data-bk-tab],
+.bk2-edit-pane[data-edit-pane="resources"] div[data-bk-tab] { background: #ffffff !important; color: #111827 !important; }
+.bk2-edit-pane[data-edit-pane="resources"] [data-bk-tab] .text-gray-900,
+.bk2-edit-pane[data-edit-pane="resources"] [data-bk-tab] h2 { color: #111827 !important; }
