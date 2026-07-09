@@ -2355,3 +2355,99 @@ body.bk2-rp-size-l .bk2-rp-item::after { content: attr(data-resource-role); marg
 /* Spare/standalone vehicle chip as a drop target (crew-move assign). */
 .bk2-veh-slot--spare.bk2-slot--drop { cursor: default; }
 .bk2-veh-slot--spare.is-drag-over { outline: 2px solid #2B7FFF; outline-offset: 1px; background: rgba(43,127,255,0.12); }
+
+/* ============================================================
+   Bookings v42 — Resources tab = full-width sectioned pool.
+   The duplicate "This shift" column is gone (the glowing card IS
+   the shift surface); the reparented resource panel now lays out
+   as three side-by-side sections (Workers / Vehicles / Towed),
+   each with its own header + count + filter chips, one global
+   search. Narrow screens get a drop strip as the add target.
+   ============================================================ */
+
+/* Tab container: strip (narrow screens only) above the pool. */
+.bk2-restab { flex-direction: column; }
+.bk2-restab-pool { flex: 1 1 auto; min-height: 0; display: flex; }
+
+/* Compact add target when the glowing card can't float. */
+.bk2-restab-dropstrip {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  border: 2px dashed #CBD5E1; border-radius: 12px;
+  padding: 13px 16px; margin-bottom: 4px;
+  color: #6B7280; font-size: 13px; font-weight: 600;
+}
+.bk2-restab-dropstrip.is-drag-over {
+  border-color: #2B7FFF; color: #1D6AE5; background: rgba(43,127,255,0.08);
+}
+
+/* Section headers — only exist visually in the intab layout. */
+.bk2-rp-secthead { display: none; }
+
+/* ── The reparented panel becomes a 3-section grid ── */
+.bk2-resourcepanel--intab {
+  display: grid !important;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-areas:
+    "search  search  search"
+    "chips-p chips-v chips-e"
+    "list-p  list-v  list-e";
+  gap: 10px 14px;
+  padding: 2px;
+  overflow: hidden;
+}
+/* Flatten the header so its children (tabbar/chipsets/search) become
+   grid items of the panel itself. */
+.bk2-resourcepanel--intab .bk2-rp-head { display: contents; }
+/* People/Vehicles/Towed tab buttons + size/collapse controls are
+   meaningless when all sections show at once. Same for the meta line —
+   counts live in the section headers. */
+.bk2-resourcepanel--intab .bk2-rp-tabbar { display: none; }
+.bk2-resourcepanel--intab .bk2-rp-meta   { display: none; }
+.bk2-resourcepanel--intab .bk2-rp-search { grid-area: search; margin-top: 0; }
+
+/* All three chipsets visible, each above its section column.
+   (display:flex beats the UA [hidden]{display:none} rule.) */
+.bk2-resourcepanel--intab .bk2-rp-chipset { display: block !important; margin-top: 0; }
+.bk2-resourcepanel--intab .bk2-rp-chipset[data-rp-chipset="people"]    { grid-area: chips-p; }
+.bk2-resourcepanel--intab .bk2-rp-chipset[data-rp-chipset="vehicles"]  { grid-area: chips-v; }
+.bk2-resourcepanel--intab .bk2-rp-chipset[data-rp-chipset="equipment"] { grid-area: chips-e; }
+.bk2-resourcepanel--intab .bk2-rp-chipset-label { display: none; }
+
+/* All three lists visible as section cards with their own scroll. */
+.bk2-resourcepanel--intab .bk2-rp-listwrap {
+  display: flex !important; flex-direction: column; min-height: 0;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; padding: 8px; overflow: hidden;
+}
+.bk2-resourcepanel--intab [data-rp-list="people"]    { grid-area: list-p; }
+.bk2-resourcepanel--intab [data-rp-list="vehicles"]  { grid-area: list-v; }
+.bk2-resourcepanel--intab [data-rp-list="equipment"] { grid-area: list-e; }
+.bk2-resourcepanel--intab .bk2-rp-secthead {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 6px 8px; font-size: 12px; font-weight: 700;
+  color: #E5E7EB; border-bottom: 1px solid rgba(255,255,255,0.07);
+  margin-bottom: 6px; flex: 0 0 auto;
+}
+.bk2-resourcepanel--intab .bk2-rp-sectcount { margin-left: auto; font-weight: 600; font-size: 11px; color: #64748B; }
+.bk2-resourcepanel--intab .bk2-rp-list {
+  overflow-y: auto; min-height: 0; flex: 1 1 auto;
+  grid-template-columns: repeat(auto-fill, minmax(215px, 1fr));
+  align-content: start;
+}
+
+/* Light theme */
+:root[data-theme="light"] .bk2-resourcepanel--intab .bk2-rp-listwrap { background: #F8FAFC; border-color: #E5E7EB; }
+:root[data-theme="light"] .bk2-resourcepanel--intab .bk2-rp-secthead { color: #111827; border-bottom-color: #E5E7EB; }
+:root[data-theme="light"] .bk2-resourcepanel--intab .bk2-rp-sectcount { color: #6B7280; }
+
+/* Narrow: stack the sections. */
+@media (max-width: 900px) {
+  .bk2-resourcepanel--intab {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto minmax(180px, 1fr) auto minmax(120px, auto) auto minmax(120px, auto);
+    grid-template-areas:
+      "search" "chips-p" "list-p" "chips-v" "list-v" "chips-e" "list-e";
+  }
+}

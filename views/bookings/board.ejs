@@ -707,9 +707,21 @@
         </div>
       </header>
       <div class="bk2-rp-meta" id="bk2-rp-meta">Loading resources…</div>
-      <div class="bk2-rp-listwrap" data-rp-list="people"    role="tabpanel"><ul class="bk2-rp-list" id="bk2-rp-list-people"></ul></div>
-      <div class="bk2-rp-listwrap" data-rp-list="vehicles"  role="tabpanel" hidden><ul class="bk2-rp-list" id="bk2-rp-list-vehicles"></ul></div>
-      <div class="bk2-rp-listwrap" data-rp-list="equipment" role="tabpanel" hidden><ul class="bk2-rp-list" id="bk2-rp-list-equipment"></ul></div>
+      <!-- Section headers only render in the Resources tab (intab) layout,
+           where all three sections show side-by-side; CSS hides them in the
+           board's tabbed panel. Counts filled by rpRepaint. -->
+      <div class="bk2-rp-listwrap" data-rp-list="people"    role="tabpanel">
+        <div class="bk2-rp-secthead"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg><span>Workers</span><span class="bk2-rp-sectcount" data-rp-count="people"></span></div>
+        <ul class="bk2-rp-list" id="bk2-rp-list-people"></ul>
+      </div>
+      <div class="bk2-rp-listwrap" data-rp-list="vehicles"  role="tabpanel" hidden>
+        <div class="bk2-rp-secthead"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 17h8m-8 0a2 2 0 11-4 0 2 2 0 014 0zm8 0a2 2 0 104 0 2 2 0 00-4 0zm-9-5h10l-1-4H4v4zm10 0h3l3 3v2h-2"/></svg><span>Vehicles</span><span class="bk2-rp-sectcount" data-rp-count="vehicles"></span></div>
+        <ul class="bk2-rp-list" id="bk2-rp-list-vehicles"></ul>
+      </div>
+      <div class="bk2-rp-listwrap" data-rp-list="equipment" role="tabpanel" hidden>
+        <div class="bk2-rp-secthead"><svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 20h18L12 4 3 20z"/></svg><span>Towed Equipment</span><span class="bk2-rp-sectcount" data-rp-count="equipment"></span></div>
+        <ul class="bk2-rp-list" id="bk2-rp-list-equipment"></ul>
+      </div>
     </aside>
   </section>
 
@@ -1303,9 +1315,14 @@
          loadResourcesTab(). -->
     <section class="bk2-edit-pane bk2-edit-pane--resources" data-edit-pane="resources" hidden>
       <div class="bk2-restab">
-        <div class="bk2-restab-shift" data-restab-shift>
-          <div class="bk2-restab-shift-head">This shift — drag people &amp; vehicles from the pool →</div>
-          <div data-restab-shift-body><div class="bk2-edit-placeholder"><p>Loading…</p></div></div>
+        <!-- ← The glowing card IS the shift — drag rows from the pool below
+             onto it. A duplicate "This shift" column used to live here; the
+             card already renders the same slots/targets, so it was redundant.
+             On narrow screens the card doesn't float, so a compact drop strip
+             stands in as the add target (shown by loadResourcesTab). -->
+        <div class="bk2-restab-dropstrip" data-restab-dropstrip hidden>
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          <span>Drop workers, vehicles &amp; equipment here to add them to this shift</span>
         </div>
         <div class="bk2-restab-pool" data-restab-pool></div>
       </div>
@@ -2368,36 +2385,25 @@
   }
 
   // ── Self-contained Resources tab ──
-  // Left column = this booking's live allocation (the board card's .bk2-crews
-  // block — real drop targets using the board's drag/drop). Right column = the
-  // resource pool panel, reparented in. Both use the same board drag protocol.
+  // The tab is a full-width pool browser (Workers / Vehicles / Towed sections,
+  // filters + search); the GLOWING CARD is the allocation surface — it renders
+  // the same slots/targets a shift column would, so we don't duplicate one
+  // here. On narrow screens (no floating card) a compact drop strip stands in
+  // as the add target.
   function loadResourcesTab() {
     var ed = $('#bk2-editor'); var id = ed && ed.dataset.bookingId;
     if (!id) return;
     bkPoolToTab();                    // move the pool into the tab
-    refreshResTab();                  // fill the shift (targets) column
+    var strip = document.querySelector('[data-restab-dropstrip]');
+    if (strip) {
+      strip.hidden = !!floatingCard;  // only needed when the card can't float
+      strip.setAttribute('data-booking-id', id);
+    }
   }
-  function refreshResTab() {
-    var ed = $('#bk2-editor'); var id = ed && ed.dataset.bookingId;
-    var body = document.querySelector('[data-restab-shift-body]');
-    if (!id || !body) return;
-    fetch(location.pathname + location.search, { credentials: 'same-origin', headers: { 'Accept': 'text/html', 'X-Requested-With': 'fetch' } })
-      .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
-      .then(function (html) {
-        var doc = new DOMParser().parseFromString(html, 'text/html');
-        var card = doc.querySelector('.bk2-card[data-booking-id="' + id + '"]');
-        var crews = card && card.querySelector('.bk2-crews');
-        if (crews) { body.innerHTML = ''; body.appendChild(document.importNode(crews, true)); }
-        else { body.innerHTML = '<div class="bk2-restab-empty bk2-slot--drop bk2-slot--drop-crewadd" data-booking-id="' + id + '">Drop workers &amp; vehicles here to add them to this shift.</div>'; }
-      })
-      .catch(function () { body.innerHTML = '<div class="bk2-edit-placeholder"><p>Couldn’t load — try reopening.</p></div>'; });
-  }
-  // After any allocation change (drop / remove / assign), keep the tab's shift
-  // column + the glowing card in sync.
+  // After any allocation change (drop / remove / assign), keep the glowing
+  // card (the shift surface) in sync.
   document.addEventListener('bk2:alloc-changed', function () {
     try { refreshFloatCard(); } catch (e) {}
-    var pane = document.querySelector('[data-edit-pane="resources"]');
-    if (pane && !pane.hidden) { try { refreshResTab(); } catch (e) {} }
   });
 
   // ── Wire interactivity on the lifted Resources fragment ──
@@ -4389,6 +4395,13 @@
                 : (ppl.length + ' of ' + (rpData.people || []).length + ' workers');
       meta.textContent = label;
     }
+    // Per-section counts for the Resources-tab layout (section headers are
+    // display:none in the board panel, so this is harmless there).
+    var counts = { people: [ppl, rpData.people], vehicles: [veh, rpData.vehicles], equipment: [eqp, rpData.equipment] };
+    Object.keys(counts).forEach(function (k) {
+      var el = document.querySelector('[data-rp-count="' + k + '"]');
+      if (el) el.textContent = counts[k][0].length + ' of ' + (counts[k][1] || []).length;
+    });
   }
 
   function rpSetTab(name) {
@@ -4635,7 +4648,7 @@
     var row = e.target && e.target.closest && e.target.closest('.bk2-rp-item');
     if (row) row.classList.remove('is-dragging');
     // Remove any leftover drag-over highlights
-    document.querySelectorAll('.bk2-slot--drop.is-drag-over, .bk2-card-teambox.is-drag-over').forEach(function (el) {
+    document.querySelectorAll('.bk2-slot--drop.is-drag-over, .bk2-card-teambox.is-drag-over, .bk2-restab-dropstrip.is-drag-over').forEach(function (el) {
       el.classList.remove('is-drag-over');
     });
   });
@@ -4683,10 +4696,12 @@
     }
 
     // Non-crew-move drags use the simple drop-class match (resource
-    // panel → empty crew/UTE slot), else the card's team box (drop-to-add).
+    // panel → empty crew/UTE slot), else the card's team box (drop-to-add),
+    // else the Resources tab's narrow-screen drop strip.
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
     if (!slot) {
-      var box = e.target && e.target.closest && e.target.closest('.bk2-card-teambox');
+      var box = e.target && e.target.closest &&
+        (e.target.closest('.bk2-card-teambox') || e.target.closest('.bk2-restab-dropstrip[data-booking-id]'));
       if (box) { e.preventDefault(); try { e.dataTransfer.dropEffect = 'copy'; } catch (err) {} box.classList.add('is-drag-over'); }
       return;
     }
@@ -4770,9 +4785,12 @@
     // specific slot, so slot-level drops keep their precise behaviour.
     var slot = e.target && e.target.closest && e.target.closest('.bk2-slot--drop');
     if (!slot) {
-      var box = e.target && e.target.closest && e.target.closest('.bk2-card-teambox');
-      var cardEl = box && box.closest('.bk2-card[data-booking-id]');
-      if (box && cardEl) {
+      var box = e.target && e.target.closest &&
+        (e.target.closest('.bk2-card-teambox') || e.target.closest('.bk2-restab-dropstrip[data-booking-id]'));
+      // The teambox lives inside a card; the Resources-tab drop strip carries
+      // its own data-booking-id (set by loadResourcesTab).
+      var cardEl = box && (box.closest('.bk2-card[data-booking-id]') || box);
+      if (box && cardEl && cardEl.getAttribute('data-booking-id')) {
         e.preventDefault(); e.stopPropagation();
         box.classList.remove('is-drag-over');
         var bId = cardEl.getAttribute('data-booking-id');
