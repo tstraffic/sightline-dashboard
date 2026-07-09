@@ -2258,14 +2258,21 @@ body.bk2-date-loading::before {
 :root[data-theme="light"] .bk2-shift-divider { color: #4F46E5; }
 :root[data-theme="light"] .bk2-shift-divider::before, :root[data-theme="light"] .bk2-shift-divider::after { background: #C7D2FE; }
 
-/* Resource panel sizes — class on <body> so it survives AJAX board swaps. */
-body.bk2-rp-size-s .bk2-pane--with-panel { grid-template-columns: minmax(0, 1fr) 280px; }
-body.bk2-rp-size-l .bk2-pane--with-panel { grid-template-columns: minmax(0, 1fr) 480px; }
-/* At L, surface each row's role/rego detail inline. */
+/* Resource panel sizes — class on <body> so it survives AJAX board swaps.
+   Small = the compact right column (as it was). Big = ~40vw so the panel
+   covers the right of the screen and the board (minmax 1fr) reflows left,
+   giving room for easy drag-drop allocating. */
+body.bk2-rp-size-s .bk2-pane--with-panel { grid-template-columns: minmax(0, 1fr) 340px; }
+body.bk2-rp-size-l .bk2-pane--with-panel { grid-template-columns: minmax(0, 1fr) clamp(460px, 40vw, 720px); }
+/* At Big, use the extra width: multiple name columns + inline role/rego. */
+body.bk2-rp-size-l .bk2-rp-list { grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); }
 body.bk2-rp-size-l .bk2-rp-item::after { content: attr(data-resource-role); margin-left: 4px; font-size: 10px; color: #94A3B8; text-transform: uppercase; letter-spacing: 0.04em; }
 @media (max-width: 1100px) {
   body.bk2-rp-size-s .bk2-pane--with-panel, body.bk2-rp-size-l .bk2-pane--with-panel { grid-template-columns: 1fr; }
+  body.bk2-rp-size-l .bk2-rp-list { grid-template-columns: 1fr 1fr; }
 }
+/* Give the size toggle room for its word label ("Big"/"Small"). */
+.bk2-rp-iconbtn--wide { width: auto; padding: 0 8px; }
 
 /* Quick-edit Resources pane — interactivity affordances + themed surface. */
 .bk2-edit-pane[data-edit-pane="resources"] { padding: 10px; }
@@ -2479,3 +2486,67 @@ body.bk2-rp-size-l .bk2-rp-item::after { content: attr(data-resource-role); marg
 .bk2-card--floating.is-drag-over {
   outline: 2px dashed #2B7FFF; outline-offset: 3px;
 }
+
+/* ============================================================
+   Bookings v44 — light-mode styling for the board's resource
+   panel (it was hard-dark even on the light board). Scoped with
+   :not(.bk2-resourcepanel--intab) so the pool reparented into the
+   dark quick-edit editor keeps its own treatment.
+   ============================================================ */
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) {
+  background: #FFFFFF;
+  border-color: #E5E7EB;
+  color: #1F2937;
+  box-shadow: 0 8px 24px rgba(15,23,42,0.10);
+}
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-head {
+  background: #F8FAFC; border-bottom-color: #E9EDF2;
+}
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-tabs { background: #EEF2F7; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-tab { color: #64748B; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-tab:hover { color: #111827; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-tab[aria-selected="true"] {
+  background: #FFFFFF; color: #1D6AE5; box-shadow: 0 1px 2px rgba(15,23,42,0.12);
+}
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-iconbtn {
+  color: #64748B; border-color: #E2E8F0;
+}
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-iconbtn:hover { background: #F1F5F9; color: #111827; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-chipset-label { color: #94A3B8; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-chip {
+  background: #F1F5F9; color: #475569; border-color: #E2E8F0;
+}
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-chip:hover { background: #E2E8F0; color: #1F2937; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-chip[aria-pressed="true"] {
+  background: #DCFCE7; color: #15803D; border-color: #86EFAC;
+}
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-chip--reveal {
+  background: #EFF6FF; color: #1D6AE5; border-color: #BFDBFE;
+}
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-chip--reveal[aria-pressed="true"] {
+  background: #DBEAFE; color: #1E40AF; border-color: #93C5FD;
+}
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-search {
+  background: #F8FAFC; border-color: #E2E8F0; color: #64748B;
+}
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-search input { color: #111827; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-search input::placeholder { color: #9CA3AF; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-meta { color: #94A3B8; border-bottom-color: #F1F5F9; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-secthead { color: #111827; border-bottom-color: #E5E7EB; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-sectcount { color: #6B7280; }
+/* Rows: light zebra + hover, dark text. */
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-item:nth-child(4n+1),
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-item:nth-child(4n+2) { background: #F8FAFC; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-item:hover { background: #EFF6FF; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-name { color: #1F2937; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-icon { color: #94A3B8; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-hrs { color: #94A3B8; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-empty { color: #94A3B8; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-item.is-unavailable { opacity: 0.55; }
+
+/* Re-show chip (appears when the panel is hidden) — light treatment. */
+:root[data-theme="light"] .bk2-rp-show:not([hidden]) {
+  background: #FFFFFF; color: #1D6AE5; border-color: #BFDBFE;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.08);
+}
+:root[data-theme="light"] .bk2-rp-show:hover { background: #EFF6FF; }

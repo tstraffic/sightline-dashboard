@@ -657,9 +657,9 @@
               <span>Towed</span>
             </button>
           </div>
-          <button type="button" id="bk2-rp-size" class="bk2-rp-iconbtn" title="Panel size" aria-label="Cycle panel size">
+          <button type="button" id="bk2-rp-size" class="bk2-rp-iconbtn bk2-rp-iconbtn--wide" title="Panel size" aria-label="Toggle panel size">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"/></svg>
-            <span data-rp-size-label style="font-size:10px;font-weight:700;margin-left:2px">M</span>
+            <span data-rp-size-label style="font-size:10px;font-weight:700;margin-left:3px">Big</span>
           </button>
           <button type="button" id="bk2-rp-toggle" class="bk2-rp-iconbtn" title="Hide panel" aria-label="Hide panel">
             <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
@@ -4518,14 +4518,21 @@
     var saved = '0'; try { saved = localStorage.getItem(RP_STATE_KEY) || '0'; } catch (e) {}
     if (saved === '1') rpSetCollapsed(true);
 
-    // ── Panel size — S / M / L, cycled from the header, persisted. The class
-    // lives on <body> so it survives AJAX date-nav board swaps. ──
-    var RP_SIZES = ['s', 'm', 'l'];
+    // ── Panel size — Small ⇄ Big, toggled from the header, persisted. Small
+    // is the compact right column; Big widens it to ~40vw so it covers the
+    // right of the screen and the board reflows left for easy drag-drop.
+    // (Hiding it entirely is the separate chevron / re-show control.) The
+    // class lives on <body> so it survives AJAX date-nav board swaps. ──
+    var RP_SIZES = ['s', 'l'];
+    var RP_SIZE_LABEL = { s: 'Small', l: 'Big' };
     function rpApplySize(sz) {
-      if (RP_SIZES.indexOf(sz) === -1) sz = 'm';
+      if (RP_SIZES.indexOf(sz) === -1) sz = 's'; // migrate legacy 'm'/unknown → small
       RP_SIZES.forEach(function (s) { document.body.classList.toggle('bk2-rp-size-' + s, s === sz); });
       var lbl = document.querySelector('[data-rp-size-label]');
-      if (lbl) lbl.textContent = sz.toUpperCase();
+      // Label shows what a click will DO next (the other size), like a toggle.
+      if (lbl) lbl.textContent = sz === 's' ? 'Big' : 'Small';
+      var btn = $('#bk2-rp-size');
+      if (btn) btn.title = 'Panel is ' + RP_SIZE_LABEL[sz] + ' — click for ' + (sz === 's' ? 'Big' : 'Small');
       try { localStorage.setItem('bk2.rp.size', sz); } catch (e) {}
     }
     var rpSizeBtn = $('#bk2-rp-size');
@@ -4534,11 +4541,11 @@
       rpSizeBtn.addEventListener('click', function () {
         // Read current from the body class (not localStorage) so a stacked
         // listener can never double-advance the cycle.
-        var cur = RP_SIZES.find(function (s) { return document.body.classList.contains('bk2-rp-size-' + s); }) || 'm';
+        var cur = RP_SIZES.find(function (s) { return document.body.classList.contains('bk2-rp-size-' + s); }) || 's';
         rpApplySize(RP_SIZES[(RP_SIZES.indexOf(cur) + 1) % RP_SIZES.length]);
       });
     }
-    var savedSize = 'm'; try { savedSize = localStorage.getItem('bk2.rp.size') || 'm'; } catch (e) {}
+    var savedSize = 's'; try { savedSize = localStorage.getItem('bk2.rp.size') || 's'; } catch (e) {}
     rpApplySize(savedSize);
 
     rpLoad();
