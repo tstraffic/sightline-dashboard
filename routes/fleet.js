@@ -44,23 +44,41 @@ function lookupRelatedReports(db, vehicle) {
   const tokens = [vehicle.rego, vehicle.asset_id, vehicle.fleet_id]
     .map(s => (s == null ? '' : String(s).trim()))
     .filter(t => t && t.length >= 2);
-  if (!tokens.length) return out;
 
-  // Incidents — only query if the table exists and has the columns we need.
+  // Incidents — two sources, merged & deduped:
+  //   1. EXPLICITLY LINKED via incidents.vehicle_id (the incident form's
+  //      "Vehicle involved" picker, migration 311). Always shown — flagged
+  //      linked:1 — even if the vehicle has no rego/asset text to match on.
+  //   2. Heuristic text match on the vehicle's rego / asset_id / fleet_id
+  //      appearing in the incident title / description / location (legacy
+  //      reports typed the rego in free text).
+  const byId = new Map();
+  const cols = `i.id, i.incident_number, i.incident_type, i.severity, i.title, i.description,
+                i.location, i.incident_date, i.investigation_status, i.created_at`;
   try {
-    const incidentParts = tokens.map(() => '(title LIKE ? OR description LIKE ? OR COALESCE(location, \'\') LIKE ?)').join(' OR ');
-    const incidentParams = [];
-    tokens.forEach(t => { const wild = `%${t}%`; incidentParams.push(wild, wild, wild); });
-    out.incidents = db.prepare(`
-      SELECT i.id, i.incident_number, i.incident_type, i.severity, i.title, i.description,
-             i.location, i.incident_date, i.investigation_status, i.created_at
-      FROM incidents i
-      WHERE ${incidentParts}
-      ORDER BY COALESCE(i.incident_date, i.created_at) DESC LIMIT 50
-    `).all(...incidentParams);
-  } catch (e) {
-    console.warn('[fleet] incident lookup failed for vehicle', vehicle.id, ':', e.message);
+    db.prepare(`SELECT ${cols}, 1 AS linked FROM incidents i WHERE i.vehicle_id = ?
+                ORDER BY COALESCE(i.incident_date, i.created_at) DESC LIMIT 50`)
+      .all(vehicle.id)
+      .forEach(r => byId.set(r.id, r));
+  } catch (e) { /* vehicle_id column missing on a pre-migration-311 DB */ }
+  if (tokens.length) {
+    try {
+      const incidentParts = tokens.map(() => '(title LIKE ? OR description LIKE ? OR COALESCE(location, \'\') LIKE ?)').join(' OR ');
+      const incidentParams = [];
+      tokens.forEach(t => { const wild = `%${t}%`; incidentParams.push(wild, wild, wild); });
+      db.prepare(`SELECT ${cols}, 0 AS linked FROM incidents i WHERE ${incidentParts}
+                  ORDER BY COALESCE(i.incident_date, i.created_at) DESC LIMIT 50`)
+        .all(...incidentParams)
+        .forEach(r => { if (!byId.has(r.id)) byId.set(r.id, r); });
+    } catch (e) {
+      console.warn('[fleet] incident lookup failed for vehicle', vehicle.id, ':', e.message);
+    }
   }
+  out.incidents = [...byId.values()]
+    .sort((a, b) => String(b.incident_date || b.created_at || '').localeCompare(String(a.incident_date || a.created_at || '')))
+    .slice(0, 50);
+  // Only skip the equipment lookup below when there's nothing to match on.
+  if (!tokens.length) return out;
 
   // Equipment counts live in safety_forms with form_type='equipment' and a
   // JSON data blob; LIKE the raw JSON for the tokens.

@@ -304,7 +304,7 @@
     <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
       <div>
         <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Incident Reports</h2>
-        <p class="text-[11px] text-gray-500 mt-0.5">Reports submitted from the worker portal that mention <strong><%= vehicle.rego || vehicle.asset_id %></strong>.</p>
+        <p class="text-[11px] text-gray-500 mt-0.5">Incidents linked to this vehicle (<span class="font-semibold text-brand-700">LINKED</span>) or that mention <strong><%= vehicle.rego || vehicle.asset_id %></strong>.</p>
       </div>
       <div class="flex items-center gap-2">
         <a href="/incidents" class="text-xs font-medium text-gray-600 hover:text-gray-900">All Incidents →</a>
@@ -334,7 +334,10 @@
             <% incidents.forEach(function (i) { %>
               <tr class="hover:bg-gray-50">
                 <td class="px-3 py-2 text-xs whitespace-nowrap text-gray-700"><%= i.incident_date ? formatDate(i.incident_date) : (i.created_at ? formatDate(i.created_at) : '—') %></td>
-                <td class="px-3 py-2 text-xs font-mono text-gray-600"><%= i.incident_number %></td>
+                <td class="px-3 py-2 text-xs font-mono text-gray-600 whitespace-nowrap">
+                  <%= i.incident_number %>
+                  <% if (i.linked) { %><span class="inline-flex items-center px-1.5 py-0.5 ml-1 rounded text-[9px] font-bold bg-brand-50 text-brand-700 ring-1 ring-brand-600/20" title="This incident was reported against this vehicle">LINKED</span><% } %>
+                </td>
                 <td class="px-3 py-2 text-xs text-gray-700"><%= (i.incident_type || '').replace(/_/g, ' ') %></td>
                 <td class="px-3 py-2 text-xs"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= SEVERITY_TONES[i.severity] || SEVERITY_TONES.low %>"><%= (i.severity || 'low').toUpperCase() %></span></td>
                 <td class="px-3 py-2 text-xs text-gray-900 max-w-sm truncate" title="<%= i.title %>"><%= i.title %></td>
