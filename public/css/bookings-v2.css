@@ -2591,3 +2591,42 @@ body.bk2-rp-size-l .bk2-rp-item::after { content: attr(data-resource-role); marg
 :root[data-theme="light"] .bk2-resourcepanel--intab .bk2-rp-hrs { color: #94A3B8; }
 :root[data-theme="light"] .bk2-resourcepanel--intab .bk2-rp-empty { color: #94A3B8; }
 :root[data-theme="light"] .bk2-resourcepanel--intab .bk2-rp-item.is-unavailable { opacity: 0.55; }
+
+/* ============================================================
+   Bookings v46 — Big resource panel = full-height right rail
+   (Traffio-style). Instead of a wider grid column, the Big panel
+   pins to the viewport's right edge, spans header→bottom, and the
+   whole board content in <main> shifts left to clear it. Small +
+   hidden are unchanged.
+   ============================================================ */
+body.bk2-rp-size-l { --rp-big-w: clamp(460px, 40vw, 760px); }
+/* Reserve the right gutter on the board's <main> so nothing hides under the
+   fixed rail. Dropped when the panel is hidden. (Only the bookings board sets
+   bk2-rp-size-* on <body>, so this is board-scoped in practice.) */
+body.bk2-rp-size-l:not(.bk2-rp-hidden) main { padding-right: var(--rp-big-w); }
+/* The board grid no longer needs a panel column — the rail is out of flow. */
+body.bk2-rp-size-l .bk2-pane--with-panel[aria-current="true"] { grid-template-columns: 1fr; }
+/* The rail. */
+body.bk2-rp-size-l .bk2-resourcepanel {
+  position: fixed; top: 64px; right: 0; bottom: 0;
+  width: var(--rp-big-w); height: auto; max-height: none;
+  margin: 0; border-radius: 0;
+  border-top: 0; border-right: 0; border-bottom: 0;
+  z-index: 20;
+  box-shadow: -10px 0 30px rgba(15,23,42,0.16);
+}
+/* Below the desktop breakpoint the panel stacks (as before) — undo the rail. */
+@media (max-width: 1100px) {
+  body.bk2-rp-size-l:not(.bk2-rp-hidden) main { padding-right: 0; }
+  body.bk2-rp-size-l .bk2-resourcepanel {
+    position: sticky; top: 12px; bottom: auto;
+    width: auto; max-height: calc(100vh - 96px);
+    border-radius: 14px; z-index: auto;
+    box-shadow: 0 10px 24px rgba(0,0,0,0.25);
+  }
+}
+/* The board wrapper's fade-in-up entrance animates `transform`, which makes
+   it the containing block for position:fixed descendants — trapping the Big
+   rail inside it instead of the viewport. Neutralise it while Big is active
+   (a persistent state doesn't need the one-shot entrance flourish). */
+body.bk2-rp-size-l .bk2-page { animation: none !important; transform: none !important; }

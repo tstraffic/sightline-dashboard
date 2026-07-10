@@ -4499,6 +4499,10 @@
     var pane = document.querySelector('.bk2-pane--with-panel');
     if (!pane) return;
     pane.classList.toggle('is-collapsed', !!on);
+    // Mirror on <body> so the Big fixed-rail layout can drop the reserved
+    // right gutter on <main> when the panel is hidden (CSS can't reach a
+    // parent from the pane's class).
+    document.body.classList.toggle('bk2-rp-hidden', !!on);
     var showBtn = $('#bk2-rp-show'); if (showBtn) showBtn.hidden = !on;
     try { localStorage.setItem(RP_STATE_KEY, on ? '1' : '0'); } catch (e) {}
   }
