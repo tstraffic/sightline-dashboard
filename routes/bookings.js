@@ -813,12 +813,14 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       g.workers.push(slot);
       continue;
     }
-    if (c.assigned_vehicle_id == null) {
-      // Workers explicitly with no vehicle assignment. If the booking
-      // has any vehicles, they go to the "Unassigned" pool. If the
-      // booking has NO vehicles, they go into block slots in order.
-      if (blockByVehicle.size > 0) { unassigned.push(c); continue; }
-    }
+    // Everyone else (no vehicle assignment, or a vehicle no longer on the
+    // shift) fills the next open crew/TC slot in block order — so dragging a
+    // worker into the shift auto-slots them under TC rather than dumping them
+    // in a "not in any vehicle" pile. A crew block having an (even empty) ute
+    // placeholder no longer forces workers out of its TC slots. Only genuine
+    // overflow — no open slot anywhere — collects in the unassigned pool
+    // (and the crew-add endpoint bumps the Traffic Controller requirement when
+    // the headcount exceeds what the shift called for, growing the slots).
     remaining.push(c);
   }
   let workerIdx = 0;
