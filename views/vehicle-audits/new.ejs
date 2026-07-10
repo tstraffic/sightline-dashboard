@@ -1,13 +1,11 @@
 <% locals.currentPage = 'vehicle-audits' %>
 
-<!-- Header -->
-<div class="flex items-center justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Start Audit</h1>
-    <p class="text-gray-500 text-sm mt-0.5"><%= vehicle ? (vehicle.asset_id + ' · ' + (typeLabels[vehicle.traffic_class] || 'Unclassified')) : 'Pick a vehicle from the fleet register' %></p>
-  </div>
-  <a href="/vehicle-audits" class="text-sm font-medium text-gray-500 hover:text-gray-800">&larr; Back</a>
-</div>
+<%- include('_subnav', {
+  vaTab: 'new',
+  vaTitle: 'Start Audit',
+  vaSub: vehicle ? (vehicle.asset_id + ' · ' + (typeLabels[vehicle.traffic_class] || 'Unclassified')) : 'Pick a vehicle from the fleet register',
+  vaOpen: typeof vaOpen !== 'undefined' ? vaOpen : 0
+}) %>
 
 <!-- Step 1: vehicle picker (sourced from the existing vehicles table) -->
 <form method="GET" action="/vehicle-audits/new" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-5">
@@ -59,7 +57,8 @@
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
     <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
       <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest"><%= sec.section %></h2>
-      <span class="text-[10px] text-gray-400 font-medium" data-sec-count><%= sec.items.length %> items</span>
+      <!-- live per-section progress, painted by repaint() -->
+      <span class="text-[10px] font-bold" data-sec-progress data-sec-total="<%= sec.items.length %>"><span class="text-gray-400">0</span> / <%= sec.items.length %></span>
     </div>
     <div class="divide-y divide-gray-100">
       <% sec.items.forEach(it => { %>
@@ -84,11 +83,17 @@
             </label>
           </div>
         </div>
-        <!-- Fail details: comment + photo, revealed when Fail is picked -->
+        <!-- Fail details: comment + fault allocation + photo, revealed when Fail is picked -->
         <div class="va-fail-extra mt-2.5 hidden">
           <div class="flex flex-col sm:flex-row gap-2">
             <input type="text" name="comment_<%= it.id %>" placeholder="What's wrong? (shows on the defect)"
                    class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+            <!-- Optional: pin this damage on a driver right now — lands on the
+                 auto-created defect. Leave as-is to allocate later. -->
+            <select name="fault_<%= it.id %>" class="sm:w-52 border border-gray-300 rounded-lg px-2.5 py-2 text-sm bg-white text-gray-600" title="Worker responsible for this damage (optional)">
+              <option value="">Fault: allocate later</option>
+              <% crew.forEach(function (c) { %><option value="<%= c.id %>">Fault: <%= c.full_name %></option><% }); %>
+            </select>
             <label class="inline-flex items-center gap-1.5 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-xs font-medium text-gray-500 hover:border-brand-400 hover:text-brand-600 cursor-pointer self-start">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.66-.9l.82-1.2A2 2 0 0110.07 4h3.86a2 2 0 011.66.9l.82 1.2a2 2 0 001.66.9H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
               <span data-photo-label>Photo</span>
@@ -179,6 +184,16 @@
       it.classList.toggle('is-fail', !!isFail);
       var extra = it.querySelector('.va-fail-extra');
       if (extra) extra.classList.toggle('hidden', !isFail);
+    });
+    // Per-section progress — turns emerald when the section is complete.
+    Array.prototype.slice.call(form.querySelectorAll('[data-sec-progress]')).forEach(function (badge) {
+      var box = badge.closest('.bg-white');
+      var secItems = box ? Array.prototype.slice.call(box.querySelectorAll('.va-item')) : [];
+      var secDone = secItems.filter(answered).length;
+      var total = parseInt(badge.getAttribute('data-sec-total'), 10) || secItems.length;
+      var complete = secDone >= total;
+      badge.innerHTML = '<span class="' + (complete ? 'text-emerald-600' : 'text-gray-400') + '">' +
+        (complete ? '&#10003; ' : '') + secDone + '</span> / ' + total;
     });
   }
   form.addEventListener('change', function (e) {

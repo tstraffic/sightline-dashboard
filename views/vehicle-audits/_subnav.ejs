@@ -1,0 +1,35 @@
+<%
+/* Vehicle Audits module header + tab bar — included by every page so the
+   whole module feels like one place. Params (via include locals):
+     vaTab   — 'overview' | 'new' | 'defects' | 'accountability' | null
+     vaTitle — h1 text
+     vaSub   — subtitle line (optional)
+     vaOpen  — open-defect count for the Defects badge (optional)
+     vaAction — extra HTML for a page-specific primary action (optional) */
+  var __tabs = [
+    { key: 'overview',       href: '/vehicle-audits',                label: 'Overview' },
+    { key: 'new',            href: '/vehicle-audits/new',            label: 'Start Audit' },
+    { key: 'defects',        href: '/vehicle-audits/defects',        label: 'Defects' },
+    { key: 'accountability', href: '/vehicle-audits/accountability', label: 'Accountability' },
+  ];
+%>
+<div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-5">
+  <div class="min-w-0">
+    <h1 class="text-2xl font-bold text-gray-900 truncate"><%= vaTitle %></h1>
+    <% if (typeof vaSub !== 'undefined' && vaSub) { %><p class="text-gray-500 text-sm mt-0.5"><%- vaSub %></p><% } %>
+  </div>
+  <div class="flex items-center gap-2 flex-wrap">
+    <nav class="inline-flex items-center bg-gray-100 border border-gray-200 rounded-xl p-1 gap-0.5 overflow-x-auto max-w-full" aria-label="Vehicle audit sections">
+      <% __tabs.forEach(function (t) { var on = (typeof vaTab !== 'undefined' && vaTab === t.key); %>
+        <a href="<%= t.href %>"
+           class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors <%= on ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-white/60' %>">
+          <%= t.label %>
+          <% if (t.key === 'defects' && typeof vaOpen !== 'undefined' && vaOpen > 0) { %>
+            <span class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold <%= on ? 'bg-amber-100 text-amber-700' : 'bg-amber-500/90 text-white' %>"><%= vaOpen %></span>
+          <% } %>
+        </a>
+      <% }); %>
+    </nav>
+    <% if (typeof vaAction !== 'undefined' && vaAction) { %><%- vaAction %><% } %>
+  </div>
+</div>

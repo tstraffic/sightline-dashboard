@@ -1,0 +1,70 @@
+<%
+/* One editable defect row — shared by the Defects register AND the audit
+   record page, so fault can be allocated (or re-allocated) anywhere a
+   defect appears. Params (via include locals):
+     d           — defect row (joined with asset_id + worker_name)
+     crew        — [{id, full_name}] for the fault picker
+     csrfToken   — token
+     today       — YYYY-MM-DD (overdue highlight)
+     showVehicle — include the vehicle chip/link (default true; false on
+                   the audit record where the vehicle is already known) */
+  var __showVeh = (typeof showVehicle === 'undefined') ? true : !!showVehicle;
+  var __overdue = d.status !== 'fixed' && d.due_date && d.due_date < today;
+  var __sev = {
+    critical: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+    major:    'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    minor:    'bg-gray-50 text-gray-500 ring-1 ring-gray-200',
+  }[d.severity] || 'bg-gray-50 text-gray-500 ring-1 ring-gray-200';
+  var __fmtD = function (s) { if (!s) return '—'; var dd = new Date(s + 'T00:00:00'); return isNaN(dd) ? s : dd.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }); };
+%>
+<form method="POST" action="/vehicle-audits/defects/<%= d.id %>"
+      class="bg-white border <%= __overdue ? 'border-red-300 ring-1 ring-red-100' : 'border-gray-200' %> rounded-xl shadow-sm p-3">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <div class="flex flex-col lg:flex-row lg:items-center gap-2.5">
+    <!-- What + context -->
+    <div class="flex-1 min-w-0">
+      <div class="flex items-center gap-2 flex-wrap">
+        <% if (__showVeh) { %>
+          <a href="/fleet/<%= d.vehicle_id %>?tab=audits" class="text-sm font-bold text-gray-900 hover:text-brand-600"><%= d.asset_id %></a>
+        <% } %>
+        <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <%= __sev %>"><%= d.severity %></span>
+        <% if (__overdue) { %><span class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-700 ring-1 ring-red-600/20 uppercase">Overdue</span><% } %>
+        <% if (!d.assigned_to) { %><span class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-gray-100 text-gray-500 ring-1 ring-gray-200 uppercase" title="No worker held responsible yet">No fault set</span><% } %>
+        <% if (__showVeh && d.audit_id) { %><a href="/vehicle-audits/<%= d.audit_id %>" class="text-[11px] text-gray-400 hover:text-brand-600">from audit #<%= d.audit_id %></a><% } %>
+      </div>
+      <p class="text-sm text-gray-700 mt-0.5"><%= d.item_label %><% if (d.notes) { %> <span class="text-gray-400">— <%= d.notes %></span><% } %></p>
+      <% if (d.status === 'fixed' && d.resolved_date) { %><p class="text-[11px] text-emerald-600 mt-0.5">Fixed <%= __fmtD(d.resolved_date) %></p><% } %>
+    </div>
+    <!-- Inline controls: fault / severity / status / due / cost / save -->
+    <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 lg:w-[560px]">
+      <label class="block">
+        <span class="block text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5 lg:hidden">Fault of</span>
+        <select name="assigned_to" class="w-full border <%= d.assigned_to ? 'border-gray-300' : 'border-amber-300 bg-amber-50/40' %> rounded-lg px-2 py-1.5 text-xs" title="Worker responsible for the damage">
+          <option value="">Fault: unassigned</option>
+          <% crew.forEach(function (c) { %><option value="<%= c.id %>" <%= String(d.assigned_to) === String(c.id) ? 'selected' : '' %>><%= c.full_name %></option><% }); %>
+        </select>
+      </label>
+      <label class="block">
+        <span class="block text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5 lg:hidden">Severity</span>
+        <select name="severity" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white">
+          <% ['critical','major','minor'].forEach(function (s) { %><option value="<%= s %>" <%= d.severity === s ? 'selected' : '' %>><%= s %></option><% }); %>
+        </select>
+      </label>
+      <label class="block">
+        <span class="block text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5 lg:hidden">Status</span>
+        <select name="status" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white">
+          <% ['open','chasing','fixed'].forEach(function (s) { %><option value="<%= s %>" <%= d.status === s ? 'selected' : '' %>><%= s %></option><% }); %>
+        </select>
+      </label>
+      <label class="block">
+        <span class="block text-[9px] font-bold text-gray-400 uppercase tracking-widest mb-0.5 lg:hidden">Due</span>
+        <input type="date" name="due_date" value="<%= d.due_date || '' %>" class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white" title="Due date">
+      </label>
+      <div class="flex gap-1.5 items-end">
+        <input type="number" name="cost_estimate" value="<%= d.cost_estimate != null ? d.cost_estimate : '' %>" min="0" step="1" placeholder="$"
+               class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white" title="Cost estimate">
+        <button type="submit" class="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold transition-colors">Save</button>
+      </div>
+    </div>
+  </div>
+</form>

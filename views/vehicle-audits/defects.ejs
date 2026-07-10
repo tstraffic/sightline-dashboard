@@ -1,27 +1,41 @@
 <% locals.currentPage = 'vehicle-audits' %>
 <%
-  const fmtD = s => { if (!s) return '—'; const d = new Date(s + 'T00:00:00'); return isNaN(d) ? s : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }); };
-  const SEV_CHIP = {
-    critical: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
-    major:    'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
-    minor:    'bg-gray-50 text-gray-500 ring-1 ring-gray-200',
-  };
+  const AUD = n => (n == null || isNaN(Number(n))) ? '$0' : '$' + Number(n).toLocaleString('en-AU', { maximumFractionDigits: 0 });
 %>
 
-<!-- Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Vehicle Defects</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Failed audit items being chased to fixed</p>
+<%- include('_subnav', {
+  vaTab: 'defects',
+  vaTitle: 'Vehicle Defects',
+  vaSub: 'Failed audit items being chased to fixed &middot; allocate fault to the responsible worker',
+  vaOpen: typeof vaOpen !== 'undefined' ? vaOpen : 0
+}) %>
+
+<!-- Register pulse -->
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+    <p class="text-[10px] font-bold text-red-500 uppercase tracking-widest">Open</p>
+    <p class="text-xl font-bold <%= stats.open > 0 ? 'text-red-600' : 'text-gray-300' %> mt-0.5"><%= stats.open || 0 %></p>
   </div>
-  <div class="flex items-center gap-2">
-    <a href="/vehicle-audits/accountability" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors">Accountability</a>
-    <a href="/vehicle-audits" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors">&larr; Audits</a>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+    <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Chasing</p>
+    <p class="text-xl font-bold <%= stats.chasing > 0 ? 'text-amber-600' : 'text-gray-300' %> mt-0.5"><%= stats.chasing || 0 %></p>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+    <p class="text-[10px] font-bold text-red-500 uppercase tracking-widest">Overdue</p>
+    <p class="text-xl font-bold <%= stats.overdue > 0 ? 'text-red-600' : 'text-gray-300' %> mt-0.5"><%= stats.overdue || 0 %></p>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+    <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Fixed</p>
+    <p class="text-xl font-bold <%= stats.fixed > 0 ? 'text-emerald-600' : 'text-gray-300' %> mt-0.5"><%= stats.fixed || 0 %></p>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 col-span-2 sm:col-span-1">
+    <p class="text-[10px] font-bold text-brand-500 uppercase tracking-widest">Open Cost</p>
+    <p class="text-xl font-bold text-brand-600 mt-0.5"><%= AUD(stats.openCost) %></p>
   </div>
 </div>
 
 <!-- Filters -->
-<form method="GET" action="/vehicle-audits/defects" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 mb-5 grid grid-cols-2 sm:grid-cols-5 gap-2">
+<form method="GET" action="/vehicle-audits/defects" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 mb-4 grid grid-cols-2 sm:grid-cols-5 gap-2">
   <select name="vehicle" class="border border-gray-300 rounded-lg px-2.5 py-2 text-sm bg-white" onchange="this.form.submit()">
     <option value="">All vehicles</option>
     <% vehicles.forEach(v => { %><option value="<%= v.id %>" <%= String(f.vehicle) === String(v.id) ? 'selected' : '' %>><%= v.asset_id %><%= v.rego ? ' · ' + v.rego : '' %></option><% }); %>
@@ -43,47 +57,10 @@
   <a href="/vehicle-audits/defects" class="inline-flex items-center justify-center px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-800">Clear</a>
 </form>
 
-<!-- Defect rows: each row is its own inline-edit form -->
+<!-- Defect rows — inline edit incl. fault allocation -->
 <div class="space-y-2.5">
-  <% defects.forEach(d => {
-    const overdue = d.status !== 'fixed' && d.due_date && d.due_date < today;
-  %>
-  <form method="POST" action="/vehicle-audits/defects/<%= d.id %>"
-        class="bg-white border <%= overdue ? 'border-red-300 ring-1 ring-red-100' : 'border-gray-200' %> rounded-xl shadow-sm p-3">
-    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
-    <div class="flex flex-col lg:flex-row lg:items-center gap-2.5">
-      <!-- What + where -->
-      <div class="flex-1 min-w-0">
-        <div class="flex items-center gap-2 flex-wrap">
-          <a href="/fleet/<%= d.vehicle_id %>?tab=audits" class="text-sm font-bold text-gray-900 hover:text-brand-600"><%= d.asset_id %></a>
-          <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <%= SEV_CHIP[d.severity] %>"><%= d.severity %></span>
-          <% if (overdue) { %><span class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-700 ring-1 ring-red-600/20 uppercase">Overdue</span><% } %>
-          <% if (d.audit_id) { %><a href="/vehicle-audits/<%= d.audit_id %>" class="text-[11px] text-gray-400 hover:text-brand-600">from audit #<%= d.audit_id %></a><% } %>
-        </div>
-        <p class="text-sm text-gray-700 mt-0.5"><%= d.item_label %><% if (d.notes) { %> <span class="text-gray-400">— <%= d.notes %></span><% } %></p>
-        <% if (d.status === 'fixed' && d.resolved_date) { %><p class="text-[11px] text-emerald-600 mt-0.5">Fixed <%= fmtD(d.resolved_date) %></p><% } %>
-      </div>
-      <!-- Inline controls -->
-      <div class="grid grid-cols-2 sm:grid-cols-5 gap-2 lg:w-[560px]">
-        <select name="assigned_to" class="border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white" title="Worker responsible">
-          <option value="">Unassigned</option>
-          <% crew.forEach(c => { %><option value="<%= c.id %>" <%= String(d.assigned_to) === String(c.id) ? 'selected' : '' %>><%= c.full_name %></option><% }); %>
-        </select>
-        <select name="severity" class="border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white">
-          <% ['critical','major','minor'].forEach(s => { %><option value="<%= s %>" <%= d.severity === s ? 'selected' : '' %>><%= s %></option><% }); %>
-        </select>
-        <select name="status" class="border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white">
-          <% ['open','chasing','fixed'].forEach(s => { %><option value="<%= s %>" <%= d.status === s ? 'selected' : '' %>><%= s %></option><% }); %>
-        </select>
-        <input type="date" name="due_date" value="<%= d.due_date || '' %>" class="border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white" title="Due date">
-        <div class="flex gap-1.5">
-          <input type="number" name="cost_estimate" value="<%= d.cost_estimate != null ? d.cost_estimate : '' %>" min="0" step="1" placeholder="$"
-                 class="w-full border border-gray-300 rounded-lg px-2 py-1.5 text-xs bg-white" title="Cost estimate">
-          <button type="submit" class="px-3 py-1.5 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold transition-colors">Save</button>
-        </div>
-      </div>
-    </div>
-  </form>
+  <% defects.forEach(d => { %>
+    <%- include('_defect_row', { d, crew, csrfToken, today, showVehicle: true }) %>
   <% }); %>
   <% if (!defects.length) { %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center text-sm text-gray-400">No defects match — clean fleet.</div>

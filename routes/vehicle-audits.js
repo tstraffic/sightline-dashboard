@@ -62,6 +62,15 @@ const vehicleListStmt = (db) => db.prepare(`
   ORDER BY asset_id
 `).all();
 
+const crewListStmt = (db) => db.prepare(
+  "SELECT id, full_name FROM crew_members WHERE status = 'active' OR status IS NULL ORDER BY full_name"
+).all();
+
+// Open-defect count shown as a badge on the module sub-nav (every page).
+const openDefectCount = (db) => db.prepare(
+  "SELECT COUNT(*) AS n FROM vehicle_defects WHERE status != 'fixed'"
+).get().n;
+
 // ── DASHBOARD — all vehicles + last-audit meta + summary cards ──────
 router.get('/', (req, res) => {
   const db = getDb();
@@ -96,6 +105,7 @@ router.get('/', (req, res) => {
     currentPage: 'vehicle-audits',
     vehicles, cards,
     typeLabels: TYPE_LABELS,
+    vaOpen: cards.openDefects,
     user: req.session.user,
   });
 });
@@ -114,7 +124,9 @@ router.get('/new', (req, res) => {
     title: 'Start Vehicle Audit',
     currentPage: 'vehicle-audits',
     vehicles, vehicle, sections,
+    crew: crewListStmt(db),          // "Fault of…" picker on failed items
     typeLabels: TYPE_LABELS,
+    vaOpen: openDefectCount(db),
     today: todayISO(),
     user: req.session.user,
   });
@@ -139,13 +151,19 @@ router.post('/', photoUpload.any(), (req, res) => {
     if (m) photoByTpl[m[1]] = 'data/uploads/vehicle-audits/' + f.filename;
   }
 
+  // Validate any "fault of" picks against real crew ids once, up front.
+  const crewIds = new Set(db.prepare('SELECT id FROM crew_members').all().map(c => c.id));
   const results = templates.map(t => {
     const raw = String(b['result_' + t.id] || 'na');
     const result = ['pass', 'fail', 'na'].includes(raw) ? raw : 'na';
+    const faultRaw = parseInt(b['fault_' + t.id], 10);
     return {
       tpl: t, result,
       comment: String(b['comment_' + t.id] || '').trim(),
       photo: photoByTpl[String(t.id)] || null,
+      // Optional per-item fault allocation — the auditor can pin a failed
+      // item on a driver right in the audit, or leave it for later.
+      fault: Number.isFinite(faultRaw) && crewIds.has(faultRaw) ? faultRaw : null,
     };
   });
   const criticalFail = results.some(r => r.tpl.is_critical && r.result === 'fail');
@@ -173,15 +191,16 @@ router.post('/', photoUpload.any(), (req, res) => {
       VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const insDefect = db.prepare(`
-      INSERT INTO vehicle_defects (audit_id, vehicle_id, item_label, severity, status, due_date, notes)
-      VALUES (?, ?, ?, ?, 'open', ?, ?)
+      INSERT INTO vehicle_defects (audit_id, vehicle_id, item_label, severity, assigned_to, status, due_date, notes)
+      VALUES (?, ?, ?, ?, ?, 'open', ?, ?)
     `);
     let defects = 0;
     for (const r of results) {
       insItem.run(auditId, r.tpl.id, r.tpl.section, r.tpl.item_label, r.tpl.is_critical, r.result, r.comment, r.photo);
       if (r.result === 'fail') {
         // Failed items are chased to be fixed that week — default due +7 days.
-        insDefect.run(auditId, vehicle.id, r.tpl.item_label, r.tpl.is_critical ? 'critical' : 'major', plusDaysISO(7), r.comment);
+        // Fault (assigned_to) lands straight on the defect when picked in-audit.
+        insDefect.run(auditId, vehicle.id, r.tpl.item_label, r.tpl.is_critical ? 'critical' : 'major', r.fault, plusDaysISO(7), r.comment);
         defects += 1;
       }
     }
@@ -236,12 +255,25 @@ router.get('/defects', (req, res) => {
     ORDER BY ${orderBy}
   `).all(...params);
 
+  // Register-wide pulse for the chips row (unfiltered, so the numbers
+  // stay meaningful while drilling into a single vehicle/worker).
+  const stats = db.prepare(`
+    SELECT
+      SUM(CASE WHEN status = 'open'    THEN 1 ELSE 0 END) AS open,
+      SUM(CASE WHEN status = 'chasing' THEN 1 ELSE 0 END) AS chasing,
+      SUM(CASE WHEN status = 'fixed'   THEN 1 ELSE 0 END) AS fixed,
+      COALESCE(SUM(CASE WHEN status != 'fixed' THEN cost_estimate ELSE 0 END), 0) AS openCost,
+      SUM(CASE WHEN status != 'fixed' AND due_date IS NOT NULL AND due_date < date('now','localtime') THEN 1 ELSE 0 END) AS overdue
+    FROM vehicle_defects
+  `).get();
+
   res.render('vehicle-audits/defects', {
     title: 'Vehicle Defects',
     currentPage: 'vehicle-audits',
-    defects, f,
+    defects, f, stats,
     vehicles: vehicleListStmt(db),
-    crew: db.prepare("SELECT id, full_name FROM crew_members WHERE status = 'active' OR status IS NULL ORDER BY full_name").all(),
+    crew: crewListStmt(db),
+    vaOpen: (stats.open || 0) + (stats.chasing || 0),
     today: todayISO(),
     user: req.session.user,
   });
@@ -288,7 +320,7 @@ router.get('/accountability', (req, res) => {
     const g = byKey.get(key);
     g.defects.push(d);
     g.totalCost += d.cost_estimate || 0;
-    if (d.status !== 'fixed') g.open += 1;
+    if (d.status !== 'fixed') { g.open += 1; g.openCost = (g.openCost || 0) + (d.cost_estimate || 0); }
   }
   // Named workers first (sorted by cost owed), Unassigned bucket last.
   groups.sort((a, b) => (a.workerId ? 0 : 1) - (b.workerId ? 0 : 1) || b.totalCost - a.totalCost);
@@ -297,6 +329,7 @@ router.get('/accountability', (req, res) => {
     title: 'Defect Accountability',
     currentPage: 'vehicle-audits',
     groups,
+    vaOpen: openDefectCount(db),
     user: req.session.user,
   });
 });
@@ -323,7 +356,10 @@ router.get('/:id(\\d+)', (req, res) => {
     audit,
     sections: groupBySection(items),
     defects,
+    crew: crewListStmt(db),          // fault can be (re)allocated on past audits
     typeLabels: TYPE_LABELS,
+    vaOpen: openDefectCount(db),
+    today: todayISO(),
     user: req.session.user,
   });
 });
