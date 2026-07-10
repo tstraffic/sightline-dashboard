@@ -1,0 +1,58 @@
+<% locals.currentPage = 'vehicle-audits' %>
+<%
+  const fmtD = s => { if (!s) return '—'; const d = new Date(s + 'T00:00:00'); return isNaN(d) ? s : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }); };
+  const AUD = n => (n == null || isNaN(Number(n))) ? '$0' : '$' + Number(n).toLocaleString('en-AU', { maximumFractionDigits: 0 });
+  const SEV_CHIP = {
+    critical: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+    major:    'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    minor:    'bg-gray-50 text-gray-500 ring-1 ring-gray-200',
+  };
+  const initials = n => (n || '?').split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase();
+%>
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Defect Accountability</h1>
+    <p class="text-gray-500 text-sm mt-0.5">Damage grouped by responsible worker &middot; cross-reference against monthly audits</p>
+  </div>
+  <a href="/vehicle-audits/defects" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors">&larr; Defects</a>
+</div>
+
+<% if (!groups.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center text-sm text-gray-400">No defects recorded yet.</div>
+<% } %>
+
+<% groups.forEach(g => { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
+  <div class="px-4 py-3 border-b border-gray-100 bg-gray-50/60 flex items-center gap-3">
+    <span class="w-8 h-8 rounded-full bg-brand-600/10 text-brand-700 flex items-center justify-center text-xs font-bold"><%= initials(g.worker) %></span>
+    <div class="flex-1 min-w-0">
+      <p class="text-sm font-bold text-gray-900"><%= g.worker %></p>
+      <p class="text-[11px] text-gray-400"><%= g.defects.length %> defect<%= g.defects.length === 1 ? '' : 's' %> · <%= g.open %> open</p>
+    </div>
+    <div class="text-right">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Cost</p>
+      <p class="text-lg font-bold <%= g.totalCost > 0 ? 'text-red-600' : 'text-gray-300' %>"><%= AUD(g.totalCost) %></p>
+    </div>
+  </div>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <tbody class="divide-y divide-gray-100">
+        <% g.defects.forEach(d => { %>
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-2.5">
+            <a href="/fleet/<%= d.vehicle_id %>?tab=audits" class="font-semibold text-gray-900 hover:text-brand-600"><%= d.asset_id %></a>
+            <span class="text-gray-600 ml-1"><%= d.item_label %></span>
+          </td>
+          <td class="px-4 py-2.5 w-24"><span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <%= SEV_CHIP[d.severity] %>"><%= d.severity %></span></td>
+          <td class="px-4 py-2.5 w-24 text-xs text-gray-500 capitalize"><%= d.status %></td>
+          <td class="px-4 py-2.5 w-28 text-xs text-gray-500">Due <%= fmtD(d.due_date) %></td>
+          <td class="px-4 py-2.5 w-24 text-right font-medium text-gray-800"><%= d.cost_estimate != null ? AUD(d.cost_estimate) : '—' %></td>
+        </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% }); %>

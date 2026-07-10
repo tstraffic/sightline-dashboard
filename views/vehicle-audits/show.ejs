@@ -1,0 +1,134 @@
+<% locals.currentPage = 'vehicle-audits' %>
+<%
+  const fmtD = s => { if (!s) return '—'; const d = new Date(s + 'T00:00:00'); return isNaN(d) ? s : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }); };
+  const AUD = n => (n == null || isNaN(Number(n))) ? '—' : '$' + Number(n).toLocaleString('en-AU', { maximumFractionDigits: 0 });
+  const RESULT_CHIP = {
+    pass: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
+    fail: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+    na:   'bg-gray-50 text-gray-500 ring-1 ring-gray-200',
+  };
+  const SEV_CHIP = {
+    critical: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+    major:    'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    minor:    'bg-gray-50 text-gray-500 ring-1 ring-gray-200',
+  };
+%>
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">
+      Audit — <a href="/fleet/<%= audit.vehicle_id %>" class="text-brand-600 hover:text-brand-500"><%= audit.asset_id %></a>
+    </h1>
+    <p class="text-gray-500 text-sm mt-0.5">
+      <%= [audit.make, audit.model].filter(Boolean).join(' ') %><%= audit.rego ? ' · ' + audit.rego : '' %>
+      · <%= typeLabels[audit.traffic_class] || audit.traffic_class || 'Unclassified' %>
+    </p>
+  </div>
+  <div class="flex items-center gap-2">
+    <a href="/fleet/<%= audit.vehicle_id %>?tab=audits" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors">Vehicle Profile</a>
+    <a href="/vehicle-audits" class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors">All Audits</a>
+  </div>
+</div>
+
+<!-- Result banner -->
+<div class="rounded-xl p-4 mb-5 border <%= audit.overall_result === 'pass' ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200' %>">
+  <div class="flex items-center gap-3">
+    <% if (audit.overall_result === 'pass') { %>
+      <svg class="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <p class="text-sm font-bold text-emerald-800">PASS — roadworthy at time of audit</p>
+    <% } else { %>
+      <svg class="w-6 h-6 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <p class="text-sm font-bold text-red-800">FAIL — critical item(s) failed<%= audit.vehicle_status === 'Off-Road' ? ' · vehicle is Off-Road' : '' %></p>
+    <% } %>
+  </div>
+</div>
+
+<!-- Meta -->
+<div class="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-5">
+  <% const meta = (label, val) => { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"><%= label %></p>
+      <p class="text-sm font-semibold text-gray-900 mt-0.5"><%= val || '—' %></p>
+    </div>
+  <% } %>
+  <%- meta('Date', fmtD(audit.audit_date)) %>
+  <%- meta('Type', audit.audit_type === 'site' ? 'Site' : 'Yard') %>
+  <%- meta('Auditor', audit.auditor) %>
+  <%- meta('Location', audit.location) %>
+  <%- meta('Signed By', audit.signed_by) %>
+</div>
+
+<% if (audit.notes) { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-5">
+  <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</p>
+  <p class="text-sm text-gray-700 whitespace-pre-line"><%= audit.notes %></p>
+</div>
+<% } %>
+
+<!-- Item results by section -->
+<% sections.forEach(sec => { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
+  <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest"><%= sec.section %></h2>
+  </div>
+  <div class="divide-y divide-gray-100">
+    <% sec.items.forEach(it => { %>
+    <div class="px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2 <%= it.result === 'fail' ? 'bg-red-50/50' : '' %>">
+      <div class="flex-1 min-w-0">
+        <span class="text-sm text-gray-800"><%= it.item_label %></span>
+        <% if (it.is_critical) { %><span class="ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600 ring-1 ring-red-600/20 uppercase align-middle">Critical</span><% } %>
+        <% if (it.comment) { %><div class="text-xs text-gray-500 mt-0.5"><%= it.comment %></div><% } %>
+      </div>
+      <div class="flex items-center gap-2 self-start sm:self-auto">
+        <% if (it.photo_path) { %>
+          <a href="/<%= it.photo_path %>" target="_blank" class="inline-flex items-center gap-1 text-xs font-medium text-brand-600 hover:text-brand-500">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.66-.9l.82-1.2A2 2 0 0110.07 4h3.86a2 2 0 011.66.9l.82 1.2a2 2 0 001.66.9H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+            Photo
+          </a>
+        <% } %>
+        <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <%= RESULT_CHIP[it.result] || RESULT_CHIP.na %>"><%= it.result %></span>
+      </div>
+    </div>
+    <% }); %>
+  </div>
+</div>
+<% }); %>
+
+<!-- Defects raised by this audit -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
+  <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Defects Raised</h2>
+    <a href="/vehicle-audits/defects?vehicle=<%= audit.vehicle_id %>" class="text-xs font-medium text-brand-600 hover:text-brand-500">Manage in Defects &rarr;</a>
+  </div>
+  <% if (!defects.length) { %>
+    <p class="px-4 py-6 text-center text-sm text-gray-400">No defects — clean audit.</p>
+  <% } else { %>
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-200">
+          <th class="px-4 py-2.5">Item</th>
+          <th class="px-4 py-2.5">Severity</th>
+          <th class="px-4 py-2.5">Assigned To</th>
+          <th class="px-4 py-2.5">Status</th>
+          <th class="px-4 py-2.5">Due</th>
+          <th class="px-4 py-2.5 text-right">Est. Cost</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        <% defects.forEach(d => { %>
+        <tr>
+          <td class="px-4 py-2.5 text-gray-800"><%= d.item_label %><% if (d.notes) { %><div class="text-xs text-gray-400"><%= d.notes %></div><% } %></td>
+          <td class="px-4 py-2.5"><span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <%= SEV_CHIP[d.severity] %>"><%= d.severity %></span></td>
+          <td class="px-4 py-2.5 text-gray-600"><%= d.worker_name || 'Unassigned' %></td>
+          <td class="px-4 py-2.5 text-gray-600 capitalize"><%= d.status %></td>
+          <td class="px-4 py-2.5 text-gray-600"><%= fmtD(d.due_date) %></td>
+          <td class="px-4 py-2.5 text-right text-gray-800 font-medium"><%= AUD(d.cost_estimate) %></td>
+        </tr>
+        <% }); %>
+      </tbody>
+    </table>
+  </div>
+  <% } %>
+</div>

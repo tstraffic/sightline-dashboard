@@ -99,6 +99,11 @@
     Equipment Counts
     <% if (equipmentChecks.length) { %><span class="v-tab-count"><%= equipmentChecks.length %></span><% } %>
   </button>
+  <button type="button" class="v-tab" data-v-tab="audits">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    Audits
+    <% if (typeof audits !== 'undefined' && audits.length) { %><span class="v-tab-count"><%= audits.length %></span><% } %>
+  </button>
 </nav>
 
 <!-- ============================================================
@@ -385,6 +390,69 @@
                 <% }) %>
               </div>
             <% } %>
+          </li>
+        <% }) %>
+      </ul>
+    <% } %>
+  </div>
+</section>
+
+<!-- ============================================================
+     TAB: AUDIT HISTORY — vehicle_audits keyed on this vehicle's PK.
+     Each audit expands in place to item-level results; the "Full
+     record" link opens /vehicle-audits/:id.
+     ============================================================ -->
+<section class="v-pane" data-v-pane="audits" hidden>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+      <div>
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Audit History</h2>
+        <p class="text-[11px] text-gray-500 mt-0.5">Monthly yard &amp; site roadworthiness audits for <strong><%= vehicle.asset_id %></strong>.</p>
+      </div>
+      <a href="/vehicle-audits/new?vehicle_id=<%= vehicle.id %>" class="inline-flex items-center px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition-colors whitespace-nowrap">
+        <svg class="w-3.5 h-3.5 mr-1.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+        Start Audit
+      </a>
+    </div>
+    <% if (typeof audits === 'undefined' || !audits.length) { %>
+      <div class="p-6 text-center text-sm text-gray-500">
+        No audits recorded for this vehicle yet.<br>
+        <span class="text-[12px] text-gray-400">Run the first one from Safety &rarr; Vehicle Audits, or the button above.</span>
+      </div>
+    <% } else { %>
+      <ul class="divide-y divide-gray-100">
+        <% audits.forEach(function (a) { %>
+          <li>
+            <details class="group">
+              <summary class="px-4 py-3 flex flex-wrap items-center gap-2.5 cursor-pointer hover:bg-gray-50 list-none [&::-webkit-details-marker]:hidden">
+                <svg class="w-3.5 h-3.5 text-gray-400 transition-transform group-open:rotate-90" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                <span class="text-sm font-semibold text-gray-900"><%= formatDate(a.audit_date) %></span>
+                <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <%= a.overall_result === 'pass' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-red-50 text-red-700 ring-1 ring-red-600/20' %>"><%= a.overall_result %></span>
+                <span class="text-[11px] text-gray-500 uppercase font-bold"><%= a.audit_type %></span>
+                <% if (a.auditor) { %><span class="text-[11px] text-gray-500">by <%= a.auditor %></span><% } %>
+                <% if (a.fail_count) { %><span class="text-[11px] font-bold text-red-600"><%= a.fail_count %> failed item<%= a.fail_count === 1 ? '' : 's' %></span><% } %>
+                <% if (a.open_defects) { %><span class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 uppercase"><%= a.open_defects %> open defect<%= a.open_defects === 1 ? '' : 's' %></span><% } %>
+                <span class="flex-1"></span>
+                <a href="/vehicle-audits/<%= a.id %>" class="text-xs font-medium text-brand-600 hover:text-brand-500" onclick="event.stopPropagation()">Full record &rarr;</a>
+              </summary>
+              <div class="px-4 pb-3 pl-10">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-0.5">
+                  <% (a.items || []).forEach(function (it) { %>
+                    <div class="flex items-center gap-2 py-1 text-[12px] <%= it.result === 'fail' ? 'text-red-700 font-medium' : 'text-gray-600' %>">
+                      <% if (it.result === 'pass') { %>
+                        <svg class="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                      <% } else if (it.result === 'fail') { %>
+                        <svg class="w-3.5 h-3.5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                      <% } else { %>
+                        <span class="w-3.5 h-3.5 flex-shrink-0 text-center text-[9px] font-bold text-gray-300 leading-[14px]">N/A</span>
+                      <% } %>
+                      <span class="min-w-0"><%= it.item_label %><% if (it.comment) { %> <span class="text-gray-400 font-normal">— <%= it.comment %></span><% } %></span>
+                      <% if (it.photo_path) { %><a href="/<%= it.photo_path %>" target="_blank" class="text-brand-600 hover:text-brand-500 flex-shrink-0" title="Photo"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 9a2 2 0 012-2h.93a2 2 0 001.66-.9l.82-1.2A2 2 0 0110.07 4h3.86a2 2 0 011.66.9l.82 1.2a2 2 0 001.66.9H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg></a><% } %>
+                    </div>
+                  <% }) %>
+                </div>
+              </div>
+            </details>
           </li>
         <% }) %>
       </ul>

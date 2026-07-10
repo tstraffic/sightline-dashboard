@@ -330,6 +330,8 @@ app.get('/safety', requireLogin, (req, res) => res.redirect('/safety-today'));
 // isn't captured by the /audits/:id show route.
 app.use('/audits/reports', requireLogin, requirePermission('audits'), require('./routes/audit-reports'));
 app.use('/audits', requireLogin, requirePermission('audits'), require('./routes/audits'));
+// Vehicle Audits (Safety) — yard/site roadworthiness checks against the fleet register
+app.use('/vehicle-audits', requireLogin, requirePermission('audits'), require('./routes/vehicle-audits'));
 // Central cross-audit / cross-incident open-actions register
 app.use('/actions', requireLogin, requirePermission('incidents'), require('./routes/actions'));
 // Crew ↔ HR employee linking (bridge for per-person audit tagging)

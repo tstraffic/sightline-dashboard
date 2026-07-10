@@ -114,7 +114,7 @@ const SERVICE_TYPES = [
   'Other',
 ];
 
-const VEHICLE_STATUSES = ['Active', 'Spare', 'Retired', 'Verify'];
+const VEHICLE_STATUSES = ['Active', 'Spare', 'Retired', 'Verify', 'Off-Road'];
 const VEHICLE_TYPES   = ['Light Vehicle', 'Heavy Vehicle'];
 
 // Traffic classification — what a vehicle counts as when put on a booking.
@@ -574,7 +574,22 @@ router.get('/:id', (req, res) => {
   services.forEach(s => { s.invoices = invStmt.all(s.id); });
 
   const { incidents, equipmentChecks } = lookupRelatedReports(db, vehicle);
-  const initialTab = ['overview','service','incidents','equipment'].includes(req.query.tab) ? req.query.tab : 'overview';
+  const initialTab = ['overview','service','incidents','equipment','audits'].includes(req.query.tab) ? req.query.tab : 'overview';
+
+  // Audit History — vehicle_audits keyed on this vehicle's PK, each with
+  // its item-level results so the tab can expand an audit in place.
+  let audits = [];
+  try {
+    audits = db.prepare(`
+      SELECT a.*,
+        (SELECT COUNT(*) FROM vehicle_audit_items i WHERE i.audit_id = a.id AND i.result = 'fail') AS fail_count,
+        (SELECT COUNT(*) FROM vehicle_defects d WHERE d.audit_id = a.id AND d.status != 'fixed') AS open_defects
+      FROM vehicle_audits a WHERE a.vehicle_id = ?
+      ORDER BY a.audit_date DESC, a.id DESC
+    `).all(vehicle.id);
+    const itemsStmt = db.prepare('SELECT section, item_label, is_critical, result, comment, photo_path FROM vehicle_audit_items WHERE audit_id = ? ORDER BY id');
+    audits.forEach(a => { a.items = itemsStmt.all(a.id); });
+  } catch (e) { /* pre-migration-314 DB — tab shows empty state */ }
 
   res.render('fleet/detail', {
     title: `${vehicle.asset_id} — ${vehicle.make || ''} ${vehicle.model || ''}`.trim(),
@@ -583,6 +598,7 @@ router.get('/:id', (req, res) => {
     services,
     incidents,
     equipmentChecks,
+    audits,
     initialTab,
     serviceTypes: SERVICE_TYPES,
     trafficClasses: TRAFFIC_CLASSES,

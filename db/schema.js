@@ -14030,6 +14030,129 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 313 error:', e.message); }
   }
 
+  // 314 — Vehicle Audits (Safety). Monthly yard/site roadworthiness audits
+  // against the EXISTING fleet register: every FK points at vehicles(id) —
+  // no parallel vehicle table. Checklists are table-driven per traffic_class
+  // ('common' rows apply to every type). NOTE: the names checklist_templates,
+  // audits and defects were already taken by the Forms, Site-Audits and Jobs
+  // modules, hence the vehicle_ prefix throughout.
+  if (!isMigrationApplied.get(314)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS vehicle_checklist_templates (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          vehicle_type TEXT NOT NULL,          -- 'common' | vehicles.traffic_class ('ute','vms','pod','tma',...)
+          section TEXT NOT NULL,
+          item_label TEXT NOT NULL,
+          is_critical INTEGER NOT NULL DEFAULT 0,   -- critical fail = overall fail + off-road prompt
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          active INTEGER NOT NULL DEFAULT 1
+        );
+        CREATE TABLE IF NOT EXISTS vehicle_audits (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+          auditor TEXT NOT NULL DEFAULT '',
+          audit_type TEXT NOT NULL DEFAULT 'yard' CHECK(audit_type IN ('yard','site')),
+          audit_date DATE NOT NULL,
+          location TEXT DEFAULT '',
+          overall_result TEXT NOT NULL DEFAULT 'pass' CHECK(overall_result IN ('pass','fail')),
+          notes TEXT DEFAULT '',
+          signed_by TEXT DEFAULT '',
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS vehicle_audit_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          audit_id INTEGER NOT NULL REFERENCES vehicle_audits(id) ON DELETE CASCADE,
+          template_item_id INTEGER REFERENCES vehicle_checklist_templates(id),
+          section TEXT DEFAULT '',             -- snapshot: history survives template edits
+          item_label TEXT NOT NULL,
+          is_critical INTEGER NOT NULL DEFAULT 0,
+          result TEXT NOT NULL CHECK(result IN ('pass','fail','na')),
+          comment TEXT DEFAULT '',
+          photo_path TEXT
+        );
+        CREATE TABLE IF NOT EXISTS vehicle_defects (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          audit_id INTEGER REFERENCES vehicle_audits(id) ON DELETE SET NULL,
+          vehicle_id INTEGER NOT NULL REFERENCES vehicles(id) ON DELETE CASCADE,
+          item_label TEXT NOT NULL,
+          severity TEXT NOT NULL DEFAULT 'minor' CHECK(severity IN ('critical','major','minor')),
+          assigned_to INTEGER REFERENCES crew_members(id),   -- worker responsible for the damage
+          status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','chasing','fixed')),
+          due_date DATE,
+          cost_estimate REAL,
+          resolved_date DATE,
+          notes TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_vaudits_vehicle ON vehicle_audits(vehicle_id);
+        CREATE INDEX IF NOT EXISTS idx_vaudit_items_audit ON vehicle_audit_items(audit_id);
+        CREATE INDEX IF NOT EXISTS idx_vdefects_vehicle ON vehicle_defects(vehicle_id);
+        CREATE INDEX IF NOT EXISTS idx_vdefects_status ON vehicle_defects(status);
+      `);
+
+      // Seed the starting checklists — tight, road-legal essentials only.
+      const seedCount = db.prepare('SELECT COUNT(*) AS n FROM vehicle_checklist_templates').get().n;
+      if (seedCount === 0) {
+        const ins = db.prepare('INSERT INTO vehicle_checklist_templates (vehicle_type, section, item_label, is_critical, sort_order) VALUES (?, ?, ?, ?, ?)');
+        let ord = 0;
+        const seed = (type, section, label, critical) => ins.run(type, section, label, critical ? 1 : 0, ++ord);
+
+        // ── Common — every vehicle type ──
+        seed('common', 'Registration & Compliance', 'Registration current', true);
+        seed('common', 'Registration & Compliance', 'CTP / insurance current', true);
+        seed('common', 'Registration & Compliance', 'Service / logbook due check', false);
+        seed('common', 'Roadworthiness', 'Tyres — tread depth & pressure (incl. spare)', true);
+        seed('common', 'Roadworthiness', 'Brakes incl. park brake', true);
+        seed('common', 'Roadworthiness', 'Lights — head / tail / indicators / brake / reverse', true);
+        seed('common', 'Roadworthiness', 'Horn', false);
+        seed('common', 'Roadworthiness', 'Mirrors', false);
+        seed('common', 'Roadworthiness', 'Windscreen & wipers', false);
+        seed('common', 'Roadworthiness', 'Seatbelts', true);
+        seed('common', 'Roadworthiness', 'Fluid levels — oil / coolant / washer', false);
+        seed('common', 'Safety Equipment', 'Fire extinguisher charged & in date', false);
+        seed('common', 'Safety Equipment', 'First aid kit stocked', false);
+        seed('common', 'Safety Equipment', 'Beacon / amber lights', true);
+        seed('common', 'Safety Equipment', 'Reversing camera / alarm', false);
+        seed('common', 'General', 'Body damage walk-around', false);
+        seed('common', 'General', 'Fuel card present', false);
+
+        // ── Traffic Ute ──
+        seed('ute', 'Traffic Gear', 'Sign frames secure & complete', false);
+        seed('ute', 'Traffic Gear', 'Stop/slow bats present & serviceable', false);
+        seed('ute', 'Traffic Gear', 'Cone stock on board', false);
+        seed('ute', 'Traffic Gear', 'PPE stock — vests / helmets', false);
+        seed('ute', 'Traffic Gear', 'Witches hats condition', false);
+
+        // ── VMS Ute ──
+        seed('vms', 'VMS Board', 'VMS board display test — all pixels', true);
+        seed('vms', 'VMS Board', 'Solar / battery charge level', false);
+        seed('vms', 'VMS Board', 'Controller / remote pairing works', false);
+        seed('vms', 'VMS Board', 'Board mounting secure', true);
+
+        // ── TMA ──
+        seed('tma', 'Attenuator & Rig', 'Attenuator condition + deployment test', true);
+        seed('tma', 'Attenuator & Rig', 'Arrow board function', true);
+        seed('tma', 'Attenuator & Rig', 'Hydraulics — no leaks, full travel', false);
+        seed('tma', 'Attenuator & Rig', 'Reflective / chevron panels intact', false);
+        seed('tma', 'Attenuator & Rig', 'Hazard tag / certification current', true);
+
+        // ── POD Truck ──
+        seed('pod', 'Crane & Load', 'Crane / hiab function test', true);
+        seed('pod', 'Crane & Load', 'Load restraint gear — straps / chains', true);
+        seed('pod', 'Crane & Load', 'Tailgate / gates secure', false);
+        seed('pod', 'Crane & Load', 'Tie-down points condition', false);
+        seed('pod', 'Crane & Load', 'Load rating plate legible', false);
+        seed('pod', 'Crane & Load', 'Tail lift operation', false);
+        console.log('Migration 314: seeded ' + ord + ' checklist template items');
+      }
+
+      recordMigration.run(314, 'vehicle audits: checklist templates + audits + items + defects (FK vehicles.id)');
+      console.log('Migration 314 applied');
+    } catch (e) { console.error('Migration 314 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

@@ -1,0 +1,125 @@
+<% locals.currentPage = 'vehicle-audits' %>
+<%
+  const AUD = n => (n == null || isNaN(Number(n))) ? '$0' : '$' + Number(n).toLocaleString('en-AU', { maximumFractionDigits: 0 });
+  const fmtD = s => { if (!s) return '—'; const d = new Date(s + 'T00:00:00'); return isNaN(d) ? s : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }); };
+%>
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Vehicle Audits</h1>
+    <p class="text-gray-500 text-sm mt-0.5">Monthly yard &amp; site roadworthiness checks &middot; sourced from the Vehicles register</p>
+  </div>
+  <div class="flex items-center gap-2 flex-wrap">
+    <a href="/vehicle-audits/defects" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      Defects
+    </a>
+    <a href="/vehicle-audits/accountability" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors">
+      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
+      Accountability
+    </a>
+    <a href="/vehicle-audits/new" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
+      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Start Audit
+    </a>
+  </div>
+</div>
+
+<!-- Summary cards -->
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Vehicles</p>
+    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= cards.totalVehicles %></p>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+    <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Audited This Month</p>
+    <p class="text-xl font-bold <%= cards.auditedThisMonth > 0 ? 'text-emerald-600' : 'text-gray-300' %> mt-0.5"><%= cards.auditedThisMonth %></p>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+    <p class="text-[10px] font-bold text-red-500 uppercase tracking-widest">Off-Road</p>
+    <p class="text-xl font-bold <%= cards.offRoad > 0 ? 'text-red-600' : 'text-gray-300' %> mt-0.5"><%= cards.offRoad %></p>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+    <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Open Defects</p>
+    <p class="text-xl font-bold <%= cards.openDefects > 0 ? 'text-amber-600' : 'text-gray-300' %> mt-0.5"><%= cards.openDefects %></p>
+  </div>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 col-span-2 sm:col-span-1">
+    <p class="text-[10px] font-bold text-brand-500 uppercase tracking-widest">Open Defect Cost</p>
+    <p class="text-xl font-bold text-brand-600 mt-0.5"><%= AUD(cards.openDefectCost) %></p>
+  </div>
+</div>
+
+<!-- Vehicle list with last-audit meta -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest border-b border-gray-200">
+          <th class="px-4 py-3">Vehicle</th>
+          <th class="px-4 py-3 hidden sm:table-cell">Type</th>
+          <th class="px-4 py-3 hidden md:table-cell">Status</th>
+          <th class="px-4 py-3">Last Audit</th>
+          <th class="px-4 py-3">Result</th>
+          <th class="px-4 py-3 hidden sm:table-cell">Days Since</th>
+          <th class="px-4 py-3 hidden md:table-cell">Open Defects</th>
+          <th class="px-4 py-3 text-right">Actions</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        <% vehicles.forEach(v => {
+          const overdue = v.last_audit_date == null || (v.days_since != null && v.days_since > 30);
+        %>
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3">
+            <a href="/fleet/<%= v.id %>" class="font-semibold text-gray-900 hover:text-brand-600"><%= v.asset_id %></a>
+            <div class="text-[11px] text-gray-400"><%= [v.make, v.model].filter(Boolean).join(' ') %><%= v.rego ? ' · ' + v.rego : '' %></div>
+          </td>
+          <td class="px-4 py-3 hidden sm:table-cell">
+            <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 ring-1 ring-gray-200"><%= typeLabels[v.traffic_class] || v.traffic_class || '—' %></span>
+          </td>
+          <td class="px-4 py-3 hidden md:table-cell">
+            <% if (v.status === 'Off-Road') { %>
+              <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 ring-1 ring-red-600/20">Off-Road</span>
+            <% } else { %>
+              <span class="text-xs text-gray-500"><%= v.status %></span>
+            <% } %>
+          </td>
+          <td class="px-4 py-3 text-gray-700"><%= fmtD(v.last_audit_date) %><% if (v.last_audit_type) { %> <span class="text-[10px] text-gray-400 uppercase"><%= v.last_audit_type %></span><% } %></td>
+          <td class="px-4 py-3">
+            <% if (!v.last_audit_result) { %>
+              <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-50 text-gray-400 ring-1 ring-gray-200">Never audited</span>
+            <% } else if (v.last_audit_result === 'pass') { %>
+              <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20">Pass</span>
+            <% } else { %>
+              <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 ring-1 ring-red-600/20">Fail</span>
+            <% } %>
+          </td>
+          <td class="px-4 py-3 hidden sm:table-cell">
+            <% if (v.days_since == null) { %>
+              <span class="text-gray-300">—</span>
+            <% } else { %>
+              <span class="<%= overdue ? 'text-red-600 font-bold' : 'text-gray-600' %>"><%= v.days_since %>d</span>
+              <% if (overdue) { %><span class="ml-1 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-700 ring-1 ring-red-600/20 uppercase">Overdue</span><% } %>
+            <% } %>
+          </td>
+          <td class="px-4 py-3 hidden md:table-cell">
+            <% if (v.open_defects > 0) { %>
+              <a href="/vehicle-audits/defects?vehicle=<%= v.id %>" class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 hover:bg-amber-100"><%= v.open_defects %> open</a>
+            <% } else { %><span class="text-gray-300">0</span><% } %>
+          </td>
+          <td class="px-4 py-3 text-right whitespace-nowrap">
+            <% if (v.last_audit_id) { %>
+              <a href="/vehicle-audits/<%= v.last_audit_id %>" class="text-xs font-medium text-gray-500 hover:text-gray-800 mr-3">View last</a>
+            <% } %>
+            <a href="/vehicle-audits/new?vehicle_id=<%= v.id %>" class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold <%= overdue ? 'bg-brand-600 text-white hover:bg-brand-500' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50' %> transition-colors">Start Audit</a>
+          </td>
+        </tr>
+        <% }); %>
+        <% if (!vehicles.length) { %>
+        <tr><td colspan="8" class="px-4 py-10 text-center text-sm text-gray-400">No vehicles in the register yet — add them under <a href="/fleet" class="text-brand-600 font-medium">Vehicles</a>.</td></tr>
+        <% } %>
+      </tbody>
+    </table>
+  </div>
+</div>

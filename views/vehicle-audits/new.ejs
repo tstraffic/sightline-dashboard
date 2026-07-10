@@ -1,0 +1,214 @@
+<% locals.currentPage = 'vehicle-audits' %>
+
+<!-- Header -->
+<div class="flex items-center justify-between gap-3 mb-5">
+  <div>
+    <h1 class="text-2xl font-bold text-gray-900">Start Audit</h1>
+    <p class="text-gray-500 text-sm mt-0.5"><%= vehicle ? (vehicle.asset_id + ' · ' + (typeLabels[vehicle.traffic_class] || 'Unclassified')) : 'Pick a vehicle from the fleet register' %></p>
+  </div>
+  <a href="/vehicle-audits" class="text-sm font-medium text-gray-500 hover:text-gray-800">&larr; Back</a>
+</div>
+
+<!-- Step 1: vehicle picker (sourced from the existing vehicles table) -->
+<form method="GET" action="/vehicle-audits/new" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-5">
+  <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5" for="va-vehicle">Vehicle</label>
+  <div class="flex flex-col sm:flex-row gap-2">
+    <select id="va-vehicle" name="vehicle_id" required
+            class="flex-1 border border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+      <option value="">Select a vehicle…</option>
+      <% vehicles.forEach(v => { %>
+        <option value="<%= v.id %>" <%= vehicle && vehicle.id === v.id ? 'selected' : '' %>>
+          <%= v.asset_id %> — <%= [v.make, v.model].filter(Boolean).join(' ') %><%= v.rego ? ' (' + v.rego + ')' : '' %> · <%= typeLabels[v.traffic_class] || 'Unclassified' %>
+        </option>
+      <% }); %>
+    </select>
+    <button type="submit" class="inline-flex items-center justify-center px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Load Checklist</button>
+  </div>
+</form>
+
+<% if (vehicle && sections.length) { %>
+<form method="POST" action="/vehicle-audits" enctype="multipart/form-data" id="va-form" class="pb-24">
+  <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+  <input type="hidden" name="vehicle_id" value="<%= vehicle.id %>">
+
+  <!-- Audit meta -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-5 grid grid-cols-2 sm:grid-cols-4 gap-3">
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Audit Type</label>
+      <select name="audit_type" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+        <option value="yard">Yard</option>
+        <option value="site">Site</option>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+      <input type="date" name="audit_date" value="<%= today %>" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Auditor</label>
+      <input type="text" name="auditor" value="<%= user && user.full_name || '' %>" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" placeholder="Name">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Location</label>
+      <input type="text" name="location" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" placeholder="Yard / site name">
+    </div>
+  </div>
+
+  <!-- Checklist sections -->
+  <% sections.forEach(sec => { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
+    <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest"><%= sec.section %></h2>
+      <span class="text-[10px] text-gray-400 font-medium" data-sec-count><%= sec.items.length %> items</span>
+    </div>
+    <div class="divide-y divide-gray-100">
+      <% sec.items.forEach(it => { %>
+      <div class="va-item px-4 py-3" data-item-id="<%= it.id %>" data-critical="<%= it.is_critical ? '1' : '0' %>">
+        <div class="flex flex-col sm:flex-row sm:items-center gap-2.5">
+          <div class="flex-1 min-w-0">
+            <span class="text-sm font-medium text-gray-800"><%= it.item_label %></span>
+            <% if (it.is_critical) { %>
+              <span class="ml-1.5 inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-red-50 text-red-600 ring-1 ring-red-600/20 uppercase align-middle" title="Failing this item fails the audit and prompts off-road">Critical</span>
+            <% } %>
+          </div>
+          <!-- Segmented pass/fail/na — big tap targets for phones -->
+          <div class="va-seg inline-flex rounded-lg border border-gray-300 overflow-hidden self-start" role="group">
+            <label class="va-seg-btn va-seg-pass">
+              <input type="radio" name="result_<%= it.id %>" value="pass" class="sr-only">Pass
+            </label>
+            <label class="va-seg-btn va-seg-fail">
+              <input type="radio" name="result_<%= it.id %>" value="fail" class="sr-only">Fail
+            </label>
+            <label class="va-seg-btn va-seg-na">
+              <input type="radio" name="result_<%= it.id %>" value="na" class="sr-only">N/A
+            </label>
+          </div>
+        </div>
+        <!-- Fail details: comment + photo, revealed when Fail is picked -->
+        <div class="va-fail-extra mt-2.5 hidden">
+          <div class="flex flex-col sm:flex-row gap-2">
+            <input type="text" name="comment_<%= it.id %>" placeholder="What's wrong? (shows on the defect)"
+                   class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
+            <label class="inline-flex items-center gap-1.5 px-3 py-2 border border-dashed border-gray-300 rounded-lg text-xs font-medium text-gray-500 hover:border-brand-400 hover:text-brand-600 cursor-pointer self-start">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.66-.9l.82-1.2A2 2 0 0110.07 4h3.86a2 2 0 011.66.9l.82 1.2a2 2 0 001.66.9H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"/><circle cx="12" cy="13" r="3"/></svg>
+              <span data-photo-label>Photo</span>
+              <input type="file" name="photo_<%= it.id %>" accept="image/*" capture="environment" class="hidden">
+            </label>
+          </div>
+        </div>
+      </div>
+      <% }); %>
+    </div>
+  </div>
+  <% }); %>
+
+  <!-- Notes + sign-off -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</label>
+      <textarea name="notes" rows="2" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" placeholder="Anything else worth recording"></textarea>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Signed By</label>
+      <input type="text" name="signed_by" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" placeholder="Driver / yard manager">
+    </div>
+  </div>
+
+  <!-- Critical-fail banner (hidden until a critical item fails) -->
+  <div id="va-critical-banner" class="hidden bg-red-50 border border-red-200 rounded-xl p-4 mb-4">
+    <div class="flex items-start gap-3">
+      <svg class="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+      <div class="flex-1">
+        <p class="text-sm font-bold text-red-800">Critical item failed — this audit will be recorded as a FAIL.</p>
+        <label class="mt-2 inline-flex items-center gap-2 text-sm font-medium text-red-800 cursor-pointer">
+          <input type="checkbox" name="set_off_road" value="1" checked class="rounded border-red-300 text-red-600 focus:ring-red-500">
+          Take <%= vehicle.asset_id %> off the road until fixed
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sticky submit bar — thumb-reachable on a phone in the yard -->
+  <div class="fixed bottom-0 left-0 right-0 lg:left-[240px] bg-white/90 backdrop-blur border-t border-gray-200 px-4 py-3 z-40">
+    <div class="max-w-5xl mx-auto flex items-center justify-between gap-3">
+      <div class="text-xs text-gray-500"><span id="va-progress" class="font-bold text-gray-800">0</span> / <span id="va-total"></span> answered</div>
+      <div class="flex items-center gap-2">
+        <button type="button" id="va-all-pass" class="px-3 py-2 rounded-lg border border-gray-300 bg-white text-xs font-semibold text-gray-600 hover:bg-gray-50">Mark remaining Pass</button>
+        <button type="submit" id="va-submit" class="px-5 py-2 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-sm font-bold transition-colors disabled:opacity-40 disabled:cursor-not-allowed" disabled>Submit Audit</button>
+      </div>
+    </div>
+  </div>
+</form>
+
+<style>
+  .va-seg-btn { display:inline-flex; align-items:center; justify-content:center; min-width:58px; padding:8px 12px; font-size:12px; font-weight:700; color:#6B7280; background:#fff; cursor:pointer; user-select:none; transition:background-color .12s ease, color .12s ease; }
+  .va-seg-btn + .va-seg-btn { border-left:1px solid #E5E7EB; }
+  .va-seg-btn:hover { background:#F9FAFB; }
+  .va-seg-pass:has(input:checked) { background:#059669; color:#fff; }
+  .va-seg-fail:has(input:checked) { background:#DC2626; color:#fff; }
+  .va-seg-na:has(input:checked)   { background:#6B7280; color:#fff; }
+  .va-item.is-fail { background:#FEF2F2; }
+  @media (max-width: 640px) { .va-seg { width:100%; } .va-seg-btn { flex:1; padding:10px 8px; } }
+</style>
+
+<script>
+(function () {
+  var form = document.getElementById('va-form');
+  if (!form) return;
+  var items = Array.prototype.slice.call(form.querySelectorAll('.va-item'));
+  var totalEl = document.getElementById('va-total');
+  var progEl = document.getElementById('va-progress');
+  var submitBtn = document.getElementById('va-submit');
+  var banner = document.getElementById('va-critical-banner');
+  totalEl.textContent = items.length;
+
+  function answered(item) { return !!item.querySelector('input[type="radio"]:checked'); }
+  function repaint() {
+    var done = items.filter(answered).length;
+    progEl.textContent = done;
+    submitBtn.disabled = done < items.length;
+    // Critical fail → show the FAIL banner + off-road prompt.
+    var critFail = items.some(function (it) {
+      var r = it.querySelector('input[type="radio"]:checked');
+      return it.getAttribute('data-critical') === '1' && r && r.value === 'fail';
+    });
+    banner.classList.toggle('hidden', !critFail);
+    items.forEach(function (it) {
+      var r = it.querySelector('input[type="radio"]:checked');
+      var isFail = r && r.value === 'fail';
+      it.classList.toggle('is-fail', !!isFail);
+      var extra = it.querySelector('.va-fail-extra');
+      if (extra) extra.classList.toggle('hidden', !isFail);
+    });
+  }
+  form.addEventListener('change', function (e) {
+    if (e.target && e.target.type === 'radio') repaint();
+    if (e.target && e.target.type === 'file') {
+      var label = e.target.closest('label') && e.target.closest('label').querySelector('[data-photo-label]');
+      if (label) label.textContent = e.target.files && e.target.files.length ? '1 photo' : 'Photo';
+    }
+  });
+
+  // Speed helper: everything not yet answered becomes Pass (the common
+  // case in the yard is "all good, two things broken").
+  document.getElementById('va-all-pass').addEventListener('click', function () {
+    items.forEach(function (it) {
+      if (!answered(it)) {
+        var pass = it.querySelector('input[value="pass"]');
+        if (pass) pass.checked = true;
+      }
+    });
+    repaint();
+  });
+
+  // Never double-submit from a laggy yard connection.
+  form.addEventListener('submit', function () { submitBtn.disabled = true; submitBtn.textContent = 'Saving…'; });
+  repaint();
+})();
+</script>
+<% } else if (vehicle) { %>
+  <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-sm text-amber-800">
+    No checklist exists for this vehicle's type (<%= typeLabels[vehicle.traffic_class] || vehicle.traffic_class || 'unclassified' %>).
+    Classify the vehicle on its <a href="/fleet/<%= vehicle.id %>" class="font-bold underline">profile</a> first.
+  </div>
+<% } %>
