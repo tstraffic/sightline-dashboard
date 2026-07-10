@@ -801,9 +801,18 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
   for (const c of (crewRows || [])) {
     if (c.assigned_vehicle_id && blockByVehicle.has(c.assigned_vehicle_id)) {
       const blk = blockByVehicle.get(c.assigned_vehicle_id);
-      const slot = blk.worker_slots.find(s => !s.filled);
-      if (slot) { fillSlot(slot, c); continue; }
-      // overflow — fall through
+      let slot = blk.worker_slots.find(s => !s.filled);
+      if (!slot) {
+        // Block is already full but the planner explicitly put this worker on
+        // THIS vehicle — grow the block so they actually land in the ute
+        // rather than silently overflowing to the pool (which read as "it
+        // swapped someone out at random"). Over-capacity crews are allowed;
+        // the crew-size label still reflects what the shift called for.
+        slot = { filled: false, extra: true };
+        blk.worker_slots.push(slot);
+      }
+      fillSlot(slot, c);
+      continue;
     }
     // Worker assigned to a standalone/spare vehicle → render under it.
     if (c.assigned_vehicle_id && spareByVehicle.has(c.assigned_vehicle_id)) {

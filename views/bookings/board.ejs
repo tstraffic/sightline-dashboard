@@ -5277,6 +5277,17 @@
       nb:  slot.getAttribute('data-flag-nb')     === '1',
     };
 
+    // Is this worker currently riding a vehicle? True when the slot sits in a
+    // crew block that has a vehicle, or under a spare/standalone vehicle — but
+    // NOT when it's already in the "Not in any vehicle" pool. Drives the
+    // "Take off ute" action: a reliable click alternative to the fiddly
+    // drag-onto-the-unassign-strip gesture (some planners can't land it).
+    var inPool = !!(slot.closest && slot.closest('.bk2-unassigned'));
+    var crewBlk = slot.closest && slot.closest('.bk2-crew');
+    var blkHasVehicle = crewBlk && crewBlk.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
+    var inSpareVeh = !!(slot.closest && slot.closest('.bk2-spareveh'));
+    var onVehicle = !inPool && (blkHasVehicle || inSpareVeh);
+
     // Pick up which booking card we're on so we can show context.
     var cardEl = slot.closest('.bk2-card');
     var bookingNumber = cardEl ? (cardEl.querySelector('.bk2-banner-meta') || {}).textContent || '' : '';
@@ -5310,6 +5321,11 @@
         popBtn('profile', 'Profile', '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>', false) +
       '</div>' +
       '<div class="bk2-pop-foot">' +
+        (onVehicle ?
+          '<button type="button" class="bk2-pop-takeoff" data-pop-action="takeoff">' +
+            '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 17h8m-8 0a2 2 0 11-4 0 2 2 0 014 0zm8 0a2 2 0 104 0 2 2 0 00-4 0zm-9-5h10l-1-4H4v4zm10 0h3l3 3v2h-2M3 3l18 18"/></svg>' +
+            'Take off ute' +
+          '</button>' : '') +
         '<button type="button" class="bk2-pop-remove" data-pop-action="remove">' +
           '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 7V4a1 1 0 011-1h4a1 1 0 011 1v3"/></svg>' +
           'Remove from shift' +
@@ -5338,6 +5354,14 @@
       if (action === 'close') { closePopover(); return; }
       if (action === 'profile') {
         if (crewMemberId) window.location.href = '/crew/' + encodeURIComponent(crewMemberId);
+        return;
+      }
+      if (action === 'takeoff') {
+        // Same effect as dragging the worker onto the "take off the ute" zone —
+        // clear their vehicle (assign-vehicle with no vehicle_id), which parks
+        // them in the "Not in any vehicle" pool and keeps them there.
+        closePopover();
+        assignCrewToVehicle({ booking_id: bookingId, booking_crew_id: bookingCrewId, crew_name: crewName }, '');
         return;
       }
       if (action === 'remove') {

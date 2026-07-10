@@ -2003,6 +2003,17 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-pop-remove:hover { background: #FECACA; }
 :root[data-theme="dark"] .bk2-pop-remove { background: rgba(220,38,38,0.18); color: #FCA5A5; }
 :root[data-theme="dark"] .bk2-pop-remove:hover { background: rgba(220,38,38,0.30); color: #fff; }
+/* Take-off-ute: a neutral secondary action (detach from vehicle, keep on shift)
+   sitting above the destructive "Remove from shift". */
+.bk2-pop-takeoff {
+  width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px; background: #EEF2F7; color: #334155;
+  border: 0; border-radius: 10px; font-size: 13px; font-weight: 700; cursor: pointer;
+  transition: background 100ms ease;
+}
+.bk2-pop-takeoff:hover { background: #E2E8F0; }
+:root[data-theme="dark"] .bk2-pop-takeoff { background: rgba(255,255,255,0.07); color: #CBD5E1; }
+:root[data-theme="dark"] .bk2-pop-takeoff:hover { background: rgba(255,255,255,0.13); color: #fff; }
 
 /* ============================================================
    CREW DRAG-DROP — workers between vehicles + unassigned pool
