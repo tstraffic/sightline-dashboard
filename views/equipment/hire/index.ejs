@@ -79,13 +79,22 @@
                 <p class="font-semibold text-gray-900"><%= h.type_label %><% if (h.quantity > 1) { %> <span class="text-gray-400">×<%= h.quantity %></span><% } %></p>
                 <% if (h.description) { %><p class="text-[11px] text-gray-500"><%= h.description %></p><% } %>
                 <% if (h.registration) { %><p class="text-[11px] text-gray-400 tabular-nums"><%= h.registration %></p><% } %>
+                <% if (h.out_numbers) { %><p class="text-[11px] text-amber-700 tabular-nums" title="Unit numbers still out">Out: <%= h.out_numbers %></p><% } %>
               </td>
               <td class="px-4 py-2.5 text-gray-700"><%= h.company_label %><% if (h.reference) { %><p class="text-[11px] text-gray-400"><%= h.reference %></p><% } %></td>
               <td class="px-4 py-2.5 text-gray-600 whitespace-nowrap"><%= fmtDate(h.start_date) %> → <%= h.end_date ? fmtDate(h.end_date) : 'ongoing' %></td>
               <td class="px-4 py-2.5 text-right text-gray-700 tabular-nums whitespace-nowrap"><%= money(h.rate) %>/<%= h.rate_unit %></td>
               <td class="px-4 py-2.5 text-right text-gray-900 font-semibold tabular-nums"><%= h.month_cost == null ? '—' : money(h.month_cost) %></td>
-              <td class="px-4 py-2.5"><span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold <%= statusChip(h.status) %>"><%= statusLabel(h.status) %></span></td>
+              <td class="px-4 py-2.5">
+                <span class="inline-flex px-2 py-0.5 rounded-full text-[11px] font-semibold <%= statusChip(h.status) %>"><%= statusLabel(h.status) %></span>
+                <% if (h.status === 'on_hire' && h.units_returned > 0) { %>
+                  <span class="block text-[10px] font-bold text-emerald-600 mt-0.5"><%= h.units_returned %>/<%= h.units_total %> returned</span>
+                <% } %>
+              </td>
               <td class="px-4 py-2.5 text-right whitespace-nowrap">
+                <% if (h.status === 'on_hire') { %>
+                  <a href="/equipment/hire/<%= h.id %>/return" class="hire-return-btn inline-flex items-center px-2.5 py-1 rounded-lg text-[11px] font-bold bg-emerald-600 text-white hover:bg-emerald-500 transition-colors">Return…</a>
+                <% } %>
                 <% if (h.hire_docket_id) { %><a href="/equipment/hire-dockets/<%= h.hire_docket_id %>" class="px-2 py-1 text-[11px] font-semibold text-gray-500 hover:bg-gray-100 rounded">Docket</a><% } %>
                 <a href="/equipment/hire/<%= h.id %>/edit" class="px-2 py-1 text-[11px] font-semibold text-brand-600 hover:bg-brand-50 rounded">Edit</a>
                 <form method="POST" action="/equipment/hire/<%= h.id %>/delete" class="inline" onsubmit="return confirm('Remove this hire?')">
@@ -100,6 +109,12 @@
     </div>
   <% } %>
 </div>
+
+<style>
+  /* The global "table tbody td a" colour rule would paint this button-link's
+     text blue on its green fill — pin it white. */
+  table tbody td a.hire-return-btn { color: #fff !important; }
+</style>
 
 <% if (byCompany && byCompany.length) { %>
 <div class="mt-5">

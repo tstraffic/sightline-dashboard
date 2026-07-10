@@ -82,6 +82,42 @@
       <textarea name="notes" rows="2" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent resize-y"><%= v('notes') %></textarea>
     </div>
   </div>
+
+  <!-- Unit numbers — one input per item on hire (kept in step with Quantity).
+       These are the numbers the return flow confirms one by one. -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <div class="flex items-center justify-between mb-2">
+      <div>
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Unit Numbers</p>
+        <p class="text-[11px] text-gray-500 mt-0.5">One per item (e.g. the hire company's asset numbers). Optional — but returns are confirmed against these.</p>
+      </div>
+      <span class="text-[11px] text-gray-400" id="hire-units-count"></span>
+    </div>
+    <%
+      const allUnits = (typeof units !== 'undefined' && units) ? units : [];
+      const returnedUnits = allUnits.filter(u => u.returned_at);
+      const openUnits = allUnits.filter(u => !u.returned_at);
+    %>
+    <% if (returnedUnits.length) { %>
+      <div class="mb-3">
+        <p class="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mb-1.5">Already returned (locked)</p>
+        <div class="flex flex-wrap gap-1.5">
+          <% returnedUnits.forEach(function (u) { %>
+            <span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20 text-xs font-semibold">
+              <%= u.unit_number || 'Unit' %> <span class="font-normal text-emerald-600/70">· back <%= u.returned_at %></span>
+            </span>
+          <% }) %>
+        </div>
+      </div>
+    <% } %>
+    <div id="hire-units" class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2"
+         data-min="<%= returnedUnits.length %>">
+      <% openUnits.forEach(function (u, i) { %>
+        <input type="text" name="unit_numbers[]" value="<%= u.unit_number || '' %>" placeholder="Unit no. <%= returnedUnits.length + i + 1 %>"
+               class="hire-unit-no px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      <% }) %>
+    </div>
+  </div>
   <div class="flex items-center justify-end gap-2">
     <a href="/equipment/hire" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg">Cancel</a>
     <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg"><%= isEdit ? 'Save hire' : 'Add hire' %></button>
@@ -114,5 +150,30 @@
       }).catch(function () {});
   }
   [company, hType, unit].forEach(function (el) { if (el) el.addEventListener('change', lookup); });
+
+  // ---- Unit-number inputs follow Quantity ----
+  var qtyInput = document.querySelector('input[name="quantity"]');
+  var unitsBox = document.getElementById('hire-units');
+  var unitsCount = document.getElementById('hire-units-count');
+  var lockedCount = unitsBox ? parseInt(unitsBox.getAttribute('data-min'), 10) || 0 : 0;
+  function syncUnitInputs() {
+    if (!unitsBox || !qtyInput) return;
+    var qty = Math.max(1, Math.min(500, parseInt(qtyInput.value, 10) || 1));
+    // Never below what's already been returned (those are locked history).
+    if (qty < lockedCount) { qty = lockedCount; qtyInput.value = qty; }
+    var want = qty - lockedCount;
+    var inputs = unitsBox.querySelectorAll('input.hire-unit-no');
+    for (var i = inputs.length - 1; i >= want; i--) inputs[i].remove();
+    for (var j = inputs.length; j < want; j++) {
+      var inp = document.createElement('input');
+      inp.type = 'text';
+      inp.name = 'unit_numbers[]';
+      inp.placeholder = 'Unit no. ' + (lockedCount + j + 1);
+      inp.className = 'hire-unit-no px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent';
+      unitsBox.appendChild(inp);
+    }
+    if (unitsCount) unitsCount.textContent = qty + ' unit' + (qty === 1 ? '' : 's') + (lockedCount ? ' (' + lockedCount + ' already returned)' : '');
+  }
+  if (qtyInput) { qtyInput.addEventListener('input', syncUnitInputs); syncUnitInputs(); }
 })();
 </script>

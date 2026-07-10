@@ -1,0 +1,145 @@
+<% locals.currentPage = 'equipment' %>
+<%
+  function fmtDate(d) { return d ? new Date(d + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: '2-digit', timeZone: 'UTC' }) : '—'; }
+%>
+
+<!-- Breadcrumb -->
+<div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
+  <a href="/equipment/hire" class="hover:text-gray-900 transition">Hired</a>
+  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
+  <span class="text-gray-900">Return equipment</span>
+</div>
+
+<div class="mb-5">
+  <h1 class="text-2xl font-bold text-gray-900">Return — <%= hire.type_label %></h1>
+  <p class="text-gray-500 text-sm mt-0.5">
+    <%= hire.company_label %><%= hire.reference ? ' · ref ' + hire.reference : '' %>
+    · on hire since <%= fmtDate(hire.start_date) %>
+    · <strong class="text-amber-600"><%= outstanding.length %></strong> of <%= outstanding.length + returned.length %> still out
+  </p>
+</div>
+
+<% if (!outstanding.length) { %>
+  <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 mb-5 text-sm font-semibold text-emerald-800">
+    Everything is back — this hire is off-hired.
+  </div>
+<% } else { %>
+<form method="POST" action="/equipment/hire/<%= hire.id %>/return" class="space-y-4">
+  <%- include('../../partials/csrf') %>
+
+  <!-- Quick match: type the numbers coming back, they tick themselves -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+    <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Type the returned numbers to confirm</label>
+    <div class="flex flex-col sm:flex-row gap-2">
+      <input type="text" id="ret-match" placeholder="e.g. VMS-102, VMS-107 (comma or space separated)"
+             class="flex-1 px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      <button type="button" id="ret-match-btn" class="px-4 py-2.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg">Match &amp; tick</button>
+    </div>
+    <p class="text-[11px] text-gray-400 mt-1.5" id="ret-match-msg">Or tick the units below by hand.</p>
+  </div>
+
+  <!-- Outstanding units -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Still on hire</h2>
+      <button type="button" id="ret-all" class="text-xs font-semibold text-brand-600 hover:text-brand-500">Tick all</button>
+    </div>
+    <div class="divide-y divide-gray-100">
+      <% outstanding.forEach(function (u, i) { %>
+        <label class="ret-unit flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-50">
+          <input type="checkbox" name="unit_<%= u.id %>" value="1" data-number="<%= (u.unit_number || '').toLowerCase() %>"
+                 class="ret-check w-5 h-5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+          <span class="text-sm font-semibold text-gray-900"><%= u.unit_number || ('Unit ' + (i + 1)) %></span>
+          <% if (!u.unit_number) { %><span class="text-[10px] text-gray-400">(no number recorded)</span><% } %>
+        </label>
+      <% }) %>
+    </div>
+  </div>
+
+  <!-- Confirmation summary + date/note -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div class="sm:col-span-2">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Note <span class="text-gray-400 normal-case font-medium">(optional — condition, who dropped it back…)</span></label>
+      <input type="text" name="return_note" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Return date</label>
+      <input type="date" name="return_date" value="<%= today %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between gap-3">
+    <p class="text-sm text-gray-500"><span id="ret-summary" class="font-bold text-gray-800">0</span> of <%= outstanding.length %> selected<span id="ret-offhire-hint" class="hidden text-emerald-600 font-semibold"> — hire will be off-hired</span></p>
+    <div class="flex items-center gap-2">
+      <a href="/equipment/hire" class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg">Cancel</a>
+      <button type="submit" id="ret-submit" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-bold rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed" disabled>Confirm return</button>
+    </div>
+  </div>
+</form>
+<% } %>
+
+<!-- Already returned -->
+<% if (returned.length) { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mt-5">
+  <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Returned</h2>
+  </div>
+  <div class="divide-y divide-gray-100">
+    <% returned.forEach(function (u, i) { %>
+      <div class="flex items-center gap-3 px-4 py-2.5">
+        <svg class="w-4 h-4 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+        <span class="text-sm font-semibold text-gray-800"><%= u.unit_number || ('Unit ' + (i + 1)) %></span>
+        <span class="text-[11px] text-gray-500">back <%= fmtDate(u.returned_at) %><%= u.returned_by ? ' · ' + u.returned_by : '' %><%= u.return_note ? ' · ' + u.return_note : '' %></span>
+        <span class="flex-1"></span>
+        <form method="POST" action="/equipment/hire/<%= hire.id %>/units/<%= u.id %>/unreturn" onsubmit="return confirm('Put this unit back on hire?')">
+          <%- include('../../partials/csrf') %>
+          <button type="submit" class="text-[11px] font-semibold text-gray-400 hover:text-red-600">Undo</button>
+        </form>
+      </div>
+    <% }) %>
+  </div>
+</div>
+<% } %>
+
+<script>
+(function () {
+  var checks = Array.prototype.slice.call(document.querySelectorAll('.ret-check'));
+  if (!checks.length) return;
+  var summary = document.getElementById('ret-summary');
+  var hint = document.getElementById('ret-offhire-hint');
+  var submit = document.getElementById('ret-submit');
+  function repaint() {
+    var n = checks.filter(function (c) { return c.checked; }).length;
+    summary.textContent = n;
+    submit.disabled = n === 0;
+    hint.classList.toggle('hidden', n !== checks.length);
+    checks.forEach(function (c) { c.closest('.ret-unit').classList.toggle('bg-emerald-50/60', c.checked); });
+  }
+  checks.forEach(function (c) { c.addEventListener('change', repaint); });
+  document.getElementById('ret-all').addEventListener('click', function () {
+    var allOn = checks.every(function (c) { return c.checked; });
+    checks.forEach(function (c) { c.checked = !allOn; });
+    repaint();
+  });
+  // Type-to-confirm: match typed numbers against outstanding units and tick them.
+  var matchBtn = document.getElementById('ret-match-btn');
+  var matchInput = document.getElementById('ret-match');
+  var matchMsg = document.getElementById('ret-match-msg');
+  function doMatch() {
+    var tokens = (matchInput.value || '').toLowerCase().split(/[\s,;]+/).filter(Boolean);
+    if (!tokens.length) return;
+    var hit = 0, miss = [];
+    tokens.forEach(function (t) {
+      var c = checks.find(function (ch) { return ch.dataset.number && ch.dataset.number === t; });
+      if (c) { c.checked = true; hit++; }
+      else miss.push(t);
+    });
+    repaint();
+    matchMsg.textContent = hit + ' matched' + (miss.length ? ' — not found: ' + miss.join(', ') : '');
+    matchMsg.className = 'text-[11px] mt-1.5 ' + (miss.length ? 'text-red-600 font-medium' : 'text-emerald-600 font-medium');
+  }
+  matchBtn.addEventListener('click', doMatch);
+  matchInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); doMatch(); } });
+  repaint();
+})();
+</script>

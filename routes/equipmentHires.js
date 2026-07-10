@@ -42,6 +42,38 @@ function typeLabel(value) {
   const t = getEquipmentType(value);
   return t ? t.label : (value || '—');
 }
+const todayISO = () => new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+
+// ---- per-unit helpers (equipment_hire_units, migration 315) ----
+// Parse the form's unit_numbers[] into a clean array of trimmed strings.
+function parseUnitNumbers(raw) {
+  const arr = Array.isArray(raw) ? raw : (raw != null ? [raw] : []);
+  return arr.map(s => String(s).trim().slice(0, 80));
+}
+// Bring a hire's unit rows in line with quantity + typed numbers. Returned
+// units are history — never touched; only the unreturned pool is resized and
+// renumbered. Returns the (possibly clamped) effective quantity.
+function syncUnits(db, hireId, quantity, numbers) {
+  const returned = db.prepare('SELECT COUNT(*) AS n FROM equipment_hire_units WHERE hire_id = ? AND returned_at IS NOT NULL').get(hireId).n;
+  const qty = Math.max(returned || 0, Math.min(500, Math.max(1, quantity || 1)));
+  const open = db.prepare('SELECT id FROM equipment_hire_units WHERE hire_id = ? AND returned_at IS NULL ORDER BY id').all(hireId);
+  const want = qty - returned;
+  // shrink extras / grow missing
+  for (let i = open.length - 1; i >= want; i--) {
+    db.prepare('DELETE FROM equipment_hire_units WHERE id = ?').run(open[i].id);
+  }
+  for (let i = open.length; i < want; i++) {
+    db.prepare('INSERT INTO equipment_hire_units (hire_id) VALUES (?)').run(hireId);
+  }
+  // apply numbers to the (fresh) unreturned set, in order
+  const rows = db.prepare('SELECT id FROM equipment_hire_units WHERE hire_id = ? AND returned_at IS NULL ORDER BY id').all(hireId);
+  const upd = db.prepare('UPDATE equipment_hire_units SET unit_number = ? WHERE id = ?');
+  rows.forEach((r, i) => upd.run(numbers[i] || '', r.id));
+  return qty;
+}
+function unitsFor(db, hireId) {
+  return db.prepare('SELECT * FROM equipment_hire_units WHERE hire_id = ? ORDER BY returned_at IS NOT NULL, id').all(hireId);
+}
 
 // ---------- HIRED REGISTER (month-scoped) ----------
 router.get('/', (req, res) => {
@@ -53,7 +85,10 @@ router.get('/', (req, res) => {
 
   // Hires whose period overlaps the selected month (open-ended = still on hire).
   const rows = db.prepare(`
-    SELECT h.*, c.name AS company_current_name
+    SELECT h.*, c.name AS company_current_name,
+      (SELECT COUNT(*) FROM equipment_hire_units u WHERE u.hire_id = h.id) AS units_total,
+      (SELECT COUNT(*) FROM equipment_hire_units u WHERE u.hire_id = h.id AND u.returned_at IS NOT NULL) AS units_returned,
+      (SELECT GROUP_CONCAT(NULLIF(u.unit_number, ''), ', ') FROM equipment_hire_units u WHERE u.hire_id = h.id AND u.returned_at IS NULL) AS out_numbers
     FROM equipment_hires h
     LEFT JOIN hire_companies c ON c.id = h.company_id
     WHERE h.status != 'cancelled'
@@ -69,6 +104,7 @@ router.get('/', (req, res) => {
       company_label: h.company_current_name || h.company_name || '—',
       type_label: typeLabel(h.equipment_type),
       month_cost: cost,
+      units_out: (h.units_total || 0) - (h.units_returned || 0),
     };
   });
 
@@ -267,8 +303,11 @@ router.post('/', (req, res) => {
     VALUES (@equipment_type,@description,@company_id,@company_name,@reference,@quantity,@start_date,@end_date,
        @rate,@rate_unit,@status,@hire_docket_id,@power_kind,@registration,@notes,@created_by_id)
   `).run({ ...h, created_by_id: req.session.user.id });
+  // One unit row per item on hire, carrying its number (if typed) — the
+  // return flow confirms these numbers one by one.
+  syncUnits(db, result.lastInsertRowid, h.quantity, parseUnitNumbers(b['unit_numbers[]'] || b.unit_numbers));
   try { logActivity({ user: req.session.user, action: 'create', entityType: 'equipment_hire', entityId: result.lastInsertRowid, entityLabel: `${h.company_name} — ${typeLabel(h.equipment_type)}`, ip: req.ip }); } catch (e) {}
-  req.flash('success', 'Hire added.');
+  req.flash('success', 'Hire added — ' + h.quantity + ' unit' + (h.quantity === 1 ? '' : 's') + ' on hire.');
   res.redirect(redirectToMonth(h.start_date));
 });
 
@@ -281,6 +320,7 @@ router.get('/:id/edit', (req, res) => {
     currentPage: 'equipment',
     tabActive: 'hired',
     hire,
+    units: unitsFor(db, hire.id),
     companies: companiesForForm(db),
     equipmentTypes: EQUIPMENT_TYPES,
     rateUnits: RATE_UNITS,
@@ -296,6 +336,19 @@ router.post('/:id', (req, res) => {
     const c = db.prepare('SELECT name FROM hire_companies WHERE id = ?').get(h.company_id);
     if (c) h.company_name = c.name;
   }
+  // Keep unit rows in step with quantity + typed numbers (returned units are
+  // untouched history; quantity can't drop below what's already returned).
+  h.quantity = syncUnits(db, parseInt(req.params.id, 10), h.quantity, parseUnitNumbers(req.body['unit_numbers[]'] || req.body.unit_numbers));
+  // Manual status flips reconcile the units so the counts never lie:
+  //   → off_hired: everything still out is marked returned today.
+  //   → on_hire when everything was returned: the units go back on hire.
+  if (h.status === 'off_hired') {
+    db.prepare(`UPDATE equipment_hire_units SET returned_at = ?, returned_by = ? WHERE hire_id = ? AND returned_at IS NULL`)
+      .run(h.end_date || todayISO(), (req.session.user && req.session.user.full_name) || '', req.params.id);
+  } else if (h.status === 'on_hire') {
+    const out = db.prepare('SELECT COUNT(*) AS n FROM equipment_hire_units WHERE hire_id = ? AND returned_at IS NULL').get(req.params.id).n;
+    if (out === 0) db.prepare("UPDATE equipment_hire_units SET returned_at = NULL, returned_by = '', return_note = '' WHERE hire_id = ?").run(req.params.id);
+  }
   db.prepare(`
     UPDATE equipment_hires SET
       equipment_type=@equipment_type, description=@description, company_id=@company_id, company_name=@company_name,
@@ -307,6 +360,79 @@ router.post('/:id', (req, res) => {
   try { logActivity({ user: req.session.user, action: 'update', entityType: 'equipment_hire', entityId: parseInt(req.params.id), entityLabel: `${h.company_name} — ${typeLabel(h.equipment_type)}`, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Hire updated.');
   res.redirect(redirectToMonth(h.start_date));
+});
+
+// ---------- RETURN / OFF-HIRE FLOW ----------
+// The return page lists every unit still out; the yard confirms the actual
+// numbers coming back (tick them, or type the numbers to auto-match). Partial
+// returns leave the hire on_hire with the remainder; returning the last unit
+// off-hires the whole record automatically.
+router.get('/:id/return', (req, res) => {
+  const db = getDb();
+  const hire = db.prepare(`
+    SELECT h.*, c.name AS company_current_name FROM equipment_hires h
+    LEFT JOIN hire_companies c ON c.id = h.company_id WHERE h.id = ?
+  `).get(req.params.id);
+  if (!hire) { req.flash('error', 'Hire not found.'); return res.redirect('/equipment/hire'); }
+  const units = unitsFor(db, hire.id);
+  res.render('equipment/hire/return', {
+    title: 'Return — ' + typeLabel(hire.equipment_type),
+    currentPage: 'equipment',
+    tabActive: 'hired',
+    hire: { ...hire, company_label: hire.company_current_name || hire.company_name || '—', type_label: typeLabel(hire.equipment_type) },
+    outstanding: units.filter(u => !u.returned_at),
+    returned: units.filter(u => u.returned_at),
+    today: todayISO(),
+  });
+});
+
+router.post('/:id/return', (req, res) => {
+  const db = getDb();
+  const hire = db.prepare('SELECT * FROM equipment_hires WHERE id = ?').get(req.params.id);
+  if (!hire) { req.flash('error', 'Hire not found.'); return res.redirect('/equipment/hire'); }
+  const b = req.body;
+  const returnDate = /^\d{4}-\d{2}-\d{2}$/.test(b.return_date || '') ? b.return_date : todayISO();
+  const note = String(b.return_note || '').trim().slice(0, 500);
+  const by = (req.session.user && req.session.user.full_name) || '';
+  // Checked units arrive as unit_<id> fields.
+  const ids = Object.keys(b)
+    .filter(k => /^unit_\d+$/.test(k))
+    .map(k => parseInt(k.slice(5), 10));
+  if (!ids.length) { req.flash('error', 'Tick the unit numbers that came back.'); return res.redirect('/equipment/hire/' + hire.id + '/return'); }
+
+  const mark = db.prepare(`
+    UPDATE equipment_hire_units SET returned_at = ?, returned_by = ?, return_note = ?
+    WHERE id = ? AND hire_id = ? AND returned_at IS NULL
+  `);
+  let marked = 0;
+  const tx = db.transaction(() => {
+    for (const id of ids) marked += mark.run(returnDate, by, note, id, hire.id).changes;
+    const out = db.prepare('SELECT COUNT(*) AS n FROM equipment_hire_units WHERE hire_id = ? AND returned_at IS NULL').get(hire.id).n;
+    if (out === 0) {
+      db.prepare("UPDATE equipment_hires SET status = 'off_hired', end_date = COALESCE(end_date, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+        .run(returnDate, hire.id);
+    }
+    return out;
+  });
+  const outstanding = tx();
+  try { logActivity({ user: req.session.user, action: 'update', entityType: 'equipment_hire', entityId: hire.id, entityLabel: `returned ${marked} unit(s)${outstanding ? `, ${outstanding} still out` : ' — off-hired'}`, ip: req.ip }); } catch (e) {}
+  req.flash('success', outstanding
+    ? `${marked} unit${marked === 1 ? '' : 's'} returned — ${outstanding} still on hire.`
+    : `All units returned — hire off-hired as of ${returnDate}.`);
+  res.redirect(outstanding ? '/equipment/hire/' + hire.id + '/return' : redirectToMonth(hire.start_date));
+});
+
+// Undo a mistaken return: the unit goes back on hire (and so does the hire).
+router.post('/:id/units/:unitId/unreturn', (req, res) => {
+  const db = getDb();
+  const unit = db.prepare('SELECT * FROM equipment_hire_units WHERE id = ? AND hire_id = ?').get(req.params.unitId, req.params.id);
+  if (!unit) { req.flash('error', 'Unit not found.'); return res.redirect('/equipment/hire'); }
+  db.prepare("UPDATE equipment_hire_units SET returned_at = NULL, returned_by = '', return_note = '' WHERE id = ?").run(unit.id);
+  // Re-opening an off-hired hire also clears the (auto-set) end date so the
+  // hire reads as ongoing again and stays visible in the current month.
+  db.prepare("UPDATE equipment_hires SET status = 'on_hire', end_date = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'off_hired'").run(req.params.id);
+  req.flash('success', 'Return undone — unit is back on hire.');
+  res.redirect('/equipment/hire/' + req.params.id + '/return');
 });
 
 router.post('/:id/delete', (req, res) => {

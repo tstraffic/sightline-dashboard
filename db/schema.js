@@ -14153,6 +14153,41 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 314 error:', e.message); }
   }
 
+  // 315 — per-unit tracking for Equipment/Hire. A hire of quantity N gets N
+  // unit rows, each with its own unit number (e.g. the hire company's asset
+  // numbers), so returns are confirmed number-by-number: tick the units that
+  // came back, the rest stay on hire. When every unit is returned the hire
+  // auto-flips to off_hired. Backfill: existing hires get their quantity in
+  // units (blank numbers); already off-hired rows are marked fully returned.
+  if (!isMigrationApplied.get(315)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS equipment_hire_units (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          hire_id INTEGER NOT NULL REFERENCES equipment_hires(id) ON DELETE CASCADE,
+          unit_number TEXT DEFAULT '',
+          returned_at DATE,
+          returned_by TEXT DEFAULT '',
+          return_note TEXT DEFAULT '',
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_hire_units_hire ON equipment_hire_units(hire_id);
+      `);
+      const hires = db.prepare("SELECT id, quantity, status, end_date, created_at FROM equipment_hires").all();
+      const ins = db.prepare('INSERT INTO equipment_hire_units (hire_id, unit_number, returned_at) VALUES (?, ?, ?)');
+      let made = 0;
+      for (const h of hires) {
+        const qty = Math.max(1, Math.min(500, h.quantity || 1));
+        const returnedAt = h.status === 'off_hired'
+          ? (h.end_date || String(h.created_at || '').slice(0, 10) || null)
+          : null;
+        for (let i = 0; i < qty; i++) { ins.run(h.id, '', returnedAt); made++; }
+      }
+      recordMigration.run(315, 'equipment_hire_units: per-unit numbers + return tracking');
+      console.log('Migration 315 applied (' + made + ' units backfilled)');
+    } catch (e) { console.error('Migration 315 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
