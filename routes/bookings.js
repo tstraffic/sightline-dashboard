@@ -813,6 +813,13 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       g.workers.push(slot);
       continue;
     }
+    // A worker the planner DELIBERATELY dragged off a ute (off_vehicle flag)
+    // stays in the "Not in any vehicle" pool — it must NOT auto-slot back into
+    // the ute's now-free seat, otherwise "take them off the ute" looks like it
+    // did nothing (the worker snaps straight back). This is the counterpart to
+    // the auto-fill below: only workers who were never explicitly removed get
+    // pulled into open crew slots.
+    if (c.off_vehicle) { unassigned.push(c); continue; }
     // Everyone else (no vehicle assignment, or a vehicle no longer on the
     // shift) fills the next open crew/TC slot in block order — so dragging a
     // worker into the shift auto-slots them under TC rather than dumping them
@@ -925,6 +932,7 @@ router.get('/', (req, res) => {
     const crewRows = db.prepare(`
       SELECT bc.id AS booking_crew_id, bc.booking_id, bc.crew_member_id, bc.status AS bc_status, bc.role_on_site,
         bc.is_team_leader, bc.is_first_aid, bc.straight_to_site, bc.non_billable, bc.assigned_vehicle_id,
+        COALESCE(bc.off_vehicle, 0) AS off_vehicle,
         cm.full_name, cm.role, cm.portal_role,
         COALESCE(e.employment_status, 'active') AS employment_status
       FROM booking_crew bc
@@ -2528,7 +2536,12 @@ router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
       vehicleId = parsed;
     }
   }
-  db.prepare("UPDATE booking_crew SET assigned_vehicle_id = ? WHERE id = ?").run(vehicleId, req.params.crewId);
+  // off_vehicle disambiguates a NULL assignment: setting it (drop on the
+  // "take off the ute" zone) keeps the worker parked in the "Not in any
+  // vehicle" pool instead of auto-slotting straight back into the ute's
+  // freed seat. Assigning to a real vehicle clears it.
+  const offVehicle = vehicleId == null ? 1 : 0;
+  db.prepare("UPDATE booking_crew SET assigned_vehicle_id = ?, off_vehicle = ? WHERE id = ?").run(vehicleId, offVehicle, req.params.crewId);
 
   // If the worker just left a vehicle they were driving, clear the
   // driver pointer on that vehicle so the data doesn't drift —

@@ -14011,6 +14011,25 @@ function runMigrations(db) {
     }
   }
 
+  // 313 — "off vehicle" flag on booking_crew. assigned_vehicle_id = NULL is
+  // ambiguous: it means BOTH "just added, please auto-slot into an open TC
+  // seat" (migration/task-68 behaviour) AND "the planner deliberately dragged
+  // this worker off a ute". Those want opposite rendering: the former should
+  // fill the next open crew slot, the latter must STAY in the "Not in any
+  // vehicle" pool instead of snapping straight back into the ute's now-free
+  // seat. A dedicated flag disambiguates them — set when a worker is dropped
+  // on the unassign zone, cleared whenever they're (re)assigned to a vehicle.
+  if (!isMigrationApplied.get(313)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(booking_crew)").all();
+      if (!cols.some(c => c.name === 'off_vehicle')) {
+        db.exec("ALTER TABLE booking_crew ADD COLUMN off_vehicle INTEGER NOT NULL DEFAULT 0");
+      }
+      recordMigration.run(313, 'booking_crew: off_vehicle flag (deliberately unassigned, keep in pool)');
+      console.log('Migration 313 applied');
+    } catch (e) { console.error('Migration 313 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
