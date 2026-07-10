@@ -176,6 +176,13 @@
 <style>
   .va-chip.is-on { background: #059669; border-color: #059669; color: #fff; }
   .va-chip.is-on:hover { background: #047857; }
+  /* A global rule paints every table-body link blue in light mode
+     (custom.css: "table tbody td a { color:#1D6AE5!important }"), which was
+     turning the Start-Audit button's text blue on its green fill. Restore
+     the button-styled links' own colours (id-scoped + !important to win). */
+  #va-rows td a[href^="/vehicle-audits/new"].bg-brand-600 { color: #fff !important; }
+  #va-rows td a[href^="/vehicle-audits/new"].bg-white { color: #374151 !important; }
+  :root[data-theme="dark"] #va-rows td a[href^="/vehicle-audits/new"].bg-white { color: #E2E8F0 !important; }
 </style>
 <script>
 (function () {
