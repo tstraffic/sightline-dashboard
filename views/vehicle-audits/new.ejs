@@ -55,7 +55,7 @@
   <!-- Checklist sections -->
   <% sections.forEach(sec => { %>
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm mb-4 overflow-hidden">
-    <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+    <div class="va-sechead px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
       <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest"><%= sec.section %></h2>
       <!-- live per-section progress, painted by repaint() -->
       <span class="text-[10px] font-bold" data-sec-progress data-sec-total="<%= sec.items.length %>"><span class="text-gray-400">0</span> / <%= sec.items.length %></span>
@@ -146,14 +146,32 @@
 </form>
 
 <style>
+  /* Segmented Pass / Fail / N-A control. Colours are set explicitly for
+     BOTH themes so the labels never get washed out — in dark mode the
+     app's global text colour was turning the labels white on the white
+     button, leaving blank boxes. */
   .va-seg-btn { display:inline-flex; align-items:center; justify-content:center; min-width:58px; padding:8px 12px; font-size:12px; font-weight:700; color:#6B7280; background:#fff; cursor:pointer; user-select:none; transition:background-color .12s ease, color .12s ease; }
   .va-seg-btn + .va-seg-btn { border-left:1px solid #E5E7EB; }
-  .va-seg-btn:hover { background:#F9FAFB; }
+  .va-seg-btn:hover { background:#F9FAFB; color:#374151; }
   .va-seg-pass:has(input:checked) { background:#059669; color:#fff; }
   .va-seg-fail:has(input:checked) { background:#DC2626; color:#fff; }
   .va-seg-na:has(input:checked)   { background:#6B7280; color:#fff; }
   .va-item.is-fail { background:#FEF2F2; }
   @media (max-width: 640px) { .va-seg { width:100%; } .va-seg-btn { flex:1; padding:10px 8px; } }
+
+  /* Dark theme — dark surfaces + legible label text; selected states keep
+     their solid colour so the choice reads clearly on any background. */
+  :root[data-theme="dark"] .va-seg { border-color: rgba(255,255,255,0.16) !important; }
+  :root[data-theme="dark"] .va-seg-btn { background:#1E2430; color:#94A3B8; }
+  :root[data-theme="dark"] .va-seg-btn + .va-seg-btn { border-left-color: rgba(255,255,255,0.12); }
+  :root[data-theme="dark"] .va-seg-btn:hover { background:#2A3140; color:#E2E8F0; }
+  :root[data-theme="dark"] .va-seg-pass:has(input:checked) { background:#059669; color:#fff; }
+  :root[data-theme="dark"] .va-seg-fail:has(input:checked) { background:#DC2626; color:#fff; }
+  :root[data-theme="dark"] .va-seg-na:has(input:checked)   { background:#4B5563; color:#fff; }
+  :root[data-theme="dark"] .va-item.is-fail { background: rgba(220,38,38,0.14); }
+  /* Section header bar reads as a light strip in dark mode otherwise. */
+  :root[data-theme="dark"] .va-sechead { background: rgba(255,255,255,0.04) !important; border-bottom-color: rgba(255,255,255,0.08) !important; }
+  :root[data-theme="dark"] .va-sechead h2 { color:#E2E8F0 !important; }
 </style>
 
 <script>
