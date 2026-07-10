@@ -62,9 +62,20 @@ const vehicleListStmt = (db) => db.prepare(`
   ORDER BY asset_id
 `).all();
 
-const crewListStmt = (db) => db.prepare(
-  "SELECT id, full_name FROM crew_members WHERE status = 'active' OR status IS NULL ORDER BY full_name"
-).all();
+// Roster for the "Fault of…" pickers — one entry per person. crew_members
+// carries duplicate rows for some people (test accounts + re-imports), which
+// made the picker list the same name many times; collapse to the canonical
+// (lowest-id) active row per name.
+const crewListStmt = (db) => db.prepare(`
+  SELECT id, full_name FROM crew_members
+  WHERE (status = 'active' OR status IS NULL) AND merged_into_id IS NULL
+    AND id IN (
+      SELECT MIN(id) FROM crew_members
+      WHERE (status = 'active' OR status IS NULL) AND merged_into_id IS NULL
+      GROUP BY full_name
+    )
+  ORDER BY full_name
+`).all();
 
 // Open-defect count shown as a badge on the module sub-nav (every page).
 const openDefectCount = (db) => db.prepare(
@@ -362,6 +373,32 @@ router.get('/:id(\\d+)', (req, res) => {
     today: todayISO(),
     user: req.session.user,
   });
+});
+
+// ── DELETE a past audit — removes the audit, its checklist items and the
+//    defects it raised (items cascade via FK; defects deleted explicitly so
+//    an audit's whole footprint goes with it). Vehicle status is left as-is.
+router.post('/:id(\\d+)/delete', (req, res) => {
+  const db = getDb();
+  const audit = db.prepare('SELECT a.id, a.vehicle_id, v.asset_id, v.status AS vehicle_status FROM vehicle_audits a JOIN vehicles v ON v.id = a.vehicle_id WHERE a.id = ?').get(req.params.id);
+  if (!audit) { req.flash('error', 'Audit not found.'); return res.redirect('/vehicle-audits'); }
+
+  const tx = db.transaction(() => {
+    db.prepare('DELETE FROM vehicle_defects WHERE audit_id = ?').run(audit.id);
+    db.prepare('DELETE FROM vehicle_audit_items WHERE audit_id = ?').run(audit.id); // also cascades, belt-and-braces
+    db.prepare('DELETE FROM vehicle_audits WHERE id = ?').run(audit.id);
+  });
+  tx();
+
+  logActivity({
+    user: req.session.user, action: 'delete', entityType: 'vehicle_audit', entityId: audit.id,
+    entityLabel: `${audit.asset_id} audit #${audit.id}`, ip: req.ip,
+  });
+  req.flash('success', `Audit #${audit.id} deleted.`);
+  // If the delete was launched from the vehicle profile, go back there.
+  const ref = req.get('Referrer') || '';
+  if (/\/fleet\/\d+/.test(ref)) return res.redirect('/fleet/' + audit.vehicle_id + '?tab=audits');
+  res.redirect('/vehicle-audits');
 });
 
 module.exports = router;

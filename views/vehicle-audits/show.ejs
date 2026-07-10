@@ -15,7 +15,12 @@
   vaTitle: 'Audit — ' + audit.asset_id,
   vaSub: [audit.make, audit.model].filter(Boolean).join(' ') + (audit.rego ? ' · ' + audit.rego : '') + ' · ' + (typeLabels[audit.traffic_class] || audit.traffic_class || 'Unclassified'),
   vaOpen: typeof vaOpen !== 'undefined' ? vaOpen : 0,
-  vaAction: '<a href="/fleet/' + audit.vehicle_id + '?tab=audits" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors whitespace-nowrap">Vehicle Profile</a>'
+  vaAction:
+    '<a href="/fleet/' + audit.vehicle_id + '?tab=audits" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-xl transition-colors whitespace-nowrap">Vehicle Profile</a>' +
+    '<form method="POST" action="/vehicle-audits/' + audit.id + '/delete" class="inline" onsubmit="return confirm(\'Delete this audit? Its checklist results and the defects it raised are removed permanently.\')">' +
+      '<input type="hidden" name="_csrf" value="' + csrfToken + '">' +
+      '<button type="submit" class="inline-flex items-center justify-center px-4 py-2 bg-white border border-red-300 text-red-600 hover:bg-red-50 text-sm font-medium rounded-xl transition-colors whitespace-nowrap">Delete</button>' +
+    '</form>'
 }) %>
 
 <!-- Result banner + tallies -->
