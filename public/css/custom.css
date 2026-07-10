@@ -51,6 +51,8 @@ a, button, input, select, textarea {
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 100px; }
   ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+  /* Firefox equivalent of the thin webkit scrollbar above */
+  * { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
 }
 
 /* ===== Light theme overrides ===== */
@@ -839,7 +841,11 @@ table {
 
 @keyframes fade-in-up {
   from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  /* End on `none` (not translateY(0)): with fill-mode both/forwards the final
+     keyframe's transform is RETAINED, and any transform other than `none`
+     makes the element a containing block for position:fixed descendants —
+     the class of bug that trapped the bookings board's fixed right rail. */
+  to { opacity: 1; transform: none; }
 }
 
 @keyframes scale-in {
@@ -904,18 +910,23 @@ table {
   animation: slide-down 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* Page content entrance â€” staggered fade-in-up */
+/* Page content entrance â€” staggered fade-in-up. Kept FAST: the old
+   0.45s + 50ms steps meant ~800ms of content flying in on every single
+   navigation, which read as sluggish. 0.22s + 25ms steps settles in
+   under 400ms while keeping the polish. (When a cross-document view
+   transition runs, html.vt-nav disables this entirely â€” see
+   admin-fluid.css â€” so the crossfade isn't doubled up.) */
 main > div > * {
-  animation: fade-in-up 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation: fade-in-up 0.22s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 main > div > *:nth-child(1) { animation-delay: 0ms; }
-main > div > *:nth-child(2) { animation-delay: 50ms; }
-main > div > *:nth-child(3) { animation-delay: 100ms; }
-main > div > *:nth-child(4) { animation-delay: 150ms; }
-main > div > *:nth-child(5) { animation-delay: 200ms; }
-main > div > *:nth-child(6) { animation-delay: 250ms; }
-main > div > *:nth-child(7) { animation-delay: 300ms; }
-main > div > *:nth-child(8) { animation-delay: 350ms; }
+main > div > *:nth-child(2) { animation-delay: 25ms; }
+main > div > *:nth-child(3) { animation-delay: 50ms; }
+main > div > *:nth-child(4) { animation-delay: 75ms; }
+main > div > *:nth-child(5) { animation-delay: 100ms; }
+main > div > *:nth-child(6) { animation-delay: 125ms; }
+main > div > *:nth-child(7) { animation-delay: 150ms; }
+main > div > *:nth-child(8) { animation-delay: 175ms; }
 
 /* ===== Tab Panel Transitions ===== */
 [data-tab-panel] {
@@ -4244,3 +4255,16 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 :root[data-theme="dark"] .ss-chip { background: #0F172A; border-color: #334155; color: #CBD5E1; }
 :root[data-theme="dark"] .ss-chip-active { background: #2B7FFF; border-color: #2B7FFF; color: #fff; }
 :root[data-theme="dark"] .ss-empty { color: #64748B; }
+
+/* ===== Reduced motion ===== */
+/* Users who ask the OS for less motion get near-instant everything.
+   Durations are 0.01ms (not 0 / none) so animationend + transitionend
+   events still fire â€” JS that waits on them keeps working. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  html { scroll-behavior: auto !important; }
+}

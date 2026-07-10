@@ -1,0 +1,87 @@
+/* ============================================================
+   Admin fluid layer — cross-document view transitions, nav
+   progress bar, dropdown entrances. ADMIN DASHBOARD ONLY:
+   loaded from views/layout.ejs, never the worker portal (which
+   has its own motion stack). Generic/shared motion lives in
+   custom.css.
+   ============================================================ */
+
+/* ── Cross-document view transitions ────────────────────────
+   Same-origin navigations crossfade instead of white-flashing.
+   Reloads are excluded by spec. Browsers without support simply
+   navigate normally — pure progressive enhancement. */
+@view-transition {
+  navigation: auto;
+}
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 160ms;
+}
+
+/* Sidebar + header snapshot as their OWN transition groups, so
+   while the content crossfades the app chrome appears to stay
+   perfectly still — the "app-like" feel. (Geometry is identical
+   across pages, so the group renders as static.) */
+#sidebar { view-transition-name: app-sidebar; }
+#app-header { view-transition-name: app-header; }
+::view-transition-old(app-sidebar),
+::view-transition-new(app-sidebar),
+::view-transition-old(app-header),
+::view-transition-new(app-header) {
+  animation-duration: 0.01ms;
+}
+
+/* When a real view transition ran (html.vt-nav is set from the
+   pagereveal event in layout.ejs), skip the staggered content
+   entrance from custom.css — the crossfade already covers the
+   reveal, and stacking both reads as double-animation. */
+html.vt-nav main > div > * { animation: none !important; }
+
+/* ── Navigation progress bar ────────────────────────────────
+   Injected by app.js on link click / form submit after a short
+   delay (fast navigations never see it). Mirrors the bookings
+   board's own 2px date-loading bar so the two feel consistent. */
+#fluid-progress {
+  position: fixed;
+  top: 0; left: 0;
+  width: 100%; height: 2px;
+  z-index: 10000;
+  background: linear-gradient(90deg, var(--brand-600, #059669), var(--brand-500, #10B981));
+  transform-origin: left;
+  transform: scaleX(0);
+  opacity: 1;
+  pointer-events: none;
+}
+#fluid-progress.is-active {
+  animation: fluid-progress-trickle 7s cubic-bezier(0.1, 0.6, 0.2, 1) forwards;
+}
+@keyframes fluid-progress-trickle {
+  0%   { transform: scaleX(0); }
+  8%   { transform: scaleX(0.35); }
+  30%  { transform: scaleX(0.62); }
+  100% { transform: scaleX(0.88); }
+}
+
+/* ── Dropdown / menu entrances ──────────────────────────────
+   These panels toggle .hidden with no transition today, so they
+   pop. A short scale/fade entrance when they appear makes every
+   open feel intentional. (Close stays instant — that's fine.) */
+#notif-dropdown:not(.hidden),
+#quickadd-dropdown:not(.hidden),
+#sv-dropdown:not(.hidden) {
+  animation: fluid-pop 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: top right;
+}
+#globalFabMenu:not(.hidden) {
+  animation: fluid-pop 140ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  transform-origin: bottom right;
+}
+@keyframes fluid-pop {
+  from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── Smooth table rows ──────────────────────────────────────
+   Tailwind hover:bg-* classes change row colour instantly; a
+   short transition makes list scanning feel less flickery. */
+tbody tr { transition: background-color var(--transition-fast, 150ms ease); }

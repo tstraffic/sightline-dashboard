@@ -79,6 +79,15 @@
       e.preventDefault();
       window.toggleAtomisTheme();
     });
+
+    // Fluid layer: when this page load is revealed via a cross-document
+    // view transition (Chrome 126+/Safari 18.2+), tag <html> so
+    // admin-fluid.css can skip the staggered content entrance -- the
+    // crossfade already covers the reveal. Must be registered in <head>
+    // so the listener exists before the pagereveal event fires.
+    window.addEventListener('pagereveal', function (e) {
+      if (e.viewTransition) document.documentElement.classList.add('vt-nav');
+    });
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -156,10 +165,11 @@
       }
     }
   </script>
-  <link rel="stylesheet" href="/css/custom.css?v=atomis-11">
+  <link rel="stylesheet" href="/css/custom.css?v=atomis-12">
   <link rel="stylesheet" href="/css/themes.css?v=atomis-themes-3">
   <link rel="stylesheet" href="/css/chat.css?v=atomis-1">
   <link rel="stylesheet" href="/css/bookings-v2.css?v=bk2-50">
+  <link rel="stylesheet" href="/css/admin-fluid.css?v=fluid-1">
   <style>/* Hide Tailwind CDN dev indicator */#__tailwind_indicator,div[style*="z-index: 2147483647"]{display:none!important}</style>
 </head>
 <body class="h-full text-gray-900 font-sans antialiased dark-glass">
@@ -208,7 +218,7 @@
 
   <script src="/js/step-wizard.js"></script>
   <script src="/js/smart-select.js?v=3"></script>
-  <script src="/js/app.js"></script>
+  <script src="/js/app.js?v=2"></script>
   <script src="/js/dropzone.js"></script>
   <script src="/js/chat.js?v=3"></script>
   <%- script %>

@@ -591,3 +591,104 @@ document.addEventListener('DOMContentLoaded', initCountUp);
     return outputArray;
   }
 })();
+
+// ===== Fluid layer: navigation progress bar =====
+// A slim top bar (styled in admin-fluid.css) that appears when a page
+// navigation or form submit takes longer than a beat, so clicks never
+// feel dead. Shown after a short delay -- fast navigations (prefetched
+// pages, cached assets) complete before it ever renders.
+(function () {
+  var showTimer = null;
+  var safetyTimer = null;
+
+  function showBar() {
+    var bar = document.getElementById('fluid-progress');
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = 'fluid-progress';
+      document.body.appendChild(bar);
+    }
+    // Restart the trickle animation from zero.
+    bar.classList.remove('is-active');
+    void bar.offsetWidth;
+    bar.classList.add('is-active');
+    // Safety: if navigation never happens (blocked popup, JS error,
+    // user cancels), don't leave a frozen bar around.
+    clearTimeout(safetyTimer);
+    safetyTimer = setTimeout(hideBar, 20000);
+  }
+  function hideBar() {
+    clearTimeout(showTimer); showTimer = null;
+    clearTimeout(safetyTimer); safetyTimer = null;
+    var bar = document.getElementById('fluid-progress');
+    if (bar) bar.remove();
+  }
+  function queueBar() {
+    if (showTimer) return;
+    // 120ms grace period: instant navigations never flash the bar.
+    showTimer = setTimeout(function () { showTimer = null; showBar(); }, 120);
+  }
+
+  // Same-document restores (bfcache back/forward) keep the old DOM --
+  // clear any bar that was mid-trickle when the user navigated away.
+  window.addEventListener('pageshow', hideBar);
+
+  // Link navigations. Bubble phase so page handlers that preventDefault
+  // (e.g. bookings-board cards opening the quick-edit) are respected.
+  document.addEventListener('click', function (e) {
+    if (e.defaultPrevented) return;
+    if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    var a = e.target && e.target.closest && e.target.closest('a[href]');
+    if (!a) return;
+    if (a.target && a.target !== '_self') return;
+    if (a.hasAttribute('download')) return;
+    var href = a.getAttribute('href') || '';
+    if (!href || href.charAt(0) === '#') return;
+    if (/^(javascript|mailto|tel):/i.test(href)) return;
+    var url;
+    try { url = new URL(a.href, location.href); } catch (err) { return; }
+    if (url.origin !== location.origin) return;
+    // Same-page hash jump -- no navigation.
+    if (url.pathname === location.pathname && url.search === location.search && url.hash) return;
+    queueBar();
+  });
+
+  // Full-page form submits (POST + redirect is the app's main pattern).
+  document.addEventListener('submit', function (e) {
+    if (e.defaultPrevented) return;
+    var form = e.target;
+    if (!form || form.target && form.target !== '_self') return;
+    queueBar();
+  });
+})();
+
+// ===== Fluid layer: sidebar hover-prefetch =====
+// Prefetch a sidebar destination the moment the pointer reaches its
+// link, so by click time the HTML is already local. STRICTLY limited
+// to sidebar nav links: they are pure read-only list pages. Never
+// prefetch /logout (a GET that destroys the session) or arbitrary
+// links -- some GET routes elsewhere have side effects.
+(function () {
+  if (!document.createElement('link').relList ||
+      !document.createElement('link').relList.supports ||
+      !document.createElement('link').relList.supports('prefetch')) return;
+  var done = Object.create(null);
+
+  function prefetch(e) {
+    var a = e.target && e.target.closest && e.target.closest('#sidebar a.sidebar-link[href^="/"]');
+    if (!a) return;
+    var href = a.getAttribute('href') || '';
+    if (!href || done[href]) return;
+    if (href.indexOf('/logout') === 0) return;          // NEVER -- kills the session
+    if (href.split('#')[0].split('?')[0] === location.pathname) return; // already here
+    done[href] = true;
+    var link = document.createElement('link');
+    link.rel = 'prefetch';
+    link.href = href;
+    link.as = 'document';
+    document.head.appendChild(link);
+  }
+
+  document.addEventListener('mouseover', prefetch);
+  document.addEventListener('touchstart', prefetch, { passive: true });
+})();
