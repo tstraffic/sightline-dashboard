@@ -259,8 +259,14 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
   backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
   opacity: 0; transition: opacity 200ms ease;
   z-index: 1000;
+  /* SAFETY: a not-yet-open backdrop is invisible (opacity 0) but was still
+     capturing pointer events — if the reveal (`is-open`, added on the next
+     animation frame) ever failed to land, the board froze: every click hit
+     this invisible full-screen layer until a refresh. Only the OPEN backdrop
+     should intercept clicks. */
+  pointer-events: none;
 }
-.bk2-edit-backdrop.is-open { opacity: 1; }
+.bk2-edit-backdrop.is-open { opacity: 1; pointer-events: auto; }
 /* The booking open in the quick-edit slide-over — ringed + glowing. */
 .bk2-card.is-editing {
   position: relative;
