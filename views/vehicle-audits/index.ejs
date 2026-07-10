@@ -84,8 +84,19 @@
             data-search="<%= [v.asset_id, v.rego, v.make, v.model, typeLabels[v.traffic_class] || ''].filter(Boolean).join(' ').toLowerCase() %>"
             data-flags="<%= [overdue ? 'overdue' : '', never ? 'never' : '', v.status === 'Off-Road' ? 'offroad' : '', v.last_audit_result === 'fail' ? 'failed' : '', v.open_defects > 0 ? 'defects' : '', attention ? 'attention' : ''].filter(Boolean).join(' ') %>">
           <td class="px-4 py-3">
-            <a href="/fleet/<%= v.id %>?tab=audits" class="font-semibold text-gray-900 hover:text-brand-600"><%= v.asset_id %></a>
-            <div class="text-[11px] text-gray-400"><%= [v.make, v.model].filter(Boolean).join(' ') %><%= v.rego ? ' · ' + v.rego : '' %></div>
+            <div class="flex items-center gap-2">
+              <% if (v.history && v.history.length) { %>
+                <button type="button" class="va-hist-toggle text-gray-400 hover:text-gray-700 flex-shrink-0" data-hist-toggle="<%= v.id %>" aria-label="Show all audits" title="Show all audits">
+                  <svg class="w-4 h-4 transition-transform" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                </button>
+              <% } else { %>
+                <span class="w-4 flex-shrink-0"></span>
+              <% } %>
+              <div class="min-w-0">
+                <a href="/fleet/<%= v.id %>?tab=audits" class="font-semibold text-gray-900 hover:text-brand-600"><%= v.asset_id %></a>
+                <div class="text-[11px] text-gray-400"><%= [v.make, v.model].filter(Boolean).join(' ') %><%= v.rego ? ' · ' + v.rego : '' %><% if (v.history && v.history.length) { %> · <span class="font-medium text-gray-500"><%= v.history.length %> audit<%= v.history.length === 1 ? '' : 's' %></span><% } %></div>
+              </div>
+            </div>
           </td>
           <td class="px-4 py-3 hidden sm:table-cell">
             <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600 ring-1 ring-gray-200"><%= typeLabels[v.traffic_class] || v.traffic_class || '—' %></span>
@@ -127,6 +138,31 @@
             <a href="/vehicle-audits/new?vehicle_id=<%= v.id %>" class="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold <%= (overdue || never) ? 'bg-brand-600 text-white hover:bg-brand-500' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50' %> transition-colors">Start Audit</a>
           </td>
         </tr>
+        <% if (v.history && v.history.length) { %>
+        <tr class="va-hist bg-gray-50/50" data-hist-for="<%= v.id %>" hidden>
+          <td colspan="8" class="px-4 pt-0 pb-3">
+            <div class="ml-6 pl-4 border-l-2 border-gray-200">
+              <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest py-1.5">All audits for <%= v.asset_id %></p>
+              <% v.history.forEach(function (a) { %>
+                <div class="flex flex-wrap items-center gap-2 py-1.5 border-b border-gray-100 last:border-0">
+                  <span class="text-xs font-semibold text-gray-800 w-[86px]"><%= fmtD(a.audit_date) %></span>
+                  <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase <%= a.overall_result === 'pass' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-red-50 text-red-700 ring-1 ring-red-600/20' %>"><%= a.overall_result %></span>
+                  <span class="text-[10px] text-gray-400 uppercase font-bold"><%= a.audit_type %></span>
+                  <% if (a.auditor) { %><span class="text-[11px] text-gray-500 hidden sm:inline">by <%= a.auditor %></span><% } %>
+                  <% if (a.fail_count) { %><span class="text-[11px] font-bold text-red-600"><%= a.fail_count %> failed</span><% } %>
+                  <% if (a.open_defects) { %><span class="inline-flex px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 uppercase"><%= a.open_defects %> open</span><% } %>
+                  <span class="flex-1"></span>
+                  <a href="/vehicle-audits/<%= a.id %>" class="text-xs font-medium text-brand-600 hover:text-brand-500">Full record &rarr;</a>
+                  <form method="POST" action="/vehicle-audits/<%= a.id %>/delete" class="inline" onsubmit="return confirm('Delete this audit? Its checklist results and the defects it raised are removed permanently.')">
+                    <input type="hidden" name="_csrf" value="<%= csrfToken %>">
+                    <button type="submit" class="text-xs font-medium text-red-500 hover:text-red-700" title="Delete this audit">Delete</button>
+                  </form>
+                </div>
+              <% }); %>
+            </div>
+          </td>
+        </tr>
+        <% } %>
         <% }); %>
         <% if (!vehicles.length) { %>
         <tr><td colspan="8" class="px-4 py-10 text-center text-sm text-gray-400">No vehicles in the register yet — add them under <a href="/fleet" class="text-brand-600 font-medium">Vehicles</a>.</td></tr>
@@ -150,9 +186,17 @@
   var emptyEl = document.getElementById('va-empty');
   var activeFlag = '';
 
+  var histRows = Array.prototype.slice.call(document.querySelectorAll('#va-rows tr.va-hist'));
+  function collapseAll() {
+    histRows.forEach(function (h) { h.hidden = true; });
+    document.querySelectorAll('.va-hist-toggle svg').forEach(function (s) { s.style.transform = ''; });
+  }
   function apply() {
     var q = (search.value || '').trim().toLowerCase();
     var shown = 0;
+    // Any active search/filter collapses expanded history so hidden vehicles
+    // don't leave an orphaned history row showing.
+    collapseAll();
     rows.forEach(function (r) {
       var okQ = !q || r.getAttribute('data-search').indexOf(q) !== -1;
       var okF = !activeFlag || (' ' + r.getAttribute('data-flags') + ' ').indexOf(' ' + activeFlag + ' ') !== -1;
@@ -164,6 +208,19 @@
     emptyEl.hidden = shown !== 0;
   }
   search.addEventListener('input', apply);
+
+  // Expand / collapse a vehicle's full audit history inline.
+  document.querySelectorAll('.va-hist-toggle').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var id = btn.getAttribute('data-hist-toggle');
+      var row = document.querySelector('tr.va-hist[data-hist-for="' + id + '"]');
+      if (!row) return;
+      var open = row.hidden;
+      row.hidden = !open;
+      var svg = btn.querySelector('svg');
+      if (svg) svg.style.transform = open ? 'rotate(90deg)' : '';
+    });
+  });
   function setFlag(flag) {
     activeFlag = flag;
     chips.forEach(function (c) { c.classList.toggle('is-on', c.getAttribute('data-va-filter') === flag); });

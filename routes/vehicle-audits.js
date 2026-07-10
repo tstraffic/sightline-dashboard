@@ -100,6 +100,17 @@ router.get('/', (req, res) => {
     ORDER BY v.asset_id
   `).all();
 
+  // Full audit history per vehicle so each dashboard row can expand to show
+  // every audit (not just the latest). Small dataset — one query per vehicle.
+  const histStmt = db.prepare(`
+    SELECT a.id, a.audit_date, a.audit_type, a.overall_result, a.auditor,
+      (SELECT COUNT(*) FROM vehicle_audit_items i WHERE i.audit_id = a.id AND i.result = 'fail') AS fail_count,
+      (SELECT COUNT(*) FROM vehicle_defects d WHERE d.audit_id = a.id AND d.status != 'fixed') AS open_defects
+    FROM vehicle_audits a WHERE a.vehicle_id = ?
+    ORDER BY a.audit_date DESC, a.id DESC
+  `);
+  vehicles.forEach(v => { v.history = histStmt.all(v.id); });
+
   const cards = {
     totalVehicles: vehicles.length,
     auditedThisMonth: db.prepare(`
