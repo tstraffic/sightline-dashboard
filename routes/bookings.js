@@ -1759,7 +1759,8 @@ router.get('/api/resources', (req, res) => {
     const people = db.prepare(`
       SELECT cm.id, cm.full_name, cm.role, cm.portal_role, cm.phone, cm.employee_id,
         cm.tc_ticket_expiry, cm.white_card_expiry, cm.licence_expiry, cm.licence_type,
-        cm.tcp_level, cm.first_aid, cm.company, cm.employment_type,
+        cm.tcp_level, cm.first_aid, cm.first_aid_expiry, cm.medical_expiry,
+        cm.company, cm.employment_type, cm.supervisor_approved,
         e.employment_status AS employment_status,
         e.address, e.suburb, e.state, e.postcode,
         e.blocked_from_allocation
@@ -1774,6 +1775,8 @@ router.get('/api/resources', (req, res) => {
       if (p.licence_expiry && p.licence_expiry < today) warnings.push('licence_expired');
       if (p.tc_ticket_expiry && p.tc_ticket_expiry < today) warnings.push('tc_expired');
       if (p.white_card_expiry && p.white_card_expiry < today) warnings.push('whitecard_expired');
+      if (p.first_aid_expiry && p.first_aid_expiry < today) warnings.push('firstaid_expired');
+      if (p.medical_expiry && p.medical_expiry < today) warnings.push('medical_expired');
       if (p.employment_status === 'on_leave') warnings.push('on_leave');
       const assignedToday = assignedIds.includes(p.id);
       return { ...p, warnings, assigned_today: assignedToday };

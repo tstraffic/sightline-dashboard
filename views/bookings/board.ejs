@@ -680,6 +680,9 @@
             <button type="button" class="bk2-rp-chip" data-rp-filter="can_drive"    title="Has a licence type recorded">Can Drive</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="first_aid"    title="First-aid certified">First Aid</button>
             <button type="button" class="bk2-rp-chip" data-rp-filter="subcontractor" title="Subcontractor crew">Subcontractor</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="available"    title="Only workers free to allocate (not booked / blocked / on leave / expired)">Available</button>
+            <button type="button" class="bk2-rp-chip" data-rp-filter="unapproved"   title="Not yet supervisor-approved">Unapproved</button>
+            <button type="button" class="bk2-rp-chip bk2-rp-chip--detail" data-rp-detail="1" title="Show role, tickets & credential detail on each row">⋯ Details</button>
           </div>
         </div>
         <div class="bk2-rp-chipset" data-rp-chipset="vehicles" hidden>
@@ -4220,6 +4223,8 @@
     if (f.can_drive     && !p.licence_type) return false;
     if (f.first_aid     && !p.first_aid) return false;
     if (f.subcontractor && (p.employment_type || '').toLowerCase() !== 'subcontractor') return false;
+    if (f.available     && rpPersonReason(p)) return false;                 // only those free to allocate
+    if (f.unapproved    && p.supervisor_approved) return false;             // not yet supervisor-approved
     return true;
   }
   function rpVehicleOk(v) {
@@ -4283,8 +4288,12 @@
   function rpRow(opts) {
     var hoursHtml = '<span class="bk2-rp-hrs" title="Hours this week — not yet tracked">' + (opts.hours == null ? '?' : opts.hours) + '</span>';
     var iconHtml  = '<svg class="bk2-rp-icon" width="14" height="14" fill="currentColor" viewBox="0 0 24 24">' + opts.icon + '</svg>';
-    var nameHtml  = '<span class="bk2-rp-name">' + rpEsc(opts.name) + '</span>';
+    // Name column carries an optional detail subtitle (role · ticket · licence),
+    // revealed by the "Details" toggle (CSS: body.bk2-rp-detail).
+    var subHtml   = opts.sub ? '<span class="bk2-rp-sub">' + rpEsc(opts.sub) + '</span>' : '';
+    var nameHtml  = '<span class="bk2-rp-namewrap"><span class="bk2-rp-name">' + rpEsc(opts.name) + '</span>' + subHtml + '</span>';
     var badgeHtml = (opts.badges || []).join('');
+    var warnHtml  = (opts.warnChips && opts.warnChips.length) ? '<span class="bk2-rp-warns">' + opts.warnChips.join('') + '</span>' : '';
     var markHtml  = opts.ok
       ? '<span class="bk2-rp-mark bk2-rp-mark--yes" title="' + rpEsc(opts.okTitle || 'Available') + '">✓</span>'
       : '<span class="bk2-rp-mark bk2-rp-mark--no"  title="' + rpEsc(opts.notOkTitle || 'Not available') + '">✗</span>';
@@ -4300,9 +4309,24 @@
           ' data-resource-name="' + rpEsc(opts.name) + '"' +
           extraAttrs +
           ' title="' + rpEsc(opts.tooltip || opts.name) + '">' +
-        hoursHtml + iconHtml + nameHtml + badgeHtml + markHtml +
+        hoursHtml + iconHtml + nameHtml + badgeHtml + warnHtml + markHtml +
       '</li>'
     );
+  }
+  // Short red credential chips shown in Details mode — surfaced from the
+  // server-computed warnings so expiries are visible at a glance.
+  var RP_WARN_CHIP = {
+    licence_expired:   ['LIC',   'Driver licence expired'],
+    tc_expired:        ['TICKET','TC ticket expired'],
+    whitecard_expired: ['CARD',  'White card expired'],
+    firstaid_expired:  ['FA',    'First-aid expired'],
+    medical_expired:   ['MED',   'Medical expired'],
+  };
+  function rpWarnChips(warnings) {
+    return (warnings || []).map(function (w) {
+      var m = RP_WARN_CHIP[w]; if (!m) return '';
+      return '<span class="bk2-rp-wchip" title="' + m[1] + '">' + m[0] + '</span>';
+    }).filter(Boolean);
   }
 
   // SVG path data — defined once and reused. `<svg>` wrapper added in rpRow.
@@ -4321,13 +4345,26 @@
       if (rpIsTl(p.role))     badges.push('<svg class="bk2-rp-badge bk2-rp-badge--tl"     viewBox="0 0 24 24" fill="currentColor" width="12" height="12" title="Team lead / supervisor">' + ICON_MEGAPHONE + '</svg>');
       // Truck marker if they hold a driver's licence — quick read on who can drive.
       if (p.licence_type)     badges.push('<svg class="bk2-rp-badge bk2-rp-badge--drive"  viewBox="0 0 24 24" fill="currentColor" width="12" height="12" title="Has driver licence: ' + rpEsc(p.licence_type) + '">' + ICON_TRUCK + '</svg>');
+      // First-aid marker (green cross) — quick read on who's a first-aider.
+      if (p.first_aid)        badges.push('<span class="bk2-rp-fa" title="First-aid certified">✚</span>');
+      // Subcontractor marker.
+      if ((p.employment_type || '').toLowerCase() === 'subcontractor') badges.push('<span class="bk2-rp-sc" title="Subcontractor">SUB</span>');
       var reason = rpPersonReason(p);
+      // Detail subtitle: role · TCP · licence · company (whatever's present).
+      var detail = [
+        (p.role || '').replace(/_/g, ' '),
+        p.tcp_level ? ('TCP ' + p.tcp_level) : null,
+        p.licence_type ? ('Lic ' + p.licence_type) : null,
+        (p.company && (p.employment_type || '').toLowerCase() === 'subcontractor') ? p.company : null,
+      ].filter(Boolean).join(' · ');
       return rpRow({
         type: 'person',
         id: p.id,
         name: p.full_name,
         icon: ICON_PERSON,
         badges: badges,
+        sub: detail,
+        warnChips: rpWarnChips(p.warnings),
         ok: !reason,
         okTitle: 'Available',
         notOkTitle: reason,
@@ -4431,9 +4468,17 @@
   }
 
   function rpToggleChip(btn) {
+    var on = btn.getAttribute('aria-pressed') === 'true';
+    // "Details" is a display toggle (reveal per-row role/ticket detail), not a
+    // list filter — flip a body class and stop; the markup is already there.
+    if (btn.dataset.rpDetail) {
+      btn.setAttribute('aria-pressed', on ? 'false' : 'true');
+      document.body.classList.toggle('bk2-rp-detail', !on);
+      try { localStorage.setItem('bk2.rp.detail', !on ? '1' : '0'); } catch (e) {}
+      return;
+    }
     var key = btn.dataset.rpFilter;
     var tab = btn.closest('[data-rp-chipset]').dataset.rpChipset;
-    var on = btn.getAttribute('aria-pressed') === 'true';
     btn.setAttribute('aria-pressed', on ? 'false' : 'true');
     rpFilters[tab][key] = !on;
     rpRepaint();
@@ -4515,6 +4560,14 @@
       c.setAttribute('aria-pressed', 'false');
       c.addEventListener('click', function () { rpToggleChip(c); });
     });
+    // Restore the "Details" reveal preference (persisted display toggle).
+    try {
+      if (localStorage.getItem('bk2.rp.detail') === '1') {
+        document.body.classList.add('bk2-rp-detail');
+        var dBtn = document.querySelector('.bk2-rp-chip[data-rp-detail]');
+        if (dBtn) dBtn.setAttribute('aria-pressed', 'true');
+      }
+    } catch (e) {}
     var rpSearchEl = $('#bk2-rp-search');
     if (rpSearchEl) {
       rpSearchEl.addEventListener('input', function () { rpQuery = this.value.trim(); rpRepaint(); });

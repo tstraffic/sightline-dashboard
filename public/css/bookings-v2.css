@@ -2630,3 +2630,44 @@ body.bk2-rp-size-l .bk2-resourcepanel {
    rail inside it instead of the viewport. Neutralise it while Big is active
    (a persistent state doesn't need the one-shot entrance flourish). */
 body.bk2-rp-size-l .bk2-page { animation: none !important; transform: none !important; }
+
+/* ============================================================
+   Bookings v48 — richer, more effective resource rows. A "Details"
+   toggle reveals per-person role/ticket/licence + credential-expiry
+   chips; new inline first-aid / subcontractor markers. New filters
+   (Available, Unapproved) reuse the chip styling.
+   ============================================================ */
+.bk2-rp-namewrap { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; line-height: 1.15; }
+.bk2-rp-namewrap .bk2-rp-name { flex: 0 0 auto; }
+.bk2-rp-sub {
+  display: none;
+  font-size: 10px; color: #94A3B8;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-top: 1px; text-transform: capitalize;
+}
+body.bk2-rp-detail .bk2-rp-sub { display: block; }
+.bk2-rp-warns { display: none; align-items: center; gap: 3px; flex-shrink: 0; }
+body.bk2-rp-detail .bk2-rp-warns { display: inline-flex; }
+.bk2-rp-wchip {
+  font-size: 8px; font-weight: 800; letter-spacing: 0.03em;
+  padding: 1px 4px; border-radius: 4px; white-space: nowrap;
+  background: rgba(239,68,68,0.18); color: #FCA5A5; border: 1px solid rgba(239,68,68,0.35);
+}
+.bk2-rp-fa { flex-shrink: 0; font-size: 12px; font-weight: 800; color: #22C55E; line-height: 1; }
+.bk2-rp-sc {
+  flex-shrink: 0; font-size: 8px; font-weight: 800; letter-spacing: 0.04em;
+  padding: 1px 4px; border-radius: 4px;
+  background: rgba(148,163,184,0.2); color: #CBD5E1; border: 1px solid rgba(148,163,184,0.35);
+}
+/* "Details" chip reads as a view toggle (blue), not a green filter. */
+.bk2-rp-chip--detail[aria-pressed="true"] {
+  background: rgba(43,127,255,0.22); color: #93C5FD; border-color: rgba(43,127,255,0.5);
+}
+/* Light theme */
+:root[data-theme="light"] .bk2-rp-wchip { background: #FEF2F2; color: #B91C1C; border-color: #FECACA; }
+:root[data-theme="light"] .bk2-rp-sc { background: #F1F5F9; color: #475569; border-color: #E2E8F0; }
+:root[data-theme="light"] .bk2-resourcepanel:not(.bk2-resourcepanel--intab) .bk2-rp-sub,
+:root[data-theme="light"] .bk2-resourcepanel--intab .bk2-rp-sub { color: #6B7280; }
+:root[data-theme="light"] .bk2-rp-chip--detail[aria-pressed="true"] {
+  background: #DBEAFE; color: #1E40AF; border-color: #93C5FD;
+}
