@@ -378,7 +378,7 @@
               <div class="flex items-center gap-1.5 flex-wrap mt-1">
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:<%= pr.bg %>;color:<%= pr.color %>;"><%= pr.label %></span>
                 <% if (t.is_general) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(16,185,129,0.18);color:#60A5FA;">GENERAL</span><% } else { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(16,185,129,0.18);color:#5EEAD4;">THIS SHIFT</span><% } %>
-                <% if (t.due_at) { %><span class="text-[10px]" style="color:rgba(255,255,255,0.4);">Due <%= new Date(t.due_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></span><% } %>
+                <% if (t.due_at) { %><span class="text-[10px]" style="color:rgba(255,255,255,0.4);">Due <%= formatDateTime(t.due_at) %></span><% } %>
               </div>
             </div>
           </div>
@@ -410,7 +410,7 @@
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:<%= rp.bg %>;color:<%= rp.color %>;"><%= rp.label %></span>
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:<%= pr.bg %>;color:<%= pr.color %>;"><%= pr.label %></span>
                   <% if (t.is_general) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(16,185,129,0.18);color:#60A5FA;">GENERAL</span><% } %>
-                  <% if (t.due_at) { %><span class="text-[10px]" style="color:rgba(255,255,255,0.4);">Due <%= new Date(t.due_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></span><% } %>
+                  <% if (t.due_at) { %><span class="text-[10px]" style="color:rgba(255,255,255,0.4);">Due <%= formatDateTime(t.due_at) %></span><% } %>
                 </div>
               </div>
             </div>

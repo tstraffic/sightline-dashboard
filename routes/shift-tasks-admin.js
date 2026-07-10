@@ -8,6 +8,26 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const bookingNotify = require('../services/bookingNotify');
+const { sydneyToday, sydneyIso, parseAsSydney } = require('../lib/sydney');
+
+// Query params can arrive as arrays (e.g. two `status` fields in one form —
+// the old filter strip did exactly that and crashed `.trim()`). Take the
+// first value and whitelist it.
+function pick(raw, allowed, fallback) {
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  const s = (v == null ? '' : String(v)).trim();
+  return allowed.includes(s) ? s : fallback;
+}
+// Preserve the full filter set across redirects so a status toggle or delete
+// doesn't dump the user's scope/assignee selection.
+function boardQuery(b) {
+  const qs = new URLSearchParams();
+  if (b.return_status) qs.set('status', String(b.return_status));
+  if (b.return_scope) qs.set('scope', String(b.return_scope));
+  if (b.return_assignee) qs.set('assignee', String(b.return_assignee));
+  const s = qs.toString();
+  return '/shift-tasks' + (s ? '?' + s : '');
+}
 
 // Build the deep-link + shift label for a task-assigned push. Shift-bound
 // tasks open the shift's Tasks tab; general tasks land on the worker home.
@@ -21,9 +41,10 @@ function taskNotifyMeta(db, bookingId, title) {
 // GET /shift-tasks — board view
 router.get('/', (req, res) => {
   const db = getDb();
-  const status = (req.query.status || 'pending').trim();   // pending | done | cancelled | all
-  const scope = (req.query.scope || 'all').trim();          // all | shift | general
-  const assignee = req.query.assignee ? Number(req.query.assignee) : null;
+  const status = pick(req.query.status, ['pending', 'done', 'cancelled', 'all'], 'pending');
+  const scope = pick(req.query.scope, ['all', 'shift', 'general'], 'all');
+  const assigneeRaw = Array.isArray(req.query.assignee) ? req.query.assignee[0] : req.query.assignee;
+  const assignee = assigneeRaw ? Number(assigneeRaw) || null : null;
 
   const where = ['1=1'];
   const params = [];
@@ -80,16 +101,21 @@ router.get('/', (req, res) => {
 
   // Bucket bookings into Today / Tomorrow / In N days / Ongoing — the EJS
   // renders these as <optgroup>s and as visual day-pills above the select.
-  const todayIso = new Date().toISOString().slice(0, 10);
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  // All in SYDNEY terms: the server runs in UTC, so raw Date/toISOString
+  // labelled the wrong day during Sydney mornings, and naive wall-clock
+  // start/end strings must be parsed with their Sydney offset attached.
+  const todayIso = sydneyToday();
+  const tomorrow = sydneyIso(new Date(Date.now() + 86400000));
   const nowMs = Date.now();
   const bookingGroups = {
     ongoing: [], today: [], tomorrow: [], later: [],
   };
   for (const b of bookings) {
-    const startMs = new Date(b.start_datetime).getTime();
-    const endMs   = new Date(b.end_datetime).getTime();
-    if (startMs <= nowMs && endMs >= nowMs) bookingGroups.ongoing.push(b);
+    const start = parseAsSydney(b.start_datetime);
+    const end = parseAsSydney(b.end_datetime);
+    const startMs = start ? start.getTime() : NaN;
+    const endMs = end ? end.getTime() : NaN;
+    if (Number.isFinite(startMs) && Number.isFinite(endMs) && startMs <= nowMs && endMs >= nowMs) bookingGroups.ongoing.push(b);
     else if (b.shift_date === todayIso)     bookingGroups.today.push(b);
     else if (b.shift_date === tomorrow)     bookingGroups.tomorrow.push(b);
     else                                     bookingGroups.later.push(b);
@@ -149,14 +175,50 @@ router.post('/:id/status', (req, res) => {
     SET status = ?, completed_at = ${completedAt}, updated_at = datetime('now')
     WHERE id = ?
   `).run(status, req.params.id);
-  res.redirect('/shift-tasks?status=' + (req.body.return_status || 'pending'));
+  res.redirect(boardQuery(req.body));
+});
+
+// POST /shift-tasks/:id/update — inline edit from the board: title,
+// assignee, priority, due. Reassignment on a shift-bound task keeps the
+// same booking_crew guard as create; the allocation link follows the new
+// assignee. Notifies the new worker when the task changes hands.
+router.post('/:id/update', (req, res) => {
+  const db = getDb();
+  const task = db.prepare('SELECT * FROM shift_tasks WHERE id = ?').get(req.params.id);
+  if (!task) { req.flash('error', 'Task not found.'); return res.redirect(boardQuery(req.body)); }
+  const b = req.body;
+  const title = (b.title || '').trim() || task.title;
+  const priority = ['low', 'normal', 'high'].includes(b.priority) ? b.priority : task.priority;
+  const dueAt = b.due_at === undefined ? task.due_at : (b.due_at || null);
+  let crewId = parseInt(b.crew_member_id, 10) || task.crew_member_id;
+  let allocId = task.allocation_id;
+  if (crewId !== task.crew_member_id) {
+    if (task.booking_id) {
+      const ok = db.prepare('SELECT 1 FROM booking_crew WHERE booking_id=? AND crew_member_id=?').get(task.booking_id, crewId);
+      if (!ok) { req.flash('error', "Worker isn't assigned to that task's booking."); return res.redirect(boardQuery(b)); }
+      const alloc = db.prepare('SELECT id FROM crew_allocations WHERE booking_id=? AND crew_member_id=? LIMIT 1').get(task.booking_id, crewId);
+      allocId = alloc ? alloc.id : null;
+    } else {
+      allocId = null;
+    }
+  }
+  db.prepare(`
+    UPDATE shift_tasks SET title=?, crew_member_id=?, allocation_id=?, priority=?, due_at=?, updated_at=datetime('now')
+    WHERE id=?
+  `).run(title, crewId, allocId, priority, dueAt, req.params.id);
+  if (crewId !== task.crew_member_id) {
+    try { bookingNotify.notifyTaskAssigned([crewId], taskNotifyMeta(db, task.booking_id, title)); } catch (e) {}
+  }
+  logActivity({ user: req.session.user, action: 'update', entityType: 'shift_task', entityId: task.id, details: 'Edited task: ' + title, req });
+  req.flash('success', 'Task updated.');
+  res.redirect(boardQuery(b));
 });
 
 // POST /shift-tasks/:id/delete
 router.post('/:id/delete', (req, res) => {
   getDb().prepare('DELETE FROM shift_tasks WHERE id = ?').run(req.params.id);
   req.flash('success', 'Task removed.');
-  res.redirect('/shift-tasks?status=' + (req.body.return_status || 'pending'));
+  res.redirect(boardQuery(req.body));
 });
 
 module.exports = router;

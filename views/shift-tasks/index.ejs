@@ -12,14 +12,28 @@
     if (p === 'low')  return 'bg-gray-100 text-gray-600 ring-gray-500/10';
     return            'bg-amber-50 text-amber-700 ring-amber-600/10';
   }
-  // Format booking option label — terse, scannable, time-led.
+  // Format booking option label — terse, scannable, time-led. Times go
+  // through the Sydney-safe formatter (naive wall-clock strings would
+  // otherwise be parsed as UTC on the server and shift 10-11 hours).
   function bkOpt(b) {
-    var d = new Date(b.start_datetime);
-    var t = d.toLocaleTimeString('en-AU', { timeZone: 'Australia/Sydney', hour: 'numeric', minute: '2-digit' });
+    var t = formatTime(b.start_datetime);
     var bits = [b.booking_number || ('#' + b.id), t];
     if (b.title)  bits.push(b.title);
     if (b.suburb) bits.push(b.suburb);
     return bits.join(' · ');
+  }
+  // Normalise a stored due_at into datetime-local input format.
+  function dueLocal(v) { return (v || '').replace(' ', 'T').slice(0, 16); }
+  // Build a board URL carrying the FULL filter set (status+scope+assignee) —
+  // the old strip submitted partial forms and every click reset the others.
+  function fq(over) {
+    var q = { status: status, scope: scope, assignee: assignee || '' };
+    Object.keys(over || {}).forEach(function (k) { q[k] = over[k]; });
+    var parts = [];
+    if (q.status && q.status !== 'pending') parts.push('status=' + q.status);
+    if (q.scope && q.scope !== 'all') parts.push('scope=' + q.scope);
+    if (q.assignee) parts.push('assignee=' + q.assignee);
+    return '/shift-tasks' + (parts.length ? '?' + parts.join('&') : '');
   }
   function dayLabel(iso) {
     var d = new Date(iso + 'T00:00:00');
@@ -328,37 +342,139 @@
     </form>
   </div>
 
-  <!-- ── Filter strip ─────────────────────────────────────────── -->
-  <form method="GET" id="filters-form" class="flex flex-wrap items-center gap-2.5">
+  <!-- ── Filter strip ─────────────────────────────────────────────
+       Chips are LINKS carrying the complete filter set, so changing one
+       filter never resets the others (the old submit-button strip also
+       posted `status` twice, which 500'd the route). -->
+  <div class="flex flex-wrap items-center gap-2.5">
     <div class="tb-chip-group">
-      <% ['pending','done','all'].forEach(function (s) { %>
-        <button type="submit" name="status" value="<%= s %>" class="tb-chip <%= status === s ? 'active' : '' %>">
-          <%= s.charAt(0).toUpperCase() + s.slice(1) %>
-        </button>
+      <% [['pending','Pending'],['done','Done'],['cancelled','Cancelled'],['all','Board']].forEach(function (pair) { %>
+        <a href="<%= fq({ status: pair[0] }) %>" class="tb-chip <%= status === pair[0] ? 'active' : '' %>"><%= pair[1] %></a>
       <% }) %>
     </div>
     <div class="tb-chip-group">
       <% [['all','All'],['shift','Shift-bound'],['general','General']].forEach(function (pair) { %>
-        <button type="submit" name="scope" value="<%= pair[0] %>" class="tb-chip <%= scope === pair[0] ? 'active' : '' %>">
-          <%= pair[1] %>
-        </button>
+        <a href="<%= fq({ scope: pair[0] }) %>" class="tb-chip <%= scope === pair[0] ? 'active' : '' %>"><%= pair[1] %></a>
       <% }) %>
-      <input type="hidden" name="status" value="<%= status %>">
     </div>
-    <select name="assignee" onchange="this.form.submit()" class="tb-select tb-input" style="width:auto;min-width:160px;padding-top:7px;padding-bottom:7px;font-size:0.78rem;">
-      <option value="">All assignees</option>
-      <% crew.forEach(function (c) { %>
-        <option value="<%= c.id %>" <%= assignee === c.id ? 'selected' : '' %>><%= c.full_name %></option>
-      <% }) %>
-    </select>
+    <form method="GET" action="/shift-tasks" class="inline-flex">
+      <input type="hidden" name="status" value="<%= status %>">
+      <input type="hidden" name="scope" value="<%= scope %>">
+      <select name="assignee" onchange="this.form.submit()" class="tb-select tb-input" style="width:auto;min-width:160px;padding-top:7px;padding-bottom:7px;font-size:0.78rem;">
+        <option value="">All assignees</option>
+        <% crew.forEach(function (c) { %>
+          <option value="<%= c.id %>" <%= assignee === c.id ? 'selected' : '' %>><%= c.full_name %></option>
+        <% }) %>
+      </select>
+    </form>
     <% if (status !== 'pending' || scope !== 'all' || assignee) { %>
       <a href="/shift-tasks" class="text-xs text-gray-500 hover:text-gray-700 ml-1">Clear filters</a>
     <% } %>
-  </form>
+  </div>
 
-  <!-- ── Task list ───────────────────────────────────────────── -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-    <% if (rows.length === 0) { %>
+  <!-- ── Task board ─────────────────────────────────────────────
+       "Board" status shows Pending | Done columns side by side; a specific
+       status filter shows that column alone. Every card can be expanded to
+       edit title / assignee / priority / due in place. -->
+  <%
+    var pendingRows = rows.filter(function (t) { return t.status === 'pending'; });
+    var doneRows = rows.filter(function (t) { return t.status === 'done'; });
+    var cancelledRows = rows.filter(function (t) { return t.status === 'cancelled'; });
+    var boardMode = status === 'all';
+
+    function taskCard(t) {
+      var rp = rolePill(t.assignee_portal_role);
+      var done = t.status === 'done';
+  %>
+          <li class="px-4 py-3 hover:bg-gray-50 <%= done ? 'opacity-70' : '' %>">
+            <div class="flex items-start gap-3">
+              <form method="POST" action="/shift-tasks/<%= t.id %>/status" class="shrink-0 mt-0.5">
+                <%- include('../partials/csrf') %>
+                <input type="hidden" name="status" value="<%= done ? 'pending' : 'done' %>">
+                <input type="hidden" name="return_status" value="<%= status %>">
+                <input type="hidden" name="return_scope" value="<%= scope %>">
+                <input type="hidden" name="return_assignee" value="<%= assignee || '' %>">
+                <button type="submit" aria-label="<%= done ? 'Reopen' : 'Mark done' %>"
+                  class="w-5 h-5 rounded flex items-center justify-center"
+                  style="border:1.5px solid <%= done ? '#10B981' : '#D1D5DB' %>;background:<%= done ? '#D1FAE5' : 'transparent' %>;">
+                  <% if (done) { %><svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><% } %>
+                </button>
+              </form>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium <%= done ? 'line-through text-gray-500' : 'text-gray-900' %>"><%= t.title %></p>
+                <% if (t.description) { %><p class="text-xs text-gray-500 mt-0.5"><%= t.description %></p><% } %>
+                <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold <%= rp.cls %>"><%= t.assignee_name %></span>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ring-1 <%= priorityPill(t.priority) %>"><%= (t.priority || 'normal').toUpperCase() %></span>
+                  <% if (t.booking_id) { %>
+                    <a href="/bookings/<%= t.booking_id %>#tasks" class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:underline">
+                      <%= t.booking_number || '#' + t.booking_id %><% if (t.start_datetime) { %> · <%= formatDateShort(t.start_datetime) %><% } %>
+                    </a>
+                  <% } else { %>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700">GENERAL</span>
+                  <% } %>
+                  <% if (t.due_at) { %><span class="text-[10px] text-gray-500">Due <%= formatDateTime(t.due_at) %></span><% } %>
+                  <% var by = t.created_by_name || t.created_by_crew_name; if (by) { %><span class="text-[10px] text-gray-400">· by <%= by %></span><% } %>
+                </div>
+              </div>
+              <button type="button" class="tb-edit-toggle shrink-0 text-gray-300 hover:text-brand-600 p-1" aria-label="Edit task" title="Edit task">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+              </button>
+              <form method="POST" action="/shift-tasks/<%= t.id %>/delete" onsubmit="return confirm('Remove this task?')" class="shrink-0">
+                <%- include('../partials/csrf') %>
+                <input type="hidden" name="return_status" value="<%= status %>">
+                <input type="hidden" name="return_scope" value="<%= scope %>">
+                <input type="hidden" name="return_assignee" value="<%= assignee || '' %>">
+                <button type="submit" class="text-gray-300 hover:text-red-500 p-1" aria-label="Remove">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                </button>
+              </form>
+            </div>
+            <!-- Inline edit — reassign / retitle / priority / due -->
+            <form method="POST" action="/shift-tasks/<%= t.id %>/update" class="tb-edit-form hidden mt-2.5 ml-8 p-3 rounded-lg border border-gray-200 bg-gray-50/70 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2">
+              <%- include('../partials/csrf') %>
+              <input type="hidden" name="return_status" value="<%= status %>">
+              <input type="hidden" name="return_scope" value="<%= scope %>">
+              <input type="hidden" name="return_assignee" value="<%= assignee || '' %>">
+              <input type="text" name="title" value="<%= t.title %>" required maxlength="200" class="tb-input lg:col-span-2" style="padding:7px 10px;font-size:0.8rem;">
+              <select name="crew_member_id" class="tb-select tb-input" style="padding:7px 30px 7px 10px;font-size:0.8rem;" title="<%= t.booking_id ? 'Must be on the task\'s booking' : 'Assignee' %>">
+                <% crew.forEach(function (c) { %>
+                  <option value="<%= c.id %>" <%= t.crew_member_id === c.id ? 'selected' : '' %>><%= c.full_name %></option>
+                <% }) %>
+              </select>
+              <select name="priority" class="tb-select tb-input" style="padding:7px 30px 7px 10px;font-size:0.8rem;">
+                <% ['high','normal','low'].forEach(function (p) { %><option value="<%= p %>" <%= (t.priority || 'normal') === p ? 'selected' : '' %>><%= p.charAt(0).toUpperCase() + p.slice(1) %></option><% }) %>
+              </select>
+              <div class="flex gap-1.5">
+                <input type="datetime-local" name="due_at" value="<%= dueLocal(t.due_at) %>" class="tb-input" style="padding:7px 10px;font-size:0.8rem;">
+                <button type="submit" class="px-3 rounded-lg bg-brand-600 hover:bg-brand-500 text-white text-xs font-bold whitespace-nowrap">Save</button>
+              </div>
+            </form>
+          </li>
+  <%
+    }
+
+    function taskColumn(label, list, tone) {
+  %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div class="px-4 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center justify-between">
+          <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest"><%= label %></h2>
+          <span class="inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold <%= tone === 'emerald' ? 'bg-emerald-50 text-emerald-700' : (tone === 'gray' ? 'bg-gray-100 text-gray-500' : 'bg-amber-50 text-amber-700') %>"><%= list.length %></span>
+        </div>
+        <% if (!list.length) { %>
+          <p class="px-4 py-8 text-center text-xs text-gray-400">Nothing here.</p>
+        <% } else { %>
+          <ul class="divide-y divide-gray-100">
+            <% list.forEach(function (t) { taskCard(t); }) %>
+          </ul>
+        <% } %>
+      </div>
+  <%
+    }
+  %>
+
+  <% if (rows.length === 0) { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
       <div class="tb-empty">
         <div class="tb-empty-ic">
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
@@ -366,53 +482,31 @@
         <p class="font-medium text-gray-700">No tasks match these filters.</p>
         <p class="text-xs text-gray-500 mt-1">Use the form above to allocate one.</p>
       </div>
-    <% } else { %>
-      <ul class="divide-y divide-gray-100">
-        <% rows.forEach(function (t) { var rp = rolePill(t.assignee_portal_role); var done = t.status === 'done'; %>
-          <li class="px-5 py-3 flex items-start gap-3 hover:bg-gray-50 <%= done ? 'opacity-70' : '' %>">
-            <form method="POST" action="/shift-tasks/<%= t.id %>/status" class="shrink-0 mt-0.5">
-              <%- include('../partials/csrf') %>
-              <input type="hidden" name="status" value="<%= done ? 'pending' : 'done' %>">
-              <input type="hidden" name="return_status" value="<%= status %>">
-              <button type="submit" aria-label="<%= done ? 'Reopen' : 'Mark done' %>"
-                class="w-5 h-5 rounded flex items-center justify-center"
-                style="border:1.5px solid <%= done ? '#10B981' : '#D1D5DB' %>;background:<%= done ? '#D1FAE5' : 'transparent' %>;">
-                <% if (done) { %><svg class="w-3 h-3 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><% } %>
-              </button>
-            </form>
-            <div class="flex-1 min-w-0">
-              <p class="text-sm font-medium <%= done ? 'line-through text-gray-500' : 'text-gray-900' %>"><%= t.title %></p>
-              <% if (t.description) { %><p class="text-xs text-gray-500 mt-0.5"><%= t.description %></p><% } %>
-              <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold <%= rp.cls %>"><%= t.assignee_name %></span>
-                <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ring-1 <%= priorityPill(t.priority) %>"><%= (t.priority || 'normal').toUpperCase() %></span>
-                <% if (t.booking_id) { %>
-                  <a href="/bookings/<%= t.booking_id %>#tasks" class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:underline">
-                    <%= t.booking_number || '#' + t.booking_id %><% if (t.start_datetime) { %> · <%= new Date(t.start_datetime).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short' }) %><% } %>
-                  </a>
-                <% } else { %>
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700">GENERAL</span>
-                <% } %>
-                <% if (t.due_at) { %><span class="text-[10px] text-gray-500">Due <%= new Date(t.due_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></span><% } %>
-                <% var by = t.created_by_name || t.created_by_crew_name; if (by) { %><span class="text-[10px] text-gray-400">· by <%= by %></span><% } %>
-              </div>
-            </div>
-            <form method="POST" action="/shift-tasks/<%= t.id %>/delete" onsubmit="return confirm('Remove this task?')" class="shrink-0">
-              <%- include('../partials/csrf') %>
-              <input type="hidden" name="return_status" value="<%= status %>">
-              <button type="submit" class="text-gray-300 hover:text-red-500 p-1" aria-label="Remove">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-              </button>
-            </form>
-          </li>
-        <% }) %>
-      </ul>
+    </div>
+  <% } else if (boardMode) { %>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+      <% taskColumn('Pending', pendingRows, 'amber') %>
+      <% taskColumn('Done', doneRows, 'emerald') %>
+    </div>
+    <% if (cancelledRows.length) { %>
+      <div class="mt-4"><% taskColumn('Cancelled', cancelledRows, 'gray') %></div>
     <% } %>
-  </div>
+  <% } else { %>
+    <% taskColumn(status.charAt(0).toUpperCase() + status.slice(1), rows, status === 'done' ? 'emerald' : (status === 'cancelled' ? 'gray' : 'amber')) %>
+  <% } %>
 </div>
 
 <script>
 (function () {
+  // Pencil toggles each card's inline edit form.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('.tb-edit-toggle');
+    if (!btn) return;
+    var li = btn.closest('li');
+    var form = li && li.querySelector('.tb-edit-form');
+    if (form) form.classList.toggle('hidden');
+  });
+
   // Scope toggle: collapse the booking row when the task is general.
   var scopeShift = document.getElementById('scope-shift');
   var scopeGeneral = document.getElementById('scope-general');

@@ -8,6 +8,33 @@ const { logActivity } = require('../middleware/audit');
 const { requireRole } = require('../middleware/auth');
 const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew, autoAdvanceOngoing } = require('../lib/bookingLifecycle');
 const { getDocketCrew } = require('../lib/shiftDocket');
+const { generateJobNumber } = require('../lib/jobNumbers');
+
+// Lazily create a project (jobs row) from a typed name on the booking form.
+// The old inline INSERT omitted the jobs table's NOT NULL columns
+// (job_number/client/site_address/suburb/start_date), so it ALWAYS failed —
+// and the swallow-all catch meant "new project" silently never worked.
+function lazyCreateProject(db, name, clientId, b) {
+  let clientName = '';
+  if (clientId) {
+    const c = db.prepare('SELECT company_name FROM clients WHERE id = ?').get(clientId);
+    if (c) clientName = c.company_name;
+  }
+  if (!clientName) clientName = (b.client_name || '').trim();
+  try {
+    return db.prepare(`
+      INSERT INTO jobs (job_number, job_name, client, client_id, site_address, suburb, status, stage, start_date, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, 'active', 'delivery', ?, CURRENT_TIMESTAMP)
+    `).run(
+      generateJobNumber(), name, clientName || '—', clientId,
+      (b.site_address || '').trim(), (b.suburb || '').trim(),
+      b.start_date || new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' })
+    ).lastInsertRowid;
+  } catch (e) {
+    console.error('[bookings] lazy project create failed:', e.message);
+    return null;
+  }
+}
 const { getConfig } = require('../middleware/settings');
 const bookingNotify = require('../services/bookingNotify');
 
@@ -773,6 +800,32 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
   const spareByVehicle = new Map();
   for (const g of spareGroups) spareByVehicle.set(g.vehicle_id, g);
 
+  // role_on_site → the short role label a people-addon block carries
+  // (PEOPLE_ADDON_ROLES values). Used to pair workers with "their" standalone
+  // group when they're off a vehicle, and to steal the right addon slot when
+  // a vehicle-assigned worker's seat comes out of an addon requirement.
+  const ROLE_TO_ADDON = {
+    traffic_controller: 'TC', spotter: 'Spotter', hoist_operator: 'Hoist',
+    labourer: 'Labour', trainee: 'Trainee', security: 'Security',
+  };
+  // Remove one unfilled slot from a role-matching no-vehicle addon block.
+  // Returns true if one was taken. Keeps totals honest: when a standalone TC
+  // hops onto a ute, their empty "1 open slot" must not linger in the TC group.
+  function stealAddonSlot(role) {
+    const want = ROLE_TO_ADDON[role];
+    if (!want) return false;
+    for (const b of blocks) {
+      if (!b.no_vehicle || b.role !== want) continue;
+      const idx = b.worker_slots.findIndex(s => !s.filled);
+      if (idx !== -1) {
+        b.worker_slots.splice(idx, 1);
+        b.size = Math.max(0, (b.size || 1) - 1);
+        return true;
+      }
+    }
+    return false;
+  }
+
   function fillSlot(slot, c) {
     slot.filled = true;
     slot.booking_crew_id = c.booking_crew_id;
@@ -804,11 +857,13 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       let slot = blk.worker_slots.find(s => !s.filled);
       if (!slot) {
         // Block is already full but the planner explicitly put this worker on
-        // THIS vehicle — grow the block so they actually land in the ute
-        // rather than silently overflowing to the pool (which read as "it
-        // swapped someone out at random"). Over-capacity crews are allowed;
-        // the crew-size label still reflects what the shift called for.
-        slot = { filled: false, extra: true };
+        // THIS vehicle. Their seat most likely comes out of a standalone
+        // addon requirement (e.g. a lone "Traffic Controller") — take that
+        // group's empty slot with them so it doesn't linger as a phantom
+        // "1 open slot". Only when no matching addon slot exists is this
+        // genuine over-capacity (extra) growth.
+        const stolen = stealAddonSlot(c.role_on_site);
+        slot = { filled: false, extra: !stolen };
         blk.worker_slots.push(slot);
       }
       fillSlot(slot, c);
@@ -823,12 +878,19 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       continue;
     }
     // A worker the planner DELIBERATELY dragged off a ute (off_vehicle flag)
-    // stays in the "Not in any vehicle" pool — it must NOT auto-slot back into
-    // the ute's now-free seat, otherwise "take them off the ute" looks like it
-    // did nothing (the worker snaps straight back). This is the counterpart to
-    // the auto-fill below: only workers who were never explicitly removed get
-    // pulled into open crew slots.
-    if (c.off_vehicle) { unassigned.push(c); continue; }
+    // must NOT auto-slot back into the ute's now-free seat. Preferred landing:
+    // an open slot in their role's standalone group ("just Traffic
+    // Controllers") so moving someone out of a crew reads naturally; only when
+    // no matching group has room do they sit in the "Not in any vehicle" pool.
+    if (c.off_vehicle) {
+      const want = ROLE_TO_ADDON[c.role_on_site];
+      const home = want
+        ? blocks.find(b => b.no_vehicle && b.role === want && b.worker_slots.some(s => !s.filled))
+        : null;
+      if (home) { fillSlot(home.worker_slots.find(s => !s.filled), c); continue; }
+      unassigned.push(c);
+      continue;
+    }
     // Everyone else (no vehicle assignment, or a vehicle no longer on the
     // shift) fills the next open crew/TC slot in block order — so dragging a
     // worker into the shift auto-slots them under TC rather than dumping them
@@ -859,11 +921,16 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
     }
   }
 
+  // Addon groups whose every slot was stolen by vehicle assignments have
+  // nothing left to show (their people are riding utes) — drop them so the
+  // card doesn't render an empty header.
+  const visible = blocks.filter(b => !(b.no_vehicle && b.worker_slots.length === 0));
+
   // Attach unassigned pool to the blocks array so the caller can read
   // it via `crew_blocks.unassigned`. Keeps the return type backwards-
   // compatible (still an array) without forcing every caller to use
   // an object shape.
-  blocks.unassigned = unassigned.map(c => {
+  visible.unassigned = unassigned.map(c => {
     const slot = { filled: true };
     fillSlot(slot, c);
     return slot;
@@ -881,8 +948,8 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       if (d) d.is_driver = true;
     }
   }
-  blocks.spare_vehicles = spareGroups;
-  return blocks;
+  visible.spare_vehicles = spareGroups;
+  return visible;
 }
 
 // GET / — Day-focused Board view + universal slide-over.
@@ -1379,10 +1446,14 @@ router.post('/:id/quick-update', (req, res) => {
     else { try { clientId = db.prepare("INSERT INTO clients (company_name, created_at) VALUES (?, CURRENT_TIMESTAMP)").run(b.client_name.trim()).lastInsertRowid; } catch (e) {} }
   }
   let jobId = b.job_id ? parseInt(b.job_id, 10) : null;
+  // An explicit existing-project pick wins outright: discard any leftover
+  // typed new-project name so it can't leak into the title / site_address
+  // fallbacks below (the "picked existing after opening + New project" bug).
+  if (jobId) b.site_label = '';
   if (!jobId && b.site_label) {
     const pr = db.prepare("SELECT id FROM jobs WHERE LOWER(job_name) = LOWER(?) LIMIT 1").get(b.site_label.trim());
     if (pr) jobId = pr.id;
-    else if (clientId) { try { jobId = db.prepare("INSERT INTO jobs (job_name, client_id, status, created_at) VALUES (?, ?, 'active', CURRENT_TIMESTAMP)").run(b.site_label.trim(), clientId).lastInsertRowid; } catch (e) {} }
+    else if (clientId) jobId = lazyCreateProject(db, b.site_label.trim(), clientId, b);
   }
   const lat = b.latitude ? parseFloat(b.latitude) : null;
   const lng = b.longitude ? parseFloat(b.longitude) : null;
@@ -1583,15 +1654,13 @@ router.post('/quick', (req, res) => {
     }
   }
   let jobId = b.job_id ? parseInt(b.job_id, 10) : null;
+  // Explicit existing-project pick wins — drop any stale typed new-project
+  // name so it can't leak into the title / site_address fallbacks below.
+  if (jobId) b.site_label = '';
   if (!jobId && b.site_label) {
     const proj = db.prepare("SELECT id FROM jobs WHERE LOWER(job_name) = LOWER(?) LIMIT 1").get(b.site_label.trim());
     if (proj) jobId = proj.id;
-    else if (clientId) {
-      try {
-        const ins = db.prepare("INSERT INTO jobs (job_name, client_id, status, created_at) VALUES (?, ?, 'active', CURRENT_TIMESTAMP)").run(b.site_label.trim(), clientId);
-        jobId = ins.lastInsertRowid;
-      } catch (e) { /* table may not allow these columns — leave jobId null */ }
-    }
+    else if (clientId) jobId = lazyCreateProject(db, b.site_label.trim(), clientId, b);
   }
 
   // Parse optional lat/lng from the address autocomplete picker.
@@ -3009,6 +3078,7 @@ router.post('/:id/documents/:docId/delete', (req, res) => {
   const doc = db.prepare("SELECT * FROM booking_documents WHERE id=? AND booking_id=?").get(req.params.docId, req.params.id);
   if (doc && doc.file_path && fs.existsSync(doc.file_path)) { try { fs.unlinkSync(doc.file_path); } catch(e) {} }
   db.prepare("DELETE FROM booking_documents WHERE id=? AND booking_id=?").run(req.params.docId, req.params.id);
+  if (req.headers.accept && req.headers.accept.includes('application/json')) return res.json({ ok: true });
   req.flash('success', 'Document deleted.');
   res.redirect('/bookings/' + req.params.id);
 });
@@ -3184,21 +3254,26 @@ router.post('/:id/clone', (req, res) => {
 // shift detail page; TLs / Supervisors see the whole crew's tasks.
 // =============================================
 
-// POST /:id/tasks — create
+// POST /:id/tasks — create. Answers JSON for the board's quick-edit Tasks
+// tab (Accept: application/json) so adding a task never leaves the board.
 router.post('/:id/tasks', (req, res) => {
   const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) {
+    if (isJson) return res.status(404).json({ ok: false, error: 'Booking not found.' });
     req.flash('error', 'Booking not found.');
     return res.redirect('/bookings');
   }
   const { crew_member_id, title, description, priority, due_at } = req.body;
   if (!crew_member_id || !title || !title.trim()) {
+    if (isJson) return res.status(400).json({ ok: false, error: 'Title and assignee are required.' });
     req.flash('error', 'Title and assignee are required.');
     return res.redirect('/bookings/' + req.params.id);
   }
   // Assignee must be on this booking — block cross-booking task drops.
   const ok = db.prepare("SELECT 1 FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, crew_member_id);
   if (!ok) {
+    if (isJson) return res.status(400).json({ ok: false, error: "Worker isn't on this booking." });
     req.flash('error', "Worker isn't on this booking.");
     return res.redirect('/bookings/' + req.params.id);
   }
@@ -3228,6 +3303,7 @@ router.post('/:id/tasks', (req, res) => {
       shift_label: [date, bk.title || bk.booking_number].filter(Boolean).join(' '),
     });
   } catch (e) { console.error('[bookings] task-assigned notify failed:', e.message); }
+  if (isJson) return res.json({ ok: true });
   req.flash('success', 'Task added.');
   res.redirect('/bookings/' + req.params.id + '#tasks');
 });
@@ -3235,6 +3311,7 @@ router.post('/:id/tasks', (req, res) => {
 // POST /:id/tasks/:taskId/delete
 router.post('/:id/tasks/:taskId/delete', (req, res) => {
   getDb().prepare("DELETE FROM shift_tasks WHERE id=? AND booking_id=?").run(req.params.taskId, req.params.id);
+  if (req.headers.accept && req.headers.accept.includes('application/json')) return res.json({ ok: true });
   req.flash('success', 'Task removed.');
   res.redirect('/bookings/' + req.params.id + '#tasks');
 });
@@ -3248,6 +3325,7 @@ router.post('/:id/tasks/:taskId/status', (req, res) => {
     SET status = ?, completed_at = ${completedAt}, updated_at = datetime('now')
     WHERE id = ? AND booking_id = ?
   `).run(status, req.params.taskId, req.params.id);
+  if (req.headers.accept && req.headers.accept.includes('application/json')) return res.json({ ok: true });
   res.redirect('/bookings/' + req.params.id + '#tasks');
 });
 

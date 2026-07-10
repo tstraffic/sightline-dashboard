@@ -400,7 +400,7 @@
                     var emptyWorkerCount = blk.worker_slots.filter(function (s) { return !s.filled; }).length;
                     var hasVehicle = blk.vehicle_slot && blk.vehicle_slot.filled;
                   %>
-                    <div class="bk2-crew">
+                    <div class="bk2-crew"<%- blk.no_vehicle ? ' data-bk-novehicle="1" data-booking-id="' + b.id + '"' : '' %>>
                       <div class="bk2-crew-head">
                         <span class="bk2-crew-label"><%= blk.no_vehicle ? (blk.role || 'Crew') : ('Crew ' + blk.ordinal) %></span>
                         <span class="bk2-crew-size"><%= blk.no_vehicle ? ('×' + (blk.size || 1)) : ((blk.size || '') + '-man · ' + (blk.role || 'TC')) %></span>
@@ -2365,8 +2365,83 @@
       // via a script that doesn't run when we lift the node by innerHTML.
       // Bind the same interactions in the overlay so the chips are live.
       if (tab === 'resources') wireOverlayCrewChips(pane, id);
+      // Tasks + Documents fragments have the same lifted-HTML problem: their
+      // forms would full-page POST (ejecting the planner from the board) and
+      // the dropzone never gets its handlers. Wire them per-tab.
+      if (tab === 'tasks') wireOverlayTasks(pane);
+      if (tab === 'documents') {
+        if (window.initDropzones) window.initDropzones(pane);
+        wireOverlayDocs(pane);
+      }
     }).catch(function () {
       pane.innerHTML = '<div class="bk2-edit-placeholder"><h3>Couldn’t load</h3><p>Try the full edit page.</p></div>';
+    });
+  }
+
+  // ── Tasks tab: AJAX the lifted forms so add / toggle / delete stay in the
+  // board. Server answers JSON when asked; on success we drop the cached
+  // full-page doc and re-lift the tasks fragment so the list is fresh.
+  function wireOverlayTasks(pane) {
+    if (pane.dataset.btBound) return;
+    pane.dataset.btBound = '1';
+    pane.addEventListener('submit', function (e) {
+      var form = e.target && e.target.closest && e.target.closest('form');
+      if (!form) return;
+      var action = form.getAttribute('action') || '';
+      if (!/\/bookings\/\d+\/tasks/.test(action)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var body = new URLSearchParams(new FormData(form));
+      fetch(action, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body,
+        credentials: 'same-origin',
+      }).then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
+        .then(function (j) {
+          if (!j || j.ok === false) {
+            if (typeof bk2Toast === 'function') bk2Toast((j && j.error) || 'Could not save task.', 'error');
+            return;
+          }
+          if (typeof bk2Toast === 'function') bk2Toast('Tasks updated.');
+          fragmentDocCache = null;          // the cached page HTML is stale now
+          fragmentLoaded.tasks = false;
+          loadBookingFragment('tasks');     // re-lift the fresh list
+        })
+        .catch(function () { if (typeof bk2Toast === 'function') bk2Toast('Could not save task — network error.', 'error'); });
+    });
+  }
+
+  // ── Documents tab: dropzone re-init happens above; here we AJAX the
+  // multipart upload + delete forms so uploads never navigate away.
+  function wireOverlayDocs(pane) {
+    if (pane.dataset.bdBound) return;
+    pane.dataset.bdBound = '1';
+    pane.addEventListener('submit', function (e) {
+      var form = e.target && e.target.closest && e.target.closest('form');
+      if (!form) return;
+      var action = form.getAttribute('action') || '';
+      if (!/\/bookings\/\d+\/documents/.test(action)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      var fd = new FormData(form);   // multipart — CSRF middleware skips these
+      fetch(action, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json' },
+        body: fd,
+        credentials: 'same-origin',
+      }).then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
+        .then(function (j) {
+          if (!j || j.ok === false) {
+            if (typeof bk2Toast === 'function') bk2Toast((j && j.error) || 'Upload failed.', 'error');
+            return;
+          }
+          if (typeof bk2Toast === 'function') bk2Toast('Documents updated.');
+          fragmentDocCache = null;
+          fragmentLoaded.documents = false;
+          loadBookingFragment('documents');
+        })
+        .catch(function () { if (typeof bk2Toast === 'function') bk2Toast('Upload failed — network error.', 'error'); });
     });
   }
 
@@ -2721,7 +2796,8 @@
         o.textContent = (p.job_number ? p.job_number + ' — ' : '') + (p.job_name || ('Project ' + p.id));
         projSel.appendChild(o);
       });
-      projSel.disabled = false;
+      // Stay parked while the new-project input is open (mutual exclusion).
+      projSel.disabled = !!(projNewInput && !projNewInput.hidden);
       if (projNewBtn) projNewBtn.hidden = false;
       if (selectId) projSel.value = String(selectId);
     }
@@ -2729,7 +2805,7 @@
       if (!projSel) return;
       projSel.innerHTML = '<option value="">Select a client first</option>';
       projSel.disabled = true;
-      if (projNewBtn) projNewBtn.hidden = true;
+      if (projNewBtn) { projNewBtn.hidden = true; projNewBtn.textContent = '+ New project'; }
       if (projNewInput) { projNewInput.hidden = true; projNewInput.value = ''; }
     }
     window.bk2LoadProjects = function (clientId, selectId) {
@@ -2743,11 +2819,34 @@
       var cid = e.detail && e.detail.clientId;
       if (cid) window.bk2LoadProjects(cid); else clearProjects();
     });
+    // "+ New project" and the existing-project select are MUTUALLY EXCLUSIVE.
+    // Before this, the select stayed live while the new-project input was
+    // open, so the form could submit BOTH job_id and a stale typed name —
+    // the typed name then leaked into the booking title / site address.
     if (projNewBtn) projNewBtn.addEventListener('click', function () {
       if (!projNewInput) return;
       var showing = !projNewInput.hidden;
       projNewInput.hidden = showing;
-      if (!showing) { if (projSel) projSel.value = ''; projNewInput.focus(); } else projNewInput.value = '';
+      if (!showing) {
+        // opening: new-project mode — clear + park the select
+        if (projSel) { projSel.value = ''; projSel.disabled = true; }
+        projNewInput.focus();
+        projNewBtn.textContent = '× Cancel';
+      } else {
+        // closing: back to pick-existing mode
+        projNewInput.value = '';
+        if (projSel) projSel.disabled = false;
+        projNewBtn.textContent = '+ New project';
+      }
+    });
+    if (projSel) projSel.addEventListener('change', function () {
+      // Picking an existing project closes + empties the new-project input
+      // so a leftover typed name can never ride along with job_id.
+      if (projSel.value && projNewInput && !projNewInput.hidden) {
+        projNewInput.hidden = true;
+        projNewInput.value = '';
+        if (projNewBtn) projNewBtn.textContent = '+ New project';
+      }
     });
 
     // ── Location context: inline add row (no window.prompt) ──
@@ -4751,10 +4850,13 @@
       var unassignZone = e.target.closest && e.target.closest('.bk2-slot--drop-unassign');
       var crewBlock    = e.target.closest && e.target.closest('.bk2-crew');
       var crewBlockHasVehicle = crewBlock && crewBlock.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
+      // A vehicle-less people group ("Traffic Controller ×N") accepts crew
+      // drops too — landing there means "take this worker off their vehicle".
+      var noVehBlock = crewBlock && crewBlock.hasAttribute('data-bk-novehicle');
       // A standalone/spare vehicle chip is a valid assign target on its own
       // (not inside a .bk2-crew) — lets any worker go onto any shift vehicle.
       var spareVehChip = e.target.closest && e.target.closest('.bk2-veh-slot--spare.bk2-slot--drop-veh-assign[data-vehicle-id]');
-      if (unassignZone || crewBlockHasVehicle || spareVehChip) {
+      if (unassignZone || crewBlockHasVehicle || noVehBlock || spareVehChip) {
         e.preventDefault();
         e.stopPropagation();
         try { e.dataTransfer.dropEffect = 'move'; } catch (err) {}
@@ -4825,12 +4927,15 @@
       var unassignZone = e.target.closest && e.target.closest('.bk2-slot--drop-unassign');
       var crewBlock    = e.target.closest && e.target.closest('.bk2-crew');
       var vehSlotInBlock = crewBlock ? crewBlock.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]') : null;
+      // Dropping on a vehicle-less people group = take the worker off their
+      // vehicle; they land in that standalone group (server-side placement).
+      var noVehBlock = (crewBlock && crewBlock.hasAttribute('data-bk-novehicle')) ? crewBlock : null;
       // Standalone/spare vehicle chip is its own assign target.
       var spareVehChip = e.target.closest && e.target.closest('.bk2-veh-slot--spare.bk2-slot--drop-veh-assign[data-vehicle-id]');
       // If we landed inside the unassigned pool, prefer that intent.
       // Otherwise, if there's a crew block with a vehicle anywhere on
-      // our drop path, use it; else a spare vehicle chip.
-      var target = unassignZone || vehSlotInBlock || spareVehChip;
+      // our drop path, use it; else a no-vehicle group; else a spare chip.
+      var target = unassignZone || vehSlotInBlock || noVehBlock || spareVehChip;
       if (!target) {
         console.debug('[bk2 drop] crew-move dropped outside any crew-move target — ignoring');
         return;
@@ -4856,7 +4961,9 @@
         alert('Workers can only be reassigned within the same booking.');
         return;
       }
-      var isAssign = !unassignZone;
+      // Unassigned pool AND vehicle-less people groups both mean "clear the
+      // worker's vehicle" — only real vehicle targets carry an id.
+      var isAssign = !unassignZone && !noVehBlock;
       var vehicleId = isAssign ? ((vehSlotInBlock || spareVehChip).getAttribute('data-vehicle-id') || '') : '';
       console.debug('[bk2 drop] crew-move →', { isAssign: isAssign, vehicleId: vehicleId, booking_crew_id: payload.booking_crew_id });
       assignCrewToVehicle(payload, vehicleId);
@@ -5550,10 +5657,12 @@
           alert((result.json && result.json.error) || ('Could not move that worker (HTTP ' + result.status + ').'));
           return;
         }
-        // In-place DOM relocation — keeps scroll position, the
-        // resource panel scroll, the slide-over editor state, and
-        // any other open card popovers untouched.
-        relocateCrewSlot(payload, vehicleId);
+        // Assigns relocate the slot in place (keeps scroll + editor state).
+        // Unassigns re-render from server truth: the worker may land in a
+        // standalone group (e.g. "Traffic Controller") OR the pool, and only
+        // the server-side placement knows which.
+        if (vehicleId) relocateCrewSlot(payload, vehicleId);
+        else bk2RefreshCard(String(payload.booking_id));
         try { document.dispatchEvent(new CustomEvent('bk2:alloc-changed')); } catch (e) {}
       }).catch(function (err) {
         console.warn('[bk2 assignCrewToVehicle] fetch failed', err);

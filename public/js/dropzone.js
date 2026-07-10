@@ -1,13 +1,20 @@
 /**
  * Reusable drag-and-drop file upload zones.
  * Add data-dropzone to any container wrapping a <input type="file">.
- * The input gets hidden, replaced with a visual drop zone.
+ *
+ * Exposed as window.initDropzones(root) and idempotent (per-zone guard), so
+ * HTML injected AFTER page load — e.g. the bookings quick-edit slide-over
+ * lifting the Documents card via innerHTML — can re-initialise its zones.
+ * The old version bound once on DOMContentLoaded only, which left lifted
+ * zones with no drop/click handlers at all.
  */
 (function() {
-  document.addEventListener('DOMContentLoaded', function() {
-    document.querySelectorAll('[data-dropzone]').forEach(function(zone) {
+  function initDropzones(root) {
+    (root || document).querySelectorAll('[data-dropzone]').forEach(function(zone) {
+      if (zone.dataset.dzBound) return;   // idempotent — safe to call repeatedly
       var input = zone.querySelector('input[type="file"]');
       if (!input) return;
+      zone.dataset.dzBound = '1';
 
       // Prevent default drag behaviors on the whole page
       ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(function(evt) {
@@ -44,7 +51,10 @@
         input.click();
       });
     });
-  });
+  }
+  window.initDropzones = initDropzones;
+
+  document.addEventListener('DOMContentLoaded', function() { initDropzones(document); });
 
   function updateFileList(zone, files) {
     var listEl = zone.querySelector('.dropzone-file-list');
