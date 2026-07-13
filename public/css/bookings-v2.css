@@ -2228,6 +2228,66 @@ body.bk2-date-loading::before {
 .bk2-docpane-uprow select { flex: 0 0 auto; }
 .bk2-docpane-uprow input[type="file"] { flex: 1 1 auto; font-size: 12.5px; }
 
+/* ── Crew-visibility pill toggle (Documents tab + Req. Plans/Permits panes) ──
+   One compact control, two states: "Crew visible" (soft emerald, eye) and
+   "Hidden" (muted gray, eye-off). Used as a plain button (AJAX, doc panes)
+   and as a submit button inside a form (Documents tab). */
+.bk2-vis-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3.5px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1;
+  border: 1px solid transparent;
+  cursor: pointer;
+  background: none;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  transition: background 130ms ease, color 130ms ease, border-color 130ms ease;
+}
+.bk2-vis-toggle svg { width: 13px; height: 13px; flex: 0 0 auto; }
+.bk2-vis-toggle.is-on {
+  background: rgba(16,185,129,0.10);
+  border-color: rgba(16,185,129,0.35);
+  color: #059669;
+}
+.bk2-vis-toggle.is-on:hover { background: rgba(16,185,129,0.18); }
+.bk2-vis-toggle.is-off {
+  background: rgba(107,114,128,0.08);
+  border-color: rgba(107,114,128,0.28);
+  color: #6B7280;
+}
+.bk2-vis-toggle.is-off:hover { background: rgba(107,114,128,0.16); color: #4B5563; }
+:root[data-theme="dark"] body.dark-glass .bk2-vis-toggle.is-on {
+  background: rgba(16,185,129,0.16);
+  border-color: rgba(16,185,129,0.4);
+  color: #6EE7B7;
+}
+:root[data-theme="dark"] body.dark-glass .bk2-vis-toggle.is-off {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(255,255,255,0.14);
+  color: rgba(255,255,255,0.55);
+}
+:root[data-theme="dark"] body.dark-glass .bk2-vis-toggle.is-off:hover { color: rgba(255,255,255,0.75); }
+/* The Req. Plans / Permits doc rows (.bk2-docrow) stay WHITE cards even in
+   dark mode — the dark pill colors above would be white-on-white there, so
+   re-apply the light-theme palette inside those rows. */
+:root[data-theme="dark"] body.dark-glass .bk2-docrow .bk2-vis-toggle.is-on {
+  background: rgba(16,185,129,0.10);
+  border-color: rgba(16,185,129,0.35);
+  color: #059669;
+}
+:root[data-theme="dark"] body.dark-glass .bk2-docrow .bk2-vis-toggle.is-off {
+  background: rgba(107,114,128,0.08);
+  border-color: rgba(107,114,128,0.28);
+  color: #6B7280;
+}
+:root[data-theme="dark"] body.dark-glass .bk2-docrow .bk2-vis-toggle.is-off:hover { color: #4B5563; }
+
 /* ── Document upload: in-flight spinner + progress overlay ──
    Guards against double-submit (the button disables + the pane covers) and
    gives a real progress bar off XHR upload events. */

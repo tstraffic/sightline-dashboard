@@ -1262,18 +1262,24 @@
                   <% DOC_TYPES.forEach(function (t) { %><option value="<%= t[0] %>"<%= (doc.document_type || 'other') === t[0] ? ' selected' : '' %>><%= t[1] %></option><% }) %>
                 </select>
               </form>
-              <!-- Crew visibility — unticked docs never appear in the worker
-                   app (useful when cloned shifts carry plans the crew
-                   shouldn't see). Auto-saves on change. -->
+              <!-- Crew visibility — hidden docs never appear in the worker app
+                   (useful when cloned shifts carry plans the crew shouldn't
+                   see). One click flips it; the hidden input carries the NEW
+                   state. -->
+              <% const docVisible = (doc.visible_to_crew == null || doc.visible_to_crew); %>
               <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/visibility" class="inline">
                 <%- include('../partials/csrf') %>
-                <label class="inline-flex items-center gap-1 text-[11px] font-medium cursor-pointer <%= (doc.visible_to_crew == null || doc.visible_to_crew) ? 'text-emerald-600' : 'text-gray-400' %>"
-                  title="<%= (doc.visible_to_crew == null || doc.visible_to_crew) ? 'Crew can see this in the worker app — untick to hide' : 'Hidden from crew — tick to show' %>">
-                  <input type="checkbox" name="visible" value="1" <%= (doc.visible_to_crew == null || doc.visible_to_crew) ? 'checked' : '' %>
-                    onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()"
-                    class="w-3.5 h-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
-                  Crew
-                </label>
+                <input type="hidden" name="visible" value="<%= docVisible ? '0' : '1' %>">
+                <button type="submit" class="bk2-vis-toggle <%= docVisible ? 'is-on' : 'is-off' %>"
+                  title="<%= docVisible ? 'Crew can see this in the worker app — click to hide' : 'Hidden from crew — click to show' %>">
+                  <% if (docVisible) { %>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    <span>Crew visible</span>
+                  <% } else { %>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                    <span>Hidden</span>
+                  <% } %>
+                </button>
               </form>
               <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/delete" class="inline">
                 <%- include('../partials/csrf') %>

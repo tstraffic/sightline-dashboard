@@ -4012,8 +4012,19 @@
         list.appendChild(hint);
         return;
       }
+      // Shared eye / eye-off pill states for the crew-visibility toggle.
+      var EYE_ON  = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+      var EYE_OFF = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>';
+      function visPill(on) {
+        return {
+          cls: 'bk2-vis-toggle ' + (on ? 'is-on' : 'is-off'),
+          html: (on ? EYE_ON : EYE_OFF) + '<span>' + (on ? 'Crew visible' : 'Hidden') + '</span>',
+          title: on ? 'Crew can see this in the worker app — click to hide' : 'Hidden from crew — click to show',
+        };
+      }
       matching.forEach(function (d) {
         var visible = (d.visible_to_crew == null) ? 1 : (d.visible_to_crew ? 1 : 0);
+        var p = visPill(visible === 1);
         var row = document.createElement('div');
         row.className = 'bk2-docrow';
         row.innerHTML =
@@ -4021,10 +4032,7 @@
           + '<span class="bk2-docrow-name">' + (d.title || d.original_name || 'Document') + '</span>'
           + '<span class="bk2-docrow-meta">' + (d.document_type || '') + ' · ' + fmtSize(d.file_size) + '</span>'
           + '</div>'
-          + '<button type="button" class="bk2-docrow-dl" data-doc-vis="' + d.id + '" data-vis-now="' + visible + '"'
-          + ' title="' + (visible ? 'Crew can see this in the worker app — click to hide' : 'Hidden from crew — click to show') + '"'
-          + ' style="border:none;background:none;cursor:pointer;' + (visible ? 'color:#059669;' : 'color:#9CA3AF;') + '">'
-          + (visible ? '👁 Crew' : '🚫 Hidden') + '</button>'
+          + '<button type="button" class="' + p.cls + '" data-doc-vis="' + d.id + '" data-vis-now="' + visible + '" title="' + p.title + '">' + p.html + '</button>'
           + '<a class="bk2-docrow-dl" href="/bookings/' + id + '/documents/' + d.id + '/download">Download</a>';
         list.appendChild(row);
       });
@@ -4045,10 +4053,11 @@
                 var row = docsCache.docs.find(function (x) { return String(x.id) === String(docId); });
                 if (row) row.visible_to_crew = parseInt(next, 10);
               }
+              var p2 = visPill(next === '1');
               btn.setAttribute('data-vis-now', next);
-              btn.textContent = next === '1' ? '👁 Crew' : '🚫 Hidden';
-              btn.style.color = next === '1' ? '#059669' : '#9CA3AF';
-              btn.title = next === '1' ? 'Crew can see this in the worker app — click to hide' : 'Hidden from crew — click to show';
+              btn.className = p2.cls;
+              btn.innerHTML = p2.html;
+              btn.title = p2.title;
               if (typeof window.bk2Toast === 'function') window.bk2Toast(next === '1' ? 'Visible to crew.' : 'Hidden from crew.', 'success');
             })
             .catch(function () { if (typeof window.bk2Toast === 'function') window.bk2Toast('Could not change visibility.', 'error'); });
