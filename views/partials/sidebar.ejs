@@ -527,7 +527,7 @@
     </a>
     <% } %>
     <!-- IT Feedback inbox — admin only, last item in the sidebar. -->
-    <% if (canAccess(user, 'admin') || user.role === 'admin') { %>
+    <% if (user && (canAccess(user, 'admin') || user.role === 'admin')) { %>
     <a href="/feedback" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'feedback' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.4-4 8-9 8a9.9 9.9 0 01-4-.8L3 21l1.5-4.5C3.5 15.3 3 13.7 3 12c0-4.4 4-8 9-8s9 3.6 9 8z"/></svg>
       IT Feedback

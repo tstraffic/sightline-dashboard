@@ -108,7 +108,11 @@
           <!-- Divider -->
           <div class="hidden lg:block w-px h-6 bg-gray-200/80 mx-1"></div>
 
-          <!-- Profile avatar (clickable) -->
+          <!-- Profile avatar (clickable) — only when an admin user is present.
+               The admin layout (and this header) is also used by the 404/500
+               error views, which can render for a logged-out or worker-only
+               request where `user` is null; guard so those pages don't crash. -->
+          <% if (user) { %>
           <a href="/profile" class="flex items-center gap-2.5 hover:opacity-90 transition-all active:scale-[0.97] group" title="My Profile">
             <div class="hidden lg:block text-right">
               <span class="text-gray-800 text-sm font-semibold block leading-tight"><%= user.full_name %></span>
@@ -123,6 +127,7 @@
               <%= user.full_name ? user.full_name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) : 'U' %>
             </div>
           </a>
+          <% } %>
 
           <a href="/logout" class="hidden lg:inline-flex items-center gap-1.5 text-gray-400 hover:text-red-500 text-sm transition-colors p-2 rounded-xl hover:bg-red-50" title="Sign out">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
