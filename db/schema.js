@@ -14263,6 +14263,20 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 317 error:', e.message); }
   }
 
+  // 318 — Council permit application reference number. The council-issued
+  // reference for a lodged permit application (the number the council quotes
+  // back on correspondence), captured beside the Charge client control and
+  // driving the two-stage Applied → Approved council workflow.
+  if (!isMigrationApplied.get(318)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(compliance)").all().map(c => c.name);
+      const addCol = (name, ddl) => { if (!cols.includes(name)) db.exec(`ALTER TABLE compliance ADD COLUMN ${ddl}`); };
+      addCol('application_ref_no', "application_ref_no TEXT DEFAULT ''");
+      recordMigration.run(318, 'compliance: application_ref_no (council permit two-stage workflow)');
+      console.log('Migration 318 applied');
+    } catch (e) { console.error('Migration 318 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

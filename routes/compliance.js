@@ -568,7 +568,11 @@ router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 
     req.flash('error', 'Job start date is required for ' + (sub.item_type === 'council_permit' ? 'Council' : 'ROL') + ' plans.');
     return res.redirect('/compliance/' + sub.parent_id + '/edit');
   }
-  if (files.length === 0) {
+  // Council permit applications are lodged before any document exists (the
+  // permit/approval file only arrives once the council issues it), so a file
+  // is NOT mandatory for council. Every other type still needs ≥1 file.
+  const fileOptional = (sub.item_type === 'council_permit');
+  if (files.length === 0 && !fileOptional) {
     // No files attached AND no existing files = can't submit.
     const existingDocs = db.prepare('SELECT COUNT(*) as c FROM compliance_documents WHERE compliance_id = ?').get(sub.id).c;
     if (existingDocs === 0) {
@@ -825,6 +829,72 @@ router.post('/sub-plans/:subId/charge', (req, res) => {
     .run(chargeClient, chargeAmount, sub.id);
   if (wantsJson(req)) return res.json({ success: true, charge_client: chargeClient, charge_amount: chargeAmount });
   req.flash('success', 'Charge updated.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// Council permit application reference number — the council-issued reference
+// for a lodged application, captured beside the Charge client control and
+// editable at any status. AJAX-saved (urlencoded, like /charge).
+router.post('/sub-plans/:subId/app-ref', (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  const ref = String(req.body.application_ref_no || '').trim().slice(0, 120);
+  db.prepare("UPDATE compliance SET application_ref_no = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(ref, sub.id);
+  if (wantsJson(req)) return res.json({ success: true, application_ref_no: ref });
+  req.flash('success', 'Application ref saved.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// Council permit two-stage workflow (spec: "first stage is applied, then mark
+// as approved and drag drop/select file"):
+//   action=apply   → status 'submitted' (application lodged; NO file required),
+//                    saves the application ref, stamps a submitted_date.
+//   action=approve → attaches any dropped/selected file(s), status 'approved',
+//                    stamps approved_date. File is optional here too.
+// The council-issued application ref rides along on either action so it can be
+// filled in at the moment of applying.
+router.post('/sub-plans/:subId/council', subPlanUpload.array('documents', 10), (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  if (sub.item_type !== 'council_permit') {
+    if (wantsJson(req)) return res.status(400).json({ error: 'Not a council permit sub-plan' });
+    req.flash('error', 'Not a council permit sub-plan.'); return res.redirect('/compliance/' + sub.parent_id + '/edit');
+  }
+  const action = req.body.action === 'approve' ? 'approve' : 'apply';
+  const files = req.files || [];
+  const today = new Date().toISOString().split('T')[0];
+
+  // Persist the council application ref whenever it's supplied (both stages).
+  if (req.body.application_ref_no !== undefined) {
+    db.prepare("UPDATE compliance SET application_ref_no = ? WHERE id = ?")
+      .run(String(req.body.application_ref_no || '').trim().slice(0, 120), sub.id);
+  }
+
+  // Attach any dropped/selected files (only expected at the approve stage, but
+  // accepted at either — a file is never mandatory for council).
+  if (files.length) {
+    const insDoc = db.prepare('INSERT INTO compliance_documents (compliance_id, filename, original_name, file_path, file_size, mime_type, uploaded_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
+    files.forEach(f => insDoc.run(sub.id, f.filename, f.originalname, subRel(sub, f), f.size, f.mimetype || '', req.session.user.id));
+  }
+
+  if (action === 'apply') {
+    // Lodged: submitted, no file needed. Stamp submitted_date if not already set.
+    db.prepare("UPDATE compliance SET status = CASE WHEN status = 'approved' THEN status ELSE 'submitted' END, submitted_date = COALESCE(submitted_date, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(today, sub.id);
+  } else {
+    db.prepare("UPDATE compliance SET status = 'approved', approved_date = COALESCE(approved_date, ?), submitted_date = COALESCE(submitted_date, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(today, today, sub.id);
+  }
+  planStatus.syncParentStatus(db, sub.parent_id);
+  if (sub.job_id) {
+    autoLogDiary(db, { jobId: sub.job_id, complianceItemId: sub.id,
+      summary: `[${req.session.user.full_name}] ${action === 'approve' ? 'Approved' : 'Lodged'} council permit ${sub.reference_number}${files.length ? ' (+' + files.length + ' file' + (files.length > 1 ? 's' : '') + ')' : ''}.`,
+      userId: req.session.user.id });
+  }
+  if (wantsJson(req)) return res.json({ success: true });
+  req.flash('success', action === 'approve' ? `${sub.reference_number} approved.` : `${sub.reference_number} marked applied.`);
   res.redirect('/compliance/' + sub.parent_id + '/edit');
 });
 
