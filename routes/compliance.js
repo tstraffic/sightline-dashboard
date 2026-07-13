@@ -242,7 +242,14 @@ router.get('/', (req, res) => {
   if (status && status !== 'all')       { query += ` AND c.status = ?`;     params.push(status); }
   if (job_id)                           { query += ` AND c.job_id = ?`;     params.push(job_id); }
   if (client_id)                        { query += ` AND c.client_id = ?`;  params.push(client_id); }
-  if (item_type && item_type !== 'all') { query += ` AND (c.item_type = ? OR c.item_types LIKE ?)`; params.push(item_type, `%${item_type}%`); }
+  // Type filter: a Plan's real type(s) live on its SUB-PLANS (the parent row
+  // is a header with item_type 'other'), so match the parent's own type/types
+  // OR any child sub-plan of that type. Without the EXISTS clause, filtering
+  // by TGS/ROL/etc. returned nothing after every plan became a parent.
+  if (item_type && item_type !== 'all') {
+    query += ` AND (c.item_type = ? OR c.item_types LIKE ? OR EXISTS (SELECT 1 FROM compliance sc WHERE sc.parent_id = c.id AND sc.item_type = ?))`;
+    params.push(item_type, `%${item_type}%`, item_type);
+  }
   if (date_from) { query += ` AND c.due_date >= ?`; params.push(date_from); }
   if (date_to)   { query += ` AND c.due_date <= ?`; params.push(date_to); }
 
