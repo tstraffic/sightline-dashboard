@@ -82,33 +82,51 @@ const VALID_STATUSES = ['client_booking', 'unconfirmed', 'confirmed', 'locked', 
 // deleted) when it has a driver (crew_member_id), a fleet vehicle
 // (fleet_vehicle_id), or a typed name/rego — those are real allocations
 // the office set up by hand. Surplus protected utes are simply kept.
+// Reconcile empty vehicle placeholder rows against the vehicle requirements,
+// PER CLASS. Every requirement that calls for a vehicle (an "Nx TC Crew" ute,
+// or a standalone Pod Truck / VMS Ute / Traffic Ute / TMA / Truck) gets an
+// empty booking_vehicles placeholder so the card renders a "drop a vehicle
+// here" slot for it. Real / driver-linked / named rows are protected and
+// counted toward the target so we never over-create. Historically this only
+// handled TC-crew utes (hence the name); it now covers all classes.
 function syncTCCrewVehicles(db, bookingId) {
   try {
     const reqs = db.prepare("SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id = ?").all(bookingId);
-    let target = 0;
+    const target = { ute: 0, pod: 0, vms: 0, tma: 0, truck: 0 };
     for (const r of reqs) {
-      // Match "Nx TC Crew" — 1 ute per package, multiplied by qty. The
-      // crew size N is irrelevant to ute count. Standalone "Traffic
-      // Controller" rows don't match here, so they add no ute.
-      const m = /^(\d+)x TC Crew$/.exec(r.resource_type || '');
-      if (m) target += (parseInt(r.quantity_required) || 0);
+      const label = String(r.resource_type || '').trim();
+      const qty = Math.max(0, parseInt(r.quantity_required, 10) || 0);
+      if (!qty) continue;
+      // "Nx TC Crew" → 1 ute per package (crew size N is irrelevant to ute count).
+      const m = /^(\d+)x TC Crew$/i.exec(label);
+      if (m) { target.ute += qty; continue; }
+      const cls = REQ_LABEL_TO_VEHICLE_CLASS[label.toLowerCase()];
+      if (cls && target[cls] !== undefined) target[cls] += qty;
     }
-    const utes = db.prepare("SELECT id, vehicle_name, registration, crew_member_id, fleet_vehicle_id FROM booking_vehicles WHERE booking_id = ? AND vehicle_role = 'ute' ORDER BY id").all(bookingId);
+    const rows = db.prepare("SELECT id, vehicle_name, registration, crew_member_id, fleet_vehicle_id, vehicle_role FROM booking_vehicles WHERE booking_id = ? ORDER BY id").all(bookingId);
     const isProtected = (v) => !!(v.crew_member_id || v.fleet_vehicle_id ||
       (v.vehicle_name && String(v.vehicle_name).trim()) ||
       (v.registration && String(v.registration).trim()));
-    const current = utes.length;
-    if (current < target) {
-      const ins = db.prepare("INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, vehicle_role) VALUES (?, '', '', 'ute')");
-      for (let i = 0; i < target - current; i++) ins.run(bookingId);
-    } else if (current > target) {
-      // Remove only surplus UNPROTECTED placeholders, newest first.
-      const removable = utes.filter(v => !isProtected(v)).map(v => v.id).reverse();
-      const del = db.prepare("DELETE FROM booking_vehicles WHERE id = ?");
-      let toRemove = current - target;
-      for (const id of removable) {
-        if (toRemove <= 0) break;
-        del.run(id); toRemove--;
+    const byClass = { ute: [], pod: [], vms: [], tma: [], truck: [] };
+    for (const v of rows) {
+      const c = classifyBookingVehicle(v);
+      (byClass[c] || (byClass[c] = [])).push(v);
+    }
+    const ins = db.prepare("INSERT INTO booking_vehicles (booking_id, vehicle_name, registration, vehicle_role) VALUES (?, '', '', ?)");
+    const del = db.prepare("DELETE FROM booking_vehicles WHERE id = ?");
+    for (const cls of Object.keys(target)) {
+      const cur = byClass[cls] || [];
+      const t = target[cls];
+      if (cur.length < t) {
+        for (let i = 0; i < t - cur.length; i++) ins.run(bookingId, cls);
+      } else if (cur.length > t) {
+        // Remove only surplus UNPROTECTED placeholders of this class, newest first.
+        const removable = cur.filter(v => !isProtected(v)).map(v => v.id).reverse();
+        let toRemove = cur.length - t;
+        for (const id of removable) {
+          if (toRemove <= 0) break;
+          del.run(id); toRemove--;
+        }
       }
     }
   } catch (e) {
@@ -763,19 +781,22 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
   const vehicles = (vehicleRows || []).slice();
   for (const blk of blocks) {
     if (blk.no_vehicle) continue; // people add-on block — no vehicle slot
-    const v = vehicles.shift();
-    if (v) {
-      const hasName = v.vehicle_name && String(v.vehicle_name).trim() !== '';
-      const hasRego = v.registration  && String(v.registration).trim()  !== '';
-      blk.vehicle_slot = {
-        filled: hasName || hasRego,
-        vehicle_id: v.id,
-        name: v.vehicle_name,
-        registration: v.registration,
-        role: v.vehicle_role || 'ute',
-        driver_id: v.driver_id || null,
-      };
-    }
+    // A TC-crew block rides a UTE — take the first ute-class vehicle only, so a
+    // standalone Pod Truck / VMS Ute / TMA / Truck (or its placeholder) is never
+    // swallowed into the crew's ute slot; those fall through to spare vehicles.
+    const idx = vehicles.findIndex(v => classifyBookingVehicle(v) === 'ute');
+    if (idx === -1) continue; // no ute available → leave the empty "UTE slot" drop target
+    const v = vehicles.splice(idx, 1)[0];
+    const hasName = v.vehicle_name && String(v.vehicle_name).trim() !== '';
+    const hasRego = v.registration  && String(v.registration).trim()  !== '';
+    blk.vehicle_slot = {
+      filled: hasName || hasRego,
+      vehicle_id: v.id,
+      name: v.vehicle_name,
+      registration: v.registration,
+      role: v.vehicle_role || 'ute',
+      driver_id: v.driver_id || null,
+    };
   }
 
   // Look-up: vehicle_id → block (used to place workers under the
@@ -2772,14 +2793,29 @@ router.post('/:id/vehicles', (req, res) => {
     if (VEHICLE_CLASS_REQ_LABEL[role]) return role;
     return classifyVehicle([vehicle_name, registration, role].filter(Boolean).join(' '));
   })();
-  // If there's an empty placeholder (no name & no rego, vehicle_role=ute),
-  // upgrade it rather than appending another row — keeps the ute count
-  // matching the requirement. Placeholders are crew utes, so ONLY a traffic
-  // ute may fill one — a pod truck / VMS ute / TMA is its own resource and
-  // must not swallow the crew's ute slot.
+  // If there's an empty placeholder, upgrade it rather than appending another
+  // row — keeps the vehicle count matching the requirement (no double-bump).
+  //   · An explicit `upgrade_vehicle_id` (sent by an empty class slot on the
+  //     card) targets that exact placeholder, so a Pod/VMS/TMA slot fills with
+  //     its own vehicle.
+  //   · Otherwise, fall back to the first empty placeholder OF THE SAME CLASS —
+  //     a pod truck fills a pod placeholder, a traffic ute a ute placeholder,
+  //     never crossing classes.
   let upgraded = false;
-  if (req.body.upgrade_placeholder !== '0' && vehClass === 'ute') {
-    const placeholder = db.prepare("SELECT id FROM booking_vehicles WHERE booking_id = ? AND (vehicle_name IS NULL OR vehicle_name = '') AND (registration IS NULL OR registration = '') ORDER BY id LIMIT 1").get(req.params.id);
+  if (req.body.upgrade_placeholder !== '0') {
+    const emptyWhere = "booking_id = ? AND (vehicle_name IS NULL OR vehicle_name = '') AND (registration IS NULL OR registration = '') AND (crew_member_id IS NULL) AND (fleet_vehicle_id IS NULL)";
+    let placeholder = null;
+    const explicitId = parseInt(req.body.upgrade_vehicle_id, 10);
+    if (Number.isFinite(explicitId) && explicitId > 0) {
+      placeholder = db.prepare("SELECT id FROM booking_vehicles WHERE id = ? AND " + emptyWhere).get(explicitId, req.params.id);
+    }
+    if (!placeholder) {
+      // Match a same-class empty placeholder (classifyBookingVehicle folds
+      // role/text → class). Scan candidates and pick the first of this class.
+      const cands = db.prepare("SELECT id, vehicle_name, registration, vehicle_role FROM booking_vehicles WHERE " + emptyWhere + " ORDER BY id").all(req.params.id);
+      const match = cands.find(c => classifyBookingVehicle(c) === vehClass);
+      if (match) placeholder = { id: match.id };
+    }
     if (placeholder) {
       db.prepare("UPDATE booking_vehicles SET vehicle_name = ?, registration = ?, vehicle_role = COALESCE(NULLIF(?, ''), vehicle_role), fleet_vehicle_id = ? WHERE id = ?")
         .run(vehicle_name, registration, req.body.vehicle_role || '', fleet_vehicle_id, placeholder.id);

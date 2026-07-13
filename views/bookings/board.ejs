@@ -424,6 +424,7 @@
                         <div class="bk2-veh-slot bk2-veh-slot--empty bk2-slot--drop bk2-slot--drop-vehicle"
                              data-booking-id="<%= b.id %>"
                              data-vehicle-role="ute"
+                             data-vehicle-id="<%= (blk.vehicle_slot && blk.vehicle_slot.vehicle_id) || '' %>"
                              data-crew-ordinal="<%= blk.ordinal %>">
                           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14"/></svg>
                           <span class="bk2-veh-slot-label">UTE slot · drop a vehicle here</span>
@@ -559,15 +560,29 @@
                         <span>Vehicles</span>
                       </div>
                       <% _spare.forEach(function (v) { %>
-                        <!-- Spare/standalone vehicle. It's a crew-move drop
-                             target (bk2-slot--drop-veh-assign) so any worker —
-                             incl. a standalone TC — can be assigned to it. -->
-                        <div class="bk2-veh-slot bk2-veh-slot--spare bk2-slot--drop bk2-slot--drop-veh-assign" data-booking-id="<%= b.id %>" data-vehicle-id="<%= v.vehicle_id %>">
-                          <span class="bk2-veh-tag"><%= (v.role || 'ute').toUpperCase().slice(0,3) %></span>
-                          <span class="bk2-veh-slot-name"><%= v.name || v.registration || '(unnamed)' %></span>
-                          <% if (v.name && v.registration) { %><span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8"><%= v.registration %></span><% } %>
-                          <button type="button" class="bk2-veh-remove" data-action="remove-vehicle" data-vehicle-id="<%= v.vehicle_id %>" title="Remove vehicle" aria-label="Remove vehicle">×</button>
-                        </div>
+                        <% if (v.filled) { %>
+                          <!-- Filled spare/standalone vehicle. Crew-move drop
+                               target (bk2-slot--drop-veh-assign) so any worker —
+                               incl. a standalone TC — can be assigned to it. -->
+                          <div class="bk2-veh-slot bk2-veh-slot--spare bk2-slot--drop bk2-slot--drop-veh-assign" data-booking-id="<%= b.id %>" data-vehicle-id="<%= v.vehicle_id %>">
+                            <span class="bk2-veh-tag"><%= (v.role || 'ute').toUpperCase().slice(0,3) %></span>
+                            <span class="bk2-veh-slot-name"><%= v.name || v.registration || '(unnamed)' %></span>
+                            <% if (v.name && v.registration) { %><span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8"><%= v.registration %></span><% } %>
+                            <button type="button" class="bk2-veh-remove" data-action="remove-vehicle" data-vehicle-id="<%= v.vehicle_id %>" title="Remove vehicle" aria-label="Remove vehicle">×</button>
+                          </div>
+                        <% } else { %>
+                          <!-- Empty vehicle requirement placeholder — a drop
+                               target for a matching vehicle (bk2-slot--drop-vehicle).
+                               data-vehicle-id targets this exact placeholder so
+                               the drop upgrades it (no duplicate, no double-bump). -->
+                          <div class="bk2-veh-slot bk2-veh-slot--empty bk2-slot--drop bk2-slot--drop-vehicle"
+                               data-booking-id="<%= b.id %>"
+                               data-vehicle-id="<%= v.vehicle_id %>"
+                               data-vehicle-role="<%= v.role || 'ute' %>">
+                            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14"/></svg>
+                            <span class="bk2-veh-slot-label"><%= (v.role || 'ute').toUpperCase().slice(0,3) %> slot · drop a vehicle here</span>
+                          </div>
+                        <% } %>
                         <% (v.workers || []).forEach(function (slot) { %>
                           <div class="bk2-slot bk2-slot--filled bk2-slot--click<%= slot.is_driver ? ' is-driver' : '' %>"
                                draggable="true" data-bk-crew-drag="1"
@@ -3181,7 +3196,21 @@
             // Create-again) becomes the action.
             prefillEditForm(newId);
             setEditorTab('overview');
-            boardDirty = true;
+            // Float the new booking's card on the left, mirroring the edit
+            // flow. The card doesn't exist in the DOM yet (the board refresh is
+            // normally deferred to editor close), so refresh the board pane
+            // first, then lift the new card out to float beside the editor.
+            // boardDirty stays false — we've just refreshed.
+            boardDirty = false;
+            (function (floatId) {
+              var p = (typeof window.bk2RefreshBoard === 'function') ? window.bk2RefreshBoard() : null;
+              Promise.resolve(p).then(function () {
+                try {
+                  unfloatCard();
+                  floatCardBesideEditor(document.querySelector('.bk2-card[data-booking-id="' + floatId + '"]'));
+                } catch (e) {}
+              });
+            })(newId);
             if (btn) { btn.disabled = false; btn.classList.remove('is-saving'); if (origLabel) btn.innerHTML = origLabel; }
             if (typeof window.bk2Toast === 'function') window.bk2Toast('Booking #' + newNum + ' created.', 'success');
           }
@@ -5076,6 +5105,10 @@
       if (v.source === 'fleet') vBody.append('fleet_vehicle_id', v.id);
       else                      vBody.append('equipment_id',     v.id);
       vBody.append('vehicle_role', slot.getAttribute('data-vehicle-role') || v.role || 'ute');
+      // Target the exact empty placeholder this slot represents so the drop
+      // upgrades it (fills the required slot) instead of appending + bumping.
+      var upId = slot.getAttribute('data-vehicle-id');
+      if (upId) vBody.append('upgrade_vehicle_id', upId);
       if (CSRF_TOKEN) vBody.append('_csrf', CSRF_TOKEN);
 
       fetch('/bookings/' + encodeURIComponent(bookingId) + '/vehicles', {
@@ -5970,7 +6003,9 @@
     // Expose a soft board refresh (re-fetch current URL, swap panes) so the
     // editor can show a freshly-created booking on close without a full reload.
     window.bk2RefreshBoard = function () {
-      fetch(location.href, { credentials: 'same-origin', headers: { 'Accept': 'text/html', 'X-Requested-With': 'fetch' } })
+      // Returns the fetch promise so callers can sequence work off a completed
+      // board re-render (e.g. floating a freshly-created booking's card).
+      return fetch(location.href, { credentials: 'same-origin', headers: { 'Accept': 'text/html', 'X-Requested-With': 'fetch' } })
         .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
         .then(function (html) { applyResponseDoc(new DOMParser().parseFromString(html, 'text/html')); })
         .catch(function () { location.reload(); });
