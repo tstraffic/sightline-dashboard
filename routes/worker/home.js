@@ -83,12 +83,21 @@ router.get('/home', async (req, res) => {
 
   const inTwoWeeks = new Date(todayDate); inTwoWeeks.setDate(inTwoWeeks.getDate() + 14);
   const upcomingShifts = db.prepare(`
-    SELECT ca.allocation_date, ca.start_time, ca.end_time, ca.shift_type, ca.status,
-           j.id as job_id, j.job_number, j.client, j.site_address, j.suburb
+    SELECT ca.id, ca.allocation_date, ca.start_time, ca.end_time, ca.shift_type, ca.status,
+           ca.booking_id,
+           j.id as job_id,
+           COALESCE(j.job_number, b.booking_number) AS job_number,
+           COALESCE(j.client,     b.title)          AS client,
+           COALESCE(j.site_address, b.site_address) AS site_address,
+           COALESCE(j.suburb,     b.suburb)         AS suburb,
+           CASE WHEN ca.job_id IS NULL AND ca.booking_id IS NOT NULL
+                THEN 'booking' ELSE 'allocation' END AS source
     FROM crew_allocations ca
-    LEFT JOIN jobs j ON ca.job_id = j.id
+    LEFT JOIN jobs j     ON ca.job_id = j.id
+    LEFT JOIN bookings b ON ca.booking_id = b.id
     WHERE ca.crew_member_id = ? AND ca.allocation_date > ?
       AND ca.allocation_date <= ? AND ca.status != 'cancelled'
+      AND (ca.booking_id IS NULL OR (b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')))
     ORDER BY ca.allocation_date ASC, ca.start_time ASC LIMIT 5
   `).all(worker.id, today, localIso(inTwoWeeks));
 
@@ -102,6 +111,7 @@ router.get('/home', async (req, res) => {
         SUBSTR(b.end_datetime, 12, 5) AS end_time,
         '' AS shift_type,
         CASE WHEN bc.status = 'assigned' THEN 'allocated' ELSE bc.status END AS status,
+        bc.id AS id, bc.booking_id AS booking_id, 'booking' AS source,
         NULL AS job_id, b.booking_number AS job_number, b.title AS client,
         b.site_address, b.suburb
       FROM booking_crew bc

@@ -270,6 +270,56 @@
   <!-- ============================================================ -->
   <div id="panel-upcoming" class="tab-panel">
 
+    <!-- To finish — worked shifts still awaiting a signed docket. Kept out of
+         "Past" so they don't get lost; links straight to the docket to sign. -->
+    <% if (typeof toFinish !== 'undefined' && toFinish.length > 0) { %>
+      <div class="ws-section-head">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2" style="color:#FBBF24;"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+        <span class="ws-section-title" style="color:#FBBF24;">To finish &mdash; sign docket (<%= toFinish.length %>)</span>
+      </div>
+      <% Object.keys(toFinishByDate).sort().reverse().forEach(function (date) {
+        var d = new Date(date + 'T00:00:00');
+        var dayLabel = d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short' });
+        var dayNum = d.getDate();
+        var monthName = d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' });
+      %>
+        <div class="ws-day-head">
+          <span class="ws-day-title"><%= dayLabel %> <%= dayNum %> <%= monthName.toUpperCase() %></span>
+        </div>
+        <% toFinishByDate[date].forEach(function (s) {
+          var dlink = (s.source === 'booking' && s.booking_id)
+            ? ('/w/dockets/shift/' + s.booking_id)
+            : ('/w/dockets/shift/job/' + s.job_id + '/' + s.allocation_date);
+        %>
+          <a href="<%= dlink %>" class="ws-shift" style="border-left:3px solid #FBBF24;">
+            <span class="ws-shift-bar" style="background:#FBBF24;"></span>
+            <div class="ws-shift-body">
+              <div class="ws-shift-top">
+                <span class="ws-shift-time">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2" stroke-linecap="round"/></svg>
+                  <%= fmtTime(s.start_time) %><% if (s.end_time) { %> &ndash; <%= fmtTime(s.end_time) %><% } %>
+                </span>
+                <span class="ws-shift-num"><%= s.job_number %></span>
+              </div>
+              <p class="ws-shift-client"><%= s.client || s.job_name %><% if (s.project_name && s.project_name !== s.client) { %> &middot; <%= s.project_name %><% } %></p>
+              <% if (s.suburb || s.state) { %>
+                <p class="ws-shift-loc">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                  <%= s.suburb %><% if (s.state) { %>, <%= s.state %><% } %>
+                </p>
+              <% } %>
+              <div class="ws-shift-pills">
+                <span class="ws-pill" style="background:rgba(245,158,11,0.16);color:#FBBF24;">Sign docket &rarr;</span>
+                <% if (s.role_on_site) { %>
+                  <span class="ws-pill role">as <%= s.role_on_site.replace(/_/g, ' ') %></span>
+                <% } %>
+              </div>
+            </div>
+          </a>
+        <% }) %>
+      <% }) %>
+    <% } %>
+
     <!-- Month + week nav -->
     <div class="ws-month">
       <a href="/w/jobs?week=<%= prevWeek %>" class="ws-month-btn" aria-label="Previous week">
@@ -440,7 +490,7 @@
                 <% } else if (s.status === 'declined') { %>
                   <span class="ws-pill declined">Declined</span>
                 <% } else if (s.allocation_date < today) { %>
-                  <span class="ws-pill past">Past</span>
+                  <span class="ws-pill" style="background:rgba(245,158,11,0.16);color:#FBBF24;">Sign docket</span>
                 <% } else { %>
                   <span class="ws-pill confirmed">Accepted</span>
                 <% } %>

@@ -179,7 +179,7 @@ router.get('/jobs', (req, res) => {
     LEFT JOIN users u ON j.ops_supervisor_id = u.id
     LEFT JOIN bookings b ON ca.booking_id = b.id
     WHERE ca.crew_member_id = ?
-      AND ca.allocation_date >= ?
+      AND ca.allocation_date >= date(?, '-7 days')
       AND ca.status IN ('allocated', 'confirmed')
       AND (ca.booking_id IS NULL OR (
         b.status IN (${VISIBLE_BOOKING_STATUSES.map(() => '?').join(',')})
@@ -202,7 +202,7 @@ router.get('/jobs', (req, res) => {
       FROM booking_crew bc
       JOIN bookings b ON bc.booking_id = b.id
       WHERE bc.crew_member_id = ?
-        AND DATE(b.start_datetime) >= ?
+        AND DATE(b.start_datetime) >= date(?, '-7 days')
         AND bc.status IN ('assigned', 'confirmed')
         AND b.deleted_at IS NULL
         AND b.status IN (${VISIBLE_BOOKING_STATUSES.map(() => '?').join(',')})
@@ -216,21 +216,38 @@ router.get('/jobs', (req, res) => {
     ...b, status: b.status === 'assigned' ? 'allocated' : b.status
   }))].sort((a, b) => (a.allocation_date + a.start_time).localeCompare(b.allocation_date + b.start_time));
 
-  // Split upcoming into requests (allocated) and confirmed
-  const requests = upcoming.filter(a => a.status === 'allocated');
-  const confirmed = upcoming.filter(a => a.status === 'confirmed');
+  // Split into three: shifts whose date has passed but aren't finished yet
+  // (no docket signed → status still allocated/confirmed) surface as
+  // "To finish" so they never silently drop into Past; then future requests
+  // (allocated) and future confirmed. The upcoming query already limits the
+  // past tail to 7 days, so only recently-worked shifts show here.
+  const toFinish = upcoming.filter(a => a.allocation_date < today);
+  const future = upcoming.filter(a => a.allocation_date >= today);
+  const requests = future.filter(a => a.status === 'allocated');
+  const confirmed = future.filter(a => a.status === 'confirmed');
 
-  // Finished from crew_allocations
+  // Finished from crew_allocations — a shift is only "past" once its docket is
+  // signed (completeShift → status 'completed') or it was declined. Un-docketed
+  // shifts within the last 7 days stay in "To finish"; older ones fall here.
   const finished = db.prepare(`
-    SELECT ca.*, j.job_number, j.job_name, j.client, j.site_address, j.suburb,
-      j.notes as job_notes, j.project_name, j.client_project_number, j.state,
-      u.full_name as supervisor_name
+    SELECT ca.*,
+      COALESCE(j.job_number, b.booking_number) AS job_number,
+      COALESCE(j.job_name,   b.title)          AS job_name,
+      COALESCE(j.client,     b.title)          AS client,
+      COALESCE(j.site_address, b.site_address) AS site_address,
+      COALESCE(j.suburb,     b.suburb)         AS suburb,
+      j.notes as job_notes, COALESCE(j.project_name, b.title) AS project_name,
+      j.client_project_number, COALESCE(j.state, b.state) AS state,
+      u.full_name as supervisor_name,
+      CASE WHEN ca.job_id IS NULL AND ca.booking_id IS NOT NULL
+           THEN 'booking' ELSE 'allocation' END AS source
     FROM crew_allocations ca
-    LEFT JOIN jobs j ON ca.job_id = j.id
-    LEFT JOIN users u ON j.ops_supervisor_id = u.id
+    LEFT JOIN jobs j     ON ca.job_id = j.id
+    LEFT JOIN bookings b ON ca.booking_id = b.id
+    LEFT JOIN users u    ON j.ops_supervisor_id = u.id
     WHERE ca.crew_member_id = ?
       AND ca.status != 'cancelled'
-      AND (ca.status IN ('completed', 'declined') OR ca.allocation_date < ?)
+      AND (ca.status IN ('completed', 'declined') OR ca.allocation_date < date(?, '-7 days'))
     ORDER BY ca.allocation_date DESC, ca.start_time DESC
     LIMIT 20
   `).all(worker.id, today);
@@ -298,7 +315,7 @@ router.get('/jobs', (req, res) => {
     LEFT JOIN users u    ON j.ops_supervisor_id = u.id
     WHERE ca.crew_member_id = ?
       AND ca.status != 'cancelled'
-      AND (ca.status IN ('completed','declined','confirmed') OR ca.allocation_date < ?)
+      AND (ca.status IN ('completed','declined','confirmed') OR ca.allocation_date < date(?, '-7 days'))
       AND ca.allocation_date BETWEEN ? AND ?
     ORDER BY ca.allocation_date ASC, ca.start_time ASC
   `).all(worker.id, today, weekStartIso, weekEndIso);
@@ -358,6 +375,8 @@ router.get('/jobs', (req, res) => {
     requests,
     confirmed,
     finished,
+    toFinish,
+    toFinishByDate: groupByDate(toFinish),
     requestsByDate: groupByDate(requests),
     confirmedByDate: groupByDate(confirmedThisWeek),
     finishedByDate: groupByDate(finished),

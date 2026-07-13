@@ -1191,7 +1191,12 @@
   const ndNum = nd.getDate();
   const ndMon = nd.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' });
   const ndDow = nd.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'short' });
-  const nextLink = nextShift.job_id ? ('/w/jobs/' + nextShift.job_id) : '/w/shifts';
+  // Deep-link to the actual shift page. /w/jobs/:id expects the ALLOCATION id
+  // (not the job id), and booking-sourced shifts live at /w/booking-shift/:id —
+  // mirror the today-card logic so the box never dead-ends on "not found".
+  const nextLink = (nextShift.source === 'booking' && nextShift.booking_id)
+    ? ('/w/booking-shift/' + nextShift.booking_id)
+    : ('/w/jobs/' + (nextShift.id || nextShift.job_id));
   const isAllocated = (nextShift.status === 'allocated' || nextShift.status === 'assigned');
 %>
   <div class="wh-section-head">
@@ -1232,6 +1237,11 @@
       </div>
       <svg style="width:14px;height:14px;color:rgba(255,255,255,0.4);align-self:center;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
     </div>
+    <!-- Explicit clickable footer so it's obvious the whole box opens the shift. -->
+    <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border-top:1px solid rgba(255,255,255,0.06);<%= isAllocated ? 'background:rgba(245,158,11,0.10);color:#FCD34D;' : 'background:rgba(16,185,129,0.08);color:#6EE7B7;' %>font-size:0.72rem;font-weight:700;letter-spacing:0.02em;">
+      <%= isAllocated ? 'Tap to accept or reject' : 'View shift details' %>
+      <svg style="width:13px;height:13px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+    </div>
   </a>
 
   <!-- Compact list of the rest -->
@@ -1240,7 +1250,9 @@
       <% restShifts.forEach(s => {
         const d = new Date(s.allocation_date + 'T00:00:00');
         const dNum = d.getDate(); const dMon = d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', month: 'short' });
-        const link = s.job_id ? ('/w/jobs/' + s.job_id) : '/w/shifts';
+        const link = (s.source === 'booking' && s.booking_id)
+          ? ('/w/booking-shift/' + s.booking_id)
+          : ('/w/jobs/' + (s.id || s.job_id));
       %>
         <a href="<%= link %>" class="wh-up-item" style="text-decoration: none;">
           <div class="wh-up-date"<%= s.shift_type === 'night' ? ' style="background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7);"' : '' %>>
