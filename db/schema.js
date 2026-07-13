@@ -14277,6 +14277,42 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 318 error:', e.message); }
   }
 
+  // 319 — booking documents: crew-visibility flag + move uploads onto the
+  // persistent volume. visible_to_crew gates whether a plan/doc shows in the
+  // worker portal (default 1 = visible, matching old behaviour). Uploads used
+  // to land in <app>/uploads/bookings — OUTSIDE the data/ volume — so Railway
+  // wiped them on every deploy ("file doesn't exist" on older plans). New
+  // uploads go to data/uploads/bookings; this migration moves any surviving
+  // files across and rewrites stored paths to match.
+  if (!isMigrationApplied.get(319)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(booking_documents)").all().map(c => c.name);
+      if (!cols.includes('visible_to_crew')) {
+        db.exec("ALTER TABLE booking_documents ADD COLUMN visible_to_crew INTEGER DEFAULT 1");
+      }
+      // Move surviving files from the ephemeral dir onto the volume.
+      const oldDir = path.join(__dirname, '..', 'uploads', 'bookings');
+      const newDir = path.join(__dirname, '..', 'data', 'uploads', 'bookings');
+      try {
+        if (fs.existsSync(oldDir)) {
+          fs.mkdirSync(newDir, { recursive: true });
+          for (const entry of fs.readdirSync(oldDir)) {
+            const from = path.join(oldDir, entry);
+            const to = path.join(newDir, entry);
+            try { if (!fs.existsSync(to)) fs.renameSync(from, to); } catch (e) { /* cross-device or perms — leave in place */ }
+          }
+        }
+      } catch (e) { console.error('Migration 319 file move:', e.message); }
+      // Rewrite stored paths (relative or absolute) to the volume location.
+      db.prepare("UPDATE booking_documents SET file_path = 'data/' || file_path WHERE file_path LIKE 'uploads/bookings/%'").run();
+      db.prepare("UPDATE booking_documents SET file_path = REPLACE(file_path, ?, ?) WHERE file_path LIKE ?")
+        .run(path.join(__dirname, '..', 'uploads', 'bookings'), path.join(__dirname, '..', 'data', 'uploads', 'bookings'),
+             path.join(__dirname, '..', 'uploads', 'bookings') + '%');
+      recordMigration.run(319, 'booking_documents: visible_to_crew + uploads moved onto data/ volume');
+      console.log('Migration 319 applied');
+    } catch (e) { console.error('Migration 319 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

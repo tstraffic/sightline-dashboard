@@ -1262,6 +1262,19 @@
                   <% DOC_TYPES.forEach(function (t) { %><option value="<%= t[0] %>"<%= (doc.document_type || 'other') === t[0] ? ' selected' : '' %>><%= t[1] %></option><% }) %>
                 </select>
               </form>
+              <!-- Crew visibility — unticked docs never appear in the worker
+                   app (useful when cloned shifts carry plans the crew
+                   shouldn't see). Auto-saves on change. -->
+              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/visibility" class="inline">
+                <%- include('../partials/csrf') %>
+                <label class="inline-flex items-center gap-1 text-[11px] font-medium cursor-pointer <%= (doc.visible_to_crew == null || doc.visible_to_crew) ? 'text-emerald-600' : 'text-gray-400' %>"
+                  title="<%= (doc.visible_to_crew == null || doc.visible_to_crew) ? 'Crew can see this in the worker app — untick to hide' : 'Hidden from crew — tick to show' %>">
+                  <input type="checkbox" name="visible" value="1" <%= (doc.visible_to_crew == null || doc.visible_to_crew) ? 'checked' : '' %>
+                    onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()"
+                    class="w-3.5 h-3.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500">
+                  Crew
+                </label>
+              </form>
               <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/delete" class="inline">
                 <%- include('../partials/csrf') %>
                 <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Delete"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>

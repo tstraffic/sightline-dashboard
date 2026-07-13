@@ -538,7 +538,7 @@ router.get('/jobs/:id', (req, res) => {
   if (allocation.booking_id) {
     bookingLevel = db.prepare(`
       SELECT id, document_type, title, original_name, file_size, created_at
-      FROM booking_documents WHERE booking_id = ?
+      FROM booking_documents WHERE booking_id = ? AND COALESCE(visible_to_crew, 1) = 1
     `).all(allocation.booking_id).map(d => ({
       id: d.id, source: 'booking', doc_type: d.document_type, title: d.title,
       original_name: d.original_name, mime_type: null,
@@ -592,6 +592,8 @@ router.get('/booking-documents/:id', (req, res) => {
     SELECT bd.* FROM booking_documents bd WHERE bd.id = ?
   `).get(req.params.id);
   if (!doc) return res.status(404).send('Not found');
+  // Docs hidden from crew never leave the admin side, even by direct URL.
+  if (doc.visible_to_crew != null && !doc.visible_to_crew) return res.status(404).send('Not found');
 
   const linked = db.prepare(`
     SELECT 1 FROM crew_allocations
@@ -599,8 +601,17 @@ router.get('/booking-documents/:id', (req, res) => {
   `).get(worker.id, doc.booking_id);
   if (!linked) return res.status(403).send('Forbidden');
 
-  const abs = path.isAbsolute(doc.file_path) ? doc.file_path : path.join(__dirname, '..', '..', doc.file_path);
-  if (!fs.existsSync(abs)) return res.status(404).send('File missing');
+  // Stored paths come in every historical shape (absolute, app-relative, and
+  // pre-migration-319 rows pointing at the old ephemeral uploads/ dir whose
+  // file now lives under data/uploads/). Try each candidate.
+  const appRoot = path.join(__dirname, '..', '..');
+  const candidates = path.isAbsolute(doc.file_path)
+    ? [doc.file_path, doc.file_path.replace(path.join(appRoot, 'uploads'), path.join(appRoot, 'data', 'uploads'))]
+    : [path.join(appRoot, doc.file_path),
+       path.join(appRoot, 'data', doc.file_path),
+       path.join(appRoot, doc.file_path.replace(/^data\//, ''))];
+  const abs = candidates.find(c => { try { return fs.existsSync(c); } catch (e) { return false; } });
+  if (!abs) return res.status(404).send('File missing');
 
   // booking_documents has no mime_type column — guess from extension to keep
   // PDFs inline and other formats downloadable.
@@ -851,7 +862,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
       })) : [];
       const bookingLevel = db.prepare(`
         SELECT id, document_type, title, original_name, file_size, created_at
-        FROM booking_documents WHERE booking_id = ?
+        FROM booking_documents WHERE booking_id = ? AND COALESCE(visible_to_crew, 1) = 1
       `).all(booking.id).map(d => ({
         id: d.id, source: 'booking', doc_type: d.document_type, title: d.title,
         original_name: d.original_name, mime_type: null,

@@ -39,7 +39,32 @@ const { getConfig } = require('../middleware/settings');
 const bookingNotify = require('../services/bookingNotify');
 
 // Multer config for booking document uploads
-const BOOKING_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'bookings');
+// Booking uploads MUST live under data/ — that's the mounted volume on
+// Railway. The old location (<app>/uploads) was wiped on every deploy, which
+// is why previously-attached plans intermittently 404'd ("file doesn't
+// exist"). Migration 319 moved surviving files + rewrote stored paths.
+const BOOKING_UPLOAD_DIR = path.join(__dirname, '..', 'data', 'uploads', 'bookings');
+
+// Resolve a stored booking-document file_path to an absolute path that
+// actually exists. Tolerates every historical shape: absolute paths, paths
+// relative to the app root, and pre-migration rows still pointing at the old
+// uploads/ location whose file was moved to data/uploads/. Returns null when
+// the file is genuinely gone (e.g. wiped by a deploy before the volume fix).
+function resolveDocPath(storedPath) {
+  if (!storedPath) return null;
+  const appRoot = path.join(__dirname, '..');
+  const candidates = [];
+  if (path.isAbsolute(storedPath)) {
+    candidates.push(storedPath);
+    candidates.push(storedPath.replace(path.join(appRoot, 'uploads'), path.join(appRoot, 'data', 'uploads')));
+  } else {
+    candidates.push(path.join(appRoot, storedPath));
+    if (storedPath.startsWith('uploads/')) candidates.push(path.join(appRoot, 'data', storedPath));
+    if (storedPath.startsWith('data/uploads/')) candidates.push(path.join(appRoot, storedPath.replace(/^data\//, '')));
+  }
+  for (const c of candidates) { try { if (fs.existsSync(c)) return c; } catch (e) {} }
+  return null;
+}
 const bookingStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(BOOKING_UPLOAD_DIR, 'booking_' + req.params.id);
@@ -3079,12 +3104,54 @@ router.get('/:id/documents.json', (req, res) => {
   try {
     docs = db.prepare(`
       SELECT bd.id, bd.document_type, bd.title, bd.original_name, bd.file_size, bd.created_at,
+             COALESCE(bd.visible_to_crew, 1) AS visible_to_crew,
              u.full_name AS uploader_name
       FROM booking_documents bd LEFT JOIN users u ON u.id = bd.uploaded_by_id
       WHERE bd.booking_id = ? ORDER BY bd.created_at DESC
     `).all(req.params.id);
   } catch (e) {}
-  res.json({ ok: true, documents: docs });
+  // Required plans — derived from the booking's requirements so a TGS or
+  // TMP/CTMP requirement automatically shows up on the Req. Plans tab as a
+  // needed item (✓ once a matching document is attached).
+  const requiredPlans = [];
+  try {
+    const REQ_LABEL_TO_PLAN = [
+      { match: /traffic guidance|^tgs$/i, type: 'tgs',  label: 'TGS' },
+      { match: /^tmp\b|^ctmp$|traffic management plan/i, type: 'tmp', label: 'TMP / CTMP' },
+    ];
+    const reqRows = db.prepare("SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id = ?").all(req.params.id);
+    for (const m of REQ_LABEL_TO_PLAN) {
+      const required = reqRows
+        .filter(r => m.match.test(String(r.resource_type || '').trim()))
+        .reduce((s, r) => s + Math.max(0, parseInt(r.quantity_required, 10) || 0), 0);
+      if (!required) continue;
+      // CTMP uploads satisfy a TMP requirement — count both types.
+      const typesForAttach = m.type === 'tmp' ? ['tmp', 'ctmp'] : [m.type];
+      const attached = docs.filter(d => typesForAttach.indexOf(d.document_type) !== -1).length;
+      requiredPlans.push({ type: m.type, label: m.label, required, attached });
+    }
+  } catch (e) {}
+  res.json({ ok: true, documents: docs, requiredPlans });
+});
+
+// POST /:id/documents/:docId/visibility — toggle whether the crew can see
+// this document in the worker portal. Plans often shouldn't travel to the
+// field (draft TMPs, internal markups) — especially on oft-cloned shifts.
+router.post('/:id/documents/:docId/visibility', (req, res) => {
+  const db = getDb();
+  const doc = db.prepare("SELECT id FROM booking_documents WHERE id=? AND booking_id=?").get(req.params.docId, req.params.id);
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  if (!doc) {
+    if (isJson) return res.status(404).json({ error: 'Document not found' });
+    req.flash('error', 'Document not found.'); return res.redirect('/bookings/' + req.params.id);
+  }
+  const visible = (req.body.visible === '1' || req.body.visible === 1 || req.body.visible === true || req.body.visible === 'on') ? 1 : 0;
+  db.prepare("UPDATE booking_documents SET visible_to_crew = ? WHERE id = ?").run(visible, doc.id);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking_document', entityId: req.params.id,
+    details: `Document #${doc.id} ${visible ? 'visible to' : 'hidden from'} crew`, req });
+  if (isJson) return res.json({ ok: true, visible_to_crew: visible });
+  req.flash('success', visible ? 'Document visible to crew.' : 'Document hidden from crew.');
+  res.redirect('/bookings/' + req.params.id + '#documents');
 });
 
 router.post('/:id/documents', uploadDoc.single('file'), (req, res) => {
@@ -3113,15 +3180,20 @@ router.post('/:id/documents', uploadDoc.single('file'), (req, res) => {
 // GET /:id/documents/:docId/download — Download document
 router.get('/:id/documents/:docId/download', (req, res) => {
   const doc = getDb().prepare("SELECT * FROM booking_documents WHERE id=? AND booking_id=?").get(req.params.docId, req.params.id);
-  if (!doc || !fs.existsSync(doc.file_path)) { req.flash('error', 'File not found.'); return res.redirect('/bookings/' + req.params.id); }
-  res.download(doc.file_path, doc.original_name);
+  const abs = doc && resolveDocPath(doc.file_path);
+  if (!doc || !abs) {
+    req.flash('error', doc ? 'That file is no longer on the server — please re-attach it.' : 'File not found.');
+    return res.redirect('/bookings/' + req.params.id);
+  }
+  res.download(abs, doc.original_name);
 });
 
 // POST /:id/documents/:docId/delete — Delete document
 router.post('/:id/documents/:docId/delete', (req, res) => {
   const db = getDb();
   const doc = db.prepare("SELECT * FROM booking_documents WHERE id=? AND booking_id=?").get(req.params.docId, req.params.id);
-  if (doc && doc.file_path && fs.existsSync(doc.file_path)) { try { fs.unlinkSync(doc.file_path); } catch(e) {} }
+  const delAbs = doc && resolveDocPath(doc.file_path);
+  if (delAbs) { try { fs.unlinkSync(delAbs); } catch(e) {} }
   db.prepare("DELETE FROM booking_documents WHERE id=? AND booking_id=?").run(req.params.docId, req.params.id);
   if (req.headers.accept && req.headers.accept.includes('application/json')) return res.json({ ok: true });
   req.flash('success', 'Document deleted.');
@@ -3286,6 +3358,28 @@ router.post('/:id/clone', (req, res) => {
   // Hired-item suppliers + mobile-works legs (previously dropped by clone).
   try { for (const h of db.prepare("SELECT item_key, item_label, hire_company_id, company_name FROM booking_hire_items WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_hire_items (booking_id, item_key, item_label, hire_company_id, company_name) VALUES (?, ?, ?, ?, ?)").run(newId, h.item_key, h.item_label, h.hire_company_id, h.company_name); } catch(e) {}
   try { for (const lg of db.prepare("SELECT seq, start_time, address, notes FROM booking_mobile_legs WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_mobile_legs (booking_id, seq, start_time, address, notes) VALUES (?, ?, ?, ?, ?)").run(newId, lg.seq, lg.start_time, lg.address, lg.notes); } catch(e) {}
+  // Documents (plans, permits, …) travel with the clone — recurring shifts
+  // are cloned daily and re-attaching the same TGS/TMP each time was the #1
+  // reason plans went missing. Files are physically COPIED (not shared) so
+  // deleting a doc on one shift can never orphan the other; the crew-
+  // visibility flag rides along. Docs whose file is already gone are skipped.
+  try {
+    const cloneDocDir = path.join(BOOKING_UPLOAD_DIR, 'booking_' + newId);
+    for (const d of db.prepare("SELECT * FROM booking_documents WHERE booking_id=?").all(source.id)) {
+      const srcAbs = resolveDocPath(d.file_path);
+      if (!srcAbs) continue; // file lost (pre-volume-fix) — nothing to copy
+      try {
+        fs.mkdirSync(cloneDocDir, { recursive: true });
+        const destAbs = path.join(cloneDocDir, d.filename || path.basename(srcAbs));
+        if (!fs.existsSync(destAbs)) fs.copyFileSync(srcAbs, destAbs);
+        db.prepare(`INSERT INTO booking_documents (booking_id, document_type, title, description, filename, original_name, file_path, file_size, uploaded_by_id, visible_to_crew)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(newId, d.document_type || 'other', d.title || '', d.description || '',
+               d.filename || path.basename(destAbs), d.original_name, destAbs, d.file_size || 0,
+               req.session.user.id, d.visible_to_crew != null ? d.visible_to_crew : 1);
+      } catch (e) { console.error('[bookings/clone] doc copy failed:', e.message); }
+    }
+  } catch (e) { /* legacy schema */ }
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: newId, details: `Cloned ${source.booking_number} → ${bookingNumber}${includeCrew ? '' : ' (setup only)'}`, req });
   // Land on the board for the cloned shift's day (not the full edit page).
   const cloneDate = (newStart || '').slice(0, 10);

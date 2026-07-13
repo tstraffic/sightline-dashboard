@@ -2793,7 +2793,7 @@
     // Tabs in TAB_TO_BK_TAB lift their section; others stay placeholder.
     var ed = $('#bk2-editor');
     if (ed && ed.dataset.existing === '1' && name !== 'overview') {
-      if (name === 'reqplans' || name === 'reqperm') { try { if (window.bk2LoadDocPanes) window.bk2LoadDocPanes(); } catch (e) {} }
+      if (name === 'reqplans' || name === 'reqperm') { try { if (window.bk2LoadDocPanes) window.bk2LoadDocPanes(true); } catch (e) {} }
       else if (name === 'resources') { try { loadResourcesTab(); } catch (e) {} }
       else loadBookingFragment(name);
     }
@@ -3980,17 +3980,40 @@
     function fmtSize(n) { n = parseInt(n, 10) || 0; if (n < 1024) return n + ' B'; if (n < 1048576) return (n / 1024).toFixed(0) + ' KB'; return (n / 1048576).toFixed(1) + ' MB'; }
     function csrf() { var m = document.querySelector('meta[name="csrf-token"]'); return m ? m.getAttribute('content') : ''; }
 
-    function renderPane(pane, docs) {
+    function renderPane(pane, docs, requiredPlans) {
       var types = (pane.getAttribute('data-doc-types') || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
       var list = pane.querySelector('[data-bk-docpane-list]');
       var id = editorBookingId();
       var matching = (docs || []).filter(function (d) { return types.indexOf(d.document_type) !== -1; });
+      list.innerHTML = '';
+      // Required-plans checklist — a TGS / TMP requirement on the booking
+      // automatically shows here as a needed plan, ✓ once attached. Only on
+      // the Plans pane (its type filter includes 'tgs').
+      if (types.indexOf('tgs') !== -1 && requiredPlans && requiredPlans.length) {
+        var strip = document.createElement('div');
+        strip.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;';
+        requiredPlans.forEach(function (rp) {
+          var ok = rp.attached >= rp.required;
+          var chip = document.createElement('span');
+          chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;'
+            + (ok ? 'background:rgba(16,185,129,0.12);color:#059669;border:1px solid rgba(16,185,129,0.35);'
+                  : 'background:rgba(245,158,11,0.12);color:#B45309;border:1px solid rgba(245,158,11,0.4);');
+          chip.textContent = (ok ? '✓ ' : '⚠ ') + rp.label + ' required'
+            + (rp.required > 1 ? ' ×' + rp.required : '')
+            + (ok ? '' : ' — attach below');
+          strip.appendChild(chip);
+        });
+        list.appendChild(strip);
+      }
       if (!matching.length) {
-        list.innerHTML = '<p class="bk2-create-hint">No documents attached yet. Use the control below to add one.</p>';
+        var hint = document.createElement('p');
+        hint.className = 'bk2-create-hint';
+        hint.textContent = 'No documents attached yet. Use the control below to add one.';
+        list.appendChild(hint);
         return;
       }
-      list.innerHTML = '';
       matching.forEach(function (d) {
+        var visible = (d.visible_to_crew == null) ? 1 : (d.visible_to_crew ? 1 : 0);
         var row = document.createElement('div');
         row.className = 'bk2-docrow';
         row.innerHTML =
@@ -3998,8 +4021,38 @@
           + '<span class="bk2-docrow-name">' + (d.title || d.original_name || 'Document') + '</span>'
           + '<span class="bk2-docrow-meta">' + (d.document_type || '') + ' · ' + fmtSize(d.file_size) + '</span>'
           + '</div>'
+          + '<button type="button" class="bk2-docrow-dl" data-doc-vis="' + d.id + '" data-vis-now="' + visible + '"'
+          + ' title="' + (visible ? 'Crew can see this in the worker app — click to hide' : 'Hidden from crew — click to show') + '"'
+          + ' style="border:none;background:none;cursor:pointer;' + (visible ? 'color:#059669;' : 'color:#9CA3AF;') + '">'
+          + (visible ? '👁 Crew' : '🚫 Hidden') + '</button>'
           + '<a class="bk2-docrow-dl" href="/bookings/' + id + '/documents/' + d.id + '/download">Download</a>';
         list.appendChild(row);
+      });
+      // Crew-visibility toggles — flip on the server, then update in place.
+      list.querySelectorAll('[data-doc-vis]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          var docId = btn.getAttribute('data-doc-vis');
+          var next = btn.getAttribute('data-vis-now') === '1' ? '0' : '1';
+          var body = new URLSearchParams({ visible: next, _csrf: csrf() });
+          fetch('/bookings/' + id + '/documents/' + docId + '/visibility', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: body, credentials: 'same-origin',
+          }).then(function (r) { return r.json(); })
+            .then(function (j) {
+              if (!j || j.ok === false) throw new Error((j && j.error) || 'failed');
+              if (docsCache && docsCache.docs) {
+                var row = docsCache.docs.find(function (x) { return String(x.id) === String(docId); });
+                if (row) row.visible_to_crew = parseInt(next, 10);
+              }
+              btn.setAttribute('data-vis-now', next);
+              btn.textContent = next === '1' ? '👁 Crew' : '🚫 Hidden';
+              btn.style.color = next === '1' ? '#059669' : '#9CA3AF';
+              btn.title = next === '1' ? 'Crew can see this in the worker app — click to hide' : 'Hidden from crew — click to show';
+              if (typeof window.bk2Toast === 'function') window.bk2Toast(next === '1' ? 'Visible to crew.' : 'Hidden from crew.', 'success');
+            })
+            .catch(function () { if (typeof window.bk2Toast === 'function') window.bk2Toast('Could not change visibility.', 'error'); });
+        });
       });
     }
 
@@ -4008,14 +4061,14 @@
       if (!id) return;
       var panes = document.querySelectorAll('[data-bk-docpane]');
       if (docsCache && docsCache.id === id && !force) {
-        panes.forEach(function (p) { renderPane(p, docsCache.docs); });
+        panes.forEach(function (p) { renderPane(p, docsCache.docs, docsCache.requiredPlans); });
         return;
       }
       fetch('/bookings/' + id + '/documents.json', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
         .then(function (r) { return r.ok ? r.json() : Promise.reject(r.status); })
         .then(function (data) {
-          docsCache = { id: id, docs: data.documents || [] };
-          panes.forEach(function (p) { renderPane(p, docsCache.docs); });
+          docsCache = { id: id, docs: data.documents || [], requiredPlans: data.requiredPlans || [] };
+          panes.forEach(function (p) { renderPane(p, docsCache.docs, docsCache.requiredPlans); });
         })
         .catch(function () {
           panes.forEach(function (p) { var l = p.querySelector('[data-bk-docpane-list]'); if (l) l.innerHTML = '<p class="bk2-create-hint">Couldn’t load documents.</p>'; });
