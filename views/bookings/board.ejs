@@ -2031,6 +2031,13 @@
     }
     setEditorMode('create');
     var _delBtnC = $('#bk2-edit-delete'); if (_delBtnC) _delBtnC.hidden = true; // no delete for an unsaved shift
+    // Reset the status pills — a new booking always starts Unconfirmed
+    // (/quick hardcodes it server-side). Without this the pill row kept the
+    // previously-edited booking's active status, which read as if the new
+    // shift inherited it.
+    $$('.bk2-edit-statuspill').forEach(function (p) { p.classList.remove('is-active'); });
+    var _unconf = document.querySelector('.bk2-edit-statuspill[data-status-set="unconfirmed"]');
+    if (_unconf) _unconf.classList.add('is-active');
     var title = $('#bk2-edit-title'); if (title) title.textContent = 'New Booking';
     // Reset the create form so reopening doesn't carry over stale
     // values from a previous session (e.g. dates pre-filled when
