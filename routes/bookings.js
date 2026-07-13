@@ -2562,12 +2562,21 @@ router.post('/:id/crew', (req, res) => {
 
   // Keep the Overview requirements in step: if the shift now carries more crew
   // than the requirements call for, the just-added person was dropped on as an
-  // extra — add a Traffic Controller so the requirement reflects the headcount.
+  // extra — grow the requirement matching THEIR role (a surplus spotter grows
+  // "Spotter", not "Traffic Controller") so the counts stay honest per role.
   if (inserted) {
     try {
       const totalCrew = db.prepare("SELECT COUNT(*) AS n FROM booking_crew WHERE booking_id = ?").get(req.params.id).n;
       const surplus = totalCrew - requiredCrewCapacity(db, req.params.id);
-      if (surplus > 0) bumpRequirement(db, req.params.id, 'Traffic Controller', surplus);
+      if (surplus > 0) {
+        const ROLE_ON_SITE_TO_REQ_LABEL = {
+          traffic_controller: 'Traffic Controller', spotter: 'Spotter',
+          hoist_operator: 'Hoist Operator', labourer: 'Labour',
+          trainee: 'Trainee', security: 'Security',
+        };
+        const label = ROLE_ON_SITE_TO_REQ_LABEL[String(role_on_site || '').toLowerCase()] || 'Traffic Controller';
+        bumpRequirement(db, req.params.id, label, surplus);
+      }
     } catch (e) { console.error('[bookings.crew] requirement bump failed:', e.message); }
   }
 

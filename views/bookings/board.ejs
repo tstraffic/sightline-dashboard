@@ -2279,17 +2279,7 @@
         // People/Vehicles/Equipment summary recalculates.
         var reqs = data.requirements || {};
         console.log('[bk2 prefill] requirements for booking', bookingId, reqs);
-        // Scope the stepper query to the editor form ONLY — the old Quick
-        // Book form (#bk2-qb-form) is also on the page and shares input
-        // names; querying via the editor form's querySelectorAll already
-        // scopes, but be explicit about which form's steppers we're hitting.
-        var stepperInputs = form.querySelectorAll('.bk2-create-stepper input[type="number"]');
-        stepperInputs.forEach(function (inp) {
-          if (!inp.name) return;
-          var saved = reqs[inp.name];
-          inp.value = (saved != null) ? String(saved) : '0';
-          inp.dispatchEvent(new Event('input', { bubbles: true }));
-        });
+        applyReqSteppers(reqs);
 
         // Client-scoped Project dropdown: load this client's projects then
         // select the saved one. Then apply saved hired-item suppliers (after
@@ -2581,10 +2571,46 @@
       strip.setAttribute('data-booking-id', id);
     }
   }
+  // ── Requirement steppers ↔ server truth ──
+  // Set every Overview requirement stepper from a {field → qty} map. Shared by
+  // the prefill (editor open) and the live refresh below. Scoped to the editor
+  // form ONLY — the old Quick Book form shares input names. Fires `input` so
+  // the People/Vehicles/Equipment summary recalculates.
+  function applyReqSteppers(reqs) {
+    var form = $('#bk2-edit-form');
+    if (!form) return;
+    form.querySelectorAll('.bk2-create-stepper input[type="number"]').forEach(function (inp) {
+      if (!inp.name) return;
+      var saved = reqs[inp.name];
+      inp.value = (saved != null) ? String(saved) : '0';
+      inp.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+  }
+  // Re-pull the booking's requirements and re-apply them to the steppers.
+  // Adding crew/vehicles/equipment bumps booking_requirements server-side
+  // (e.g. a 4th TC on a full 3-man crew adds "Traffic Controller: 1"); without
+  // this the steppers kept their editor-open values, so the Overview looked
+  // stale AND pressing Save rebuilt the requirements from those stale numbers,
+  // silently reverting the bump.
+  function refreshRequirementSteppers() {
+    var ed = $('#bk2-editor');
+    if (!ed || ed.hidden || ed.dataset.existing !== '1' || !ed.dataset.bookingId) return;
+    var id = ed.dataset.bookingId;
+    fetch('/bookings/api/' + id + '/edit-data', { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (data) {
+        if (!data) return;
+        var ed2 = $('#bk2-editor');
+        if (!ed2 || ed2.hidden || ed2.dataset.bookingId !== id) return; // editor moved on
+        applyReqSteppers(data.requirements || {});
+      })
+      .catch(function () {});
+  }
   // After any allocation change (drop / remove / assign), keep the glowing
-  // card (the shift surface) in sync.
+  // card (the shift surface) AND the Overview requirement steppers in sync.
   document.addEventListener('bk2:alloc-changed', function () {
     try { refreshFloatCard(); } catch (e) {}
+    try { refreshRequirementSteppers(); } catch (e) {}
   });
 
   // ── Wire interactivity on the lifted Resources fragment ──
@@ -2617,8 +2643,9 @@
       fragmentDocCache = null;
       fragmentLoaded.resources = false;
       loadBookingFragment('resources');
-      // Keep the floating summary card in step with crew/vehicle changes.
-      try { refreshFloatCard(); } catch (e) {}
+      // Keep the floating summary card + requirement steppers in step with
+      // crew/vehicle changes (alloc-changed drives both).
+      try { document.dispatchEvent(new CustomEvent('bk2:alloc-changed')); } catch (e) {}
     }
     function postForm(url, payload) {
       var body = new URLSearchParams();
