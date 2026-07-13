@@ -2217,6 +2217,93 @@ body.bk2-date-loading::before {
 .bk2-docpane-uprow select { flex: 0 0 auto; }
 .bk2-docpane-uprow input[type="file"] { flex: 1 1 auto; font-size: 12.5px; }
 
+/* ── Document upload: in-flight spinner + progress overlay ──
+   Guards against double-submit (the button disables + the pane covers) and
+   gives a real progress bar off XHR upload events. */
+.bk2-spin {
+  display: inline-block;
+  width: 13px; height: 13px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  border: 2px solid rgba(255,255,255,0.45);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: bk2Spin 0.6s linear infinite;
+}
+.bk2-spin-lg {
+  width: 30px; height: 30px;
+  margin: 0 0 12px;
+  vertical-align: baseline;
+  border-width: 3px;
+  border-color: rgba(43,127,255,0.25);
+  border-top-color: #2B7FFF;
+}
+@keyframes bk2Spin { to { transform: rotate(360deg); } }
+
+.bk2-upload-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.78);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  border-radius: 12px;
+  animation: bk2Fade 0.15s ease-out;
+}
+@keyframes bk2Fade { from { opacity: 0; } to { opacity: 1; } }
+.bk2-upload-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 22px 28px;
+  min-width: 220px;
+  background: #fff;
+  border: 1px solid #E5E7EB;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(15,23,42,0.16);
+}
+.bk2-upload-title { font-size: 14px; font-weight: 600; color: #111827; margin-bottom: 12px; }
+.bk2-upload-track {
+  width: 180px; height: 6px;
+  background: #E5E7EB;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.bk2-upload-fill {
+  width: 0%; height: 100%;
+  background: linear-gradient(90deg, #2B7FFF, #1D6AE5);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+.bk2-upload-pct { font-size: 11.5px; font-weight: 600; color: #6B7280; margin-top: 7px; min-height: 14px; }
+/* Bytes are sent, server is still saving — indeterminate sweep. */
+.bk2-upload-overlay.is-processing .bk2-upload-fill {
+  width: 40% !important;
+  animation: bk2Indeterminate 1.1s ease-in-out infinite;
+}
+@keyframes bk2Indeterminate {
+  0%   { margin-left: -40%; }
+  100% { margin-left: 100%; }
+}
+
+:root[data-theme="dark"] body.dark-glass .bk2-upload-overlay { background: rgba(17,24,39,0.72); }
+:root[data-theme="dark"] body.dark-glass .bk2-upload-card {
+  background: #111827;
+  border-color: rgba(255,255,255,0.12);
+  box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+}
+:root[data-theme="dark"] body.dark-glass .bk2-upload-title { color: rgba(255,255,255,0.92); }
+:root[data-theme="dark"] body.dark-glass .bk2-upload-track { background: rgba(255,255,255,0.14); }
+:root[data-theme="dark"] body.dark-glass .bk2-upload-pct { color: rgba(255,255,255,0.6); }
+
+@media (prefers-reduced-motion: reduce) {
+  .bk2-spin { animation-duration: 1.2s; }
+  .bk2-upload-overlay.is-processing .bk2-upload-fill { animation: none; width: 100% !important; }
+}
+
 /* ==========================================================================
    Bookings v35 — inline location-context add, add-on group headers,
    "workers needed" badge. (Mobile-legs restyle edited in place above.)

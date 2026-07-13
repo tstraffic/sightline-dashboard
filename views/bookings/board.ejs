@@ -2414,6 +2414,41 @@
 
   // ── Documents tab: dropzone re-init happens above; here we AJAX the
   // multipart upload + delete forms so uploads never navigate away.
+  // Build a loading overlay over the documents pane while a file uploads.
+  // Returns { setProgress(fraction), processing(), remove() }. Shows a real
+  // determinate bar off XHR upload progress, then flips to an indeterminate
+  // "Processing…" state once the bytes are sent but the server is still saving.
+  function makeDocUploadOverlay(pane) {
+    var ov = document.createElement('div');
+    ov.className = 'bk2-upload-overlay';
+    ov.innerHTML =
+      '<div class="bk2-upload-card">' +
+        '<div class="bk2-spin bk2-spin-lg"></div>' +
+        '<div class="bk2-upload-title">Uploading…</div>' +
+        '<div class="bk2-upload-track"><div class="bk2-upload-fill"></div></div>' +
+        '<div class="bk2-upload-pct">0%</div>' +
+      '</div>';
+    pane.style.position = pane.style.position || 'relative';
+    pane.appendChild(ov);
+    var fill = ov.querySelector('.bk2-upload-fill');
+    var pct = ov.querySelector('.bk2-upload-pct');
+    var title = ov.querySelector('.bk2-upload-title');
+    return {
+      setProgress: function (f) {
+        var p = Math.max(0, Math.min(1, f));
+        fill.style.width = (p * 100).toFixed(0) + '%';
+        pct.textContent = (p * 100).toFixed(0) + '%';
+        if (p >= 1) this.processing();
+      },
+      processing: function () {
+        ov.classList.add('is-processing');
+        title.textContent = 'Processing…';
+        pct.textContent = '';
+      },
+      remove: function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }
+    };
+  }
+
   function wireOverlayDocs(pane) {
     if (pane.dataset.bdBound) return;
     pane.dataset.bdBound = '1';
@@ -2424,24 +2459,56 @@
       if (!/\/bookings\/\d+\/documents/.test(action)) return;
       e.preventDefault();
       e.stopPropagation();
-      var fd = new FormData(form);   // multipart — CSRF middleware skips these
-      fetch(action, {
-        method: 'POST',
-        headers: { 'Accept': 'application/json' },
-        body: fd,
-        credentials: 'same-origin',
-      }).then(function (r) { return r.json().catch(function () { return { ok: r.ok }; }); })
-        .then(function (j) {
-          if (!j || j.ok === false) {
-            if (typeof bk2Toast === 'function') bk2Toast((j && j.error) || 'Upload failed.', 'error');
-            return;
-          }
-          if (typeof bk2Toast === 'function') bk2Toast('Documents updated.');
-          fragmentDocCache = null;
-          fragmentLoaded.documents = false;
-          loadBookingFragment('documents');
-        })
-        .catch(function () { if (typeof bk2Toast === 'function') bk2Toast('Upload failed — network error.', 'error'); });
+      // In-flight guard: while a request for THIS form is running, ignore
+      // repeat submits (spamming Upload no longer queues a copy per click).
+      if (form.dataset.busy === '1') return;
+      form.dataset.busy = '1';
+
+      var isUpload = /\/documents$/.test(action);   // the add-file form, not delete/type
+      var btn = form.querySelector('button[type="submit"], button:not([type])');
+      var btnHtml = btn ? btn.innerHTML : '';
+      if (btn) {
+        btn.disabled = true;
+        if (isUpload) btn.innerHTML = '<span class="bk2-spin"></span>Uploading…';
+      }
+      var overlay = isUpload ? makeDocUploadOverlay(pane) : null;
+
+      var finish = function () {
+        form.dataset.busy = '';
+        if (btn) { btn.disabled = false; btn.innerHTML = btnHtml; }
+        if (overlay) overlay.remove();
+      };
+
+      // XHR (not fetch) so we can render real upload progress. Body is
+      // multipart — the CSRF middleware skips multipart, same as before.
+      var xhr = new XMLHttpRequest();
+      xhr.open('POST', action, true);
+      xhr.setRequestHeader('Accept', 'application/json');
+      xhr.withCredentials = true;
+      if (overlay && xhr.upload) {
+        xhr.upload.onprogress = function (ev) {
+          if (ev.lengthComputable) overlay.setProgress(ev.loaded / ev.total);
+        };
+        xhr.upload.onload = function () { overlay.processing(); };
+      }
+      xhr.onload = function () {
+        var j = null; try { j = JSON.parse(xhr.responseText); } catch (err) {}
+        var ok = xhr.status >= 200 && xhr.status < 300 && (!j || j.ok !== false);
+        finish();
+        if (!ok) {
+          if (typeof bk2Toast === 'function') bk2Toast((j && j.error) || 'Upload failed.', 'error');
+          return;
+        }
+        if (typeof bk2Toast === 'function') bk2Toast(isUpload ? 'Document uploaded.' : 'Documents updated.');
+        fragmentDocCache = null;
+        fragmentLoaded.documents = false;
+        loadBookingFragment('documents');
+      };
+      xhr.onerror = function () {
+        finish();
+        if (typeof bk2Toast === 'function') bk2Toast('Upload failed — network error.', 'error');
+      };
+      xhr.send(new FormData(form));
     });
   }
 
