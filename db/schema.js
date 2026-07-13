@@ -14188,6 +14188,65 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 315 error:', e.message); }
   }
 
+  // 316 — Upgrade legacy flat compliance rows to the parent/sub-plan model so
+  // EVERY Plans & Approvals item renders the newer layout (the edit form only
+  // shows the parent grid + sub-plan cards when parent_id IS NULL AND
+  // plan_number IS NOT NULL — legacy rows had plan_number NULL and fell back
+  // to the old single-column form). For each legacy row we: (a) clone its
+  // item-level data into a NEW sub-plan child (parent_id = the row), (b)
+  // re-point any documents/revisions/fees/extensions/ROL/RA/tasks from the
+  // row to that sub-plan, and (c) turn the original row into a parent by
+  // giving it a plan_number and rolling its status up. Nothing is deleted —
+  // the original row survives as the plan header, its detail moves onto the
+  // sub-plan card. Idempotent: only rows with plan_number NULL are touched,
+  // and once converted they carry a plan_number so a re-run skips them.
+  if (!isMigrationApplied.get(316)) {
+    try {
+      const planStatus = require('../lib/planStatus');
+      const legacy = db.prepare("SELECT * FROM compliance WHERE parent_id IS NULL AND plan_number IS NULL").all();
+      if (legacy.length) {
+        const cols = db.prepare("PRAGMA table_info(compliance)").all().map(c => c.name);
+        // Columns cloned onto the sub-plan verbatim — everything except the
+        // primary key and the two hierarchy discriminators (we set those).
+        const copyCols = cols.filter(n => n !== 'id' && n !== 'parent_id' && n !== 'plan_number');
+        const cloneSql = `INSERT INTO compliance (parent_id, plan_number, ${copyCols.join(', ')})
+                          SELECT ?, NULL, ${copyCols.join(', ')} FROM compliance WHERE id = ?`;
+        const cloneStmt = db.prepare(cloneSql);
+        const parentStmt = db.prepare("UPDATE compliance SET plan_number = ?, item_type = 'other', item_types = '', reference_number = '', status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+        // Item-level artifacts move from the legacy row to its new sub-plan.
+        // Guarded per table — a pre-migration DB may lack some of these.
+        const repointTables = ['compliance_documents', 'compliance_revisions', 'compliance_fees', 'compliance_extensions', 'compliance_rol_shifts', 'compliance_rol_conditions', 'risk_assessments', 'tasks'];
+        const repointStmts = {};
+        for (const t of repointTables) {
+          try {
+            if (db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(t) &&
+                db.prepare(`PRAGMA table_info(${t})`).all().some(c => c.name === 'compliance_id')) {
+              repointStmts[t] = db.prepare(`UPDATE ${t} SET compliance_id = ? WHERE compliance_id = ?`);
+            }
+          } catch (e) { /* table absent — skip */ }
+        }
+
+        let converted = 0;
+        const tx = db.transaction(() => {
+          for (const row of legacy) {
+            const pn = planStatus.nextPlanNumber(db);      // monotonic; each conversion bumps it
+            const subId = cloneStmt.run(row.id, row.id).lastInsertRowid;
+            for (const t of Object.keys(repointStmts)) {
+              try { repointStmts[t].run(subId, row.id); } catch (e) { /* leave in place if it fails */ }
+            }
+            const status = planStatus.rollupStatus([{ status: row.status, expiry_date: row.expiry_date }]);
+            parentStmt.run(pn, status, row.id);
+            converted += 1;
+          }
+        });
+        tx();
+        console.log('Migration 316: upgraded ' + converted + ' legacy plans to parent + sub-plan');
+      }
+      recordMigration.run(316, 'compliance: legacy plans → parent/sub-plan (all use new layout)');
+      console.log('Migration 316 applied');
+    } catch (e) { console.error('Migration 316 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
