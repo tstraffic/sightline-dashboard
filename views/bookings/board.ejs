@@ -910,6 +910,14 @@
       <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
       Open full edit page
     </a>
+    <!-- Delete shift — only offered once the booking is Cancel / Late Cancl.
+         Visibility is driven entirely by syncDeleteBtn() (status + edit mode),
+         NOT data-mode-only, so a cancelled shift can be removed for good. -->
+    <button type="button" class="bk2-edit-actbtn" id="bk2-edit-delete" hidden
+      style="color:#fff;background:#DC2626;border-color:#DC2626;">
+      <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6M1 7h22M9 3h6a1 1 0 011 1v3H8V4a1 1 0 011-1z"/></svg>
+      Delete shift
+    </button>
   </div>
 
   <!-- Tab content panels. Only the active one is visible. -->
@@ -2022,6 +2030,7 @@
       cBtn.innerHTML = '<svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg> Create';
     }
     setEditorMode('create');
+    var _delBtnC = $('#bk2-edit-delete'); if (_delBtnC) _delBtnC.hidden = true; // no delete for an unsaved shift
     var title = $('#bk2-edit-title'); if (title) title.textContent = 'New Booking';
     // Reset the create form so reopening doesn't carry over stale
     // values from a previous session (e.g. dates pre-filled when
@@ -2184,6 +2193,9 @@
     var created = $('#bk2-edit-created'); if (created) created.hidden = true;
     ed.dataset.existing = '1';
     ed.dataset.bookingId = id;
+    // Hide "Delete shift" until prefill loads this booking's real status
+    // (prevents it lingering from a previously-open cancelled booking).
+    var _delBtn = $('#bk2-edit-delete'); if (_delBtn) _delBtn.hidden = true;
     // Float the edited card beside the editor; blur the rest of the board.
     try {
       unfloatCard();
@@ -2292,6 +2304,7 @@
           $$('.bk2-edit-statuspill').forEach(function (p) { p.classList.remove('is-active'); });
           statusPill.classList.add('is-active');
         }
+        if (typeof syncDeleteBtn === 'function') syncDeleteBtn();
         // Form is the editor's primary surface now — hide the quickview.
         var qv = $('#bk2-edit-quickview'); if (qv) qv.hidden = true;
         // Relabel the Create button as Save (mode-only CSS still keeps it
@@ -3002,6 +3015,7 @@
           if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Could not update status');
           if (typeof window.bk2Toast === 'function') window.bk2Toast('Status → ' + (p.querySelector('.bk2-edit-statuspill-lbl') || p).textContent.trim(), 'success');
           boardDirty = true;
+          syncDeleteBtn();   // reveal/hide "Delete shift" as the status changes
         })
         .catch(function (e) {
           // Revert the visual state so the pills never lie about what saved.
@@ -3011,6 +3025,49 @@
         });
     });
   });
+
+  // ── "Delete shift" — only for cancelled bookings ──
+  // A booking can only be deleted once it's Cancel / Late Cancl. (a soft delete
+  // via POST /:id/delete, which also cancels crew allocations + notifies). The
+  // button lives in the status row and is shown only when the active status is
+  // one of those AND we're editing an existing booking.
+  function syncDeleteBtn() {
+    var btn = document.getElementById('bk2-edit-delete');
+    if (!btn) return;
+    var ed = $('#bk2-editor');
+    var isEdit = !!(ed && ed.dataset.existing === '1' && ed.dataset.bookingId);
+    var active = document.querySelector('.bk2-edit-statuspill.is-active');
+    var st = active ? active.getAttribute('data-status-set') : '';
+    btn.hidden = !(isEdit && (st === 'cancelled' || st === 'late_cancellation'));
+  }
+  (function () {
+    var delBtn = document.getElementById('bk2-edit-delete');
+    if (!delBtn) return;
+    delBtn.addEventListener('click', function () {
+      var ed = $('#bk2-editor');
+      var id = ed && ed.dataset.bookingId;
+      if (!id) return;
+      if (!confirm('Delete this cancelled shift? It will be removed from the board and the crew notified.')) return;
+      var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      delBtn.disabled = true;
+      fetch('/bookings/' + id + '/delete', {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ _csrf: csrf }),
+        credentials: 'same-origin',
+      }).then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.body.ok) throw new Error((res.body && res.body.error) || 'Could not delete the shift');
+          if (typeof window.bk2Toast === 'function') window.bk2Toast('Shift deleted.', 'success');
+          boardDirty = true;
+          if (typeof closeEditor === 'function') closeEditor();
+        })
+        .catch(function (e) {
+          delBtn.disabled = false;
+          if (typeof window.bk2Toast === 'function') window.bk2Toast(e.message, 'error'); else alert(e.message);
+        });
+    });
+  })();
 
   // Toggle the callout-time field's visibility based on the callout toggle.
   var calloutBox = document.querySelector('input[name="is_callout"]');
