@@ -848,8 +848,8 @@ router.post('/sub-plans/:subId/app-ref', (req, res) => {
 
 // Council permit two-stage workflow (spec: "first stage is applied, then mark
 // as approved and drag drop/select file"):
-//   action=apply   → status 'submitted' (application lodged; NO file required),
-//                    saves the application ref, stamps a submitted_date.
+//   action=apply   → status 'submitted'. Requires Description + Submission date
+//                    + Job start (saved here); a file is optional at this stage.
 //   action=approve → attaches any dropped/selected file(s), status 'approved',
 //                    stamps approved_date. File is optional here too.
 // The council-issued application ref rides along on either action so it can be
@@ -865,6 +865,26 @@ router.post('/sub-plans/:subId/council', subPlanUpload.array('documents', 10), (
   const action = req.body.action === 'approve' ? 'approve' : 'apply';
   const files = req.files || [];
   const today = new Date().toISOString().split('T')[0];
+  const parentEdit = '/compliance/' + sub.parent_id + '/edit';
+
+  // Applying lodges the application, so the core details must be in first:
+  // Description, Submission date, Job start. (Files stay optional.)
+  const desc = String(req.body.description || '').trim();
+  const submittedDate = String(req.body.submitted_date || '').trim();
+  const jobDate = String(req.body.job_date || '').trim();
+  const dateOk = (d) => /^\d{4}-\d{2}-\d{2}$/.test(d);
+  if (action === 'apply') {
+    const missing = [];
+    if (!desc) missing.push('Description');
+    if (!dateOk(submittedDate)) missing.push('Submission date');
+    if (!dateOk(jobDate)) missing.push('Job start date');
+    if (missing.length) {
+      const msg = missing.join(', ') + (missing.length > 1 ? ' are' : ' is') + ' required before a council permit can be marked as applied.';
+      if (wantsJson(req)) return res.status(400).json({ error: msg });
+      req.flash('error', msg);
+      return res.redirect(parentEdit);
+    }
+  }
 
   // Persist the council application ref whenever it's supplied (both stages).
   if (req.body.application_ref_no !== undefined) {
@@ -872,17 +892,16 @@ router.post('/sub-plans/:subId/council', subPlanUpload.array('documents', 10), (
       .run(String(req.body.application_ref_no || '').trim().slice(0, 120), sub.id);
   }
 
-  // Attach any dropped/selected files (only expected at the approve stage, but
-  // accepted at either — a file is never mandatory for council).
+  // Attach any dropped/selected files (optional at either stage).
   if (files.length) {
     const insDoc = db.prepare('INSERT INTO compliance_documents (compliance_id, filename, original_name, file_path, file_size, mime_type, uploaded_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
     files.forEach(f => insDoc.run(sub.id, f.filename, f.originalname, subRel(sub, f), f.size, f.mimetype || '', req.session.user.id));
   }
 
   if (action === 'apply') {
-    // Lodged: submitted, no file needed. Stamp submitted_date if not already set.
-    db.prepare("UPDATE compliance SET status = CASE WHEN status = 'approved' THEN status ELSE 'submitted' END, submitted_date = COALESCE(submitted_date, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?")
-      .run(today, sub.id);
+    // Lodged: save the required details + flip to submitted.
+    db.prepare("UPDATE compliance SET description = ?, submitted_date = ?, job_date = ?, status = CASE WHEN status = 'approved' THEN status ELSE 'submitted' END, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
+      .run(desc, submittedDate, jobDate, sub.id);
   } else {
     db.prepare("UPDATE compliance SET status = 'approved', approved_date = COALESCE(approved_date, ?), submitted_date = COALESCE(submitted_date, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?")
       .run(today, today, sub.id);

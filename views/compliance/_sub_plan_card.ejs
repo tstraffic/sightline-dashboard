@@ -242,14 +242,20 @@
   <% } %>
 
   <!-- Council permit two-stage workflow: Applied → Approved.
-       Stage 1 lodges the application (no file needed); stage 2 attaches the
-       issued permit via drag-drop/select and marks it approved. The council
-       application ref is captured beside the Charge client control above and
-       synced into whichever action form the user submits (belt-and-suspenders
-       against the beside-charge input's onchange racing a full-page POST). -->
+       Stage 1 lodges the application — Description + Submission date + Job start
+       are required first (files optional); stage 2 attaches the issued permit
+       via drag-drop/select and marks it approved. The lodged details stay
+       visible through both stages. The council application ref is captured
+       beside the Charge client control above and synced into whichever action
+       form the user submits (belt-and-suspenders against the beside-charge
+       input's onchange racing a full-page POST). -->
   <% if (sub.item_type === 'council_permit') {
        const councilApplied = ['submitted', 'approved'].includes(sub.status);
        const councilApproved = sub.status === 'approved';
+       const councilDesc = sub.description || '';
+       const councilSubmitted = sub.submitted_date || '';
+       const councilJob = sub.job_date || '';
+       const councilTodayStr = new Date().toISOString().slice(0, 10);
        const syncRef = "this.application_ref_no.value=(document.getElementById('appref-input-" + sub.id + "')||{}).value||''";
   %>
     <div class="mb-3 rounded-lg ring-1 ring-gray-200 overflow-hidden">
@@ -259,8 +265,7 @@
             <span class="inline-flex items-center justify-center w-4 h-4 rounded-full text-[10px] font-bold <%= councilApplied ? 'bg-emerald-600 text-white' : 'bg-gray-300 text-white' %>"><%= councilApplied ? '✓' : '1' %></span>
             <span class="font-semibold <%= councilApplied ? 'text-emerald-800' : 'text-gray-600' %>">Applied</span>
           </div>
-          <% if (sub.submitted_date) { %><p class="text-[11px] text-gray-500 mt-0.5 ml-5">Lodged <%= sub.submitted_date %></p><% } %>
-          <% if (sub.application_ref_no) { %><p class="text-[11px] text-gray-500 mt-0.5 ml-5">Ref <span class="font-medium text-gray-700"><%= sub.application_ref_no %></span></p><% } %>
+          <% if (councilSubmitted) { %><p class="text-[11px] text-gray-500 mt-0.5 ml-5">Lodged <%= councilSubmitted %></p><% } %>
         </div>
         <div class="flex-1 px-3 py-2 <%= councilApproved ? 'bg-emerald-50' : 'bg-gray-50' %>">
           <div class="flex items-center gap-1.5">
@@ -271,15 +276,51 @@
         </div>
       </div>
 
+      <!-- Lodged details — visible from the moment it's applied, through approval. -->
+      <% if (councilApplied) { %>
+        <div class="px-3 py-2.5 bg-white border-t border-gray-200 grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+          <div class="col-span-2"><span class="text-gray-400 uppercase tracking-wide text-[10px] font-semibold">Description</span><div class="font-medium text-gray-800 mt-0.5"><%= councilDesc || '—' %></div></div>
+          <div><span class="text-gray-400 uppercase tracking-wide text-[10px] font-semibold">Job start</span><div class="font-medium text-gray-800 mt-0.5"><%= councilJob || '—' %></div></div>
+          <div><span class="text-gray-400 uppercase tracking-wide text-[10px] font-semibold">Application ref</span><div class="font-medium text-gray-800 mt-0.5"><%= sub.application_ref_no || '—' %></div></div>
+        </div>
+      <% } %>
+
       <div class="p-3 bg-white border-t border-gray-200">
         <% if (!councilApplied) { %>
-          <!-- Stage 1: lodge the application (no file required) -->
-          <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/council" class="flex items-center justify-between gap-2 flex-wrap" onsubmit="<%= syncRef %>">
+          <!-- Stage 1: capture the lodging details (all required) — file optional. -->
+          <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/council" enctype="multipart/form-data" class="space-y-2.5" onsubmit="<%= syncRef %>">
             <%- include('../partials/csrf') %>
             <input type="hidden" name="action" value="apply">
             <input type="hidden" name="application_ref_no" value="<%= sub.application_ref_no || '' %>">
-            <p class="text-[11px] text-gray-500">Enter the council <span class="font-medium">Application ref</span> above, then lodge — the permit file can be attached once approved.</p>
-            <button type="submit" class="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md whitespace-nowrap">Mark as applied</button>
+            <p class="text-[11px] text-gray-500">Fill in these details to lodge the application. The council <span class="font-medium">Application ref</span> is set beside <span class="font-medium">Charge client</span> above.</p>
+            <div>
+              <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Description <span class="text-rose-500">*</span></label>
+              <input type="text" name="description" required value="<%= councilDesc %>" placeholder="e.g. Road opening — 2 lanes northbound"
+                class="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              <div>
+                <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Submission date <span class="text-rose-500">*</span></label>
+                <input type="date" name="submitted_date" required value="<%= councilSubmitted || councilTodayStr %>"
+                  class="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+              </div>
+              <div>
+                <label class="block text-[10px] font-semibold uppercase tracking-wide text-gray-500 mb-1">Job start <span class="text-rose-500">*</span></label>
+                <input type="date" name="job_date" required value="<%= councilJob %>"
+                  class="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+              </div>
+            </div>
+            <div data-dropzone>
+              <input type="file" name="documents" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.gif,.webp,.dwg,.dxf">
+              <div class="dropzone-label">
+                <svg class="w-7 h-7 mx-auto mb-1.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                <p class="text-xs text-gray-500">Drag &amp; drop a file here or <span class="text-brand-600 font-medium">click to browse</span></p>
+                <p class="text-[11px] text-gray-400 mt-0.5">Optional — attach the application now, or the permit later.</p>
+              </div>
+            </div>
+            <div class="flex items-center justify-end">
+              <button type="submit" class="px-3 py-1.5 text-xs font-semibold text-white bg-brand-600 hover:bg-brand-700 rounded-md whitespace-nowrap">Mark as applied</button>
+            </div>
           </form>
         <% } else if (!councilApproved) { %>
           <!-- Stage 2: attach the issued permit (drag-drop / select) + approve -->
