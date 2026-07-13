@@ -598,6 +598,60 @@ function generateNotifications() {
       }
     } catch (e) { console.error('[notifications] compliance plan reminder step failed:', e.message); }
 
+    // ROL application chase: a ROL application is valid 14 days from the
+    // applied-for date. If it isn't approved by day 10, chase the Planning
+    // team — a reminder notification AND a one-off Planning task (so it lands
+    // on the tasks board, not just the bell). Fires across the day 10→14
+    // window each daily sweep; the notification 24h-dedupe + the task
+    // existence check keep it from piling up.
+    try {
+      const rolChase = db.prepare(`
+        SELECT c.id, c.reference_number, c.rol_actual_number, c.rol_applied_date, c.assigned_to_id,
+               c.parent_id, c.job_id, c.title,
+               p.assigned_to_id AS parent_owner_id, j.job_number, j.planning_owner_id
+        FROM compliance c
+        LEFT JOIN compliance p ON c.parent_id = p.id
+        LEFT JOIN jobs j ON c.job_id = j.id
+        WHERE c.parent_id IS NOT NULL
+          AND c.item_type IN ('rol','road_occupancy')
+          AND c.rol_applied_date IS NOT NULL
+          AND c.status NOT IN ('approved','rejected','expired')
+          AND COALESCE(c.rol_stage,'none') != 'approved'
+          AND date('now','localtime') >= date(c.rol_applied_date, '+10 days')
+          AND date('now','localtime') <= date(c.rol_applied_date, '+14 days')
+      `).all();
+      // Planning-team fallback owner: a planning-role user, else any admin.
+      const planningUser = db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) = 'planning' ORDER BY id LIMIT 1").get();
+      const adminUser = db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) IN ('admin','management') ORDER BY id LIMIT 1").get();
+      const findTask = db.prepare("SELECT id FROM tasks WHERE compliance_id = ? AND title = ? AND deleted_at IS NULL");
+      const insTask = db.prepare(`
+        INSERT INTO tasks (job_id, division, title, description, owner_id, due_date, status, priority, task_type, notes, created_by, compliance_id)
+        VALUES (?, 'planning', ?, ?, ?, ?, 'not_started', 'high', 'one_off', ?, NULL, ?)
+      `);
+      for (const c of rolChase) {
+        const expiry = new Date(Date.parse(c.rol_applied_date + 'T00:00:00Z') + 14 * 86400000).toISOString().split('T')[0];
+        const ref = c.rol_actual_number || c.reference_number || ('ROL #' + c.id);
+        const recipient = c.planning_owner_id || c.assigned_to_id || c.parent_owner_id || (planningUser && planningUser.id) || (adminUser && adminUser.id);
+        if (recipient) {
+          const title = `ROL approval overdue — chase ${ref}`;
+          const message = `ROL ${ref}${c.job_number ? ' on ' + c.job_number : ''} still not approved. The application expires ${expiry} (14 days from ${c.rol_applied_date}). Chase the authority now.`;
+          insertAndTrack(recipient, 'deadline_reminder', title, message, `/compliance/${c.parent_id}/edit#sub-${c.id}`, c.job_id);
+        }
+        // Planning task — one per ROL sub-plan (dedup by compliance_id + title).
+        const taskTitle = `Chase ROL approval — ${ref}`;
+        const owner = c.assigned_to_id || c.planning_owner_id || (planningUser && planningUser.id) || (adminUser && adminUser.id);
+        if (owner && !findTask.get(c.id, taskTitle)) {
+          try {
+            insTask.run(
+              c.job_id || null, taskTitle,
+              `ROL application not approved by day 10. Expires ${expiry}. Chase the authority and mark the ROL approved once granted.`,
+              owner, expiry, `Plan: /compliance/${c.parent_id}/edit#sub-${c.id}`, c.id
+            );
+          } catch (te) { console.error('[notifications] ROL chase task insert failed:', te.message); }
+        }
+      }
+    } catch (e) { console.error('[notifications] ROL chase step failed:', e.message); }
+
     // Send immediate email notifications for newly created notifications
     sendImmediateEmails(db, newNotificationIds);
 

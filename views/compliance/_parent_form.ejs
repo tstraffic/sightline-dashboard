@@ -31,6 +31,9 @@
   (subPlans || []).forEach(s => {
     (groupedSubPlans[s.item_type] = groupedSubPlans[s.item_type] || []).push(s);
   });
+  // ROL sub-plans of this plan — passed to every card so a TGS can offer a
+  // "Linked ROL" dropdown listing the ROLs on the same plan.
+  const rolSubs = (subPlans || []).filter(s => s.item_type === 'rol' || s.item_type === 'road_occupancy');
 
   const planNumber = isEdit ? item.plan_number : null;
 %>
@@ -358,7 +361,7 @@
             </div>
             <div class="space-y-3">
               <% list.forEach(sub => { %>
-                <%- include('./_sub_plan_card', { sub, docs: (subPlanDocs && subPlanDocs[sub.id]) || [], parentId: item.id, statusBadge: STATUS_BADGE, ra: (typeof raBySubPlan !== 'undefined' && raBySubPlan) ? raBySubPlan[sub.id] : null, fees: (typeof subPlanFees !== 'undefined' && subPlanFees) ? (subPlanFees[sub.id] || []) : [], extensions: (typeof subPlanExtensions !== 'undefined' && subPlanExtensions) ? (subPlanExtensions[sub.id] || []) : [], rolShifts: (typeof subPlanRolShifts !== 'undefined' && subPlanRolShifts) ? (subPlanRolShifts[sub.id] || []) : [], rolConditions: (typeof subPlanRolConditions !== 'undefined' && subPlanRolConditions) ? (subPlanRolConditions[sub.id] || []) : [] }) %>
+                <%- include('./_sub_plan_card', { sub, docs: (subPlanDocs && subPlanDocs[sub.id]) || [], parentId: item.id, statusBadge: STATUS_BADGE, ra: (typeof raBySubPlan !== 'undefined' && raBySubPlan) ? raBySubPlan[sub.id] : null, fees: (typeof subPlanFees !== 'undefined' && subPlanFees) ? (subPlanFees[sub.id] || []) : [], extensions: (typeof subPlanExtensions !== 'undefined' && subPlanExtensions) ? (subPlanExtensions[sub.id] || []) : [], rolShifts: (typeof subPlanRolShifts !== 'undefined' && subPlanRolShifts) ? (subPlanRolShifts[sub.id] || []) : [], rolConditions: (typeof subPlanRolConditions !== 'undefined' && subPlanRolConditions) ? (subPlanRolConditions[sub.id] || []) : [], rolSubs: rolSubs }) %>
               <% }) %>
             </div>
           </div>

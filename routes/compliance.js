@@ -245,10 +245,14 @@ router.get('/', (req, res) => {
   // Type filter: a Plan's real type(s) live on its SUB-PLANS (the parent row
   // is a header with item_type 'other'), so match the parent's own type/types
   // OR any child sub-plan of that type. Without the EXISTS clause, filtering
-  // by TGS/ROL/etc. returned nothing after every plan became a parent.
+  // by TGS/ROL/etc. returned nothing after every plan became a parent. ROL is
+  // stored as both 'rol' (new) and 'road_occupancy' (legacy) — the ROL chip
+  // matches either.
   if (item_type && item_type !== 'all') {
-    query += ` AND (c.item_type = ? OR c.item_types LIKE ? OR EXISTS (SELECT 1 FROM compliance sc WHERE sc.parent_id = c.id AND sc.item_type = ?))`;
-    params.push(item_type, `%${item_type}%`, item_type);
+    const typeAliases = (item_type === 'rol' || item_type === 'road_occupancy') ? ['rol', 'road_occupancy'] : [item_type];
+    const inList = typeAliases.map(() => '?').join(',');
+    query += ` AND (c.item_type IN (${inList}) OR c.item_types LIKE ? OR EXISTS (SELECT 1 FROM compliance sc WHERE sc.parent_id = c.id AND sc.item_type IN (${inList})))`;
+    params.push(...typeAliases, `%${item_type}%`, ...typeAliases);
   }
   if (date_from) { query += ` AND c.due_date >= ?`; params.push(date_from); }
   if (date_to)   { query += ` AND c.due_date <= ?`; params.push(date_to); }
@@ -739,6 +743,69 @@ router.post('/sub-plans/:subId/details', (req, res) => {
     .run(req.body.job_date || null, req.body.council_plan_type || '', req.body.client_request_date || null, sub.id);
   if (wantsJson(req)) return res.json({ success: true });
   req.flash('success', 'Details saved.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// Manual ROL entry — the counterpart to the PDF auto-extract. Captures the
+// applied-for date (drives the 14-day expiry + 10-day chase), the manually
+// keyed ROL licence number, the approved date range + time window, and an
+// optional "mark approved". The auto-generated TSROL ref lives on
+// reference_number and isn't touched here.
+router.post('/sub-plans/:subId/rol-manual', (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  if (sub.item_type !== 'rol' && sub.item_type !== 'road_occupancy') {
+    if (wantsJson(req)) return res.status(400).json({ error: 'Not a ROL sub-plan' });
+    req.flash('error', 'Not a ROL sub-plan.'); return res.redirect('/compliance/' + sub.parent_id + '/edit');
+  }
+  const b = req.body;
+  const appliedDate = /^\d{4}-\d{2}-\d{2}$/.test(b.rol_applied_date || '') ? b.rol_applied_date : null;
+  const approved = b.mark_approved === '1' || b.mark_approved === 'on';
+  // Stage: approved wins; else 'applied' once an application date exists; else keep.
+  const stage = approved ? 'approved' : (appliedDate ? 'applied' : (sub.rol_stage || 'none'));
+  db.prepare(`
+    UPDATE compliance SET
+      rol_applied_date = ?,
+      rol_actual_number = ?,
+      rol_summary_from = ?,
+      rol_summary_to = ?,
+      rol_time_window = ?,
+      rol_stage = ?,
+      status = CASE WHEN ? = 1 THEN 'approved' ELSE status END,
+      approved_date = CASE WHEN ? = 1 THEN COALESCE(approved_date, date('now','localtime')) ELSE approved_date END,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ?
+  `).run(
+    appliedDate,
+    String(b.rol_actual_number || '').trim().slice(0, 120),
+    /^\d{4}-\d{2}-\d{2}$/.test(b.rol_summary_from || '') ? b.rol_summary_from : null,
+    /^\d{4}-\d{2}-\d{2}$/.test(b.rol_summary_to || '') ? b.rol_summary_to : null,
+    String(b.rol_time_window || '').trim().slice(0, 120),
+    stage,
+    approved ? 1 : 0,
+    approved ? 1 : 0,
+    sub.id
+  );
+  if (wantsJson(req)) return res.json({ success: true });
+  req.flash('success', 'ROL details saved.');
+  res.redirect('/compliance/' + sub.parent_id + '/edit');
+});
+
+// Link a TGS sub-plan to a ROL sub-plan of the SAME plan (or clear the link).
+router.post('/sub-plans/:subId/link-rol', (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return res.redirect('/compliance'); }
+  let linkId = parseInt(req.body.linked_rol_id, 10) || null;
+  if (linkId) {
+    // Only allow linking to a ROL sub-plan under the same parent plan.
+    const target = db.prepare("SELECT id FROM compliance WHERE id = ? AND parent_id = ? AND item_type IN ('rol','road_occupancy')").get(linkId, sub.parent_id);
+    if (!target) linkId = null;
+  }
+  db.prepare("UPDATE compliance SET linked_rol_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(linkId, sub.id);
+  if (wantsJson(req)) return res.json({ success: true, linked_rol_id: linkId });
+  req.flash('success', linkId ? 'Linked to ROL.' : 'ROL link cleared.');
   res.redirect('/compliance/' + sub.parent_id + '/edit');
 });
 

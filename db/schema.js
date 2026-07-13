@@ -14247,6 +14247,22 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 316 error:', e.message); }
   }
 
+  // 317 — ROL applied-for date + TGS→ROL link. rol_applied_date is when the
+  // ROL application was lodged; the application is valid 14 days from it, so
+  // if the ROL isn't approved by day 10 the notification engine chases the
+  // Planning team. linked_rol_id lets a TGS sub-plan point at the ROL that
+  // covers the same works (surfaced as a dropdown on the TGS card).
+  if (!isMigrationApplied.get(317)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(compliance)").all().map(c => c.name);
+      const addCol = (name, ddl) => { if (!cols.includes(name)) db.exec(`ALTER TABLE compliance ADD COLUMN ${ddl}`); };
+      addCol('rol_applied_date', 'rol_applied_date DATE');
+      addCol('linked_rol_id', 'linked_rol_id INTEGER REFERENCES compliance(id)');
+      recordMigration.run(317, 'compliance: rol_applied_date + linked_rol_id (ROL expiry chase + TGS link)');
+      console.log('Migration 317 applied');
+    } catch (e) { console.error('Migration 317 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
