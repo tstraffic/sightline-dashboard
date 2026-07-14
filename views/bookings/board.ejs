@@ -2633,6 +2633,11 @@
   // After any allocation change (drop / remove / assign), keep the glowing
   // card (the shift surface) AND the Overview requirement steppers in sync.
   document.addEventListener('bk2:alloc-changed', function () {
+    // Route through the canonical refresh so the floating card, the static
+    // board card, and the requirement steppers all track the change live.
+    var ed = $('#bk2-editor');
+    var id = ed && ed.dataset && ed.dataset.bookingId;
+    if (id && typeof bk2RefreshCard === 'function') { bk2RefreshCard(id); return; }
     try { refreshFloatCard(); } catch (e) {}
     try { refreshRequirementSteppers(); } catch (e) {}
   });
@@ -5396,10 +5401,16 @@
       } catch (err) {}
     }
     if (!personId) return;
-    // Don't treat the vehicle/unassign drop targets as person-add slots —
-    // those are crew-move only.
-    if (slot.classList.contains('bk2-slot--drop-veh-assign') ||
-        slot.classList.contains('bk2-slot--drop-unassign')   ||
+    // A pool worker dropped straight onto a vehicle chip → add them to the
+    // booking AND seat them in that ute in one go (no add-then-drag).
+    if (slot.classList.contains('bk2-slot--drop-veh-assign') && slot.getAttribute('data-vehicle-id')) {
+      slot.classList.add('is-saving');
+      bk2AddPersonToBooking(bookingId, personId, slot.getAttribute('data-vehicle-id'));
+      return;
+    }
+    // The unassigned pool + empty vehicle-placeholder aren't person-add
+    // slots (the placeholder wants a vehicle, not a worker).
+    if (slot.classList.contains('bk2-slot--drop-unassign') ||
         slot.classList.contains('bk2-slot--drop-vehicle')) {
       return;
     }
@@ -5620,18 +5631,43 @@
   // ── Drop-to-add on a board card's team box (booking not opened) ──
   // Dropping a pool worker/vehicle anywhere on a card's team area adds them to
   // that booking, then refreshes the card in place.
+  // Canonical live refresh. Re-fetch the board once and patch BOTH the
+  // static board card AND the floating (glowing) editor card for this
+  // booking, then re-sync the Overview requirement steppers — so every
+  // allocation change (add, remove, move, driver, gear…) shows up instantly
+  // without reopening the editor. An in-flight guard coalesces burst calls
+  // and re-runs once more if a change landed while a fetch was in flight.
+  var _bk2Refreshing = {};
   function bk2RefreshCard(bookingId) {
+    bookingId = String(bookingId || '');
+    if (!bookingId) return;
+    try { refreshRequirementSteppers(); } catch (e) {}
+    if (_bk2Refreshing[bookingId]) { _bk2Refreshing[bookingId] = 'again'; return; }
+    _bk2Refreshing[bookingId] = true;
+    var done = function () {
+      var again = _bk2Refreshing[bookingId] === 'again';
+      delete _bk2Refreshing[bookingId];
+      if (again) bk2RefreshCard(bookingId);
+    };
     fetch(location.pathname + location.search, { credentials: 'same-origin', headers: { 'Accept': 'text/html', 'X-Requested-With': 'fetch' } })
       .then(function (r) { return r.ok ? r.text() : Promise.reject(r.status); })
       .then(function (html) {
         var doc = new DOMParser().parseFromString(html, 'text/html');
         var fresh = doc.querySelector('.bk2-card[data-booking-id="' + bookingId + '"]');
-        var cur = document.querySelector('.bk2-card[data-booking-id="' + bookingId + '"]:not(.bk2-card--floating)');
-        if (fresh && cur) cur.innerHTML = fresh.innerHTML;
-      }).catch(function () {});
+        if (!fresh) return;
+        document.querySelectorAll('.bk2-card[data-booking-id="' + bookingId + '"]:not(.bk2-card--floating)')
+          .forEach(function (cur) { cur.innerHTML = fresh.innerHTML; });
+        var flo = document.querySelector('.bk2-card--floating[data-booking-id="' + bookingId + '"]');
+        if (flo) flo.innerHTML = fresh.innerHTML;
+      }).then(done, done);
   }
-  function bk2AddPersonToBooking(bookingId, personId) {
-    var body = new URLSearchParams(); body.append('crew_member_id', personId); if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
+  // Add a pool worker to a booking. When vehicleId is given (dropped
+  // straight onto a vehicle chip) they're seated in that ute in the same
+  // request — no add-then-drag needed.
+  function bk2AddPersonToBooking(bookingId, personId, vehicleId) {
+    var body = new URLSearchParams(); body.append('crew_member_id', personId);
+    if (vehicleId) body.append('assigned_vehicle_id', vehicleId);
+    if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
     fetch('/bookings/' + encodeURIComponent(bookingId) + '/crew', {
       method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': CSRF_TOKEN || '' },
       body: body, credentials: 'same-origin',
@@ -5973,6 +6009,16 @@
         syncSlotPills(slot);
         // Driver visual highlight on the slot
         if (action === 'drv') slot.classList.toggle('is-driver', isOn);
+        // A driver change ripples server-side — only ONE driver per vehicle
+        // (so the previous driver's DRV pill must clear) and any gear
+        // return-to-depot task switches from the whole crew to the driver.
+        // Re-sync from server truth and close the sheet so the live card
+        // reflects it. Plain flags have no ripple, so they stay optimistic.
+        if (action === 'drv') {
+          var bkEl = slot.closest('[data-booking-id]');
+          closePopover();
+          if (bkEl) bk2RefreshCard(bkEl.getAttribute('data-booking-id'));
+        }
       }).catch(function () {
         btn.disabled = false;
         alert('Could not update — network error.');

@@ -920,7 +920,11 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
   // Returns true if one was taken. Keeps totals honest: when a standalone TC
   // hops onto a ute, their empty "1 open slot" must not linger in the TC group.
   function stealAddonSlot(role) {
-    const want = ROLE_TO_ADDON[role];
+    // A blank role_on_site means a default Traffic Controller (mirrors
+    // fillSlot's fallback), so it should satisfy a 'Traffic Controller'
+    // requirement — otherwise a role-less worker seated in a ute leaves a
+    // phantom empty TC slot behind.
+    const want = ROLE_TO_ADDON[role || 'traffic_controller'];
     if (!want) return false;
     for (const b of blocks) {
       if (!b.no_vehicle || b.role !== want) continue;
@@ -977,12 +981,17 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
       fillSlot(slot, c);
       continue;
     }
-    // Worker assigned to a standalone/spare vehicle → render under it.
+    // Worker assigned to a standalone/spare vehicle → render under it. They
+    // still FULFILL their role requirement (a TC riding a ute is a TC on the
+    // shift), so steal their slot out of the matching standalone addon block —
+    // otherwise it lingers as a phantom "TC slot · drop a worker here" even
+    // though the role is filled (the "vehicle TC box still there" bug).
     if (c.assigned_vehicle_id && spareByVehicle.has(c.assigned_vehicle_id)) {
       const g = spareByVehicle.get(c.assigned_vehicle_id);
       const slot = { filled: true };
       fillSlot(slot, c);
       g.workers.push(slot);
+      stealAddonSlot(c.role_on_site);
       continue;
     }
     // A worker the planner DELIBERATELY dragged off a ute (off_vehicle flag)
@@ -2680,11 +2689,18 @@ router.post('/:id/crew', (req, res) => {
   // they render as standalone traffic controllers. The planner explicitly
   // drags a worker onto a ute slot to put them in it. (Previously we auto-
   // assigned the first vehicle, forcing everyone "into the ute" on add.)
+  // EXCEPTION: a worker dragged straight from the panel onto a vehicle chip
+  // posts assigned_vehicle_id — seat them there in the same call so they
+  // don't have to be added-then-dragged.
+  let seatVehicleId = parseInt(req.body.assigned_vehicle_id, 10) || null;
+  if (seatVehicleId && !db.prepare("SELECT 1 FROM booking_vehicles WHERE id=? AND booking_id=?").get(seatVehicleId, req.params.id)) {
+    seatVehicleId = null; // stray id — ignore rather than cross bookings
+  }
   // INSERT OR IGNORE + the unique index (migration 298) makes the add
   // atomically idempotent even under a race. `inserted` is false if the
   // row was already there (we'll skip the notification below).
-  const insertResult = db.prepare("INSERT OR IGNORE INTO booking_crew (booking_id, crew_member_id, role_on_site, status, assigned_vehicle_id) VALUES (?, ?, ?, 'assigned', NULL)")
-    .run(req.params.id, crew_member_id, role_on_site || '');
+  const insertResult = db.prepare("INSERT OR IGNORE INTO booking_crew (booking_id, crew_member_id, role_on_site, status, assigned_vehicle_id, off_vehicle) VALUES (?, ?, ?, 'assigned', ?, 0)")
+    .run(req.params.id, crew_member_id, role_on_site || '', seatVehicleId);
   const inserted = insertResult.changes > 0;
   // A new crew member joins any whole-crew return-to-depot task groups.
   if (inserted) syncBookingReturnTasks(db, parseInt(req.params.id, 10));
