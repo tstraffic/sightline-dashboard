@@ -652,6 +652,31 @@ const PEOPLE_ADDON_ROLES = {
   'Security': 'Security',
 };
 
+// role_on_site → the people-addon requirement label it counts against. Shared
+// by the add-surplus bump and the remove-deficit shrink so both directions
+// agree on which row a worker's seat lives in.
+const ROLE_ON_SITE_TO_REQ_LABEL = {
+  traffic_controller: 'Traffic Controller', spotter: 'Spotter',
+  hoist_operator: 'Hoist Operator', labourer: 'Labour',
+  trainee: 'Trainee', security: 'Security',
+};
+
+// Decrement a booking_requirements row, deleting it at zero. Returns how much
+// was actually absorbed (0 when the row doesn't exist), so callers can spill
+// the remainder into a fallback label. The mirror image of bumpRequirement —
+// used when a resource is REMOVED so auto-bumped requirements come back down.
+function shrinkRequirement(db, bookingId, resourceType, by = 1) {
+  const label = String(resourceType || '').trim();
+  if (!label || by <= 0) return 0;
+  const existing = db.prepare("SELECT id, quantity_required FROM booking_requirements WHERE booking_id = ? AND resource_type = ?").get(bookingId, label);
+  if (!existing) return 0;
+  const have = Math.max(0, parseInt(existing.quantity_required, 10) || 0);
+  const take = Math.min(have, by);
+  if (have - take <= 0) db.prepare("DELETE FROM booking_requirements WHERE id = ?").run(existing.id);
+  else db.prepare("UPDATE booking_requirements SET quantity_required = ? WHERE id = ?").run(have - take, existing.id);
+  return take;
+}
+
 // Increment (or create) a booking_requirements row. Used when a planner drops
 // a resource straight onto a shift from the board's resource panel beyond what
 // the requirements already call for, so the Overview "Requirements" list grows
@@ -747,8 +772,16 @@ function equipmentReqLabel(name, category) {
 // flat booking_crew + booking_vehicles arrays into them in assignment
 // order. This is the Phase 1 heuristic; Phase 2 introduces a real
 // booking_crew_groups table and replaces this function.
-function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
+function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
   const blocks = [];
+  // Gear (trailers/portabooms) hitched to a vehicle — keyed by vehicle id so
+  // the card can render it under the ute it rides (migration 320).
+  const gearByVehicle = new Map();
+  for (const g of (gearRows || [])) {
+    if (!g.attached_vehicle_id) continue;
+    if (!gearByVehicle.has(g.attached_vehicle_id)) gearByVehicle.set(g.attached_vehicle_id, []);
+    gearByVehicle.get(g.attached_vehicle_id).push({ id: g.id, name: g.equipment_name || 'Gear', type: g.equipment_type || '' });
+  }
   // Each "Nx TC Crew" requirement row becomes one crew block of size N.
   // Quantity in the row multiplies that.
   for (const r of (requirementRows || [])) {
@@ -821,6 +854,7 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
       registration: v.registration,
       role: v.vehicle_role || 'ute',
       driver_id: v.driver_id || null,
+      gear: gearByVehicle.get(v.id) || [],
     };
   }
 
@@ -842,6 +876,7 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows) {
     driver_id: v.driver_id || null,
     filled: !!((v.vehicle_name && String(v.vehicle_name).trim()) || (v.registration && String(v.registration).trim())),
     workers: [],
+    gear: gearByVehicle.get(v.id) || [],
   }));
   const spareByVehicle = new Map();
   for (const g of spareGroups) spareByVehicle.set(g.vehicle_id, g);
@@ -1049,6 +1084,7 @@ router.get('/', (req, res) => {
   const crewByBooking = {};
   const vehiclesByBooking = {};
   const reqsByBooking = {};
+  const gearByBooking = {};
   if (bookingIds.length) {
     const placeholders = bookingIds.map(() => '?').join(',');
     const crewRows = db.prepare(`
@@ -1078,6 +1114,18 @@ router.get('/', (req, res) => {
       ORDER BY id
     `).all(...bookingIds);
     for (const r of rqRows) (reqsByBooking[r.booking_id] = reqsByBooking[r.booking_id] || []).push(r);
+
+    // Gear hitched to a vehicle (trailers / portabooms, migration 320) —
+    // rendered as chips under the vehicle it rides on the card.
+    try {
+      const geRows = db.prepare(`
+        SELECT id, booking_id, equipment_name, equipment_type, attached_vehicle_id
+        FROM booking_equipment
+        WHERE booking_id IN (${placeholders}) AND attached_vehicle_id IS NOT NULL
+        ORDER BY id
+      `).all(...bookingIds);
+      for (const g of geRows) (gearByBooking[g.booking_id] = gearByBooking[g.booking_id] || []).push(g);
+    } catch (e) { /* pre-migration-320 DB */ }
   }
 
   // Detect scheduling clashes (a worker is on >1 booking the same day).
@@ -1107,7 +1155,7 @@ router.get('/', (req, res) => {
         ...c,
         warnings: conflictIds.has(c.crew_member_id) ? ['tight_schedule'] : [],
       }));
-      const crew_blocks = deriveCrewBlocks(crewWithWarn, vehiclesByBooking[r.id], reqsByBooking[r.id]);
+      const crew_blocks = deriveCrewBlocks(crewWithWarn, vehiclesByBooking[r.id], reqsByBooking[r.id], gearByBooking[r.id]);
       return { ...r, crew_blocks, counts: { docs: r.doc_count, notes: r.note_count, dockets: r.docket_count } };
     })
     .filter(b => {
@@ -2594,11 +2642,6 @@ router.post('/:id/crew', (req, res) => {
       const totalCrew = db.prepare("SELECT COUNT(*) AS n FROM booking_crew WHERE booking_id = ?").get(req.params.id).n;
       const surplus = totalCrew - requiredCrewCapacity(db, req.params.id);
       if (surplus > 0) {
-        const ROLE_ON_SITE_TO_REQ_LABEL = {
-          traffic_controller: 'Traffic Controller', spotter: 'Spotter',
-          hoist_operator: 'Hoist Operator', labourer: 'Labour',
-          trainee: 'Trainee', security: 'Security',
-        };
         const label = ROLE_ON_SITE_TO_REQ_LABEL[String(role_on_site || '').toLowerCase()] || 'Traffic Controller';
         bumpRequirement(db, req.params.id, label, surplus);
       }
@@ -2716,7 +2759,26 @@ router.post('/:id/crew/:crewId/driver', (req, res) => {
 router.post('/:id/crew/:crewId/remove', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  // Grab the seat's role BEFORE deleting — it decides which requirement row
+  // shrinks back down.
+  const seat = db.prepare("SELECT role_on_site FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, req.params.crewId);
   const removed = db.prepare("DELETE FROM booking_crew WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  // Mirror of the add-surplus bump: if the shift now REQUIRES more crew than
+  // it carries, shrink the removed worker's role add-on by the deficit (then
+  // spill into the generic Traffic Controller row). "Nx TC Crew" packages are
+  // deliberate plans and are never auto-shrunk — only the add-on rows that
+  // drops grew in the first place come back down.
+  if (removed.changes > 0) {
+    try {
+      const totalCrew = db.prepare("SELECT COUNT(*) AS n FROM booking_crew WHERE booking_id = ?").get(req.params.id).n;
+      let deficit = requiredCrewCapacity(db, req.params.id) - totalCrew;
+      if (deficit > 0) {
+        const label = ROLE_ON_SITE_TO_REQ_LABEL[String((seat && seat.role_on_site) || '').toLowerCase()] || 'Traffic Controller';
+        deficit -= shrinkRequirement(db, req.params.id, label, deficit);
+        if (deficit > 0 && label !== 'Traffic Controller') shrinkRequirement(db, req.params.id, 'Traffic Controller', deficit);
+      }
+    } catch (e) { console.error('[bookings.crew.remove] requirement shrink failed:', e.message); }
+  }
   // Drop the worker-portal allocation too. When history hangs off it
   // (safety_forms / dockets / checklist responses reference allocation_id,
   // most without ON DELETE CASCADE) the DELETE throws an FK error — cancel
@@ -2952,7 +3014,37 @@ router.post('/:id/vehicles/:vehicleId', (req, res) => {
 router.post('/:id/vehicles/:vehicleId/remove', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  db.prepare("DELETE FROM booking_vehicles WHERE id=? AND booking_id=?").run(req.params.vehicleId, req.params.id);
+  const vehRow = db.prepare("SELECT * FROM booking_vehicles WHERE id=? AND booking_id=?").get(req.params.vehicleId, req.params.id);
+  // Detach any gear FIRST — booking_equipment.attached_vehicle_id references
+  // this row (migration 320), so deleting the vehicle while a trailer is
+  // hitched would throw an FK error. The gear stays on the booking, unattached.
+  if (vehRow) {
+    try { db.prepare("UPDATE booking_equipment SET attached_vehicle_id = NULL WHERE booking_id=? AND attached_vehicle_id=?").run(req.params.id, vehRow.id); } catch (e) {}
+  }
+  const gone = db.prepare("DELETE FROM booking_vehicles WHERE id=? AND booking_id=?").run(req.params.vehicleId, req.params.id);
+  if (gone.changes > 0 && vehRow) {
+    // Mirror of the add bump: removing a vehicle shrinks its CLASS add-on row
+    // by however far the class now over-requires ("Nx TC Crew" package utes
+    // are deliberate and never auto-shrunk — syncTCCrewVehicles will simply
+    // re-create their placeholder if this was one). Then reconcile slots.
+    try {
+      const cls = classifyBookingVehicle(vehRow);
+      const rows = db.prepare("SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id = ?").all(req.params.id);
+      let target = 0;
+      for (const r of rows) {
+        const label = String(r.resource_type || '').trim();
+        const qty = Math.max(0, parseInt(r.quantity_required, 10) || 0);
+        if (!qty) continue;
+        if (cls === 'ute' && /^(\d+)x TC Crew$/i.test(label)) { target += qty; continue; }
+        if (REQ_LABEL_TO_VEHICLE_CLASS[label.toLowerCase()] === cls) target += qty;
+      }
+      const current = db.prepare("SELECT * FROM booking_vehicles WHERE booking_id = ?").all(req.params.id)
+        .filter(v => classifyBookingVehicle(v) === cls).length;
+      const deficit = target - current;
+      if (deficit > 0) shrinkRequirement(db, req.params.id, VEHICLE_CLASS_REQ_LABEL[cls] || 'Traffic Ute', deficit);
+      syncTCCrewVehicles(db, req.params.id);
+    } catch (e) { console.error('[bookings.vehicles.remove] requirement shrink failed:', e.message); }
+  }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
     details: `Removed vehicle #${req.params.vehicleId} from booking`, req });
   if (isJson) return res.json({ ok: true });
@@ -3249,6 +3341,13 @@ router.post('/:id/equipment', (req, res) => {
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const b = req.body;
   const qty = parseInt(b.quantity) || 1;
+  // Optional: attach the gear to a specific vehicle on this booking (trailer
+  // or portaboom riding a ute). Validated so a stray id can't cross bookings.
+  let attachedVehicleId = parseInt(b.attached_vehicle_id, 10) || null;
+  if (attachedVehicleId) {
+    const okVeh = db.prepare("SELECT id FROM booking_vehicles WHERE id=? AND booking_id=?").get(attachedVehicleId, req.params.id);
+    if (!okVeh) attachedVehicleId = null;
+  }
   let newId = null;
   let addedName = '', addedCategory = '';
   if (b.equipment_id) {
@@ -3256,15 +3355,15 @@ router.post('/:id/equipment', (req, res) => {
     if (eq) {
       addedName = eq.name || eq.asset_name || '';
       addedCategory = eq.category || '';
-      const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_id, equipment_name, equipment_type, quantity) VALUES (?, ?, ?, ?, ?)")
-        .run(req.params.id, eq.id, addedName, addedCategory, qty);
+      const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_id, equipment_name, equipment_type, quantity, attached_vehicle_id) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(req.params.id, eq.id, addedName, addedCategory, qty, attachedVehicleId);
       newId = r.lastInsertRowid;
     }
   } else if (b.equipment_name) {
     addedName = b.equipment_name;
     addedCategory = b.equipment_type || '';
-    const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_name, equipment_type, quantity) VALUES (?, ?, ?, ?)")
-      .run(req.params.id, addedName, addedCategory, qty);
+    const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_name, equipment_type, quantity, attached_vehicle_id) VALUES (?, ?, ?, ?, ?, ?)")
+      .run(req.params.id, addedName, addedCategory, qty, attachedVehicleId);
     newId = r.lastInsertRowid;
   }
   // Reflect the added gear in the Overview requirements list too.
@@ -3282,7 +3381,15 @@ router.post('/:id/equipment', (req, res) => {
 router.post('/:id/equipment/:eqId/remove', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  db.prepare("DELETE FROM booking_equipment WHERE id=? AND booking_id=?").run(req.params.eqId, req.params.id);
+  const eqRow = db.prepare("SELECT * FROM booking_equipment WHERE id=? AND booking_id=?").get(req.params.eqId, req.params.id);
+  const gone = db.prepare("DELETE FROM booking_equipment WHERE id=? AND booking_id=?").run(req.params.eqId, req.params.id);
+  // Un-bump the requirement this gear grew when it was added.
+  if (gone.changes > 0 && eqRow) {
+    try {
+      const label = equipmentReqLabel(eqRow.equipment_name, eqRow.equipment_type);
+      if (label) shrinkRequirement(db, req.params.id, label, Math.max(1, parseInt(eqRow.quantity, 10) || 1));
+    } catch (e) { console.error('[bookings.equipment.remove] requirement shrink failed:', e.message); }
+  }
   if (isJson) return res.json({ ok: true });
   req.flash('success', 'Equipment removed.');
   res.redirect('/bookings/' + req.params.id);

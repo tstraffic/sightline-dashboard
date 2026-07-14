@@ -14313,6 +14313,20 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 319 error:', e.message); }
   }
 
+  // 320 — gear rides utes: a booking_equipment row (trailer, portaboom, …)
+  // can be attached to a specific booking_vehicles row so the board card
+  // shows what's hitched to which ute. NULL = on the booking, unattached.
+  if (!isMigrationApplied.get(320)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(booking_equipment)").all().map(c => c.name);
+      if (!cols.includes('attached_vehicle_id')) {
+        db.exec("ALTER TABLE booking_equipment ADD COLUMN attached_vehicle_id INTEGER REFERENCES booking_vehicles(id)");
+      }
+      recordMigration.run(320, 'booking_equipment: attached_vehicle_id (gear hitched to a ute)');
+      console.log('Migration 320 applied');
+    } catch (e) { console.error('Migration 320 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
