@@ -340,7 +340,7 @@
       <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-          <h2 class="text-sm font-bold text-gray-900">My Tasks</h2>
+          <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">My Tasks</h2>
           <span class="text-[10px] font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded-full"><%= myTasks.length %></span>
         </div>
         <a href="/tasks" class="text-xs text-brand-600 hover:text-brand-700 font-medium">View all &rarr;</a>
@@ -385,7 +385,7 @@
       <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          <h2 class="text-sm font-bold text-gray-900">My Plans & Approvals</h2>
+          <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">My Plans & Approvals</h2>
           <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full"><%= myPlans.length %></span>
         </div>
         <a href="/compliance" class="text-xs text-emerald-600 hover:text-emerald-700 font-medium">View all &rarr;</a>
@@ -427,7 +427,7 @@
       <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-          <h2 class="text-sm font-bold text-gray-900">Tasks I Assigned</h2>
+          <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Tasks I Assigned</h2>
           <% if (tasksIAssigned.length > 0) { %><span class="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full"><%= tasksIAssigned.length %></span><% } %>
         </div>
         <a href="/tasks" class="text-xs text-purple-600 hover:text-purple-700 font-medium">View all &rarr;</a>
@@ -558,7 +558,7 @@
       <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
         <div class="flex items-center gap-2">
           <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          <h2 class="text-sm font-bold text-gray-900">Today's Allocations</h2>
+          <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Today's Allocations</h2>
           <span class="text-[10px] font-medium text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full"><%= todaysAllocations.length %> crew</span>
         </div>
         <div class="flex items-center gap-3">

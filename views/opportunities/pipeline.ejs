@@ -68,23 +68,15 @@
   };
 %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Sales Pipeline</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Drag opportunities between stages to update</p>
-  </div>
-  <div class="flex items-center gap-2">
-    <a href="/opportunities" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
-      <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
-      List View
-    </a>
-    <a href="/opportunities/new" class="inline-flex items-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
-      <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-      New Opportunity
-    </a>
-  </div>
-</div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Sales & CRM',
+  title: 'Sales Pipeline',
+  subtitle: 'Drag opportunities between stages to update',
+  actions: [
+    { label: 'List View', href: '/opportunities', style: 'secondary', icon: 'M4 6h16M4 10h16M4 14h16M4 18h16' },
+    { label: 'New Opportunity', href: '/opportunities/new', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }
+  ]
+}) %>
 
 <!-- Kanban Board -->
 <div class="overflow-x-auto pb-4 -mx-4 px-4">

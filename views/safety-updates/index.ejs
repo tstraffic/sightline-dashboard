@@ -19,16 +19,12 @@
 %>
 
 <div class="max-w-6xl mx-auto space-y-5">
-  <div class="flex items-start justify-between gap-3 flex-wrap">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Safety Updates</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Bulletins, incident alerts and reminders. Published items push to every worker's portal.</p>
-    </div>
-    <a href="/safety-updates/new" class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg inline-flex items-center gap-1.5">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m6-6H6"/></svg>
-      New update
-    </a>
-  </div>
+  <%- include('../partials/page-header', { rail: true, wrapperClass: '',
+    eyebrow: 'Safety',
+    title: 'Safety Updates',
+    subtitle: 'Bulletins, incident alerts and reminders. Published items push to every worker\'s portal.',
+    actions: [{ label: 'New update', href: '/safety-updates/new', style: 'primary', icon: 'M12 6v12m6-6H6' }]
+  }) %>
 
   <!-- Status tabs -->
   <div class="border-b border-gray-200 flex items-center gap-1">

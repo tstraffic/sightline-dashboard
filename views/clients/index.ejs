@@ -1,37 +1,30 @@
 <% locals.currentPage = 'clients' %>
 
 <div class="space-y-5">
-  <!-- Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Company Directory</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Clients, subcontractors &amp; suppliers</p>
-    </div>
-    <div class="flex items-center gap-2">
-      <a href="/clients/new<%= filters.type ? '?type=' + filters.type : '' %>" class="inline-flex items-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">
-        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-        Add Company
-      </a>
-    </div>
-  </div>
+  <%- include('../partials/page-header', { rail: true, wrapperClass: '',
+    eyebrow: 'Clients',
+    title: 'Company Directory',
+    subtitle: 'Clients, subcontractors & suppliers',
+    actions: [{ label: 'Add Company', href: '/clients/new' + (filters.type ? '?type=' + filters.type : ''), style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }]
+  }) %>
 
   <!-- Stats Cards -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-    <a href="/clients" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 hover-lift block <%= !filters.type ? 'ring-2 ring-brand-500' : '' %>">
-      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">All Companies</p>
-      <p class="text-xl font-bold text-gray-900 mt-0.5"><%= stats.total %></p>
+    <a href="/clients" class="stat-card <%= !filters.type ? 'ring-2 ring-brand-500' : '' %>">
+      <p class="stat-card-label">All Companies</p>
+      <p class="stat-card-value"><%= stats.total %></p>
     </a>
-    <a href="/clients?type=client" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 hover-lift block <%= filters.type === 'client' ? 'ring-2 ring-blue-500' : '' %>">
-      <p class="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Clients</p>
-      <p class="text-xl font-bold text-blue-700 mt-0.5"><%= stats.clients %></p>
+    <a href="/clients?type=client" class="stat-card <%= filters.type === 'client' ? 'ring-2 ring-blue-500' : '' %>">
+      <p class="stat-card-label">Clients</p>
+      <p class="stat-card-value <%= stats.clients > 0 ? 'is-info' : 'is-muted' %>"><%= stats.clients %></p>
     </a>
-    <a href="/clients?type=subcontractor" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 hover-lift block <%= filters.type === 'subcontractor' ? 'ring-2 ring-emerald-500' : '' %>">
-      <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Subcontractors</p>
-      <p class="text-xl font-bold text-emerald-700 mt-0.5"><%= stats.subcontractors %></p>
+    <a href="/clients?type=subcontractor" class="stat-card <%= filters.type === 'subcontractor' ? 'ring-2 ring-emerald-500' : '' %>">
+      <p class="stat-card-label">Subcontractors</p>
+      <p class="stat-card-value <%= stats.subcontractors > 0 ? 'is-good' : 'is-muted' %>"><%= stats.subcontractors %></p>
     </a>
-    <a href="/clients?type=supplier" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 hover-lift block <%= filters.type === 'supplier' ? 'ring-2 ring-amber-500' : '' %>">
-      <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Suppliers</p>
-      <p class="text-xl font-bold text-amber-700 mt-0.5"><%= stats.suppliers %></p>
+    <a href="/clients?type=supplier" class="stat-card <%= filters.type === 'supplier' ? 'ring-2 ring-amber-500' : '' %>">
+      <p class="stat-card-label">Suppliers</p>
+      <p class="stat-card-value <%= stats.suppliers > 0 ? 'is-warn' : 'is-muted' %>"><%= stats.suppliers %></p>
     </a>
   </div>
 

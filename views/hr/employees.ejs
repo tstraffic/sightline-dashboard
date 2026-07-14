@@ -35,31 +35,26 @@
 
 <div class="space-y-5">
 
-  <!-- Page Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Employees</h1>
-      <p class="text-sm text-gray-500 mt-1">Manage employee records, compliance and workforce readiness</p>
-    </div>
-    <a href="/hr/employees/new" class="inline-flex items-center justify-center px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">
-      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-      Add Employee
-    </a>
-  </div>
+  <%- include('../partials/page-header', { rail: true, wrapperClass: '',
+    eyebrow: 'People / HR',
+    title: 'Employees',
+    subtitle: 'Manage employee records, compliance and workforce readiness',
+    actions: [{ label: 'Add Employee', href: '/hr/employees/new', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }]
+  }) %>
 
   <!-- Stat Cards -->
   <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-      <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Active Employees</p>
-      <p class="text-2xl font-bold text-emerald-600 mt-1"><%= stats.totalActive %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Active Employees</p>
+      <p class="stat-card-value <%= stats.totalActive > 0 ? 'is-good' : 'is-muted' %>"><%= stats.totalActive %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-      <p class="text-[10px] font-bold text-purple-400 uppercase tracking-widest">Onboarding</p>
-      <p class="text-2xl font-bold text-purple-600 mt-1"><%= stats.totalOnboarding %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Onboarding</p>
+      <p class="stat-card-value <%= stats.totalOnboarding > 0 ? 'is-info' : 'is-muted' %>"><%= stats.totalOnboarding %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-      <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest">Blocked</p>
-      <p class="text-2xl font-bold text-red-600 mt-1"><%= stats.totalBlocked %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Blocked</p>
+      <p class="stat-card-value <%= stats.totalBlocked > 0 ? 'is-critical' : 'is-muted' %>"><%= stats.totalBlocked %></p>
     </div>
   </div>
 

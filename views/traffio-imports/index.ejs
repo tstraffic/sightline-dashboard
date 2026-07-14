@@ -31,14 +31,11 @@
 %>
 
 <div class="max-w-5xl mx-auto px-4 py-6">
-  <div class="flex items-center justify-between mb-1">
-    <h1 class="text-xl font-bold text-gray-900">Traffio Reconciliation</h1>
-  </div>
-  <p class="text-sm text-gray-500 mb-5">
-    Traffio records that couldn't be confidently matched to a job. Pending bookings are grouped by
-    Traffio project — reconcile a whole project at once and every queued shift maps to the job
-    together. Once mapped, future shifts of that project auto-match.
-  </p>
+  <%- include('../partials/page-header', { rail: true,
+    eyebrow: 'Operations',
+    title: 'Traffio Reconciliation',
+    subtitle: "Traffio records that couldn't be confidently matched to a job. Pending bookings are grouped by Traffio project — reconcile a whole project at once and every queued shift maps to the job together. Once mapped, future shifts of that project auto-match."
+  }) %>
 
   <!-- status chips -->
   <div class="flex flex-wrap gap-2 mb-4">

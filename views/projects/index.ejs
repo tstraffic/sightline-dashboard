@@ -1,15 +1,11 @@
 <% locals.currentPage = 'projects' %>
 
-<!-- Page Header -->
-<div class="flex items-center justify-between mb-4">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Jobs</h1>
-    <p class="text-gray-500 text-sm mt-1">Job register</p>
-  </div>
-  <div class="flex items-center gap-2">
-    <a href="/projects/new" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">+ New Job</a>
-  </div>
-</div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Planning',
+  title: 'Jobs',
+  subtitle: 'Job register',
+  actions: [{ label: '+ New Job', href: '/projects/new', style: 'primary' }]
+}) %>
 
 <!-- Project Register -->
 <div>

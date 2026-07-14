@@ -25,20 +25,15 @@ function listMarginClass(pct, hasRev) {
 
 <div class="max-w-7xl mx-auto space-y-6">
 
-  <!-- Header -->
-  <div class="flex items-center justify-between gap-4">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Quotes</h1>
-      <p class="text-sm text-gray-500 mt-1">Fixed-price offers for known scopes. <%= counts.all %> total.</p>
-    </div>
-    <div class="flex items-center gap-2">
-      <a href="/rate-cards" class="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">Rate Cards</a>
-      <a href="/quotes/new" class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium rounded-lg">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        New Quote
-      </a>
-    </div>
-  </div>
+  <%- include('../../partials/page-header', { rail: true, wrapperClass: '',
+    eyebrow: 'Planning',
+    title: 'Quotes',
+    subtitle: 'Fixed-price offers for known scopes. ' + counts.all + ' total.',
+    actions: [
+      { label: 'Rate Cards', href: '/rate-cards', style: 'secondary' },
+      { label: 'New Quote', href: '/quotes/new', style: 'primary', icon: 'M12 4v16m8-8H4' }
+    ]
+  }) %>
 
   <% if (flash_success && flash_success.length > 0) { %>
     <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm" data-auto-dismiss><%= flash_success[0] %></div>

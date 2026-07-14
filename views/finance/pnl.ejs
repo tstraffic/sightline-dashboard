@@ -16,10 +16,14 @@
   }
 %>
 
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Compliance Plan P&amp;L</h1>
-    <p class="text-gray-500 text-xs mt-0.5">Internal cost vs client charge across every plan · admin &amp; finance only</p>
+<!-- Header — bespoke rate badge on the right, so the page-header type
+     classes are applied in place. -->
+<div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+  <div class="min-w-0">
+    <p class="page-eyebrow">Finance</p>
+    <h1 class="page-title vt-page-title">Compliance Plan P&amp;L</h1>
+    <p class="page-sub">Internal cost vs client charge across every plan · admin &amp; finance only</p>
+    <div class="chevron-rail" aria-hidden="true"></div>
   </div>
   <div class="flex items-center gap-2">
     <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-slate-100 text-slate-700 text-[11px] font-medium rounded-md">
@@ -30,34 +34,34 @@
 </div>
 
 <!-- Roll-up totals -->
-<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4 p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-  <div>
-    <div class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Hours</div>
-    <div class="text-lg font-bold text-gray-900 mt-0.5 tabular-nums"><%= fmtHours(totals.hours) %></div>
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-4">
+  <div class="stat-card">
+    <p class="stat-card-label">Hours</p>
+    <p class="stat-card-value"><%= fmtHours(totals.hours) %></p>
   </div>
-  <div>
-    <div class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Charged</div>
-    <div class="text-lg font-bold text-emerald-700 mt-0.5 tabular-nums"><%= fmtMoneyShort(totals.charge) %></div>
+  <div class="stat-card">
+    <p class="stat-card-label">Charged</p>
+    <p class="stat-card-value is-money <%= totals.charge > 0 ? 'is-good' : 'is-muted' %>"><%= fmtMoneyShort(totals.charge) %></p>
   </div>
-  <div>
-    <div class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Council fees</div>
-    <div class="text-lg font-bold text-amber-700 mt-0.5 tabular-nums"><%= fmtMoneyShort(totals.council) %></div>
+  <div class="stat-card">
+    <p class="stat-card-label">Council fees</p>
+    <p class="stat-card-value is-money <%= totals.council > 0 ? 'is-warn' : 'is-muted' %>"><%= fmtMoneyShort(totals.council) %></p>
   </div>
-  <div>
-    <div class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Labour cost</div>
-    <div class="text-lg font-bold text-gray-900 mt-0.5 tabular-nums"><%= fmtMoneyShort(totals.labour) %></div>
+  <div class="stat-card">
+    <p class="stat-card-label">Labour cost</p>
+    <p class="stat-card-value is-money"><%= fmtMoneyShort(totals.labour) %></p>
   </div>
-  <div>
-    <div class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">T&amp;S total cost</div>
-    <div class="text-lg font-bold text-gray-900 mt-0.5 tabular-nums"><%= fmtMoneyShort(totals.cost) %></div>
+  <div class="stat-card">
+    <p class="stat-card-label">T&amp;S total cost</p>
+    <p class="stat-card-value is-money"><%= fmtMoneyShort(totals.cost) %></p>
   </div>
-  <div>
-    <div class="text-[10px] uppercase tracking-wide text-gray-400 font-bold">Profit / Loss</div>
-    <div class="text-lg font-bold mt-0.5 tabular-nums <%= totals.profit >= 0 ? 'text-emerald-700' : 'text-rose-700' %>">
+  <div class="stat-card">
+    <p class="stat-card-label">Profit / Loss</p>
+    <p class="stat-card-value is-money <%= totals.profit >= 0 ? 'is-good' : 'is-critical' %>">
       <%= (totals.profit >= 0 ? '' : '-') + fmtMoneyShort(Math.abs(totals.profit)) %>
-    </div>
+    </p>
     <% if (totals.charge > 0) { %>
-      <div class="text-[10px] text-gray-400 leading-tight"><%= ((totals.profit / totals.charge) * 100).toFixed(1) %>% margin</div>
+      <p class="stat-card-sub"><%= ((totals.profit / totals.charge) * 100).toFixed(1) %>% margin</p>
     <% } %>
   </div>
 </div>

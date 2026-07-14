@@ -20,19 +20,18 @@
 %>
 
 <div class="max-w-6xl mx-auto space-y-5">
-  <div class="flex items-start justify-between gap-3 flex-wrap">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Safety Comments</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Hazard flags, SWMS issues, suggestions, equipment concerns — anything workers submit through the portal lands here.</p>
-    </div>
-  </div>
+  <%- include('../partials/page-header', { rail: true, wrapperClass: '',
+    eyebrow: 'Safety',
+    title: 'Safety Comments',
+    subtitle: 'Hazard flags, SWMS issues, suggestions, equipment concerns — anything workers submit through the portal lands here.'
+  }) %>
 
   <!-- Stat cards -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
     <% ['submitted','acknowledged','under_review','closed'].forEach(s => { %>
-      <a href="/safety-comments?status=<%= s %>" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 hover:border-brand-400 transition-colors">
-        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"><%= statusLabels[s] %></p>
-        <p class="text-xl font-bold text-gray-900 mt-0.5"><%= counts[s] || 0 %></p>
+      <a href="/safety-comments?status=<%= s %>" class="stat-card">
+        <p class="stat-card-label"><%= statusLabels[s] %></p>
+        <p class="stat-card-value <%= counts[s] > 0 ? '' : 'is-muted' %>"><%= counts[s] || 0 %></p>
       </a>
     <% }) %>
   </div>

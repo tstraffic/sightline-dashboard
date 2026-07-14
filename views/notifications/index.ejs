@@ -1,10 +1,12 @@
 <% locals.currentPage = 'notifications' %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Notifications</h1>
-    <p class="text-gray-500 text-sm mt-0.5"><%= unreadCount %> unread of <%= totalCount %> total</p>
+<!-- Header — bespoke controls (POST forms), so the page-header type
+     classes are applied in place. -->
+<div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+  <div class="min-w-0">
+    <h1 class="page-title vt-page-title">Notifications</h1>
+    <p class="page-sub"><%= unreadCount %> unread of <%= totalCount %> total</p>
+    <div class="chevron-rail" aria-hidden="true"></div>
   </div>
   <div class="flex items-center gap-2">
     <form method="POST" action="/notifications/mark-all-read" class="inline">
@@ -20,17 +22,17 @@
 
 <!-- Stats Row -->
 <div class="grid grid-cols-3 gap-3 mb-5">
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= totalCount %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Total</p>
+    <p class="stat-card-value"><%= totalCount %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Unread</p>
-    <p class="text-xl font-bold <%= unreadCount > 0 ? 'text-brand-600' : 'text-gray-900' %> mt-0.5"><%= unreadCount %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Unread</p>
+    <p class="stat-card-value <%= unreadCount > 0 ? 'is-good' : 'is-muted' %>"><%= unreadCount %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Read</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= totalCount - unreadCount %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Read</p>
+    <p class="stat-card-value <%= (totalCount - unreadCount) > 0 ? '' : 'is-muted' %>"><%= totalCount - unreadCount %></p>
   </div>
 </div>
 

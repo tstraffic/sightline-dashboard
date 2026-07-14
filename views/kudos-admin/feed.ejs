@@ -60,11 +60,14 @@
 </style>
 
 <div id="kf-root" class="space-y-5">
-  <!-- Header + sub-nav -->
-  <div class="flex items-center justify-between flex-wrap gap-2">
-    <div>
-      <h1 class="text-2xl font-bold kf-head-t">Kudos feed</h1>
-      <p class="text-sm kf-sub mt-1">Every kudos as it comes in. Hide anything inappropriate straight from here.</p>
+  <!-- Header + sub-nav — bespoke text-link actions, so the page-header type
+       classes are applied in place. -->
+  <div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div class="min-w-0">
+      <p class="page-eyebrow">People / HR</p>
+      <h1 class="page-title vt-page-title">Kudos feed</h1>
+      <p class="page-sub">Every kudos as it comes in. Hide anything inappropriate straight from here.</p>
+      <div class="chevron-rail" aria-hidden="true"></div>
     </div>
     <div class="flex items-center gap-3 text-sm">
       <a href="/kudos-admin/queue" class="text-brand-600 font-medium">Moderation →</a>
@@ -74,13 +77,13 @@
 
   <!-- KPIs -->
   <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-    <div class="kf-panel rounded-xl p-4">
-      <p class="text-[10px] font-bold kf-kpi-label uppercase tracking-widest">Total kudos</p>
-      <p class="text-2xl font-bold kf-kpi-val mt-1"><%= totalKudos %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Total kudos</p>
+      <p class="stat-card-value"><%= totalKudos %></p>
     </div>
-    <div class="kf-panel rounded-xl p-4">
-      <p class="text-[10px] font-bold uppercase tracking-widest" style="color:#10B981">Last 7 days</p>
-      <p class="text-2xl font-bold mt-1" style="color:#059669"><%= last7 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Last 7 days</p>
+      <p class="stat-card-value <%= last7 > 0 ? 'is-good' : 'is-muted' %>"><%= last7 %></p>
     </div>
     <div class="kf-panel rounded-xl p-4 col-span-2 sm:col-span-1">
       <p class="text-[10px] font-bold kf-kpi-label uppercase tracking-widest">Filter</p>

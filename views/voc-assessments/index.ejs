@@ -24,10 +24,14 @@
   }
 %>
 
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Verifications of Competency</h1>
-    <p class="text-gray-500 text-sm mt-0.5">In-house equipment / operations assessments &middot; theory + practical &middot; tracked to expiry</p>
+<!-- Header — bespoke actions (role-gated links + regen form), so the
+     page-header type classes are applied in place. -->
+<div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+  <div class="min-w-0">
+    <p class="page-eyebrow">Safety</p>
+    <h1 class="page-title vt-page-title">Verifications of Competency</h1>
+    <p class="page-sub">In-house equipment / operations assessments &middot; theory + practical &middot; tracked to expiry</p>
+    <div class="chevron-rail" aria-hidden="true"></div>
   </div>
   <div class="flex flex-col sm:flex-row gap-2">
     <% if (canAccess(user, 'voc_admin')) { %>

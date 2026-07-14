@@ -41,39 +41,34 @@
   };
 %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Accounts</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Manage clients, prospects, and business relationships</p>
-  </div>
-  <a href="/clients/new" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
-    <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-    Add Account
-  </a>
-</div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Sales & CRM',
+  title: 'Accounts',
+  subtitle: 'Manage clients, prospects, and business relationships',
+  actions: [{ label: 'Add Account', href: '/clients/new', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }]
+}) %>
 
 <!-- Stat Cards -->
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= stats.total || 0 %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Total</p>
+    <p class="stat-card-value"><%= stats.total || 0 %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Leads</p>
-    <p class="text-xl font-bold text-sky-600 mt-0.5"><%= stats.leads || 0 %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Leads</p>
+    <p class="stat-card-value <%= (stats.leads || 0) > 0 ? 'is-info' : 'is-muted' %>"><%= stats.leads || 0 %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Prospects</p>
-    <p class="text-xl font-bold text-indigo-600 mt-0.5"><%= stats.prospects || 0 %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Prospects</p>
+    <p class="stat-card-value <%= (stats.prospects || 0) > 0 ? 'is-info' : 'is-muted' %>"><%= stats.prospects || 0 %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Active Clients</p>
-    <p class="text-xl font-bold text-emerald-600 mt-0.5"><%= stats.active_clients || 0 %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Active Clients</p>
+    <p class="stat-card-value <%= (stats.active_clients || 0) > 0 ? 'is-good' : 'is-muted' %>"><%= stats.active_clients || 0 %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Dormant</p>
-    <p class="text-xl font-bold <%= (stats.dormant || 0) > 0 ? 'text-red-600' : 'text-gray-900' %> mt-0.5"><%= stats.dormant || 0 %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Dormant</p>
+    <p class="stat-card-value <%= (stats.dormant || 0) > 0 ? 'is-critical' : 'is-muted' %>"><%= stats.dormant || 0 %></p>
   </div>
 </div>
 

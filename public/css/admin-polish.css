@@ -381,6 +381,42 @@ body.dark-glass .lane-divider {
 body.dark-glass .stat-card-value.is-money { font-size: 1.15rem; line-height: 1.2; }
 
 /* ───────────────────────────────────────────────────────────
+   15. BOOKINGS BOARD — type identity only
+   The board is a dense working canvas: it takes the display
+   voice (Bricolage title + mono day label) but NOT the chevron
+   rail — chrome must recede on a planner. This sheet loads
+   after bookings-v2.css, so these win specificity ties. Colors
+   stay with bookings-v2 (it themes them per mode already).
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass .bk2-title,
+body.dark-glass .bookings-title {
+  font-family: "Bricolage Grotesque", "Geist", system-ui, sans-serif;
+  font-weight: 620;
+  font-variation-settings: 'opsz' 32;
+  letter-spacing: -0.03em;
+}
+body.dark-glass .bk2-daylabel {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+/* ───────────────────────────────────────────────────────────
+   16. SECTION LABELS — one utility voice everywhere
+   .section-title / .dash-section-title (the emerald left-bar
+   labels on the dashboard and detail pages) were 11px Geist
+   bold; re-voicing them in Geist Mono ties every section label
+   to the same operational register as the page eyebrows.
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass .section-title,
+body.dark-glass .dash-section-title {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+}
+
+/* ───────────────────────────────────────────────────────────
    10. KPI GRID — balanced rows on the Today dashboard
    Column count comes from the template via --kpi-cols, computed
    from the tile count so the last row never orphans (10 → 5+5,

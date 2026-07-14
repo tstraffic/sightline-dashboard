@@ -25,11 +25,14 @@
   };
 %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Activity Log</h1>
-    <p class="text-gray-500 text-xs mt-0.5">System audit trail &middot; all user actions tracked</p>
+<!-- Header — bespoke entries counter, so the page-header type classes
+     are applied in place. -->
+<div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+  <div class="min-w-0">
+    <p class="page-eyebrow">Admin</p>
+    <h1 class="page-title vt-page-title">Activity Log</h1>
+    <p class="page-sub">System audit trail &middot; all user actions tracked</p>
+    <div class="chevron-rail" aria-hidden="true"></div>
   </div>
   <div class="text-xs text-gray-400">
     <% if (pagination.total > 0) { %>

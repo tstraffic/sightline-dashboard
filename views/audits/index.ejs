@@ -11,39 +11,34 @@
 } %>
 
 <div class="px-4 lg:px-8 py-6">
-  <!-- Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-6">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Site Audits</h1>
-      <p class="text-sm text-gray-500 mt-1">Traffic Control Site Safety Audits</p>
-    </div>
-    <div class="flex items-center gap-2">
-      <a href="/audits/reports" class="inline-flex items-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-xl text-sm">Reports</a>
-      <a href="/actions" class="inline-flex items-center gap-1.5 px-3 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 font-medium rounded-xl text-sm">Open actions</a>
-      <a href="/audits/new" class="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-brand-600 hover:bg-brand-700 text-white font-medium rounded-xl shadow-sm transition active:scale-[0.98]">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        New Audit
-      </a>
-    </div>
-  </div>
+  <%- include('../partials/page-header', { rail: true,
+    eyebrow: 'Safety',
+    title: 'Site Audits',
+    subtitle: 'Traffic Control Site Safety Audits',
+    actions: [
+      { label: 'Reports', href: '/audits/reports', style: 'secondary' },
+      { label: 'Open actions', href: '/actions', style: 'secondary' },
+      { label: 'New Audit', href: '/audits/new', style: 'primary', icon: 'M12 4v16m8-8H4' }
+    ]
+  }) %>
 
   <!-- Stat tiles -->
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
-    <div class="bg-white rounded-xl border border-gray-200 p-4">
-      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Total</p>
-      <p class="text-2xl font-bold text-gray-900 mt-1"><%= counts.total || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Total</p>
+      <p class="stat-card-value"><%= counts.total || 0 %></p>
     </div>
-    <div class="bg-white rounded-xl border border-gray-200 p-4">
-      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Drafts</p>
-      <p class="text-2xl font-bold text-gray-700 mt-1"><%= counts.draft || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Drafts</p>
+      <p class="stat-card-value <%= counts.draft > 0 ? '' : 'is-muted' %>"><%= counts.draft || 0 %></p>
     </div>
-    <div class="bg-white rounded-xl border border-gray-200 p-4">
-      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Signed Off</p>
-      <p class="text-2xl font-bold text-emerald-600 mt-1"><%= counts.signed_off || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Signed Off</p>
+      <p class="stat-card-value <%= counts.signed_off > 0 ? 'is-good' : 'is-muted' %>"><%= counts.signed_off || 0 %></p>
     </div>
-    <div class="bg-white rounded-xl border border-gray-200 p-4">
-      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Fails</p>
-      <p class="text-2xl font-bold text-red-600 mt-1"><%= counts.fail_count || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Fails</p>
+      <p class="stat-card-value <%= counts.fail_count > 0 ? 'is-critical' : 'is-muted' %>"><%= counts.fail_count || 0 %></p>
     </div>
   </div>
 

@@ -21,29 +21,29 @@
 
 <div class="space-y-5">
 
-  <!-- Header -->
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">HR Reports</h1>
-    <p class="text-sm text-gray-500 mt-1">Workforce analytics, compliance, and staffing insights</p>
-  </div>
+  <%- include('../partials/page-header', { rail: true, wrapperClass: '',
+    eyebrow: 'People / HR',
+    title: 'HR Reports',
+    subtitle: 'Workforce analytics, compliance, and staffing insights'
+  }) %>
 
   <!-- Top-level Stats -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Active</p>
-      <p class="text-2xl font-bold text-gray-900 mt-1"><%= employmentTypes.reduce((sum, t) => sum + t.count, 0) %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Total Active</p>
+      <p class="stat-card-value"><%= employmentTypes.reduce((sum, t) => sum + t.count, 0) %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-      <p class="text-[10px] font-bold text-amber-400 uppercase tracking-widest">Expiring (30d)</p>
-      <p class="text-2xl font-bold text-amber-600 mt-1"><%= expiringCompetencies.length %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Expiring (30d)</p>
+      <p class="stat-card-value <%= expiringCompetencies.length > 0 ? 'is-warn' : 'is-muted' %>"><%= expiringCompetencies.length %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-      <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest">Missing Docs</p>
-      <p class="text-2xl font-bold text-red-600 mt-1"><%= missingDocs.length %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Missing Docs</p>
+      <p class="stat-card-value <%= missingDocs.length > 0 ? 'is-critical' : 'is-muted' %>"><%= missingDocs.length %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-      <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest">Blocked</p>
-      <p class="text-2xl font-bold text-red-600 mt-1"><%= blockedWorkers.length %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Blocked</p>
+      <p class="stat-card-value <%= blockedWorkers.length > 0 ? 'is-critical' : 'is-muted' %>"><%= blockedWorkers.length %></p>
     </div>
   </div>
 

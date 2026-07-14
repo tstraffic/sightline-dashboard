@@ -14,25 +14,25 @@
 
 <!-- Summary cards — Off-Road & Open Defects are live filters/links -->
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Vehicles</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= cards.totalVehicles %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Total Vehicles</p>
+    <p class="stat-card-value"><%= cards.totalVehicles %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Audited This Month</p>
-    <p class="text-xl font-bold <%= cards.auditedThisMonth > 0 ? 'text-emerald-600' : 'text-gray-300' %> mt-0.5"><%= cards.auditedThisMonth %> <span class="text-xs font-semibold text-gray-300">/ <%= cards.totalVehicles %></span></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Audited This Month</p>
+    <p class="stat-card-value <%= cards.auditedThisMonth > 0 ? 'is-good' : 'is-muted' %>"><%= cards.auditedThisMonth %> <span class="text-xs font-semibold text-gray-300">/ <%= cards.totalVehicles %></span></p>
   </div>
-  <button type="button" data-va-card-filter="offroad" class="text-left bg-white border border-gray-200 rounded-xl shadow-sm p-3 hover:border-red-300 hover:shadow transition-all cursor-pointer">
-    <p class="text-[10px] font-bold text-red-500 uppercase tracking-widest">Off-Road</p>
-    <p class="text-xl font-bold <%= cards.offRoad > 0 ? 'text-red-600' : 'text-gray-300' %> mt-0.5"><%= cards.offRoad %></p>
+  <button type="button" data-va-card-filter="offroad" class="stat-card text-left cursor-pointer">
+    <p class="stat-card-label">Off-Road</p>
+    <p class="stat-card-value <%= cards.offRoad > 0 ? 'is-critical' : 'is-muted' %>"><%= cards.offRoad %></p>
   </button>
-  <a href="/vehicle-audits/defects" class="block bg-white border border-gray-200 rounded-xl shadow-sm p-3 hover:border-amber-300 hover:shadow transition-all">
-    <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Open Defects</p>
-    <p class="text-xl font-bold <%= cards.openDefects > 0 ? 'text-amber-600' : 'text-gray-300' %> mt-0.5"><%= cards.openDefects %></p>
+  <a href="/vehicle-audits/defects" class="stat-card">
+    <p class="stat-card-label">Open Defects</p>
+    <p class="stat-card-value <%= cards.openDefects > 0 ? 'is-warn' : 'is-muted' %>"><%= cards.openDefects %></p>
   </a>
-  <a href="/vehicle-audits/defects?sort=cost" class="block bg-white border border-gray-200 rounded-xl shadow-sm p-3 hover:border-brand-300 hover:shadow transition-all col-span-2 sm:col-span-1">
-    <p class="text-[10px] font-bold text-brand-500 uppercase tracking-widest">Open Defect Cost</p>
-    <p class="text-xl font-bold text-brand-600 mt-0.5"><%= AUD(cards.openDefectCost) %></p>
+  <a href="/vehicle-audits/defects?sort=cost" class="stat-card col-span-2 sm:col-span-1">
+    <p class="stat-card-label">Open Defect Cost</p>
+    <p class="stat-card-value is-money is-good"><%= AUD(cards.openDefectCost) %></p>
   </a>
 </div>
 

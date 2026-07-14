@@ -11,47 +11,40 @@
   }
 %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Equipment / Hire</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Owned asset register &middot; deployment &middot; inspections</p>
-  </div>
-  <div class="flex items-center gap-2">
-    <a href="/equipment/new?ownership=owned" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
-      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-      Add new
-    </a>
-  </div>
-</div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Operations',
+  title: 'Equipment / Hire',
+  subtitle: 'Owned asset register · deployment · inspections',
+  actions: [{ label: 'Add new', href: '/equipment/new?ownership=owned', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }]
+}) %>
 
 <%- include('_tabs', { tabActive: 'owned' }) %>
 
 <!-- Stats Row -->
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Items</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= stats.total %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Total Items</p>
+    <p class="stat-card-value"><%= stats.total %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-brand-500 uppercase tracking-widest">Deployed</p>
-    <p class="text-xl font-bold text-brand-600 mt-0.5"><%= stats.totalDeployed %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Deployed</p>
+    <p class="stat-card-value <%= stats.totalDeployed > 0 ? 'is-good' : 'is-muted' %>"><%= stats.totalDeployed %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Available</p>
-    <p class="text-xl font-bold text-emerald-600 mt-0.5"><%= stats.total - stats.totalDeployed %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Available</p>
+    <p class="stat-card-value <%= (stats.total - stats.totalDeployed) > 0 ? 'is-good' : 'is-muted' %>"><%= stats.total - stats.totalDeployed %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest">Inspections Due</p>
-    <p class="text-xl font-bold <%= stats.inspectionsDue > 0 ? 'text-red-600' : 'text-gray-300' %> mt-0.5"><%= stats.inspectionsDue %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Inspections Due</p>
+    <p class="stat-card-value <%= stats.inspectionsDue > 0 ? 'is-critical' : 'is-muted' %>"><%= stats.inspectionsDue %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Poor / Damaged</p>
-    <p class="text-xl font-bold <%= stats.poorDamaged > 0 ? 'text-orange-600' : 'text-gray-300' %> mt-0.5"><%= stats.poorDamaged %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Poor / Damaged</p>
+    <p class="stat-card-value <%= stats.poorDamaged > 0 ? 'is-warn' : 'is-muted' %>"><%= stats.poorDamaged %></p>
   </div>
-  <a href="/equipment/hire" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 hover:border-brand-300 transition-colors">
-    <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">On Hire</p>
-    <p class="text-xl font-bold text-amber-600 mt-0.5">View &rarr;</p>
+  <a href="/equipment/hire" class="stat-card">
+    <p class="stat-card-label">On Hire</p>
+    <p class="stat-card-value is-warn">View &rarr;</p>
   </a>
 </div>
 

@@ -160,11 +160,14 @@
 
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-5">
 
-  <!-- ── Header ───────────────────────────────────────────────── -->
-  <div class="flex items-end justify-between flex-wrap gap-4">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Tasks Board</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Allocate tasks to TCs, Team Leaders &amp; Supervisors — bound to a specific shift or as standing work.</p>
+  <!-- ── Header — bespoke count cluster, so the page-header type
+       classes are applied in place. ─────────────────────────────── -->
+  <div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div class="min-w-0">
+      <p class="page-eyebrow">Operations</p>
+      <h1 class="page-title vt-page-title">Tasks Board</h1>
+      <p class="page-sub">Allocate tasks to TCs, Team Leaders &amp; Supervisors — bound to a specific shift or as standing work.</p>
+      <div class="chevron-rail" aria-hidden="true"></div>
     </div>
     <div class="flex items-center gap-4">
       <span class="tb-stat"><span class="tb-stat-num text-amber-700"><%= counts.pending %></span> pending</span>

@@ -29,49 +29,41 @@
 %>
 
 <div class="max-w-6xl mx-auto space-y-5">
-  <!-- Header -->
-  <div class="flex items-start justify-between gap-3 flex-wrap">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">SOP Register</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Standard Operating Procedures — templates renew every 3 months, job-linked SOPs every 6 months.</p>
-    </div>
-    <div class="flex items-center gap-2 flex-wrap">
-      <a href="/sop-register/new?kind=template" class="px-3 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-semibold rounded-lg inline-flex items-center gap-1.5">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12"/></svg>
-        Import template
-      </a>
-      <a href="/sop-register/new?kind=job" class="px-3 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg inline-flex items-center gap-1.5">
-        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v12m6-6H6"/></svg>
-        Assign new SOP
-      </a>
-    </div>
-  </div>
+  <%- include('../partials/page-header', { rail: true, wrapperClass: '',
+    eyebrow: 'Safety',
+    title: 'SOP Register',
+    subtitle: 'Standard Operating Procedures — templates renew every 3 months, job-linked SOPs every 6 months.',
+    actions: [
+      { label: 'Import template', href: '/sop-register/new?kind=template', style: 'secondary', icon: 'M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5-5 5 5M12 5v12' },
+      { label: 'Assign new SOP', href: '/sop-register/new?kind=job', style: 'primary', icon: 'M12 6v12m6-6H6' }
+    ]
+  }) %>
 
   <!-- Stat cards -->
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</p>
-      <p class="text-xl font-bold text-gray-900 mt-0.5"><%= counts.total || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Total</p>
+      <p class="stat-card-value"><%= counts.total || 0 %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-      <p class="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Templates</p>
-      <p class="text-xl font-bold text-blue-700 mt-0.5"><%= counts.templates || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Templates</p>
+      <p class="stat-card-value <%= counts.templates > 0 ? 'is-info' : 'is-muted' %>"><%= counts.templates || 0 %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-      <p class="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Job-linked</p>
-      <p class="text-xl font-bold text-purple-700 mt-0.5"><%= counts.job_linked || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Job-linked</p>
+      <p class="stat-card-value <%= counts.job_linked > 0 ? 'is-info' : 'is-muted' %>"><%= counts.job_linked || 0 %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-      <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Active</p>
-      <p class="text-xl font-bold text-emerald-700 mt-0.5"><%= counts.active || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Active</p>
+      <p class="stat-card-value <%= counts.active > 0 ? 'is-good' : 'is-muted' %>"><%= counts.active || 0 %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-      <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Expiring &lt;30d</p>
-      <p class="text-xl font-bold <%= counts.expiring_soon ? 'text-amber-700' : 'text-gray-300' %> mt-0.5"><%= counts.expiring_soon || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Expiring &lt;30d</p>
+      <p class="stat-card-value <%= counts.expiring_soon > 0 ? 'is-warn' : 'is-muted' %>"><%= counts.expiring_soon || 0 %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-      <p class="text-[10px] font-bold text-red-500 uppercase tracking-widest">Expired</p>
-      <p class="text-xl font-bold <%= counts.expired ? 'text-red-700' : 'text-gray-300' %> mt-0.5"><%= counts.expired || 0 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Expired</p>
+      <p class="stat-card-value <%= counts.expired > 0 ? 'is-critical' : 'is-muted' %>"><%= counts.expired || 0 %></p>
     </div>
   </div>
 

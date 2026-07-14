@@ -11,11 +11,12 @@
 %>
 
 <div class="max-w-5xl mx-auto px-4 py-6">
-  <div class="flex items-center justify-between mb-1">
-    <h1 class="text-xl font-bold text-gray-900">Invoicing</h1>
-    <a href="/finance/invoicing/new" class="inline-flex items-center px-3 py-2 rounded-lg text-sm font-semibold bg-brand-600 text-white hover:bg-brand-700">+ New invoices</a>
-  </div>
-  <p class="text-sm text-gray-500 mb-5">Draft invoices built from signed Traffio dockets. Review, set rates, approve — then push to QuickBooks (Phase 3).</p>
+  <%- include('../partials/page-header', { rail: true,
+    eyebrow: 'Finance',
+    title: 'Invoicing',
+    subtitle: 'Draft invoices built from signed Traffio dockets. Review, set rates, approve — then push to QuickBooks (Phase 3).',
+    actions: [{ label: '+ New invoices', href: '/finance/invoicing/new', style: 'primary' }]
+  }) %>
 
   <div class="flex flex-wrap gap-2 mb-4">
     <% const chips = [['draft','Draft',counts.draft],['approved','Approved',counts.approved],['pushed','Pushed',counts.pushed],['void','Void',counts.void],['all','All','']]; %>

@@ -28,10 +28,14 @@
   const canOverride = typeof userRole !== 'undefined' && (userRole === 'admin' || userRole === 'management' || userRole === 'operations');
 %>
 
-<div class="mb-6 flex items-center justify-between flex-wrap gap-4">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Allocations</h1>
-    <p class="text-gray-500 text-sm mt-1">Calendar board &mdash; create shifts, allocate crew & equipment</p>
+<!-- Header — bespoke controls (new-shift modal button + view toggles), so the
+     page-header type classes are applied in place. -->
+<div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+  <div class="min-w-0">
+    <p class="page-eyebrow">Operations</p>
+    <h1 class="page-title vt-page-title">Allocations</h1>
+    <p class="page-sub">Calendar board &mdash; create shifts, allocate crew & equipment</p>
+    <div class="chevron-rail" aria-hidden="true"></div>
   </div>
   <div class="flex items-center gap-2">
     <button onclick="document.getElementById('create-shift-modal').classList.remove('hidden')" class="px-4 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors inline-flex items-center gap-1">
@@ -75,21 +79,21 @@
 
 <!-- Summary Stats -->
 <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-  <div class="bg-white border border-gray-200 border-l-4 border-l-brand-500 rounded-xl p-4">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Jobs</p>
-    <p class="text-3xl font-bold text-gray-900 mt-1"><%= stats.jobsToday %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Jobs</p>
+    <p class="stat-card-value <%= stats.jobsToday > 0 ? '' : 'is-muted' %>"><%= stats.jobsToday %></p>
   </div>
-  <div class="bg-white border border-gray-200 border-l-4 border-l-brand-500 rounded-xl p-4">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Crew Allocated</p>
-    <p class="text-3xl font-bold text-brand-600 mt-1"><%= stats.crewAllocated %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Crew Allocated</p>
+    <p class="stat-card-value <%= stats.crewAllocated > 0 ? 'is-good' : 'is-muted' %>"><%= stats.crewAllocated %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 <%= stats.unconfirmed > 0 ? 'border-orange-300' : '' %>">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Unconfirmed</p>
-    <p class="text-3xl font-bold <%= stats.unconfirmed > 0 ? 'text-orange-600' : 'text-emerald-600' %> mt-1"><%= stats.unconfirmed %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Unconfirmed</p>
+    <p class="stat-card-value <%= stats.unconfirmed > 0 ? 'is-warn' : 'is-good' %>"><%= stats.unconfirmed %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 <%= stats.gaps > 0 ? 'border-red-700' : '' %>">
-    <p class="text-xs text-gray-500 uppercase tracking-wide">Jobs with Gaps</p>
-    <p class="text-3xl font-bold <%= stats.gaps > 0 ? 'text-red-600' : 'text-emerald-600' %> mt-1"><%= stats.gaps %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Jobs with Gaps</p>
+    <p class="stat-card-value <%= stats.gaps > 0 ? 'is-critical' : 'is-good' %>"><%= stats.gaps %></p>
   </div>
 </div>
 

@@ -13,10 +13,12 @@
     { key: 'accountability', href: '/vehicle-audits/accountability', label: 'Accountability' },
   ];
 %>
-<div class="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-3 mb-5">
+<div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
   <div class="min-w-0">
-    <h1 class="text-2xl font-bold text-gray-900 truncate"><%= vaTitle %></h1>
-    <% if (typeof vaSub !== 'undefined' && vaSub) { %><p class="text-gray-500 text-sm mt-0.5"><%- vaSub %></p><% } %>
+    <p class="page-eyebrow">Safety</p>
+    <h1 class="page-title vt-page-title"><%= vaTitle %></h1>
+    <% if (typeof vaSub !== 'undefined' && vaSub) { %><p class="page-sub"><%- vaSub %></p><% } %>
+    <div class="chevron-rail" aria-hidden="true"></div>
   </div>
   <div class="flex items-center gap-2 flex-wrap">
     <nav class="inline-flex items-center bg-gray-100 border border-gray-200 rounded-xl p-1 gap-0.5 overflow-x-auto max-w-full" aria-label="Vehicle audit sections">

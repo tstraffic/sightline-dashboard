@@ -50,45 +50,37 @@
   };
 %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Opportunities</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Track and manage your sales pipeline</p>
-  </div>
-  <div class="flex items-center gap-2">
-    <a href="/opportunities/pipeline" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">
-      <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2"/></svg>
-      Pipeline View
-    </a>
-    <a href="/opportunities/new" class="inline-flex items-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
-      <svg class="w-4 h-4 mr-1.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-      New Opportunity
-    </a>
-  </div>
-</div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Sales & CRM',
+  title: 'Opportunities',
+  subtitle: 'Track and manage your sales pipeline',
+  actions: [
+    { label: 'Pipeline View', href: '/opportunities/pipeline', style: 'secondary', icon: 'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2' },
+    { label: 'New Opportunity', href: '/opportunities/new', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }
+  ]
+}) %>
 
 <!-- Stat Cards -->
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Open</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= stats.total_open || 0 %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Open</p>
+    <p class="stat-card-value <%= (stats.total_open || 0) > 0 ? '' : 'is-muted' %>"><%= stats.total_open || 0 %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pipeline Value</p>
-    <p class="text-xl font-bold text-brand-600 mt-0.5"><%= formatCurrency(stats.pipeline_value) %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Pipeline Value</p>
+    <p class="stat-card-value is-money <%= (stats.pipeline_value || 0) > 0 ? 'is-good' : 'is-muted' %>"><%= formatCurrency(stats.pipeline_value) %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Weighted Value</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= formatCurrency(stats.weighted_pipeline) %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Weighted Value</p>
+    <p class="stat-card-value is-money <%= (stats.weighted_pipeline || 0) > 0 ? '' : 'is-muted' %>"><%= formatCurrency(stats.weighted_pipeline) %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Won This Month</p>
-    <p class="text-xl font-bold text-emerald-600 mt-0.5"><%= stats.won_this_month || 0 %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Won This Month</p>
+    <p class="stat-card-value <%= (stats.won_this_month || 0) > 0 ? 'is-good' : 'is-muted' %>"><%= stats.won_this_month || 0 %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lost This Month</p>
-    <p class="text-xl font-bold <%= (stats.lost_this_month || 0) > 0 ? 'text-red-600' : 'text-gray-900' %> mt-0.5"><%= stats.lost_this_month || 0 %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Lost This Month</p>
+    <p class="stat-card-value <%= (stats.lost_this_month || 0) > 0 ? 'is-critical' : 'is-muted' %>"><%= stats.lost_this_month || 0 %></p>
   </div>
 </div>
 

@@ -7,17 +7,12 @@
   }
 %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Client Contacts</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Stakeholder directory &middot; communication tracking</p>
-  </div>
-  <a href="/contacts/new" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
-    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-    New Contact
-  </a>
-</div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'People / HR',
+  title: 'Client Contacts',
+  subtitle: 'Stakeholder directory · communication tracking',
+  actions: [{ label: 'New Contact', href: '/contacts/new', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }]
+}) %>
 
 <!-- Sub Navigation -->
 <div class="flex items-center gap-1 mb-5 border-b border-gray-200 pb-0">

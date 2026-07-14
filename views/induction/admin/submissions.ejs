@@ -64,11 +64,14 @@
 
 <div class="space-y-5">
 
-  <!-- Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Induction</h1>
-      <p class="text-sm text-gray-500 mt-1">Manage soft induction submissions</p>
+  <!-- Header — bespoke copy-link buttons (onclick), so the page-header type
+       classes are applied in place. -->
+  <div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div class="min-w-0">
+      <p class="page-eyebrow">People / HR</p>
+      <h1 class="page-title vt-page-title">Induction</h1>
+      <p class="page-sub">Manage soft induction submissions</p>
+      <div class="chevron-rail" aria-hidden="true"></div>
     </div>
     <div class="flex flex-wrap items-center gap-2">
       <button onclick="copyLink('')" class="inline-flex items-center gap-1.5 px-3 py-2 bg-brand-50 hover:bg-brand-100 text-brand-700 text-xs font-semibold rounded-lg border border-brand-200 transition" title="Copy induction link (TFN/ABN)">

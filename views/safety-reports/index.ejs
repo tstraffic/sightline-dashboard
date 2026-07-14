@@ -13,11 +13,14 @@
 %>
 
 <div class="max-w-7xl mx-auto space-y-5">
-  <!-- Header + range filter -->
-  <div class="flex items-start justify-between gap-3 flex-wrap">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Safety Reports</h1>
-      <p class="text-sm text-gray-500 mt-0.5">Compliance + engagement across SWMS, Toolboxes, Quizzes, Updates, and Flags. Filter by date range. <a href="/safety-reports/workers.csv?range=<%= rangeKey %>" class="text-brand-600 hover:underline">Download CSV →</a></p>
+  <!-- Header — bespoke action cluster (range-filter form), so the
+       page-header type classes are applied in place. -->
+  <div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div class="min-w-0">
+      <p class="page-eyebrow">Safety</p>
+      <h1 class="page-title vt-page-title">Safety Reports</h1>
+      <p class="page-sub">Compliance + engagement across SWMS, Toolboxes, Quizzes, Updates, and Flags. Filter by date range. <a href="/safety-reports/workers.csv?range=<%= rangeKey %>" class="text-brand-600 hover:underline">Download CSV →</a></p>
+      <div class="chevron-rail" aria-hidden="true"></div>
     </div>
     <form method="GET" action="/safety-reports" class="flex items-center gap-2">
       <label class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Range</label>
@@ -31,34 +34,34 @@
 
   <!-- Top-line stat cards -->
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-      <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">SWMS ack</p>
-      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= pct(stats.swms.rate) %></p>
-      <p class="text-[11px] text-gray-500 mt-0.5"><%= stats.swms.acked %>/<%= stats.swms.denom %> ack pairs · <%= stats.swms.total %> SWMS</p>
+    <div class="stat-card">
+      <p class="stat-card-label">SWMS ack</p>
+      <p class="stat-card-value <%= stats.swms.rate > 0 ? 'is-good' : 'is-muted' %>"><%= pct(stats.swms.rate) %></p>
+      <p class="stat-card-sub"><%= stats.swms.acked %>/<%= stats.swms.denom %> ack pairs · <%= stats.swms.total %> SWMS</p>
       <%- bar(stats.swms.rate) %>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-      <p class="text-[10px] font-bold text-violet-500 uppercase tracking-widest">Quiz pass</p>
-      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= pct(stats.quizzes.rate) %></p>
-      <p class="text-[11px] text-gray-500 mt-0.5"><%= stats.quizzes.passed %>/<%= stats.quizzes.denom %> · <%= stats.quizzes.total %> quizzes</p>
+    <div class="stat-card">
+      <p class="stat-card-label">Quiz pass</p>
+      <p class="stat-card-value <%= stats.quizzes.rate > 0 ? 'is-info' : 'is-muted' %>"><%= pct(stats.quizzes.rate) %></p>
+      <p class="stat-card-sub"><%= stats.quizzes.passed %>/<%= stats.quizzes.denom %> · <%= stats.quizzes.total %> quizzes</p>
       <%- bar(stats.quizzes.rate) %>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-      <p class="text-[10px] font-bold text-blue-500 uppercase tracking-widest">Toolbox coverage</p>
-      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= pct(stats.toolboxes.rate) %></p>
-      <p class="text-[11px] text-gray-500 mt-0.5"><%= stats.toolboxes.covered %>/<%= stats.toolboxes.denom %> · <%= stats.toolboxes.total %> talks</p>
+    <div class="stat-card">
+      <p class="stat-card-label">Toolbox coverage</p>
+      <p class="stat-card-value <%= stats.toolboxes.rate > 0 ? 'is-info' : 'is-muted' %>"><%= pct(stats.toolboxes.rate) %></p>
+      <p class="stat-card-sub"><%= stats.toolboxes.covered %>/<%= stats.toolboxes.denom %> · <%= stats.toolboxes.total %> talks</p>
       <%- bar(stats.toolboxes.rate) %>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-      <p class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest">Update read</p>
-      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= pct(stats.updates.rate) %></p>
-      <p class="text-[11px] text-gray-500 mt-0.5"><%= stats.updates.read %>/<%= stats.updates.denom %> · <%= stats.updates.total %> bulletins</p>
+    <div class="stat-card">
+      <p class="stat-card-label">Update read</p>
+      <p class="stat-card-value <%= stats.updates.rate > 0 ? 'is-info' : 'is-muted' %>"><%= pct(stats.updates.rate) %></p>
+      <p class="stat-card-sub"><%= stats.updates.read %>/<%= stats.updates.denom %> · <%= stats.updates.total %> bulletins</p>
       <%- bar(stats.updates.rate) %>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
-      <p class="text-[10px] font-bold text-rose-500 uppercase tracking-widest">Open flags</p>
-      <p class="text-2xl font-bold text-gray-900 mt-0.5"><%= stats.flags.open %></p>
-      <p class="text-[11px] text-gray-500 mt-0.5">of <%= stats.flags.total %> total · <a href="/safety-comments?status=submitted" class="text-brand-600 hover:underline">inbox →</a></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Open flags</p>
+      <p class="stat-card-value <%= stats.flags.open > 0 ? 'is-critical' : 'is-muted' %>"><%= stats.flags.open %></p>
+      <p class="stat-card-sub">of <%= stats.flags.total %> total · <a href="/safety-comments?status=submitted" class="text-brand-600 hover:underline">inbox →</a></p>
     </div>
   </div>
 

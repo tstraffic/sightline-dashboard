@@ -5,35 +5,41 @@
 %>
 
 <div class="space-y-5">
-  <div class="flex items-center justify-between gap-3 flex-wrap">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Payslips</h1>
-      <p class="text-sm text-gray-500 mt-1">Uploaded payroll runs. Workers see their own at <span class="font-mono text-xs">/w/hr/payslips</span>.</p>
+  <!-- Header — subtitle carries inline markup, so the page-header type
+       classes are applied in place. -->
+  <div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div class="min-w-0">
+      <p class="page-eyebrow">Finance</p>
+      <h1 class="page-title vt-page-title">Payslips</h1>
+      <p class="page-sub">Uploaded payroll runs. Workers see their own at <span class="font-mono text-xs">/w/hr/payslips</span>.</p>
+      <div class="chevron-rail" aria-hidden="true"></div>
     </div>
-    <a href="/payroll/payslips/new" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">
-      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-      Upload payslip
-    </a>
+    <div class="flex items-center gap-2 flex-wrap shrink-0">
+      <a href="/payroll/payslips/new" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        Upload payslip
+      </a>
+    </div>
   </div>
 
   <!-- Stats -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-    <div class="bg-white border border-gray-200 rounded-xl p-4">
-      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</p>
-      <p class="text-2xl font-bold text-gray-900 mt-1"><%= stats.total %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Total</p>
+      <p class="stat-card-value"><%= stats.total %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4">
-      <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Last 30 days</p>
-      <p class="text-2xl font-bold text-emerald-600 mt-1"><%= stats.last30 %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Last 30 days</p>
+      <p class="stat-card-value <%= stats.last30 > 0 ? 'is-good' : 'is-muted' %>"><%= stats.last30 %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4">
-      <p class="text-[10px] font-bold text-brand-500 uppercase tracking-widest">Net paid (90d)</p>
-      <p class="text-xl font-bold text-brand-600 mt-1"><%= money(stats.totalPaid) %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Net paid (90d)</p>
+      <p class="stat-card-value is-money <%= stats.totalPaid > 0 ? 'is-good' : 'is-muted' %>"><%= money(stats.totalPaid) %></p>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-4">
-      <p class="text-[10px] font-bold text-purple-500 uppercase tracking-widest">Viewed by staff</p>
-      <p class="text-2xl font-bold text-purple-600 mt-1"><%= stats.viewed %></p>
-      <p class="text-xs text-gray-400 mt-0.5">of <%= stats.total %></p>
+    <div class="stat-card">
+      <p class="stat-card-label">Viewed by staff</p>
+      <p class="stat-card-value <%= stats.viewed > 0 ? 'is-info' : 'is-muted' %>"><%= stats.viewed %></p>
+      <p class="stat-card-sub">of <%= stats.total %></p>
     </div>
   </div>
 
