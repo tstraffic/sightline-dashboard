@@ -896,6 +896,9 @@
     <div class="mt-5 border-t border-gray-100 pt-4">
       <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hired equipment &amp; suppliers</label>
       <p class="text-xs text-gray-500 mb-2">Tick anything hired in from another company and choose the supplier.</p>
+      <!-- Marker so the server knows this POST carried the hire picker even
+           when every checkbox is unticked (unchecked boxes don't post). -->
+      <input type="hidden" name="hire_grid_present" value="1">
       <div class="space-y-1.5">
         <% var _hi = (typeof hireItems !== 'undefined' ? hireItems : {}); %>
         <% (typeof hireableItems !== 'undefined' ? hireableItems : []).forEach(function (h) { var hk = h[0], hl = h[1]; var saved = _hi[hk]; %>

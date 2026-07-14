@@ -2905,3 +2905,35 @@ body.bk2-rp-detail .bk2-rp-warns { display: inline-flex; }
 :root[data-theme="light"] .bk2-rp-chip--detail[aria-pressed="true"] {
   background: #DBEAFE; color: #1E40AF; border-color: #93C5FD;
 }
+
+/* ── Hired gear + return-to-depot prompt ─────────────────────────────── */
+/* Amber HIRED pill — on resource-panel rows and card gear chips. */
+.bk2-hired-pill {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+  color: #92400E; background: #FEF3C7; border: 1px solid #FDE68A;
+  border-radius: 999px; text-transform: uppercase;
+}
+:root[data-theme="dark"] .bk2-hired-pill { color: #FCD34D; background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.40); }
+
+/* Gear chips drag to re-hitch (onto a ute) or detach (onto the card). */
+.bk2-veh-gear[draggable="true"] { cursor: grab; }
+.bk2-veh-gear.is-dragging { opacity: 0.5; }
+
+/* Loose gear strip — unhitched equipment at the card bottom. */
+.bk2-loosegear { margin-top: 6px; }
+.bk2-veh-gear--loose { margin-left: 0; }
+
+/* Return-to-depot Yes/No modal (reuses the centered .bk2-pop shell). */
+.bk2-pop-text { font-size: 13.5px; line-height: 1.5; color: #334155; }
+:root[data-theme="dark"] .bk2-pop-text { color: rgba(255,255,255,0.75); }
+.bk2-pop--center .bk2-pop-btn {
+  flex-direction: row; padding: 11px 10px;
+  font-size: 12.5px; text-transform: none; letter-spacing: 0;
+  border-radius: 10px;
+}
+.bk2-pop-btn--yes { background: #2B7FFF; color: #fff; }
+.bk2-pop-btn--yes:hover { background: #1D6AE5; color: #fff; }
+:root[data-theme="dark"] .bk2-pop-btn--yes { background: #2B7FFF; color: #fff; }
+:root[data-theme="dark"] .bk2-pop-btn--yes:hover { background: #1D6AE5; color: #fff; }

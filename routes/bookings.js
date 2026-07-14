@@ -37,6 +37,7 @@ function lazyCreateProject(db, name, clientId, b) {
 }
 const { getConfig } = require('../middleware/settings');
 const bookingNotify = require('../services/bookingNotify');
+const { syncEquipmentReturnTask, syncBookingReturnTasks } = require('../services/returnTasks');
 
 // Multer config for booking document uploads
 // Booking uploads MUST live under data/ — that's the mounted volume on
@@ -129,7 +130,15 @@ function syncTCCrewVehicles(db, bookingId) {
       if (cls && target[cls] !== undefined) target[cls] += qty;
     }
     const rows = db.prepare("SELECT id, vehicle_name, registration, crew_member_id, fleet_vehicle_id, vehicle_role FROM booking_vehicles WHERE booking_id = ? ORDER BY id").all(bookingId);
+    // Gear hitched to a vehicle protects it too (migration 320): deleting it
+    // would either throw on the FK or silently unhitch the planner's gear.
+    const gearVehIds = new Set();
+    try {
+      db.prepare("SELECT DISTINCT attached_vehicle_id AS vid FROM booking_equipment WHERE booking_id = ? AND attached_vehicle_id IS NOT NULL")
+        .all(bookingId).forEach(r => gearVehIds.add(r.vid));
+    } catch (e) { /* pre-migration-320 DB */ }
     const isProtected = (v) => !!(v.crew_member_id || v.fleet_vehicle_id ||
+      gearVehIds.has(v.id) ||
       (v.vehicle_name && String(v.vehicle_name).trim()) ||
       (v.registration && String(v.registration).trim()));
     const byClass = { ute: [], pod: [], vms: [], tma: [], truck: [] };
@@ -768,6 +777,18 @@ function equipmentReqLabel(name, category) {
   return n || null;
 }
 
+// Hire rows have free-text type/description instead of a register category —
+// derive one so hired units group/filter/bump like owned gear.
+function hireTextToCategory(text) {
+  const t = String(text || '').toLowerCase();
+  if (t.includes('trailer')) return 'trailer';
+  if (t.includes('vms')) return 'vms';
+  if (t.includes('arrow')) return 'arrow_board';
+  if (t.includes('light')) return 'lighting';
+  if (t.includes('portaboom') || t.includes('boom') || t.includes('speed') || t.includes('sign')) return 'sign';
+  return 'other';
+}
+
 // Build crew_blocks for one booking — derives N-man crew composites from
 // booking_requirements rows matching /^(\d+)x TC Crew$/, then fans the
 // flat booking_crew + booking_vehicles arrays into them in assignment
@@ -776,12 +797,17 @@ function equipmentReqLabel(name, category) {
 function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
   const blocks = [];
   // Gear (trailers/portabooms) hitched to a vehicle — keyed by vehicle id so
-  // the card can render it under the ute it rides (migration 320).
+  // the card can render it under the ute it rides (migration 320). Loose
+  // (unattached) gear collects separately for the card's Gear strip.
   const gearByVehicle = new Map();
+  const looseGear = [];
   for (const g of (gearRows || [])) {
-    if (!g.attached_vehicle_id) continue;
+    const chip = { id: g.id, name: g.equipment_name || 'Gear', type: g.equipment_type || '',
+                   hired: !!g.hire_unit_id, supplier: g.supplier_name || '',
+                   attached_vehicle_id: g.attached_vehicle_id || null };
+    if (!g.attached_vehicle_id) { looseGear.push(chip); continue; }
     if (!gearByVehicle.has(g.attached_vehicle_id)) gearByVehicle.set(g.attached_vehicle_id, []);
-    gearByVehicle.get(g.attached_vehicle_id).push({ id: g.id, name: g.equipment_name || 'Gear', type: g.equipment_type || '' });
+    gearByVehicle.get(g.attached_vehicle_id).push(chip);
   }
   // Each "Nx TC Crew" requirement row becomes one crew block of size N.
   // Quantity in the row multiplies that.
@@ -1031,6 +1057,9 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
     }
   }
   visible.spare_vehicles = spareGroups;
+  // Unattached gear (incl. hired units dropped on the card body) — rendered
+  // in the card's Gear strip so it stays visible and re-hitchable.
+  visible.loose_gear = looseGear;
   return visible;
 }
 
@@ -1116,13 +1145,15 @@ router.get('/', (req, res) => {
     `).all(...bookingIds);
     for (const r of rqRows) (reqsByBooking[r.booking_id] = reqsByBooking[r.booking_id] || []).push(r);
 
-    // Gear hitched to a vehicle (trailers / portabooms, migration 320) —
-    // rendered as chips under the vehicle it rides on the card.
+    // Gear on the booking (trailers / portabooms, migration 320/321) —
+    // hitched rows render as chips under their vehicle, loose rows in the
+    // card's Gear strip. hire_unit_id/supplier_name drive the HIRED badge.
     try {
       const geRows = db.prepare(`
-        SELECT id, booking_id, equipment_name, equipment_type, attached_vehicle_id
+        SELECT id, booking_id, equipment_name, equipment_type, attached_vehicle_id,
+               hire_unit_id, supplier_name, return_task
         FROM booking_equipment
-        WHERE booking_id IN (${placeholders}) AND attached_vehicle_id IS NOT NULL
+        WHERE booking_id IN (${placeholders})
         ORDER BY id
       `).all(...bookingIds);
       for (const g of geRows) (gearByBooking[g.booking_id] = gearByBooking[g.booking_id] || []).push(g);
@@ -1355,6 +1386,11 @@ function resolveHireCompany(db, idVal, nameVal, userId) {
 // supplier_id_<key> / supplier_name_<key>. Only call when the requirements
 // grid was actually submitted so partial POSTs never wipe existing rows.
 function persistBookingHireItems(db, bookingId, b, userId) {
+  // The board no longer posts hired_* fields (hired-ness now flows from
+  // dragging actual hired units) — bail unless this POST carried the
+  // hire-picker, so board saves can't wipe rows the full form wrote. The
+  // full form posts hire_grid_present so unticking every box still clears.
+  if (!('hire_grid_present' in b) && !HIREABLE_ITEMS.some(([key]) => ('hired_' + key) in b)) return;
   const del = db.prepare('DELETE FROM booking_hire_items WHERE booking_id = ?');
   const ins = db.prepare('INSERT OR IGNORE INTO booking_hire_items (booking_id, item_key, item_label, hire_company_id, company_name) VALUES (?, ?, ?, ?, ?)');
   db.transaction(() => {
@@ -2044,6 +2080,40 @@ router.get('/api/resources', (req, res) => {
         ORDER BY category, name
       `).all();
     } catch (e) {}
+    // HIRED gear — every un-returned unit of an on-hire hire joins the pool
+    // so the allocator can drag it onto a shift like owned equipment. Each
+    // row carries hired:true + the supplier so the panel/card can badge it.
+    try {
+      const hireUnits = db.prepare(`
+        SELECT u.id AS hire_unit_id, u.unit_number,
+               h.equipment_type, h.description,
+               COALESCE(NULLIF(h.company_name, ''), hc.name, '') AS supplier
+        FROM equipment_hire_units u
+        JOIN equipment_hires h ON h.id = u.hire_id
+        LEFT JOIN hire_companies hc ON hc.id = h.company_id
+        WHERE h.status = 'on_hire' AND u.returned_at IS NULL
+        ORDER BY h.equipment_type, u.unit_number
+      `).all();
+      const onBookings = new Set(db.prepare(`
+        SELECT be.hire_unit_id FROM booking_equipment be
+        JOIN bookings b ON b.id = be.booking_id
+        WHERE be.hire_unit_id IS NOT NULL AND DATE(b.start_datetime) = ?
+          AND b.status NOT IN ('cancelled','complete','late_cancellation','finalised') AND b.deleted_at IS NULL
+      `).all(date).map(r => r.hire_unit_id));
+      equipment = equipment.concat(hireUnits.map(u => {
+        const baseName = (u.equipment_type || u.description || 'Hired equipment').trim();
+        return {
+          id: 'hu-' + u.hire_unit_id,
+          hire_unit_id: u.hire_unit_id,
+          name: baseName + (u.unit_number ? ' · ' + u.unit_number : ''),
+          category: hireTextToCategory(baseName + ' ' + (u.description || '')),
+          asset_number: u.unit_number || '',
+          hired: true,
+          supplier: u.supplier,
+          assigned_today: onBookings.has(u.hire_unit_id),
+        };
+      }));
+    } catch (e) { console.error('[api/resources] hire units failed:', e.message); }
 
     res.json({ date, people, vehicles, equipment });
   } catch (err) {
@@ -2248,6 +2318,13 @@ router.get('/:id', (req, res) => {
 
   let hireSuppliers = [];
   try { hireSuppliers = db.prepare('SELECT item_key, item_label, company_name FROM booking_hire_items WHERE booking_id = ? ORDER BY item_label').all(booking.id); } catch (e) {}
+  // Hired units dragged onto the shift (migration 321) join the same panel —
+  // this is the new source of truth for what's hired on a booking.
+  try {
+    hireSuppliers = hireSuppliers.concat(db.prepare(
+      "SELECT equipment_name AS item_label, supplier_name AS company_name FROM booking_equipment WHERE booking_id = ? AND hire_unit_id IS NOT NULL ORDER BY equipment_name"
+    ).all(booking.id));
+  } catch (e) {}
   let mobileLegs = [];
   try { mobileLegs = getMobileLegs(db, booking.id); } catch (e) {}
   res.render('bookings/show', {
@@ -2609,6 +2686,8 @@ router.post('/:id/crew', (req, res) => {
   const insertResult = db.prepare("INSERT OR IGNORE INTO booking_crew (booking_id, crew_member_id, role_on_site, status, assigned_vehicle_id) VALUES (?, ?, ?, 'assigned', NULL)")
     .run(req.params.id, crew_member_id, role_on_site || '');
   const inserted = insertResult.changes > 0;
+  // A new crew member joins any whole-crew return-to-depot task groups.
+  if (inserted) syncBookingReturnTasks(db, parseInt(req.params.id, 10));
 
   // Auto-create crew_allocation so the worker sees this in their portal.
   // job_id is nullable (migration 141) so ad-hoc bookings without a job
@@ -2731,6 +2810,8 @@ router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
     db.prepare("UPDATE booking_vehicles SET crew_member_id = NULL WHERE id = ? AND crew_member_id = ?")
       .run(row.assigned_vehicle_id, row.crew_member_id);
   }
+  // Seat/driver moves can change who owes a gear-return task.
+  syncBookingReturnTasks(db, parseInt(req.params.id, 10));
 
   if (isJson) return res.json({ ok: true, assigned_vehicle_id: vehicleId });
   res.redirect('/bookings/' + req.params.id);
@@ -2756,6 +2837,11 @@ router.post('/:id/crew/:crewId/driver', (req, res) => {
   }
   const isCurrent = veh.crew_member_id == crew.crew_member_id;
   db.prepare("UPDATE booking_vehicles SET crew_member_id = ? WHERE id = ?").run(isCurrent ? null : crew.crew_member_id, veh.id);
+  try {
+    db.prepare("SELECT id FROM booking_equipment WHERE booking_id=? AND attached_vehicle_id=? AND return_task=1")
+      .all(req.params.id, veh.id)
+      .forEach(g => syncEquipmentReturnTask(db, parseInt(req.params.id, 10), g.id));
+  } catch (e) { console.error('[bookings.crew.driver] return-task sync failed:', e.message); }
   if (isJson) return res.json({ ok: true, value: isCurrent ? 0 : 1 });
   res.redirect('/bookings/' + req.params.id);
 });
@@ -2796,6 +2882,9 @@ router.post('/:id/crew/:crewId/remove', (req, res) => {
   }
   // Also clear them as driver on any vehicles on this booking
   db.prepare("UPDATE booking_vehicles SET crew_member_id = NULL WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  // Leavers drop out of return-to-depot task groups; driver-less gear
+  // re-targets to whoever is left.
+  if (removed.changes > 0) syncBookingReturnTasks(db, parseInt(req.params.id, 10));
   if (removed.changes > 0) {
     const bk = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
     // Only notify a removal if the crew had already been told they were on it.
@@ -2851,6 +2940,12 @@ router.post('/:id/vehicles/:vehicleId/driver', (req, res) => {
   }
   db.prepare("UPDATE booking_vehicles SET crew_member_id = ? WHERE id = ? AND booking_id = ?")
     .run(cid, req.params.vehicleId, req.params.id);
+  // A driver change re-targets return tasks for gear riding this vehicle.
+  try {
+    db.prepare("SELECT id FROM booking_equipment WHERE booking_id=? AND attached_vehicle_id=? AND return_task=1")
+      .all(req.params.id, req.params.vehicleId)
+      .forEach(g => syncEquipmentReturnTask(db, parseInt(req.params.id, 10), g.id));
+  } catch (e) { console.error('[bookings.vehicles.driver] return-task sync failed:', e.message); }
   if (isJson) {
     const driver = cid ? db.prepare("SELECT id, full_name FROM crew_members WHERE id = ?").get(cid) : null;
     return res.json({ ok: true, driver });
@@ -3022,10 +3117,20 @@ router.post('/:id/vehicles/:vehicleId/remove', (req, res) => {
   // Detach any gear FIRST — booking_equipment.attached_vehicle_id references
   // this row (migration 320), so deleting the vehicle while a trailer is
   // hitched would throw an FK error. The gear stays on the booking, unattached.
+  let detachedGearIds = [];
   if (vehRow) {
+    try {
+      detachedGearIds = db.prepare("SELECT id FROM booking_equipment WHERE booking_id=? AND attached_vehicle_id=? AND return_task=1")
+        .all(req.params.id, vehRow.id).map(r => r.id);
+    } catch (e) {}
     try { db.prepare("UPDATE booking_equipment SET attached_vehicle_id = NULL WHERE booking_id=? AND attached_vehicle_id=?").run(req.params.id, vehRow.id); } catch (e) {}
   }
   const gone = db.prepare("DELETE FROM booking_vehicles WHERE id=? AND booking_id=?").run(req.params.vehicleId, req.params.id);
+  // Gear that was riding this ute is now loose — its return task falls back
+  // to the whole crew.
+  for (const gid of detachedGearIds) {
+    try { syncEquipmentReturnTask(db, parseInt(req.params.id, 10), gid); } catch (e) { console.error('[bookings.vehicles.remove] return-task sync failed:', e.message); }
+  }
   if (gone.changes > 0 && vehRow) {
     // Mirror of the add bump: removing a vehicle shrinks its CLASS add-on row
     // by however far the class now over-requires ("Nx TC Crew" package utes
@@ -3354,7 +3459,30 @@ router.post('/:id/equipment', (req, res) => {
   }
   let newId = null;
   let addedName = '', addedCategory = '';
-  if (b.equipment_id) {
+  let reqName = ''; // what the requirement bump matches on (differs for hire units)
+  if (b.hire_unit_id) {
+    // Hired gear dragged from the panel — snapshot what/whose it is so the
+    // card can badge it HIRED even after the hire is later closed out.
+    const hu = db.prepare(`
+      SELECT u.id, u.unit_number, h.equipment_type, h.description,
+             COALESCE(NULLIF(h.company_name, ''), hc.name, '') AS supplier
+      FROM equipment_hire_units u
+      JOIN equipment_hires h ON h.id = u.hire_id
+      LEFT JOIN hire_companies hc ON hc.id = h.company_id
+      WHERE u.id = ? AND h.status = 'on_hire' AND u.returned_at IS NULL
+    `).get(b.hire_unit_id);
+    if (!hu) {
+      if (isJson) return res.status(400).json({ ok: false, error: 'That hired unit is no longer on hire.' });
+      req.flash('error', 'That hired unit is no longer on hire.');
+      return res.redirect('/bookings/' + req.params.id);
+    }
+    reqName = (hu.equipment_type || hu.description || '').trim();
+    addedName = (reqName || 'Hired equipment') + (hu.unit_number ? ' · ' + hu.unit_number : '');
+    addedCategory = hireTextToCategory(reqName + ' ' + (hu.description || ''));
+    const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_name, equipment_type, quantity, attached_vehicle_id, hire_unit_id, supplier_name) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .run(req.params.id, addedName, addedCategory, qty, attachedVehicleId, hu.id, hu.supplier || '');
+    newId = r.lastInsertRowid;
+  } else if (b.equipment_id) {
     const eq = db.prepare("SELECT * FROM equipment WHERE id = ?").get(b.equipment_id);
     if (eq) {
       addedName = eq.name || eq.asset_name || '';
@@ -3373,7 +3501,7 @@ router.post('/:id/equipment', (req, res) => {
   // Reflect the added gear in the Overview requirements list too.
   if (newId) {
     try {
-      const label = equipmentReqLabel(addedName, addedCategory);
+      const label = equipmentReqLabel(reqName || addedName, addedCategory);
       if (label) bumpRequirement(db, req.params.id, label, qty);
     } catch (e) { console.error('[bookings.equipment] requirement bump failed:', e.message); }
   }
@@ -3386,16 +3514,65 @@ router.post('/:id/equipment/:eqId/remove', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const eqRow = db.prepare("SELECT * FROM booking_equipment WHERE id=? AND booking_id=?").get(req.params.eqId, req.params.id);
+  // Pending return-to-depot tasks die with the gear; done rows stay as
+  // history (their booking_equipment_id nulls out via ON DELETE SET NULL).
+  try {
+    db.prepare("DELETE FROM shift_tasks WHERE booking_equipment_id = ? AND status = 'pending'").run(req.params.eqId);
+  } catch (e) { console.error('[bookings.equipment.remove] task cleanup failed:', e.message); }
   const gone = db.prepare("DELETE FROM booking_equipment WHERE id=? AND booking_id=?").run(req.params.eqId, req.params.id);
-  // Un-bump the requirement this gear grew when it was added.
+  // Un-bump the requirement this gear grew when it was added. Hired rows
+  // carry the unit code in the name ("Portaboom · PB-01") — match on the
+  // base name so the shrink finds the label the bump created.
   if (gone.changes > 0 && eqRow) {
     try {
-      const label = equipmentReqLabel(eqRow.equipment_name, eqRow.equipment_type);
+      const baseName = String(eqRow.equipment_name || '').split(' · ')[0];
+      const label = equipmentReqLabel(baseName, eqRow.equipment_type);
       if (label) shrinkRequirement(db, req.params.id, label, Math.max(1, parseInt(eqRow.quantity, 10) || 1));
     } catch (e) { console.error('[bookings.equipment.remove] requirement shrink failed:', e.message); }
   }
   if (isJson) return res.json({ ok: true });
   req.flash('success', 'Equipment removed.');
+  res.redirect('/bookings/' + req.params.id);
+});
+
+// POST /:id/equipment/:eqId/return-task — the allocator said Yes to the
+// popup: flag the gear and build its return-to-depot task group.
+router.post('/:id/equipment/:eqId/return-task', (req, res) => {
+  const db = getDb();
+  const gear = db.prepare("SELECT * FROM booking_equipment WHERE id=? AND booking_id=?").get(req.params.eqId, req.params.id);
+  if (!gear) return res.status(404).json({ ok: false, error: 'Equipment not found on this booking.' });
+  db.prepare("UPDATE booking_equipment SET return_task = 1 WHERE id = ?").run(gear.id);
+  try { syncEquipmentReturnTask(db, parseInt(req.params.id, 10), gear.id); } catch (e) {
+    console.error('[bookings.equipment.return-task] sync failed:', e.message);
+    return res.status(500).json({ ok: false, error: 'Could not create the return task.' });
+  }
+  const rows = db.prepare("SELECT COUNT(*) AS n FROM shift_tasks WHERE booking_equipment_id = ? AND status = 'pending'").get(gear.id);
+  const drv = gear.attached_vehicle_id
+    ? db.prepare('SELECT crew_member_id FROM booking_vehicles WHERE id = ?').get(gear.attached_vehicle_id)
+    : null;
+  res.json({ ok: true, mode: (drv && drv.crew_member_id && rows.n === 1) ? 'driver' : 'crew', assignees: rows.n });
+});
+
+// POST /:id/equipment/:eqId/attach — re-hitch gear already on the booking
+// to a vehicle (drag gear chip onto a ute), or detach it (vehicle_id='').
+router.post('/:id/equipment/:eqId/attach', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const gear = db.prepare("SELECT * FROM booking_equipment WHERE id=? AND booking_id=?").get(req.params.eqId, req.params.id);
+  if (!gear) {
+    if (isJson) return res.status(404).json({ ok: false, error: 'Equipment not found on this booking.' });
+    req.flash('error', 'Equipment not found on this booking.');
+    return res.redirect('/bookings/' + req.params.id);
+  }
+  let vehicleId = parseInt(req.body.vehicle_id, 10) || null;
+  if (vehicleId) {
+    const okVeh = db.prepare("SELECT id FROM booking_vehicles WHERE id=? AND booking_id=?").get(vehicleId, req.params.id);
+    if (!okVeh) vehicleId = null;
+  }
+  db.prepare("UPDATE booking_equipment SET attached_vehicle_id = ? WHERE id = ?").run(vehicleId, gear.id);
+  try { syncEquipmentReturnTask(db, parseInt(req.params.id, 10), gear.id); } catch (e) { console.error('[bookings.equipment.attach] sync failed:', e.message); }
+  if (isJson) return res.json({ ok: true, attached_vehicle_id: vehicleId });
+  req.flash('success', vehicleId ? 'Equipment hitched to the vehicle.' : 'Equipment detached.');
   res.redirect('/bookings/' + req.params.id);
 });
 
@@ -3475,7 +3652,7 @@ router.post('/:id/clone', (req, res) => {
   // Equipment + shift tasks were silently dropped by clone before — copy
   // them too (tasks reset to pending; equipment as-is).
   try { for (const eq of db.prepare("SELECT equipment_id, equipment_name, equipment_type, quantity, notes FROM booking_equipment WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_equipment (booking_id, equipment_id, equipment_name, equipment_type, quantity, notes) VALUES (?, ?, ?, ?, ?, ?)").run(newId, eq.equipment_id, eq.equipment_name, eq.equipment_type, eq.quantity, eq.notes); } catch(e) {}
-  try { for (const t of db.prepare("SELECT title, description, crew_member_id, priority, due_at FROM shift_tasks WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO shift_tasks (booking_id, title, description, crew_member_id, priority, due_at, status, created_by_user_id) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)").run(newId, t.title, t.description, t.crew_member_id, t.priority, t.due_at, req.session.user.id); } catch(e) {}
+  try { for (const t of db.prepare("SELECT title, description, crew_member_id, priority, due_at FROM shift_tasks WHERE booking_id=? AND booking_equipment_id IS NULL").all(source.id)) db.prepare("INSERT INTO shift_tasks (booking_id, title, description, crew_member_id, priority, due_at, status, created_by_user_id) VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)").run(newId, t.title, t.description, t.crew_member_id, t.priority, t.due_at, req.session.user.id); } catch(e) {}
   // Hired-item suppliers + mobile-works legs (previously dropped by clone).
   try { for (const h of db.prepare("SELECT item_key, item_label, hire_company_id, company_name FROM booking_hire_items WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_hire_items (booking_id, item_key, item_label, hire_company_id, company_name) VALUES (?, ?, ?, ?, ?)").run(newId, h.item_key, h.item_label, h.hire_company_id, h.company_name); } catch(e) {}
   try { for (const lg of db.prepare("SELECT seq, start_time, address, notes FROM booking_mobile_legs WHERE booking_id=?").all(source.id)) db.prepare("INSERT INTO booking_mobile_legs (booking_id, seq, start_time, address, notes) VALUES (?, ?, ?, ?, ?)").run(newId, lg.seq, lg.start_time, lg.address, lg.notes); } catch(e) {}
@@ -3570,7 +3747,17 @@ router.post('/:id/tasks', (req, res) => {
 
 // POST /:id/tasks/:taskId/delete
 router.post('/:id/tasks/:taskId/delete', (req, res) => {
-  getDb().prepare("DELETE FROM shift_tasks WHERE id=? AND booking_id=?").run(req.params.taskId, req.params.id);
+  const db = getDb();
+  // Deleting an automatic return-to-depot task kills the whole group AND
+  // clears the gear's opt-in — otherwise the next allocation change would
+  // just re-create it.
+  const t = db.prepare("SELECT booking_equipment_id FROM shift_tasks WHERE id=? AND booking_id=?").get(req.params.taskId, req.params.id);
+  if (t && t.booking_equipment_id) {
+    db.prepare("UPDATE booking_equipment SET return_task = 0 WHERE id = ?").run(t.booking_equipment_id);
+    db.prepare("DELETE FROM shift_tasks WHERE booking_equipment_id=? AND booking_id=?").run(t.booking_equipment_id, req.params.id);
+  } else {
+    db.prepare("DELETE FROM shift_tasks WHERE id=? AND booking_id=?").run(req.params.taskId, req.params.id);
+  }
   if (req.headers.accept && req.headers.accept.includes('application/json')) return res.json({ ok: true });
   req.flash('success', 'Task removed.');
   res.redirect('/bookings/' + req.params.id + '#tasks');
@@ -3578,13 +3765,24 @@ router.post('/:id/tasks/:taskId/delete', (req, res) => {
 
 // POST /:id/tasks/:taskId/status — toggle status (admin override)
 router.post('/:id/tasks/:taskId/status', (req, res) => {
+  const db = getDb();
   const status = ['pending','done','cancelled'].includes(req.body.status) ? req.body.status : 'pending';
   const completedAt = status === 'done' ? "datetime('now')" : 'NULL';
-  getDb().prepare(`
-    UPDATE shift_tasks
-    SET status = ?, completed_at = ${completedAt}, updated_at = datetime('now')
-    WHERE id = ? AND booking_id = ?
-  `).run(status, req.params.taskId, req.params.id);
+  // Return-to-depot groups move as one — the gear is either back or it isn't.
+  const t = db.prepare("SELECT booking_equipment_id FROM shift_tasks WHERE id=? AND booking_id=?").get(req.params.taskId, req.params.id);
+  if (t && t.booking_equipment_id) {
+    db.prepare(`
+      UPDATE shift_tasks
+      SET status = ?, completed_at = ${completedAt}, updated_at = datetime('now')
+      WHERE booking_equipment_id = ? AND booking_id = ?
+    `).run(status, t.booking_equipment_id, req.params.id);
+  } else {
+    db.prepare(`
+      UPDATE shift_tasks
+      SET status = ?, completed_at = ${completedAt}, updated_at = datetime('now')
+      WHERE id = ? AND booking_id = ?
+    `).run(status, req.params.taskId, req.params.id);
+  }
   if (req.headers.accept && req.headers.accept.includes('application/json')) return res.json({ ok: true });
   res.redirect('/bookings/' + req.params.id + '#tasks');
 });

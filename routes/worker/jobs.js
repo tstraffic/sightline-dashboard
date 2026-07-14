@@ -5,6 +5,7 @@ const { sydneyToday, TZ: SYD_TZ } = require('../../lib/sydney');
 const { resolveShift, getCurrentDocket } = require('../../lib/shiftDocket');
 const { maybePromoteToGreenToGo } = require('../../lib/bookingLifecycle');
 const bookingNotify = require('../../services/bookingNotify');
+const { syncBookingReturnTasks } = require('../../services/returnTasks');
 const { logActivity } = require('../../middleware/audit');
 
 // Shared by every worker accept path: if this acceptance was the last one
@@ -975,6 +976,9 @@ router.post('/bookings/:id/respond', (req, res) => {
       .run(req.params.id, worker.id);
     db.prepare("UPDATE crew_allocations SET status = 'declined' WHERE booking_id = ? AND crew_member_id = ? AND status IN ('allocated','confirmed')")
       .run(req.params.id, worker.id);
+    // A declined worker isn't bringing gear back — drop them from any
+    // return-to-depot task groups on this shift.
+    try { syncBookingReturnTasks(db, parseInt(req.params.id, 10)); } catch (e) { console.error('[worker respond] return-task sync failed:', e.message); }
     req.flash('success', 'Shift declined.');
   }
 
@@ -1000,7 +1004,17 @@ router.post('/shift-tasks/:id/done', (req, res) => {
     req.flash('error', 'Task not found or not yours.');
     return res.redirect('back');
   }
-  if (undo) {
+  if (t.booking_equipment_id) {
+    // Automatic return-to-depot task — the gear is either back at the depot
+    // or it isn't, so one crew member's tick moves the WHOLE group.
+    if (undo) {
+      db.prepare("UPDATE shift_tasks SET status = 'pending', completed_at = NULL, updated_at = datetime('now') WHERE booking_equipment_id = ?").run(t.booking_equipment_id);
+      req.flash('success', 'Task reopened for the whole crew.');
+    } else {
+      db.prepare("UPDATE shift_tasks SET status = 'done', completed_at = datetime('now'), updated_at = datetime('now') WHERE booking_equipment_id = ? AND status = 'pending'").run(t.booking_equipment_id);
+      req.flash('success', 'Task marked done for the whole crew.');
+    }
+  } else if (undo) {
     db.prepare("UPDATE shift_tasks SET status = 'pending', completed_at = NULL, updated_at = datetime('now') WHERE id = ?").run(taskId);
     req.flash('success', 'Task reopened.');
   } else {

@@ -14327,6 +14327,41 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 320 error:', e.message); }
   }
 
+  // 321 — hired gear on the board + automatic return-to-depot tasks.
+  // booking_equipment learns where a dragged-on item came from (a hire
+  // register unit + supplier snapshot) and whether the allocator asked
+  // for an automatic "return to depot" task. shift_tasks rows created
+  // by that automation carry booking_equipment_id — the FK doubles as
+  // the group key: one row per assignee, completing any row completes
+  // the group. The partial unique index makes re-syncs INSERT OR IGNORE
+  // safe (no duplicate row per assignee per gear item).
+  if (!isMigrationApplied.get(321)) {
+    try {
+      const beCols = db.prepare("PRAGMA table_info(booking_equipment)").all().map(c => c.name);
+      if (!beCols.includes('hire_unit_id')) {
+        db.exec("ALTER TABLE booking_equipment ADD COLUMN hire_unit_id INTEGER REFERENCES equipment_hire_units(id)");
+      }
+      if (!beCols.includes('supplier_name')) {
+        db.exec("ALTER TABLE booking_equipment ADD COLUMN supplier_name TEXT DEFAULT ''");
+      }
+      if (!beCols.includes('return_task')) {
+        db.exec("ALTER TABLE booking_equipment ADD COLUMN return_task INTEGER NOT NULL DEFAULT 0");
+      }
+      const stCols = db.prepare("PRAGMA table_info(shift_tasks)").all().map(c => c.name);
+      if (!stCols.includes('booking_equipment_id')) {
+        db.exec("ALTER TABLE shift_tasks ADD COLUMN booking_equipment_id INTEGER REFERENCES booking_equipment(id) ON DELETE SET NULL");
+      }
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_shift_tasks_beq
+          ON shift_tasks(booking_equipment_id) WHERE booking_equipment_id IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_tasks_beq_crew
+          ON shift_tasks(booking_equipment_id, crew_member_id) WHERE booking_equipment_id IS NOT NULL;
+      `);
+      recordMigration.run(321, 'hired gear on bookings (hire_unit_id/supplier) + grouped return-to-depot shift tasks');
+      console.log('Migration 321 applied');
+    } catch (e) { console.error('Migration 321 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

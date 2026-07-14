@@ -389,10 +389,10 @@
                 <% } %>
               </div>
 
-              <% if (b.crew_blocks && (b.crew_blocks.length || (b.crew_blocks.spare_vehicles || []).length || (b.crew_blocks.unassigned || []).length)) {
+              <% if (b.crew_blocks && (b.crew_blocks.length || (b.crew_blocks.spare_vehicles || []).length || (b.crew_blocks.unassigned || []).length || (b.crew_blocks.loose_gear || []).length)) {
                 // Render the expanded crew/vehicle area whenever there are
-                // blocks OR loose vehicles OR unassigned crew — so spare
-                // vehicles (booking with no TC-Crew block) still show + can be
+                // blocks OR loose vehicles OR unassigned crew OR loose gear —
+                // so spare vehicles / unhitched gear still show + can be
                 // removed, matching the Resources tab.
               %>
                 <div class="bk2-crews bk2-card-teambox" data-booking-id="<%= b.id %>">
@@ -421,9 +421,10 @@
                           <% if (blk.vehicle_slot.name && blk.vehicle_slot.registration) { %><span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8"><%= blk.vehicle_slot.registration %></span><% } %>
                         </div>
                         <% (blk.vehicle_slot.gear || []).forEach(function (g) { %>
-                          <div class="bk2-veh-gear" data-booking-id="<%= b.id %>">
+                          <div class="bk2-veh-gear" draggable="true" data-bk-gear-drag="1" data-booking-id="<%= b.id %>" data-eq-id="<%= g.id %>" data-eq-name="<%= g.name %>" data-from-vehicle-id="<%= blk.vehicle_slot.vehicle_id %>">
                             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
                             <span class="bk2-veh-gear-name"><%= g.name %></span>
+                            <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
                             <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
                           </div>
                         <% }); %>
@@ -436,6 +437,15 @@
                           <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l2-4h14l2 4M5 17h14"/></svg>
                           <span class="bk2-veh-slot-label">UTE slot · drop a vehicle here</span>
                         </div>
+                        <%# Gear hitched to a still-empty placeholder ute must stay visible. %>
+                        <% ((blk.vehicle_slot && blk.vehicle_slot.gear) || []).forEach(function (g) { %>
+                          <div class="bk2-veh-gear" draggable="true" data-bk-gear-drag="1" data-booking-id="<%= b.id %>" data-eq-id="<%= g.id %>" data-eq-name="<%= g.name %>" data-from-vehicle-id="<%= blk.vehicle_slot.vehicle_id %>">
+                            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
+                            <span class="bk2-veh-gear-name"><%= g.name %></span>
+                            <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
+                            <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
+                          </div>
+                        <% }); %>
                       <% } %>
 
                       <% blk.worker_slots.forEach(function (slot) { %>
@@ -577,13 +587,6 @@
                             <% if (v.name && v.registration) { %><span style="font-family:ui-monospace,monospace;font-size:11px;opacity:0.8"><%= v.registration %></span><% } %>
                             <button type="button" class="bk2-veh-remove" data-action="remove-vehicle" data-vehicle-id="<%= v.vehicle_id %>" title="Remove vehicle" aria-label="Remove vehicle">×</button>
                           </div>
-                          <% (v.gear || []).forEach(function (g) { %>
-                            <div class="bk2-veh-gear" data-booking-id="<%= b.id %>">
-                              <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
-                              <span class="bk2-veh-gear-name"><%= g.name %></span>
-                              <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
-                            </div>
-                          <% }); %>
                         <% } else { %>
                           <!-- Empty vehicle requirement placeholder — a drop
                                target for a matching vehicle (bk2-slot--drop-vehicle).
@@ -597,6 +600,15 @@
                             <span class="bk2-veh-slot-label"><%= (v.role || 'ute').toUpperCase().slice(0,3) %> slot · drop a vehicle here</span>
                           </div>
                         <% } %>
+                        <%# Gear rides this vehicle whether the slot is filled or still a placeholder. %>
+                        <% (v.gear || []).forEach(function (g) { %>
+                          <div class="bk2-veh-gear" draggable="true" data-bk-gear-drag="1" data-booking-id="<%= b.id %>" data-eq-id="<%= g.id %>" data-eq-name="<%= g.name %>" data-from-vehicle-id="<%= v.vehicle_id %>">
+                            <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
+                            <span class="bk2-veh-gear-name"><%= g.name %></span>
+                            <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
+                            <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
+                          </div>
+                        <% }); %>
                         <% (v.workers || []).forEach(function (slot) { %>
                           <div class="bk2-slot bk2-slot--filled bk2-slot--click<%= slot.is_driver ? ' is-driver' : '' %>"
                                draggable="true" data-bk-crew-drag="1"
@@ -620,6 +632,27 @@
                             <% if (slot.non_billable)     { %><span class="bk2-flag bk2-flag--nb"  title="Non-Billable">NB</span><% } %>
                           </div>
                         <% }); %>
+                      <% }); %>
+                    </div>
+                  <% } %>
+
+                  <!-- Loose gear: equipment on the shift but not hitched to
+                       any vehicle (incl. hired units dropped on the card).
+                       Drag a chip onto a ute to hitch it; × removes it. -->
+                  <% var _loose = (b.crew_blocks && b.crew_blocks.loose_gear) || []; %>
+                  <% if (_loose.length) { %>
+                    <div class="bk2-loosegear" data-booking-id="<%= b.id %>">
+                      <div class="bk2-spareveh-head">
+                        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                        <span>Gear</span>
+                      </div>
+                      <% _loose.forEach(function (g) { %>
+                        <div class="bk2-veh-gear bk2-veh-gear--loose" draggable="true" data-bk-gear-drag="1" data-booking-id="<%= b.id %>" data-eq-id="<%= g.id %>" data-eq-name="<%= g.name %>" data-from-vehicle-id="">
+                          <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+                          <span class="bk2-veh-gear-name"><%= g.name %></span>
+                          <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
+                          <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Remove gear" aria-label="Remove gear">×</button>
+                        </div>
                       <% }); %>
                     </div>
                   <% } %>
@@ -1313,30 +1346,9 @@
           <p class="bk2-create-reqs-summary">People: <strong id="bk2-create-pp">2</strong> · Vehicles: <strong id="bk2-create-vv">1</strong> · Equipment: <strong id="bk2-create-ee">0</strong></p>
         </div>
 
-        <!-- HIRED EQUIPMENT & SUPPLIERS — only shows rows for equipment that's
-             on the booking; mark a row "hired in" to record its supplier. -->
-        <div class="bk2-create-card" data-bk-hire-card hidden>
-          <h3 class="bk2-create-head">Hired equipment &amp; suppliers</h3>
-          <p class="bk2-create-hint">For any item hired in from another company, tick it and pick the supplier.</p>
-          <div class="bk2-hire-list">
-            <% (typeof hireableItems !== 'undefined' ? hireableItems : []).forEach(function (hi) { var hkey = hi[0], hlabel = hi[1]; %>
-              <div class="bk2-hire-row" data-hire-key="<%= hkey %>" hidden style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:6px 0;border-top:1px solid #EEF0F3;">
-                <label style="display:flex;align-items:center;gap:6px;min-width:180px;font-size:13px;">
-                  <input type="checkbox" name="hired_<%= hkey %>" value="1" class="bk2-hire-check">
-                  <span><%= hlabel %> — hired in</span>
-                </label>
-                <span class="bk2-hire-supplier" hidden style="display:flex;align-items:center;gap:6px;flex:1;min-width:200px;">
-                  <select name="supplier_id_<%= hkey %>" class="bk2-hire-supsel" style="flex:1;">
-                    <option value="">— supplier —</option>
-                    <% (typeof hireCompanies !== 'undefined' ? hireCompanies : []).forEach(function (hc) { %><option value="<%= hc.id %>"><%= hc.name %></option><% }); %>
-                    <option value="__new">+ Add new…</option>
-                  </select>
-                  <input type="text" name="supplier_name_<%= hkey %>" class="bk2-hire-supnew" placeholder="New supplier name" autocomplete="off" hidden style="flex:1;">
-                </span>
-              </div>
-            <% }); %>
-          </div>
-        </div>
+        <!-- The old "Hired equipment & suppliers" checkbox card is gone —
+             hired-ness now flows from dragging actual hired units out of the
+             Resources tab (they carry a HIRED pill + supplier on the card). -->
 
         <!-- BOOKING POOL -->
         <div class="bk2-create-card">
@@ -2297,11 +2309,8 @@
         applyReqSteppers(reqs);
 
         // Client-scoped Project dropdown: load this client's projects then
-        // select the saved one. Then apply saved hired-item suppliers (after
-        // the steppers above have revealed the relevant hire rows).
+        // select the saved one.
         try { if (window.bk2LoadProjects) window.bk2LoadProjects(b.client_id, b.job_id); } catch (e) {}
-        try { if (window.bk2RefreshHireRows) window.bk2RefreshHireRows(); } catch (e) {}
-        try { if (window.bk2ApplyHireItems) window.bk2ApplyHireItems(data.hireItems || {}); } catch (e) {}
 
         // Mobile-works legs + meeting point (added with the doc/legs feature).
         try { if (window.bk2ApplyMobileLegs) window.bk2ApplyMobileLegs(data.mobileLegs || [], data.hasMobileWorks); } catch (e) {}
@@ -2864,68 +2873,11 @@
   $$('.bk2-create-req input[type="number"]').forEach(function (i) { i.addEventListener('input', reqRepaint); });
   reqRepaint();
 
-  // ── Hired equipment + suppliers · client-scoped projects · location-context
-  //    add — all scoped to the quick-edit slide-over form (#bk2-edit-form). ──
+  // ── Client-scoped projects · location-context add — scoped to the
+  //    quick-edit slide-over form (#bk2-edit-form). (The hire-picker card
+  //    is gone; hired-ness comes from dragging hired units on.) ──
   (function () {
     var form = document.getElementById('bk2-edit-form'); if (!form) return;
-    var hireCard = form.querySelector('[data-bk-hire-card]');
-
-    // Show a hire row only when its equipment stepper qty > 0; show the card
-    // when at least one row is visible.
-    function refreshHireRows() {
-      if (!hireCard) return;
-      var anyVisible = false;
-      hireCard.querySelectorAll('.bk2-hire-row').forEach(function (row) {
-        var key = row.getAttribute('data-hire-key');
-        var inp = form.querySelector('input[name="' + key + '"]');
-        var qty = inp ? (parseInt(inp.value, 10) || 0) : 0;
-        var show = qty > 0;
-        row.hidden = !show;
-        if (show) { anyVisible = true; }
-        else {
-          var chk = row.querySelector('.bk2-hire-check'); if (chk) chk.checked = false;
-          var sup = row.querySelector('.bk2-hire-supplier'); if (sup) sup.hidden = true;
-        }
-      });
-      hireCard.hidden = !anyVisible;
-    }
-    window.bk2RefreshHireRows = refreshHireRows;
-
-    form.addEventListener('change', function (e) {
-      if (e.target.classList && e.target.classList.contains('bk2-hire-check')) {
-        var row = e.target.closest('.bk2-hire-row');
-        var sup = row && row.querySelector('.bk2-hire-supplier');
-        if (sup) sup.hidden = !e.target.checked;
-      }
-      if (e.target.classList && e.target.classList.contains('bk2-hire-supsel')) {
-        var wrap = e.target.closest('.bk2-hire-supplier');
-        var isNew = e.target.value === '__new';
-        var txt = wrap && wrap.querySelector('.bk2-hire-supnew');
-        if (txt) { txt.hidden = !isNew; if (!isNew) txt.value = ''; }
-      }
-    });
-    form.querySelectorAll('.bk2-create-stepper input[type="number"]').forEach(function (i) { i.addEventListener('input', refreshHireRows); });
-    refreshHireRows();
-
-    // Prefill saved hired items (edit mode).
-    window.bk2ApplyHireItems = function (map) {
-      refreshHireRows();
-      Object.keys(map || {}).forEach(function (key) {
-        var row = hireCard && hireCard.querySelector('.bk2-hire-row[data-hire-key="' + key + '"]');
-        if (!row) return;
-        var chk = row.querySelector('.bk2-hire-check'); if (chk) chk.checked = true;
-        var sup = row.querySelector('.bk2-hire-supplier'); if (sup) sup.hidden = false;
-        var sel = row.querySelector('.bk2-hire-supsel');
-        var rec = map[key] || {};
-        if (sel && rec.hire_company_id) {
-          sel.value = String(rec.hire_company_id);
-          if (sel.value !== String(rec.hire_company_id)) { // company deactivated → name fallback
-            sel.value = '__new';
-            var txt = row.querySelector('.bk2-hire-supnew'); if (txt) { txt.hidden = false; txt.value = rec.company_name || ''; }
-          }
-        }
-      });
-    };
 
     // ── Client-scoped Project dropdown ──
     var projSel = form.querySelector('[data-bk-project-select]');
@@ -4665,6 +4617,8 @@
     if (opts.rego)     extraAttrs += ' data-resource-rego="'     + rpEsc(opts.rego)     + '"';
     if (opts.role)     extraAttrs += ' data-resource-role="'     + rpEsc(opts.role)     + '"';
     if (opts.category) extraAttrs += ' data-resource-category="' + rpEsc(opts.category) + '"';
+    if (opts.hireUnit) extraAttrs += ' data-resource-hire-unit="' + rpEsc(opts.hireUnit) + '"'
+                                   + ' data-resource-supplier="'  + rpEsc(opts.supplier || '') + '"';
     return (
       '<li class="bk2-rp-item ' + (opts.ok ? '' : 'is-unavailable') + '"' +
           ' draggable="true"' +
@@ -4780,18 +4734,20 @@
     if (!list.length) return '<li class="bk2-rp-empty">No equipment matches.</li>';
     return list.map(function (e) {
       var sub = [e.category, e.asset_number].filter(Boolean).join(' · ');
-      var ok = rpEquipmentOkFlag(e);
+      var ok = e.hired ? true : rpEquipmentOkFlag(e);
       return rpRow({
         type: 'equipment',
         id: e.id,
         name: e.name || 'Equipment',
         icon: ICON_TRIANGLE,
-        badges: [],
+        badges: e.hired ? ['<span class="bk2-hired-pill" title="Hired' + (e.supplier ? ' from ' + rpEsc(e.supplier) : '') + '">HIRED</span>'] : [],
         ok: ok,
-        okTitle: 'Available',
+        okTitle: e.hired ? 'On hire — available' : 'Available',
         notOkTitle: e.current_condition || 'Check condition',
-        tooltip: (e.name || '') + (sub ? ' — ' + sub : ''),
+        tooltip: (e.name || '') + (sub ? ' — ' + sub : '') + (e.hired && e.supplier ? ' — hired from ' + e.supplier : ''),
         category: e.category || '',
+        hireUnit: e.hire_unit_id || '',
+        supplier: e.supplier || '',
       });
     }).join('');
   }
@@ -5086,6 +5042,23 @@
   // name into dataTransfer (multiple types so any drop target
   // can read it, and so we have a text/plain fallback).
   document.addEventListener('dragstart', function (e) {
+    // Gear chip already ON a card — dragging it re-hitches it (drop on a
+    // ute chip) or detaches it (drop on the card body).
+    var gearChip = e.target && e.target.closest && e.target.closest('[data-bk-gear-drag]');
+    if (gearChip) {
+      try {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('application/x-bk2-gear-move', JSON.stringify({
+          eqId: gearChip.getAttribute('data-eq-id'),
+          bookingId: gearChip.getAttribute('data-booking-id'),
+          fromVehicleId: gearChip.getAttribute('data-from-vehicle-id') || '',
+          name: gearChip.getAttribute('data-eq-name') || 'Gear',
+        }));
+        e.dataTransfer.setData('text/plain', gearChip.getAttribute('data-eq-name') || 'Gear');
+      } catch (err) {}
+      gearChip.classList.add('is-dragging');
+      return;
+    }
     var row = e.target && e.target.closest && e.target.closest('.bk2-rp-item');
     if (!row) return;
     var type = row.getAttribute('data-resource-type');
@@ -5100,9 +5073,12 @@
       } else if (type === 'equipment') {
         // Gear (trailer / portaboom / arrow board …). Dropping it on a
         // vehicle chip hitches it to that ute; anywhere else on the card
-        // adds it to the booking unattached.
+        // adds it to the booking unattached. Hired units carry their hire
+        // unit id + supplier so the server records the provenance.
         e.dataTransfer.setData('application/x-bk2-equip', JSON.stringify({
           id: id, name: name, category: row.getAttribute('data-resource-category') || '',
+          hire_unit_id: row.getAttribute('data-resource-hire-unit') || '',
+          supplier: row.getAttribute('data-resource-supplier') || '',
         }));
       } else {
         // Vehicle payload bundles id + source (fleet|equipment) + rego
@@ -5122,6 +5098,8 @@
   document.addEventListener('dragend', function (e) {
     var row = e.target && e.target.closest && e.target.closest('.bk2-rp-item');
     if (row) row.classList.remove('is-dragging');
+    var gearChip = e.target && e.target.closest && e.target.closest('[data-bk-gear-drag]');
+    if (gearChip) gearChip.classList.remove('is-dragging');
     // Remove any leftover drag-over highlights
     document.querySelectorAll('.bk2-slot--drop.is-drag-over, .bk2-card-teambox.is-drag-over, .bk2-restab-dropstrip.is-drag-over, .bk2-card--floating.is-drag-over').forEach(function (el) {
       el.classList.remove('is-drag-over');
@@ -5210,10 +5188,47 @@
     var personId        = '';
     var vehiclePayload  = '';
     var equipPayload    = '';
+    var gearMovePayload = '';
     try { crewMovePayload = e.dataTransfer.getData('application/x-bk2-crew-move') || ''; } catch (err) {}
     try { personId        = e.dataTransfer.getData('application/x-bk2-person')   || ''; } catch (err) {}
     try { vehiclePayload  = e.dataTransfer.getData('application/x-bk2-vehicle')  || ''; } catch (err) {}
     try { equipPayload    = e.dataTransfer.getData('application/x-bk2-equip')    || ''; } catch (err) {}
+    try { gearMovePayload = e.dataTransfer.getData('application/x-bk2-gear-move') || ''; } catch (err) {}
+
+    // ── GEAR MOVE (chip already on a card) ──
+    // Onto a vehicle chip of the SAME booking → hitch to that ute; onto the
+    // card body → detach (back to the loose Gear strip). Cross-booking
+    // drops are ignored — remove + re-add is the explicit way to move gear
+    // between shifts.
+    if (gearMovePayload) {
+      var gmv; try { gmv = JSON.parse(gearMovePayload); } catch (err) { return; }
+      if (!gmv || !gmv.eqId || !gmv.bookingId) return;
+      var gmVehChip = e.target.closest && e.target.closest('.bk2-slot--drop-veh-assign[data-vehicle-id]');
+      var gmHost = gmVehChip ||
+        (e.target.closest && (e.target.closest('.bk2-card-teambox') ||
+                              e.target.closest('.bk2-card[data-booking-id]') ||
+                              e.target.closest('.bk2-card--floating[data-booking-id]')));
+      if (!gmHost) return;
+      var gmBookingEl = gmHost.closest('[data-booking-id]') || gmHost;
+      if (String(gmBookingEl.getAttribute('data-booking-id')) !== String(gmv.bookingId)) return;
+      e.preventDefault(); e.stopPropagation();
+      document.querySelectorAll('.is-drag-over').forEach(function (el) { el.classList.remove('is-drag-over'); });
+      var gmTargetVehicle = gmVehChip ? (gmVehChip.getAttribute('data-vehicle-id') || '') : '';
+      if (String(gmTargetVehicle) === String(gmv.fromVehicleId || '')) return; // no-op drop
+      var gmBody = new URLSearchParams();
+      gmBody.append('vehicle_id', gmTargetVehicle);
+      if (CSRF_TOKEN) gmBody.append('_csrf', CSRF_TOKEN);
+      fetch('/bookings/' + encodeURIComponent(gmv.bookingId) + '/equipment/' + encodeURIComponent(gmv.eqId) + '/attach', {
+        method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': CSRF_TOKEN || '' },
+        body: gmBody, credentials: 'same-origin',
+      }).then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function (j) {
+          if (!j || j.ok === false) throw new Error((j && j.error) || 'failed');
+          if (typeof bk2Toast === 'function') bk2Toast((gmv.name || 'Gear') + (gmTargetVehicle ? ' hitched to the vehicle.' : ' detached.'), 'success');
+          bk2RefreshCard(gmv.bookingId);
+        }).catch(function () { if (typeof bk2Toast === 'function') bk2Toast('Could not move the gear.', 'error'); });
+      return;
+    }
 
     // ── EQUIPMENT DROP (gear from the panel) ──
     // On a vehicle chip → hitch it to that ute (trailer / portaboom).
@@ -5647,7 +5662,8 @@
   // vehicleId is given (drop landed on a ute chip), else booking-level.
   function bk2AddEquipmentToBooking(bookingId, eqp, vehicleId) {
     var body = new URLSearchParams();
-    body.append('equipment_id', eqp.id);
+    if (eqp.hire_unit_id) body.append('hire_unit_id', eqp.hire_unit_id);
+    else body.append('equipment_id', eqp.id);
     if (vehicleId) body.append('attached_vehicle_id', vehicleId);
     if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
     fetch('/bookings/' + encodeURIComponent(bookingId) + '/equipment', {
@@ -5659,7 +5675,67 @@
         if (typeof bk2Toast === 'function') bk2Toast((eqp.name || 'Gear') + (vehicleId ? ' hitched to the vehicle.' : ' added to the shift.'), 'success');
         bk2RefreshCard(bookingId);
         try { document.dispatchEvent(new CustomEvent('bk2:alloc-changed')); } catch (err) {}
+        // Offer the automatic return-to-depot task — drag-adds only, never
+        // requirement steppers.
+        if (j.id) bk2ReturnTaskPrompt(bookingId, j.id, eqp.name || 'this equipment');
       }).catch(function () { if (typeof bk2Toast === 'function') bk2Toast('Could not add the gear.', 'error'); });
+  }
+
+  // Yes/No modal after gear lands on a shift: create the automatic
+  // "return to depot" task? Yes → the server assigns it to the ute's
+  // driver (hitched) or the whole crew (loose) and keeps it in sync.
+  function bk2ReturnTaskPrompt(bookingId, eqId, eqName) {
+    var backdrop = document.createElement('div');
+    backdrop.className = 'bk2-pop-backdrop';
+    var pop = document.createElement('div');
+    pop.className = 'bk2-pop bk2-pop--center';
+    pop.setAttribute('role', 'dialog');
+    pop.innerHTML =
+      '<div class="bk2-pop-head"><span class="bk2-pop-title">Return to depot</span></div>' +
+      '<p class="bk2-pop-text">Create an automatic task for the crew to return <strong></strong> to the depot after the shift?</p>' +
+      '<div class="bk2-pop-confirm-row">' +
+        '<button type="button" class="bk2-pop-btn bk2-pop-btn--yes" data-rt="yes">Yes, create task</button>' +
+        '<button type="button" class="bk2-pop-btn" data-rt="no">No thanks</button>' +
+      '</div>';
+    pop.querySelector('strong').textContent = eqName;
+    document.body.appendChild(backdrop);
+    document.body.appendChild(pop);
+    requestAnimationFrame(function () { backdrop.classList.add('is-open'); pop.classList.add('is-open'); });
+    function close() {
+      backdrop.classList.remove('is-open'); pop.classList.remove('is-open');
+      document.removeEventListener('keydown', onKey, true);
+      setTimeout(function () {
+        if (backdrop.parentNode) backdrop.parentNode.removeChild(backdrop);
+        if (pop.parentNode) pop.parentNode.removeChild(pop);
+      }, 220);
+    }
+    function onKey(ev) { if (ev.key === 'Escape') { ev.stopPropagation(); close(); } }
+    document.addEventListener('keydown', onKey, true);
+    backdrop.addEventListener('click', close);
+    pop.addEventListener('click', function (ev) {
+      var btn = ev.target.closest && ev.target.closest('[data-rt]');
+      if (!btn) return;
+      if (btn.getAttribute('data-rt') === 'no') { close(); return; }
+      btn.disabled = true;
+      var body = new URLSearchParams();
+      if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
+      fetch('/bookings/' + encodeURIComponent(bookingId) + '/equipment/' + encodeURIComponent(eqId) + '/return-task', {
+        method: 'POST', headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': CSRF_TOKEN || '' },
+        body: body, credentials: 'same-origin',
+      }).then(function (r) { return r.json().catch(function () { return {}; }); })
+        .then(function (j) {
+          if (!j || j.ok === false) throw new Error((j && j.error) || 'failed');
+          if (typeof bk2Toast === 'function') {
+            bk2Toast(j.mode === 'driver'
+              ? 'Return task assigned to the driver.'
+              : 'Return task assigned to the whole crew — first to finish ticks it off for everyone.', 'success');
+          }
+          close();
+        }).catch(function () {
+          if (typeof bk2Toast === 'function') bk2Toast('Could not create the return task.', 'error');
+          btn.disabled = false;
+        });
+    });
   }
 
   // ==========================================================
