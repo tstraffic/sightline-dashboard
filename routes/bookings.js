@@ -755,6 +755,7 @@ const EQUIP_CATEGORY_TO_REQ = {
   vms: 'VMS Board',
   lighting: 'Light Tower',
   vehicle: 'Traffic Ute',
+  trailer: 'Trailer',
 };
 // Best-effort mapping of an added equipment item → a requirement label: an
 // exact name match against a known requirement label wins, else its category,
@@ -1212,6 +1213,7 @@ const QUICK_ADDONS = [
   { key: 'vms_board',         label: 'VMS Board',           category: 'vms' },
   { key: 'speed_advisory',    label: 'Speed Advisory Sign', category: 'sign' },
   { key: 'light_tower',       label: 'Light Tower',         category: 'lighting' },
+  { key: 'trailer',           label: 'Trailer',             category: 'trailer' },
   { key: 'pod_truck',         label: 'Pod Truck',           category: 'vehicle' },
   { key: 'tma',               label: 'TMA',                 category: 'vehicle' },
 ];
@@ -1243,6 +1245,7 @@ const QUICK_REQ_FIELDS = [
   ['addon_tmp_tm', 'TMP with Traffic Management'],
   ['addon_tc', 'Traffic Controller'],
   ['addon_tgs', 'Traffic Guidance Scheme'],
+  ['addon_trailer', 'Trailer'],
   ['addon_trainee', 'Trainee'],
   ['addon_vms_board', 'VMS Board'],
   ['addon_vms_ute', 'VMS Ute'],
@@ -1265,6 +1268,7 @@ const HIREABLE_ITEMS = [
   ['addon_speed_advisory', 'Speed Advisory Sign'],
   ['addon_tma_dry', 'TMA (dry hire)'],
   ['addon_tma_wet', 'TMA (wet hire)'],
+  ['addon_trailer', 'Trailer'],
   ['addon_vms_board', 'VMS Board'],
   ['addon_vms_ute', 'VMS Ute'],
   ['addon_vehicle', 'Traffic Ute'],
