@@ -11,25 +11,25 @@
 
 <!-- Stat Cards -->
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Active</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= stats.active %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Active</p>
+    <p class="stat-card-value <%= stats.active > 0 ? '' : 'is-muted' %>"><%= stats.active %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">On Hold</p>
-    <p class="text-xl font-bold <%= stats.onHold > 0 ? 'text-amber-600' : 'text-gray-900' %> mt-0.5"><%= stats.onHold %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">On Hold</p>
+    <p class="stat-card-value <%= stats.onHold > 0 ? 'is-warn' : 'is-muted' %>"><%= stats.onHold %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pipeline</p>
-    <p class="text-xl font-bold text-brand-600 mt-0.5"><%= stats.tender %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Pipeline</p>
+    <p class="stat-card-value <%= stats.tender > 0 ? 'is-info' : 'is-muted' %>"><%= stats.tender %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Overdue</p>
-    <p class="text-xl font-bold <%= stats.overdue > 0 ? 'text-red-600' : 'text-gray-900' %> mt-0.5"><%= stats.overdue %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Overdue</p>
+    <p class="stat-card-value <%= stats.overdue > 0 ? 'is-critical' : 'is-muted' %>"><%= stats.overdue %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 hidden sm:block">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Health Red</p>
-    <p class="text-xl font-bold <%= stats.healthRed > 0 ? 'text-red-600' : 'text-gray-900' %> mt-0.5"><%= stats.healthRed %></p>
+  <div class="stat-card sm-only">
+    <p class="stat-card-label">Health Red</p>
+    <p class="stat-card-value <%= stats.healthRed > 0 ? 'is-critical' : 'is-muted' %>"><%= stats.healthRed %></p>
   </div>
 </div>
 

@@ -151,3 +151,111 @@ body.dark-glass ::selection { background: rgba(16, 185, 129, 0.25); }
 @media (prefers-reduced-motion: reduce) {
   body.dark-glass button:not(:disabled):active { transform: none; }
 }
+
+/* ───────────────────────────────────────────────────────────
+   9. STAT CARD — one summary-metric card for every register
+   Before this, Jobs, Compliance (and others) each hand-rolled
+   their own KPI card: different radius (xl vs lg), alignment
+   (left vs centre), label styling and number order. This is the
+   single canonical component — label on top, big display number
+   below, left-aligned, one radius, one hover. Tone modifiers
+   colour the number only, so a zero reads quiet and a problem
+   reads hot. Styled for both themes (app is dark-first).
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass .stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: #1A1D24;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+body.dark-glass a.stat-card:hover { border-color: rgba(255, 255, 255, 0.18); }
+body.dark-glass a.stat-card:active { transform: translateY(0.5px); }
+body.dark-glass .stat-card-label {
+  /* Geist Mono = the app's utility voice (login labels, KPI tiles,
+     table headers). Sans-bold here read as a different product. */
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: #8B8E95;
+}
+body.dark-glass .stat-card-value {
+  /* margin-top:auto bottom-anchors the number, so a two-line label
+     ("Ready for Invoice") can't push it off the row's shared baseline. */
+  margin-top: auto;
+  font-family: "Bricolage Grotesque", "Geist", system-ui, sans-serif;
+  font-size: 1.6rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  line-height: 1;
+  color: #F5F5F7;
+  font-variant-numeric: tabular-nums;
+}
+body.dark-glass .stat-card-sub {
+  font-size: 11px;
+  line-height: 1;
+  color: #8B8E95;
+  font-variant-numeric: tabular-nums;
+}
+/* Desktop-only card (replaces Tailwind's `hidden sm:block`, which this
+   component's flex display would out-specify). */
+@media (max-width: 639px) {
+  body.dark-glass .stat-card.sm-only { display: none; }
+}
+/* Number tones — colour the value, not the card. */
+body.dark-glass .stat-card-value.is-good     { color: #34D399; }
+body.dark-glass .stat-card-value.is-info     { color: #60A5FA; }
+body.dark-glass .stat-card-value.is-warn     { color: #FBBF24; }
+body.dark-glass .stat-card-value.is-critical { color: #F87171; }
+body.dark-glass .stat-card-value.is-muted    { color: #5A5D64; }
+/* Actionable accent cards (e.g. "Ready for Invoice") — tint the border. */
+body.dark-glass .stat-card.accent-amber   { border-color: rgba(251, 191, 36, 0.30); }
+body.dark-glass a.stat-card.accent-amber:hover   { border-color: rgba(251, 191, 36, 0.55); background: rgba(251, 191, 36, 0.06); }
+body.dark-glass .stat-card.accent-emerald { border-color: rgba(52, 211, 153, 0.30); }
+body.dark-glass a.stat-card.accent-emerald:hover { border-color: rgba(52, 211, 153, 0.55); background: rgba(52, 211, 153, 0.06); }
+
+/* Light theme */
+:root[data-theme="light"] body.dark-glass .stat-card {
+  background: #fff;
+  border-color: #E5E7EB;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+:root[data-theme="light"] body.dark-glass a.stat-card:hover {
+  border-color: #D1D5DB;
+  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.07);
+}
+:root[data-theme="light"] body.dark-glass .stat-card-label { color: #6B7280; }
+:root[data-theme="light"] body.dark-glass .stat-card-value { color: #111827; }
+:root[data-theme="light"] body.dark-glass .stat-card-sub   { color: #6B7280; }
+:root[data-theme="light"] body.dark-glass .stat-card-value.is-good     { color: #059669; }
+:root[data-theme="light"] body.dark-glass .stat-card-value.is-info     { color: #1D6AE5; }
+:root[data-theme="light"] body.dark-glass .stat-card-value.is-warn     { color: #D97706; }
+:root[data-theme="light"] body.dark-glass .stat-card-value.is-critical { color: #DC2626; }
+:root[data-theme="light"] body.dark-glass .stat-card-value.is-muted    { color: #9CA3AF; }
+:root[data-theme="light"] body.dark-glass .stat-card.accent-amber   { border-color: #FDE68A; background: #FFFDF7; }
+:root[data-theme="light"] body.dark-glass a.stat-card.accent-amber:hover   { border-color: #FCD34D; background: #FFFBEB; }
+:root[data-theme="light"] body.dark-glass .stat-card.accent-emerald { border-color: #A7F3D0; background: #F7FEFB; }
+:root[data-theme="light"] body.dark-glass a.stat-card.accent-emerald:hover { border-color: #6EE7B7; background: #ECFDF5; }
+
+/* ───────────────────────────────────────────────────────────
+   10. KPI GRID — balanced rows on the Today dashboard
+   Column count comes from the template via --kpi-cols, computed
+   from the tile count so the last row never orphans (10 → 5+5,
+   8 → 4+4). Below desktop the counts are fixed and safe.
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass .kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (min-width: 640px) {
+  body.dark-glass .kpi-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1280px) {
+  body.dark-glass .kpi-grid { grid-template-columns: repeat(var(--kpi-cols, 5), minmax(0, 1fr)); }
+}

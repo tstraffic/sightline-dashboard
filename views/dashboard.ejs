@@ -151,8 +151,11 @@
   tiles.push({ link: '/timesheets?approved=0',          value: kpi.pendingTimesheets,     label: 'Pending Timesheets',level: 'warn' });
   tiles.push({ link: '/hr/roster',                      value: kpi.ticketsExpiring,       label: 'Expiring Tickets',  level: 'warn' });
   tiles.push({ link: '/allocations',                    value: kpi.unconfirmedAllocations, label: 'Unconfirmed',      level: 'info' });
+  // Balance the tile rows at desktop: 10 tiles → 5+5, 8 → 4+4, 7 → 4+3.
+  // A fixed xl:grid-cols-7 left a lopsided 7+3 orphan row for ops users.
+  const kpiCols = tiles.length <= 5 ? Math.max(tiles.length, 3) : Math.ceil(tiles.length / Math.ceil(tiles.length / 5));
 %>
-<div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2 mb-6 stagger-children">
+<div class="kpi-grid gap-2 mb-6 stagger-children" style="--kpi-cols: <%= kpiCols %>">
   <% tiles.forEach(function(t) {
     const c = tileClasses(t.value, t.level);
   %>

@@ -74,40 +74,38 @@
 
   <!-- Summary Cards -->
   <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">
-    <div class="bg-white border border-gray-200 rounded-lg p-3 text-center">
-      <div class="text-xl font-bold text-gray-900"><%= summary.total %></div>
-      <div class="text-xs text-gray-500 mt-0.5">Total</div>
+    <div class="stat-card">
+      <div class="stat-card-label">Total</div>
+      <div class="stat-card-value"><%= summary.total %></div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-lg p-3 text-center">
-      <div class="text-xl font-bold text-emerald-600"><%= summary.approved %></div>
-      <div class="text-xs text-gray-500 mt-0.5">Approved</div>
+    <div class="stat-card">
+      <div class="stat-card-label">Approved</div>
+      <div class="stat-card-value <%= summary.approved > 0 ? 'is-good' : 'is-muted' %>"><%= summary.approved %></div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-lg p-3 text-center">
-      <div class="text-xl font-bold text-blue-600"><%= summary.pending %></div>
-      <div class="text-xs text-gray-500 mt-0.5">Pending</div>
+    <div class="stat-card">
+      <div class="stat-card-label">Pending</div>
+      <div class="stat-card-value <%= summary.pending > 0 ? 'is-info' : 'is-muted' %>"><%= summary.pending %></div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-lg p-3 text-center">
-      <div class="text-xl font-bold text-red-600"><%= summary.overdue %></div>
-      <div class="text-xs text-gray-500 mt-0.5">Overdue</div>
+    <div class="stat-card">
+      <div class="stat-card-label">Overdue</div>
+      <div class="stat-card-value <%= summary.overdue > 0 ? 'is-critical' : 'is-muted' %>"><%= summary.overdue %></div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-lg p-3 text-center">
-      <div class="text-xl font-bold text-amber-600"><%= summary.expiringSoon %></div>
-      <div class="text-xs text-gray-500 mt-0.5">Expiring Soon</div>
+    <div class="stat-card">
+      <div class="stat-card-label">Expiring Soon</div>
+      <div class="stat-card-value <%= summary.expiringSoon > 0 ? 'is-warn' : 'is-muted' %>"><%= summary.expiringSoon %></div>
     </div>
-    <a href="<%= buildUrl({ invoice_state: 'ready', view: filters.view, ref: filters.ref }) %>"
-      class="bg-white border border-amber-200 rounded-lg p-3 text-center hover:bg-amber-50 transition cursor-pointer ring-1 ring-amber-100">
-      <div class="text-xl font-bold text-amber-700"><%= summary.readyForInvoice %></div>
-      <div class="text-xs text-amber-700/80 mt-0.5 font-medium">Ready for Invoice</div>
+    <a href="<%= buildUrl({ invoice_state: 'ready', view: filters.view, ref: filters.ref }) %>" class="stat-card accent-amber">
+      <div class="stat-card-label">Ready for Invoice</div>
+      <div class="stat-card-value <%= summary.readyForInvoice > 0 ? 'is-warn' : 'is-muted' %>"><%= summary.readyForInvoice %></div>
       <% if (summary.readyForInvoiceValue > 0) { %>
-        <div class="text-[10px] text-amber-600/70 tabular-nums mt-0.5">$<%= summary.readyForInvoiceValue.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) %></div>
+        <div class="stat-card-sub">$<%= summary.readyForInvoiceValue.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) %></div>
       <% } %>
     </a>
-    <a href="<%= buildUrl({ invoice_state: 'invoiced', view: filters.view, ref: filters.ref }) %>"
-      class="bg-white border border-emerald-200 rounded-lg p-3 text-center hover:bg-emerald-50 transition cursor-pointer ring-1 ring-emerald-100">
-      <div class="text-xl font-bold text-emerald-700"><%= summary.invoicedLast30 %></div>
-      <div class="text-xs text-emerald-700/80 mt-0.5 font-medium">Invoiced (30d)</div>
+    <a href="<%= buildUrl({ invoice_state: 'invoiced', view: filters.view, ref: filters.ref }) %>" class="stat-card accent-emerald">
+      <div class="stat-card-label">Invoiced (30d)</div>
+      <div class="stat-card-value <%= summary.invoicedLast30 > 0 ? 'is-good' : 'is-muted' %>"><%= summary.invoicedLast30 %></div>
       <% if (summary.invoicedLast30Value > 0) { %>
-        <div class="text-[10px] text-emerald-600/70 tabular-nums mt-0.5">$<%= summary.invoicedLast30Value.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) %></div>
+        <div class="stat-card-sub">$<%= summary.invoicedLast30Value.toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }) %></div>
       <% } %>
     </a>
   </div>
