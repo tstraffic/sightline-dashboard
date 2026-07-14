@@ -2717,7 +2717,17 @@ router.post('/:id/crew/:crewId/remove', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const removed = db.prepare("DELETE FROM booking_crew WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
-  db.prepare("DELETE FROM crew_allocations WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  // Drop the worker-portal allocation too. When history hangs off it
+  // (safety_forms / dockets / checklist responses reference allocation_id,
+  // most without ON DELETE CASCADE) the DELETE throws an FK error — cancel
+  // the allocation instead, which hides the shift from the worker portal
+  // while keeping their signed history intact. Previously this 500'd and
+  // left the allocation live after booking_crew was already deleted.
+  try {
+    db.prepare("DELETE FROM crew_allocations WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  } catch (e) {
+    db.prepare("UPDATE crew_allocations SET status='cancelled' WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  }
   // Also clear them as driver on any vehicles on this booking
   db.prepare("UPDATE booking_vehicles SET crew_member_id = NULL WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
   if (removed.changes > 0) {
