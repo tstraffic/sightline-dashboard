@@ -5,7 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const bcrypt = require('bcryptjs');
 const { getDb } = require('../db/database');
-const { requirePermission, canViewSensitiveHR } = require('../middleware/auth');
+const { requirePermission, canViewSensitiveHR, canAccess } = require('../middleware/auth');
 const { logActivity } = require('../middleware/audit');
 const { createInvitation, TOKEN_EXPIRY_HOURS } = require('../services/invitations');
 const { createEmployeeReview } = require('../lib/reviews');
@@ -184,7 +184,21 @@ router.get('/', requirePermission('hr_dashboard'), (req, res) => {
 // ============================================
 // ROSTER (new employees list — replaces /employees view)
 // ============================================
-router.get('/roster', requirePermission('hr_employees'), (req, res) => {
+// Roster is THE single listing of everyone (the old /crew "Workforce" page
+// now redirects here). Viewing is open to crew-permission holders too —
+// operations could always see the workforce list, and the sidebar already
+// shows them the Roster link. Export + bulk actions stay hr_employees-only.
+function requireRosterView(req, res, next) {
+  if (!req.session || !req.session.user) return res.redirect('/login');
+  const u = req.session.user;
+  if (canAccess(u, 'hr_employees') || canAccess(u, 'crew')) return next();
+  return res.status(403).render('error', {
+    title: 'Access Denied',
+    message: 'You do not have permission to access this resource.',
+    user: u,
+  });
+}
+router.get('/roster', requireRosterView, (req, res) => {
   const db = getDb();
   const { employment_type, status, level, search, sort, order, payment_type, view, induction } = req.query;
   const showDeleted = view === 'deleted';

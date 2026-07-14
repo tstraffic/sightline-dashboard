@@ -85,7 +85,7 @@ router.get('/', (req, res) => {
   if (urgency.openIncidents > 0) actionItems.push({ icon: 'alert', color: 'red', text: `${urgency.openIncidents} open incident${urgency.openIncidents !== 1 ? 's' : ''}`, link: '/incidents' });
   if (urgency.missingUpdates > 0) actionItems.push({ icon: 'update', color: 'orange', text: `${urgency.missingUpdates} job${urgency.missingUpdates !== 1 ? 's' : ''} missing weekly update`, link: '/jobs?status=active' });
   if (urgency.unconfirmedAllocations > 0) actionItems.push({ icon: 'crew', color: 'orange', text: `${urgency.unconfirmedAllocations} unconfirmed allocation${urgency.unconfirmedAllocations !== 1 ? 's' : ''} today`, link: '/allocations' });
-  if (urgency.ticketsExpiring > 0) actionItems.push({ icon: 'ticket', color: 'orange', text: `${urgency.ticketsExpiring} crew ticket${urgency.ticketsExpiring !== 1 ? 's' : ''} expiring soon`, link: '/crew' });
+  if (urgency.ticketsExpiring > 0) actionItems.push({ icon: 'ticket', color: 'orange', text: `${urgency.ticketsExpiring} crew ticket${urgency.ticketsExpiring !== 1 ? 's' : ''} expiring soon`, link: '/hr/roster' });
   if (urgency.pendingTimesheets > 0) actionItems.push({ icon: 'clock', color: 'orange', text: `${urgency.pendingTimesheets} pending timesheet${urgency.pendingTimesheets !== 1 ? 's' : ''}`, link: '/timesheets?approved=0' });
   if (urgency.crewGaps > 0) actionItems.push({ icon: 'crew', color: 'red', text: `${urgency.crewGaps} crew gap${urgency.crewGaps !== 1 ? 's' : ''} today`, link: '/allocations' });
 

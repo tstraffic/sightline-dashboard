@@ -149,7 +149,7 @@
   tiles.push({ link: '/compliance',                     value: kpi.overdueCompliance,     label: 'Overdue Plans',     level: 'critical' });
   tiles.push({ link: '/allocations',                    value: kpi.crewGaps,              label: 'Crew Gaps',         level: 'critical' });
   tiles.push({ link: '/timesheets?approved=0',          value: kpi.pendingTimesheets,     label: 'Pending Timesheets',level: 'warn' });
-  tiles.push({ link: '/crew',                           value: kpi.ticketsExpiring,       label: 'Expiring Tickets',  level: 'warn' });
+  tiles.push({ link: '/hr/roster',                      value: kpi.ticketsExpiring,       label: 'Expiring Tickets',  level: 'warn' });
   tiles.push({ link: '/allocations',                    value: kpi.unconfirmedAllocations, label: 'Unconfirmed',      level: 'info' });
 %>
 <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-7 gap-2 mb-6 stagger-children">

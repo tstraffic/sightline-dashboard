@@ -13,153 +13,12 @@ const {
   getBatchFatigue,
 } = require('../middleware/compliance');
 
-// GET / — Workforce Roster
+// GET / — the Workforce listing is retired: the Roster tab (/hr/roster) is
+// the single place that lists every employee and links to their profiles.
+// Individual worker profiles (/crew/:id) remain for deep links (booking board
+// "Profile", HR employee pages, vehicle audits, …).
 router.get('/', (req, res) => {
-  const db = getDb();
-  const today = new Date().toISOString().split('T')[0];
-  const filter = req.query.filter || 'all'; // all | active | blocked | fatigued | expiring
-  const roleFilter = req.query.role || '';
-  const search = (req.query.search || '').trim().toLowerCase();
-
-  // Fetch all crew (active + inactive)
-  let crew = db.prepare(`
-    SELECT * FROM crew_members ORDER BY active DESC, full_name ASC
-  `).all();
-
-  // Batch: active allocation counts per crew member (today or future, not cancelled)
-  const allocCountRows = db.prepare(`
-    SELECT crew_member_id, COUNT(*) as cnt
-    FROM crew_allocations
-    WHERE allocation_date >= ? AND status != 'cancelled'
-    GROUP BY crew_member_id
-  `).all(today);
-  const allocCountMap = {};
-  allocCountRows.forEach(r => { allocCountMap[r.crew_member_id] = r.cnt; });
-
-  // Batch: last worked date per crew member (from timesheets)
-  const lastWorkedRows = db.prepare(`
-    SELECT crew_member_id, MAX(work_date) as last_worked
-    FROM timesheets
-    GROUP BY crew_member_id
-  `).all();
-  const lastWorkedMap = {};
-  lastWorkedRows.forEach(r => { lastWorkedMap[r.crew_member_id] = r.last_worked; });
-
-  // Batch fatigue lookup for performance
-  const fatigueMap = getBatchFatigue(today);
-
-  // Compute nearest expiry from all date fields
-  function getNearestExpiry(m) {
-    const fields = [
-      { label: 'Licence', date: m.licence_expiry },
-      { label: 'White Card', date: m.white_card_expiry },
-      { label: 'Medical', date: m.medical_expiry },
-      { label: 'TC Ticket', date: m.tc_ticket_expiry },
-      { label: 'TI Ticket', date: m.ti_ticket_expiry },
-      { label: 'First Aid', date: m.first_aid_expiry },
-    ];
-    let nearest = null;
-    for (const f of fields) {
-      if (f.date && (!nearest || f.date < nearest.date)) {
-        nearest = { label: f.label, date: f.date };
-      }
-    }
-    return nearest;
-  }
-
-  // Compute compliance status for each + enrich with extra data.
-  // A crew member is "pending onboarding" if they have no PIN set (so
-  // they can't log into the worker portal yet) OR if their employee_id
-  // still carries the VOC-PENDING-* placeholder we drop in when the
-  // Quick Cert flow auto-creates a row for an unknown name. HR uses
-  // this to find rows that need finishing.
-  const crewWithStatus = crew.map(m => {
-    const nearestExpiry = getNearestExpiry(m);
-    const pendingOnboarding = m.active && (
-      !m.pin_hash ||
-      (m.employee_id && /^VOC-PENDING-/.test(m.employee_id))
-    );
-    return {
-      ...m,
-      compliance: getComplianceStatusBatch(m, fatigueMap, today),
-      activeJobs: allocCountMap[m.id] || 0,
-      lastWorked: lastWorkedMap[m.id] || null,
-      nearestExpiry,
-      pendingOnboarding,
-      // Specific quick-cert flag — useful for a tighter sub-filter and
-      // for showing a distinct chip in the view.
-      vocQuickCreated: !!(m.employee_id && /^VOC-PENDING-/.test(m.employee_id)),
-    };
-  });
-
-  // 30-day expiry window for "expiring" filter
-  const thirtyDaysOut = new Date();
-  thirtyDaysOut.setDate(thirtyDaysOut.getDate() + 30);
-  const expiryThreshold = thirtyDaysOut.toISOString().split('T')[0];
-
-  // Apply filters
-  let filtered = crewWithStatus;
-  if (filter === 'active') {
-    filtered = filtered.filter(c => c.active);
-  } else if (filter === 'blocked') {
-    filtered = filtered.filter(c => c.active && !c.compliance.canAllocate);
-  } else if (filter === 'fatigued') {
-    filtered = filtered.filter(c => c.compliance.fatigueBlocked);
-  } else if (filter === 'expiring') {
-    filtered = filtered.filter(c => c.active && c.nearestExpiry && c.nearestExpiry.date <= expiryThreshold);
-  } else if (filter === 'pending_onboarding') {
-    filtered = filtered.filter(c => c.pendingOnboarding);
-  }
-
-  // Apply role filter
-  if (roleFilter) {
-    filtered = filtered.filter(c => c.role === roleFilter);
-  }
-
-  // Apply search
-  if (search) {
-    filtered = filtered.filter(c =>
-      c.full_name.toLowerCase().includes(search) ||
-      (c.employee_id || '').toLowerCase().includes(search) ||
-      (c.role || '').toLowerCase().includes(search) ||
-      (c.company || '').toLowerCase().includes(search)
-    );
-  }
-
-  // Sorting
-  const allowedSorts = ['full_name', 'employee_id', 'role', 'licence_expiry'];
-  const sort = allowedSorts.includes(req.query.sort) ? req.query.sort : 'full_name';
-  const order = req.query.order === 'desc' ? 'desc' : 'asc';
-  filtered.sort((a, b) => {
-    let valA = a[sort] || '';
-    let valB = b[sort] || '';
-    if (typeof valA === 'string') valA = valA.toLowerCase();
-    if (typeof valB === 'string') valB = valB.toLowerCase();
-    if (valA < valB) return order === 'asc' ? -1 : 1;
-    if (valA > valB) return order === 'asc' ? 1 : -1;
-    return 0;
-  });
-
-  // Stats
-  const totalActive = crewWithStatus.filter(c => c.active).length;
-  const allocatable = crewWithStatus.filter(c => c.active && c.compliance.canAllocate).length;
-  const complianceIssues = crewWithStatus.filter(c => c.active && (!c.compliance.allTicketsValid || !c.compliance.licenceValid || !c.compliance.inductionComplete)).length;
-  const fatigueBlocked = crewWithStatus.filter(c => c.compliance.fatigueBlocked).length;
-  const expiringSoon = crewWithStatus.filter(c => c.active && c.nearestExpiry && c.nearestExpiry.date <= expiryThreshold).length;
-  const pendingOnboardingCount = crewWithStatus.filter(c => c.pendingOnboarding).length;
-
-  res.render('crew/index', {
-    title: 'Workforce',
-    currentPage: 'crew',
-    crew: filtered,
-    filter,
-    roleFilter,
-    search: req.query.search || '',
-    stats: { totalActive, allocatable, complianceIssues, fatigueBlocked, expiringSoon, pendingOnboardingCount },
-    today,
-    sort,
-    order,
-  });
+  res.redirect('/hr/roster');
 });
 
 // GET /new — Add Crew Member form
@@ -412,10 +271,11 @@ router.get('/:id', (req, res) => {
   // HR employee profile) instead of always the Workforce list. Internal paths
   // only (must start with a single "/") to avoid open-redirects.
   const rawFrom = (req.query.from || '').toString();
-  const backUrl = /^\/[^/]/.test(rawFrom) ? rawFrom : '/crew';
-  const backLabel = backUrl === '/crew' ? 'Crew Roster'
+  // Default back target is the Roster tab — the single listing of everyone.
+  const backUrl = /^\/[^/]/.test(rawFrom) ? rawFrom : '/hr/roster';
+  const backLabel = backUrl.startsWith('/hr/roster') ? 'Roster'
     : (backUrl.startsWith('/hr/employees') ? 'Employee Profile'
-    : (backUrl.startsWith('/hr/roster') ? 'Roster' : 'Back'));
+    : (backUrl.startsWith('/bookings') ? 'Bookings' : 'Back'));
 
   res.render('crew/show', {
     title: member.full_name + ' — Worker Profile',
