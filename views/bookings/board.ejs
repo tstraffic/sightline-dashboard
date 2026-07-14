@@ -5713,7 +5713,17 @@
       var action = btn.getAttribute('data-pop-action');
       if (action === 'close') { closePopover(); return; }
       if (action === 'profile') {
-        if (crewMemberId) window.location.href = '/crew/' + encodeURIComponent(crewMemberId);
+        // Open the worker's profile in a NEW tab so the planner keeps their
+        // place on the board (the editor + glowing panel stay put). Navigating
+        // the board's own tab to the profile meant that going back landed on
+        // the Workforce roster instead of the shift. `from` also points the
+        // profile's own Back link at the board rather than Workforce.
+        if (crewMemberId) {
+          var profUrl = '/crew/' + encodeURIComponent(crewMemberId) +
+            '?from=' + encodeURIComponent(location.pathname + location.search);
+          window.open(profUrl, '_blank', 'noopener');
+        }
+        closePopover();
         return;
       }
       if (action === 'takeoff') {
