@@ -2023,6 +2023,36 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-pop-remove:hover { background: #FECACA; }
 :root[data-theme="dark"] .bk2-pop-remove { background: rgba(220,38,38,0.18); color: #FCA5A5; }
 :root[data-theme="dark"] .bk2-pop-remove:hover { background: rgba(220,38,38,0.30); color: #fff; }
+/* Inline confirm strip — replaces the native confirm() dialog when the
+   planner presses "Remove from shift". Red framed card with a solid
+   destructive Yes and a neutral Keep, fading in where the button was. */
+.bk2-pop-confirm {
+  display: grid; gap: 10px;
+  padding: 12px;
+  background: #FEF2F2;
+  border: 1px solid #FECACA;
+  border-radius: 10px;
+  animation: bk2Fade 0.15s ease-out;
+}
+.bk2-pop-confirm-msg { font-size: 13px; font-weight: 600; color: #991B1B; line-height: 1.35; }
+.bk2-pop-confirm-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.bk2-pop-confirm-yes {
+  padding: 10px; border: 0; border-radius: 8px; cursor: pointer;
+  background: #DC2626; color: #fff; font-size: 13px; font-weight: 700;
+  transition: background 100ms ease;
+}
+.bk2-pop-confirm-yes:hover { background: #B91C1C; }
+.bk2-pop-confirm-yes:disabled { opacity: 0.7; cursor: default; }
+.bk2-pop-confirm-no {
+  padding: 10px; border: 1px solid #E2E8F0; border-radius: 8px; cursor: pointer;
+  background: #fff; color: #334155; font-size: 13px; font-weight: 600;
+  transition: background 100ms ease;
+}
+.bk2-pop-confirm-no:hover { background: #F1F5F9; }
+:root[data-theme="dark"] .bk2-pop-confirm { background: rgba(220,38,38,0.10); border-color: rgba(220,38,38,0.35); }
+:root[data-theme="dark"] .bk2-pop-confirm-msg { color: #FCA5A5; }
+:root[data-theme="dark"] .bk2-pop-confirm-no { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.14); color: #CBD5E1; }
+:root[data-theme="dark"] .bk2-pop-confirm-no:hover { background: rgba(255,255,255,0.13); color: #fff; }
 /* Take-off-ute: a neutral secondary action (detach from vehicle, keep on shift)
    sitting above the destructive "Remove from shift". */
 .bk2-pop-takeoff {

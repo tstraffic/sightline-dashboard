@@ -5735,8 +5735,31 @@
         return;
       }
       if (action === 'remove') {
-        if (!confirm('Remove ' + crewName + ' from this booking?')) return;
-        removeFromBooking(slot, bookingId, crewMemberId);
+        // Inline confirm instead of the browser's native dialog: the button
+        // swaps for a red confirm strip (Yes, remove / Keep) inside the panel.
+        if (btn.getAttribute('data-confirming') === '1') return;
+        btn.setAttribute('data-confirming', '1');
+        var strip = document.createElement('div');
+        strip.className = 'bk2-pop-confirm';
+        strip.innerHTML =
+          '<span class="bk2-pop-confirm-msg">Remove ' + escapeHtml(crewName) + ' from this shift?</span>' +
+          '<div class="bk2-pop-confirm-row">' +
+            '<button type="button" class="bk2-pop-confirm-yes">Yes, remove</button>' +
+            '<button type="button" class="bk2-pop-confirm-no">Keep</button>' +
+          '</div>';
+        btn.hidden = true;
+        btn.insertAdjacentElement('afterend', strip);
+        strip.querySelector('.bk2-pop-confirm-no').addEventListener('click', function () {
+          strip.remove();
+          btn.hidden = false;
+          btn.removeAttribute('data-confirming');
+        });
+        strip.querySelector('.bk2-pop-confirm-yes').addEventListener('click', function () {
+          var yes = strip.querySelector('.bk2-pop-confirm-yes');
+          yes.disabled = true;
+          yes.textContent = 'Removing…';
+          removeFromBooking(slot, bookingId, crewMemberId);
+        });
         return;
       }
       // Flag toggles — tl/fa/sts/nb fire /flag, drv fires /driver
