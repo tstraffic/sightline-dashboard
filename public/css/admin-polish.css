@@ -1,0 +1,153 @@
+/* ============================================================
+   ADMIN POLISH — design-system consistency layer
+   Loaded LAST so it wins specificity ties. Two jobs:
+
+   1. LIGHT-MODE CONTRAST REPAIRS — the admin app is dark-first
+      (body.dark-glass always on) and light mode is an override
+      pile; several dark-tuned colours had no light reset and
+      rendered washed out on white (worst: the dark remap
+      `.dark-glass .text-brand-600 → #60a5fa` leaking into light,
+      putting active tabs & links at 2.4:1).
+
+   2. SHARED DESIGN LANGUAGE (both themes) — one focus ring, one
+      card shadow, one table rhythm, tabular numerals, consistent
+      press feedback. Small rules, applied everywhere, so every
+      page reads as the same product.
+   ============================================================ */
+
+/* ───────────────────────────────────────────────────────────
+   1. LIGHT MODE — contrast repairs
+   ─────────────────────────────────────────────────────────── */
+
+/* Brand text: the dark theme remaps .text-brand-600/700 to light
+   blue for dark surfaces. Re-assert accessible emerald on light —
+   active tabs, "View all →" links, icon accents. (emerald-700 on
+   white = 5.4:1; emerald-800 hover.) */
+:root[data-theme="light"] body.dark-glass .text-brand-600,
+:root[data-theme="light"] body.dark-glass a.text-brand-600 { color: #047857 !important; }
+:root[data-theme="light"] body.dark-glass .text-brand-700 { color: #065F46 !important; }
+:root[data-theme="light"] body.dark-glass .hover\:text-brand-600:hover { color: #047857 !important; }
+:root[data-theme="light"] body.dark-glass .hover\:text-brand-700:hover,
+:root[data-theme="light"] body.dark-glass a.text-brand-600:hover { color: #065F46 !important; }
+
+/* Active tab underline colour follows the text repair. */
+:root[data-theme="light"] body.dark-glass [data-tab].border-brand-600 { border-color: #059669 !important; }
+
+/* Pale brand tints (100/200/300/400) are dark-surface colours; on a
+   light background they vanish. Content areas only — the sidebar
+   handles its own overrides below. */
+:root[data-theme="light"] body.dark-glass main .text-brand-100,
+:root[data-theme="light"] body.dark-glass main .text-brand-200,
+:root[data-theme="light"] body.dark-glass main .text-brand-300 { color: #047857 !important; }
+:root[data-theme="light"] body.dark-glass main .text-brand-400,
+:root[data-theme="light"] body.dark-glass main .text-brand-500 { color: #059669 !important; }
+
+/* Sidebar "Customise menu" (text-brand-200 + white/5 bg — invisible
+   on the light sidebar). Quiet slate ghost button instead. */
+:root[data-theme="light"] #sidebar #sb-edit-toggle {
+  color: #555A63 !important;
+  background: rgba(15, 17, 21, 0.05) !important;
+}
+:root[data-theme="light"] #sidebar #sb-edit-toggle:hover {
+  color: #0F1115 !important;
+  background: rgba(15, 17, 21, 0.09) !important;
+}
+
+/* Sidebar "New" feature badge (bg-brand-500/30 + text-brand-100 —
+   mint on mint in light). */
+:root[data-theme="light"] #sidebar .bg-brand-500\/30,
+:root[data-theme="light"] #sidebar [class*="bg-brand-500/30"] {
+  background: #D1FAE5 !important;
+  color: #065F46 !important;
+}
+
+/* Header ghost icon buttons (bell / quick-add / logout use white/…
+   alphas tuned for dark) — give them visible light-mode ink. */
+:root[data-theme="light"] header .text-white\/70,
+:root[data-theme="light"] header [class*="text-white/"] { color: #555A63 !important; }
+:root[data-theme="light"] header [class*="hover:bg-white/"]:hover { background: rgba(15,17,21,0.06) !important; }
+
+/* KPI tile labels (10px mono uppercase gray-500) — one step darker
+   so the control-room labels stay crisp on white. */
+:root[data-theme="light"] body.dark-glass .urgency-tile p.font-mono { color: #4B5563 !important; }
+
+/* ───────────────────────────────────────────────────────────
+   2. FOCUS VISIBILITY — one ring, keyboard only (both themes)
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass a:focus-visible,
+body.dark-glass button:focus-visible,
+body.dark-glass input:focus-visible,
+body.dark-glass select:focus-visible,
+body.dark-glass textarea:focus-visible,
+body.dark-glass [tabindex]:focus-visible {
+  outline: 2px solid #10B981 !important;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+:root[data-theme="light"] body.dark-glass a:focus-visible,
+:root[data-theme="light"] body.dark-glass button:focus-visible,
+:root[data-theme="light"] body.dark-glass input:focus-visible,
+:root[data-theme="light"] body.dark-glass select:focus-visible,
+:root[data-theme="light"] body.dark-glass textarea:focus-visible,
+:root[data-theme="light"] body.dark-glass [tabindex]:focus-visible {
+  outline-color: #059669 !important;
+}
+
+/* ───────────────────────────────────────────────────────────
+   3. INTERACTION FEEDBACK (both themes)
+   ─────────────────────────────────────────────────────────── */
+/* Subtle press acknowledgement on real buttons — no layout shift. */
+body.dark-glass button:not(:disabled):active { transform: translateY(0.5px); }
+body.dark-glass button:disabled { cursor: not-allowed; }
+
+/* ───────────────────────────────────────────────────────────
+   4. CARD LANGUAGE — one elevation token (light theme)
+   Bordered white cards share a single soft shadow instead of the
+   per-page mix of shadow-sm / shadow / flat.
+   ─────────────────────────────────────────────────────────── */
+:root[data-theme="light"] body.dark-glass .bg-white.shadow-sm,
+:root[data-theme="light"] body.dark-glass .bg-white.shadow,
+:root[data-theme="light"] body.dark-glass .bg-white.shadow-md {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.04) !important;
+}
+/* Secondary gray buttons get a hairline so they read as buttons,
+   not disabled fills. */
+:root[data-theme="light"] body.dark-glass button.bg-gray-100,
+:root[data-theme="light"] body.dark-glass a.bg-gray-100 {
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.08);
+}
+
+/* ───────────────────────────────────────────────────────────
+   5. TABLES — shared rhythm (both themes)
+   ─────────────────────────────────────────────────────────── */
+/* Numbers line up everywhere: dates, counts, currency. */
+body.dark-glass table { font-variant-numeric: tabular-nums; }
+body.dark-glass .kpi-number { font-variant-numeric: tabular-nums; }
+/* Quiet row hover so long registers are scannable. */
+:root[data-theme="light"] body.dark-glass tbody tr:hover td { background: rgba(15, 23, 42, 0.02); }
+:root:not([data-theme="light"]) body.dark-glass tbody tr:hover td { background: rgba(255, 255, 255, 0.025); }
+/* Header cells: consistent tracking on every register. */
+body.dark-glass thead th { letter-spacing: 0.06em; }
+
+/* ───────────────────────────────────────────────────────────
+   6. TYPE POLISH (both themes)
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass h1, body.dark-glass h2 { text-wrap: balance; }
+body.dark-glass .font-display { letter-spacing: -0.02em; }
+
+/* ───────────────────────────────────────────────────────────
+   7. DARK-MODE SCROLLBAR (custom.css only styles light thumbs)
+   ─────────────────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  :root:not([data-theme="light"]) ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.14); }
+  :root:not([data-theme="light"]) ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.28); }
+  :root:not([data-theme="light"]) * { scrollbar-color: rgba(255, 255, 255, 0.18) transparent; }
+}
+
+/* ───────────────────────────────────────────────────────────
+   8. SELECTION + REDUCED MOTION
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass ::selection { background: rgba(16, 185, 129, 0.25); }
+@media (prefers-reduced-motion: reduce) {
+  body.dark-glass button:not(:disabled):active { transform: none; }
+}
