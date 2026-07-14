@@ -1,16 +1,11 @@
 <% locals.currentPage = 'timesheets' %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Timesheets</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Crew hours &middot; approvals &middot; overtime tracking</p>
-  </div>
-  <a href="/timesheets/new" class="inline-flex items-center justify-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
-    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-    Log Timesheet
-  </a>
-</div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Operations',
+  title: 'Timesheets',
+  subtitle: 'Crew hours · approvals · overtime tracking',
+  actions: [{ label: 'Log Timesheet', href: '/timesheets/new', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }]
+}) %>
 
 <!-- Sub-navigation -->
 <div class="flex items-center gap-1 mb-5 border-b border-gray-200 pb-2">
@@ -21,21 +16,21 @@
 
 <!-- Stats Bar -->
 <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total Hours</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= stats.totalHours %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Total Hours</p>
+    <p class="stat-card-value"><%= stats.totalHours %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Pending</p>
-    <p class="text-xl font-bold <%= stats.pendingApproval > 0 ? 'text-orange-600' : 'text-gray-300' %> mt-0.5"><%= stats.pendingApproval %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Pending</p>
+    <p class="stat-card-value <%= stats.pendingApproval > 0 ? 'is-warn' : 'is-muted' %>"><%= stats.pendingApproval %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest">Approved</p>
-    <p class="text-xl font-bold text-emerald-600 mt-0.5"><%= stats.approvedCount %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Approved</p>
+    <p class="stat-card-value <%= stats.approvedCount > 0 ? 'is-good' : 'is-muted' %>"><%= stats.approvedCount %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-brand-500 uppercase tracking-widest">Crew Logged</p>
-    <p class="text-xl font-bold text-brand-600 mt-0.5"><%= stats.uniqueCrew %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Crew Logged</p>
+    <p class="stat-card-value <%= stats.uniqueCrew > 0 ? 'is-info' : 'is-muted' %>"><%= stats.uniqueCrew %></p>
   </div>
 </div>
 

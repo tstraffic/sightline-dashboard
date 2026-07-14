@@ -55,12 +55,12 @@
 
   <!-- ========== Header + sticky action toolbar ========== -->
   <div class="space-y-3">
-    <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-2">
-      <div>
-        <h1 class="text-2xl font-bold text-gray-900">HR Dashboard</h1>
-        <p class="text-sm text-gray-500 mt-0.5">Workforce, compliance and document health at a glance.</p>
-      </div>
-    </div>
+    <%- include('../partials/page-header', { rail: true,
+      eyebrow: 'People / HR',
+      title: 'HR Dashboard',
+      subtitle: 'Workforce, compliance and document health at a glance.',
+      wrapperClass: ''
+    }) %>
 
     <!-- Toolbar: search + quick actions. Sticky on desktop so it stays
          reachable as you scroll the long page. -->

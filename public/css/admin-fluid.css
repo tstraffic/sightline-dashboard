@@ -37,6 +37,30 @@
    reveal, and stacking both reads as double-animation. */
 html.vt-nav main > div > * { animation: none !important; }
 
+/* ── Page-title morph ───────────────────────────────────────
+   The page-header partial emits .vt-page-title (at most once per
+   page — a duplicated view-transition-name silently skips the
+   whole transition). Titles crossfade in their own group between
+   registers; pages without the element (dashboard) exit cleanly.
+   Duration pinned to the root's 160ms — a named group otherwise
+   defaults to the UA's ~250ms and lags the page settle. */
+.vt-page-title { view-transition-name: page-title; }
+::view-transition-group(page-title),
+::view-transition-old(page-title),
+::view-transition-new(page-title) {
+  animation-duration: 160ms;
+}
+
+/* Reduced motion: the global damping in custom.css can't reach
+   view-transition pseudo-elements, so damp them here. */
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+  }
+}
+
 /* ── Navigation progress bar ────────────────────────────────
    Injected by app.js on link click / form submit after a short
    delay (fast navigations never see it). Mirrors the bookings

@@ -31,11 +31,14 @@
 
 <div class="space-y-5">
 
-  <!-- Header -->
-  <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Roster<% if (locals.showDeleted) { %> <span class="text-gray-400">— Deleted</span><% } %></h1>
-      <p class="text-sm text-gray-500 mt-1"><% if (locals.showDeleted) { %>Deleted employees — restore to reactivate their login<% } else { %>Full workforce list &mdash; manage, filter and bulk-action employees<% } %></p>
+  <!-- Header — bespoke actions (export menu), so the page-header partial's
+       type classes are applied in place. vt-page-title: once per page. -->
+  <div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div class="min-w-0">
+      <p class="page-eyebrow">People / HR</p>
+      <h1 class="page-title vt-page-title">Roster<% if (locals.showDeleted) { %> <span class="text-gray-400">— Deleted</span><% } %></h1>
+      <p class="page-sub"><% if (locals.showDeleted) { %>Deleted employees — restore to reactivate their login<% } else { %>Full workforce list — manage, filter and bulk-action employees<% } %></p>
+      <div class="chevron-rail" aria-hidden="true"></div>
     </div>
     <div class="flex items-center gap-2">
       <!-- Export menu — opens a small dropdown so the user can choose

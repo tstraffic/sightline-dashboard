@@ -11,39 +11,34 @@
   }
 %>
 
-<!-- Page Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-  <div>
-    <h1 class="text-2xl font-bold text-gray-900">Incidents</h1>
-    <p class="text-gray-500 text-sm mt-0.5">Safety register &middot; investigations &middot; corrective actions</p>
-  </div>
-  <a href="/incidents/new" class="inline-flex items-center justify-center px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors">
-    <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-    Report Incident
-  </a>
-</div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Safety',
+  title: 'Incidents',
+  subtitle: 'Safety register · investigations · corrective actions',
+  actions: [{ label: 'Report Incident', href: '/incidents/new', style: 'danger', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }]
+}) %>
 
 <!-- Stat Cards -->
 <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Total</p>
-    <p class="text-xl font-bold text-gray-900 mt-0.5"><%= stats.total %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Total</p>
+    <p class="stat-card-value"><%= stats.total %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-amber-500 uppercase tracking-widest">Open</p>
-    <p class="text-xl font-bold <%= stats.open > 0 ? 'text-amber-600' : 'text-gray-300' %> mt-0.5"><%= stats.open %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Open</p>
+    <p class="stat-card-value <%= stats.open > 0 ? 'is-warn' : 'is-muted' %>"><%= stats.open %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-red-400 uppercase tracking-widest">Critical / High</p>
-    <p class="text-xl font-bold <%= stats.critical > 0 ? 'text-red-600' : 'text-gray-300' %> mt-0.5"><%= stats.critical %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Critical / High</p>
+    <p class="stat-card-value <%= stats.critical > 0 ? 'is-critical' : 'is-muted' %>"><%= stats.critical %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-orange-400 uppercase tracking-widest">Open Actions</p>
-    <p class="text-xl font-bold <%= stats.openActions > 0 ? 'text-orange-600' : 'text-gray-300' %> mt-0.5"><%= stats.openActions %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">Open Actions</p>
+    <p class="stat-card-value <%= stats.openActions > 0 ? 'is-warn' : 'is-muted' %>"><%= stats.openActions %></p>
   </div>
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
-    <p class="text-[10px] font-bold text-brand-500 uppercase tracking-widest">This Month</p>
-    <p class="text-xl font-bold text-brand-600 mt-0.5"><%= stats.thisMonth %></p>
+  <div class="stat-card">
+    <p class="stat-card-label">This Month</p>
+    <p class="stat-card-value <%= stats.thisMonth > 0 ? 'is-good' : 'is-muted' %>"><%= stats.thisMonth %></p>
   </div>
 </div>
 

@@ -244,6 +244,143 @@ body.dark-glass a.stat-card.accent-emerald:hover { border-color: rgba(52, 211, 1
 :root[data-theme="light"] body.dark-glass a.stat-card.accent-emerald:hover { border-color: #6EE7B7; background: #ECFDF5; }
 
 /* ───────────────────────────────────────────────────────────
+   11. PAGE HEADER TYPE — the app's display voice
+   Register titles previously rendered in Geist bold
+   (text-2xl font-bold), never touching the loaded Bricolage
+   Grotesque variable face. These three classes are the whole
+   header type system; the page-header partial emits them.
+
+   .page-title sets NO color — custom.css:3496 claims h1 color
+   per-theme (--dark-text-primary), so inheriting is what makes
+   light mode come free. It also avoids Tailwind size classes so
+   the mobile h1.text-2xl !important override (custom.css:1465)
+   can't fight it.
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass .page-eyebrow {
+  font-family: "Geist Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  line-height: 1;
+  color: #8B8E95;
+  margin-bottom: 0.45rem;
+}
+body.dark-glass .page-title {
+  font-family: "Bricolage Grotesque", "Geist", system-ui, sans-serif;
+  font-size: 1.9rem;
+  font-weight: 620;
+  font-variation-settings: 'opsz' 40;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  text-wrap: balance;
+}
+body.dark-glass .page-sub {
+  font-size: 13px;
+  line-height: 1.45;
+  color: #8B8E95;
+  margin-top: 0.3rem;
+  max-width: 60ch;
+}
+@media (max-width: 640px) {
+  body.dark-glass .page-title { font-size: 1.4rem; }
+  body.dark-glass .page-sub { font-size: 12px; }
+}
+:root[data-theme="light"] body.dark-glass .page-eyebrow { color: #6B7280; }
+:root[data-theme="light"] body.dark-glass .page-sub { color: #6B7280; }
+
+/* ───────────────────────────────────────────────────────────
+   12. CHEVRON RAIL — the signature
+   45° hazard stripes from the industry's own barrier boards.
+   Exactly two contexts, by design: (a) the rule under a page
+   header, (b) the left rail of a genuinely critical banner.
+   Striped = live hazard / attention. Never decoration.
+
+   Fixed emerald like .section-title's accent (custom.css:1287)
+   — skins re-tint border tokens, accents stay constant.
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass .chevron-rail {
+  height: 3px;
+  margin-top: 0.85rem;
+  border-radius: 1.5px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(16, 185, 129, 0.55) 0 6px,
+    rgba(16, 185, 129, 0.12) 6px 12px
+  );
+  /* Fade the stripes out rightward so the rail reads as an
+     accent, not a full-width divider. */
+  -webkit-mask-image: linear-gradient(to right, black 0, black 96px, transparent 240px);
+  mask-image: linear-gradient(to right, black 0, black 96px, transparent 240px);
+}
+:root[data-theme="light"] body.dark-glass .chevron-rail {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(4, 120, 87, 0.65) 0 6px,
+    rgba(4, 120, 87, 0.14) 6px 12px
+  );
+}
+/* Critical-banner variant: a striped left rail replacing the flat
+   border. Red stripes — this is the hazard register. */
+body.dark-glass .chevron-rail-left {
+  position: relative;
+  overflow: hidden;
+}
+body.dark-glass .chevron-rail-left::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(239, 68, 68, 0.75) 0 5px,
+    rgba(239, 68, 68, 0.15) 5px 10px
+  );
+}
+/* Warning flavour (amber) for due-soon rather than overdue. */
+body.dark-glass .chevron-rail-left.is-warn::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(251, 191, 36, 0.75) 0 5px,
+    rgba(251, 191, 36, 0.15) 5px 10px
+  );
+}
+:root[data-theme="light"] body.dark-glass .chevron-rail-left::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(220, 38, 38, 0.7) 0 5px,
+    rgba(220, 38, 38, 0.12) 5px 10px
+  );
+}
+:root[data-theme="light"] body.dark-glass .chevron-rail-left.is-warn::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(217, 119, 6, 0.7) 0 5px,
+    rgba(217, 119, 6, 0.12) 5px 10px
+  );
+}
+
+/* ───────────────────────────────────────────────────────────
+   13. LANE DIVIDER — the quiet echo
+   Section separators as dashed road centre-lines. Uses the
+   border token on purpose: skins tint it like other chrome.
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass .lane-divider {
+  border: none;
+  height: 0;
+  border-top: 1.5px dashed var(--dark-border-strong, rgba(255, 255, 255, 0.15));
+  margin: 1.25rem 0;
+}
+
+/* ───────────────────────────────────────────────────────────
+   14. STAT CARD — currency size step
+   Tailwind CDN utilities can't override linked-sheet classes
+   (CDN <style> is injected before these links parse), so the
+   smaller money size must be a real class.
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass .stat-card-value.is-money { font-size: 1.15rem; line-height: 1.2; }
+
+/* ───────────────────────────────────────────────────────────
    10. KPI GRID — balanced rows on the Today dashboard
    Column count comes from the template via --kpi-cols, computed
    from the tile count so the last row never orphans (10 → 5+5,

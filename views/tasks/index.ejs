@@ -124,10 +124,15 @@
   const activeTab = filters.tab || '';
 %>
 
-<!-- Header -->
-<div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
-    <h1 class="text-2xl font-bold text-gray-900">Tasks & Actions</h1>
-    <div class="flex items-center gap-2">
+<!-- Header — bespoke controls (select-all + view toggles), so the
+     page-header type classes are applied in place. -->
+<div class="page-header flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5">
+    <div class="min-w-0">
+      <p class="page-eyebrow">Operations</p>
+      <h1 class="page-title vt-page-title">Tasks & Actions</h1>
+      <div class="chevron-rail" aria-hidden="true"></div>
+    </div>
+    <div class="flex items-center gap-2 flex-wrap">
       <label class="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm text-gray-500 hover:bg-gray-50 cursor-pointer border border-gray-300 bg-white">
         <input type="checkbox" id="select-all" class="rounded bg-white border-gray-300 text-brand-500 focus:ring-brand-500">
         <span class="hidden sm:inline">Select All</span>
@@ -181,25 +186,25 @@
 
   <!-- Summary Stat Cards -->
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-4">
-    <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
-      <div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Total</div>
-      <div class="text-xl font-bold text-gray-900 mt-0.5"><%= counts.total || 0 %></div>
+    <div class="stat-card">
+      <div class="stat-card-label">Total</div>
+      <div class="stat-card-value"><%= counts.total || 0 %></div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
-      <div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Not Started</div>
-      <div class="text-xl font-bold text-gray-600 mt-0.5"><%= counts.not_started || 0 %></div>
+    <div class="stat-card">
+      <div class="stat-card-label">Not Started</div>
+      <div class="stat-card-value <%= (counts.not_started || 0) > 0 ? '' : 'is-muted' %>"><%= counts.not_started || 0 %></div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
-      <div class="text-xs font-medium text-gray-500 uppercase tracking-wider">In Progress</div>
-      <div class="text-xl font-bold text-blue-600 mt-0.5"><%= counts.in_progress || 0 %></div>
+    <div class="stat-card">
+      <div class="stat-card-label">In Progress</div>
+      <div class="stat-card-value <%= (counts.in_progress || 0) > 0 ? 'is-info' : 'is-muted' %>"><%= counts.in_progress || 0 %></div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
-      <div class="text-xs font-medium text-gray-500 uppercase tracking-wider">Blocked</div>
-      <div class="text-xl font-bold text-red-600 mt-0.5"><%= counts.blocked || 0 %></div>
+    <div class="stat-card">
+      <div class="stat-card-label">Blocked</div>
+      <div class="stat-card-value <%= (counts.blocked || 0) > 0 ? 'is-critical' : 'is-muted' %>"><%= counts.blocked || 0 %></div>
     </div>
-    <div class="bg-white border border-gray-200 rounded-xl p-3 shadow-sm">
-      <div class="text-xs font-medium text-amber-500 uppercase tracking-wider">Overdue</div>
-      <div class="text-xl font-bold text-amber-600 mt-0.5"><%= counts.overdue || 0 %></div>
+    <div class="stat-card">
+      <div class="stat-card-label">Overdue</div>
+      <div class="stat-card-value <%= (counts.overdue || 0) > 0 ? 'is-warn' : 'is-muted' %>"><%= counts.overdue || 0 %></div>
     </div>
   </div>
 

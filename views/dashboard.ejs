@@ -10,8 +10,11 @@
 <!-- Greeting -->
 <div class="hero-banner flex items-baseline justify-between gap-4 mb-6 px-1">
   <div class="hero-greeting">
-    <h1 class="text-xl sm:text-2xl font-display font-medium text-gray-900 tracking-tight" style="letter-spacing:-0.025em"><span id="greeting">Hello</span>, <%= user.full_name.split(' ')[0] %>.</h1>
-    <p class="text-[12px] font-mono text-gray-500 mt-1 tracking-wide uppercase" id="today-date"></p>
+    <!-- page-title only — no vt-page-title here: the dashboard title is
+         personal, not a register name, so it shouldn't morph between pages
+         (and the class must stay unique per page). -->
+    <h1 class="page-title"><span id="greeting">Hello</span>, <%= user.full_name.split(' ')[0] %>.</h1>
+    <p class="page-eyebrow mt-1.5" id="today-date"></p>
   </div>
 </div>
 <script>
@@ -170,7 +173,7 @@
 
 <!-- Missing site docs — the bookings that need a TGS / TMP / ROL upload before the crew rolls up -->
 <% if (typeof missingDocsList !== 'undefined' && missingDocsList && missingDocsList.length) { %>
-<div class="bg-amber-50/60 border border-amber-200 rounded-2xl p-4 mb-5">
+<div class="chevron-rail-left is-warn bg-amber-50/60 border border-amber-200 rounded-2xl p-4 mb-5">
   <div class="flex items-center justify-between gap-2 mb-3">
     <div class="flex items-center gap-2">
       <svg class="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
@@ -208,7 +211,7 @@
      fire-extinguisher items overdue or due in the next 30 days. Compact
      by design; full breakdown lives on /fleet/compliance. -->
 <% if (typeof fleetCompliance !== 'undefined' && fleetCompliance && fleetCompliance.count > 0) { %>
-<div class="bg-red-50/60 border border-red-200 rounded-2xl p-4 mb-5">
+<div class="chevron-rail-left bg-red-50/60 border border-red-200 rounded-2xl p-4 mb-5">
   <div class="flex items-center justify-between gap-2 mb-3">
     <div class="flex items-center gap-2">
       <svg class="w-4 h-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l1.5-5A2 2 0 016.43 6.5h11.14a2 2 0 011.93 1.5L21 13m-18 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1a1 1 0 001-1v-5M3 13h18"/></svg>

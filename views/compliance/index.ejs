@@ -60,17 +60,12 @@
   }
 %>
 
-<!-- Header -->
-<div class="flex items-center justify-between mb-5">
-    <div>
-      <h1 class="text-2xl font-bold text-gray-900">Plans &amp; Approvals</h1>
-      <p class="text-sm text-gray-500 mt-0.5">TGS plans, CTMPs, SPAs, ROLs and other approvals</p>
-    </div>
-    <a href="/compliance/new" class="inline-flex items-center px-4 py-2 bg-brand-600 text-white font-semibold rounded-lg hover:bg-brand-500 transition text-sm">
-      <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-      New Item
-    </a>
-  </div>
+<%- include('../partials/page-header', { rail: true,
+  eyebrow: 'Planning',
+  title: 'Plans & Approvals',
+  subtitle: 'TGS plans, CTMPs, SPAs, ROLs and other approvals',
+  actions: [{ label: 'New Item', href: '/compliance/new', style: 'primary', icon: 'M12 4v16m8-8H4' }]
+}) %>
 
   <!-- Summary Cards -->
   <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3 mb-4">

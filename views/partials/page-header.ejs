@@ -1,0 +1,53 @@
+<%
+/*
+  page-header — the one header device for every admin register.
+
+  include('../partials/page-header', {
+    eyebrow:  'Operations',          // optional mono kicker (sidebar section name)
+    title:    'Jobs Register',       // required
+    subtitle: 'Manage and track…',   // optional; pass literal ·, not &middot;
+    actions: [{ label, href, style: 'primary'|'secondary'|'danger', icon, title }],
+    rawActions: '<html>',            // escape hatch for bespoke controls; wins over actions
+    rail: true,                      // chevron hazard rail under the header
+    wrapperClass: 'mb-5'             // pass '' when inside a space-y-* wrapper
+  })
+
+  The h1 carries ONLY page-title + vt-page-title: no Tailwind size/
+  weight/color classes, so the mobile h1.text-2xl override and the
+  .dark-glass h1 color remap in custom.css behave (see admin-polish
+  §11). vt-page-title must appear at most once per page — it names a
+  view-transition group (duplicates silently kill all transitions).
+*/
+  const _actions = (typeof actions !== 'undefined' && actions) ? actions : [];
+  const _raw  = (typeof rawActions !== 'undefined' && rawActions) ? rawActions : null;
+  const _rail = (typeof rail !== 'undefined') && !!rail;
+  const _wrap = (typeof wrapperClass !== 'undefined') ? wrapperClass : 'mb-5';
+  const _eyebrow = (typeof eyebrow !== 'undefined' && eyebrow) ? eyebrow : null;
+  const _subtitle = (typeof subtitle !== 'undefined' && subtitle) ? subtitle : null;
+  const PH_BTN = {
+    primary:   'inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors',
+    secondary: 'inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition-colors',
+    danger:    'inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors'
+  };
+%>
+<div class="page-header <%= _wrap %>">
+  <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
+    <div class="min-w-0">
+      <% if (_eyebrow) { %><p class="page-eyebrow"><%= _eyebrow %></p><% } %>
+      <h1 class="page-title vt-page-title"><%= title %></h1>
+      <% if (_subtitle) { %><p class="page-sub"><%= _subtitle %></p><% } %>
+    </div>
+    <% if (_raw) { %>
+      <div class="flex items-center gap-2 flex-wrap shrink-0"><%- _raw %></div>
+    <% } else if (_actions.length) { %>
+      <div class="flex items-center gap-2 flex-wrap shrink-0">
+        <% _actions.forEach(a => { %>
+          <a href="<%= a.href %>" class="<%= PH_BTN[a.style || 'secondary'] %>"<% if (a.title) { %> title="<%= a.title %>"<% } %>>
+            <% if (a.icon) { %><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="<%= a.icon %>"/></svg><% } %><%= a.label %>
+          </a>
+        <% }) %>
+      </div>
+    <% } %>
+  </div>
+  <% if (_rail) { %><div class="chevron-rail" aria-hidden="true"></div><% } %>
+</div>
