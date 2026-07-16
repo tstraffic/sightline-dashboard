@@ -9,7 +9,8 @@ function requireWorker(req, res, next) {
     return next();
   }
   req.session.workerReturnTo = req.originalUrl;
-  res.redirect('/w/login');
+  // Persist before redirecting — same session-store race as the logins.
+  req.session.save(() => res.redirect('/w/login'));
 }
 
 /**
@@ -108,6 +109,12 @@ function requirePortalRole(requiredRole) {
 function workerLocals(req, res, next) {
   res.locals.worker = req.session.worker || null;
   res.locals.layout = 'worker/layout';
+  // Remember which portal was used last (page loads only, not API polls)
+  // so the root route can send dual-session users to the right side.
+  if (req.session && req.session.worker && req.session.lastPortal !== 'worker'
+      && req.headers.accept && req.headers.accept.includes('text/html')) {
+    req.session.lastPortal = 'worker';
+  }
   // Also set flash messages for worker views
   res.locals.flash_success = req.flash('success');
   res.locals.flash_error = req.flash('error');

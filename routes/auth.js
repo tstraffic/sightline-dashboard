@@ -10,19 +10,30 @@ function landingFor(user) {
   return user && user.role === 'marketing' ? '/marketing' : '/dashboard';
 }
 
+// Only ever redirect to an internal path — a `next` value must start with a
+// single '/' (no '//host' or 'proto:' forms) or it is dropped.
+function sanitizeNext(raw) {
+  if (typeof raw !== 'string' || raw.length > 500) return null;
+  return /^\/(?!\/)/.test(raw) ? raw : null;
+}
+
 router.get('/login', (req, res) => {
-  if (req.session.user) return res.redirect(landingFor(req.session.user));
-  res.render('login', { layout: false, title: 'Login', user: null, flash_error: req.flash('error') });
+  const nextPath = sanitizeNext(req.query.next);
+  if (req.session.user) return res.redirect(nextPath || landingFor(req.session.user));
+  res.render('login', { layout: false, title: 'Login', user: null, nextPath, flash_error: req.flash('error') });
 });
 
 router.post('/login', (req, res) => {
   const { username, password } = req.body;
+  // The form carries `next` as a hidden field so the destination survives
+  // even when the session-store write races a redirect.
+  const nextPath = sanitizeNext(req.body.next);
   const db = getDb();
   const user = db.prepare('SELECT * FROM users WHERE username = ? AND active = 1').get(username);
 
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     req.flash('error', 'Invalid username or password.');
-    return res.redirect('/login');
+    return res.redirect(nextPath ? '/login?next=' + encodeURIComponent(nextPath) : '/login');
   }
 
   req.session.user = {
@@ -35,19 +46,29 @@ router.post('/login', (req, res) => {
 
   // Force password change for accounts with default/seed credentials
   if (user.must_change_password) {
+    // Keep the destination so finishing the password change resumes the
+    // flow (e.g. entering the worker portal via /w/office-login).
+    if (nextPath) req.session.returnTo = nextPath;
     req.flash('error', 'You must change your password before continuing. This account is using a default password.');
-    return res.redirect('/profile');
+    return req.session.save(() => res.redirect('/profile'));
   }
 
-  const returnTo = req.session.returnTo || landingFor(req.session.user);
+  const returnTo = nextPath || req.session.returnTo || landingFor(req.session.user);
   delete req.session.returnTo;
-  res.redirect(returnTo);
+  // Persist the session before the browser follows the redirect — the same
+  // store race the worker login guards against.
+  req.session.save(() => res.redirect(returnTo));
 });
 
 router.get('/logout', (req, res) => {
-  req.session.destroy(() => {
-    res.redirect('/login');
-  });
+  // Sign out of the office portal only. A worker session in the same
+  // browser (an admin who also uses the crew app) stays signed in — the
+  // two portals have separate sign-outs.
+  delete req.session.user;
+  delete req.session.returnTo;
+  delete req.session._mustChangePassword;
+  delete req.session.lastPortal;
+  req.session.save(() => res.redirect('/login'));
 });
 
 // Forgot password

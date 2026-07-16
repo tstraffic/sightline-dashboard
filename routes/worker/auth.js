@@ -165,6 +165,25 @@ router.get('/logout', (req, res) => {
   req.session.save(() => res.redirect('/w/login'));
 });
 
+// GET /w/office-login — office staff enter the worker portal with their
+// admin session (no PIN). This is the worker-side entry point: it never
+// leaves the portal on failure, and when the office login is needed first
+// it bounces through /login with an explicit ?next so the flow returns
+// here even if the session-store write races the redirect.
+router.get('/office-login', (req, res) => {
+  if (!req.session.user) {
+    return res.redirect('/login?next=' + encodeURIComponent('/w/office-login'));
+  }
+  const { resolveLinkedCrew, startWorkerSession } = require('../../lib/portalLink');
+  const crew = resolveLinkedCrew(req.session.user.id);
+  if (!crew) {
+    req.flash('error', "Your office account isn't linked to a roster profile yet. An admin can link it on your employee record (Roster → your profile → Edit → Linked user account).");
+    return req.session.save(() => res.redirect('/w/login'));
+  }
+  startWorkerSession(req, crew);
+  req.session.save(() => res.redirect('/w/home'));
+});
+
 // Forgot PIN
 router.get('/forgot-pin', (req, res) => {
   res.render('worker/forgot-pin', {

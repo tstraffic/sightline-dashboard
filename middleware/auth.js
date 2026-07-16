@@ -247,6 +247,11 @@ function requireLogin(req, res, next) {
     // Normalise legacy role in session so templates see current name
     req.session.user.role = normaliseRole(req.session.user.role);
     res.locals.user = req.session.user;
+    // Remember which portal was used last (page loads only, not API polls)
+    // so the root route can send dual-session users to the right side.
+    if (req.session.lastPortal !== 'admin' && req.headers.accept && req.headers.accept.includes('text/html')) {
+      req.session.lastPortal = 'admin';
+    }
     return next();
   }
   // For AJAX / API requests, return 401 instead of saving the URL as returnTo
@@ -261,7 +266,10 @@ function requireLogin(req, res, next) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   req.session.returnTo = req.originalUrl;
-  res.redirect('/login');
+  // Persist returnTo before the browser follows the redirect — otherwise
+  // the session-store write can race the /login request and the post-login
+  // redirect falls back to the dashboard.
+  req.session.save(() => res.redirect('/login'));
 }
 
 function requireRole(...roles) {

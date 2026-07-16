@@ -287,8 +287,10 @@ app.use((req, res, next) => {
       } catch (e) { req.session._mustChangePassword = false; }
     }
     if (req.session._mustChangePassword) {
-      // Allow access to profile, logout, and static assets only
-      const allowed = ['/profile', '/logout', '/login'];
+      // Allow access to profile, logout, static assets — and the whole
+      // worker portal: the gate protects office surfaces, and yanking an
+      // admin out of /w mid-shift into /profile intertwines the portals.
+      const allowed = ['/profile', '/logout', '/login', '/w'];
       const isAllowed = allowed.some(p => req.path === p || req.path.startsWith(p + '/'));
       if (!isAllowed && !req.path.startsWith('/css') && !req.path.startsWith('/js') && !req.path.startsWith('/images') && !req.path.startsWith('/notifications/push')) {
         req.flash('error', 'Please change your password before continuing. Your account is using a default password.');
@@ -403,10 +405,14 @@ app.use('/api/views', requireLogin, require('./routes/saved-views'));
 // Roster redirects to crew page
 app.get('/roster', requireLogin, (req, res) => res.redirect('/crew'));
 
-// Home redirects to dashboard or worker portal
+// Home routes to whichever portal was used last; single-session users go
+// straight to their side, dual-session users (admins who also use the crew
+// app) follow lastPortal so neither portal hijacks the other.
 app.get('/', (req, res) => {
-  if (req.session.worker) return res.redirect('/w/home');
-  if (req.session.user) return res.redirect('/dashboard');
+  const { user, worker, lastPortal } = req.session;
+  if (user && worker) return res.redirect(lastPortal === 'admin' ? '/dashboard' : '/w/home');
+  if (worker) return res.redirect('/w/home');
+  if (user) return res.redirect('/dashboard');
   res.redirect('/login');
 });
 

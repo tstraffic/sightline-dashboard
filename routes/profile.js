@@ -57,24 +57,13 @@ router.get('/', (req, res) => {
 // worker session (same shape as a PIN login), and lands on /w/home. The admin
 // session stays intact so they can return to the office side anytime.
 router.get('/worker-portal', (req, res) => {
-  const db = getDb();
-  const crew = db.prepare(`
-    SELECT cm.id, cm.full_name, cm.employee_id, cm.role, cm.phone, cm.email
-    FROM employees e JOIN crew_members cm ON cm.id = e.linked_crew_member_id
-    WHERE e.linked_user_id = ? AND e.deleted_at IS NULL AND cm.active = 1
-    ORDER BY e.id DESC LIMIT 1
-  `).get(req.session.user.id);
+  const { resolveLinkedCrew, startWorkerSession } = require('../lib/portalLink');
+  const crew = resolveLinkedCrew(req.session.user.id);
   if (!crew) {
     req.flash('error', "Your account isn't linked to a roster profile yet. An admin can link it on your employee record (Roster → your profile → Edit → Linked user account).");
     return res.redirect('/profile');
   }
-  req.session.worker = {
-    id: crew.id, full_name: crew.full_name, employee_id: crew.employee_id,
-    role: crew.role, phone: crew.phone, email: crew.email,
-  };
-  try {
-    db.prepare('UPDATE crew_members SET last_worker_login = CURRENT_TIMESTAMP, worker_login_count = COALESCE(worker_login_count, 0) + 1 WHERE id = ?').run(crew.id);
-  } catch (e) { /* non-fatal */ }
+  startWorkerSession(req, crew);
   // Persist the worker session before redirecting (same store-race guard the
   // PIN login uses).
   req.session.save(() => res.redirect('/w/home'));
@@ -174,7 +163,11 @@ router.post('/change-password', (req, res) => {
   req.session._mustChangePassword = false;
 
   req.flash('success', 'Password changed successfully.');
-  res.redirect('/profile');
+  // Resume wherever the login was headed before the forced change (e.g.
+  // /w/office-login when entering the worker portal).
+  const resumeTo = req.session.returnTo;
+  delete req.session.returnTo;
+  req.session.save(() => res.redirect(resumeTo || '/profile'));
 });
 
 // POST /profile/send-reset-email — send password reset link to own email

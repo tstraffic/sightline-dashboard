@@ -401,6 +401,7 @@
 
         <form method="POST" action="/login">
           <%- include('partials/csrf') %>
+          <% if (typeof nextPath !== 'undefined' && nextPath) { %><input type="hidden" name="next" value="<%= nextPath %>"><% } %>
           <div class="field">
             <label for="username">Username/Email</label>
             <input type="text" id="username" name="username" required autofocus autocomplete="username" placeholder="username / you@tstc.com.au">
