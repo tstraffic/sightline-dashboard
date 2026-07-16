@@ -1001,7 +1001,13 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
     // Controllers") so moving someone out of a crew reads naturally; only when
     // no matching group has room do they sit in the "Not in any vehicle" pool.
     if (c.off_vehicle) {
-      const want = ROLE_TO_ADDON[c.role_on_site];
+      // Blank role_on_site defaults to Traffic Controller (same convention as
+      // fillSlot + stealAddonSlot). Without this fallback a role-less worker
+      // taken off a ute skipped the matching TC add-on group and dropped into
+      // "Not in any vehicle" — leaving a phantom "TC slot · drop a worker
+      // here" box that already had its person sitting right beside it, and
+      // that couldn't be filled by dragging (the drag just re-parked them).
+      const want = ROLE_TO_ADDON[c.role_on_site || 'traffic_controller'];
       const home = want
         ? blocks.find(b => b.no_vehicle && b.role === want && b.worker_slots.some(s => !s.filled))
         : null;
