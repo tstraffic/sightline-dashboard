@@ -71,12 +71,12 @@ function syncEquipmentReturnTask(db, bookingId, bookingEquipmentId) {
     // booking_id, so nothing is lost.
     const ins = db.prepare(`
       INSERT OR IGNORE INTO shift_tasks
-        (booking_id, crew_member_id, title, description, priority, booking_equipment_id)
-      VALUES (?, ?, ?, 'Automatic return-to-depot task', 'normal', ?)
+        (booking_id, crew_member_id, title, description, priority, booking_equipment_id, kind, group_key)
+      VALUES (?, ?, ?, 'Automatic return-to-depot task', 'normal', ?, 'equipment_return', ?)
     `);
     for (const cid of targets) {
       if (pendingSet.has(cid)) continue;
-      const r = ins.run(bookingId, cid, title, bookingEquipmentId);
+      const r = ins.run(bookingId, cid, title, bookingEquipmentId, 'beq:' + bookingEquipmentId);
       if (r.changes > 0) notifyIds.push(cid);
     }
   });
@@ -104,4 +104,80 @@ function syncBookingReturnTasks(db, bookingId) {
   } catch (e) { console.error('[returnTasks] booking sync failed:', e.message); }
 }
 
-module.exports = { syncEquipmentReturnTask, syncBookingReturnTasks };
+// Re-fan every whole-crew Team task ('team:%' groups) on a booking against
+// the current roster: insert pending rows for members who joined, delete
+// pending rows for members who left. Same history rule as return tasks —
+// any non-pending row means the group is settled and gets left alone.
+function syncTeamTasks(db, bookingId) {
+  try {
+    const tx = db.transaction(() => {
+      const groups = db.prepare(`
+        SELECT group_key FROM shift_tasks
+        WHERE booking_id = ? AND group_key LIKE 'team:%'
+        GROUP BY group_key
+        HAVING SUM(CASE WHEN status != 'pending' THEN 1 ELSE 0 END) = 0
+      `).all(bookingId).map(r => r.group_key);
+      if (!groups.length) return;
+      const crew = db.prepare(
+        "SELECT crew_member_id FROM booking_crew WHERE booking_id = ? AND status != 'declined'"
+      ).all(bookingId).map(r => r.crew_member_id);
+      const crewSet = new Set(crew);
+      const ins = db.prepare(`
+        INSERT OR IGNORE INTO shift_tasks
+          (booking_id, crew_member_id, title, description, priority, due_at,
+           created_by_user_id, created_by_crew_id, kind, group_key)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'general', ?)
+      `);
+      for (const gk of groups) {
+        const rows = db.prepare('SELECT * FROM shift_tasks WHERE group_key = ?').all(gk);
+        const proto = rows[0];
+        const members = new Set(rows.map(r => r.crew_member_id));
+        for (const r of rows) {
+          if (!crewSet.has(r.crew_member_id)) db.prepare('DELETE FROM shift_tasks WHERE id = ?').run(r.id);
+        }
+        for (const cid of crew) {
+          if (!members.has(cid)) {
+            ins.run(bookingId, cid, proto.title, proto.description, proto.priority,
+              proto.due_at, proto.created_by_user_id, proto.created_by_crew_id, gk);
+          }
+        }
+      }
+    });
+    tx();
+  } catch (e) { console.error('[returnTasks] team sync failed:', e.message); }
+}
+
+// One call for allocation-changing endpoints: keeps both grouped kinds
+// (equipment returns + whole-crew team tasks) in step with the roster.
+function syncBookingTaskGroups(db, bookingId) {
+  syncBookingReturnTasks(db, bookingId);
+  syncTeamTasks(db, bookingId);
+}
+
+// Create a whole-crew Team task: one shift_tasks row per active crew
+// member sharing a fresh 'team:' group key. allocation_id stays NULL
+// (cascade-safety — see syncEquipmentReturnTask). Returns the group key
+// and the crew fanned to, or null when the booking has no active crew.
+function createTeamTask(db, bookingId, { title, description, priority, dueAt, createdByUserId, createdByCrewId }) {
+  const crew = db.prepare(
+    "SELECT crew_member_id FROM booking_crew WHERE booking_id = ? AND status != 'declined'"
+  ).all(bookingId).map(r => r.crew_member_id);
+  if (!crew.length) return null;
+  const groupKey = 'team:' + bookingId + ':' + require('crypto').randomBytes(4).toString('hex');
+  const ins = db.prepare(`
+    INSERT OR IGNORE INTO shift_tasks
+      (booking_id, crew_member_id, title, description, priority, due_at,
+       created_by_user_id, created_by_crew_id, kind, group_key)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'general', ?)
+  `);
+  const tx = db.transaction(() => {
+    for (const cid of crew) {
+      ins.run(bookingId, cid, title, description || '', priority || 'normal',
+        dueAt || null, createdByUserId || null, createdByCrewId || null, groupKey);
+    }
+  });
+  tx();
+  return { groupKey, crewIds: crew };
+}
+
+module.exports = { syncEquipmentReturnTask, syncBookingReturnTasks, syncTeamTasks, syncBookingTaskGroups, createTeamTask };

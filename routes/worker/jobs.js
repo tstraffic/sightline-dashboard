@@ -5,7 +5,7 @@ const { sydneyToday, TZ: SYD_TZ } = require('../../lib/sydney');
 const { resolveShift, getCurrentDocket } = require('../../lib/shiftDocket');
 const { maybePromoteToGreenToGo } = require('../../lib/bookingLifecycle');
 const bookingNotify = require('../../services/bookingNotify');
-const { syncBookingReturnTasks } = require('../../services/returnTasks');
+const { syncBookingReturnTasks, syncBookingTaskGroups, createTeamTask } = require('../../services/returnTasks');
 const { logActivity } = require('../../middleware/audit');
 
 // Shared by every worker accept path: if this acceptance was the last one
@@ -899,8 +899,10 @@ router.get('/booking-shift/:bookingId', (req, res) => {
     const isTL = !!(me && (me.portal_role === 'team_leader' || me.portal_role === 'supervisor'));
     myTasks = db.prepare(`
       SELECT st.*, cm.full_name AS assignee_name,
-        CASE WHEN st.booking_id IS NULL AND st.allocation_id IS NULL THEN 1 ELSE 0 END AS is_general
+        CASE WHEN st.booking_id IS NULL AND st.allocation_id IS NULL THEN 1 ELSE 0 END AS is_general,
+        CASE WHEN be.hire_unit_id IS NOT NULL THEN 1 ELSE 0 END AS is_hired
       FROM shift_tasks st JOIN crew_members cm ON st.crew_member_id = cm.id
+      LEFT JOIN booking_equipment be ON be.id = st.booking_equipment_id
       WHERE st.crew_member_id = ?
         AND (
           st.allocation_id = ?
@@ -917,19 +919,28 @@ router.get('/booking-shift/:bookingId', (req, res) => {
       const crewIds = db.prepare("SELECT crew_member_id FROM booking_crew WHERE booking_id = ? AND crew_member_id != ?").all(booking.id, worker.id).map(r => r.crew_member_id);
       if (crewIds.length) {
         const placeholders = crewIds.map(() => '?').join(',');
+        // Grouped tasks (team / equipment return) collapse to one row, and
+        // groups the viewer is IN are skipped — they already see those
+        // under "My tasks" with the TEAM badge.
         teamTasks = db.prepare(`
           SELECT st.*, cm.full_name AS assignee_name, cm.portal_role AS assignee_portal_role,
-            CASE WHEN st.booking_id IS NULL AND st.allocation_id IS NULL THEN 1 ELSE 0 END AS is_general
+            CASE WHEN st.booking_id IS NULL AND st.allocation_id IS NULL THEN 1 ELSE 0 END AS is_general,
+            COUNT(*) AS group_size
           FROM shift_tasks st JOIN crew_members cm ON st.crew_member_id = cm.id
           WHERE st.crew_member_id IN (${placeholders})
             AND (
               st.booking_id = ?
               OR (st.booking_id IS NULL AND st.allocation_id IS NULL)
             )
+            AND (st.group_key IS NULL OR NOT EXISTS (
+              SELECT 1 FROM shift_tasks mine
+              WHERE mine.group_key = st.group_key AND mine.crew_member_id = ?
+            ))
+          GROUP BY COALESCE(st.group_key, 'id:' || st.id)
           ORDER BY CASE st.status WHEN 'pending' THEN 0 ELSE 1 END,
                    CASE st.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
                    st.due_at ASC, st.created_at ASC
-        `).all(...crewIds, booking.id);
+        `).all(...crewIds, booking.id, worker.id);
       }
     }
   } catch (e) { console.error('[booking-shift] tasks fetch error:', e.message); }
@@ -984,7 +995,7 @@ router.post('/bookings/:id/respond', (req, res) => {
       .run(req.params.id, worker.id);
     // A declined worker isn't bringing gear back — drop them from any
     // return-to-depot task groups on this shift.
-    try { syncBookingReturnTasks(db, parseInt(req.params.id, 10)); } catch (e) { console.error('[worker respond] return-task sync failed:', e.message); }
+    try { syncBookingTaskGroups(db, parseInt(req.params.id, 10)); } catch (e) { console.error('[worker respond] task-group sync failed:', e.message); }
     req.flash('success', 'Shift declined.');
   }
 
@@ -1010,14 +1021,41 @@ router.post('/shift-tasks/:id/done', (req, res) => {
     req.flash('error', 'Task not found or not yours.');
     return res.redirect('back');
   }
-  if (t.booking_equipment_id) {
-    // Automatic return-to-depot task — the gear is either back at the depot
-    // or it isn't, so one crew member's tick moves the WHOLE group.
+  if (t.group_key || t.booking_equipment_id) {
+    // Grouped task (equipment return or whole-crew Team task) — one crew
+    // member's tick moves the WHOLE group. group_key is the fan-out key;
+    // booking_equipment_id is the legacy fallback for pre-322 rows.
+    const key = t.group_key ? 'group_key' : 'booking_equipment_id';
+    const val = t.group_key || t.booking_equipment_id;
     if (undo) {
-      db.prepare("UPDATE shift_tasks SET status = 'pending', completed_at = NULL, updated_at = datetime('now') WHERE booking_equipment_id = ?").run(t.booking_equipment_id);
+      db.prepare(`UPDATE shift_tasks SET status = 'pending', completed_at = NULL, updated_at = datetime('now') WHERE ${key} = ?`).run(val);
+      // Reopening an equipment-return task retracts its condition report
+      // (and the faulty follow-up task, if the office hasn't started it).
+      if (t.booking_equipment_id) {
+        try { require('../../services/equipmentReports').undoReturnReport(db, t.booking_equipment_id); } catch (e) {}
+      }
       req.flash('success', 'Task reopened for the whole crew.');
     } else {
-      db.prepare("UPDATE shift_tasks SET status = 'done', completed_at = datetime('now'), updated_at = datetime('now') WHERE booking_equipment_id = ? AND status = 'pending'").run(t.booking_equipment_id);
+      // Equipment-return completion carries the condition/destination
+      // report from the bottom sheet. Validate before completing —
+      // a return without a report leaves the location trail blind.
+      if (t.kind === 'equipment_return' && t.booking_equipment_id) {
+        const { recordReturnReport } = require('../../services/equipmentReports');
+        const result = recordReturnReport(db, {
+          bookingId: t.booking_id,
+          bookingEquipmentId: t.booking_equipment_id,
+          condition: req.body.condition,
+          destination: req.body.destination,
+          note: req.body.note,
+          reportedByCrewId: worker.id,
+        });
+        if (!result) {
+          req.flash('error', 'Tell us the gear\'s condition and where it went to finish this task.');
+          if (t.booking_id) return res.redirect('/w/booking-shift/' + t.booking_id + '?tab=tasks');
+          return res.redirect('/w/home');
+        }
+      }
+      db.prepare(`UPDATE shift_tasks SET status = 'done', completed_at = datetime('now'), updated_at = datetime('now') WHERE ${key} = ? AND status = 'pending'`).run(val);
       req.flash('success', 'Task marked done for the whole crew.');
     }
   } else if (undo) {
@@ -1053,6 +1091,35 @@ router.post('/shift-tasks', (req, res) => {
     return res.redirect('back');
   }
   const isGeneral = scope === 'general';
+  // Whole-team task: fans one row per active crew member, completes as
+  // one. Branched BEFORE the booking_crew guard ('team' isn't a crew id);
+  // needs a shift roster, so general scope is rejected.
+  if (crew_member_id === 'team') {
+    if (isGeneral || !booking_id) {
+      req.flash('error', 'Team tasks need a shift — for a general task pick one person.');
+      return res.redirect('back');
+    }
+    const group = createTeamTask(db, parseInt(booking_id, 10), {
+      title: title.trim(),
+      priority: ['low','normal','high'].includes(priority) ? priority : 'normal',
+      createdByCrewId: worker.id,
+    });
+    if (!group) {
+      req.flash('error', 'No crew on this shift yet.');
+      return res.redirect('back');
+    }
+    try {
+      const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(booking_id) || {};
+      const date = bk.start_datetime ? new Date(String(bk.start_datetime).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' }) : '';
+      bookingNotify.notifyTaskAssigned(group.crewIds.filter(id => String(id) !== String(worker.id)), {
+        title: title.trim(),
+        url: '/w/booking-shift/' + booking_id + '?tab=tasks',
+        shift_label: [date, bk.title || bk.booking_number].filter(Boolean).join(' '),
+      });
+    } catch (e) { console.error('[worker tasks] team notify failed:', e.message); }
+    req.flash('success', 'Team task added — first to finish ticks it off for everyone.');
+    return res.redirect('/w/booking-shift/' + booking_id + '?tab=tasks');
+  }
   let bookingScope = null;
   let allocScope = null;
   if (!isGeneral) {

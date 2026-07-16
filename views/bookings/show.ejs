@@ -875,7 +875,13 @@
                 <p class="text-sm font-medium <%= done ? 'line-through text-gray-500' : 'text-gray-900' %>"><%= t.title %></p>
                 <% if (t.description) { %><p class="text-xs text-gray-500 mt-0.5"><%= t.description %></p><% } %>
                 <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold <%= TASK_PORTAL[t.assignee_portal_role] || TASK_PORTAL.traffic_controller %>"><%= t.assignee_name %></span>
+                  <% if (t.group_key && t.group_key.indexOf('team:') === 0) { %>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-600/10 text-brand-700 ring-1 ring-brand-600/25">TEAM · <%= t.group_size %></span>
+                  <% } else if (t.group_key) { %>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 ring-1 ring-purple-600/20">CREW · <%= t.group_size %></span>
+                  <% } else { %>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold <%= TASK_PORTAL[t.assignee_portal_role] || TASK_PORTAL.traffic_controller %>"><%= t.assignee_name %></span>
+                  <% } %>
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ring-1 <%= TASK_PRIORITY[t.priority] || TASK_PRIORITY.normal %>"><%= (t.priority || 'normal').toUpperCase() %></span>
                   <% if (t.due_at) { %><span class="text-[10px] text-gray-500">Due <%= formatDateTime(t.due_at) %></span><% } %>
                   <% if (t.created_by_name) { %><span class="text-[10px] text-gray-400">· by <%= t.created_by_name %></span><% } %>
@@ -901,7 +907,7 @@
         <%- include('../partials/csrf') %>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <select name="crew_member_id" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm">
-            <option value="">Assign to…</option>
+            <option value="team" selected>Whole team — first to finish ticks it off</option>
             <% (b.personnel || []).forEach(function (p) { %>
               <option value="<%= p.id %>"><%= p.name %><% if (p.role) { %> · <%= p.role.replace(/_/g,' ') %><% } %></option>
             <% }) %>
@@ -1438,6 +1444,13 @@
                 <span class="text-sm font-medium text-gray-900"><%= eq.equipment_name || eq.asset_name || 'Unknown' %></span>
                 <% if (eq.equipment_type || eq.eq_category) { %><span class="text-xs text-gray-400 ml-1">(<%= eq.equipment_type || eq.eq_category %>)</span><% } %>
                 <% if (eq.quantity > 1) { %><span class="text-xs font-bold text-gray-500 ml-1">x<%= eq.quantity %></span><% } %>
+                <% if (eq.report_destination) {
+                     const destLabel = { home: 'With crew', depot: 'At depot', supplier: 'To supplier', site: 'On site' }[eq.report_destination] || eq.report_destination;
+                     const faulty = eq.report_condition === 'faulty'; %>
+                  <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold ml-1 <%= faulty ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20' : 'bg-gray-100 text-gray-600 ring-1 ring-gray-200' %>" title="From the crew's return report">
+                    <%= faulty ? '⚠ FAULTY · ' : '' %><%= destLabel.toUpperCase() %>
+                  </span>
+                <% } %>
               </div>
               <form method="POST" action="/bookings/<%= b.id %>/equipment/<%= eq.id %>/remove" class="inline">
                 <%- include('../partials/csrf') %>

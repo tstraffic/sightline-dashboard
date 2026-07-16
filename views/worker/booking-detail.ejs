@@ -359,8 +359,16 @@
           <p class="text-sm" style="color:rgba(255,255,255,0.65);">No tasks assigned to you for this shift.</p>
         </div>
       <% } else { %>
-        <% myTasks.forEach(function(t) { var pr = priorityBadge(t.priority); var done = t.status === 'done'; %>
+        <% myTasks.forEach(function(t) { var pr = priorityBadge(t.priority); var done = t.status === 'done'; var isReturn = t.kind === 'equipment_return' && !done; %>
           <div class="flex items-start gap-3 px-3 py-2.5 rounded-lg <%= done ? 'opacity-60' : '' %>" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
+            <% if (isReturn) { %>
+              <!-- Equipment-return tasks open the condition/destination sheet
+                   instead of completing directly — the report is required. -->
+              <button type="button" aria-label="Mark done" data-rt-open
+                data-rt-task-id="<%= t.id %>" data-rt-name="<%= (t.title || '').replace(/^Return /, '').replace(/ to .*$/, '') %>" data-rt-hired="<%= t.is_hired ? '1' : '0' %>"
+                class="w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5"
+                style="border:1.5px solid rgba(255,255,255,0.4);background:transparent;"></button>
+            <% } else { %>
             <form method="POST" action="/w/shift-tasks/<%= t.id %>/done" class="shrink-0 mt-0.5">
               <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
               <% if (done) { %><input type="hidden" name="undo" value="1"><% } %>
@@ -370,6 +378,7 @@
                 <% if (done) { %><svg class="w-3 h-3" style="color:#34D399;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><% } %>
               </button>
             </form>
+            <% } %>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium <%= done ? 'line-through text-gray-500' : 'text-white' %>"><%= t.title %></p>
               <% if (t.description) { %>
@@ -377,6 +386,7 @@
               <% } %>
               <div class="flex items-center gap-1.5 flex-wrap mt-1">
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:<%= pr.bg %>;color:<%= pr.color %>;"><%= pr.label %></span>
+                <% if (t.group_key) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(16,185,129,0.20);color:#6EE7B7;" title="Whole crew — first to finish ticks it off for everyone">TEAM</span><% } %>
                 <% if (t.is_general) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(16,185,129,0.18);color:#60A5FA;">GENERAL</span><% } else { %><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold" style="background:rgba(16,185,129,0.18);color:#5EEAD4;">THIS SHIFT</span><% } %>
                 <% if (t.due_at) { %><span class="text-[10px]" style="color:rgba(255,255,255,0.4);">Due <%= formatDateTime(t.due_at) %></span><% } %>
               </div>
@@ -428,7 +438,7 @@
             <input type="hidden" name="booking_id" value="<%= booking.id %>">
             <% if (allocation) { %><input type="hidden" name="allocation_id" value="<%= allocation.id %>"><% } %>
             <select name="crew_member_id" required class="w-full px-3 py-2 text-sm rounded-lg" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#fff;">
-              <option value="" style="color:#000;">Assign to&hellip;</option>
+              <option value="team" selected style="color:#000;">Whole team — first to finish ticks it off</option>
               <% (crew || []).forEach(function (c) { %>
                 <option value="<%= c.crew_member_id %>" style="color:#000;"><%= c.full_name %></option>
               <% }) %>
@@ -460,6 +470,108 @@
         </details>
       </div>
     <% } %>
+
+    <!-- Equipment-return sheet — condition + destination, required to
+         complete a return task. Cloned from the hr-leave .lv-sheet
+         pattern; rt- prefixed so the two never collide. -->
+    <style>
+      .rt-sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); z-index: 60; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+      .rt-sheet-bg.open { opacity: 1; pointer-events: auto; }
+      .rt-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: #171A21; border-radius: 18px 18px 0 0; padding: 10px 16px calc(20px + env(safe-area-inset-bottom)); transform: translateY(105%); transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); max-height: 86vh; overflow-y: auto; }
+      .rt-sheet.open { transform: translateY(0); }
+      .rt-handle { width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); margin: 0 auto 12px; }
+      body.rt-sheet-active nav.fixed, body.rt-sheet-active nav[class*="fixed"], body.rt-sheet-active .wh-tab-bar { visibility: hidden; }
+      .rt-title { font-family: 'Bricolage Grotesque', Geist, sans-serif; font-size: 1.1rem; font-weight: 620; letter-spacing: -0.02em; color: #fff; }
+      .rt-sub { font-size: 0.8rem; color: rgba(255,255,255,0.55); margin-top: 2px; }
+      .rt-label { display: block; font-family: 'Geist Mono', monospace; font-size: 10px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: rgba(255,255,255,0.5); margin: 14px 0 6px; }
+      .rt-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+      .rt-seg label { cursor: pointer; }
+      .rt-seg input { position: absolute; opacity: 0; pointer-events: none; }
+      .rt-opt { display: flex; align-items: center; justify-content: center; gap: 6px; padding: 12px 8px; border-radius: 10px; font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.65); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); }
+      .rt-seg input:checked + .rt-opt.rt-ok { background: rgba(16,185,129,0.16); border-color: rgba(16,185,129,0.5); color: #6EE7B7; }
+      .rt-seg input:checked + .rt-opt.rt-bad { background: rgba(239,68,68,0.14); border-color: rgba(239,68,68,0.5); color: #FCA5A5; }
+      .rt-seg input:checked + .rt-opt.rt-dest { background: rgba(16,185,129,0.16); border-color: rgba(16,185,129,0.5); color: #6EE7B7; }
+      .rt-note { width: 100%; background: rgba(255,255,255,0.05); color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 12px; font-size: 0.875rem; margin-top: 4px; }
+      .rt-submit { width: 100%; margin-top: 16px; padding: 13px; border-radius: 12px; background: #10B981; color: #fff; font-weight: 700; font-size: 0.95rem; border: 0; }
+      .rt-submit:disabled { opacity: 0.45; }
+      .rt-err { color: #FCA5A5; font-size: 0.78rem; margin-top: 8px; display: none; }
+      :root[data-theme="light"] .rt-sheet { background-color: #FFFFFF; }
+      :root[data-theme="light"] .rt-handle { background-color: #D1D5DB; }
+      :root[data-theme="light"] .rt-title { color: #0F1115; }
+      :root[data-theme="light"] .rt-sub { color: #6B7280; }
+      :root[data-theme="light"] .rt-label { color: #6B7280; }
+      :root[data-theme="light"] .rt-opt { background-color: #F9FAFB; border-color: #E5E7EB; color: #4B5563; }
+      :root[data-theme="light"] .rt-seg input:checked + .rt-opt.rt-ok,
+      :root[data-theme="light"] .rt-seg input:checked + .rt-opt.rt-dest { background-color: #ECFDF5; border-color: #6EE7B7; color: #047857; }
+      :root[data-theme="light"] .rt-seg input:checked + .rt-opt.rt-bad { background-color: #FEF2F2; border-color: #FCA5A5; color: #B91C1C; }
+      :root[data-theme="light"] .rt-note { background-color: #FFFFFF; border-color: #D1D5DB; color: #0F1115; }
+    </style>
+    <div class="rt-sheet-bg" id="rt-bg"></div>
+    <div class="rt-sheet" id="rt-sheet" role="dialog" aria-label="Gear return report">
+      <div class="rt-handle"></div>
+      <p class="rt-title">Gear returned — quick report</p>
+      <p class="rt-sub" id="rt-gear-name"></p>
+      <form method="POST" id="rt-form" action="">
+        <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+        <label class="rt-label">Condition</label>
+        <div class="rt-seg">
+          <label><input type="radio" name="condition" value="working" required><span class="rt-opt rt-ok">✓ Working well</span></label>
+          <label><input type="radio" name="condition" value="faulty"><span class="rt-opt rt-bad">⚠ Faulty</span></label>
+        </div>
+        <label class="rt-label">Where is it now?</label>
+        <div class="rt-seg">
+          <label><input type="radio" name="destination" value="depot" required><span class="rt-opt rt-dest">At the depot</span></label>
+          <label><input type="radio" name="destination" value="home"><span class="rt-opt rt-dest">Home with me</span></label>
+          <label id="rt-supplier-opt"><input type="radio" name="destination" value="supplier"><span class="rt-opt rt-dest">Back to supplier</span></label>
+          <label><input type="radio" name="destination" value="site"><span class="rt-opt rt-dest">Left on site</span></label>
+        </div>
+        <label class="rt-label">Note (optional)</label>
+        <input type="text" name="note" maxlength="500" class="rt-note" placeholder="e.g. battery flat, left with the site office…">
+        <p class="rt-err" id="rt-err">Pick a condition and a destination.</p>
+        <button type="submit" class="rt-submit">Finish task — logs it for the whole crew</button>
+      </form>
+    </div>
+    <script>
+    (function () {
+      var bg = document.getElementById('rt-bg');
+      var sheet = document.getElementById('rt-sheet');
+      var form = document.getElementById('rt-form');
+      var nameEl = document.getElementById('rt-gear-name');
+      var supplierOpt = document.getElementById('rt-supplier-opt');
+      var errEl = document.getElementById('rt-err');
+      if (!sheet || !form) return;
+      function open(taskId, gearName, hired) {
+        form.action = '/w/shift-tasks/' + taskId + '/done';
+        nameEl.textContent = gearName || 'Equipment';
+        if (supplierOpt) supplierOpt.style.display = hired ? '' : 'none';
+        form.reset();
+        errEl.style.display = 'none';
+        bg.classList.add('open');
+        sheet.classList.add('open');
+        document.body.classList.add('rt-sheet-active');
+      }
+      function close() {
+        bg.classList.remove('open');
+        sheet.classList.remove('open');
+        document.body.classList.remove('rt-sheet-active');
+      }
+      document.addEventListener('click', function (e) {
+        var btn = e.target.closest && e.target.closest('[data-rt-open]');
+        if (!btn) return;
+        e.preventDefault();
+        open(btn.getAttribute('data-rt-task-id'), btn.getAttribute('data-rt-name'), btn.getAttribute('data-rt-hired') === '1');
+      });
+      bg.addEventListener('click', close);
+      form.addEventListener('submit', function (e) {
+        var cond = form.querySelector('input[name="condition"]:checked');
+        var dest = form.querySelector('input[name="destination"]:checked');
+        if (!cond || !dest) {
+          e.preventDefault();
+          errEl.style.display = 'block';
+        }
+      });
+    })();
+    </script>
   <% } %>
 
   <!-- FORMS TAB &mdash; shared partial keeps this 1:1 with views/worker/job-detail.ejs -->

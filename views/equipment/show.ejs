@@ -287,6 +287,53 @@
 <% } %>
 
 <!-- ============================================ -->
+<!-- CONDITION & LOCATION REPORTS (crew return reports, migration 322) -->
+<!-- ============================================ -->
+<% if (typeof conditionReports !== 'undefined' && conditionReports.length > 0) { %>
+<div class="mb-8">
+  <h2 class="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+    <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+    Condition &amp; Location Reports
+    <span class="text-xs font-normal text-gray-400">— from crew return tasks</span>
+  </h2>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b border-gray-200 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+          <th class="px-4 py-3">Date</th>
+          <th class="px-4 py-3">Booking</th>
+          <th class="px-4 py-3">Reported by</th>
+          <th class="px-4 py-3">Condition</th>
+          <th class="px-4 py-3">Went to</th>
+          <th class="px-4 py-3">Note</th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-100">
+        <% conditionReports.forEach(r => {
+          const destLabel = { home: 'Home with worker', depot: 'Depot', supplier: 'Back to supplier', site: 'Left on site' }[r.destination] || r.destination; %>
+        <tr class="hover:bg-gray-50">
+          <td class="px-4 py-3 text-gray-500 text-xs font-mono tabular-nums"><%= formatDateShort(r.created_at) %></td>
+          <td class="px-4 py-3">
+            <% if (r.booking_id) { %><a href="/bookings/<%= r.booking_id %>" class="text-brand-600 hover:text-brand-700 text-xs font-medium hover:underline"><%= r.booking_number || ('#' + r.booking_id) %></a>
+            <% } else { %><span class="text-gray-400 text-xs">—</span><% } %>
+          </td>
+          <td class="px-4 py-3 text-gray-600 text-xs"><%= r.reporter_name || '—' %></td>
+          <td class="px-4 py-3">
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= r.condition === 'faulty' ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' %>">
+              <%= r.condition === 'faulty' ? '⚠ FAULTY' : 'WORKING' %>
+            </span>
+          </td>
+          <td class="px-4 py-3 text-gray-600 text-xs"><%= destLabel %></td>
+          <td class="px-4 py-3 text-gray-500 text-xs max-w-[240px] truncate" title="<%= r.note %>"><%= r.note || '—' %></td>
+        </tr>
+        <% }) %>
+      </tbody>
+    </table>
+  </div>
+</div>
+<% } %>
+
+<!-- ============================================ -->
 <!-- MAINTENANCE LOG -->
 <!-- ============================================ -->
 <div class="mb-8">

@@ -424,7 +424,7 @@
                           <div class="bk2-veh-gear" draggable="true" data-bk-gear-drag="1" data-booking-id="<%= b.id %>" data-eq-id="<%= g.id %>" data-eq-name="<%= g.name %>" data-from-vehicle-id="<%= blk.vehicle_slot.vehicle_id %>">
                             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
                             <span class="bk2-veh-gear-name"><%= g.name %></span>
-                            <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
+                            <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %><% if (g.report_destination) { var _lp = { home: 'WITH CREW', depot: 'AT DEPOT', supplier: 'TO SUPPLIER', site: 'ON SITE' }[g.report_destination] || ''; %><span class="bk2-loc-pill<%= g.report_condition === 'faulty' ? ' bk2-loc-pill--faulty' : '' %>" title="<%= g.report_condition === 'faulty' ? 'Reported FAULTY — ' : '' %>Returned: <%= _lp %>"><%= g.report_condition === 'faulty' ? '⚠ ' : '' %><%= _lp %></span><% } %>
                             <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
                           </div>
                         <% }); %>
@@ -442,7 +442,7 @@
                           <div class="bk2-veh-gear" draggable="true" data-bk-gear-drag="1" data-booking-id="<%= b.id %>" data-eq-id="<%= g.id %>" data-eq-name="<%= g.name %>" data-from-vehicle-id="<%= blk.vehicle_slot.vehicle_id %>">
                             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
                             <span class="bk2-veh-gear-name"><%= g.name %></span>
-                            <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
+                            <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %><% if (g.report_destination) { var _lp = { home: 'WITH CREW', depot: 'AT DEPOT', supplier: 'TO SUPPLIER', site: 'ON SITE' }[g.report_destination] || ''; %><span class="bk2-loc-pill<%= g.report_condition === 'faulty' ? ' bk2-loc-pill--faulty' : '' %>" title="<%= g.report_condition === 'faulty' ? 'Reported FAULTY — ' : '' %>Returned: <%= _lp %>"><%= g.report_condition === 'faulty' ? '⚠ ' : '' %><%= _lp %></span><% } %>
                             <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
                           </div>
                         <% }); %>
@@ -605,7 +605,7 @@
                           <div class="bk2-veh-gear" draggable="true" data-bk-gear-drag="1" data-booking-id="<%= b.id %>" data-eq-id="<%= g.id %>" data-eq-name="<%= g.name %>" data-from-vehicle-id="<%= v.vehicle_id %>">
                             <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
                             <span class="bk2-veh-gear-name"><%= g.name %></span>
-                            <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
+                            <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %><% if (g.report_destination) { var _lp = { home: 'WITH CREW', depot: 'AT DEPOT', supplier: 'TO SUPPLIER', site: 'ON SITE' }[g.report_destination] || ''; %><span class="bk2-loc-pill<%= g.report_condition === 'faulty' ? ' bk2-loc-pill--faulty' : '' %>" title="<%= g.report_condition === 'faulty' ? 'Reported FAULTY — ' : '' %>Returned: <%= _lp %>"><%= g.report_condition === 'faulty' ? '⚠ ' : '' %><%= _lp %></span><% } %>
                             <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
                           </div>
                         <% }); %>
@@ -650,7 +650,7 @@
                         <div class="bk2-veh-gear bk2-veh-gear--loose" draggable="true" data-bk-gear-drag="1" data-booking-id="<%= b.id %>" data-eq-id="<%= g.id %>" data-eq-name="<%= g.name %>" data-from-vehicle-id="">
                           <svg width="11" height="11" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
                           <span class="bk2-veh-gear-name"><%= g.name %></span>
-                          <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
+                          <% if (g.hired) { %><span class="bk2-hired-pill" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %><% if (g.report_destination) { var _lp = { home: 'WITH CREW', depot: 'AT DEPOT', supplier: 'TO SUPPLIER', site: 'ON SITE' }[g.report_destination] || ''; %><span class="bk2-loc-pill<%= g.report_condition === 'faulty' ? ' bk2-loc-pill--faulty' : '' %>" title="<%= g.report_condition === 'faulty' ? 'Reported FAULTY — ' : '' %>Returned: <%= _lp %>"><%= g.report_condition === 'faulty' ? '⚠ ' : '' %><%= _lp %></span><% } %>
                           <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Remove gear" aria-label="Remove gear">×</button>
                         </div>
                       <% }); %>

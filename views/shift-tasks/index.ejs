@@ -191,8 +191,8 @@
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div class="sm:col-span-2">
           <label class="tb-label">Assign to</label>
-          <select name="crew_member_id" required class="tb-select tb-input">
-            <option value="">— Select crew member —</option>
+          <select name="crew_member_id" required class="tb-select tb-input" id="tb-assignee">
+            <option value="team" selected>Whole team — everyone on the shift, first to finish ticks it off</option>
             <% crew.forEach(function (c) { %>
               <option value="<%= c.id %>"><%= c.full_name %><% if (c.portal_role && c.portal_role !== 'traffic_controller') { %> · <%= c.portal_role.replace('_',' ') %><% } %></option>
             <% }) %>
@@ -407,7 +407,13 @@
                 <p class="text-sm font-medium <%= done ? 'line-through text-gray-500' : 'text-gray-900' %>"><%= t.title %></p>
                 <% if (t.description) { %><p class="text-xs text-gray-500 mt-0.5"><%= t.description %></p><% } %>
                 <div class="flex items-center gap-1.5 flex-wrap mt-1.5">
-                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold <%= rp.cls %>"><%= t.assignee_name %></span>
+                  <% if (t.group_key && t.group_key.indexOf('team:') === 0) { %>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-600/10 text-brand-700 ring-1 ring-brand-600/25">TEAM · <%= t.group_size %></span>
+                  <% } else if (t.group_key) { %>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 ring-1 ring-purple-600/20">CREW · <%= t.group_size %></span>
+                  <% } else { %>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold <%= rp.cls %>"><%= t.assignee_name %></span>
+                  <% } %>
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold ring-1 <%= priorityPill(t.priority) %>"><%= (t.priority || 'normal').toUpperCase() %></span>
                   <% if (t.booking_id) { %>
                     <a href="/bookings/<%= t.booking_id %>#tasks" class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 hover:underline">
@@ -440,11 +446,17 @@
               <input type="hidden" name="return_scope" value="<%= scope %>">
               <input type="hidden" name="return_assignee" value="<%= assignee || '' %>">
               <input type="text" name="title" value="<%= t.title %>" required maxlength="200" class="tb-input lg:col-span-2" style="padding:7px 10px;font-size:0.8rem;">
+              <% if (t.group_key) { %>
+                <!-- Grouped task — the whole crew owns it; reassignment is blocked server-side. -->
+                <input type="hidden" name="crew_member_id" value="team">
+                <div class="tb-input flex items-center text-xs text-gray-500" style="padding:7px 10px;">Whole crew</div>
+              <% } else { %>
               <select name="crew_member_id" class="tb-select tb-input" style="padding:7px 30px 7px 10px;font-size:0.8rem;" title="<%= t.booking_id ? 'Must be on the task\'s booking' : 'Assignee' %>">
                 <% crew.forEach(function (c) { %>
                   <option value="<%= c.id %>" <%= t.crew_member_id === c.id ? 'selected' : '' %>><%= c.full_name %></option>
                 <% }) %>
               </select>
+              <% } %>
               <select name="priority" class="tb-select tb-input" style="padding:7px 30px 7px 10px;font-size:0.8rem;">
                 <% ['high','normal','low'].forEach(function (p) { %><option value="<%= p %>" <%= (t.priority || 'normal') === p ? 'selected' : '' %>><%= p.charAt(0).toUpperCase() + p.slice(1) %></option><% }) %>
               </select>
@@ -516,11 +528,19 @@
   var bookingRow = document.getElementById('booking-row');
   var bookingSelect = document.getElementById('booking-select');
   function syncScope() {
+    var assignee = document.getElementById('tb-assignee');
+    var teamOpt = assignee && assignee.querySelector('option[value="team"]');
     if (scopeGeneral && scopeGeneral.checked) {
       if (bookingRow) bookingRow.style.display = 'none';
       if (bookingSelect) bookingSelect.value = '';
+      // Team tasks need a shift roster — general scope forces a person.
+      if (teamOpt) {
+        teamOpt.disabled = true;
+        if (assignee.value === 'team') assignee.value = '';
+      }
     } else {
       if (bookingRow) bookingRow.style.display = '';
+      if (teamOpt) teamOpt.disabled = false;
     }
   }
   if (scopeShift)   scopeShift.addEventListener('change', syncScope);

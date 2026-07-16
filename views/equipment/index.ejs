@@ -142,6 +142,7 @@
         <th class="px-3 py-2.5 text-left hidden md:table-cell"><%- include('../partials/sort-header', { label: 'Category', field: 'category', currentSort: sort, currentOrder: order, baseUrl: '/equipment', extraParams: eqSortParams }) %></th>
         <th class="px-3 py-2.5 text-left"><%- include('../partials/sort-header', { label: 'Condition', field: 'current_condition', currentSort: sort, currentOrder: order, baseUrl: '/equipment', extraParams: eqSortParams }) %></th>
         <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Location</th>
         <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Deployed</th>
         <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Uses</th>
         <th class="px-3 py-2.5 text-left hidden md:table-cell"><%- include('../partials/sort-header', { label: 'Inspection', field: 'next_inspection_date', currentSort: sort, currentOrder: order, baseUrl: '/equipment', extraParams: eqSortParams }) %></th>
@@ -151,7 +152,11 @@
       <% equipment.forEach(eq => {
         const inspOverdue = eq.next_inspection_date && eq.next_inspection_date <= today;
         const inspDays = daysUntil(eq.next_inspection_date);
-        const isPoorDamaged = ['poor','damaged'].includes(eq.current_condition);
+        const reportedFaulty = eq.latest_report_condition === 'faulty';
+        const isPoorDamaged = ['poor','damaged'].includes(eq.current_condition) || reportedFaulty;
+        const locLabel = eq.latest_report_destination
+          ? ({ home: 'With crew', depot: 'At depot', supplier: 'To supplier', site: 'On site' }[eq.latest_report_destination] || eq.latest_report_destination)
+          : (eq.location || eq.storage_location || '');
       %>
       <tr class="hover:bg-gray-50 <%= isPoorDamaged ? 'border-l-4 border-l-red-400' : inspOverdue ? 'border-l-4 border-l-amber-400' : '' %> <%= !eq.active ? 'opacity-50' : '' %>" onclick="window.location='/equipment/<%= eq.id %>'" style="cursor:pointer">
         <td class="px-2 py-2.5" onclick="event.stopPropagation()">
@@ -175,6 +180,15 @@
             <% } else { %>bg-gray-50 text-gray-500<% } %>">
             <%= eq.current_condition ? eq.current_condition.toUpperCase() : '-' %>
           </span>
+          <% if (reportedFaulty) { %>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 ring-1 ring-red-600/20 mt-0.5" title="Latest crew return report flagged this item faulty">⚠ REPORTED FAULTY</span>
+          <% } %>
+        </td>
+        <td class="px-3 py-2.5 hidden lg:table-cell">
+          <% if (locLabel) { %>
+            <span class="text-xs <%= eq.latest_report_destination ? 'text-gray-700 font-medium' : 'text-gray-400' %>"><%= locLabel %></span>
+            <% if (eq.latest_report_at) { %><p class="text-[10px] text-gray-400 font-mono"><%= formatDateShort(eq.latest_report_at) %></p><% } %>
+          <% } else { %><span class="text-xs text-gray-300">—</span><% } %>
         </td>
         <td class="px-3 py-2.5">
           <%

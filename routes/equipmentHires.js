@@ -88,7 +88,9 @@ router.get('/', (req, res) => {
     SELECT h.*, c.name AS company_current_name,
       (SELECT COUNT(*) FROM equipment_hire_units u WHERE u.hire_id = h.id) AS units_total,
       (SELECT COUNT(*) FROM equipment_hire_units u WHERE u.hire_id = h.id AND u.returned_at IS NOT NULL) AS units_returned,
-      (SELECT GROUP_CONCAT(NULLIF(u.unit_number, ''), ', ') FROM equipment_hire_units u WHERE u.hire_id = h.id AND u.returned_at IS NULL) AS out_numbers
+      (SELECT GROUP_CONCAT(NULLIF(u.unit_number, ''), ', ') FROM equipment_hire_units u WHERE u.hire_id = h.id AND u.returned_at IS NULL) AS out_numbers,
+      (SELECT COUNT(*) FROM equipment_condition_reports r JOIN equipment_hire_units u2 ON u2.id = r.hire_unit_id
+        WHERE u2.hire_id = h.id AND r.condition = 'faulty') AS unit_faults
     FROM equipment_hires h
     LEFT JOIN hire_companies c ON c.id = h.company_id
     WHERE h.status != 'cancelled'
@@ -111,13 +113,16 @@ router.get('/', (req, res) => {
   const totalMonthCost = hires.reduce((s, h) => s + (h.month_cost || 0), 0);
   const onHireCount = hires.filter(h => h.status === 'on_hire').length;
 
-  // Per-company rollup for the summary.
+  // Per-company rollup for the summary. `faults` = crew return reports
+  // flagging this supplier's units faulty — the same boom failing twice
+  // shows up here before the next hire is booked.
   const byCompany = {};
   hires.forEach(h => {
     const k = h.company_label;
-    byCompany[k] = byCompany[k] || { name: k, count: 0, cost: 0 };
+    byCompany[k] = byCompany[k] || { name: k, count: 0, cost: 0, faults: 0 };
     byCompany[k].count += 1;
     byCompany[k].cost += (h.month_cost || 0);
+    byCompany[k].faults += (h.unit_faults || 0);
   });
 
   res.render('equipment/hire/index', {

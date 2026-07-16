@@ -9,6 +9,7 @@ const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const bookingNotify = require('../services/bookingNotify');
 const { sydneyToday, sydneyIso, parseAsSydney } = require('../lib/sydney');
+const { createTeamTask } = require('../services/returnTasks');
 
 // Query params can arrive as arrays (e.g. two `status` fields in one form —
 // the old filter strip did exactly that and crashed `.trim()`). Take the
@@ -53,18 +54,24 @@ router.get('/', (req, res) => {
   if (scope === 'general') { where.push('st.booking_id IS NULL AND st.allocation_id IS NULL'); }
   if (assignee)            { where.push('st.crew_member_id = ?'); params.push(assignee); }
 
+  // Grouped tasks (whole-crew team tasks + equipment returns) collapse to
+  // ONE board row — the representative row carries group_size so the
+  // assignee cell can say "Whole team · N". Status/delete forms post the
+  // representative id; those routes fan by group_key.
   const rows = db.prepare(`
     SELECT st.*,
       cm.full_name AS assignee_name, cm.portal_role AS assignee_portal_role,
       b.booking_number, b.title AS booking_title, b.start_datetime,
       u.full_name AS created_by_name,
-      cb.full_name AS created_by_crew_name
+      cb.full_name AS created_by_crew_name,
+      COUNT(*) AS group_size
     FROM shift_tasks st
     JOIN crew_members cm ON st.crew_member_id = cm.id
     LEFT JOIN bookings b ON st.booking_id = b.id
     LEFT JOIN users u ON st.created_by_user_id = u.id
     LEFT JOIN crew_members cb ON st.created_by_crew_id = cb.id
     WHERE ${where.join(' AND ')}
+    GROUP BY COALESCE(st.group_key, 'id:' || st.id)
     ORDER BY CASE st.status WHEN 'pending' THEN 0 ELSE 1 END,
              CASE st.priority WHEN 'high' THEN 0 WHEN 'normal' THEN 1 ELSE 2 END,
              st.due_at ASC, st.created_at DESC
@@ -72,8 +79,8 @@ router.get('/', (req, res) => {
   `).all(...params);
 
   const counts = {
-    pending: db.prepare("SELECT COUNT(*) AS c FROM shift_tasks WHERE status='pending'").get().c,
-    done:    db.prepare("SELECT COUNT(*) AS c FROM shift_tasks WHERE status='done'").get().c,
+    pending: db.prepare("SELECT COUNT(DISTINCT COALESCE(group_key, 'id:' || id)) AS c FROM shift_tasks WHERE status='pending'").get().c,
+    done:    db.prepare("SELECT COUNT(DISTINCT COALESCE(group_key, 'id:' || id)) AS c FROM shift_tasks WHERE status='done'").get().c,
     general: db.prepare("SELECT COUNT(*) AS c FROM shift_tasks WHERE booking_id IS NULL AND allocation_id IS NULL").get().c,
   };
 
@@ -135,6 +142,31 @@ router.post('/', (req, res) => {
     req.flash('error', 'Title and assignee are required.');
     return res.redirect('/shift-tasks');
   }
+  // Whole-team task: needs a shift roster to fan to — a "team" general
+  // task would mean the whole company, which is the office tasks system's
+  // job. Branched BEFORE any booking_crew/parseInt handling ('team' isn't
+  // a crew id).
+  if (crew_member_id === 'team') {
+    if (scope === 'general' || !booking_id) {
+      req.flash('error', 'Team tasks need a shift — pick a booking, or assign a general task to one person.');
+      return res.redirect('/shift-tasks');
+    }
+    const group = createTeamTask(db, parseInt(booking_id, 10), {
+      title: title.trim(),
+      description: (description || '').trim(),
+      priority: ['low','normal','high'].includes(priority) ? priority : 'normal',
+      dueAt: due_at || null,
+      createdByUserId: req.session.user.id,
+    });
+    if (!group) {
+      req.flash('error', 'No crew on that booking yet — add workers first.');
+      return res.redirect('/shift-tasks');
+    }
+    logActivity({ user: req.session.user, action: 'create', entityType: 'shift_task', details: 'Created team task: ' + title.trim() + ' (' + group.crewIds.length + ' crew)', req });
+    bookingNotify.notifyTaskAssigned(group.crewIds, taskNotifyMeta(db, booking_id, title.trim()));
+    req.flash('success', 'Team task created — whole crew (' + group.crewIds.length + '), first to finish ticks it off for everyone.');
+    return res.redirect('/shift-tasks');
+  }
   let bookingScope = null, allocScope = null;
   if (scope !== 'general') {
     if (!booking_id) {
@@ -166,15 +198,30 @@ router.post('/', (req, res) => {
   res.redirect('/shift-tasks');
 });
 
-// POST /shift-tasks/:id/status — toggle / set status
+// POST /shift-tasks/:id/status — toggle / set status. Grouped tasks
+// (equipment returns + whole-crew Team tasks) move as one — this route
+// previously updated only the single row, leaving a return-task group
+// half done here while the bookings-card route fanned it; group_key
+// unifies both.
 router.post('/:id/status', (req, res) => {
+  const db = getDb();
   const status = ['pending','done','cancelled'].includes(req.body.status) ? req.body.status : 'pending';
   const completedAt = status === 'done' ? "datetime('now')" : 'NULL';
-  getDb().prepare(`
-    UPDATE shift_tasks
-    SET status = ?, completed_at = ${completedAt}, updated_at = datetime('now')
-    WHERE id = ?
-  `).run(status, req.params.id);
+  const t = db.prepare('SELECT group_key, booking_equipment_id FROM shift_tasks WHERE id = ?').get(req.params.id);
+  if (t && (t.group_key || t.booking_equipment_id)) {
+    const key = t.group_key ? 'group_key' : 'booking_equipment_id';
+    db.prepare(`
+      UPDATE shift_tasks
+      SET status = ?, completed_at = ${completedAt}, updated_at = datetime('now')
+      WHERE ${key} = ?
+    `).run(status, t.group_key || t.booking_equipment_id);
+  } else {
+    db.prepare(`
+      UPDATE shift_tasks
+      SET status = ?, completed_at = ${completedAt}, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(status, req.params.id);
+  }
   res.redirect(boardQuery(req.body));
 });
 
@@ -190,6 +237,21 @@ router.post('/:id/update', (req, res) => {
   const title = (b.title || '').trim() || task.title;
   const priority = ['low', 'normal', 'high'].includes(b.priority) ? b.priority : task.priority;
   const dueAt = b.due_at === undefined ? task.due_at : (b.due_at || null);
+  // Grouped tasks (team / equipment return): title/priority/due edits fan
+  // to every row; reassignment makes no sense for a whole-crew task.
+  if (task.group_key) {
+    if (b.crew_member_id && String(b.crew_member_id) !== 'team' && parseInt(b.crew_member_id, 10) !== task.crew_member_id) {
+      req.flash('error', 'Team tasks belong to the whole crew — delete it and create a personal task instead.');
+      return res.redirect(boardQuery(b));
+    }
+    db.prepare(`
+      UPDATE shift_tasks SET title=?, priority=?, due_at=?, updated_at=datetime('now')
+      WHERE group_key=?
+    `).run(title, priority, dueAt, task.group_key);
+    logActivity({ user: req.session.user, action: 'update', entityType: 'shift_task', entityId: task.id, details: 'Edited team task: ' + title, req });
+    req.flash('success', 'Task updated for the whole crew.');
+    return res.redirect(boardQuery(b));
+  }
   let crewId = parseInt(b.crew_member_id, 10) || task.crew_member_id;
   let allocId = task.allocation_id;
   if (crewId !== task.crew_member_id) {
@@ -214,9 +276,22 @@ router.post('/:id/update', (req, res) => {
   res.redirect(boardQuery(b));
 });
 
-// POST /shift-tasks/:id/delete
+// POST /shift-tasks/:id/delete — grouped tasks delete as one; return
+// tasks also clear the gear's opt-in (parity with the bookings-card
+// route) so the next allocation change doesn't resurrect the group.
 router.post('/:id/delete', (req, res) => {
-  getDb().prepare('DELETE FROM shift_tasks WHERE id = ?').run(req.params.id);
+  const db = getDb();
+  const t = db.prepare('SELECT group_key, booking_equipment_id FROM shift_tasks WHERE id = ?').get(req.params.id);
+  if (t && t.booking_equipment_id) {
+    try { db.prepare('UPDATE booking_equipment SET return_task = 0 WHERE id = ?').run(t.booking_equipment_id); } catch (e) {}
+  }
+  if (t && t.group_key) {
+    db.prepare('DELETE FROM shift_tasks WHERE group_key = ?').run(t.group_key);
+  } else if (t && t.booking_equipment_id) {
+    db.prepare('DELETE FROM shift_tasks WHERE booking_equipment_id = ?').run(t.booking_equipment_id);
+  } else {
+    db.prepare('DELETE FROM shift_tasks WHERE id = ?').run(req.params.id);
+  }
   req.flash('success', 'Task removed.');
   res.redirect(boardQuery(req.body));
 });

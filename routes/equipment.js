@@ -33,7 +33,10 @@ router.get('/', (req, res) => {
     SELECT e.*,
       (SELECT COUNT(*) FROM equipment_assignments ea WHERE ea.equipment_id = e.id AND ea.actual_return_date IS NULL) as currently_deployed,
       (SELECT j.job_number FROM equipment_assignments ea2 JOIN jobs j ON ea2.job_id = j.id WHERE ea2.equipment_id = e.id AND ea2.actual_return_date IS NULL ORDER BY ea2.assigned_date DESC LIMIT 1) as deployed_to_job,
-      (SELECT COUNT(*) FROM equipment_assignments ea3 WHERE ea3.equipment_id = e.id) as total_assignments
+      (SELECT COUNT(*) FROM equipment_assignments ea3 WHERE ea3.equipment_id = e.id) as total_assignments,
+      (SELECT r.condition FROM equipment_condition_reports r WHERE r.equipment_id = e.id ORDER BY r.created_at DESC LIMIT 1) as latest_report_condition,
+      (SELECT r.destination FROM equipment_condition_reports r WHERE r.equipment_id = e.id ORDER BY r.created_at DESC LIMIT 1) as latest_report_destination,
+      (SELECT r.created_at FROM equipment_condition_reports r WHERE r.equipment_id = e.id ORDER BY r.created_at DESC LIMIT 1) as latest_report_at
     FROM equipment e
     ${whereClause}
     ORDER BY ${orderByCol} ${order}
@@ -147,6 +150,20 @@ router.get('/:id', (req, res) => {
   let hireChecklists = [];
   try { hireChecklists = db.prepare('SELECT * FROM equipment_hire_checklists WHERE equipment_id = ? ORDER BY checked_date DESC').all(req.params.id); } catch (e) {}
 
+  // Crew return reports (migration 322) — the worker-reported condition +
+  // where the gear went after each shift.
+  let conditionReports = [];
+  try {
+    conditionReports = db.prepare(`
+      SELECT r.*, b.booking_number, b.title AS booking_title, cm.full_name AS reporter_name
+      FROM equipment_condition_reports r
+      LEFT JOIN bookings b ON b.id = r.booking_id
+      LEFT JOIN crew_members cm ON cm.id = r.reported_by_crew_id
+      WHERE r.equipment_id = ?
+      ORDER BY r.created_at DESC LIMIT 50
+    `).all(req.params.id);
+  } catch (e) {}
+
   res.render('equipment/show', {
     title: `Equipment - ${item.asset_number}`,
     currentPage: 'equipment',
@@ -155,6 +172,7 @@ router.get('/:id', (req, res) => {
     maintenance,
     activities,
     hireChecklists,
+    conditionReports,
     jobs
   });
 });

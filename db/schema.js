@@ -14362,6 +14362,61 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 321 error:', e.message); }
   }
 
+  // 322 — team shift-task groups + equipment condition/location reports.
+  // shift_tasks gains a first-class discriminator (kind) and a generic
+  // completion group key: 'beq:<booking_equipment_id>' for the existing
+  // return-to-depot automation, 'team:<booking_id>:<hex8>' for the new
+  // whole-crew Team tasks. Completing any row in a group completes the
+  // group. booking_equipment_id remains the SYNC/link key for the return
+  // automation; group_key is the sole completion fan-out key. Backfill
+  // covers done rows too so historical groups can still be undone as one.
+  // equipment_condition_reports records the worker's on-completion report
+  // for equipment-return tasks: condition (working|faulty), destination
+  // (home|depot|supplier|site), note — with name/supplier snapshotted at
+  // insert because booking_equipment rows are deletable and hired units
+  // have no register row.
+  if (!isMigrationApplied.get(322)) {
+    try {
+      const stCols2 = db.prepare("PRAGMA table_info(shift_tasks)").all().map(c => c.name);
+      if (!stCols2.includes('kind')) {
+        db.exec("ALTER TABLE shift_tasks ADD COLUMN kind TEXT NOT NULL DEFAULT 'general'");
+      }
+      if (!stCols2.includes('group_key')) {
+        db.exec("ALTER TABLE shift_tasks ADD COLUMN group_key TEXT");
+      }
+      db.exec("UPDATE shift_tasks SET kind = 'equipment_return', group_key = 'beq:' || booking_equipment_id WHERE booking_equipment_id IS NOT NULL");
+      db.exec(`
+        CREATE INDEX IF NOT EXISTS idx_shift_tasks_group
+          ON shift_tasks(group_key) WHERE group_key IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_shift_tasks_group_crew
+          ON shift_tasks(group_key, crew_member_id) WHERE group_key IS NOT NULL;
+        CREATE TABLE IF NOT EXISTS equipment_condition_reports (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          booking_id INTEGER REFERENCES bookings(id) ON DELETE SET NULL,
+          booking_equipment_id INTEGER REFERENCES booking_equipment(id) ON DELETE SET NULL,
+          equipment_id INTEGER REFERENCES equipment(id) ON DELETE SET NULL,
+          hire_unit_id INTEGER REFERENCES equipment_hire_units(id) ON DELETE SET NULL,
+          supplier_name TEXT DEFAULT '',
+          equipment_name TEXT DEFAULT '',
+          shift_task_id INTEGER REFERENCES shift_tasks(id) ON DELETE SET NULL,
+          reported_by_crew_id INTEGER REFERENCES crew_members(id),
+          reported_by_user_id INTEGER REFERENCES users(id),
+          condition TEXT NOT NULL CHECK(condition IN ('working','faulty')),
+          destination TEXT NOT NULL CHECK(destination IN ('home','depot','supplier','site')),
+          note TEXT DEFAULT '',
+          office_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_ecr_equipment ON equipment_condition_reports(equipment_id);
+        CREATE INDEX IF NOT EXISTS idx_ecr_booking   ON equipment_condition_reports(booking_id);
+        CREATE INDEX IF NOT EXISTS idx_ecr_beq       ON equipment_condition_reports(booking_equipment_id);
+        CREATE INDEX IF NOT EXISTS idx_ecr_hire_unit ON equipment_condition_reports(hire_unit_id);
+      `);
+      recordMigration.run(322, 'team shift-task groups (kind/group_key) + equipment_condition_reports');
+      console.log('Migration 322 applied');
+    } catch (e) { console.error('Migration 322 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

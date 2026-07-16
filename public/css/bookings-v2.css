@@ -2931,6 +2931,20 @@ body.bk2-rp-detail .bk2-rp-warns { display: inline-flex; }
 }
 :root[data-theme="dark"] .bk2-hired-pill { color: #FCD34D; background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.40); }
 
+/* Post-return location pill — where the gear ended up per the worker's
+   completion report (equipment_condition_reports). Grey = returned OK;
+   red variant = reported faulty. */
+.bk2-loc-pill {
+  flex: 0 0 auto;
+  padding: 1px 6px;
+  font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
+  color: #374151; background: #F3F4F6; border: 1px solid #E5E7EB;
+  border-radius: 999px; text-transform: uppercase;
+}
+:root[data-theme="dark"] .bk2-loc-pill { color: rgba(255,255,255,0.75); background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.18); }
+.bk2-loc-pill--faulty { color: #B91C1C; background: #FEF2F2; border-color: #FECACA; }
+:root[data-theme="dark"] .bk2-loc-pill--faulty { color: #FCA5A5; background: rgba(239,68,68,0.14); border-color: rgba(239,68,68,0.40); }
+
 /* Gear chips drag to re-hitch (onto a ute) or detach (onto the card). */
 .bk2-veh-gear[draggable="true"] { cursor: grab; }
 .bk2-veh-gear.is-dragging { opacity: 0.5; }

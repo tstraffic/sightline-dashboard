@@ -121,10 +121,13 @@
   <h2 class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2"><%= monthNames[month-1] %> spend by company</h2>
   <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
     <% byCompany.forEach(function (c) { %>
-      <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3">
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 <%= c.faults ? 'chevron-rail-left' : '' %>">
         <p class="text-sm font-semibold text-gray-900 truncate"><%= c.name %></p>
         <p class="text-[11px] text-gray-500"><%= c.count %> item<%= c.count === 1 ? '' : 's' %></p>
         <p class="text-lg font-bold text-emerald-600 tabular-nums mt-1"><%= money(c.cost) %></p>
+        <% if (c.faults) { %>
+          <p class="text-[11px] font-bold text-red-600 mt-1" title="Crew return reports flagged this supplier's gear faulty">⚠ <%= c.faults %> fault report<%= c.faults === 1 ? '' : 's' %></p>
+        <% } %>
       </div>
     <% }) %>
   </div>
