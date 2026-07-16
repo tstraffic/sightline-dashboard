@@ -1223,6 +1223,78 @@
     <div id="documents" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="documents">
       <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Documents (<%= b.documents ? b.documents.length : 0 %>)</h2>
 
+      <% if (typeof jobPlans !== 'undefined' && jobPlans) { %>
+      <!-- Plans & Approvals inherited from the linked job — read-only view
+           of the job's TGS and ROL sub-plans so the scheduler can check
+           approvals without leaving the booking. ROL windows covering this
+           booking's date get the emerald "covers this date" chip. -->
+      <div class="mb-5 rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
+          <div>
+            <p class="page-eyebrow" style="margin-bottom:0.25rem">From the linked job</p>
+            <h3 class="font-display font-medium text-gray-900" style="font-size:14px;letter-spacing:-0.01em">Plans &amp; Approvals</h3>
+          </div>
+          <a href="/compliance?job_id=<%= b.job_id %>" class="text-xs font-medium text-brand-600 hover:text-brand-700">Open in Plans &amp; Approvals →</a>
+        </div>
+        <div class="divide-y divide-gray-100">
+          <% const planStatusPill = s => ({
+               approved:  'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
+               submitted: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+               expired:   'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+             })[s] || 'bg-gray-100 text-gray-600'; %>
+          <% jobPlans.tgs.forEach(function (p) { %>
+            <div class="px-4 py-3 flex items-start gap-3">
+              <span class="shrink-0 mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-50 text-blue-700">TGS</span>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium text-gray-900 truncate"><%= p.plan_number || p.reference_number || ('#' + p.id) %><% if (p.title) { %> <span class="text-gray-500 font-normal">— <%= p.title %></span><% } %></p>
+                <div class="flex items-center gap-2 flex-wrap mt-1">
+                  <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold <%= planStatusPill(p.status) %>"><%= (p.status || 'draft').replace(/_/g,' ') %></span>
+                  <% if (p.expiry_date) { %><span class="text-[11px] font-mono text-gray-400">expires <%= formatDateShort(p.expiry_date) %></span><% } %>
+                  <% if (p.file_link) { %><a href="<%= p.file_link %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline">Plan link</a><% } %>
+                  <% (p.docs || []).forEach(function (d) { %>
+                    <a href="<%= d.file_path %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline truncate max-w-[180px]"><%= d.original_name %></a>
+                  <% }) %>
+                </div>
+              </div>
+            </div>
+          <% }) %>
+          <% jobPlans.rol.forEach(function (p) { %>
+            <div class="px-4 py-3 flex items-start gap-3">
+              <span class="shrink-0 mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-50 text-purple-700">ROL</span>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium text-gray-900 truncate"><%= p.rol_actual_number || p.reference_number || ('#' + p.id) %><% if (p.title) { %> <span class="text-gray-500 font-normal">— <%= p.title %></span><% } %></p>
+                <div class="flex items-center gap-2 flex-wrap mt-1">
+                  <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold <%= planStatusPill(p.status) %>"><%= (p.status || 'draft').replace(/_/g,' ') %></span>
+                  <% if (p.rol_time_window) { %><span class="text-[11px] font-mono text-gray-500"><%= p.rol_time_window %></span><% } %>
+                  <% if (p.rol_file_path) { %><a href="<%= p.rol_file_path %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline">Issued ROL</a><% } %>
+                  <% (p.docs || []).forEach(function (d) { %>
+                    <a href="<%= d.file_path %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline truncate max-w-[180px]"><%= d.original_name %></a>
+                  <% }) %>
+                </div>
+                <% if (p.shifts && p.shifts.length) { %>
+                  <div class="mt-2 flex flex-wrap gap-1.5">
+                    <% p.shifts.forEach(function (s) { %>
+                      <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-mono <%= s.matchesDate ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600/25 font-semibold' : 'bg-gray-50 text-gray-500 border border-gray-200' %>">
+                        <% if (s.matchesDate) { %><svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><% } %>
+                        <%= formatDateShort(s.start_date) %><% if (s.end_date && s.end_date !== s.start_date) { %>–<%= formatDateShort(s.end_date) %><% } %>
+                        <%= (s.start_time || '') %><% if (s.end_time) { %>–<%= s.end_time %><% } %>
+                      </span>
+                    <% }) %>
+                  </div>
+                  <% if (!p.shifts.some(s => s.matchesDate)) { %>
+                    <p class="text-[11px] text-amber-700 mt-1.5 flex items-center gap-1">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                      No approved ROL window covers this booking's date (<%= formatDateShort(jobPlans.bookingDate) %>).
+                    </p>
+                  <% } %>
+                <% } %>
+              </div>
+            </div>
+          <% }) %>
+        </div>
+      </div>
+      <% } %>
+
       <!-- Upload zone — the big drop target fills the tab. Drop a file (or
            browse), name it and tag its type, and it lists below. Workers on
            the shift see these in their portal DOCS tab. -->

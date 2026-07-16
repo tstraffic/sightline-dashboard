@@ -1072,6 +1072,61 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
   return visible;
 }
 
+// Pin every order-derived worker placement to an explicit vehicle
+// assignment. deriveCrewBlocks fans workers WITHOUT assigned_vehicle_id
+// into vehicle blocks by assignment order — fine for first render, but
+// on a MULTI-vehicle booking it means any later change (moving or
+// removing one worker) re-fans the unpinned ones, who visibly "auto
+// swap" into the freed seat. Calling this before a deliberate crew
+// change freezes everyone where the planner currently sees them, so
+// only the person being moved actually moves.
+function pinDerivedVehicleAssignments(db, bookingId) {
+  try {
+    const vehicleRows = db.prepare(`
+      SELECT id, booking_id, vehicle_name, registration, vehicle_role, crew_member_id AS driver_id
+      FROM booking_vehicles WHERE booking_id = ? ORDER BY created_at
+    `).all(bookingId);
+    if (vehicleRows.length < 2) return; // one vehicle can't shuffle
+    const crewRows = db.prepare(`
+      SELECT bc.id AS booking_crew_id, bc.booking_id, bc.crew_member_id, bc.status AS bc_status, bc.role_on_site,
+        bc.is_team_leader, bc.is_first_aid, bc.straight_to_site, bc.non_billable, bc.assigned_vehicle_id,
+        COALESCE(bc.off_vehicle, 0) AS off_vehicle,
+        cm.full_name, cm.role, cm.portal_role
+      FROM booking_crew bc
+      JOIN crew_members cm ON cm.id = bc.crew_member_id
+      WHERE bc.booking_id = ? ORDER BY bc.created_at
+    `).all(bookingId);
+    if (!crewRows.some(c => !c.assigned_vehicle_id && !c.off_vehicle)) return; // nothing unpinned
+    const reqRows = db.prepare(
+      'SELECT booking_id, resource_type, quantity_required FROM booking_requirements WHERE booking_id = ? ORDER BY id'
+    ).all(bookingId);
+    let gearRows = [];
+    try {
+      gearRows = db.prepare(`
+        SELECT id, booking_id, equipment_name, equipment_type, attached_vehicle_id,
+               hire_unit_id, supplier_name FROM booking_equipment WHERE booking_id = ? ORDER BY id
+      `).all(bookingId);
+    } catch (e) { /* pre-migration-320 DB */ }
+
+    const blocks = deriveCrewBlocks(crewRows, vehicleRows, reqRows, gearRows);
+    const pin = db.prepare('UPDATE booking_crew SET assigned_vehicle_id = ? WHERE id = ? AND assigned_vehicle_id IS NULL');
+    for (const blk of blocks) {
+      const vid = blk.vehicle_slot && blk.vehicle_slot.vehicle_id;
+      if (!vid) continue;
+      for (const s of blk.worker_slots) {
+        if (s.filled && s.booking_crew_id && !s.assigned_vehicle_id) pin.run(vid, s.booking_crew_id);
+      }
+    }
+    for (const g of (blocks.spare_vehicles || [])) {
+      for (const s of (g.workers || [])) {
+        if (s.filled && s.booking_crew_id && !s.assigned_vehicle_id) pin.run(g.vehicle_id, s.booking_crew_id);
+      }
+    }
+  } catch (e) {
+    console.error('[bookings] pinDerivedVehicleAssignments error:', e.message);
+  }
+}
+
 // GET / — Day-focused Board view + universal slide-over.
 // Single-column wide cards sorted by start time, status as a per-card
 // banner. View switcher (Board/List/Calendar/Map) is client-side on
@@ -2336,7 +2391,58 @@ router.get('/:id', (req, res) => {
   } catch (e) {}
   let mobileLegs = [];
   try { mobileLegs = getMobileLegs(db, booking.id); } catch (e) {}
+
+  // Plans & Approvals from the linked job — TGS + ROL sub-plans, so the
+  // scheduler never has to leave the booking to check what's approved.
+  // ROL rows also carry their approved shift windows, with the ones
+  // covering THIS booking's date flagged (matchesDate).
+  let jobPlans = null;
+  if (booking.job_id) {
+    try {
+      const bookingDate = String(booking.start_datetime || '').substring(0, 10);
+      const rows = db.prepare(`
+        SELECT c.id, c.item_type, c.title, c.status, c.reference_number, c.plan_number,
+               c.file_link, c.expiry_date, c.approved_date,
+               c.rol_actual_number, c.rol_file_path, c.rol_file_original_name,
+               c.rol_summary_from, c.rol_summary_to, c.rol_time_window, c.rol_stage
+        FROM compliance c
+        WHERE c.item_type IN ('traffic_guidance', 'road_occupancy')
+          AND (c.job_id = @jobId
+               OR c.parent_id IN (SELECT id FROM compliance WHERE job_id = @jobId))
+        ORDER BY c.item_type, c.created_at DESC
+      `).all({ jobId: booking.job_id });
+      const docsStmt = db.prepare(
+        'SELECT id, original_name, file_path, file_size FROM compliance_documents WHERE compliance_id = ? ORDER BY created_at DESC'
+      );
+      const shiftsStmt = db.prepare(
+        'SELECT start_date, start_time, end_date, end_time FROM compliance_rol_shifts WHERE compliance_id = ? ORDER BY start_date, start_time'
+      );
+      const plans = rows.map(r => {
+        const docs = (() => { try { return docsStmt.all(r.id); } catch (e) { return []; } })();
+        let shifts = [];
+        if (r.item_type === 'road_occupancy') {
+          try {
+            shifts = shiftsStmt.all(r.id).map(s => ({
+              ...s,
+              // A shift covers the booking when its date range spans the
+              // booking's start date (single-day rows have no end_date).
+              matchesDate: !!bookingDate && s.start_date <= bookingDate
+                && bookingDate <= (s.end_date || s.start_date),
+            }));
+          } catch (e) {}
+        }
+        return { ...r, docs, shifts };
+      });
+      const tgs = plans.filter(p => p.item_type === 'traffic_guidance');
+      const rol = plans.filter(p => p.item_type === 'road_occupancy');
+      if (tgs.length || rol.length) jobPlans = { tgs, rol, bookingDate };
+    } catch (e) {
+      console.error('[bookings.show] job plans lookup error:', e.message);
+    }
+  }
+
   res.render('bookings/show', {
+    jobPlans,
     title: 'Booking ' + booking.booking_number,
     hireSuppliers, mobileLegs,
     booking: { ...booking, supervisor: booking.supervisor_name, requester_name: requesterName, planner_name: plannerName, site_contact_names: siteContactNames, site_contact_details: siteContactDetails, tags_list: tagsList,
@@ -2816,6 +2922,10 @@ router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
   // vehicle" pool instead of auto-slotting straight back into the ute's
   // freed seat. Assigning to a real vehicle clears it.
   const offVehicle = vehicleId == null ? 1 : 0;
+  // Freeze everyone ELSE where they currently render before this move —
+  // otherwise order-derived (unpinned) workers re-fan into the freed seat
+  // and the board looks like it auto-swapped people between vehicles.
+  pinDerivedVehicleAssignments(db, parseInt(req.params.id, 10));
   db.prepare("UPDATE booking_crew SET assigned_vehicle_id = ?, off_vehicle = ? WHERE id = ?").run(vehicleId, offVehicle, req.params.crewId);
 
   // If the worker just left a vehicle they were driving, clear the
@@ -2868,6 +2978,9 @@ router.post('/:id/crew/:crewId/remove', (req, res) => {
   // Grab the seat's role BEFORE deleting — it decides which requirement row
   // shrinks back down.
   const seat = db.prepare("SELECT role_on_site FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, req.params.crewId);
+  // Freeze current placements first: removing a worker frees a seat, and
+  // unpinned workers would otherwise re-fan into it (phantom auto-swap).
+  pinDerivedVehicleAssignments(db, parseInt(req.params.id, 10));
   const removed = db.prepare("DELETE FROM booking_crew WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
   // Mirror of the add-surplus bump: if the shift now REQUIRES more crew than
   // it carries, shrink the removed worker's role add-on by the deficit (then

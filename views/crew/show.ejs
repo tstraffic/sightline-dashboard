@@ -494,6 +494,59 @@
       </div>
     </div>
     <% } %>
+
+    <!-- Safety audit flags — site audits this worker was on that failed,
+         went critical, or need follow-up. Chevron-striped rail = the
+         app-wide "live hazard" register. -->
+    <% if (typeof flaggedAudits !== 'undefined' && flaggedAudits.length > 0) { %>
+    <div class="chevron-rail-left is-warn bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Safety Audit Flags</h2>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 text-[10px] font-bold"><%= flaggedAudits.length %></span>
+      </div>
+      <div class="divide-y divide-gray-50">
+        <% flaggedAudits.forEach(a => { %>
+        <a href="/audits/<%= a.id %>" class="px-4 py-2.5 flex items-center gap-3 hover:bg-gray-50 transition-colors">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm text-gray-900 truncate"><%= a.project_site || 'Site audit' %><% if (a.role_on_site) { %> <span class="text-gray-400 text-xs">· <%= a.role_on_site %></span><% } %></p>
+            <p class="text-[11px] font-mono text-gray-400 mt-0.5"><%= formatDateShort(a.audit_datetime) %><% if (a.score_percent != null) { %> · <%= Math.round(a.score_percent) %>%<% } %></p>
+          </div>
+          <% if (a.critical_fail) { %>
+            <span class="inline-flex px-2 py-0.5 rounded-full bg-red-50 text-red-700 ring-1 ring-red-600/20 text-[10px] font-bold">CRITICAL</span>
+          <% } else if (String(a.overall_result || a.overall_finding || '').toLowerCase().includes('fail')) { %>
+            <span class="inline-flex px-2 py-0.5 rounded-full bg-red-50 text-red-700 ring-1 ring-red-600/20 text-[10px] font-bold">FAILED</span>
+          <% } else { %>
+            <span class="inline-flex px-2 py-0.5 rounded-full bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 text-[10px] font-bold">FOLLOW-UP</span>
+          <% } %>
+        </a>
+        <% }) %>
+      </div>
+    </div>
+    <% } %>
+
+    <!-- Vehicle damage accountability — defects assigned to this worker,
+         mirroring /vehicle-audits/accountability scoped to one person. -->
+    <% if (typeof vehicleDefects !== 'undefined' && vehicleDefects.length > 0) { %>
+    <div class="chevron-rail-left bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between gap-2">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Vehicle Damage Accountability</h2>
+        <% const openDefects = vehicleDefects.filter(d => d.status !== 'fixed').length; %>
+        <span class="inline-flex items-center px-2 py-0.5 rounded-full <%= openDefects > 0 ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20' : 'bg-gray-100 text-gray-500' %> text-[10px] font-bold"><%= openDefects %> open · <%= vehicleDefects.length %> total</span>
+      </div>
+      <div class="divide-y divide-gray-50">
+        <% vehicleDefects.forEach(d => { %>
+        <div class="px-4 py-2.5 flex items-center gap-3">
+          <div class="min-w-0 flex-1">
+            <p class="text-sm text-gray-900 truncate"><span class="font-mono text-xs text-gray-500"><%= d.asset_id %></span> · <%= d.item_label %></p>
+            <p class="text-[11px] font-mono text-gray-400 mt-0.5"><%= d.audit_date ? formatDateShort(d.audit_date) : formatDateShort(d.created_at) %><% if (d.cost_estimate) { %> · $<%= Number(d.cost_estimate).toLocaleString('en-AU', { maximumFractionDigits: 0 }) %><% } %></p>
+          </div>
+          <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold <%= d.severity === 'critical' ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20' : d.severity === 'major' ? 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20' : 'bg-gray-50 text-gray-500 ring-1 ring-gray-200' %>"><%= (d.severity || 'minor').toUpperCase() %></span>
+          <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium <%= d.status === 'fixed' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20' %>"><%= d.status === 'fixed' ? 'Fixed' : 'Open' %></span>
+        </div>
+        <% }) %>
+      </div>
+    </div>
+    <% } %>
   </div>
 
   <!-- Right Column (1/3) -->

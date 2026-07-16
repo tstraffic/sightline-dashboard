@@ -205,6 +205,43 @@ router.get('/:id', (req, res) => {
     LIMIT 20
   `).all(member.id, '%' + member.full_name + '%', '%' + member.full_name + '%');
 
+  // Safety flags — site audits this person was on where the audit went bad
+  // (failed / critical / follow-up required). Same adverse-outcome logic the
+  // Safety Reports pages use; a clean audit is not a flag.
+  let flaggedAudits = [];
+  try {
+    flaggedAudits = db.prepare(`
+      SELECT sa.id, sa.audit_datetime, sa.project_site, sa.overall_result,
+             sa.score_percent, sa.critical_fail, sa.follow_up_required,
+             ac.role_on_site
+      FROM audit_crew ac
+      JOIN site_audits sa ON sa.id = ac.audit_id
+      WHERE ac.crew_member_id = ?
+        AND (sa.critical_fail = 1
+             OR sa.follow_up_required = 1
+             OR LOWER(COALESCE(sa.overall_result, '')) LIKE '%fail%'
+             OR LOWER(COALESCE(sa.overall_finding, '')) LIKE '%fail%')
+      ORDER BY sa.audit_datetime DESC
+      LIMIT 20
+    `).all(member.id);
+  } catch (e) { console.error('[crew.show] flagged audits error:', e.message); }
+
+  // Vehicle damage accountability — defects assigned to this person
+  // (mirror of /vehicle-audits/accountability, scoped to one worker).
+  let vehicleDefects = [];
+  try {
+    vehicleDefects = db.prepare(`
+      SELECT d.id, d.item_label, d.severity, d.status, d.cost_estimate,
+             d.created_at, d.resolved_date, v.asset_id, va.audit_date
+      FROM vehicle_defects d
+      JOIN vehicles v ON v.id = d.vehicle_id
+      LEFT JOIN vehicle_audits va ON va.id = d.audit_id
+      WHERE d.assigned_to = ?
+      ORDER BY d.created_at DESC
+      LIMIT 20
+    `).all(member.id);
+  } catch (e) { console.error('[crew.show] vehicle defects error:', e.message); }
+
   // Supervisor who approved (if any)
   let approvedBy = null;
   if (member.supervisor_approved_by_id) {
@@ -287,6 +324,8 @@ router.get('/:id', (req, res) => {
     upcomingShifts,
     recentTimesheets,
     linkedIncidents,
+    flaggedAudits,
+    vehicleDefects,
     activities,
     approvedBy: approvedBy ? approvedBy.full_name : null,
     today,
