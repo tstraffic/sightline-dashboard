@@ -856,7 +856,20 @@ router.get('/present/:module', (req, res) => {
 // Returns the rows split by module so the template can tab them; each
 // module is sorted newest-first.
 router.get('/presentations', (req, res) => {
-  const rows = getDb().prepare(`
+  const db = getDb();
+  // Self-heal: clear out empty "In progress" rows — never completed, no
+  // quiz, no attendees. These are the stranded page-open/preview sessions
+  // from the old on-load-create behaviour; nothing legitimate is ever
+  // both in-progress AND empty now that rows are created at quiz time.
+  try {
+    db.prepare(`
+      DELETE FROM induction_presentations
+      WHERE completed_at IS NULL AND quiz_score IS NULL
+        AND (attendee_names IS NULL OR TRIM(attendee_names) = '')
+    `).run();
+  } catch (e) { console.error('[presentations] prune failed:', e.message); }
+
+  const rows = db.prepare(`
     SELECT p.*, u.full_name as presenter_name
     FROM induction_presentations p
     LEFT JOIN users u ON p.presented_by_id = u.id
@@ -939,17 +952,28 @@ router.post('/present/:module/quiz-result', (req, res) => {
   const passedFlag = passed ? 1 : 0;
   const ids = Array.isArray(attendee_ids) ? attendee_ids.map(n => parseInt(n, 10)).filter(n => n > 0) : [];
 
-  if (presentation_id) {
-    try {
+  // Log the run. The presentation row is created HERE (not on page load)
+  // so History only ever records a session that actually reached the quiz
+  // — no more stranded "In progress" rows from previews / abandoned runs.
+  try {
+    const slides = moduleKey === 'employee_guide' ? employeeGuideSlides : tcTrainingSlides;
+    if (presentation_id) {
       db.prepare(`
         UPDATE induction_presentations
-        SET quiz_score = ?, quiz_passed = ?, quiz_answers = ?,
-            attendee_names = ?,
+        SET quiz_score = ?, quiz_passed = ?, quiz_answers = ?, attendee_names = ?,
             completed_at = datetime('now')
         WHERE id = ?
       `).run(score, passedFlag, JSON.stringify(answers || {}), attendee_names || '', presentation_id);
-    } catch (e) { console.error('Update presentation failed:', e.message); }
-  }
+    } else {
+      db.prepare(`
+        INSERT INTO induction_presentations
+          (module, presented_by_id, attendee_names, total_slides,
+           quiz_score, quiz_passed, quiz_answers, completed_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      `).run(moduleKey, req.session.user.id, attendee_names || '', slides.length,
+             score, passedFlag, JSON.stringify(answers || {}));
+    }
+  } catch (e) { console.error('Record presentation failed:', e.message); }
 
   // Only record completions when they actually passed
   let recorded = [];

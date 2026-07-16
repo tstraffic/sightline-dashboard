@@ -920,23 +920,19 @@
       return m ? m.content : '';
     }
 
-    // In group mode: (1) hide the trainee-info card on the quiz-intro slide
-    // (presenter has no single trainee to enter), (2) create an
-    // induction_presentations row so this session shows up in the History
-    // table on /induction/admin/presentations.
+    // In group mode, hide the trainee-info card on the quiz-intro slide
+    // (a presenter has no single trainee to enter).
+    //
+    // We deliberately do NOT create the induction_presentations row on page
+    // load any more — that spawned an "In progress" history row every time
+    // anyone so much as opened or previewed the deck, and any run that
+    // didn't reach the quiz left it stranded forever. The row is now
+    // created server-side at quiz submission (/quiz-result creates it if
+    // PRESENTATION_ID is still null), so History only ever logs a real run.
     if (GROUP_MODE) {
       var tnInit = document.getElementById('trainee-name');
       if (tnInit && tnInit.parentElement && tnInit.parentElement.parentElement) {
         tnInit.parentElement.parentElement.style.display = 'none';
-      }
-      if (START_URL) {
-        fetch(START_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'x-csrf-token': getCsrfToken() },
-          body: '{}',
-        }).then(function (r) { return r.json(); })
-          .then(function (j) { if (j && j.id) PRESENTATION_ID = j.id; })
-          .catch(function () { /* non-fatal; quiz-result can still write completions */ });
       }
     }
 
