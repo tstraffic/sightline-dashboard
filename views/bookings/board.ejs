@@ -5208,6 +5208,26 @@
     });
   });
 
+  // Which ute should dropped/moved gear hitch to? A ute that already
+  // carries gear renders its vehicle chip and its gear chips as SIBLINGS,
+  // so a second item (e.g. a portaboom dropped on/beside the trailer)
+  // misses the vehicle chip and used to fall loose into the Gear strip.
+  // Resolve up the DOM: the vehicle chip itself → a gear chip's own ute →
+  // the enclosing crew block's ute. Empty string ⇒ loose / detach.
+  function bk2ResolveHitchVehicle(e) {
+    if (!e.target || !e.target.closest) return '';
+    var vehChip = e.target.closest('.bk2-slot--drop-veh-assign[data-vehicle-id]');
+    if (vehChip) return vehChip.getAttribute('data-vehicle-id') || '';
+    var gearChip = e.target.closest('.bk2-veh-gear[data-from-vehicle-id]');
+    if (gearChip && gearChip.getAttribute('data-from-vehicle-id')) return gearChip.getAttribute('data-from-vehicle-id');
+    var crewBlock = e.target.closest('.bk2-crew');
+    if (crewBlock) {
+      var v = crewBlock.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
+      if (v) return v.getAttribute('data-vehicle-id') || '';
+    }
+    return '';
+  }
+
   document.addEventListener('drop', function (e) {
     // Read every payload we might receive. Whichever the source set
     // determines the action — crew-move ALWAYS wins because it can
@@ -5231,17 +5251,15 @@
     if (gearMovePayload) {
       var gmv; try { gmv = JSON.parse(gearMovePayload); } catch (err) { return; }
       if (!gmv || !gmv.eqId || !gmv.bookingId) return;
-      var gmVehChip = e.target.closest && e.target.closest('.bk2-slot--drop-veh-assign[data-vehicle-id]');
-      var gmHost = gmVehChip ||
-        (e.target.closest && (e.target.closest('.bk2-card-teambox') ||
+      var gmTargetVehicle = bk2ResolveHitchVehicle(e);
+      var gmHost = e.target.closest && (e.target.closest('.bk2-card-teambox') ||
                               e.target.closest('.bk2-card[data-booking-id]') ||
-                              e.target.closest('.bk2-card--floating[data-booking-id]')));
+                              e.target.closest('.bk2-card--floating[data-booking-id]'));
       if (!gmHost) return;
       var gmBookingEl = gmHost.closest('[data-booking-id]') || gmHost;
       if (String(gmBookingEl.getAttribute('data-booking-id')) !== String(gmv.bookingId)) return;
       e.preventDefault(); e.stopPropagation();
       document.querySelectorAll('.is-drag-over').forEach(function (el) { el.classList.remove('is-drag-over'); });
-      var gmTargetVehicle = gmVehChip ? (gmVehChip.getAttribute('data-vehicle-id') || '') : '';
       if (String(gmTargetVehicle) === String(gmv.fromVehicleId || '')) return; // no-op drop
       var gmBody = new URLSearchParams();
       gmBody.append('vehicle_id', gmTargetVehicle);
@@ -5264,19 +5282,18 @@
     if (equipPayload) {
       var eqp; try { eqp = JSON.parse(equipPayload); } catch (err) { return; }
       if (!eqp || !eqp.id) return;
-      var vehChipEq = e.target.closest && e.target.closest('.bk2-slot--drop-veh-assign[data-vehicle-id]');
-      var eqHost = vehChipEq ||
-        (e.target.closest && (e.target.closest('.bk2-card-teambox') ||
+      var hitchVehicleId = bk2ResolveHitchVehicle(e);
+      var eqHost = e.target.closest && (e.target.closest('.bk2-card-teambox') ||
                               e.target.closest('.bk2-card[data-booking-id]') ||
                               e.target.closest('.bk2-card--floating[data-booking-id]') ||
-                              e.target.closest('.bk2-restab-dropstrip[data-booking-id]')));
+                              e.target.closest('.bk2-restab-dropstrip[data-booking-id]'));
       if (!eqHost) return;
       e.preventDefault(); e.stopPropagation();
       document.querySelectorAll('.is-drag-over').forEach(function (el) { el.classList.remove('is-drag-over'); });
       var eqBookingEl = eqHost.closest('[data-booking-id]') || eqHost;
       var eqBookingId = eqBookingEl.getAttribute('data-booking-id');
       if (!eqBookingId) return;
-      bk2AddEquipmentToBooking(eqBookingId, eqp, vehChipEq ? vehChipEq.getAttribute('data-vehicle-id') : '');
+      bk2AddEquipmentToBooking(eqBookingId, eqp, hitchVehicleId);
       return;
     }
 
