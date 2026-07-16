@@ -1328,14 +1328,14 @@ setInterval(function() {
               <label>Requester</label>
               <select name="requester_id" class="modal-input">
                 <option value="">-- Select --</option>
-                <% formCrew.forEach(c => { %><option value="<%= c.id %>"><%= c.full_name %></option><% }); %>
+                <% formContacts.forEach(c => { %><option value="<%= c.id %>"><%= c.full_name %><%= c.position ? ' · ' + c.position : '' %></option><% }); %>
               </select>
             </div>
             <div class="modal-field">
               <label>Planner</label>
               <select name="planner_id" class="modal-input">
                 <option value="">-- Select --</option>
-                <% formCrew.forEach(c => { %><option value="<%= c.id %>"><%= c.full_name %></option><% }); %>
+                <% formContacts.forEach(c => { %><option value="<%= c.id %>"><%= c.full_name %><%= c.position ? ' · ' + c.position : '' %></option><% }); %>
               </select>
             </div>
           </div>

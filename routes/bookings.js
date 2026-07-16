@@ -1173,8 +1173,8 @@ router.get('/', (req, res) => {
     FROM bookings b
     LEFT JOIN jobs j ON b.job_id = j.id
     LEFT JOIN clients c ON b.client_id = c.id
-    LEFT JOIN crew_members cm_req ON b.requester_id = cm_req.id
-    LEFT JOIN crew_members cm_plan ON b.planner_id = cm_plan.id
+    LEFT JOIN client_contacts cm_req ON b.requester_id = cm_req.id
+    LEFT JOIN client_contacts cm_plan ON b.planner_id = cm_plan.id
     WHERE ${where}
     ORDER BY b.start_datetime
   `).all(...params);
@@ -1882,8 +1882,9 @@ router.post('/quick', (req, res) => {
       INSERT INTO bookings (booking_number, job_id, client_id, title, status, depot,
         start_datetime, end_datetime, site_address, suburb, state, postcode,
         latitude, longitude, marker_is_accurate,
-        created_by_id, booking_type, is_booking_pool, site_contacts)
-      VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regular', 0, ?)
+        created_by_id, booking_type, is_booking_pool, site_contacts,
+        requester_id, planner_id)
+      VALUES (?, ?, ?, ?, 'unconfirmed', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'regular', 0, ?, ?, ?)
     `).run(
       bookingNumber, jobId, clientId, title, b.depot || '',
       b.start_date + 'T' + startTime + ':00',
@@ -1891,7 +1892,8 @@ router.post('/quick', (req, res) => {
       b.site_address || b.site_label || '',
       b.suburb || '', b.state || '', b.postcode || '',
       lat, lng, lat ? 1 : 0,
-      req.session.user.id, siteContactsJson
+      req.session.user.id, siteContactsJson,
+      b.requester_id || null, b.planner_id || null
     );
   } catch (err) {
     console.error('[bookings/quick] INSERT failed:', err.message);
@@ -2253,10 +2255,11 @@ router.get('/:id', (req, res) => {
     req.flash('error', 'Failed to load booking: ' + err.message); return res.redirect('/bookings');
   }
   if (!booking) { if (wantsJson) return res.status(404).json({ error: 'Booking not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
-  // Resolve requester/planner names (used by both JSON and HTML paths)
+  // Resolve requester/planner names (used by both JSON and HTML paths).
+  // These now reference client_contacts (the client's people), not crew.
   let requesterName = '', plannerName = '';
-  if (booking.requester_id) { const r = db.prepare("SELECT full_name FROM crew_members WHERE id = ?").get(booking.requester_id); if (r) requesterName = r.full_name; }
-  if (booking.planner_id) { const p = db.prepare("SELECT full_name FROM crew_members WHERE id = ?").get(booking.planner_id); if (p) plannerName = p.full_name; }
+  if (booking.requester_id) { const r = db.prepare("SELECT full_name FROM client_contacts WHERE id = ?").get(booking.requester_id); if (r) requesterName = r.full_name; }
+  if (booking.planner_id) { const p = db.prepare("SELECT full_name FROM client_contacts WHERE id = ?").get(booking.planner_id); if (p) plannerName = p.full_name; }
   // Parse site contacts JSON → resolve names/details in one batched query
   // (was N+1: one SELECT per id — slow on major projects with many contacts).
   let siteContactNames = [];

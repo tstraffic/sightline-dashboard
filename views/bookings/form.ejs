@@ -211,20 +211,16 @@
       </div>
       <div>
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Requester</label>
-        <select name="requester_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-          <option value="">-- Select Requester --</option>
-          <% if (typeof crewForSelect !== 'undefined') { crewForSelect.forEach(c => { %>
-            <option value="<%= c.id %>" <%= isEdit && booking.requester_id == c.id ? 'selected' : '' %>><%= c.full_name %></option>
-          <% }); } %>
+        <!-- Options are the selected client's contacts, rebuilt by JS from
+             ALL_CONTACTS whenever the client changes (see syncReqPlan). -->
+        <select name="requester_id" id="requesterSelect" data-selected="<%= isEdit && booking.requester_id ? booking.requester_id : '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">-- Select a client first --</option>
         </select>
       </div>
       <div>
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Planner</label>
-        <select name="planner_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-          <option value="">-- Select Planner --</option>
-          <% if (typeof crewForSelect !== 'undefined') { crewForSelect.forEach(c => { %>
-            <option value="<%= c.id %>" <%= isEdit && booking.planner_id == c.id ? 'selected' : '' %>><%= c.full_name %></option>
-          <% }); } %>
+        <select name="planner_id" id="plannerSelect" data-selected="<%= isEdit && booking.planner_id ? booking.planner_id : '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">-- Select a client first --</option>
         </select>
       </div>
     </div>
@@ -426,6 +422,33 @@
       }
 
       function renderList() { renderChips(); renderResults(); }
+
+      // Requester + Planner are chosen from the SELECTED CLIENT's contacts.
+      // Rebuild both selects from ALL_CONTACTS on every client change,
+      // preserving a saved pick (data-selected) whenever it's still valid.
+      var reqSel = document.getElementById('requesterSelect');
+      var planSel = document.getElementById('plannerSelect');
+      function syncReqPlan() {
+        var clientId = clientSelect.value;
+        [reqSel, planSel].forEach(function (sel) {
+          if (!sel) return;
+          var keep = sel.value || sel.getAttribute('data-selected') || '';
+          var rows = ALL_CONTACTS.filter(function (c) { return String(c.company_id) === String(clientId); });
+          sel.innerHTML = clientId
+            ? '<option value="">-- None --</option>'
+            : '<option value="">-- Select a client first --</option>';
+          rows.forEach(function (c) {
+            var o = document.createElement('option');
+            o.value = String(c.id);
+            o.textContent = c.full_name + (c.position ? ' · ' + c.position : '');
+            if (String(c.id) === String(keep)) o.selected = true;
+            sel.appendChild(o);
+          });
+          sel.setAttribute('data-selected', '');
+        });
+      }
+      clientSelect.addEventListener('change', syncReqPlan);
+      syncReqPlan();
 
       listEl.addEventListener('click', function (e) {
         var b = e.target.closest('[data-toggle]');

@@ -1063,15 +1063,15 @@
             </label>
             <label class="bk2-create-field">
               <span class="bk2-create-lbl">Requester</span>
-              <select name="requester_id"><option value="">Select one</option></select>
+              <select name="requester_id" id="bk2c-requester"><option value="">Pick a client first</option></select>
             </label>
             <label class="bk2-create-field">
               <span class="bk2-create-lbl">Planner</span>
-              <select name="planner_id"><option value="">Select one</option></select>
+              <select name="planner_id" id="bk2c-planner"><option value="">Pick a client first</option></select>
             </label>
-            <div class="bk2-create-field bk2-create-field--required bk2-create-field--full">
+            <div class="bk2-create-field bk2-create-field--full">
               <span class="bk2-create-lbl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-                <span>Site contacts * <span id="bk2c-contact-count" class="bk2c-contact-count"></span></span>
+                <span>Site contacts <span style="font-weight:400;opacity:0.55;text-transform:none;letter-spacing:0;">(optional)</span> <span id="bk2c-contact-count" class="bk2c-contact-count"></span></span>
                 <button type="button" id="bk2c-add-contact" class="bk2c-mini-add" disabled>+ Add contact</button>
               </span>
               <!-- Selected contacts (source of truth for what submits) -->
@@ -1747,6 +1747,27 @@
       allContacts.sort(function (a, b) { return (a.full_name || '').localeCompare(b.full_name || ''); });
     }
 
+    // Requester + Planner draw from the same client-scoped contact pool.
+    // Rebuild both selects whenever contacts (re)load, keeping a prior pick
+    // if that contact is still in the list (edit prefill / client re-pick).
+    var reqSel = document.getElementById('bk2c-requester');
+    var planSel = document.getElementById('bk2c-planner');
+    function syncReqPlan() {
+      [reqSel, planSel].forEach(function (sel) {
+        if (!sel) return;
+        var keep = sel.value || sel.getAttribute('data-selected') || '';
+        sel.innerHTML = allContacts.length ? '<option value="">-- None --</option>' : '<option value="">Pick a client first</option>';
+        allContacts.forEach(function (c) {
+          var o = document.createElement('option');
+          o.value = String(c.id);
+          o.textContent = c.full_name + (c.position ? ' · ' + c.position : '');
+          if (String(c.id) === String(keep)) o.selected = true;
+          sel.appendChild(o);
+        });
+        sel.setAttribute('data-selected', '');
+      });
+    }
+
     function loadContacts(clientId, cb) {
       searchInput.disabled = true;
       setHint('Loading contacts…');
@@ -1758,6 +1779,7 @@
           searchInput.disabled = false;
           renderChips();
           renderResults('');
+          syncReqPlan();
           if (cb) cb();
         })
         .catch(function () { setHint('Could not load contacts.'); });
@@ -1776,7 +1798,7 @@
       if (!curClientId) {
         allContacts = []; byId = {}; selected.clear();
         searchInput.disabled = true; searchInput.value = '';
-        renderChips(); updateCount(0);
+        renderChips(); updateCount(0); syncReqPlan();
         setHint(nm ? 'Create this client (“+ New client”) to add its contacts.' : 'Pick a client first to choose or add site contacts.');
         return;
       }
@@ -1870,6 +1892,7 @@
           selected.add(String(res.body.contact.id));
           renderChips();
           renderResults(searchInput.value);
+          syncReqPlan();
           closeModal('bk2c-modal-contact');
         })
         .catch(function (e) { err.textContent = e.message; err.style.display = 'block'; })
