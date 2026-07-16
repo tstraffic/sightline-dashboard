@@ -5216,14 +5216,21 @@
   // the enclosing crew block's ute. Empty string ⇒ loose / detach.
   function bk2ResolveHitchVehicle(e) {
     if (!e.target || !e.target.closest) return '';
-    var vehChip = e.target.closest('.bk2-slot--drop-veh-assign[data-vehicle-id]');
-    if (vehChip) return vehChip.getAttribute('data-vehicle-id') || '';
+    // ANY vehicle slot carrying a real booking_vehicle id is a hitch target —
+    // whether the ute's rego is filled in (.bk2-slot--drop-veh-assign) or it's
+    // still an empty placeholder (.bk2-slot--drop-vehicle). Gear rides the ute
+    // either way, so a second item (portaboom onto a ute that already carries a
+    // trailer) hitches even when the ute is a bare slot. Empty data-vehicle-id
+    // (a pure requirement with no vehicle row yet) can't be hitched → falls
+    // through to loose.
+    var vehChip = e.target.closest('.bk2-veh-slot[data-vehicle-id]');
+    if (vehChip && vehChip.getAttribute('data-vehicle-id')) return vehChip.getAttribute('data-vehicle-id');
     var gearChip = e.target.closest('.bk2-veh-gear[data-from-vehicle-id]');
     if (gearChip && gearChip.getAttribute('data-from-vehicle-id')) return gearChip.getAttribute('data-from-vehicle-id');
     var crewBlock = e.target.closest('.bk2-crew');
     if (crewBlock) {
-      var v = crewBlock.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
-      if (v) return v.getAttribute('data-vehicle-id') || '';
+      var v = crewBlock.querySelector('.bk2-veh-slot[data-vehicle-id]');
+      if (v && v.getAttribute('data-vehicle-id')) return v.getAttribute('data-vehicle-id');
     }
     return '';
   }
