@@ -10,18 +10,20 @@ const { getOnSiteCrew, resolveEmployeeForCrew, syncAuditReviews } = require('../
 const { syncCorrectiveActionsFromAudit } = require('../lib/auditActions');
 const { decorateCrewCompetency } = require('../lib/auditCompetencyCheck');
 
-// All active crew, for the "add a worker" picker in the on-site roster.
-// The auto-pulled roster (getOnSiteCrew) only covers crew allocated to the
-// linked job+date; this lets the auditor add anyone actually on site.
+// The "add a worker" picker in the on-site roster. Sourced from the HR
+// roster (employees), NOT raw crew_members: the crew_members table carries
+// duplicate rows for the same person (a legacy row + one auto-created by the
+// HR linker) plus unlinked test junk, which showed up as the same name twice
+// and an amber "no HR link" tag. Every roster entry is a single HR profile
+// with a linked crew_member, so the list is clean and always HR-linked.
 function getAllActiveCrew(db) {
   return db.prepare(`
-    SELECT cm.id AS crew_member_id, cm.full_name, e.id AS employee_id
-    FROM crew_members cm
-    LEFT JOIN employees e ON e.linked_crew_member_id = cm.id
-    WHERE cm.active = 1
-    ORDER BY cm.full_name
+    SELECT e.linked_crew_member_id AS crew_member_id, e.full_name, e.id AS employee_id
+    FROM employees e
+    WHERE e.active = 1 AND e.deleted_at IS NULL AND e.linked_crew_member_id IS NOT NULL
+    ORDER BY e.full_name
   `).all().map(function (r) {
-    return { crew_member_id: r.crew_member_id, full_name: r.full_name, employee_id: r.employee_id || null, linked: !!r.employee_id, role_on_site: '' };
+    return { crew_member_id: r.crew_member_id, full_name: r.full_name, employee_id: r.employee_id, linked: true, role_on_site: '' };
   });
 }
 
