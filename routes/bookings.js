@@ -612,9 +612,10 @@ router.post('/', (req, res) => {
       const member = db.prepare("SELECT role, portal_role FROM crew_members WHERE id = ?").get(cid);
       const siteRole = pickSiteRole(cid, member && member.portal_role);
       insertCrew.run(bookingId, cid, siteRole);
-      if (b.job_id) {
-        try { insertAlloc.run(b.job_id, cid, allocDate, allocStart, allocEnd, siteRole, bookingId, req.session.user.id); } catch (e) {}
-      }
+      // job_id is nullable — ad-hoc (job-less) bookings still need the
+      // allocation row or the worker portal only sees them via fallbacks
+      // (matches the crew-add endpoint, which already passes null).
+      try { insertAlloc.run(b.job_id || null, cid, allocDate, allocStart, allocEnd, siteRole, bookingId, req.session.user.id); } catch (e) {}
     }
   });
 

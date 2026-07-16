@@ -747,3 +747,52 @@ input[type="search"], input[type="text"].bg-white {
 :root[data-theme="light"] body.worker-portal [class*="-banner"] {
   color: #111827;
 }
+
+/* ── Next-shift hero card (home "Coming up") ──────────────────────
+   Previously inline-styled dark-only; classed so light mode themes it.
+   Layout stays inline in the view — only theme-carrying properties
+   live here. */
+.wh-next {
+  display: block; text-decoration: none; position: relative;
+  border-radius: 12px; overflow: hidden;
+  background: #1A1D24; border: 1px solid rgba(255,255,255,0.06);
+}
+.wh-next-date { background: rgba(16,185,129,0.14); color: #fff; }
+.wh-next-client { color: #fff; }
+.wh-next-meta { color: rgba(255,255,255,0.7); }
+.wh-next-meta svg { color: rgba(255,255,255,0.45); }
+.wh-next-meta .sep { color: rgba(255,255,255,0.35); }
+.wh-next-meta .loc { color: rgba(255,255,255,0.6); }
+.wh-next-chev { color: rgba(255,255,255,0.4); }
+.wh-next-cta {
+  border-top: 1px solid rgba(255,255,255,0.06);
+  background: rgba(16,185,129,0.08); color: #6EE7B7;
+}
+.wh-next-cta.is-allocated { background: rgba(245,158,11,0.10); color: #FCD34D; }
+.wh-next-count { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+.wh-up-date.is-night { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7); }
+
+:root[data-theme="light"] .wh-next {
+  background: #FFFFFF; border-color: #E5E7EB;
+  box-shadow: 0 1px 3px rgba(15,23,42,0.06);
+}
+:root[data-theme="light"] .wh-next-date { background: rgba(4,120,87,0.10); color: #065F46; }
+:root[data-theme="light"] .wh-next-client { color: #111827; }
+:root[data-theme="light"] .wh-next-meta { color: #4B5563; }
+:root[data-theme="light"] .wh-next-meta svg { color: #9CA3AF; }
+:root[data-theme="light"] .wh-next-meta .sep { color: #D1D5DB; }
+:root[data-theme="light"] .wh-next-meta .loc { color: #6B7280; }
+:root[data-theme="light"] .wh-next-chev { color: #9CA3AF; }
+:root[data-theme="light"] .wh-next-cta {
+  border-top-color: #F3F4F6; background: #ECFDF5; color: #047857;
+}
+:root[data-theme="light"] .wh-next-cta.is-allocated { background: #FFFBEB; color: #B45309; }
+:root[data-theme="light"] .wh-next-count { background: rgba(15,23,42,0.06); color: #6B7280; }
+:root[data-theme="light"] .wh-up-date.is-night { background: rgba(15,23,42,0.05); color: #4B5563; }
+
+/* Light-mode nukes for the two pale accent inks used by inline-styled
+   chips (next-shift "Tap to confirm"/"Accepted", forms Signature chip,
+   leave icons). Pale mint/amber on white is ~1.6:1 — remap to the
+   accessible deep variants, same pattern as the #fff nukes above. */
+:root[data-theme="light"] [style*="color:#6EE7B7"] { color: #047857 !important; }
+:root[data-theme="light"] [style*="color:#FCD34D"] { color: #B45309 !important; }

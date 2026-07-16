@@ -23,7 +23,7 @@ router.get('/home', async (req, res) => {
   // Synchronous DB queries first (SQLite is sync) — all very fast
   // Crew don't see a shift until the allocator confirms the booking, so
   // 'unconfirmed' is excluded here (matches routes/worker/jobs.js).
-  const VISIBLE_BOOKING_STATUSES = ['confirmed','green_to_go','in_progress','complete','on_hold'];
+  const VISIBLE_BOOKING_STATUSES = ['locked','confirmed','green_to_go','in_progress','complete','on_hold']; // locked: workers are push-notified to accept while locked, so the shift must be visible
 
   // Tag the source like /w/jobs does so the home card's "Open shift" /
   // "Fill docket" buttons route correctly: booking-only allocations

@@ -398,6 +398,7 @@
   .wh-fab-menu { position: absolute; bottom: 64px; right: 0; display: flex; flex-direction: column; gap: 8px; align-items: flex-end; opacity: 0 !important; pointer-events: none; transform: translateY(10px); transition: opacity 0.22s ease, transform 0.22s ease; animation: none !important; }
   .wh-fab.open .wh-fab-menu { opacity: 1 !important; pointer-events: auto; transform: translateY(0); }
   .wh-fab-action { display: inline-flex; align-items: center; gap: 10px; padding: 8px 12px 8px 10px; background: #0F1B30; color: #fff; border: 1px solid rgba(255,255,255,0.1); border-radius: 999px; font-size: 0.8rem; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  :root[data-theme="light"] .wh-fab-action { background: #FFFFFF; color: #111827; border-color: #E5E7EB; box-shadow: 0 4px 12px rgba(15,23,42,0.12); }
   .wh-fab-action-ic { width: 28px; height: 28px; border-radius: 999px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 
   /* Manager card (replaces inline styles so it can flip per theme). */
@@ -589,6 +590,7 @@
   <div class="wh-hero">
     <p class="wh-hero-sub"><%= new Date().toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long', day: 'numeric', month: 'long' }) %></p>
     <h1 class="wh-hero-greet"><%= greeting %>,<br><%= firstName %>.</h1>
+    <div class="wd-chevron-rail" aria-hidden="true"></div>
     <% if (subtext) { %>
       <p class="wh-hero-ctx <%= subtext.kind %>"><span class="dot"></span><%= subtext.text %></p>
     <% } %>
@@ -997,7 +999,7 @@
 
 <% if (section === 'compliance' && !hidden.includes('compliance') && compliance && (!compliance.canAllocate || compliance.fatigueBlocked || (compliance.expiringItems && compliance.expiringItems.length > 0) || (compliance.expiredItems && compliance.expiredItems.length > 0))) { %>
   <div class="wh-section-head"><span class="wh-section-title">Heads up</span></div>
-  <div class="wh-alert" data-attention="amber">
+  <div class="wd-chevron-rail-left is-warn wh-alert" data-attention="amber">
     <h4 class="wd-emph">Compliance needs attention</h4>
     <ul class="list-disc pl-5">
       <% if (compliance.fatigueBlocked) { %><li>Fatigue limit reached (<%= compliance.daysWorked %>/7 days worked)</li><% } %>
@@ -1095,7 +1097,8 @@
     </div>
   <% } else { %>
     <% todaysShifts.forEach(shift => { %>
-      <div class="wh-shift <%= shift.status === 'allocated' ? 'is-allocated' : '' %>">
+      <!-- Emerald hazard rail = live shift: you're on the road today. -->
+      <div class="wd-chevron-rail-left wh-shift <%= shift.status === 'allocated' ? 'is-allocated' : '' %>">
         <div class="wh-shift-header">
           <span class="wh-shift-status <%= shift.status === 'confirmed' ? 'confirmed' : 'allocated' %>"><%= shift.status %></span>
           <span class="wh-shift-meta-time">
@@ -1202,19 +1205,18 @@
   <div class="wh-section-head">
     <span class="wh-section-title">
       Coming up
-      <span style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:6px;background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);font-size:0.62rem;font-weight:600;letter-spacing:0;"><%= upcomingShifts.length %></span>
+      <span class="wh-next-count" style="display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:6px;font-size:0.62rem;font-weight:600;letter-spacing:0;"><%= upcomingShifts.length %></span>
     </span>
     <a href="/w/shifts" class="wh-section-link">See all ›</a>
   </div>
 
   <!-- Hero: the next shift -->
-  <a href="<%= nextLink %>" style="display:block;text-decoration:none;position:relative;border-radius:12px;overflow:hidden;background:#1A1D24;border:1px solid rgba(255,255,255,0.06);">
-    <span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#10B981;"></span>
+  <a href="<%= nextLink %>" class="wh-next wd-chevron-rail-left">
     <div style="display:flex;gap:12px;padding:14px 14px 12px 16px;align-items:stretch;">
-      <div style="width:54px;flex-shrink:0;border-radius:6px;background:rgba(16,185,129,0.14);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 0;">
-        <span style="font-size:0.55rem;font-weight:600;color:#6EE7B7;text-transform:uppercase;letter-spacing:0.08em;line-height:1;"><%= ndDow %></span>
+      <div class="wh-next-date" style="width:54px;flex-shrink:0;border-radius:6px;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:6px 0;">
+        <span style="font-size:0.55rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;line-height:1;opacity:0.85;"><%= ndDow %></span>
         <span style="font-size:1.5rem;font-weight:600;line-height:1;margin-top:3px;font-family:'Bricolage Grotesque',Geist,sans-serif;letter-spacing:-0.02em;"><%= ndNum %></span>
-        <span style="font-size:0.55rem;font-weight:600;color:rgba(255,255,255,0.6);text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;line-height:1;"><%= ndMon %></span>
+        <span style="font-size:0.55rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;margin-top:2px;line-height:1;opacity:0.7;"><%= ndMon %></span>
       </div>
       <div style="flex:1;min-width:0;">
         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
@@ -1225,20 +1227,20 @@
             <span style="display:inline-flex;align-items:center;padding:2px 7px;border-radius:999px;font-size:0.58rem;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;background:rgba(16,185,129,0.18);color:#6EE7B7;border:1px solid rgba(16,185,129,0.35);">Accepted</span>
           <% } %>
         </div>
-        <p style="font-size:1rem;font-weight:700;color:#fff;line-height:1.2;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><%= nextShift.client %></p>
-        <p style="font-size:0.78rem;color:rgba(255,255,255,0.7);margin-top:2px;display:flex;align-items:center;gap:5px;">
-          <svg style="width:12px;height:12px;color:rgba(255,255,255,0.45);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <p class="wh-next-client" style="font-size:1rem;font-weight:700;line-height:1.2;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;"><%= nextShift.client %></p>
+        <p class="wh-next-meta" style="font-size:0.78rem;margin-top:2px;display:flex;align-items:center;gap:5px;">
+          <svg style="width:12px;height:12px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           <%= fmtTime(nextShift.start_time) %> – <%= fmtTime(nextShift.end_time) %>
           <% if (nextShift.suburb) { %>
-            <span style="color:rgba(255,255,255,0.35);">·</span>
-            <span style="color:rgba(255,255,255,0.6);"><%= nextShift.suburb %></span>
+            <span class="sep">·</span>
+            <span class="loc"><%= nextShift.suburb %></span>
           <% } %>
         </p>
       </div>
-      <svg style="width:14px;height:14px;color:rgba(255,255,255,0.4);align-self:center;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+      <svg class="wh-next-chev" style="width:14px;height:14px;align-self:center;flex-shrink:0;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
     </div>
     <!-- Explicit clickable footer so it's obvious the whole box opens the shift. -->
-    <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;border-top:1px solid rgba(255,255,255,0.06);<%= isAllocated ? 'background:rgba(245,158,11,0.10);color:#FCD34D;' : 'background:rgba(16,185,129,0.08);color:#6EE7B7;' %>font-size:0.72rem;font-weight:700;letter-spacing:0.02em;">
+    <div class="wh-next-cta <%= isAllocated ? 'is-allocated' : '' %>" style="display:flex;align-items:center;justify-content:center;gap:6px;padding:9px 12px;font-size:0.72rem;font-weight:700;letter-spacing:0.02em;">
       <%= isAllocated ? 'Tap to accept or reject' : 'View shift details' %>
       <svg style="width:13px;height:13px;" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
     </div>
@@ -1255,7 +1257,7 @@
           : ('/w/jobs/' + (s.id || s.job_id));
       %>
         <a href="<%= link %>" class="wh-up-item" style="text-decoration: none;">
-          <div class="wh-up-date"<%= s.shift_type === 'night' ? ' style="background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.7);"' : '' %>>
+          <div class="wh-up-date<%= s.shift_type === 'night' ? ' is-night' : '' %>">
             <span class="d"><%= dNum %></span><span class="m"><%= dMon %></span>
           </div>
           <div class="wh-up-body">

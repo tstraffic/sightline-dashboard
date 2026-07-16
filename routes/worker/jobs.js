@@ -154,7 +154,7 @@ router.get('/jobs', (req, res) => {
   // surfaces in the portal. Once confirmed it appears as a request the worker
   // can accept/decline (that accept/decline drives allocation status, which is
   // separate from booking status).
-  const VISIBLE_BOOKING_STATUSES = ['confirmed','green_to_go','in_progress','complete','on_hold'];
+  const VISIBLE_BOOKING_STATUSES = ['locked','confirmed','green_to_go','in_progress','complete','on_hold']; // locked: workers are push-notified to accept while locked, so the shift must be visible
 
   // Upcoming from crew_allocations. Falls back to booking columns when the
   // allocation isn't linked to a job (ad-hoc bookings post-migration 142),
@@ -771,6 +771,12 @@ router.get('/booking-shift/:bookingId', (req, res) => {
   // Get booking details
   const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(req.params.bookingId);
   if (!booking) { req.flash('error', 'Booking not found.'); return res.redirect('/w/jobs'); }
+  // Cancelled/deleted bookings must not render via deep link (push
+  // notifications and old links otherwise resurrect ghost shifts).
+  if (booking.deleted_at || ['cancelled', 'late_cancellation'].includes(booking.status)) {
+    req.flash('error', 'That shift has been cancelled.');
+    return res.redirect('/w/jobs');
+  }
 
   // Verify this worker is assigned to this booking
   const myAssignment = db.prepare('SELECT * FROM booking_crew WHERE booking_id = ? AND crew_member_id = ?').get(booking.id, worker.id);

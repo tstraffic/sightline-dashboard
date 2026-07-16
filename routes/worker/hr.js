@@ -690,18 +690,24 @@ router.get('/hr/pay-runs', (req, res) => {
       flash_success: req.flash('success'), flash_error: req.flash('error'),
     });
   }
-  const lines = db.prepare(`
-    SELECT prl.id, prl.pay_run_id, prl.payment_type, prl.total_wages,
-      prl.travel_allowance, prl.meal_allowance, prl.other_allowance,
-      prl.total_allowance, prl.total_deductions, prl.grand_total, prl.paid,
-      pr.period_start, pr.period_end, pr.label, pr.status,
-      COALESCE(pr.pay_run_type, 'traffic_control') AS pay_run_type
-    FROM pay_run_lines prl
-    JOIN pay_runs pr ON pr.id = prl.pay_run_id
-    WHERE prl.employee_id = ? AND pr.status = 'finalized'
-    ORDER BY pr.period_end DESC, prl.id DESC
-    LIMIT 50
-  `).all(empId);
+  // Guarded: the pay_runs/pay_run_lines tables come from a conditional
+  // migration and are absent on some DBs — a worker-facing 500 on "Pay
+  // breakdown" is never acceptable, so degrade to the empty state.
+  let lines = [];
+  try {
+    lines = db.prepare(`
+      SELECT prl.id, prl.pay_run_id, prl.payment_type, prl.total_wages,
+        prl.travel_allowance, prl.meal_allowance, prl.other_allowance,
+        prl.total_allowance, prl.total_deductions, prl.grand_total, prl.paid,
+        pr.period_start, pr.period_end, pr.label, pr.status,
+        COALESCE(pr.pay_run_type, 'traffic_control') AS pay_run_type
+      FROM pay_run_lines prl
+      JOIN pay_runs pr ON pr.id = prl.pay_run_id
+      WHERE prl.employee_id = ? AND pr.status = 'finalized'
+      ORDER BY pr.period_end DESC, prl.id DESC
+      LIMIT 50
+    `).all(empId);
+  } catch (e) { console.error('[worker.hr] pay-runs unavailable:', e.message); }
   res.render('worker/hr-pay-runs', {
     title: 'Pay breakdown', currentPage: 'more',
     lines, notLinked: false, fmtMoney,
@@ -714,13 +720,16 @@ router.get('/hr/pay-runs/:lineId', (req, res) => {
   const db = getDb();
   const empId = loadLinkedEmployeeId(req.session.worker.id);
   if (!empId) return res.status(404).send('Not linked');
-  const line = db.prepare(`
-    SELECT prl.*, pr.period_start, pr.period_end, pr.label, pr.status,
-      COALESCE(pr.pay_run_type, 'traffic_control') AS pay_run_type
-    FROM pay_run_lines prl
-    JOIN pay_runs pr ON pr.id = prl.pay_run_id
-    WHERE prl.id = ? AND prl.employee_id = ? AND pr.status = 'finalized'
-  `).get(req.params.lineId, empId);
+  let line = null;
+  try {
+    line = db.prepare(`
+      SELECT prl.*, pr.period_start, pr.period_end, pr.label, pr.status,
+        COALESCE(pr.pay_run_type, 'traffic_control') AS pay_run_type
+      FROM pay_run_lines prl
+      JOIN pay_runs pr ON pr.id = prl.pay_run_id
+      WHERE prl.id = ? AND prl.employee_id = ? AND pr.status = 'finalized'
+    `).get(req.params.lineId, empId);
+  } catch (e) { console.error('[worker.hr] pay-run line unavailable:', e.message); }
   if (!line) return res.status(404).send('Pay-run line not found');
 
   // Hydrate buckets from JSON (fallback to legacy columns)

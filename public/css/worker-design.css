@@ -383,6 +383,83 @@
 [data-attention="blue"]    { --wd-attn-glow: rgba(43, 127, 255, 0.30); }
 
 /* =========================================================================
+   Chevron hazard rail — the Atomis signature, portal flavour.
+   45° barrier-board stripes with the same discipline as the admin app:
+   meaning, never decoration.
+     .wd-chevron-rail       — short striped rule under the greeting/header
+     .wd-chevron-rail-left  — striped left rail on a card:
+                              default emerald  = live/today shift
+                              .is-warn amber   = due soon / needs attention
+                              .is-critical red = compliance blocker
+   ========================================================================= */
+.wd-chevron-rail {
+  height: 3px;
+  margin-top: 10px;
+  border-radius: 1.5px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(16, 185, 129, 0.55) 0 6px,
+    rgba(16, 185, 129, 0.12) 6px 12px
+  );
+  -webkit-mask-image: linear-gradient(to right, black 0, black 88px, transparent 220px);
+  mask-image: linear-gradient(to right, black 0, black 88px, transparent 220px);
+}
+:root[data-theme="light"] .wd-chevron-rail {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(4, 120, 87, 0.65) 0 6px,
+    rgba(4, 120, 87, 0.14) 6px 12px
+  );
+}
+.wd-chevron-rail-left { position: relative; overflow: hidden; }
+.wd-chevron-rail-left::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 4px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(16, 185, 129, 0.70) 0 5px,
+    rgba(16, 185, 129, 0.15) 5px 10px
+  );
+}
+.wd-chevron-rail-left.is-warn::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(251, 191, 36, 0.75) 0 5px,
+    rgba(251, 191, 36, 0.15) 5px 10px
+  );
+}
+.wd-chevron-rail-left.is-critical::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(239, 68, 68, 0.75) 0 5px,
+    rgba(239, 68, 68, 0.15) 5px 10px
+  );
+}
+:root[data-theme="light"] .wd-chevron-rail-left::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(4, 120, 87, 0.60) 0 5px,
+    rgba(4, 120, 87, 0.12) 5px 10px
+  );
+}
+:root[data-theme="light"] .wd-chevron-rail-left.is-warn::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(217, 119, 6, 0.70) 0 5px,
+    rgba(217, 119, 6, 0.12) 5px 10px
+  );
+}
+:root[data-theme="light"] .wd-chevron-rail-left.is-critical::before {
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(220, 38, 38, 0.70) 0 5px,
+    rgba(220, 38, 38, 0.12) 5px 10px
+  );
+}
+
+/* =========================================================================
    Reduced motion: respect OS preference.
    ========================================================================= */
 @media (prefers-reduced-motion: reduce) {

@@ -114,10 +114,14 @@ function buildGreetingSubtext(db, worker, member, employee, todaysShifts) {
   // 8. Off today — give them the next shift if one is scheduled,
   //    instead of a dead-end "you're off" message.
   try {
+    // LEFT JOIN + COALESCE like the home shift list — an INNER JOIN on jobs
+    // silently dropped allocations for job-less bookings (job_id NULL), so
+    // the hero said "no upcoming shifts" while the list showed one.
     const next = db.prepare(`
-      SELECT a.allocation_date, a.start_time, j.client
+      SELECT a.allocation_date, a.start_time,
+             COALESCE(j.client, b.title, b.booking_number) AS client
       FROM crew_allocations a
-      JOIN jobs j ON j.id = a.job_id
+      LEFT JOIN jobs j ON j.id = a.job_id
       LEFT JOIN bookings b ON b.id = a.booking_id
       WHERE a.crew_member_id = ?
         AND a.allocation_date > ?
@@ -133,6 +137,32 @@ function buildGreetingSubtext(db, worker, member, employee, todaysShifts) {
       return { kind: 'default', text: `You're off today. Next shift: ${next.client} — ${when}${time}` };
     }
   } catch (e) { /* table/col shape shift on older deploys */ }
+
+  // 8b. Booking-sourced shifts with no crew_allocations row (the same
+  // fallback the home shift list uses) — without this the hero said
+  // "no upcoming shifts" while the Coming-up card right below showed one.
+  try {
+    const nextBk = db.prepare(`
+      SELECT DATE(b.start_datetime) AS allocation_date,
+             SUBSTR(b.start_datetime, 12, 5) AS start_time,
+             b.title AS client
+      FROM booking_crew bc
+      JOIN bookings b ON b.id = bc.booking_id
+      WHERE bc.crew_member_id = ?
+        AND DATE(b.start_datetime) > ?
+        AND bc.status IN ('assigned','confirmed')
+        AND b.deleted_at IS NULL
+        AND b.status IN (${NOTIFIABLE_BOOKING_STATUSES.map(() => '?').join(',')})
+        AND NOT EXISTS (SELECT 1 FROM crew_allocations ca WHERE ca.booking_id = bc.booking_id AND ca.crew_member_id = bc.crew_member_id)
+      ORDER BY b.start_datetime ASC LIMIT 1
+    `).get(worker.id, today, ...NOTIFIABLE_BOOKING_STATUSES);
+    if (nextBk) {
+      const d = new Date(nextBk.allocation_date + 'T00:00:00');
+      const when = d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+      const time = nextBk.start_time ? ` at ${formatTime(nextBk.start_time)}` : '';
+      return { kind: 'default', text: `You're off today. Next shift: ${nextBk.client} — ${when}${time}` };
+    }
+  } catch (e) { /* booking_crew may not exist on legacy DBs */ }
 
   return { kind: 'default', text: "You're off today. No upcoming shifts scheduled." };
 }
