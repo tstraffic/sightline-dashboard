@@ -48,7 +48,10 @@
   .lv-cell.lv-past { opacity: 0.35; cursor: default; }
   .lv-cell .lv-d { font-size: 1.05rem; font-weight: 700; line-height: 1; margin-top: 2px; }
   .lv-cell .lv-icons { display: flex; flex-direction: column; align-items: center; gap: 2px; margin-top: 8px; }
-  .lv-cell svg.lv-plane { width: 16px; height: 16px; opacity: 0.18; }
+  /* Planes only appear when they mean something (leave booked that day) —
+     ghost planes on every empty day read as clutter. opacity keeps the
+     grid height stable. */
+  .lv-cell svg.lv-plane { width: 16px; height: 16px; opacity: 0; }
   .lv-cell svg.lv-plane.on-day    { opacity: 1; color: #F59E0B; }
   .lv-cell svg.lv-plane.on-night  { opacity: 1; color: #3B82F6; }
   .lv-cell svg.lv-plane.pending-day   { opacity: 1; color: #F59E0B; filter: drop-shadow(0 0 2px rgba(245,158,11,0.3)); }
@@ -187,13 +190,17 @@
   :root[data-theme="light"] .lv-monthbar a:hover { background: #F3F4F6; color: #0F1115; }
   :root[data-theme="light"] .lv-monthbar .lv-month { color: #0F1115; }
   :root[data-theme="light"] .lv-head { color: #6B7280; }
+  /* background-COLOR (not the shorthand): the shorthand resets
+     background-image/repeat, which wiped the .lv-pending stripes and
+     re-tiled the select chevron in light mode. */
   :root[data-theme="light"] .lv-cell {
-    background: #FFFFFF;
+    background-color: #FFFFFF;
     border-color: #E5E7EB;
     color: #6B7280;
   }
-  :root[data-theme="light"] .lv-cell.lv-has { color: #0F1115; background: #F9FAFB; }
-  :root[data-theme="light"] .lv-cell.lv-selected { color: #047857; background: #ECFDF5; }
+  :root[data-theme="light"] .lv-cell.lv-has { color: #0F1115; background-color: #F9FAFB; }
+  :root[data-theme="light"] .lv-cell.lv-selected { color: #047857; background-color: #ECFDF5; }
+  :root[data-theme="light"] .lv-cell.lv-pending { background-image: repeating-linear-gradient(45deg, rgba(217,119,6,0.10), rgba(217,119,6,0.10) 3px, transparent 3px, transparent 6px); }
   :root[data-theme="light"] .lv-legend {
     background: #FFFFFF;
     border: 1px solid #E5E7EB;
@@ -205,7 +212,8 @@
   :root[data-theme="light"] .lv-input,
   :root[data-theme="light"] .lv-select,
   :root[data-theme="light"] .lv-textarea {
-    background: #FFFFFF;
+    background-color: #FFFFFF; /* NOT the shorthand — it resets background-repeat
+                                  and tiled the select chevron across the field */
     border-color: #D1D5DB;
     color: #0F1115;
   }
