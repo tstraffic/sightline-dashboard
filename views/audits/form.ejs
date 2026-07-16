@@ -151,13 +151,14 @@
       </div>
     </section>
 
-    <% if (isEdit) { %>
-      <section class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
-        <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-1">Site Overview Evidence</h2>
-        <p class="text-xs text-gray-500 mb-3">Upload the TGS/TCP PDF, a site map or aerial, and the daily pre-start or briefing sheet.</p>
-        <%- include('_upload_block', { auditId: a.id, contextKey: 'overview', label: 'Add overview files', hint: 'TGS PDF · site map · pre-start', accept: 'image/*,application/pdf,.doc,.docx', returnTo: '/audits/' + a.id + '/edit', items: ctxMap['overview'] || [], csrfToken: (typeof csrfToken !== 'undefined' ? csrfToken : '') }) %>
-      </section>
-    <% } %>
+    <%# Rendered in NEW mode too (auditId late-binds after the silent
+        background draft) so answering questions never forces a page
+        reload just to unlock uploads. %>
+    <section class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
+      <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-1">Site Overview Evidence</h2>
+      <p class="text-xs text-gray-500 mb-3">Upload the TGS/TCP PDF, a site map or aerial, and the daily pre-start or briefing sheet.</p>
+      <%- include('_upload_block', { auditId: isEdit ? a.id : '', contextKey: 'overview', label: 'Add overview files', hint: 'TGS PDF · site map · pre-start', accept: 'image/*,application/pdf,.doc,.docx', returnTo: isEdit ? '/audits/' + a.id + '/edit' : '/audits/new', items: ctxMap['overview'] || [], csrfToken: (typeof csrfToken !== 'undefined' ? csrfToken : '') }) %>
+    </section>
 
     <!-- Checklist sections (template-driven) -->
     <% sections.forEach(function(section) { %>
@@ -329,18 +330,16 @@
           <% }) %>
         </div>
 
-        <% if (isEdit) { %>
-          <div class="px-4 sm:px-5 py-3 border-t border-gray-100 bg-blue-50/30">
+        <div class="px-4 sm:px-5 py-3 border-t border-gray-100 bg-blue-50/30">
             <details class="group">
               <summary class="cursor-pointer text-xs font-semibold text-brand-700 hover:text-brand-800 flex items-center gap-1 select-none">
                 <svg class="w-3.5 h-3.5 transition group-open:rotate-90" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
                 Section <%= section.key %> evidence
                 <% const cnt = (ctxMap['section_' + section.key] || []).length; %><% if (cnt) { %><span class="ml-1 bg-brand-600 text-white px-1.5 rounded-full text-[10px]"><%= cnt %></span><% } %>
               </summary>
-              <div class="mt-3"><%- include('_upload_block', { auditId: a.id, contextKey: 'section_' + section.key, label: 'Add photos for section ' + section.key, hint: 'Tap to take a photo or choose file', accept: 'image/*,application/pdf', returnTo: '/audits/' + a.id + '/edit#section-' + section.key, items: ctxMap['section_' + section.key] || [], csrfToken: (typeof csrfToken !== 'undefined' ? csrfToken : '') }) %></div>
+              <div class="mt-3"><%- include('_upload_block', { auditId: isEdit ? a.id : '', contextKey: 'section_' + section.key, label: 'Add photos for section ' + section.key, hint: 'Tap to take a photo or choose file', accept: 'image/*,application/pdf', returnTo: isEdit ? '/audits/' + a.id + '/edit#section-' + section.key : '/audits/new', items: ctxMap['section_' + section.key] || [], csrfToken: (typeof csrfToken !== 'undefined' ? csrfToken : '') }) %></div>
             </details>
           </div>
-        <% } %>
 
         <div class="px-4 sm:px-5 py-3 border-t border-gray-100 bg-gray-50">
           <label class="block text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Section Comments</label>
@@ -434,19 +433,13 @@
     <!-- Sign-off -->
     <section id="signoff" class="bg-white border border-gray-200 rounded-xl p-4 sm:p-5">
       <h2 class="text-sm font-bold text-gray-900 uppercase tracking-wide mb-1">Sign-off</h2>
-      <% if (isEdit) { %>
-        <p class="text-xs text-gray-500 mb-4">Draw to sign (finger or stylus) and tap <span class="font-semibold">Save signature</span>, or type a full name as a fallback. Timestamp recorded server-side.</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <%- include('partials/signature-pad', { slot: 'auditor', label: 'Auditor', auditId: a.id, currentPath: val('auditor_signature_path'), signedAt: val('auditor_signed_at'), fallbackName: val('auditor_signature_text') }) %>
-          <%- include('partials/signature-pad', { slot: 'supervisor', label: 'Supervisor / STMS', auditId: a.id, currentPath: val('supervisor_signature_path'), signedAt: val('supervisor_signed_at'), fallbackName: val('supervisor_signature_text') }) %>
-        </div>
-      <% } else { %>
-        <p class="text-xs text-gray-500 mb-4">Save the draft first to enable drawn signatures — you can type names now.</p>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div><label class="block text-xs font-semibold text-gray-700 mb-1">Auditor signature</label><input name="auditor_signature_text" value="<%= val('auditor_signature_text') %>" placeholder="Type full name" class="w-full px-3 py-3 text-base border-2 border-gray-300 rounded-lg italic" style="font-family:'Brush Script MT','Segoe Script',cursive;"></div>
-          <div><label class="block text-xs font-semibold text-gray-700 mb-1">Supervisor / STMS signature</label><input name="supervisor_signature_text" value="<%= val('supervisor_signature_text') %>" placeholder="Type full name" class="w-full px-3 py-3 text-base border-2 border-gray-300 rounded-lg italic" style="font-family:'Brush Script MT','Segoe Script',cursive;"></div>
-        </div>
-      <% } %>
+      <%# Pads render in NEW mode too — the audit id late-binds after the
+          silent background draft, so no reload is ever needed to sign. %>
+      <p class="text-xs text-gray-500 mb-4">Draw to sign (finger or stylus) and tap <span class="font-semibold">Save signature</span>, or type a full name as a fallback. Timestamp recorded server-side.</p>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <%- include('partials/signature-pad', { slot: 'auditor', label: 'Auditor', auditId: isEdit ? a.id : '', currentPath: val('auditor_signature_path'), signedAt: val('auditor_signed_at'), fallbackName: val('auditor_signature_text') }) %>
+        <%- include('partials/signature-pad', { slot: 'supervisor', label: 'Supervisor / STMS', auditId: isEdit ? a.id : '', currentPath: val('supervisor_signature_path'), signedAt: val('supervisor_signed_at'), fallbackName: val('supervisor_signature_text') }) %>
+      </div>
     </section>
 
     <div class="flex flex-col sm:flex-row gap-3 pb-2">
@@ -636,18 +629,38 @@
   var jobSelect = document.getElementById('job-select');
   if (jobSelect) jobSelect.addEventListener('change', function() { var opt = this.options[this.selectedIndex]; if (!opt||!opt.value) return; var num=opt.getAttribute('data-job-number')||'',client=opt.getAttribute('data-client')||'',site=opt.getAttribute('data-site')||'',suburb=opt.getAttribute('data-suburb')||''; var fields={'f-project_site':num+(client?' — '+client:''),'f-client':client,'f-location':[site,suburb].filter(Boolean).join(', ')}; Object.keys(fields).forEach(function(id){ var el=document.getElementById(id); if (el&&!el.value&&fields[id]) el.value=fields[id]; }); });
 
-  var draftCreating = false;
+  // Silent background draft. Previously this navigated to /audits/:id/edit
+  // on the FIRST answer — a full page reload that jumped the auditor back
+  // to the top mid-form. Now the draft is created in place: the returned id
+  // late-binds onto the form action, every upload block and signature pad,
+  // and the URL (replaceState), so nothing on screen moves.
+  var draftPromise = null;
   function maybeAutoDraft() {
-    if (window.AUDIT_IS_EDIT || draftCreating) return;
-    draftCreating = true;
+    if (window.AUDIT_IS_EDIT) return Promise.resolve(null);
+    if (draftPromise) return draftPromise;
     var form = document.getElementById('auditForm');
     var fd = new FormData(form); var body = new URLSearchParams();
     for (var pair of fd.entries()) body.append(pair[0], pair[1]);
     body.set('_csrf', window.AUDIT_CSRF);
-    fetch('/audits/draft', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':window.AUDIT_CSRF,'Accept':'application/json'}, body: body.toString(), credentials:'same-origin' })
-      .then(function(r){ return r.json(); }).then(function(data){ if (data&&data.ok&&data.id) { try { sessionStorage.setItem('auditScrollY', String(window.scrollY)); } catch(e){} window.location.replace('/audits/'+data.id+'/edit'); } else draftCreating=false; }).catch(function(){ draftCreating=false; });
+    draftPromise = fetch('/audits/draft', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':window.AUDIT_CSRF,'Accept':'application/json'}, body: body.toString(), credentials:'same-origin' })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (!data || !data.ok || !data.id) { draftPromise = null; return null; }
+        window.AUDIT_IS_EDIT = true;
+        window.AUDIT_ID = data.id;
+        form.setAttribute('action', '/audits/' + data.id);
+        document.querySelectorAll('[data-upload-block], .audit-sig').forEach(function (el) {
+          el.setAttribute('data-audit-id', data.id);
+        });
+        var status = document.getElementById('draft-status');
+        if (status) status.classList.remove('hidden');
+        try { history.replaceState(null, '', '/audits/' + data.id + '/edit'); } catch (e) {}
+        return data.id;
+      })
+      .catch(function(){ draftPromise = null; return null; });
+    return draftPromise;
   }
-  try { var y = sessionStorage.getItem('auditScrollY'); if (y) { window.scrollTo(0, parseInt(y,10)||0); sessionStorage.removeItem('auditScrollY'); } } catch(e){}
+  window.auditEnsureDraft = maybeAutoDraft;
 
   syncCrewRows();
   // Reveal any Section-3 "who?" box that already has flagged workers (older
@@ -662,7 +675,11 @@
   // ---- Upload blocks (fetch-based, sit inside the main form) ----
   function uplSetBusy(block, busy, err){ var prog=block.querySelector('.upl-progress'),errEl=block.querySelector('.upl-error'); if(prog)prog.classList.toggle('hidden',!busy); if(errEl){ if(err){errEl.textContent=err;errEl.classList.remove('hidden');}else{errEl.classList.add('hidden');errEl.textContent='';}} }
   function uplRenderAttachment(att){ var isImg=(att.mime_type||'').startsWith('image/'); var div=document.createElement('div'); div.className='group relative bg-gray-50 border border-gray-200 rounded-lg overflow-hidden'; div.setAttribute('data-att-id',att.id); var thumb=isImg?'<a href="'+att.file_path+'"><img src="'+att.file_path+'" class="w-full h-20 sm:h-24 object-cover"></a>':'<a href="'+att.file_path+'" class="flex items-center justify-center h-20 sm:h-24 bg-gray-100 text-xs text-gray-500 px-2 text-center break-words">'+(att.original_name||'file')+'</a>'; div.innerHTML=thumb+'<button type="button" class="upl-delete absolute top-1 right-1 w-6 h-6 bg-red-600 text-white rounded-full text-xs font-bold opacity-80 group-hover:opacity-100 transition" data-att-id="'+att.id+'">×</button>'; return div; }
-  async function uplDoUpload(block, files){ if(!files||!files.length)return; var auditId=block.getAttribute('data-audit-id'),ctx=block.getAttribute('data-context-key'),captionEl=block.querySelector('.upl-caption'),caption=captionEl?captionEl.value:''; uplSetBusy(block,true,''); try { var fd=new FormData(); fd.append('context_key',ctx); if(caption)fd.append('caption',caption); for(var i=0;i<files.length;i++)fd.append('files',files[i]); var r=await fetch('/audits/'+auditId+'/attachments?json=1',{method:'POST',body:fd,credentials:'same-origin',headers:{'Accept':'application/json','X-CSRF-Token':window.AUDIT_CSRF}}); if(!r.ok)throw new Error('Upload failed'); var data=await r.json(); if(!data.ok)throw new Error(data.error||'Upload failed'); var grid=block.querySelector('.upl-grid'); (data.attachments||[]).forEach(function(att){ grid.appendChild(uplRenderAttachment(att)); }); grid.classList.remove('hidden'); if(captionEl)captionEl.value=''; } catch(e){ uplSetBusy(block,false,e.message||'Upload failed'); return; } uplSetBusy(block,false,''); }
+  async function uplDoUpload(block, files){ if(!files||!files.length)return; var auditId=block.getAttribute('data-audit-id'),ctx=block.getAttribute('data-context-key'),captionEl=block.querySelector('.upl-caption'),caption=captionEl?captionEl.value:''; uplSetBusy(block,true,''); try {
+      // New-mode form: no audit row yet — create the silent draft first,
+      // which late-binds data-audit-id onto every block (no reload).
+      if(!auditId && window.auditEnsureDraft){ await window.auditEnsureDraft(); auditId=block.getAttribute('data-audit-id'); }
+      if(!auditId) throw new Error('Could not start the draft — try Save as Draft'); var fd=new FormData(); fd.append('context_key',ctx); if(caption)fd.append('caption',caption); for(var i=0;i<files.length;i++)fd.append('files',files[i]); var r=await fetch('/audits/'+auditId+'/attachments?json=1',{method:'POST',body:fd,credentials:'same-origin',headers:{'Accept':'application/json','X-CSRF-Token':window.AUDIT_CSRF}}); if(!r.ok)throw new Error('Upload failed'); var data=await r.json(); if(!data.ok)throw new Error(data.error||'Upload failed'); var grid=block.querySelector('.upl-grid'); (data.attachments||[]).forEach(function(att){ grid.appendChild(uplRenderAttachment(att)); }); grid.classList.remove('hidden'); if(captionEl)captionEl.value=''; } catch(e){ uplSetBusy(block,false,e.message||'Upload failed'); return; } uplSetBusy(block,false,''); }
   document.addEventListener('change', function(e){ if(e.target.matches('.upl-file')||e.target.matches('.upl-camera')){ var block=e.target.closest('[data-upload-block]'); if(!block)return; uplDoUpload(block,e.target.files); e.target.value=''; } });
   document.addEventListener('click', function(e){ var btn=e.target.closest('.upl-delete'); if(!btn)return; var block=btn.closest('[data-upload-block]'); if(!block)return; if(!confirm('Delete this file?'))return; var auditId=block.getAttribute('data-audit-id'),attId=btn.getAttribute('data-att-id'); fetch('/audits/'+auditId+'/attachments/'+attId+'/delete?json=1',{method:'POST',credentials:'same-origin',headers:{'Accept':'application/json','X-CSRF-Token':window.AUDIT_CSRF}}).then(function(r){return r.json();}).then(function(data){ if(data&&data.ok){ var wrap=btn.closest('[data-att-id]'); if(wrap)wrap.remove(); } }); });
 })();
@@ -678,12 +695,21 @@
     var clr = wrap.querySelector('.audit-sig-clear'); if (clr) clr.addEventListener('click', function(){ pad.clear(); setStatus(wrap, '', ''); });
     var sv = wrap.querySelector('.audit-sig-save'); if (sv) sv.addEventListener('click', function(){
       if (!pad.hasDrawn()) { setStatus(wrap, 'Draw a signature first', 'text-red-500'); return; }
-      var slot = wrap.getAttribute('data-slot'), id = wrap.getAttribute('data-audit-id'), data = pad.getData();
+      var slot = wrap.getAttribute('data-slot'), data = pad.getData();
       setStatus(wrap, 'Saving…', 'text-gray-500');
+      // New-mode form: no audit row yet — silent draft first (late-binds
+      // data-audit-id, no reload), then save the signature against it.
+      var ready = wrap.getAttribute('data-audit-id')
+        ? Promise.resolve()
+        : (window.auditEnsureDraft ? window.auditEnsureDraft() : Promise.resolve());
+      ready.then(function(){
+      var id = wrap.getAttribute('data-audit-id');
+      if (!id) { setStatus(wrap, 'Could not start the draft — try Save as Draft', 'text-red-500'); return; }
       fetch('/audits/' + id + '/signature/' + slot + '?json=1', { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded','X-CSRF-Token':window.AUDIT_CSRF,'Accept':'application/json'}, credentials:'same-origin', body:new URLSearchParams({ _csrf: window.AUDIT_CSRF, signature_data: data }).toString() })
         .then(function(r){ return r.json(); })
         .then(function(d){ if (d && d.ok) { setStatus(wrap, '✓ Saved', 'text-emerald-600'); var box = wrap.querySelector('.audit-sig-saved'), im = wrap.querySelector('.audit-sig-img'); if (im) im.src = '/data/uploads/audits/' + id + '/signatures/' + d.path + '?v=' + (new Date()).getTime(); if (box) box.classList.remove('hidden'); pad.clear(); } else setStatus(wrap, (d && d.error) || 'Save failed', 'text-red-500'); })
         .catch(function(){ setStatus(wrap, 'Save failed', 'text-red-500'); });
+      });
     });
   });
 })();
