@@ -236,10 +236,31 @@ function persistAuditTags(db, auditId, tags, userId) {
     keep.add(t.question_key + '|' + t.crew_member_id);
     upsert.run({ audit_id: auditId, created_by_id: userId, ...t });
   }
-  // remove tags no longer present
-  const existing = db.prepare('SELECT id, question_key, crew_member_id FROM audit_question_tags WHERE audit_id = ?').all(auditId);
+  // remove tags no longer present — and retract the HR review each one
+  // pushed, so un-flagging a worker pulls the note back out of their review.
+  const existing = db.prepare('SELECT id, question_key, crew_member_id, employee_review_id FROM audit_question_tags WHERE audit_id = ?').all(auditId);
   const del = db.prepare('DELETE FROM audit_question_tags WHERE id = ?');
-  for (const e of existing) if (!keep.has(e.question_key + '|' + e.crew_member_id)) del.run(e.id);
+  const delReview = db.prepare('DELETE FROM employee_reviews WHERE id = ?');
+  for (const e of existing) {
+    if (keep.has(e.question_key + '|' + e.crew_member_id)) continue;
+    if (e.employee_review_id) { try { delReview.run(e.employee_review_id); } catch (_) {} }
+    del.run(e.id);
+  }
+}
+
+// Push flagged exceptions to the workers' HR reviews once the audit is a real
+// record (submitted or signed off) — not while it's still a draft. Idempotent
+// via audit_question_tags.employee_review_id, so re-saving keeps reviews in
+// sync rather than duplicating. Returns a short flash suffix, or ''.
+function pushAuditReviews(db, auditId, status, userId) {
+  if (status !== 'submitted' && status !== 'signed_off') return '';
+  let r;
+  try { r = syncAuditReviews(db, auditId, userId); }
+  catch (e) { console.error('[Audits] review write-back error:', e.message); return ''; }
+  let msg = '';
+  if (r && (r.created || r.updated)) msg += ` ${r.created + r.updated} worker review(s) recorded.`;
+  if (r && r.skipped && r.skipped.length) msg += ` ${r.skipped.length} flag(s) skipped — worker not linked to an HR profile.`;
+  return msg;
 }
 
 // Resolve template + crew context for an audit row (or a fresh form).
@@ -399,7 +420,8 @@ router.post('/', (req, res) => {
     if (b.job_id && status === 'submitted') {
       autoLogDiary(db, { jobId: b.job_id, summary: `[${req.session.user.full_name}] Site audit completed — ${cols.score_weighted_percent}% (${cols.overall_finding || 'no finding'}).`, userId: req.session.user.id });
     }
-    req.flash('success', status === 'submitted' ? 'Audit submitted.' : 'Audit saved as draft.');
+    const reviewMsg = pushAuditReviews(db, newId, status, req.session.user.id);
+    req.flash('success', (status === 'submitted' ? 'Audit submitted.' : 'Audit saved as draft.') + reviewMsg);
     res.redirect('/audits/' + newId);
   } catch (err) {
     console.error('[Audits] Create error:', err.message, err.stack);
@@ -581,7 +603,8 @@ router.post('/:id', (req, res) => {
     if (b.job_id && newStatus === 'submitted' && existing.status !== 'submitted') {
       autoLogDiary(db, { jobId: b.job_id, summary: `[${req.session.user.full_name}] Site audit submitted — ${cols.score_weighted_percent}% (${cols.overall_finding || 'no finding'}).`, userId: req.session.user.id });
     }
-    req.flash('success', 'Audit updated.');
+    const reviewMsg = pushAuditReviews(db, existing.id, newStatus, req.session.user.id);
+    req.flash('success', 'Audit updated.' + reviewMsg);
     res.redirect('/audits/' + req.params.id);
   } catch (err) {
     console.error('[Audits] Update error:', err.message, err.stack);
