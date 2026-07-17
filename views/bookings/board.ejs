@@ -413,6 +413,10 @@
                            assigned_vehicle_id, moving them under that ute.
                            People add-on blocks are vehicle-less — skip it. -->
                       <% if (blk.no_vehicle) { /* no vehicle slot */ } else if (hasVehicle) { %>
+                        <%# Vehicle + its hitched gear form one drop unit: a drop
+                            anywhere inside hitches to this vehicle (see
+                            bk2ResolveHitchVehicle), and they read as one assembly. %>
+                        <div class="bk2-vehunit<%= (blk.vehicle_slot.gear || []).length ? ' has-gear' : '' %>" data-vehicle-id="<%= blk.vehicle_slot.vehicle_id %>">
                         <div class="bk2-veh-slot bk2-slot--drop bk2-slot--drop-veh-assign"
                              data-booking-id="<%= b.id %>"
                              data-vehicle-id="<%= blk.vehicle_slot.vehicle_id %>">
@@ -428,7 +432,9 @@
                             <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
                           </div>
                         <% }); %>
+                        </div>
                       <% } else { %>
+                        <div class="bk2-vehunit<%= ((blk.vehicle_slot && blk.vehicle_slot.gear) || []).length ? ' has-gear' : '' %>" data-vehicle-id="<%= (blk.vehicle_slot && blk.vehicle_slot.vehicle_id) || '' %>">
                         <div class="bk2-veh-slot bk2-veh-slot--empty bk2-slot--drop bk2-slot--drop-vehicle"
                              data-booking-id="<%= b.id %>"
                              data-vehicle-role="ute"
@@ -446,6 +452,7 @@
                             <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
                           </div>
                         <% }); %>
+                        </div>
                       <% } %>
 
                       <% blk.worker_slots.forEach(function (slot) { %>
@@ -577,6 +584,7 @@
                         <span>Vehicles</span>
                       </div>
                       <% _spare.forEach(function (v) { %>
+                        <div class="bk2-vehunit<%= (v.gear || []).length ? ' has-gear' : '' %>" data-vehicle-id="<%= v.vehicle_id %>">
                         <% if (v.filled) { %>
                           <!-- Filled spare/standalone vehicle. Crew-move drop
                                target (bk2-slot--drop-veh-assign) so any worker —
@@ -609,6 +617,7 @@
                             <button type="button" class="bk2-veh-remove" data-action="remove-equipment" data-eq-id="<%= g.id %>" title="Detach &amp; remove gear" aria-label="Remove gear">×</button>
                           </div>
                         <% }); %>
+                        </div>
                         <% (v.workers || []).forEach(function (slot) { %>
                           <div class="bk2-slot bk2-slot--filled bk2-slot--click<%= slot.is_driver ? ' is-driver' : '' %>"
                                draggable="true" data-bk-crew-drag="1"
@@ -5129,7 +5138,7 @@
     var gearChip = e.target && e.target.closest && e.target.closest('[data-bk-gear-drag]');
     if (gearChip) gearChip.classList.remove('is-dragging');
     // Remove any leftover drag-over highlights
-    document.querySelectorAll('.bk2-slot--drop.is-drag-over, .bk2-card-teambox.is-drag-over, .bk2-restab-dropstrip.is-drag-over, .bk2-card--floating.is-drag-over').forEach(function (el) {
+    document.querySelectorAll('.bk2-slot--drop.is-drag-over, .bk2-vehunit.is-drag-over, .bk2-card-teambox.is-drag-over, .bk2-restab-dropstrip.is-drag-over, .bk2-card--floating.is-drag-over').forEach(function (el) {
       el.classList.remove('is-drag-over');
     });
   });
@@ -5179,6 +5188,19 @@
       return;
     }
 
+    // Equipment / gear drags: a vehicle + its gear is one hitch target, so
+    // hovering anywhere in the assembly highlights + accepts onto that unit
+    // (a real vehicle id only — bare requirement placeholders fall through so
+    // a vehicle can still be dropped to fill them).
+    var vehUnit = e.target.closest && e.target.closest('.bk2-vehunit[data-vehicle-id]');
+    if (vehUnit && vehUnit.getAttribute('data-vehicle-id')) {
+      e.preventDefault();
+      e.stopPropagation();
+      try { e.dataTransfer.dropEffect = 'copy'; } catch (err) {}
+      vehUnit.classList.add('is-drag-over');
+      return;
+    }
+
     // Non-crew-move drags use the simple drop-class match (resource
     // panel → empty crew/UTE slot), else the card's team box (drop-to-add),
     // else ANYWHERE on the floating (glowing) card, else the Resources tab's
@@ -5200,7 +5222,7 @@
   document.addEventListener('dragleave', function (e) {
     // Clear any of the three possible highlight roots if we've left
     // them entirely (relatedTarget is outside the element).
-    var rootSelectors = ['.bk2-slot--drop.is-drag-over', '.bk2-crew.is-drag-over'];
+    var rootSelectors = ['.bk2-slot--drop.is-drag-over', '.bk2-vehunit.is-drag-over', '.bk2-crew.is-drag-over'];
     rootSelectors.forEach(function (sel) {
       var el = e.target.closest && e.target.closest(sel);
       if (!el) return;
@@ -5216,13 +5238,15 @@
   // the enclosing crew block's ute. Empty string ⇒ loose / detach.
   function bk2ResolveHitchVehicle(e) {
     if (!e.target || !e.target.closest) return '';
-    // ANY vehicle slot carrying a real booking_vehicle id is a hitch target —
-    // whether the ute's rego is filled in (.bk2-slot--drop-veh-assign) or it's
-    // still an empty placeholder (.bk2-slot--drop-vehicle). Gear rides the ute
-    // either way, so a second item (portaboom onto a ute that already carries a
-    // trailer) hitches even when the ute is a bare slot. Empty data-vehicle-id
-    // (a pure requirement with no vehicle row yet) can't be hitched → falls
-    // through to loose.
+    // A vehicle + its hitched gear are wrapped in one .bk2-vehunit, so a drop
+    // ANYWHERE in the assembly — the ute chip, a gear chip already on it, or
+    // the gaps between them — hitches to that vehicle. This is what lets a
+    // second item (a portaboom onto a ute that already carries a trailer) land
+    // on the unit rather than falling loose, in crew blocks AND the spare
+    // Vehicles list. Empty data-vehicle-id (a pure requirement with no vehicle
+    // row yet) can't be hitched → falls through to loose.
+    var unit = e.target.closest('.bk2-vehunit[data-vehicle-id]');
+    if (unit && unit.getAttribute('data-vehicle-id')) return unit.getAttribute('data-vehicle-id');
     var vehChip = e.target.closest('.bk2-veh-slot[data-vehicle-id]');
     if (vehChip && vehChip.getAttribute('data-vehicle-id')) return vehChip.getAttribute('data-vehicle-id');
     var gearChip = e.target.closest('.bk2-veh-gear[data-from-vehicle-id]');

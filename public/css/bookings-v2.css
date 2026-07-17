@@ -2057,6 +2057,29 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 }
 :root[data-theme="dark"] body.dark-glass .bk2-veh-gear::before { border-color: rgba(255,255,255,0.28); }
 
+/* Vehicle + its hitched gear = one assembly (a "vehicle unit"). Grouping them
+   makes the trailer/portaboom read as riding the ute (like the worker portal)
+   AND turns the whole block into a single hitch drop target, so a second item
+   dropped anywhere on it lands on the vehicle instead of falling loose. */
+.bk2-vehunit { position: relative; margin-top: 8px; border-radius: 12px; }
+.bk2-vehunit > .bk2-veh-slot { margin-top: 0; }
+.bk2-vehunit.has-gear {
+  padding: 5px 7px 7px;
+  background: rgba(148,163,184,0.06);
+  border: 1px solid rgba(148,163,184,0.14);
+  box-shadow: inset 2px 0 0 rgba(14,165,233,0.40);
+}
+:root[data-theme="light"] .bk2-vehunit.has-gear {
+  background: rgba(15,23,42,0.025);
+  border-color: rgba(148,163,184,0.28);
+}
+/* Whole-unit highlight while a gear/equipment drag hovers anywhere over it. */
+.bk2-vehunit.is-drag-over {
+  outline: 2px solid rgba(59,130,246,0.75);
+  outline-offset: 1px;
+  background: rgba(59,130,246,0.12);
+}
+
 /* Inline confirm strip — replaces the native confirm() dialog when the
    planner presses "Remove from shift". Red framed card with a solid
    destructive Yes and a neutral Keep, fading in where the button was. */
