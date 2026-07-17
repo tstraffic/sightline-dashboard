@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { getDb } = require('../db/database');
 const { autoLogDiary, logStatusChange } = require('../lib/diary');
+const { sydneyToday } = require('../lib/sydney');
 const planStatus = require('../lib/planStatus');
 const { notifyPlanSubmission, parseTaggedIds } = require('../lib/planNotify');
 
@@ -1668,7 +1669,24 @@ router.post('/:id/upload', complianceUpload.array('documents', 10), (req, res) =
     if (files.length === 0) {
       req.flash('error', 'No files selected. Please choose files to upload.');
     } else {
-      req.flash('success', `${files.length} file(s) uploaded.`);
+      // Uploading a file IS the act of submitting — stamp the submitted date
+      // to today (the upload date) if it isn't already set, and move a
+      // not-yet-started plan into 'submitted'. An existing submitted date and
+      // any further-along status (submitted/approved/…) are left untouched, so
+      // adding supporting files later never rewrites the original date or
+      // knocks an approved plan back a step.
+      const today = sydneyToday();
+      const cur = db.prepare('SELECT submitted_date, status FROM compliance WHERE id = ?').get(complianceId);
+      const stampDate = !(cur && cur.submitted_date);
+      const advanceStatus = cur && cur.status === 'not_started';
+      if (stampDate || advanceStatus) {
+        db.prepare(`UPDATE compliance SET
+          submitted_date = COALESCE(NULLIF(submitted_date, ''), ?),
+          status = CASE WHEN status = 'not_started' THEN 'submitted' ELSE status END,
+          updated_at = CURRENT_TIMESTAMP
+          WHERE id = ?`).run(today, complianceId);
+      }
+      req.flash('success', `${files.length} file(s) uploaded${stampDate ? ` — submitted date set to ${today}.` : '.'}`);
       // Audit trail: log upload to site diary
       const compItem = db.prepare('SELECT job_id, title, reference_number, item_type, item_types FROM compliance WHERE id = ?').get(complianceId);
       if (compItem && compItem.job_id) {
