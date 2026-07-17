@@ -348,6 +348,7 @@ router.get('/submissions', (req, res) => {
     submissions,
     filters: { status: status || 'all', payment_type: payment_type || 'all', search: search || '', date_from: date_from || '', date_to: date_to || '' },
     stats,
+    currentUrl: req.originalUrl,
   });
 });
 
@@ -444,6 +445,16 @@ router.post('/submissions/:id/status', (req, res) => {
   const s = db.prepare('SELECT * FROM induction_submissions WHERE id = ?').get(req.params.id);
   if (!s) return res.status(404).send('Submission not found');
 
+  // Where to land afterwards. The Inductions LIST passes return_to so an
+  // approve/reject from the list stays on the list instead of bouncing into
+  // the submission page (which reads as "opening their profile"). Only
+  // internal hiring-area paths are honoured; the submission-detail modal
+  // sends nothing, so it stays on the detail as before.
+  const rt = typeof req.body.return_to === 'string' ? req.body.return_to : '';
+  const dest = /^\/induction\/admin\/[A-Za-z0-9/_\-?=&%.]*$/.test(rt)
+    ? rt
+    : `/induction/admin/submissions/${req.params.id}`;
+
   // Update submission status
   db.prepare(`
     UPDATE induction_submissions
@@ -470,7 +481,7 @@ router.post('/submissions/:id/status', (req, res) => {
         const stillThere = db.prepare('SELECT id, full_name, employee_id FROM crew_members WHERE id = ?').get(fresh.linked_crew_member_id);
         if (stillThere) {
           req.flash('success', `${stillThere.full_name} is already on the roster as ${stillThere.employee_id}.`);
-          return res.redirect(`/induction/admin/submissions/${req.params.id}`);
+          return res.redirect(dest);
         }
         // Linked crew was deleted — clear the broken pointer and re-create.
         db.prepare('UPDATE induction_submissions SET linked_crew_member_id = NULL WHERE id = ?').run(req.params.id);
@@ -486,7 +497,7 @@ router.post('/submissions/:id/status', (req, res) => {
           UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime('now') WHERE id = ?
         `).run(matched.id, req.params.id);
         req.flash('success', `Matched to existing roster member ${matched.full_name} (${matched.employee_id}). No duplicate created.`);
-        return res.redirect(`/induction/admin/submissions/${req.params.id}`);
+        return res.redirect(dest);
       }
 
       // Allocate next EMP-XXX — ignores non-numeric codes (e.g. EMP-TEST) and
@@ -603,16 +614,16 @@ router.post('/submissions/:id/status', (req, res) => {
       // their roster profile.
 
       req.flash('success', `${fullName} approved and added as employee ${employeeId}. Documents imported to their profile.`);
-      return res.redirect(`/induction/admin/submissions/${req.params.id}`);
+      return res.redirect(dest);
     } catch (err) {
       console.error('Auto-convert error:', err);
       req.flash('error', `Approved but failed to create employee record: ${err.message}`);
-      return res.redirect(`/induction/admin/submissions/${req.params.id}`);
+      return res.redirect(dest);
     }
   }
 
   req.flash('success', `Submission ${status} successfully.`);
-  res.redirect(`/induction/admin/submissions/${req.params.id}`);
+  res.redirect(dest);
 });
 
 // POST /submissions/:id/convert — Manual convert approved submission to employee
@@ -620,7 +631,12 @@ router.post('/submissions/:id/convert', (req, res) => {
   const db = getDb();
   const s = db.prepare('SELECT * FROM induction_submissions WHERE id = ?').get(req.params.id);
   if (!s) { req.flash('error', 'Submission not found.'); return res.redirect('/induction/admin/submissions'); }
-  if (s.linked_crew_member_id) { req.flash('error', 'Already converted to employee.'); return res.redirect(`/induction/admin/submissions/${req.params.id}`); }
+  // Honour a return_to from the list (stay put) — same rule as /status.
+  const rt = typeof req.body.return_to === 'string' ? req.body.return_to : '';
+  const dest = /^\/induction\/admin\/[A-Za-z0-9/_\-?=&%.]*$/.test(rt)
+    ? rt
+    : `/induction/admin/submissions/${req.params.id}`;
+  if (s.linked_crew_member_id) { req.flash('error', 'Already converted to employee.'); return res.redirect(dest); }
 
   // Same strong dedup as the approve route — link to an existing roster member
   // instead of minting a duplicate when the worker already exists (re-submitted
@@ -631,7 +647,7 @@ router.post('/submissions/:id/convert', (req, res) => {
     if (matched) {
       db.prepare('UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime(\'now\') WHERE id = ?').run(matched.id, req.params.id);
       req.flash('success', `Matched to existing roster member ${matched.full_name} (${matched.employee_id}). No duplicate created.`);
-      return res.redirect(`/induction/admin/submissions/${req.params.id}`);
+      return res.redirect(dest);
     }
   } catch (e) { /* dedup is best-effort — fall through to create on error */ }
 
@@ -708,7 +724,7 @@ router.post('/submissions/:id/convert', (req, res) => {
     console.error('Convert error:', err);
     req.flash('error', `Failed to convert: ${err.message}`);
   }
-  res.redirect(`/induction/admin/submissions/${req.params.id}`);
+  res.redirect(dest);
 });
 
 // POST /induction/admin/submissions/delete — bulk delete submissions
