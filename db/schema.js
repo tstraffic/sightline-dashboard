@@ -14417,6 +14417,26 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 322 error:', e.message); }
   }
 
+  // Migration 323: per-booking crew visibility of job-linked compliance plans
+  // (TGS / ROL / TMP). No row = default (approved plans visible, others not);
+  // a row pins the admin's explicit choice for that booking.
+  if (!isMigrationApplied.get(323)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS booking_plan_visibility (
+          booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+          compliance_id INTEGER NOT NULL REFERENCES compliance(id) ON DELETE CASCADE,
+          visible_to_crew INTEGER NOT NULL DEFAULT 1,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (booking_id, compliance_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_bpv_compliance ON booking_plan_visibility(compliance_id);
+      `);
+      recordMigration.run(323, 'booking_plan_visibility — per-booking crew visibility of job plans');
+      console.log('Migration 323 applied');
+    } catch (e) { console.error('Migration 323 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

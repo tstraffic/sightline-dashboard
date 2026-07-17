@@ -4002,9 +4002,16 @@
           chip.style.cssText = 'display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;font-size:12px;font-weight:600;'
             + (ok ? 'background:rgba(16,185,129,0.12);color:#059669;border:1px solid rgba(16,185,129,0.35);'
                   : 'background:rgba(245,158,11,0.12);color:#B45309;border:1px solid rgba(245,158,11,0.4);');
-          chip.textContent = (ok ? '✓ ' : '⚠ ') + rp.label + ' required'
-            + (rp.required > 1 ? ' ×' + rp.required : '')
-            + (ok ? '' : ' — attach below');
+          // Plans inherited from the linked job count toward the requirement
+          // (and show even with no requirement row, as "from job").
+          if (!rp.required && rp.fromJob) {
+            chip.textContent = '✓ ' + rp.label + (rp.fromJob > 1 ? ' ×' + rp.fromJob : '') + ' — from linked job';
+          } else {
+            chip.textContent = (ok ? '✓ ' : '⚠ ') + rp.label + ' required'
+              + (rp.required > 1 ? ' ×' + rp.required : '')
+              + (rp.fromJob ? ' · ' + rp.fromJob + ' from job' : '')
+              + (ok ? '' : ' — attach below');
+          }
           strip.appendChild(chip);
         });
         list.appendChild(strip);

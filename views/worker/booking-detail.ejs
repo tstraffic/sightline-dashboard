@@ -158,8 +158,8 @@
            booking has no vehicles. -->
       <% if (typeof vehicleGroups !== 'undefined' && vehicleGroups) { %>
         <%
-          var crewSections = vehicleGroups.groups.map(function (g) { return { vehicle: g.vehicle, members: g.members }; });
-          if (vehicleGroups.onFoot.length) crewSections.push({ vehicle: null, members: vehicleGroups.onFoot });
+          var crewSections = vehicleGroups.groups.map(function (g) { return { vehicle: g.vehicle, gear: g.gear || [], members: g.members }; });
+          if (vehicleGroups.onFoot.length) crewSections.push({ vehicle: null, gear: [], members: vehicleGroups.onFoot });
         %>
         <div class="space-y-3">
           <% crewSections.forEach(function (sec) { %>
@@ -175,6 +175,20 @@
                   </div>
                   <span class="text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0" style="background:rgba(96,165,250,0.14);color:#93C5FD;"><%= sec.members.length %> aboard</span>
                 </div>
+                <% if (sec.gear.length) { %>
+                  <!-- Gear riding this ute — trailer / portaboom / arrow board -->
+                  <div class="px-3 py-2 flex flex-col gap-1.5" style="background:rgba(251,146,60,0.05);border-bottom:1px solid rgba(255,255,255,0.06);">
+                    <% sec.gear.forEach(function (g) { %>
+                      <div class="flex items-center gap-2">
+                        <div class="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style="background:rgba(251,146,60,0.16);color:#FB923C;">
+                          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
+                        </div>
+                        <p class="text-xs font-semibold flex-1 min-w-0 truncate" style="color:rgba(255,255,255,0.85);"><%= g.name %><% if (g.quantity > 1) { %> <span style="color:rgba(255,255,255,0.45);">×<%= g.quantity %></span><% } %></p>
+                        <% if (g.hired) { %><span class="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style="background:rgba(251,191,36,0.16);color:#FBBF24;" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
+                      </div>
+                    <% }) %>
+                  </div>
+                <% } %>
               <% } else { %>
                 <div class="flex items-center gap-2.5 px-3 py-2.5" style="border-bottom:1px solid rgba(255,255,255,0.06);">
                   <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(255,255,255,0.07);color:rgba(255,255,255,0.55);">
@@ -288,15 +302,18 @@
             <p class="text-[11px] font-bold uppercase tracking-wider mb-1.5" style="color:#10B981;"><%- DOC_TYPE_LABEL[k] %> <span style="color:rgba(255,255,255,0.35);">(<%= docsByType[k].length %>)</span></p>
             <div class="space-y-2">
               <% docsByType[k].forEach(function (doc) { %>
-                <a href="/w/doc/<%= doc.source %>/<%= doc.id %>?back=<%= encodeURIComponent(docBack) %>" class="flex items-center gap-3 px-3 py-2.5 rounded-lg" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
-                  <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="background:rgba(239,68,68,0.18);color:#F87171;">
+                <% var docHref = doc.external_url ? doc.external_url : ('/w/doc/' + doc.source + '/' + doc.id + '?back=' + encodeURIComponent(docBack)); %>
+                <a href="<%= docHref %>"<%- doc.external_url ? ' target="_blank" rel="noopener"' : '' %> class="flex items-center gap-3 px-3 py-2.5 rounded-lg" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
+                  <div class="w-9 h-9 rounded-lg flex items-center justify-center shrink-0" style="<%= doc.source === 'plan' ? 'background:rgba(96,165,250,0.18);color:#60A5FA;' : 'background:rgba(239,68,68,0.18);color:#F87171;' %>">
                     <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><path d="M14 2v6h6M9 14h6M9 18h6M9 10h2"/></svg>
                   </div>
                   <div class="flex-1 min-w-0">
                     <p class="text-sm font-semibold text-white truncate"><%= doc.title || doc.original_name %></p>
                     <p class="text-[11px] text-gray-500">
                       <% if (doc.source === 'booking') { %><span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold" style="background:rgba(16,185,129,0.18);color:#60A5FA;">THIS SHIFT</span><% } %>
-                      <% if (doc.size_bytes) { %><%= doc.source === 'booking' ? ' &middot; ' : '' %><%= fmtSize(doc.size_bytes) %><% } %>
+                      <% if (doc.source === 'plan') { %><span class="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold" style="background:rgba(96,165,250,0.18);color:#93C5FD;">JOB PLAN</span><% } %>
+                      <% if (doc.size_bytes) { %><%= (doc.source === 'booking' || doc.source === 'plan') ? ' &middot; ' : '' %><%= fmtSize(doc.size_bytes) %><% } %>
+                      <% if (doc.external_url) { %> &middot; opens link<% } %>
                     </p>
                   </div>
                   <svg class="w-4 h-4 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>

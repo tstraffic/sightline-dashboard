@@ -69,12 +69,29 @@ function getBookingVehicleGroups(db, bookingId, currentCrewId) {
       is_driver: !!v && c.crew_member_id === v.driver_id,
       is_you: !!currentCrewId && c.crew_member_id === currentCrewId,
     });
+    // Gear hitched to each vehicle (trailers, portabooms…) so the crew can
+    // see what rides which ute before they leave the depot.
+    let gearByVehicle = new Map();
+    try {
+      db.prepare(`
+        SELECT id, equipment_name, quantity, attached_vehicle_id, hire_unit_id, supplier_name
+        FROM booking_equipment
+        WHERE booking_id = ? AND attached_vehicle_id IS NOT NULL
+      `).all(bookingId).forEach(g => {
+        if (!gearByVehicle.has(g.attached_vehicle_id)) gearByVehicle.set(g.attached_vehicle_id, []);
+        gearByVehicle.get(g.attached_vehicle_id).push({
+          id: g.id, name: g.equipment_name || 'Gear',
+          quantity: g.quantity || 1, hired: !!g.hire_unit_id, supplier: g.supplier_name || '',
+        });
+      });
+    } catch (e) { /* legacy DB without booking_equipment */ }
     const groups = vehicles.map(v => ({
       vehicle: {
         id: v.id,
         name: v.vehicle_name || v.fleet_asset_id || 'Vehicle',
         rego: v.registration || v.fleet_rego || '',
       },
+      gear: gearByVehicle.get(v.id) || [],
       members: crew.filter(c => c.assigned_vehicle_id === v.id).map(c => decorate(c, v)),
     }));
     const onFoot = crew
@@ -429,6 +446,15 @@ router.get('/jobs/:id', (req, res) => {
     WHERE ca.id = ? AND ca.crew_member_id = ?
   `).get(req.params.id, worker.id);
 
+  // Booking-backed shifts live on the booking page — it carries everything
+  // this page has (details, docs, forms + docket) PLUS shift tasks and the
+  // crew/vehicle groups. Without this, job-linked bookings landed here and
+  // the worker "lost" the Tasks tab.
+  if (allocation && allocation.booking_id) {
+    const TAB_MAP = { info: 'details', docs: 'docs', forms: 'forms', docket: 'forms', tasks: 'tasks' };
+    return res.redirect('/w/booking-shift/' + allocation.booking_id + '?tab=' + (TAB_MAP[tab] || 'details'));
+  }
+
   if (!allocation) {
     req.flash('error', 'Job not found or you do not have access.');
     return res.redirect('/w/jobs');
@@ -633,21 +659,38 @@ router.get('/booking-documents/:id', (req, res) => {
 router.get('/doc/:source/:id', (req, res) => {
   const db = getDb();
   const worker = req.session.worker;
-  const source = req.params.source === 'job' ? 'job' : 'booking';
-  let doc = null, jobId = null, bookingId = null;
+  const source = req.params.source === 'job' ? 'job' : (req.params.source === 'plan' ? 'plan' : 'booking');
+  let doc = null, jobId = null, bookingId = null, fileUrl = null;
 
   if (source === 'job') {
     doc = db.prepare(`SELECT jd.*, j.id AS jid FROM job_documents jd JOIN jobs j ON jd.job_id = j.id WHERE jd.id = ? AND jd.archived_at IS NULL`).get(req.params.id);
-    if (doc) jobId = doc.jid;
+    if (doc) { jobId = doc.jid; fileUrl = '/w/job-documents/' + doc.id; }
+  } else if (source === 'plan') {
+    // A compliance-plan file (TGS / TMP / ROL) inherited from the linked
+    // job. Resolve the owning job through the plan (or its parent plan).
+    doc = db.prepare(`
+      SELECT cd.*, COALESCE(c.job_id, pc.job_id) AS jid
+      FROM compliance_documents cd
+      JOIN compliance c ON c.id = cd.compliance_id
+      LEFT JOIN compliance pc ON pc.id = c.parent_id
+      WHERE cd.id = ?
+    `).get(req.params.id);
+    if (doc) { jobId = doc.jid; fileUrl = doc.file_path; }
   } else {
     doc = db.prepare(`SELECT * FROM booking_documents WHERE id = ?`).get(req.params.id);
-    if (doc) bookingId = doc.booking_id;
+    if (doc) { bookingId = doc.booking_id; fileUrl = '/w/booking-documents/' + doc.id; }
   }
   if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/w/jobs'); }
 
-  const linked = source === 'job'
-    ? db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND job_id = ? AND status != 'cancelled' LIMIT 1`).get(worker.id, jobId)
-    : db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND booking_id = ? AND status != 'cancelled' LIMIT 1`).get(worker.id, bookingId);
+  const linked = bookingId
+    ? db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND booking_id = ? AND status != 'cancelled' LIMIT 1`).get(worker.id, bookingId)
+    : db.prepare(`
+        SELECT 1 FROM crew_allocations WHERE crew_member_id = @cm AND job_id = @job AND status != 'cancelled'
+        UNION
+        SELECT 1 FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id
+        WHERE bc.crew_member_id = @cm AND b.job_id = @job AND bc.status != 'declined'
+        LIMIT 1
+      `).get({ cm: worker.id, job: jobId });
   if (!linked) { req.flash('error', 'You don’t have access to that document.'); return res.redirect('/w/jobs'); }
 
   const name = doc.original_name || doc.title || 'Document';
@@ -661,7 +704,7 @@ router.get('/doc/:source/:id', (req, res) => {
   res.render('worker/doc-view', {
     title: doc.title || name,
     layout: 'worker/layout-bare',
-    fileUrl: '/w/' + source + '-documents/' + doc.id,
+    fileUrl,
     docName: doc.title || name,
     kind, back,
   });
@@ -876,8 +919,36 @@ router.get('/booking-shift/:bookingId', (req, res) => {
         size_bytes: d.file_size, uploaded_at: d.created_at,
         download_url: `/w/booking-documents/${d.id}`,
       }));
+      // Plans & Approvals from the linked job (TGS / TMP / ROL) that the
+      // office marked crew-visible for this booking. Each attached file
+      // becomes a doc row; a plan with only an external link becomes a
+      // link row (external_url) so the crew can still open it.
+      let planLevel = [];
+      try {
+        const { getJobPlansForBooking } = require('../../lib/bookingPlans');
+        const jp = getJobPlansForBooking(db, booking);
+        const KIND_LABEL = { tgs: 'TGS', tmp: 'TMP', rol: 'ROL' };
+        ((jp && jp.all) || []).filter(p => p.visible_to_crew).forEach(p => {
+          const planName = (p.kind === 'rol' ? (p.rol_actual_number || p.reference_number) : (p.plan_number || p.reference_number)) || (KIND_LABEL[p.kind] + ' #' + p.id);
+          (p.docs || []).forEach(d => {
+            planLevel.push({
+              id: d.id, source: 'plan', doc_type: p.kind, title: planName + (p.title ? ' — ' + p.title : ''),
+              original_name: d.original_name, mime_type: null,
+              size_bytes: d.file_size, uploaded_at: p.approved_date || '',
+              download_url: d.file_path,
+            });
+          });
+          if (!p.docs.length && (p.file_link || p.rol_file_path)) {
+            planLevel.push({
+              id: p.id, source: 'plan', doc_type: p.kind, title: planName + (p.title ? ' — ' + p.title : ''),
+              original_name: planName, mime_type: null, size_bytes: null,
+              uploaded_at: p.approved_date || '', external_url: p.rol_file_path || p.file_link,
+            });
+          }
+        });
+      } catch (e) { console.error('[booking-shift] plan fetch:', e.message); }
       const DOC_PRIORITY = { tgs:1, tmp:2, ctmp:2, rol_day:3, rol_night:4, rol:3, stage_plan:5, swms:6, permit:7, other:8, photo:9, invoice:10 };
-      jobDocuments = [...jobLevel, ...bookingLevel].sort((a, b) => {
+      jobDocuments = [...planLevel, ...jobLevel, ...bookingLevel].sort((a, b) => {
         const pa = DOC_PRIORITY[a.doc_type] || 99;
         const pb = DOC_PRIORITY[b.doc_type] || 99;
         if (pa !== pb) return pa - pb;

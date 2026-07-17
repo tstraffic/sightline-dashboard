@@ -367,7 +367,7 @@
           <span class="ws-day-title <%= isToday ? 'today' : '' %>"><%= dayLabel %> <%= dayNum %> <%= monthName.toUpperCase() %></span>
         </div>
         <% requestsByDate[date].forEach(function (s) {
-          var link = (s.source === 'booking' && s.booking_id)
+          var link = s.booking_id
             ? ('/w/booking-shift/' + s.booking_id)
             : ('/w/jobs/' + s.id);
         %>
@@ -453,7 +453,7 @@
           <span class="ws-day-meta"><%= confirmedByDate[date].length %> shift<%= confirmedByDate[date].length === 1 ? '' : 's' %></span>
         </div>
         <% confirmedByDate[date].forEach(function (s) {
-          var link = (s.source === 'booking' && s.booking_id)
+          var link = s.booking_id
             ? ('/w/booking-shift/' + s.booking_id)
             : ('/w/jobs/' + s.id);
           // Running right now? Only meaningful on today's bucket. Handles
@@ -540,7 +540,7 @@
           <span class="ws-day-title"><%= dayLabel %> <%= dayNum %> <%= monthName.toUpperCase() %></span>
         </div>
         <% finishedByDate[date].forEach(function (s) {
-          var link = (s.source === 'booking' && s.booking_id)
+          var link = s.booking_id
             ? ('/w/booking-shift/' + s.booking_id)
             : ('/w/jobs/' + s.id);
         %>

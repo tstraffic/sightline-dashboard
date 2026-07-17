@@ -1248,19 +1248,26 @@
       ];
       var DOC_TYPE_LABEL = {}; DOC_TYPES.forEach(function (t) { DOC_TYPE_LABEL[t[0]] = t[1]; });
     %>
+    <% const planCount = (typeof jobPlans !== 'undefined' && jobPlans) ? jobPlans.all.length : 0; %>
     <div id="documents" class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 scroll-mt-20" data-bk-tab="documents">
-      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Documents (<%= b.documents ? b.documents.length : 0 %>)</h2>
+      <div class="flex items-center justify-between gap-2 mb-3">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Documents (<%= (b.documents ? b.documents.length : 0) + planCount %>)</h2>
+        <p class="text-[11px] text-gray-400 flex items-center gap-1">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+          = the crew sees it in the worker app
+        </p>
+      </div>
 
       <% if (typeof jobPlans !== 'undefined' && jobPlans) { %>
-      <!-- Plans & Approvals inherited from the linked job — read-only view
-           of the job's TGS and ROL sub-plans so the scheduler can check
-           approvals without leaving the booking. ROL windows covering this
-           booking's date get the emerald "covers this date" chip. -->
+      <!-- Plans & Approvals inherited from the linked job — the job's TGS,
+           TMP/CTMP and ROL sub-plans, each with its own crew-visibility
+           toggle for THIS booking. Approved plans default visible; drafts
+           stay hidden until an admin flips them on. -->
       <div class="mb-5 rounded-xl border border-gray-200 overflow-hidden">
         <div class="px-4 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
           <div>
             <p class="page-eyebrow" style="margin-bottom:0.25rem">From the linked job</p>
-            <h3 class="font-display font-medium text-gray-900" style="font-size:14px;letter-spacing:-0.01em">Plans &amp; Approvals</h3>
+            <h3 class="font-display font-medium text-gray-900" style="font-size:14px;letter-spacing:-0.01em">Plans &amp; Approvals <span class="text-gray-400 font-normal">(<%= planCount %>)</span></h3>
           </div>
           <a href="/compliance?job_id=<%= b.job_id %>" class="text-xs font-medium text-brand-600 hover:text-brand-700">Open in Plans &amp; Approvals →</a>
         </div>
@@ -1269,37 +1276,44 @@
                approved:  'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
                submitted: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
                expired:   'bg-red-50 text-red-700 ring-1 ring-red-600/20',
-             })[s] || 'bg-gray-100 text-gray-600'; %>
-          <% jobPlans.tgs.forEach(function (p) { %>
-            <div class="px-4 py-3 flex items-start gap-3">
-              <span class="shrink-0 mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-50 text-blue-700">TGS</span>
+             })[s] || 'bg-gray-100 text-gray-600';
+             const KIND_CHIP = {
+               tgs: ['TGS', 'bg-blue-50 text-blue-700'],
+               tmp: ['TMP', 'bg-indigo-50 text-indigo-700'],
+               rol: ['ROL', 'bg-purple-50 text-purple-700'],
+             }; %>
+          <% jobPlans.all.forEach(function (p) { const kc = KIND_CHIP[p.kind] || ['PLAN','bg-gray-100 text-gray-600']; %>
+            <div class="px-4 py-3 flex items-start gap-3 <%= p.visible_to_crew ? '' : 'bg-gray-50/50' %>">
+              <span class="shrink-0 mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold <%= kc[1] %>"><%= kc[0] %></span>
               <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium text-gray-900 truncate"><%= p.plan_number || p.reference_number || ('#' + p.id) %><% if (p.title) { %> <span class="text-gray-500 font-normal">— <%= p.title %></span><% } %></p>
+                <p class="text-sm font-medium text-gray-900 truncate"><%= (p.kind === 'rol' ? (p.rol_actual_number || p.reference_number) : (p.plan_number || p.reference_number)) || ('#' + p.id) %><% if (p.title) { %> <span class="text-gray-500 font-normal">— <%= p.title %></span><% } %></p>
                 <div class="flex items-center gap-2 flex-wrap mt-1">
                   <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold <%= planStatusPill(p.status) %>"><%= (p.status || 'draft').replace(/_/g,' ') %></span>
                   <% if (p.expiry_date) { %><span class="text-[11px] font-mono text-gray-400">expires <%= formatDateShort(p.expiry_date) %></span><% } %>
-                  <% if (p.file_link) { %><a href="<%= p.file_link %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline">Plan link</a><% } %>
-                  <% (p.docs || []).forEach(function (d) { %>
-                    <a href="<%= d.file_path %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline truncate max-w-[180px]"><%= d.original_name %></a>
-                  <% }) %>
-                </div>
-              </div>
-            </div>
-          <% }) %>
-          <% jobPlans.rol.forEach(function (p) { %>
-            <div class="px-4 py-3 flex items-start gap-3">
-              <span class="shrink-0 mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-purple-50 text-purple-700">ROL</span>
-              <div class="min-w-0 flex-1">
-                <p class="text-sm font-medium text-gray-900 truncate"><%= p.rol_actual_number || p.reference_number || ('#' + p.id) %><% if (p.title) { %> <span class="text-gray-500 font-normal">— <%= p.title %></span><% } %></p>
-                <div class="flex items-center gap-2 flex-wrap mt-1">
-                  <span class="inline-flex px-2 py-0.5 rounded-full text-[10px] font-semibold <%= planStatusPill(p.status) %>"><%= (p.status || 'draft').replace(/_/g,' ') %></span>
                   <% if (p.rol_time_window) { %><span class="text-[11px] font-mono text-gray-500"><%= p.rol_time_window %></span><% } %>
-                  <% if (p.rol_file_path) { %><a href="<%= p.rol_file_path %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline">Issued ROL</a><% } %>
-                  <% (p.docs || []).forEach(function (d) { %>
-                    <a href="<%= d.file_path %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline truncate max-w-[180px]"><%= d.original_name %></a>
-                  <% }) %>
                 </div>
-                <% if (p.shifts && p.shifts.length) { %>
+                <% if (p.docs.length || p.file_link || p.rol_file_path) { %>
+                  <div class="mt-1.5 flex items-center gap-1.5 flex-wrap">
+                    <% (p.docs || []).forEach(function (d) { %>
+                      <a href="<%= d.file_path %>" target="_blank" class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-brand-50 text-brand-700 hover:bg-brand-100 ring-1 ring-brand-600/15 truncate max-w-[200px]">
+                        <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+                        <%= d.original_name %>
+                      </a>
+                    <% }) %>
+                    <% if (p.file_link) { %>
+                      <a href="<%= p.file_link %>" target="_blank" class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-brand-50 text-brand-700 hover:bg-brand-100 ring-1 ring-brand-600/15">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
+                        Open plan
+                      </a>
+                    <% } %>
+                    <% if (p.rol_file_path) { %>
+                      <a href="<%= p.rol_file_path %>" target="_blank" class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium bg-brand-50 text-brand-700 hover:bg-brand-100 ring-1 ring-brand-600/15">Issued ROL</a>
+                    <% } %>
+                  </div>
+                <% } else { %>
+                  <p class="text-[11px] text-gray-400 italic mt-1">No file attached yet — add it in Plans &amp; Approvals.</p>
+                <% } %>
+                <% if (p.kind === 'rol' && p.shifts && p.shifts.length) { %>
                   <div class="mt-2 flex flex-wrap gap-1.5">
                     <% p.shifts.forEach(function (s) { %>
                       <span class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-mono <%= s.matchesDate ? 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-600/25 font-semibold' : 'bg-gray-50 text-gray-500 border border-gray-200' %>">
@@ -1317,6 +1331,21 @@
                   <% } %>
                 <% } %>
               </div>
+              <!-- Per-booking crew visibility for this plan -->
+              <form method="POST" action="/bookings/<%= b.id %>/plans/<%= p.id %>/visibility" class="inline shrink-0">
+                <%- include('../partials/csrf') %>
+                <input type="hidden" name="visible" value="<%= p.visible_to_crew ? '0' : '1' %>">
+                <button type="submit" class="bk2-vis-toggle <%= p.visible_to_crew ? 'is-on' : 'is-off' %>"
+                  title="<%= p.visible_to_crew ? 'Crew can open this plan in the worker app — click to hide' : (p.status === 'approved' ? 'Hidden from crew — click to show' : 'Hidden from crew (not approved yet) — click to show anyway') %>">
+                  <% if (p.visible_to_crew) { %>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
+                    <span>Crew visible</span>
+                  <% } else { %>
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
+                    <span>Hidden</span>
+                  <% } %>
+                </button>
+              </form>
             </div>
           <% }) %>
         </div>

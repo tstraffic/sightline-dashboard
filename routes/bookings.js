@@ -9,6 +9,7 @@ const { requireRole } = require('../middleware/auth');
 const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew, autoAdvanceOngoing } = require('../lib/bookingLifecycle');
 const { getDocketCrew } = require('../lib/shiftDocket');
 const { generateJobNumber } = require('../lib/jobNumbers');
+const { getJobPlansForBooking, setPlanVisibility } = require('../lib/bookingPlans');
 
 // Lazily create a project (jobs row) from a typed name on the booking form.
 // The old inline INSERT omitted the jobs table's NOT NULL columns
@@ -2418,50 +2419,9 @@ router.get('/:id', (req, res) => {
   // scheduler never has to leave the booking to check what's approved.
   // ROL rows also carry their approved shift windows, with the ones
   // covering THIS booking's date flagged (matchesDate).
-  let jobPlans = null;
-  if (booking.job_id) {
-    try {
-      const bookingDate = String(booking.start_datetime || '').substring(0, 10);
-      const rows = db.prepare(`
-        SELECT c.id, c.item_type, c.title, c.status, c.reference_number, c.plan_number,
-               c.file_link, c.expiry_date, c.approved_date,
-               c.rol_actual_number, c.rol_file_path, c.rol_file_original_name,
-               c.rol_summary_from, c.rol_summary_to, c.rol_time_window, c.rol_stage
-        FROM compliance c
-        WHERE c.item_type IN ('traffic_guidance', 'road_occupancy')
-          AND (c.job_id = @jobId
-               OR c.parent_id IN (SELECT id FROM compliance WHERE job_id = @jobId))
-        ORDER BY c.item_type, c.created_at DESC
-      `).all({ jobId: booking.job_id });
-      const docsStmt = db.prepare(
-        'SELECT id, original_name, file_path, file_size FROM compliance_documents WHERE compliance_id = ? ORDER BY created_at DESC'
-      );
-      const shiftsStmt = db.prepare(
-        'SELECT start_date, start_time, end_date, end_time FROM compliance_rol_shifts WHERE compliance_id = ? ORDER BY start_date, start_time'
-      );
-      const plans = rows.map(r => {
-        const docs = (() => { try { return docsStmt.all(r.id); } catch (e) { return []; } })();
-        let shifts = [];
-        if (r.item_type === 'road_occupancy') {
-          try {
-            shifts = shiftsStmt.all(r.id).map(s => ({
-              ...s,
-              // A shift covers the booking when its date range spans the
-              // booking's start date (single-day rows have no end_date).
-              matchesDate: !!bookingDate && s.start_date <= bookingDate
-                && bookingDate <= (s.end_date || s.start_date),
-            }));
-          } catch (e) {}
-        }
-        return { ...r, docs, shifts };
-      });
-      const tgs = plans.filter(p => p.item_type === 'traffic_guidance');
-      const rol = plans.filter(p => p.item_type === 'road_occupancy');
-      if (tgs.length || rol.length) jobPlans = { tgs, rol, bookingDate };
-    } catch (e) {
-      console.error('[bookings.show] job plans lookup error:', e.message);
-    }
-  }
+  // Now sourced from lib/bookingPlans (shared with the worker portal): adds
+  // TMP/CTMP sub-plans and each plan's per-booking crew-visibility flag.
+  const jobPlans = getJobPlansForBooking(db, booking);
 
   res.render('bookings/show', {
     jobPlans,
@@ -3470,7 +3430,8 @@ router.post('/:id/dockets/:docketId/delete', (req, res) => {
 // the client filters by type (Plans vs Permits).
 router.get('/:id/documents.json', (req, res) => {
   const db = getDb();
-  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) return res.status(404).json({ error: 'Booking not found' });
+  const bkRow = db.prepare("SELECT id, job_id, start_datetime FROM bookings WHERE id=?").get(req.params.id);
+  if (!bkRow) return res.status(404).json({ error: 'Booking not found' });
   let docs = [];
   try {
     docs = db.prepare(`
@@ -3483,23 +3444,27 @@ router.get('/:id/documents.json', (req, res) => {
   } catch (e) {}
   // Required plans — derived from the booking's requirements so a TGS or
   // TMP/CTMP requirement automatically shows up on the Req. Plans tab as a
-  // needed item (✓ once a matching document is attached).
+  // needed item (✓ once a matching document is attached). Plans inherited
+  // from the linked job (Compliance TGS / TMP sub-plans) count as attached
+  // too — a scheduler shouldn't re-upload what the job already carries.
   const requiredPlans = [];
   try {
+    const jp = getJobPlansForBooking(db, bkRow);
     const REQ_LABEL_TO_PLAN = [
-      { match: /traffic guidance|^tgs$/i, type: 'tgs',  label: 'TGS' },
-      { match: /^tmp\b|^ctmp$|traffic management plan/i, type: 'tmp', label: 'TMP / CTMP' },
+      { match: /traffic guidance|^tgs$/i, type: 'tgs',  label: 'TGS',        jobPlans: (jp && jp.tgs) || [] },
+      { match: /^tmp\b|^ctmp$|traffic management plan/i, type: 'tmp', label: 'TMP / CTMP', jobPlans: (jp && jp.tmp) || [] },
     ];
     const reqRows = db.prepare("SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id = ?").all(req.params.id);
     for (const m of REQ_LABEL_TO_PLAN) {
       const required = reqRows
         .filter(r => m.match.test(String(r.resource_type || '').trim()))
         .reduce((s, r) => s + Math.max(0, parseInt(r.quantity_required, 10) || 0), 0);
-      if (!required) continue;
+      if (!required && !m.jobPlans.length) continue;
       // CTMP uploads satisfy a TMP requirement — count both types.
       const typesForAttach = m.type === 'tmp' ? ['tmp', 'ctmp'] : [m.type];
-      const attached = docs.filter(d => typesForAttach.indexOf(d.document_type) !== -1).length;
-      requiredPlans.push({ type: m.type, label: m.label, required, attached });
+      const attachedDocs = docs.filter(d => typesForAttach.indexOf(d.document_type) !== -1).length;
+      const fromJob = m.jobPlans.length;
+      requiredPlans.push({ type: m.type, label: m.label, required, attached: attachedDocs + fromJob, fromJob });
     }
   } catch (e) {}
   res.json({ ok: true, documents: docs, requiredPlans });
@@ -3522,6 +3487,31 @@ router.post('/:id/documents/:docId/visibility', (req, res) => {
     details: `Document #${doc.id} ${visible ? 'visible to' : 'hidden from'} crew`, req });
   if (isJson) return res.json({ ok: true, visible_to_crew: visible });
   req.flash('success', visible ? 'Document visible to crew.' : 'Document hidden from crew.');
+  res.redirect('/bookings/' + req.params.id + '#documents');
+});
+
+// POST /:id/plans/:planId/visibility — toggle whether the crew can see a
+// job-linked compliance plan (TGS/ROL/TMP) on THIS booking's worker page.
+// Approved plans default visible, others hidden; this pins an explicit choice.
+router.post('/:id/plans/:planId/visibility', (req, res) => {
+  const db = getDb();
+  const booking = db.prepare('SELECT id, job_id FROM bookings WHERE id = ?').get(req.params.id);
+  if (!booking || !booking.job_id) { req.flash('error', 'Booking or linked job not found.'); return res.redirect('/bookings/' + req.params.id); }
+  const plan = db.prepare(`
+    SELECT id FROM compliance
+    WHERE id = @planId AND item_type IN ('traffic_guidance','road_occupancy','tmp_approval')
+      AND (job_id = @jobId OR parent_id IN (SELECT id FROM compliance WHERE job_id = @jobId))
+  `).get({ planId: req.params.planId, jobId: booking.job_id });
+  if (!plan) { req.flash('error', 'Plan not found on the linked job.'); return res.redirect('/bookings/' + req.params.id + '#documents'); }
+  const visible = (req.body.visible === '1' || req.body.visible === 1 || req.body.visible === true || req.body.visible === 'on');
+  try { setPlanVisibility(db, booking.id, plan.id, visible); } catch (e) {
+    console.error('[bookings.plans.visibility]', e.message);
+    req.flash('error', 'Could not update plan visibility.');
+    return res.redirect('/bookings/' + req.params.id + '#documents');
+  }
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
+    details: `Job plan #${plan.id} ${visible ? 'visible to' : 'hidden from'} crew`, req });
+  req.flash('success', visible ? 'Plan visible to crew.' : 'Plan hidden from crew.');
   res.redirect('/bookings/' + req.params.id + '#documents');
 });
 
