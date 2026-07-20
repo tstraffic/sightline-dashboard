@@ -27,6 +27,21 @@
   .nf-submit { width: 100%; padding: 14px; border-radius: 12px; font-size: 0.95rem; font-weight: 700; color: #fff; background: linear-gradient(135deg, #10B981, #059669); border: 0; box-shadow: 0 8px 22px rgba(5,150,105,0.45); }
   .nf-master { font-size: 0.78rem; color: rgba(255,255,255,0.7); margin-top: 8px; display: flex; gap: 12px; }
   .nf-master a { color: #93C5FD; font-weight: 600; }
+
+  /* Light mode — everything above is white-on-dark; without these the row
+     names/subs render white-on-white. */
+  :root[data-theme="light"] .nf-wrap { color: #111827; }
+  :root[data-theme="light"] .nf-sub { color: #6B7280; }
+  :root[data-theme="light"] .nf-card { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .nf-row { border-top-color: #F3F4F6; }
+  :root[data-theme="light"] .nf-label .name { color: #111827; }
+  :root[data-theme="light"] .nf-label .sub { color: #6B7280; }
+  :root[data-theme="light"] .nf-slider { background: #E5E7EB; }
+  :root[data-theme="light"] .nf-slider::before { background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,0.15); }
+  :root[data-theme="light"] .nf-switch input:checked + .nf-slider { background: #10B981; }
+  :root[data-theme="light"] .nf-submit-bar { background: linear-gradient(180deg, transparent, rgba(255,255,255,0.96) 35%); }
+  :root[data-theme="light"] .nf-master { color: #4B5563; }
+  :root[data-theme="light"] .nf-master a { color: #1D6AE5; }
 </style>
 
 <div class="nf-wrap">

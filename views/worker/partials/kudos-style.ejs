@@ -6,6 +6,14 @@
   .kd-pills::-webkit-scrollbar { display: none; }
   .kd-pill { padding: 6px 12px; border-radius: 999px; font-size: 0.75rem; font-weight: 700; color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); white-space: nowrap; }
   .kd-pill.on { color: #fff; background: rgba(16,185,129,0.2); border-color: #10B981; }
+  /* Gold leaderboard pill — classed (not inline) so light mode can flip it. */
+  .kd-pill--gold { background: rgba(245,158,11,0.15); border-color: rgba(245,158,11,0.3); color: #FBBF24; }
+
+  /* "Who can see this?" visibility picker (feed-new) */
+  .kd-vis-box { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
+  .kd-vis-label { color: rgba(255,255,255,0.5); }
+  .kd-vis-opt { color: rgba(255,255,255,0.7); background: rgba(255,255,255,0.04); border: 1.5px solid rgba(255,255,255,0.1); }
+  .kd-vis-opt.sel { border-color: #10B981; color: #fff; }
 
   /* Feed item */
   .kd-item {
@@ -123,6 +131,11 @@
     background: #FFFFFF;
     border-color: #E5E7EB;
   }
+  :root[data-theme="light"] .kd-pill--gold { color: #B45309; background: #FEF3C7; border-color: #FCD34D; }
+  :root[data-theme="light"] .kd-vis-box { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .kd-vis-label { color: #6B7280; }
+  :root[data-theme="light"] .kd-vis-opt { color: #4B5563; background: #F9FAFB; border-color: #E5E7EB; }
+  :root[data-theme="light"] .kd-vis-opt.sel { border-color: #10B981; color: #047857; background: #ECFDF5; }
   :root[data-theme="light"] .kd-pill.on {
     color: #047857;
     background: #ECFDF5;

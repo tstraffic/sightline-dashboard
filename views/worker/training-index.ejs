@@ -11,9 +11,17 @@
   </p>
 
   <% if (!accessAllowed) { %>
-    <div class="bg-amber-500/15 border border-amber-500/40 rounded-2xl p-5 text-amber-200 text-sm">
+    <style>
+      /* Amber notice — the pale amber-200/100 text is a dark-mode choice;
+         flip to deep amber in light so it stays readable. */
+      .tr-warn { color: #FDE68A; }
+      .tr-warn-sub { color: rgba(253,230,138,0.8); }
+      :root[data-theme="light"] .tr-warn { color: #92400E; }
+      :root[data-theme="light"] .tr-warn-sub { color: #B45309; }
+    </style>
+    <div class="tr-warn bg-amber-500/15 border border-amber-500/40 rounded-2xl p-5 text-sm">
       <p class="font-semibold mb-1">Not enabled</p>
-      <p class="text-amber-100/80">Your supervisor needs to grant you online training access from your employee profile. The in-person induction is the standard path — speak to them if you think this is an error.</p>
+      <p class="tr-warn-sub">Your supervisor needs to grant you online training access from your employee profile. The in-person induction is the standard path — speak to them if you think this is an error.</p>
     </div>
   <% } else { %>
     <div class="space-y-3">
