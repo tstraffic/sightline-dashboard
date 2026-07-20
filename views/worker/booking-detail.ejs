@@ -572,6 +572,17 @@
         sheet.classList.remove('open');
         document.body.classList.remove('rt-sheet-active');
       }
+      // The sheet is meant to open ONLY via open(), which wires form.action to
+      // the tapped task's /done endpoint. But the iOS/PWA back-forward cache can
+      // restore this page with the sheet still showing (or Safari re-paints it
+      // with the nav bar visible) — and then form.action is empty, so any submit
+      // posts to the current shift URL, which has no POST route: the crew member
+      // hits a 404 and can't even reach the submit button hidden behind the nav.
+      // Force the sheet shut (and drop the stale action + restored radios) on
+      // every show, so it can only be re-opened cleanly by ticking the task.
+      function forceShut() { form.removeAttribute('action'); form.reset(); close(); }
+      window.addEventListener('pageshow', forceShut);
+      forceShut();
       document.addEventListener('click', function (e) {
         var btn = e.target.closest && e.target.closest('[data-rt-open]');
         if (!btn) return;
@@ -580,10 +591,21 @@
       });
       bg.addEventListener('click', close);
       form.addEventListener('submit', function (e) {
+        // Belt-and-braces for the 404 above: never submit unless open() wired a
+        // real task action. Read the raw attribute (the .action property would
+        // be an absolute URL and never start with the path).
+        var action = form.getAttribute('action') || '';
+        if (action.indexOf('/w/shift-tasks/') !== 0) {
+          e.preventDefault();
+          errEl.textContent = 'Tap the task again to reopen this report.';
+          errEl.style.display = 'block';
+          return;
+        }
         var cond = form.querySelector('input[name="condition"]:checked');
         var dest = form.querySelector('input[name="destination"]:checked');
         if (!cond || !dest) {
           e.preventDefault();
+          errEl.textContent = 'Pick a condition and a destination.';
           errEl.style.display = 'block';
         }
       });

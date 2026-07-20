@@ -216,6 +216,20 @@ input[type="tel"], input[type="number"], select, textarea {
 :root[data-theme="light"] .bg-brand-50 { background: #ECFDF5 !important; }
 :root[data-theme="light"] .bg-brand-100 { background: #D1FAE5 !important; }
 
+/* `has-[:checked]:bg-brand-50` / `-100` compile to their OWN class names
+   (e.g. `.has-\[\:checked\]\:bg-brand-50`), which the plain `.bg-brand-50`
+   override above does NOT match. On dark surfaces the checked option kept
+   Tailwind's bright #ECFDF5 fill while its label text (`.text-gray-800`)
+   flipped to light — so the selected text went invisible on the worker
+   risk-assessment / prestart checklists. Dim the checked wash to a dark
+   emerald tint here; restore the light value under [data-theme="light"].
+   Matched via substring on the class attribute so it fires whatever the
+   input type. */
+[class*="has-[:checked]:bg-brand-50"] { background-color: rgba(16,185,129,0.12) !important; }
+[class*="has-[:checked]:bg-brand-100"] { background-color: rgba(16,185,129,0.15) !important; }
+:root[data-theme="light"] [class*="has-[:checked]:bg-brand-50"] { background-color: #ECFDF5 !important; }
+:root[data-theme="light"] [class*="has-[:checked]:bg-brand-100"] { background-color: #D1FAE5 !important; }
+
 /* ── Status badge backgrounds (keep legible on dark) ── */
 .bg-emerald-50 { background: rgba(16,185,129,0.12) !important; }
 .bg-amber-50 { background: rgba(245,158,11,0.12) !important; }
