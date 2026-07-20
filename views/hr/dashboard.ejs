@@ -693,4 +693,8 @@
   .hr-stat-label { font-size: 0.6rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
   .hr-stat-num { font-size: 1.5rem; font-weight: 800; line-height: 1.1; margin-top: 6px; letter-spacing: -0.02em; }
   .hr-stat-ic { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+  /* Dark mode — the tile is hardcoded white above while dark-glass turns its
+     text white; key off data-theme (dark-glass is on the body in both modes). */
+  :root[data-theme="dark"] .hr-stat { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.09); }
+  :root[data-theme="dark"] .hr-stat:hover { border-color: rgba(255,255,255,0.18); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
 </style>

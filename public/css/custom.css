@@ -486,6 +486,39 @@ body, body.dark-glass {
 .dark-glass .text-teal-700, .dark-glass .text-teal-800 { color: #5EEAD4 !important; }
 .dark-glass .text-teal-600 { color: #2DD4BF !important; }
 
+.dark-glass .bg-violet-50   { background-color: rgba(139,92,246,0.10) !important; }
+.dark-glass .bg-violet-100  { background-color: rgba(139,92,246,0.16) !important; }
+.dark-glass .text-violet-700, .dark-glass .text-violet-800, .dark-glass .text-violet-900 {
+  color: #C4B5FD !important;
+}
+.dark-glass .text-violet-600 { color: #A78BFA !important; }
+
+/* Opacity-suffixed variants (text-blue-700/60, text-purple-700/70,
+   text-blue-900/85 …) — Tailwind emits them as separate classes, so the
+   solid remaps above miss them and the deep 700/900 tones sit nearly
+   invisible on the dark page (registry tab counts, info panels). Match on
+   the substring and lift them to the same readable tone, slightly dimmed. */
+.dark-glass [class*="text-blue-700/"], .dark-glass [class*="text-blue-800/"], .dark-glass [class*="text-blue-900/"],
+.dark-glass [class*="text-sky-700/"], .dark-glass [class*="text-sky-800/"] {
+  color: rgba(147,197,253,0.85) !important;
+}
+.dark-glass [class*="text-purple-700/"], .dark-glass [class*="text-purple-800/"], .dark-glass [class*="text-purple-900/"] {
+  color: rgba(216,180,254,0.85) !important;
+}
+.dark-glass [class*="text-violet-700/"], .dark-glass [class*="text-violet-800/"], .dark-glass [class*="text-violet-900/"] {
+  color: rgba(196,181,253,0.85) !important;
+}
+.dark-glass [class*="text-emerald-700/"], .dark-glass [class*="text-emerald-800/"], .dark-glass [class*="text-emerald-900/"],
+.dark-glass [class*="text-green-700/"], .dark-glass [class*="text-green-800/"] {
+  color: rgba(110,231,183,0.85) !important;
+}
+.dark-glass [class*="text-red-700/"], .dark-glass [class*="text-red-800/"], .dark-glass [class*="text-red-900/"] {
+  color: rgba(252,165,165,0.85) !important;
+}
+.dark-glass [class*="text-amber-700/"], .dark-glass [class*="text-amber-800/"], .dark-glass [class*="text-amber-900/"] {
+  color: rgba(253,230,138,0.85) !important;
+}
+
 /* Borders for the same tinted family (border-X-200 etc.) */
 .dark-glass .border-emerald-200, .dark-glass .border-green-200 { border-color: rgba(16,185,129,0.30) !important; }
 .dark-glass .border-emerald-300, .dark-glass .border-green-300 { border-color: rgba(16,185,129,0.42) !important; }
@@ -547,6 +580,49 @@ body, body.dark-glass {
 :root[data-theme="light"] body.dark-glass .bg-teal-100  { background-color: #CCFBF1 !important; }
 :root[data-theme="light"] body.dark-glass .text-teal-700 { color: #0F766E !important; }
 :root[data-theme="light"] body.dark-glass .text-teal-600 { color: #0D9488 !important; }
+
+/* The dark remaps above cover the full 700/800/900 families, but the light
+   restores only covered the 700s (and a couple of 800s) — so text-blue-800,
+   text-blue-900, text-purple-900 etc. LEAKED their pale dark-mode colours
+   into light mode (washed-out section headers on /swms, /hr/roster, the
+   /projects "active" chip…). Restore every remapped tone. */
+:root[data-theme="light"] body.dark-glass .text-emerald-900, :root[data-theme="light"] body.dark-glass .text-green-700 { color: #047857 !important; }
+:root[data-theme="light"] body.dark-glass .text-green-800, :root[data-theme="light"] body.dark-glass .text-green-900 { color: #065F46 !important; }
+:root[data-theme="light"] body.dark-glass .text-red-800, :root[data-theme="light"] body.dark-glass .text-red-900,
+:root[data-theme="light"] body.dark-glass .text-rose-800 { color: #991B1B !important; }
+:root[data-theme="light"] body.dark-glass .text-yellow-800, :root[data-theme="light"] body.dark-glass .text-yellow-900,
+:root[data-theme="light"] body.dark-glass .text-orange-800, :root[data-theme="light"] body.dark-glass .text-orange-900 { color: #92400E !important; }
+:root[data-theme="light"] body.dark-glass .text-blue-800, :root[data-theme="light"] body.dark-glass .text-blue-900,
+:root[data-theme="light"] body.dark-glass .text-sky-800 { color: #1E40AF !important; }
+:root[data-theme="light"] body.dark-glass .text-purple-800, :root[data-theme="light"] body.dark-glass .text-purple-900 { color: #5B21B6 !important; }
+:root[data-theme="light"] body.dark-glass .text-teal-800 { color: #115E59 !important; }
+:root[data-theme="light"] body.dark-glass .bg-violet-50 { background-color: #F5F3FF !important; }
+:root[data-theme="light"] body.dark-glass .bg-violet-100 { background-color: #EDE9FE !important; }
+:root[data-theme="light"] body.dark-glass .text-violet-600 { color: #7C3AED !important; }
+:root[data-theme="light"] body.dark-glass .text-violet-700, :root[data-theme="light"] body.dark-glass .text-violet-800,
+:root[data-theme="light"] body.dark-glass .text-violet-900 { color: #5B21B6 !important; }
+/* Opacity-suffixed variants — same restore, slightly dimmed like the original */
+:root[data-theme="light"] body.dark-glass [class*="text-blue-700/"], :root[data-theme="light"] body.dark-glass [class*="text-blue-800/"],
+:root[data-theme="light"] body.dark-glass [class*="text-blue-900/"], :root[data-theme="light"] body.dark-glass [class*="text-sky-700/"],
+:root[data-theme="light"] body.dark-glass [class*="text-sky-800/"] { color: rgba(30,64,175,0.8) !important; }
+:root[data-theme="light"] body.dark-glass [class*="text-purple-700/"], :root[data-theme="light"] body.dark-glass [class*="text-purple-800/"],
+:root[data-theme="light"] body.dark-glass [class*="text-purple-900/"], :root[data-theme="light"] body.dark-glass [class*="text-violet-700/"],
+:root[data-theme="light"] body.dark-glass [class*="text-violet-800/"], :root[data-theme="light"] body.dark-glass [class*="text-violet-900/"] { color: rgba(91,33,182,0.8) !important; }
+:root[data-theme="light"] body.dark-glass [class*="text-emerald-700/"], :root[data-theme="light"] body.dark-glass [class*="text-emerald-800/"],
+:root[data-theme="light"] body.dark-glass [class*="text-emerald-900/"], :root[data-theme="light"] body.dark-glass [class*="text-green-700/"],
+:root[data-theme="light"] body.dark-glass [class*="text-green-800/"] { color: rgba(4,120,87,0.8) !important; }
+:root[data-theme="light"] body.dark-glass [class*="text-red-700/"], :root[data-theme="light"] body.dark-glass [class*="text-red-800/"],
+:root[data-theme="light"] body.dark-glass [class*="text-red-900/"] { color: rgba(153,27,27,0.8) !important; }
+:root[data-theme="light"] body.dark-glass [class*="text-amber-700/"], :root[data-theme="light"] body.dark-glass [class*="text-amber-800/"],
+:root[data-theme="light"] body.dark-glass [class*="text-amber-900/"] { color: rgba(146,64,14,0.8) !important; }
+
+/* Light-mode readability: gray-300 / amber-400 text is a dark-mode dimness
+   choice that turns near-invisible on white ("No PIN", "/13", "(optional)",
+   "On Leave" stat labels). Lift them to a tone that still reads muted. */
+:root[data-theme="light"] body.dark-glass main .text-gray-300 { color: #9CA3AF !important; }
+:root[data-theme="light"] body.dark-glass main .text-gray-200 { color: #9CA3AF !important; }
+:root[data-theme="light"] body.dark-glass main .text-amber-400 { color: #B45309 !important; }
+:root[data-theme="light"] #sidebar .text-gray-200 { color: #6B7280 !important; }
 
 /* Borders — light mode restore */
 :root[data-theme="light"] body.dark-glass .border-emerald-200, :root[data-theme="light"] body.dark-glass .border-green-200 { border-color: #A7F3D0 !important; }
@@ -3504,6 +3580,14 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 .dark-glass .text-brand-700 { color: #93c5fd !important; }
 .dark-glass .hover\:text-brand-600:hover { color: #60a5fa !important; }
 .dark-glass .hover\:text-brand-700:hover { color: #93c5fd !important; }
+/* Light restore — without these the pale dark-mode blues leak into light
+   (e.g. the roster "Names" export chip: pale blue on a pale chip). */
+:root[data-theme="light"] body.dark-glass a.text-brand-600,
+:root[data-theme="light"] body.dark-glass .text-brand-600 { color: #1D6AE5 !important; }
+:root[data-theme="light"] body.dark-glass .text-brand-700 { color: #1750B8 !important; }
+:root[data-theme="light"] body.dark-glass a.text-brand-600:hover,
+:root[data-theme="light"] body.dark-glass .hover\:text-brand-600:hover { color: #1750B8 !important; }
+:root[data-theme="light"] body.dark-glass .hover\:text-brand-700:hover { color: #123E8F !important; }
 
 /* --- Buttons secondary --- */
 .dark-glass .hover\:bg-red-50:hover { background: rgba(239,68,68,0.12) !important; }
@@ -3577,17 +3661,20 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
 [data-dropzone] .dropzone-label {
   pointer-events: none;
 }
-/* Light theme compat */
-.bg-white [data-dropzone],
+/* Light theme compat — scoped to light: in dark mode the card's .bg-white
+   class is still in the DOM (only its computed background is remapped), so
+   an unscoped `.bg-white [data-dropzone]` painted the dropzone light gray
+   under white-remapped text (invisible hint text on /incidents/new etc.). */
+:root[data-theme="light"] .bg-white [data-dropzone],
 [data-dropzone].light {
   border-color: #d1d5db;
   background: #f9fafb;
 }
-.bg-white [data-dropzone]:hover,
+:root[data-theme="light"] .bg-white [data-dropzone]:hover,
 [data-dropzone].light:hover {
   border-color: #9ca3af;
 }
-.bg-white [data-dropzone].drag-over,
+:root[data-theme="light"] .bg-white [data-dropzone].drag-over,
 [data-dropzone].light.drag-over {
   border-color: var(--brand-500);
   background: rgba(43, 127, 255, 0.06);

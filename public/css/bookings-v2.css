@@ -184,6 +184,21 @@
 .bk2-fs-tool.is-active,
 .bk2-fs-tool--primary { background: #2B7FFF; border-color: rgba(255,255,255,0.18); color: #fff; }
 .bk2-fs-tool--primary:hover { background: #1D6AE5; }
+
+/* Light mode — the filter strip above is dark-first (slate-200 values,
+   white-alpha chips) and had no light overrides, leaving near-white text
+   on the white strip. */
+:root[data-theme="light"] .bk2-fs-value { color: #1E293B; }
+:root[data-theme="light"] .bk2-fs-pill { background: rgba(15,23,42,0.05); border-color: rgba(15,23,42,0.10); }
+:root[data-theme="light"] .bk2-fs-pill-more { color: #64748B; }
+:root[data-theme="light"] .bk2-fs-datestep { color: #64748B; }
+:root[data-theme="light"] .bk2-fs-datestep:hover { background: rgba(15,23,42,0.06); color: #0F172A; }
+:root[data-theme="light"] .bk2-fs-cycle.is-active { color: #1D6AE5; }
+:root[data-theme="light"] .bk2-fs-toolbar { background: rgba(15,23,42,0.03); border-top-color: rgba(15,23,42,0.08); }
+:root[data-theme="light"] .bk2-fs-tool { background: #FFFFFF; color: #475569; border-color: #E2E8F0; }
+:root[data-theme="light"] .bk2-fs-tool:hover { background: #F1F5F9; color: #0F172A; }
+:root[data-theme="light"] .bk2-fs-tool.is-active,
+:root[data-theme="light"] .bk2-fs-tool--primary { background: #2B7FFF; border-color: #2B7FFF; color: #fff; }
 .bk2-fs-spacer { flex: 1; }
 
 /* Search popover. Positioned via JS (top/left in window-doc coords). */

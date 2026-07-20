@@ -193,6 +193,32 @@
   .la-empty-big .ic svg { width: 26px; height: 26px; }
   .la-empty-big h3 { font-size: 1rem; font-weight: 700; color: #1F2937; }
   .la-empty-big p { font-size: 0.82rem; color: #6B7280; margin-top: 4px; }
+
+  /* Dark mode — the la- family is styled light above (white cards, slate
+     text) while the global dark-glass remaps turn the grays white, which
+     left white text on white cards. Key off data-theme (dark-glass is on
+     the body in BOTH modes, so it can't be the switch). */
+  :root[data-theme="dark"] .la-stat { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.09); }
+  :root[data-theme="dark"] .la-stat:hover { border-color: rgba(255,255,255,0.18); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
+  :root[data-theme="dark"] .la-stat-num { color: rgba(255,255,255,0.92); }
+  :root[data-theme="dark"] .la-stat-lbl { color: rgba(255,255,255,0.5); }
+  :root[data-theme="dark"] .la-stat-ic.urgent { background: rgba(239,68,68,0.16); color: #F87171; }
+  :root[data-theme="dark"] .la-stat-ic.month  { background: rgba(251,191,36,0.16); color: #FBBF24; }
+  :root[data-theme="dark"] .la-stat-ic.later  { background: rgba(59,130,246,0.16); color: #93C5FD; }
+  :root[data-theme="dark"] .la-stat-ic.done   { background: rgba(16,185,129,0.16); color: #34D399; }
+  :root[data-theme="dark"] .la-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.09); }
+  :root[data-theme="dark"] .la-row { border-top-color: rgba(255,255,255,0.06); }
+  :root[data-theme="dark"] .la-row:hover { background: rgba(255,255,255,0.04); }
+  :root[data-theme="dark"] .la-name { color: rgba(255,255,255,0.92); }
+  :root[data-theme="dark"] .la-when { color: rgba(255,255,255,0.85); }
+  :root[data-theme="dark"] .la-reason { color: rgba(255,255,255,0.65); background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.14); }
+  :root[data-theme="dark"] .la-avatar { background: rgba(59,130,246,0.18); color: #93C5FD; border-color: rgba(59,130,246,0.25); }
+  :root[data-theme="dark"] .la-btn.la-reject { background: rgba(239,68,68,0.14); color: #FCA5A5; }
+  :root[data-theme="dark"] .la-btn.la-reject:hover { background: rgba(239,68,68,0.22); }
+  :root[data-theme="dark"] .la-empty,
+  :root[data-theme="dark"] .la-empty-big { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); }
+  :root[data-theme="dark"] .la-empty-big h3 { color: rgba(255,255,255,0.9); }
+  :root[data-theme="dark"] .la-empty-big .ic { background: rgba(16,185,129,0.16); color: #34D399; }
 </style>
 
 <div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
