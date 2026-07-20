@@ -199,31 +199,32 @@ router.get('/manage/kudos', requireManager, (req, res) => {
     WHERE r.status = 'pending'
     ORDER BY r.created_at DESC
   `).all();
+  // No flash re-read — workerLocals already consumed it into res.locals;
+  // reading again returns [] and shadows the layout's banner.
   res.render('worker/manage-kudos', {
     title: 'Kudos moderation', currentPage: 'manage',
     reports,
-    flash_success: req.flash('success'),
   });
 });
 
 router.post('/manage/kudos/:id/hide', requireManager, (req, res) => {
   const db = getDb();
   const report = db.prepare('SELECT * FROM kudos_reports WHERE id = ?').get(req.params.id);
-  if (!report) { req.flash('error', 'Report not found.'); return res.redirect('/w/manage/kudos'); }
+  if (!report) { req.flash('error', 'Report not found.'); return req.session.save(() => res.redirect('/w/manage/kudos')); }
   const mgr = db.prepare('SELECT linked_user_id FROM employees WHERE linked_crew_member_id = ?').get(req.session.worker.id);
   const userId = mgr && mgr.linked_user_id ? mgr.linked_user_id : null;
   if (report.kudos_id) hideKudos({ kudosId: report.kudos_id, userId, reason: 'Manager hid from portal' });
   if (report.comment_id) db.prepare("UPDATE kudos_comments SET hidden_at = datetime('now') WHERE id = ?").run(report.comment_id);
   db.prepare("UPDATE kudos_reports SET status = 'actioned' WHERE id = ?").run(req.params.id);
   req.flash('success', 'Hidden and report closed.');
-  res.redirect('/w/manage/kudos');
+  req.session.save(() => res.redirect('/w/manage/kudos'));
 });
 
 router.post('/manage/kudos/:id/dismiss', requireManager, (req, res) => {
   const db = getDb();
   db.prepare("UPDATE kudos_reports SET status = 'dismissed' WHERE id = ?").run(req.params.id);
   req.flash('success', 'Report dismissed.');
-  res.redirect('/w/manage/kudos');
+  req.session.save(() => res.redirect('/w/manage/kudos'));
 });
 
 module.exports = router;

@@ -35,14 +35,14 @@
     </div>
   <% }) %>
 
-  <!-- Opt out toggle -->
+  <!-- Opt out toggle — states the CURRENT status so the action is obvious -->
   <form method="POST" action="/w/leaderboard/optout" style="margin-top: 20px; text-align: center;">
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-    <button type="submit" style="font-size: 0.72rem; color: rgba(255,255,255,0.5); text-decoration: underline;">Toggle my leaderboard visibility</button>
+    <% if (typeof optedOut !== 'undefined' && optedOut) { %>
+      <p class="kd-optout-note">You're currently hidden from the leaderboard.</p>
+      <button type="submit" class="kd-optout-btn">Show me on the leaderboard</button>
+    <% } else { %>
+      <button type="submit" class="kd-optout-btn">Hide me from the leaderboard</button>
+    <% } %>
   </form>
-
-  <% if (flash_success && flash_success.length) { %>
-    <div class="fixed left-1/2 -translate-x-1/2 bottom-[90px] px-4 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-500 shadow-lg z-50" id="kd-toast"><%= flash_success[0] %></div>
-    <script>setTimeout(()=>{ document.getElementById('kd-toast')?.remove(); }, 2800);</script>
-  <% } %>
 </div>

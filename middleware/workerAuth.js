@@ -115,9 +115,14 @@ function workerLocals(req, res, next) {
       && req.headers.accept && req.headers.accept.includes('text/html')) {
     req.session.lastPortal = 'worker';
   }
-  // Also set flash messages for worker views
-  res.locals.flash_success = req.flash('success');
-  res.locals.flash_error = req.flash('error');
+  // Flash messages for worker views. The GLOBAL locals middleware in
+  // server.js already consumed req.flash() into res.locals for EVERY
+  // request; re-reading here returns [] and used to overwrite the real
+  // message — which is why flash banners never appeared anywhere in the
+  // worker portal. Keep the captured values; only read as a fallback if
+  // the global middleware didn't run.
+  if (!Array.isArray(res.locals.flash_success)) res.locals.flash_success = req.flash('success');
+  if (!Array.isArray(res.locals.flash_error)) res.locals.flash_error = req.flash('error');
   // Portal role helpers — pulled fresh from DB so promotions take effect
   // without the worker logging out and back in.
   let portalRole = 'traffic_controller';

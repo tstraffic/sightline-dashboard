@@ -32,8 +32,8 @@
     <% if (items.length === 0) { %>
       <div class="kd-empty">
         <div class="kd-empty-ic"><svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2l2.9 6.3 6.6.6-5 4.5 1.5 6.8L12 17l-6 3.2 1.5-6.8-5-4.5 6.6-.6L12 2z"/></svg></div>
-        <p class="text-sm font-bold text-white">No kudos yet</p>
-        <p class="text-xs text-white/50 mt-1">Be the first to recognise a teammate.</p>
+        <p class="kd-empty-title">No kudos yet</p>
+        <p class="kd-empty-sub">Be the first to recognise a teammate.</p>
       </div>
     <% } else { %>
       <%- include('_feed_items', { items, viewerCrewId }) %>
@@ -42,7 +42,7 @@
 
   <% if (nextBefore) { %>
     <div id="kd-load-more-wrap" style="text-align:center; padding: 16px 0;">
-      <button id="kd-load-more" data-before="<%= nextBefore %>" style="padding: 10px 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #fff; font-size: 0.82rem; font-weight: 700;">Load more</button>
+      <button id="kd-load-more" class="kd-loadmore" data-before="<%= nextBefore %>">Load more</button>
     </div>
   <% } %>
 </div>
@@ -52,10 +52,8 @@
   <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
 </a>
 
-<% if (flash_success && flash_success.length) { %>
-  <div class="fixed left-1/2 -translate-x-1/2 bottom-[90px] px-4 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-500 shadow-lg z-50" id="kd-toast"><%= flash_success[0] %></div>
-  <script>setTimeout(()=>{ document.getElementById('kd-toast')?.remove(); }, 2800);</script>
-<% } %>
+<%# Flash banners render in the worker layout (res.locals via workerLocals) —
+    no per-page toast needed, and re-reading req.flash here used to shadow it. %>
 
 <script>
 (function () {

@@ -1,7 +1,11 @@
 <%
   function initials(name) { return (name || '').split(' ').map(n => n[0] || '').join('').slice(0, 2).toUpperCase(); }
   function timeAgo(ts) {
-    const d = new Date(ts); const diff = Math.max(0, (Date.now() - d.getTime()) / 1000);
+    // SQLite CURRENT_TIMESTAMP is UTC with no timezone marker — parse it as
+    // UTC ('Z'), otherwise JS reads it as Sydney-local and a brand-new kudos
+    // shows "10h ago".
+    const d = new Date(String(ts).replace(' ', 'T') + (String(ts).includes('Z') || String(ts).includes('+') ? '' : 'Z'));
+    const diff = Math.max(0, (Date.now() - d.getTime()) / 1000);
     if (diff < 60) return 'just now';
     if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
     if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';

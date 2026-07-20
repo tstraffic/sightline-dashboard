@@ -70,11 +70,13 @@ router.get('/feed', (req, res) => {
 
   const milestones = getRecentMilestones({ limit: 5 });
 
+  // NOTE: no flash re-read here — workerLocals already consumed req.flash()
+  // into res.locals; reading again returns [] and shadows the real message,
+  // which is why "Kudos sent!" never showed. The layout renders the banner.
   res.render('worker/feed', {
     title: 'Team feed', currentPage: 'feed',
     items: feed.items, nextBefore: feed.nextBefore,
     filter, values, milestones, viewerCrewId,
-    flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });
 
@@ -89,7 +91,6 @@ router.get('/feed/new', (req, res) => {
   res.render('worker/feed-new', {
     title: 'Send kudos', currentPage: 'feed',
     values, crew,
-    flash_error: req.flash('error'),
   });
 });
 
@@ -124,14 +125,17 @@ router.post('/feed/send', (req, res) => {
       }
 
       req.flash('success', recipientCount === 1 ? 'Kudos sent!' : `Kudos sent to ${recipientCount} teammates!`);
-      res.redirect('/w/feed');
+      // Persist the flash before the browser follows the redirect — same
+      // session-store race the logins guard against; without this the
+      // "Kudos sent!" banner silently vanished.
+      req.session.save(() => res.redirect('/w/feed'));
     } catch (e) {
       if (e.message === 'PROFANITY') {
         req.flash('error', 'Your message contains language we filter by default. Tick "send anyway" to confirm.');
       } else {
         req.flash('error', e.message);
       }
-      res.redirect('/w/feed/new');
+      req.session.save(() => res.redirect('/w/feed/new'));
     }
   });
 });
@@ -187,7 +191,6 @@ router.get('/feed/:id', (req, res) => {
   res.render('worker/feed-detail', {
     title: 'Kudos', currentPage: 'feed',
     k, viewerCrewId: req.session.worker.id,
-    flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });
 
@@ -203,7 +206,7 @@ router.post('/feed/:id/delete', (req, res) => {
     if (wantsJson(req)) return res.status(400).json({ ok: false, error: e.message });
     req.flash('error', e.message);
   }
-  res.redirect('/w/feed');
+  req.session.save(() => res.redirect('/w/feed'));
 });
 
 // ====================================================
@@ -213,7 +216,7 @@ router.post('/feed/:id/report', (req, res) => {
   reportKudos({ kudosId: parseInt(req.params.id, 10), reporterCrewId: req.session.worker.id, reason: req.body.reason || '' });
   if (wantsJson(req)) return res.json({ ok: true });
   req.flash('success', 'Reported to admin — thanks for flagging.');
-  res.redirect('/w/feed');
+  req.session.save(() => res.redirect('/w/feed'));
 });
 
 // ====================================================
@@ -225,7 +228,7 @@ router.post('/feed/block', (req, res) => {
     blockUser({ blockerCrewId: req.session.worker.id, blockedCrewId: blockedId });
     req.flash('success', 'User blocked');
   } catch (e) { req.flash('error', e.message); }
-  res.redirect('/w/feed');
+  req.session.save(() => res.redirect('/w/feed'));
 });
 
 // ====================================================
@@ -239,10 +242,11 @@ router.get('/leaderboard', (req, res) => {
     { key: 'hours', label: 'Most hours worked', suffix: 'hrs' },
   ];
   const boards = cats.map(c => ({ ...c, rows: getLeaderboard({ window: windowKey, category: c.key, limit: 10 }) }));
+  const db = getDb();
+  const optedOut = !!db.prepare('SELECT 1 FROM leaderboard_optouts WHERE crew_member_id = ?').get(req.session.worker.id);
   res.render('worker/leaderboard', {
     title: 'Leaderboard', currentPage: 'feed',
-    windowKey, boards,
-    flash_success: req.flash('success'),
+    windowKey, boards, optedOut,
   });
 });
 
@@ -256,7 +260,7 @@ router.post('/leaderboard/optout', (req, res) => {
   if (row) db.prepare('DELETE FROM leaderboard_optouts WHERE crew_member_id = ?').run(id);
   else db.prepare('INSERT INTO leaderboard_optouts (crew_member_id) VALUES (?)').run(id);
   req.flash('success', row ? 'Opted back in — you will appear on the leaderboard.' : 'Opted out of the leaderboard.');
-  res.redirect('/w/leaderboard');
+  req.session.save(() => res.redirect('/w/leaderboard'));
 });
 
 module.exports = router;

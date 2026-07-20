@@ -105,6 +105,13 @@
   /* Empty state */
   .kd-empty { text-align: center; padding: 40px 20px; background: rgba(255,255,255,0.02); border: 1px dashed rgba(255,255,255,0.08); border-radius: 14px; }
   .kd-empty-ic { width: 52px; height: 52px; border-radius: 999px; background: rgba(245,158,11,0.15); color: #F59E0B; display: flex; align-items: center; justify-content: center; margin: 0 auto 10px; }
+  .kd-empty-title { font-size: 0.875rem; font-weight: 700; color: #fff; }
+  .kd-empty-sub { font-size: 0.75rem; color: rgba(255,255,255,0.5); margin-top: 4px; }
+
+  /* Load more + leaderboard opt-out */
+  .kd-loadmore { padding: 10px 18px; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; color: #fff; font-size: 0.82rem; font-weight: 700; }
+  .kd-optout-btn { font-size: 0.72rem; color: rgba(255,255,255,0.5); text-decoration: underline; }
+  .kd-optout-note { font-size: 0.72rem; color: #FBBF24; margin-bottom: 4px; }
 
   /* Leaderboard */
   .kd-lb-head { display: flex; gap: 6px; padding: 4px 0 12px; overflow-x: auto; }
@@ -211,6 +218,11 @@
     border-color: #E5E7EB;
     color: #6B7280;
   }
+  :root[data-theme="light"] .kd-empty-title { color: #0F1115; }
+  :root[data-theme="light"] .kd-empty-sub { color: #6B7280; }
+  :root[data-theme="light"] .kd-loadmore { background: #FFFFFF; border-color: #E5E7EB; color: #374151; }
+  :root[data-theme="light"] .kd-optout-btn { color: #6B7280; }
+  :root[data-theme="light"] .kd-optout-note { color: #B45309; }
 
   :root[data-theme="light"] .kd-lb-cat {
     background: #FFFFFF;

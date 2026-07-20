@@ -159,9 +159,10 @@ function getKudosWithComments({ kudosId, viewerCrewId }) {
     WHERE k.id = ? AND k.hidden_at IS NULL
   `).get(kudosId);
   if (!k) return null;
-  // Access check
+  // Access check — 'team' and legacy 'private' kudos are involved-only (the
+  // feed already hides them from third parties; the direct link must too).
   const isRcpt = db.prepare('SELECT 1 FROM kudos_recipients WHERE kudos_id = ? AND recipient_crew_id = ?').get(kudosId, viewerCrewId);
-  if (k.visibility === 'private' && k.sender_crew_id !== viewerCrewId && !isRcpt) return null;
+  if (['private', 'team'].includes(k.visibility) && k.sender_crew_id !== viewerCrewId && !isRcpt) return null;
 
   k.recipients = db.prepare(`
     SELECT cm.id as crewId, cm.full_name as name, cm.employee_id as empId
