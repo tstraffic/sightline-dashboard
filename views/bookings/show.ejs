@@ -1332,7 +1332,7 @@
                 <% } %>
               </div>
               <!-- Per-booking crew visibility for this plan -->
-              <form method="POST" action="/bookings/<%= b.id %>/plans/<%= p.id %>/visibility" class="inline shrink-0">
+              <form method="POST" action="/bookings/<%= b.id %>/plans/<%= p.id %>/visibility" class="inline shrink-0" data-vis-toggle-form>
                 <%- include('../partials/csrf') %>
                 <input type="hidden" name="visible" value="<%= p.visible_to_crew ? '0' : '1' %>">
                 <button type="submit" class="bk2-vis-toggle <%= p.visible_to_crew ? 'is-on' : 'is-off' %>"
@@ -1396,7 +1396,7 @@
                    see). One click flips it; the hidden input carries the NEW
                    state. -->
               <% const docVisible = (doc.visible_to_crew == null || doc.visible_to_crew); %>
-              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/visibility" class="inline">
+              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/visibility" class="inline" data-vis-toggle-form>
                 <%- include('../partials/csrf') %>
                 <input type="hidden" name="visible" value="<%= docVisible ? '0' : '1' %>">
                 <button type="submit" class="bk2-vis-toggle <%= docVisible ? 'is-on' : 'is-off' %>"
@@ -1912,5 +1912,60 @@
   if (vehiclesPanel) {
     vehiclesPanel.querySelectorAll('.vehicle-card').forEach(bindDropTarget);
   }
+})();
+</script>
+
+<script>
+// Crew-visibility toggles (documents + job plans) flip on the server via AJAX
+// and repaint the pill in place — no navigation, no page reload. The <form>
+// markup stays as a no-JS fallback (a plain POST still works). Mirrors the
+// board.ejs eye/eye-off pattern so both surfaces behave identically.
+(function () {
+  var forms = document.querySelectorAll('[data-vis-toggle-form]');
+  if (!forms.length) return;
+  var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+  var EYE_ON  = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>';
+  var EYE_OFF = '<svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>';
+  function miniToast(msg, ok) {
+    var t = document.createElement('div');
+    t.textContent = msg;
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:' + (ok === false ? '#dc2626' : '#111827') + ';color:#fff;padding:8px 16px;border-radius:8px;font-size:13px;font-weight:500;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.2);';
+    document.body.appendChild(t);
+    setTimeout(function () { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; }, 1800);
+    setTimeout(function () { t.remove(); }, 2200);
+  }
+  function paint(btn, on) {
+    btn.className = 'bk2-vis-toggle ' + (on ? 'is-on' : 'is-off');
+    btn.innerHTML = (on ? EYE_ON : EYE_OFF) + '<span>' + (on ? 'Crew visible' : 'Hidden') + '</span>';
+    btn.title = on ? 'Crew can see this in the worker app — click to hide' : 'Hidden from crew — click to show';
+  }
+  forms.forEach(function (form) {
+    form.addEventListener('submit', function (e) {
+      e.preventDefault();
+      var btn = form.querySelector('button[type="submit"]');
+      var hidden = form.querySelector('input[name="visible"]');
+      if (!btn || !hidden || btn.disabled) return;
+      btn.disabled = true;
+      fetch(form.action, {
+        method: 'POST',
+        headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': csrf },
+        body: new URLSearchParams({ visible: hidden.value, _csrf: csrf }).toString(),
+        credentials: 'same-origin',
+      })
+        .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+        .then(function (res) {
+          if (!res.ok || !res.j || res.j.ok === false) throw new Error((res.j && res.j.error) || 'failed');
+          var nowVisible = !!res.j.visible_to_crew;
+          paint(btn, nowVisible);
+          hidden.value = nowVisible ? '0' : '1'; // the NEXT click's target state
+          miniToast(nowVisible ? 'Visible to crew.' : 'Hidden from crew.');
+          btn.disabled = false;
+        })
+        .catch(function () {
+          miniToast('Could not change visibility.', false);
+          btn.disabled = false;
+        });
+    });
+  });
 })();
 </script>

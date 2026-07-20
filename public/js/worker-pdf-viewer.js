@@ -161,13 +161,20 @@
     return w;
   }
 
-  // Render one page into its wrapper element. Uses devicePixelRatio (capped
-  // at 2x) for a crisp result without blowing out memory on huge docs.
+  // Render one page into its wrapper element. We oversample well beyond the
+  // CSS display size so the crew can pinch-zoom into a dense TGS / plan and
+  // still read fine text, instead of hitting a blurry raster. The render width
+  // is capped (MAX_CANVAS_W) to bound canvas memory on long multi-page docs.
+  var PDFV_OVERSAMPLE = 2.5;   // render this many px per CSS px before zoom
+  var PDFV_MAX_CANVAS_W = 1800; // hard ceiling on rendered page width (px)
   function renderPage(pdf, n, wrapEl, containerWidth) {
     return pdf.getPage(n).then(function (page) {
       var baseVp = page.getViewport({ scale: 1 });
-      var dpr = Math.min(2, window.devicePixelRatio || 1);
-      var scale = (containerWidth / baseVp.width) * dpr;
+      var dpr = window.devicePixelRatio || 1;
+      var targetW = Math.min(containerWidth * dpr * PDFV_OVERSAMPLE, PDFV_MAX_CANVAS_W);
+      // Never render below the crisp 1:1-at-DPR baseline (small containers).
+      targetW = Math.max(targetW, containerWidth * dpr);
+      var scale = targetW / baseVp.width;
       var vp = page.getViewport({ scale: scale });
       var canvas = document.createElement('canvas');
       canvas.className = 'pdfv-page';

@@ -3495,22 +3495,31 @@ router.post('/:id/documents/:docId/visibility', (req, res) => {
 // Approved plans default visible, others hidden; this pins an explicit choice.
 router.post('/:id/plans/:planId/visibility', (req, res) => {
   const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const booking = db.prepare('SELECT id, job_id FROM bookings WHERE id = ?').get(req.params.id);
-  if (!booking || !booking.job_id) { req.flash('error', 'Booking or linked job not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id)); }
+  if (!booking || !booking.job_id) {
+    if (isJson) return res.status(404).json({ error: 'Booking or linked job not found' });
+    req.flash('error', 'Booking or linked job not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
+  }
   const plan = db.prepare(`
     SELECT id FROM compliance
     WHERE id = @planId AND item_type IN ('traffic_guidance','road_occupancy','tmp_approval')
       AND (job_id = @jobId OR parent_id IN (SELECT id FROM compliance WHERE job_id = @jobId))
   `).get({ planId: req.params.planId, jobId: booking.job_id });
-  if (!plan) { req.flash('error', 'Plan not found on the linked job.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents')); }
+  if (!plan) {
+    if (isJson) return res.status(404).json({ error: 'Plan not found on the linked job' });
+    req.flash('error', 'Plan not found on the linked job.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
+  }
   const visible = (req.body.visible === '1' || req.body.visible === 1 || req.body.visible === true || req.body.visible === 'on');
   try { setPlanVisibility(db, booking.id, plan.id, visible); } catch (e) {
     console.error('[bookings.plans.visibility]', e.message);
+    if (isJson) return res.status(500).json({ error: 'Could not update plan visibility' });
     req.flash('error', 'Could not update plan visibility.');
     return req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
   }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
     details: `Job plan #${plan.id} ${visible ? 'visible to' : 'hidden from'} crew`, req });
+  if (isJson) return res.json({ ok: true, visible_to_crew: visible ? 1 : 0 });
   req.flash('success', visible ? 'Plan visible to crew.' : 'Plan hidden from crew.');
   req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
 });
