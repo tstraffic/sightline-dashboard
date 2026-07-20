@@ -135,7 +135,7 @@ router.post('/', (req, res) => {
   const name = (b.name || '').trim();
   if (!name) {
     req.flash('error', 'Name is required.');
-    return res.redirect('/rate-cards/new');
+    return req.session.save(() => res.redirect('/rate-cards/new'));
   }
 
   const purpose = (b.purpose === 'reference') ? 'reference' : 'quoting';
@@ -170,7 +170,7 @@ router.post('/', (req, res) => {
   });
 
   req.flash('success', `Rate card "${name}" created.`);
-  res.redirect(`/rate-cards/${newId}`);
+  req.session.save(() => res.redirect(`/rate-cards/${newId}`));
 });
 
 // ────────────────────────────────────────────────────────────────────
@@ -185,7 +185,7 @@ router.get('/:id', (req, res, next) => {
   const card = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(id);
   if (!card) {
     req.flash('error', 'Rate card not found.');
-    return res.redirect('/rate-cards');
+    return req.session.save(() => res.redirect('/rate-cards'));
   }
 
   const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
@@ -267,7 +267,7 @@ router.post('/:id/billing-profile', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const db = getDb();
   const card = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(id);
-  if (!card) { req.flash('error', 'Rate card not found.'); return res.redirect('/rate-cards'); }
+  if (!card) { req.flash('error', 'Rate card not found.'); return req.session.save(() => res.redirect('/rate-cards')); }
 
   const b = req.body;
   const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : null; };
@@ -310,7 +310,7 @@ router.post('/:id/billing-profile', (req, res) => {
   } catch (err) {
     req.flash('error', 'Could not save billing profile: ' + err.message);
   }
-  res.redirect('/rate-cards/' + id + '#billing-profile');
+  req.session.save(() => res.redirect('/rate-cards/' + id + '#billing-profile'));
 });
 
 // Save the activity × band matrix. Inputs are named rate_<itemId>_<BAND>;
@@ -319,7 +319,7 @@ router.post('/:id/activity-rates', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const db = getDb();
   const card = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(id);
-  if (!card) { req.flash('error', 'Rate card not found.'); return res.redirect('/rate-cards'); }
+  if (!card) { req.flash('error', 'Rate card not found.'); return req.session.save(() => res.redirect('/rate-cards')); }
   const b = req.body;
   const num = (v) => { const n = parseFloat(v); return isFinite(n) ? n : null; };
 
@@ -366,7 +366,7 @@ router.post('/:id/activity-rates', (req, res) => {
   } catch (err) {
     req.flash('error', 'Could not save activity rates: ' + err.message);
   }
-  res.redirect('/rate-cards/' + id + '#activities');
+  req.session.save(() => res.redirect('/rate-cards/' + id + '#activities'));
 });
 
 // Save the Traffio invoice billing rates panel — upserts the TC-labour
@@ -376,7 +376,7 @@ router.post('/:id/billing-rates', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const db = getDb();
   const card = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(id);
-  if (!card) { req.flash('error', 'Rate card not found.'); return res.redirect('/rate-cards'); }
+  if (!card) { req.flash('error', 'Rate card not found.'); return req.session.save(() => res.redirect('/rate-cards')); }
   try {
     require('../../middleware/invoicing').saveBillingRates(db, id, req.body);
     logActivity({
@@ -388,7 +388,7 @@ router.post('/:id/billing-rates', (req, res) => {
   } catch (err) {
     req.flash('error', 'Could not save billing rates: ' + err.message);
   }
-  res.redirect('/rate-cards/' + id + '#billing-rates');
+  req.session.save(() => res.redirect('/rate-cards/' + id + '#billing-rates'));
 });
 
 // Update card header (name, dates, default, purpose, description, client)
@@ -396,7 +396,7 @@ router.post('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const db = getDb();
   const before = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(id);
-  if (!before) { req.flash('error', 'Rate card not found.'); return res.redirect('/rate-cards'); }
+  if (!before) { req.flash('error', 'Rate card not found.'); return req.session.save(() => res.redirect('/rate-cards')); }
   const b = req.body;
 
   const name = (b.name || '').trim() || before.name;
@@ -430,7 +430,7 @@ router.post('/:id', (req, res) => {
   });
 
   req.flash('success', 'Rate card updated.');
-  res.redirect(`/rate-cards/${id}`);
+  req.session.save(() => res.redirect(`/rate-cards/${id}`));
 });
 
 // Delete card (cascade deletes items + variants + allowances via FK)
@@ -438,7 +438,7 @@ router.post('/:id/delete', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const db = getDb();
   const card = db.prepare('SELECT * FROM rate_cards WHERE id = ?').get(id);
-  if (!card) { req.flash('error', 'Rate card not found.'); return res.redirect('/rate-cards'); }
+  if (!card) { req.flash('error', 'Rate card not found.'); return req.session.save(() => res.redirect('/rate-cards')); }
 
   // Refuse to delete a card that has live quotes referencing it — would
   // null out their rate_card_id and lose the link. User should set
@@ -446,7 +446,7 @@ router.post('/:id/delete', (req, res) => {
   const inUse = db.prepare('SELECT COUNT(*) AS c FROM quotes WHERE rate_card_id = ?').get(id).c;
   if (inUse > 0) {
     req.flash('error', `Cannot delete — ${inUse} quote(s) reference this rate card. Set it to inactive instead.`);
-    return res.redirect(`/rate-cards/${id}`);
+    return req.session.save(() => res.redirect(`/rate-cards/${id}`));
   }
 
   db.prepare('DELETE FROM rate_cards WHERE id = ?').run(id);
@@ -457,7 +457,7 @@ router.post('/:id/delete', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', `Deleted rate card "${card.name}".`);
-  res.redirect('/rate-cards');
+  req.session.save(() => res.redirect('/rate-cards'));
 });
 
 // ────────────────────────────────────────────────────────────────────
@@ -470,13 +470,13 @@ router.post('/:id/items', (req, res) => {
   const cardId = parseInt(req.params.id, 10);
   const db = getDb();
   const card = db.prepare('SELECT id FROM rate_cards WHERE id = ?').get(cardId);
-  if (!card) { req.flash('error', 'Rate card not found.'); return res.redirect('/rate-cards'); }
+  if (!card) { req.flash('error', 'Rate card not found.'); return req.session.save(() => res.redirect('/rate-cards')); }
   const b = req.body;
 
   const category = CATEGORIES.find(c => c.key === b.category)?.key;
-  if (!category) { req.flash('error', 'Invalid category.'); return res.redirect(`/rate-cards/${cardId}`); }
+  if (!category) { req.flash('error', 'Invalid category.'); return req.session.save(() => res.redirect(`/rate-cards/${cardId}`)); }
   const name = (b.name || '').trim();
-  if (!name) { req.flash('error', 'Item name is required.'); return res.redirect(`/rate-cards/${cardId}`); }
+  if (!name) { req.flash('error', 'Item name is required.'); return req.session.save(() => res.redirect(`/rate-cards/${cardId}`)); }
 
   const unit = UNITS.includes(b.unit) ? b.unit : 'per_shift';
   const costMethod = (b.cost_method === 'computed_crew') ? 'computed_crew' : 'fixed';
@@ -517,7 +517,7 @@ router.post('/:id/items', (req, res) => {
   });
 
   req.flash('success', `Added "${name}".`);
-  res.redirect(`/rate-cards/${cardId}#cat-${category}`);
+  req.session.save(() => res.redirect(`/rate-cards/${cardId}#cat-${category}`));
 });
 
 // Update one item (sell rate + cost + flags)
@@ -526,7 +526,7 @@ router.post('/:id/items/:itemId', (req, res) => {
   const itemId = parseInt(req.params.itemId, 10);
   const db = getDb();
   const item = db.prepare('SELECT * FROM rate_card_items WHERE id = ? AND rate_card_id = ?').get(itemId, cardId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/rate-cards/${cardId}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/rate-cards/${cardId}`)); }
   const b = req.body;
 
   const unit = UNITS.includes(b.unit) ? b.unit : item.unit;
@@ -572,7 +572,7 @@ router.post('/:id/items/:itemId', (req, res) => {
   });
 
   req.flash('success', `Updated "${item.name}".`);
-  res.redirect(`/rate-cards/${cardId}#item-${itemId}`);
+  req.session.save(() => res.redirect(`/rate-cards/${cardId}#item-${itemId}`));
 });
 
 // Delete one item (variants cascade via FK)
@@ -581,7 +581,7 @@ router.post('/:id/items/:itemId/delete', (req, res) => {
   const itemId = parseInt(req.params.itemId, 10);
   const db = getDb();
   const item = db.prepare('SELECT * FROM rate_card_items WHERE id = ? AND rate_card_id = ?').get(itemId, cardId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/rate-cards/${cardId}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/rate-cards/${cardId}`)); }
 
   // Refuse if a quote already references this item — would null out
   // historical quote_line_items.rate_card_item_id (still safe because of
@@ -589,7 +589,7 @@ router.post('/:id/items/:itemId/delete', (req, res) => {
   const inUse = db.prepare('SELECT COUNT(*) AS c FROM quote_line_items WHERE rate_card_item_id = ?').get(itemId).c;
   if (inUse > 0) {
     req.flash('error', `Cannot delete — ${inUse} quote line(s) reference this item. Deactivate it on the card instead.`);
-    return res.redirect(`/rate-cards/${cardId}#item-${itemId}`);
+    return req.session.save(() => res.redirect(`/rate-cards/${cardId}#item-${itemId}`));
   }
 
   db.prepare('DELETE FROM rate_card_items WHERE id = ?').run(itemId);
@@ -601,7 +601,7 @@ router.post('/:id/items/:itemId/delete', (req, res) => {
   });
 
   req.flash('success', `Deleted "${item.name}".`);
-  res.redirect(`/rate-cards/${cardId}#cat-${item.category}`);
+  req.session.save(() => res.redirect(`/rate-cards/${cardId}#cat-${item.category}`));
 });
 
 module.exports = router;

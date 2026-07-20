@@ -217,8 +217,6 @@ router.get('/', (req, res) => {
       activity,
       people,
     },
-    flash_success: req.flash('success'),
-    flash_error:   req.flash('error'),
   });
 });
 
@@ -231,7 +229,7 @@ router.post('/tasks', (req, res) => {
   const title = String(b.title || '').trim();
   if (!title) {
     req.flash('error', 'Task title is required.');
-    return res.redirect('/marketing#sec-tasks');
+    return req.session.save(() => res.redirect('/marketing#sec-tasks'));
   }
 
   const priority = VALID_PRIORITY.has(b.priority) ? b.priority : 'med';
@@ -262,7 +260,7 @@ router.post('/tasks', (req, res) => {
   );
 
   req.flash('success', 'Task added.');
-  res.redirect('/marketing#sec-tasks');
+  req.session.save(() => res.redirect('/marketing#sec-tasks'));
 });
 
 // ── POST /marketing/tasks/:id/toggle — flip open/done ────────────────────
@@ -270,7 +268,7 @@ router.post('/tasks/:id/toggle', (req, res) => {
   const db = getDb();
   const user = req.session.user;
   const t = db.prepare('SELECT * FROM marketing_tasks WHERE id = ?').get(req.params.id);
-  if (!t) { req.flash('error', 'Task not found.'); return res.redirect('/marketing#sec-tasks'); }
+  if (!t) { req.flash('error', 'Task not found.'); return req.session.save(() => res.redirect('/marketing#sec-tasks')); }
 
   if (t.status === 'open') {
     db.prepare("UPDATE marketing_tasks SET status = 'done', completed_at = CURRENT_TIMESTAMP WHERE id = ?").run(t.id);
@@ -282,7 +280,7 @@ router.post('/tasks/:id/toggle', (req, res) => {
       `<strong>${escapeHtml(user.full_name || user.username)}</strong> reopened <strong>"${escapeHtml(t.title)}"</strong>.`);
   }
 
-  res.redirect('/marketing#sec-tasks');
+  req.session.save(() => res.redirect('/marketing#sec-tasks'));
 });
 
 // ── POST /marketing/tasks/:id/delete ─────────────────────────────────────
@@ -290,14 +288,14 @@ router.post('/tasks/:id/delete', (req, res) => {
   const db = getDb();
   const user = req.session.user;
   const t = db.prepare('SELECT * FROM marketing_tasks WHERE id = ?').get(req.params.id);
-  if (!t) { req.flash('error', 'Task not found.'); return res.redirect('/marketing#sec-tasks'); }
+  if (!t) { req.flash('error', 'Task not found.'); return req.session.save(() => res.redirect('/marketing#sec-tasks')); }
 
   db.prepare('DELETE FROM marketing_tasks WHERE id = ?').run(t.id);
   logActivity(db, user, 'deleted', 'task', t.id,
     `<strong>${escapeHtml(user.full_name || user.username)}</strong> deleted task <strong>"${escapeHtml(t.title)}"</strong>.`);
 
   req.flash('success', 'Task deleted.');
-  res.redirect('/marketing#sec-tasks');
+  req.session.save(() => res.redirect('/marketing#sec-tasks'));
 });
 
 // ── POST /marketing/approvals/:id/decide ─────────────────────────────────
@@ -305,12 +303,12 @@ router.post('/approvals/:id/decide', (req, res) => {
   const db = getDb();
   const user = req.session.user;
   const a = db.prepare('SELECT * FROM marketing_approvals WHERE id = ?').get(req.params.id);
-  if (!a) { req.flash('error', 'Approval not found.'); return res.redirect('/marketing#sec-tasks'); }
+  if (!a) { req.flash('error', 'Approval not found.'); return req.session.save(() => res.redirect('/marketing#sec-tasks')); }
 
   const decision = String(req.body.decision || '').toLowerCase();
   if (!VALID_DECISION.has(decision)) {
     req.flash('error', 'Invalid decision.');
-    return res.redirect('/marketing#sec-tasks');
+    return req.session.save(() => res.redirect('/marketing#sec-tasks'));
   }
 
   const note = String(req.body.note || '').trim() || null;
@@ -326,7 +324,7 @@ router.post('/approvals/:id/decide', (req, res) => {
     `<strong>${escapeHtml(user.full_name || user.username)}</strong> ${verb} <strong>${escapeHtml(a.type)}</strong> — ${escapeHtml(a.title)}${note ? ` <em>"${escapeHtml(note)}"</em>` : ''}.`);
 
   req.flash('success', `Approval ${verb}.`);
-  res.redirect('/marketing#sec-tasks');
+  req.session.save(() => res.redirect('/marketing#sec-tasks'));
 });
 
 // ── POST /marketing/quick-ask — creates a task from the quick-ask form ──
@@ -338,7 +336,7 @@ router.post('/quick-ask', (req, res) => {
   const body = String(b.body || '').trim();
   if (!body) {
     req.flash('error', 'Ask cannot be empty.');
-    return res.redirect('/marketing#sec-tasks');
+    return req.session.save(() => res.redirect('/marketing#sec-tasks'));
   }
 
   // Title = first 80 chars of body
@@ -367,7 +365,7 @@ router.post('/quick-ask', (req, res) => {
     `<strong>${escapeHtml(user.full_name || user.username)}</strong> sent a quick ask to <strong>${escapeHtml(assigneeLabel)}</strong>: <em>"${escapeHtml(title)}"</em>`);
 
   req.flash('success', `Ask sent to ${assigneeLabel}.`);
-  res.redirect('/marketing#sec-tasks');
+  req.session.save(() => res.redirect('/marketing#sec-tasks'));
 });
 
 module.exports = router;

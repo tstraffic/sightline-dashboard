@@ -578,13 +578,13 @@ router.get('/dm/:userId', (req, res) => {
 
   if (otherUserId === currentUserId) {
     req.flash('error', 'Cannot message yourself.');
-    return res.redirect('/chat');
+    return req.session.save(() => res.redirect('/chat'));
   }
 
   const otherUser = db.prepare('SELECT id, full_name, role FROM users WHERE id = ? AND active = 1').get(otherUserId);
   if (!otherUser) {
     req.flash('error', 'User not found.');
-    return res.redirect('/chat');
+    return req.session.save(() => res.redirect('/chat'));
   }
 
   const chatThreadId = findOrCreateDM(currentUserId, otherUserId);
@@ -610,7 +610,7 @@ router.get('/channel/:id', requireThreadMember, (req, res) => {
   const thread = db.prepare('SELECT * FROM chat_threads WHERE id = ? AND thread_type IN (?, ?)').get(req.params.id, 'channel', 'announcement');
   if (!thread) {
     req.flash('error', 'Channel not found.');
-    return res.redirect('/chat');
+    return req.session.save(() => res.redirect('/chat'));
   }
 
   const memberCount = db.prepare('SELECT COUNT(*) as c FROM chat_thread_members WHERE thread_id = ?').get(thread.id).c;
@@ -661,13 +661,13 @@ router.post('/new', (req, res) => {
 
   // DM creation — any user can do this
   if (thread_type === 'dm') {
-    if (!dm_user_id) { req.flash('error', 'Please select a user.'); return res.redirect('/chat/new'); }
+    if (!dm_user_id) { req.flash('error', 'Please select a user.'); return req.session.save(() => res.redirect('/chat/new')); }
     const threadId = findOrCreateDM(req.session.user.id, parseInt(dm_user_id));
     if (initial_message && initial_message.trim()) {
       db.prepare('INSERT INTO messages (thread_id, sender_id, body, message_type) VALUES (?, ?, ?, ?)').run(threadId, req.session.user.id, initial_message.trim(), 'text');
       db.prepare('UPDATE chat_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(threadId);
     }
-    return res.redirect(`/chat/dm/${dm_user_id}`);
+    return req.session.save(() => res.redirect(`/chat/dm/${dm_user_id}`));
   }
 
   // Group chat creation — any user can do this
@@ -677,8 +677,8 @@ router.post('/new', (req, res) => {
     if (!Array.isArray(memberIds)) memberIds = [memberIds];
     memberIds = memberIds.map(Number).filter(Boolean);
 
-    if (!groupName) { req.flash('error', 'Please enter a group name.'); return res.redirect('/chat/new'); }
-    if (memberIds.length === 0) { req.flash('error', 'Please select at least one member.'); return res.redirect('/chat/new'); }
+    if (!groupName) { req.flash('error', 'Please enter a group name.'); return req.session.save(() => res.redirect('/chat/new')); }
+    if (memberIds.length === 0) { req.flash('error', 'Please select at least one member.'); return req.session.save(() => res.redirect('/chat/new')); }
 
     // Always include the creator
     if (!memberIds.includes(req.session.user.id)) memberIds.push(req.session.user.id);
@@ -700,7 +700,7 @@ router.post('/new', (req, res) => {
     db.prepare('UPDATE chat_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(threadId);
 
     req.flash('success', `Group "${groupName}" created.`);
-    return res.redirect(`/chat/channel/${threadId}`);
+    return req.session.save(() => res.redirect(`/chat/channel/${threadId}`));
   }
 
   // Channel creation — any user can do this
@@ -710,14 +710,14 @@ router.post('/new', (req, res) => {
     if (!Array.isArray(memberIds)) memberIds = [memberIds];
     memberIds = memberIds.map(Number).filter(Boolean);
 
-    if (!channelName) { req.flash('error', 'Please enter a channel name.'); return res.redirect('/chat/new'); }
+    if (!channelName) { req.flash('error', 'Please enter a channel name.'); return req.session.save(() => res.redirect('/chat/new')); }
 
     // Generate slug from name
     const slug = channelName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
     // Check for duplicate slug
     const existing = db.prepare('SELECT id FROM chat_threads WHERE channel_slug = ?').get(slug);
-    if (existing) { req.flash('error', 'A channel with that name already exists.'); return res.redirect('/chat/new'); }
+    if (existing) { req.flash('error', 'A channel with that name already exists.'); return req.session.save(() => res.redirect('/chat/new')); }
 
     // Always include the creator
     if (!memberIds.includes(req.session.user.id)) memberIds.push(req.session.user.id);
@@ -739,24 +739,24 @@ router.post('/new', (req, res) => {
     db.prepare('UPDATE chat_threads SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(threadId);
 
     req.flash('success', `Channel "#${channelName}" created.`);
-    return res.redirect(`/chat/channel/${threadId}`);
+    return req.session.save(() => res.redirect(`/chat/channel/${threadId}`));
   }
 
   // Operational threads — admin/operations only
   if (!['admin', 'operations'].includes(req.session.user.role)) {
     req.flash('error', 'You do not have permission to start operational threads.');
-    return res.redirect('/chat');
+    return req.session.save(() => res.redirect('/chat'));
   }
 
   if (!entity_id || !thread_type) {
     req.flash('error', 'Please select a thread type and item.');
-    return res.redirect('/chat/new');
+    return req.session.save(() => res.redirect('/chat/new'));
   }
 
   let title, redirectUrl;
   if (thread_type === 'job') {
     const job = db.prepare('SELECT id, job_number, project_manager_id, ops_supervisor_id, planning_owner_id, marketing_owner_id, accounts_owner_id FROM jobs WHERE id = ?').get(entity_id);
-    if (!job) { req.flash('error', 'Job not found.'); return res.redirect('/chat/new'); }
+    if (!job) { req.flash('error', 'Job not found.'); return req.session.save(() => res.redirect('/chat/new')); }
     title = `Job ${job.job_number}`;
     redirectUrl = `/jobs/${job.id}#chat`;
     const threadId = ensureThreadForEntity('job', job.id, title, req.session.user.id);
@@ -769,7 +769,7 @@ router.post('/new', (req, res) => {
     }
   } else if (thread_type === 'incident') {
     const incident = db.prepare('SELECT i.id, i.incident_number, i.reported_by_id, i.job_id, j.project_manager_id, j.ops_supervisor_id FROM incidents i JOIN jobs j ON i.job_id = j.id WHERE i.id = ?').get(entity_id);
-    if (!incident) { req.flash('error', 'Incident not found.'); return res.redirect('/chat/new'); }
+    if (!incident) { req.flash('error', 'Incident not found.'); return req.session.save(() => res.redirect('/chat/new')); }
     title = `Incident ${incident.incident_number}`;
     redirectUrl = `/incidents/${incident.id}#chat`;
     const threadId = ensureThreadForEntity('incident', incident.id, title, req.session.user.id);
@@ -782,11 +782,11 @@ router.post('/new', (req, res) => {
     }
   } else {
     req.flash('error', 'Invalid thread type.');
-    return res.redirect('/chat/new');
+    return req.session.save(() => res.redirect('/chat/new'));
   }
 
   req.flash('success', `Thread created for ${title}.`);
-  res.redirect(redirectUrl);
+  req.session.save(() => res.redirect(redirectUrl));
 });
 
 // ============================================

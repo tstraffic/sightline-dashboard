@@ -237,7 +237,7 @@ router.get('/api/suppliers/:supplierId', (req, res) => {
 router.get('/deleted', (req, res) => {
   if (!isAdminRole(req.session.user)) {
     req.flash('error', 'Only admin/management can view deleted dockets.');
-    return res.redirect('/equipment/hire-dockets');
+    return req.session.save(() => res.redirect('/equipment/hire-dockets'));
   }
   const db = getDb();
   const dockets = db.prepare(`
@@ -299,7 +299,7 @@ router.post('/', (req, res) => {
     entityId: result.lastInsertRowid, entityLabel: docketNumber, ip: req.ip
   });
   req.flash('success', `Hire docket ${docketNumber} created.`);
-  res.redirect(`/equipment/hire-dockets/${result.lastInsertRowid}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${result.lastInsertRowid}`));
 });
 
 // ==================================================
@@ -308,7 +308,7 @@ router.post('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
 
   const items = db.prepare(`
     SELECT * FROM hire_docket_items WHERE docket_id = ? ORDER BY position ASC, id ASC
@@ -375,7 +375,7 @@ router.post('/:id', (req, res) => {
   const db = getDb();
   const b = req.body;
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
 
   const status = STATUSES.includes(b.status) ? b.status : docket.status;
   const reconAllowed = isAdminRole(req.session.user);
@@ -444,7 +444,7 @@ router.post('/:id', (req, res) => {
     entityId: docket.id, entityLabel: docket.docket_number, ip: req.ip
   });
   req.flash('success', 'Docket saved.');
-  res.redirect(`/equipment/hire-dockets/${docket.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
 });
 
 // ==================================================
@@ -453,7 +453,7 @@ router.post('/:id', (req, res) => {
 router.post('/:id/delete', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   db.prepare('UPDATE hire_dockets SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL')
     .run(req.session.user.id, docket.id);
   logActivity({
@@ -461,36 +461,36 @@ router.post('/:id/delete', (req, res) => {
     entityId: docket.id, entityLabel: docket.docket_number, ip: req.ip
   });
   req.flash('success', `Hire docket ${docket.docket_number} moved to Deleted.`);
-  res.redirect('/equipment/hire-dockets');
+  req.session.save(() => res.redirect('/equipment/hire-dockets'));
 });
 
 router.post('/:id/restore', (req, res) => {
   if (!isAdminRole(req.session.user)) {
     req.flash('error', 'Only admin/management can restore dockets.');
-    return res.redirect('/equipment/hire-dockets/deleted');
+    return req.session.save(() => res.redirect('/equipment/hire-dockets/deleted'));
   }
   const db = getDb();
   const docket = loadDocket(db, req.params.id, { includeDeleted: true });
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets/deleted'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets/deleted')); }
   db.prepare('UPDATE hire_dockets SET deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(docket.id);
   logActivity({
     user: req.session.user, action: 'update', entityType: 'hire_docket',
     entityId: docket.id, entityLabel: docket.docket_number + ' (restored)', ip: req.ip
   });
   req.flash('success', `Hire docket ${docket.docket_number} restored.`);
-  res.redirect(`/equipment/hire-dockets/${docket.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
 });
 
 router.post('/:id/purge', (req, res) => {
   if (!isAdminRole(req.session.user)) {
     req.flash('error', 'Only admin/management can permanently delete dockets.');
-    return res.redirect('/equipment/hire-dockets/deleted');
+    return req.session.save(() => res.redirect('/equipment/hire-dockets/deleted'));
   }
   const db = getDb();
   const docket = loadDocket(db, req.params.id, { includeDeleted: true });
   if (!docket || !docket.deleted_at) {
     req.flash('error', 'Deleted docket not found.');
-    return res.redirect('/equipment/hire-dockets/deleted');
+    return req.session.save(() => res.redirect('/equipment/hire-dockets/deleted'));
   }
   // Best-effort: remove the upload folder.
   try {
@@ -503,7 +503,7 @@ router.post('/:id/purge', (req, res) => {
     entityId: docket.id, entityLabel: docket.docket_number + ' (purged)', ip: req.ip
   });
   req.flash('success', `Hire docket ${docket.docket_number} permanently deleted.`);
-  res.redirect('/equipment/hire-dockets/deleted');
+  req.session.save(() => res.redirect('/equipment/hire-dockets/deleted'));
 });
 
 // ==================================================
@@ -512,7 +512,7 @@ router.post('/:id/purge', (req, res) => {
 router.post('/:id/items', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
 
   const b = req.body;
   const nextPos = (db.prepare('SELECT MAX(position) as m FROM hire_docket_items WHERE docket_id = ?').get(docket.id).m || 0) + 1;
@@ -534,15 +534,15 @@ router.post('/:id/items', (req, res) => {
   );
 
   req.flash('success', 'Item added.');
-  res.redirect(`/equipment/hire-dockets/${docket.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
 });
 
 router.post('/:id/items/:itemId', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const item = loadItem(db, docket.id, req.params.itemId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/equipment/hire-dockets/${docket.id}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`)); }
 
   const b = req.body;
   const wantsPickupDamage = b.pickup_damage_observed === '1' || b.pickup_damage_observed === 1;
@@ -554,14 +554,14 @@ router.post('/:id/items/:itemId', (req, res) => {
     const count = db.prepare("SELECT COUNT(*) as c FROM hire_docket_photos WHERE item_id = ? AND phase = 'pickup'").get(item.id).c;
     if (count === 0) {
       req.flash('error', 'Upload at least one pick-up photo before saving with damage observed.');
-      return res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+      return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
     }
   }
   if (wantsDropoffDamage) {
     const count = db.prepare("SELECT COUNT(*) as c FROM hire_docket_photos WHERE item_id = ? AND phase = 'dropoff'").get(item.id).c;
     if (count === 0) {
       req.flash('error', 'Upload at least one drop-off photo before saving with damage observed.');
-      return res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+      return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
     }
   }
 
@@ -627,13 +627,13 @@ router.post('/:id/items/:itemId', (req, res) => {
     entityId: docket.id, entityLabel: `${docket.docket_number} item ${item.id}`, ip: req.ip
   });
   req.flash('success', 'Item saved.');
-  res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
 });
 
 router.post('/:id/items/:itemId/delete', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   db.prepare('DELETE FROM hire_docket_items WHERE id = ? AND docket_id = ?').run(req.params.itemId, docket.id);
   // Best-effort: remove item's photo folder
   try {
@@ -641,7 +641,7 @@ router.post('/:id/items/:itemId/delete', (req, res) => {
     if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
   } catch (e) { /* ignore */ }
   req.flash('success', 'Item removed.');
-  res.redirect(`/equipment/hire-dockets/${docket.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
 });
 
 // Duplicate an item — clones type + accessories + summary notes so hiring
@@ -650,9 +650,9 @@ router.post('/:id/items/:itemId/delete', (req, res) => {
 router.post('/:id/items/:itemId/duplicate', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const src = loadItem(db, docket.id, req.params.itemId);
-  if (!src) { req.flash('error', 'Item not found.'); return res.redirect(`/equipment/hire-dockets/${docket.id}`); }
+  if (!src) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`)); }
 
   const nextPos = (db.prepare('SELECT MAX(position) as m FROM hire_docket_items WHERE docket_id = ?').get(docket.id).m || 0) + 1;
   const result = db.prepare(`
@@ -676,7 +676,7 @@ router.post('/:id/items/:itemId/duplicate', (req, res) => {
     entityId: docket.id, entityLabel: `${docket.docket_number} item ${newItemId} (duplicated from ${src.id})`, ip: req.ip
   });
   req.flash('success', 'Item duplicated — fill in the new rego / asset ID.');
-  res.redirect(`/equipment/hire-dockets/${docket.id}#item-${newItemId}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${newItemId}`));
 });
 
 // ==================================================
@@ -687,13 +687,13 @@ router.post('/:id/items/:itemId/accessories/load-preset', (req, res) => {
   // as an accessory id and route to the update handler.
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const item = loadItem(db, docket.id, req.params.itemId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/equipment/hire-dockets/${docket.id}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`)); }
   const type = getEquipmentType(item.equipment_type);
   if (!type || !type.accessoryPresets || type.accessoryPresets.length === 0) {
     req.flash('error', 'No preset for this equipment type.');
-    return res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+    return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
   }
   const existing = new Set(db.prepare('SELECT item_name FROM hire_docket_accessories WHERE item_id = ?').all(item.id).map(r => r.item_name.toLowerCase()));
   const ins = db.prepare('INSERT INTO hire_docket_accessories (item_id, item_name, qty_out) VALUES (?, ?, 1)');
@@ -702,51 +702,51 @@ router.post('/:id/items/:itemId/accessories/load-preset', (req, res) => {
     if (!existing.has(name.toLowerCase())) { ins.run(item.id, name); added++; }
   }
   req.flash('success', `Loaded ${added} preset accessor${added === 1 ? 'y' : 'ies'}.`);
-  res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
 });
 
 router.post('/:id/items/:itemId/accessories', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const item = loadItem(db, docket.id, req.params.itemId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/equipment/hire-dockets/${docket.id}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`)); }
   const b = req.body;
   const name = trimOr(b.item_name);
   if (!name) {
     req.flash('error', 'Accessory name is required.');
-    return res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+    return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
   }
   db.prepare(`
     INSERT INTO hire_docket_accessories (item_id, item_name, qty_out, qty_back, condition, missing_damaged, notes)
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(item.id, name, int(b.qty_out) || 0, int(b.qty_back) || 0, trimOr(b.condition), bool(b.missing_damaged === '1'), trimOr(b.notes));
-  res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
 });
 
 router.post('/:id/items/:itemId/accessories/:accId', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const item = loadItem(db, docket.id, req.params.itemId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/equipment/hire-dockets/${docket.id}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`)); }
   const b = req.body;
   db.prepare(`
     UPDATE hire_docket_accessories SET
       item_name = ?, qty_out = ?, qty_back = ?, condition = ?, missing_damaged = ?, notes = ?
     WHERE id = ? AND item_id = ?
   `).run(trimOr(b.item_name), int(b.qty_out) || 0, int(b.qty_back) || 0, trimOr(b.condition), bool(b.missing_damaged === '1'), trimOr(b.notes), req.params.accId, item.id);
-  res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
 });
 
 router.post('/:id/items/:itemId/accessories/:accId/delete', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const item = loadItem(db, docket.id, req.params.itemId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/equipment/hire-dockets/${docket.id}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`)); }
   db.prepare('DELETE FROM hire_docket_accessories WHERE id = ? AND item_id = ?').run(req.params.accId, item.id);
-  res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
 });
 
 // ==================================================
@@ -755,9 +755,9 @@ router.post('/:id/items/:itemId/accessories/:accId/delete', (req, res) => {
 router.post('/:id/items/:itemId/photos', photoUpload.array('photos', 10), (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const item = loadItem(db, docket.id, req.params.itemId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/equipment/hire-dockets/${docket.id}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`)); }
   const phase = req.body.phase === 'dropoff' ? 'dropoff' : 'pickup';
   const checklistKey = trimOr(req.body.checklist_key);
 
@@ -769,15 +769,15 @@ router.post('/:id/items/:itemId/photos', photoUpload.array('photos', 10), (req, 
     ins.run(item.id, phase, checklistKey, f.filename, f.originalname, f.mimetype);
   });
   req.flash('success', `${(req.files || []).length} photo(s) uploaded.`);
-  res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
 });
 
 router.post('/:id/items/:itemId/photos/:photoId/delete', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const item = loadItem(db, docket.id, req.params.itemId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/equipment/hire-dockets/${docket.id}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`)); }
   const photo = db.prepare('SELECT * FROM hire_docket_photos WHERE id = ? AND item_id = ?').get(req.params.photoId, item.id);
   if (photo) {
     try {
@@ -786,7 +786,7 @@ router.post('/:id/items/:itemId/photos/:photoId/delete', (req, res) => {
     } catch (e) { /* ignore */ }
     db.prepare('DELETE FROM hire_docket_photos WHERE id = ?').run(photo.id);
   }
-  res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
 });
 
 // Serve a photo (auth-gated; does NOT expose /data/uploads publicly).
@@ -811,7 +811,7 @@ router.get('/:id/photos/:photoId', (req, res) => {
 router.post('/:id/attachments', attachmentUpload.array('files', 10), (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const category = ATTACHMENT_CATEGORY_KEYS.includes(req.body.category) ? req.body.category : 'other';
 
   const ins = db.prepare(`
@@ -822,13 +822,13 @@ router.post('/:id/attachments', attachmentUpload.array('files', 10), (req, res) 
     ins.run(docket.id, category, f.filename, f.originalname, f.mimetype, f.size, req.session.user.id);
   });
   req.flash('success', `${(req.files || []).length} file(s) attached.`);
-  res.redirect(`/equipment/hire-dockets/${docket.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
 });
 
 router.post('/:id/attachments/:attId/delete', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const att = db.prepare('SELECT * FROM hire_docket_attachments WHERE id = ? AND docket_id = ?').get(req.params.attId, docket.id);
   if (att) {
     try {
@@ -837,7 +837,7 @@ router.post('/:id/attachments/:attId/delete', (req, res) => {
     } catch (e) { /* ignore */ }
     db.prepare('DELETE FROM hire_docket_attachments WHERE id = ?').run(att.id);
   }
-  res.redirect(`/equipment/hire-dockets/${docket.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
 });
 
 router.get('/:id/attachments/:attId', (req, res) => {
@@ -861,7 +861,7 @@ router.get('/:id/attachments/:attId', (req, res) => {
 router.post('/:id/save-supplier', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   // Prefer form values from the current request (so clicking Save Supplier
   // captures whatever the user just typed into the supplier fields). Fall
   // back to the stored docket values when the field wasn't posted — that way
@@ -874,7 +874,7 @@ router.post('/:id/save-supplier', (req, res) => {
   const name = pick('supplier_name');
   if (!name) {
     req.flash('error', 'Supplier name is blank — fill it in on the docket first.');
-    return res.redirect(`/equipment/hire-dockets/${docket.id}`);
+    return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
   }
   let existing = null;
   try {
@@ -916,7 +916,7 @@ router.post('/:id/save-supplier', (req, res) => {
   } catch (e) {
     req.flash('error', 'Could not save supplier profile: ' + e.message);
   }
-  res.redirect(`/equipment/hire-dockets/${docket.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
 });
 
 // ==================================================
@@ -937,17 +937,17 @@ function writeSignaturePng(dest, dataUrl) {
 router.post('/:id/signature', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const slot = req.body.slot;
   if (!DOCKET_SIGNATURE_SLOTS.has(slot)) {
     req.flash('error', 'Unknown signature slot.');
-    return res.redirect(`/equipment/hire-dockets/${docket.id}`);
+    return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
   }
   const filename = `${slot}-${Date.now()}.png`;
   const dest = path.join(docketUploadRoot(docket.id), 'signatures', filename);
   if (!writeSignaturePng(dest, req.body.signature_data)) {
     req.flash('error', 'Signature image rejected (must be a PNG under 500 KB).');
-    return res.redirect(`/equipment/hire-dockets/${docket.id}`);
+    return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
   }
   db.prepare(`UPDATE hire_dockets SET ${slot}_signature_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(filename, docket.id);
   logActivity({
@@ -955,29 +955,29 @@ router.post('/:id/signature', (req, res) => {
     entityId: docket.id, entityLabel: `${docket.docket_number} signature:${slot}`, ip: req.ip
   });
   req.flash('success', 'Signature captured.');
-  res.redirect(`/equipment/hire-dockets/${docket.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`));
 });
 
 router.post('/:id/items/:itemId/signature', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Hire docket not found.'); return res.redirect('/equipment/hire-dockets'); }
+  if (!docket) { req.flash('error', 'Hire docket not found.'); return req.session.save(() => res.redirect('/equipment/hire-dockets')); }
   const item = loadItem(db, docket.id, req.params.itemId);
-  if (!item) { req.flash('error', 'Item not found.'); return res.redirect(`/equipment/hire-dockets/${docket.id}`); }
+  if (!item) { req.flash('error', 'Item not found.'); return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}`)); }
   const phase = req.body.slot;
   if (!ITEM_SIGNATURE_SLOTS.has(phase)) {
     req.flash('error', 'Unknown signature slot.');
-    return res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+    return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
   }
   const filename = `item${item.id}-${phase}-${Date.now()}.png`;
   const dest = path.join(docketUploadRoot(docket.id), 'signatures', filename);
   if (!writeSignaturePng(dest, req.body.signature_data)) {
     req.flash('error', 'Signature image rejected (must be a PNG under 500 KB).');
-    return res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+    return req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
   }
   db.prepare(`UPDATE hire_docket_items SET ${phase}_signoff_signature_path = ?, ${phase}_signoff_at = CURRENT_TIMESTAMP WHERE id = ?`).run(filename, item.id);
   req.flash('success', 'Signature captured.');
-  res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`);
+  req.session.save(() => res.redirect(`/equipment/hire-dockets/${docket.id}#item-${item.id}`));
 });
 
 router.get('/:id/signature/:slot', (req, res) => {

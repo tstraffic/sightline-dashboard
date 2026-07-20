@@ -519,13 +519,13 @@ router.post('/activities', (req, res) => {
     // Redirect back to referrer if available, otherwise activities list
     const referer = req.get('Referer') || '';
     if (referer.includes('/crm/')) {
-      return res.redirect(referer);
+      return req.session.save(() => res.redirect(referer));
     }
-    res.redirect('/crm/activities');
+    req.session.save(() => res.redirect('/crm/activities'));
   } catch (err) {
     console.error('Create CRM Activity error:', err);
     req.flash('error', 'Failed to log activity: ' + err.message);
-    res.redirect('/crm/activities/new');
+    req.session.save(() => res.redirect('/crm/activities/new'));
   }
 });
 
@@ -552,14 +552,14 @@ router.post('/activities/:id/complete', (req, res) => {
     }
 
     req.flash('success', 'Activity marked as complete.');
-    res.redirect('back');
+    req.session.save(() => res.redirect('back'));
   } catch (err) {
     console.error('Complete CRM Activity error:', err);
     if (req.xhr || req.headers.accept?.includes('application/json')) {
       return res.status(500).json({ success: false, error: err.message });
     }
     req.flash('error', 'Failed to complete activity: ' + err.message);
-    res.redirect('back');
+    req.session.save(() => res.redirect('back'));
   }
 });
 
@@ -579,7 +579,7 @@ router.post('/activities/:id/create-task', (req, res) => {
 
     if (!activity) {
       req.flash('error', 'Activity not found.');
-      return res.redirect('/crm/activities');
+      return req.session.save(() => res.redirect('/crm/activities'));
     }
 
     // Determine job_id: use activity's job_id, or find first active job for client
@@ -597,7 +597,7 @@ router.post('/activities/:id/create-task', (req, res) => {
 
     if (!jobId) {
       req.flash('error', 'Cannot create task: no linked job found. Please associate a job with the client first.');
-      return res.redirect('/crm/activities');
+      return req.session.save(() => res.redirect('/crm/activities'));
     }
 
     // Build task details
@@ -637,11 +637,11 @@ router.post('/activities/:id/create-task', (req, res) => {
     });
 
     req.flash('success', `Task "${taskTitle}" created successfully.`);
-    res.redirect('/tasks?tab=not_started');
+    req.session.save(() => res.redirect('/tasks?tab=not_started'));
   } catch (err) {
     console.error('Create Task from Activity error:', err);
     req.flash('error', 'Failed to create task: ' + err.message);
-    res.redirect('/crm/activities');
+    req.session.save(() => res.redirect('/crm/activities'));
   }
 });
 
@@ -997,7 +997,7 @@ router.post('/meetings', (req, res, next) => {
     logActivity(req, { action: 'create', entity: 'crm_meeting', entityId: result.lastInsertRowid, entityLabel: title });
 
     req.flash('success', 'Meeting scheduled.');
-    res.redirect('/crm/meetings');
+    req.session.save(() => res.redirect('/crm/meetings'));
   } catch (err) {
     console.error('Create meeting error:', err);
     next(err);
@@ -1011,7 +1011,7 @@ router.get('/meetings/:id/edit', (req, res, next) => {
   try {
     const db = getDb();
     const meeting = db.prepare('SELECT * FROM crm_meetings WHERE id = ?').get(req.params.id);
-    if (!meeting) { req.flash('error', 'Meeting not found.'); return res.redirect('/crm/meetings'); }
+    if (!meeting) { req.flash('error', 'Meeting not found.'); return req.session.save(() => res.redirect('/crm/meetings')); }
 
     const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
     const opportunities = db.prepare("SELECT id, opportunity_number, title, client_id FROM opportunities WHERE status = 'open' ORDER BY title").all();
@@ -1058,7 +1058,7 @@ router.post('/meetings/:id', (req, res, next) => {
     logActivity(req, { action: 'update', entity: 'crm_meeting', entityId: req.params.id, entityLabel: title });
 
     req.flash('success', 'Meeting updated.');
-    res.redirect('/crm/meetings');
+    req.session.save(() => res.redirect('/crm/meetings'));
   } catch (err) {
     console.error('Update meeting error:', err);
     next(err);

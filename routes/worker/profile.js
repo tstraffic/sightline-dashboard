@@ -116,8 +116,6 @@ router.get('/profile', (req, res) => {
     employee,
     contacts,
     kudosSummary,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
@@ -133,7 +131,7 @@ router.post('/profile', (req, res) => {
   if (Object.keys(errors).length > 0) {
     if (wantsJson(req)) return res.status(400).json({ ok: false, errors });
     req.flash('error', Object.values(errors).join(' '));
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const { member, employee } = loadSelf(worker);
@@ -170,7 +168,7 @@ router.post('/profile', (req, res) => {
 
   if (wantsJson(req)) return res.json({ ok: true });
   req.flash('success', 'Profile updated.');
-  res.redirect('/w/profile');
+  req.session.save(() => res.redirect('/w/profile'));
 });
 
 // ============================================
@@ -181,12 +179,12 @@ router.post('/profile/photo', (req, res) => {
     if (err) {
       if (wantsJson(req)) return res.status(400).json({ ok: false, error: err.message });
       req.flash('error', err.message);
-      return res.redirect('/w/profile');
+      return req.session.save(() => res.redirect('/w/profile'));
     }
     if (!req.file) {
       if (wantsJson(req)) return res.status(400).json({ ok: false, error: 'No file uploaded' });
       req.flash('error', 'No file uploaded.');
-      return res.redirect('/w/profile');
+      return req.session.save(() => res.redirect('/w/profile'));
     }
 
     const db = getDb();
@@ -215,7 +213,7 @@ router.post('/profile/photo', (req, res) => {
 
     if (wantsJson(req)) return res.json({ ok: true, url: publicUrl });
     req.flash('success', 'Photo updated.');
-    res.redirect('/w/profile');
+    req.session.save(() => res.redirect('/w/profile'));
   });
 });
 
@@ -229,25 +227,25 @@ router.post('/profile/pin', (req, res) => {
 
   if (!current_pin || !new_pin || !confirm_pin) {
     req.flash('error', 'All PIN fields are required.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
   if (new_pin !== confirm_pin) {
     req.flash('error', 'New PINs do not match.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
   if (!PIN_RE.test(new_pin)) {
     req.flash('error', 'PIN must be 4–6 digits.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
   if (isSequentialPin(new_pin)) {
     req.flash('error', 'PIN cannot be sequential or a repeating pattern (e.g. 1234, 0000).');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const member = db.prepare('SELECT pin_hash FROM crew_members WHERE id = ?').get(worker.id);
   if (!member || !member.pin_hash || !bcrypt.compareSync(current_pin, member.pin_hash)) {
     req.flash('error', 'Current PIN is incorrect.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const newHash = bcrypt.hashSync(new_pin, 12);
@@ -262,7 +260,7 @@ router.post('/profile/pin', (req, res) => {
   });
 
   req.flash('success', 'PIN changed successfully.');
-  res.redirect('/w/profile');
+  req.session.save(() => res.redirect('/w/profile'));
 });
 
 // ============================================
@@ -274,7 +272,7 @@ router.post('/profile/contacts', (req, res) => {
   const { employee } = loadSelf(worker);
   if (!employee) {
     req.flash('error', 'Profile not linked to an employee record. Contact your supervisor.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const name = (req.body.name || '').trim();
@@ -285,15 +283,15 @@ router.post('/profile/contacts', (req, res) => {
 
   if (!name || !phone) {
     req.flash('error', 'Name and phone are required for emergency contacts.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
   if (!AU_PHONE_RE.test(phone)) {
     req.flash('error', 'Primary contact phone must be a valid Australian number.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
   if (alt_phone && !AU_PHONE_RE.test(alt_phone)) {
     req.flash('error', 'Alternate phone must be a valid Australian number.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const tx = db.transaction(() => {
@@ -320,7 +318,7 @@ router.post('/profile/contacts', (req, res) => {
   });
 
   req.flash('success', 'Emergency contact added.');
-  res.redirect('/w/profile');
+  req.session.save(() => res.redirect('/w/profile'));
 });
 
 // ============================================
@@ -332,14 +330,14 @@ router.post('/profile/contacts/:id', (req, res) => {
   const { employee } = loadSelf(worker);
   if (!employee) {
     req.flash('error', 'Profile not linked.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const contactId = parseInt(req.params.id, 10);
   const existing = db.prepare('SELECT * FROM emergency_contacts WHERE id = ? AND employee_id = ?').get(contactId, employee.id);
   if (!existing) {
     req.flash('error', 'Contact not found.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const name = (req.body.name || '').trim();
@@ -350,15 +348,15 @@ router.post('/profile/contacts/:id', (req, res) => {
 
   if (!name || !phone) {
     req.flash('error', 'Name and phone are required.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
   if (!AU_PHONE_RE.test(phone)) {
     req.flash('error', 'Primary contact phone must be a valid Australian number.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
   if (alt_phone && !AU_PHONE_RE.test(alt_phone)) {
     req.flash('error', 'Alternate phone must be a valid Australian number.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const tx = db.transaction(() => {
@@ -388,7 +386,7 @@ router.post('/profile/contacts/:id', (req, res) => {
   });
 
   req.flash('success', 'Emergency contact updated.');
-  res.redirect('/w/profile');
+  req.session.save(() => res.redirect('/w/profile'));
 });
 
 // ============================================
@@ -400,14 +398,14 @@ router.post('/profile/contacts/:id/delete', (req, res) => {
   const { employee } = loadSelf(worker);
   if (!employee) {
     req.flash('error', 'Profile not linked.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const contactId = parseInt(req.params.id, 10);
   const existing = db.prepare('SELECT * FROM emergency_contacts WHERE id = ? AND employee_id = ?').get(contactId, employee.id);
   if (!existing) {
     req.flash('error', 'Contact not found.');
-    return res.redirect('/w/profile');
+    return req.session.save(() => res.redirect('/w/profile'));
   }
 
   const tx = db.transaction(() => {
@@ -430,7 +428,7 @@ router.post('/profile/contacts/:id/delete', (req, res) => {
   });
 
   req.flash('success', 'Emergency contact removed.');
-  res.redirect('/w/profile');
+  req.session.save(() => res.redirect('/w/profile'));
 });
 
 // GET /w/profile/notifications — per-category opt-in/out for worker push.
@@ -471,7 +469,7 @@ router.post('/profile/notifications', (req, res) => {
     setWorkerNotificationPref(workerId, c.key, 'push', enabledSet.has(c.key));
   }
   req.flash('success', 'Notification settings saved.');
-  res.redirect('/w/profile/notifications');
+  req.session.save(() => res.redirect('/w/profile/notifications'));
 });
 
 module.exports = router;

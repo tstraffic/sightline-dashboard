@@ -6,23 +6,7 @@
     <p class="text-sm text-gray-500 mt-1">Update your personal information and security settings</p>
   </div>
 
-  <!-- Flash Messages -->
-  <% if (flash_success && flash_success.length > 0) { %>
-    <div class="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded-lg text-sm" data-auto-dismiss>
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 text-emerald-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-        <%= flash_success[0] %>
-      </div>
-    </div>
-  <% } %>
-  <% if (flash_error && flash_error.length > 0) { %>
-    <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg text-sm" data-auto-dismiss>
-      <div class="flex items-center gap-2">
-        <svg class="w-5 h-5 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-        <%= flash_error[0] %>
-      </div>
-    </div>
-  <% } %>
+  <%# Flash renders via the layout banner (global locals). %>
 
   <!-- Worker portal access (only when this admin is linked to a roster profile) -->
   <% if (typeof workerLink !== 'undefined' && workerLink) { %>

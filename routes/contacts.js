@@ -87,7 +87,7 @@ router.post('/', (req, res) => {
   });
 
   req.flash('success', `Contact ${full_name} added.`);
-  res.redirect('/contacts');
+  req.session.save(() => res.redirect('/contacts'));
 });
 
 // ============================================
@@ -243,7 +243,7 @@ router.post('/comms', (req, res) => {
   });
 
   req.flash('success', 'Communication logged.');
-  res.redirect('/contacts/comms');
+  req.session.save(() => res.redirect('/contacts/comms'));
 });
 
 // ============================================
@@ -253,7 +253,7 @@ router.post('/comms/:id/follow-up-done', (req, res) => {
   const db = getDb();
   db.prepare('UPDATE communication_log SET follow_up_done = 1 WHERE id = ?').run(req.params.id);
   req.flash('success', 'Follow-up marked as done.');
-  res.redirect(req.get('Referer') || '/contacts/comms');
+  req.session.save(() => res.redirect(req.get('Referer') || '/contacts/comms'));
 });
 
 // ============================================
@@ -262,12 +262,12 @@ router.post('/comms/:id/follow-up-done', (req, res) => {
 router.post('/comms/:id/delete', (req, res) => {
   const db = getDb();
   const comm = db.prepare('SELECT * FROM communication_log WHERE id = ?').get(req.params.id);
-  if (!comm) { req.flash('error', 'Communication not found.'); return res.redirect('/contacts/comms'); }
+  if (!comm) { req.flash('error', 'Communication not found.'); return req.session.save(() => res.redirect('/contacts/comms')); }
 
   db.prepare('DELETE FROM communication_log WHERE id = ?').run(req.params.id);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'communication', entityId: parseInt(req.params.id), entityLabel: comm.subject ? comm.subject.substring(0, 50) : '', ip: req.ip });
   req.flash('success', 'Communication entry deleted.');
-  res.redirect('/contacts/comms');
+  req.session.save(() => res.redirect('/contacts/comms'));
 });
 
 // ============================================
@@ -287,7 +287,7 @@ router.get('/:id', (req, res, next) => {
 
   if (!contact) {
     req.flash('error', 'Contact not found.');
-    return res.redirect('/contacts');
+    return req.session.save(() => res.redirect('/contacts'));
   }
 
   // Linked account (try company_id first, then text match)
@@ -350,7 +350,7 @@ router.get('/:id/edit', (req, res) => {
   const contact = db.prepare('SELECT * FROM client_contacts WHERE id = ?').get(req.params.id);
   if (!contact) {
     req.flash('error', 'Contact not found.');
-    return res.redirect('/contacts');
+    return req.session.save(() => res.redirect('/contacts'));
   }
   const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs ORDER BY job_number DESC").all();
   const companies = db.prepare("SELECT id, company_name, company_type FROM clients WHERE active = 1 ORDER BY company_name").all();
@@ -402,7 +402,7 @@ router.post('/:id', (req, res) => {
   });
 
   req.flash('success', 'Contact updated.');
-  res.redirect('/contacts');
+  req.session.save(() => res.redirect('/contacts'));
 });
 
 // ============================================
@@ -423,7 +423,7 @@ router.post('/:id/delete', (req, res) => {
   });
 
   req.flash('success', 'Contact deleted.');
-  res.redirect('/contacts');
+  req.session.save(() => res.redirect('/contacts'));
 });
 
 module.exports = router;

@@ -114,7 +114,7 @@ router.post('/', (req, res) => {
     const title = String(b.title || '').trim();
     if (!title) {
       req.flash('error', 'Title is required.');
-      return res.redirect('/safety-quizzes/new');
+      return req.session.save(() => res.redirect('/safety-quizzes/new'));
     }
     const p = parseQuizForm(b);
     const userId = req.session.user ? req.session.user.id : null;
@@ -130,11 +130,11 @@ router.post('/', (req, res) => {
     );
     try { logActivity({ user: req.session.user, action: 'create', entityType: 'safety_quiz', entityId: r.lastInsertRowid, entityLabel: title, ip: req.ip }); } catch (e) {}
     req.flash('success', 'Quiz created. Add questions below before publishing.');
-    return res.redirect('/safety-quizzes/' + r.lastInsertRowid + '/questions');
+    return req.session.save(() => res.redirect('/safety-quizzes/' + r.lastInsertRowid + '/questions'));
   } catch (err) {
     console.error('[safety-quizzes POST]', err);
     req.flash('error', 'Could not create quiz: ' + err.message);
-    return res.redirect('/safety-quizzes/new');
+    return req.session.save(() => res.redirect('/safety-quizzes/new'));
   }
 });
 
@@ -148,7 +148,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN users pu ON pu.id = q.published_by_id
     WHERE q.id = ?
   `).get(req.params.id);
-  if (!quiz) { req.flash('error', 'Quiz not found.'); return res.redirect('/safety-quizzes'); }
+  if (!quiz) { req.flash('error', 'Quiz not found.'); return req.session.save(() => res.redirect('/safety-quizzes')); }
   const questions = db.prepare(`SELECT id, question_text, question_type, sort_order FROM safety_quiz_questions WHERE quiz_id = ? ORDER BY sort_order ASC, id ASC`).all(quiz.id);
   const stats = db.prepare(`
     SELECT
@@ -173,7 +173,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const quiz = db.prepare('SELECT * FROM safety_quizzes WHERE id = ?').get(req.params.id);
-  if (!quiz) { req.flash('error', 'Quiz not found.'); return res.redirect('/safety-quizzes'); }
+  if (!quiz) { req.flash('error', 'Quiz not found.'); return req.session.save(() => res.redirect('/safety-quizzes')); }
   const choices = loadSourceChoices(db);
   res.render('safety-quizzes/form', {
     title: 'Edit Quiz', currentPage: 'safety-quizzes',
@@ -185,7 +185,7 @@ router.post('/:id', (req, res) => {
   try {
     const db = getDb();
     const quiz = db.prepare('SELECT * FROM safety_quizzes WHERE id = ?').get(req.params.id);
-    if (!quiz) { req.flash('error', 'Not found.'); return res.redirect('/safety-quizzes'); }
+    if (!quiz) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/safety-quizzes')); }
     const b = req.body;
     const title = String(b.title || '').trim() || quiz.title;
     const p = parseQuizForm(b);
@@ -202,11 +202,11 @@ router.post('/:id', (req, res) => {
     );
     try { logActivity({ user: req.session.user, action: 'update', entityType: 'safety_quiz', entityId: quiz.id, entityLabel: title, ip: req.ip }); } catch (e) {}
     req.flash('success', 'Quiz saved.');
-    return res.redirect('/safety-quizzes/' + quiz.id);
+    return req.session.save(() => res.redirect('/safety-quizzes/' + quiz.id));
   } catch (err) {
     console.error('[safety-quizzes PUT]', err);
     req.flash('error', 'Update failed: ' + err.message);
-    return res.redirect('/safety-quizzes/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/safety-quizzes/' + req.params.id + '/edit'));
   }
 });
 
@@ -214,7 +214,7 @@ router.post('/:id', (req, res) => {
 router.get('/:id/questions', (req, res) => {
   const db = getDb();
   const quiz = db.prepare('SELECT * FROM safety_quizzes WHERE id = ?').get(req.params.id);
-  if (!quiz) { req.flash('error', 'Not found.'); return res.redirect('/safety-quizzes'); }
+  if (!quiz) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/safety-quizzes')); }
   const questions = db.prepare('SELECT * FROM safety_quiz_questions WHERE quiz_id = ? ORDER BY sort_order ASC, id ASC').all(quiz.id)
     .map(q => Object.assign({}, q, { options: safeJson(q.options_json, []) }));
   res.render('safety-quizzes/questions', {
@@ -244,10 +244,10 @@ router.post('/:id/questions', (req, res) => {
   try {
     const db = getDb();
     const quiz = db.prepare('SELECT * FROM safety_quizzes WHERE id = ?').get(req.params.id);
-    if (!quiz) { req.flash('error', 'Not found.'); return res.redirect('/safety-quizzes'); }
+    if (!quiz) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/safety-quizzes')); }
     const b = req.body;
     const text = String(b.question_text || '').trim();
-    if (!text) { req.flash('error', 'Question text required.'); return res.redirect('/safety-quizzes/' + quiz.id + '/questions'); }
+    if (!text) { req.flash('error', 'Question text required.'); return req.session.save(() => res.redirect('/safety-quizzes/' + quiz.id + '/questions')); }
     const parsed = parseOptionsAndCorrect(b);
     const maxOrder = (db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM safety_quiz_questions WHERE quiz_id = ?').get(quiz.id)).m;
     db.prepare(`
@@ -259,11 +259,11 @@ router.post('/:id/questions', (req, res) => {
       parsed.correct, String(b.explanation || '').trim(), maxOrder + 1
     );
     req.flash('success', 'Question added.');
-    return res.redirect('/safety-quizzes/' + quiz.id + '/questions');
+    return req.session.save(() => res.redirect('/safety-quizzes/' + quiz.id + '/questions'));
   } catch (err) {
     console.error('[safety-quizzes question POST]', err);
     req.flash('error', 'Could not add question: ' + err.message);
-    return res.redirect('/safety-quizzes/' + req.params.id + '/questions');
+    return req.session.save(() => res.redirect('/safety-quizzes/' + req.params.id + '/questions'));
   }
 });
 
@@ -273,7 +273,7 @@ router.post('/:id/questions/:qid', (req, res) => {
     const db = getDb();
     const b = req.body;
     const text = String(b.question_text || '').trim();
-    if (!text) { req.flash('error', 'Question text required.'); return res.redirect('/safety-quizzes/' + req.params.id + '/questions'); }
+    if (!text) { req.flash('error', 'Question text required.'); return req.session.save(() => res.redirect('/safety-quizzes/' + req.params.id + '/questions')); }
     const parsed = parseOptionsAndCorrect(b);
     db.prepare(`
       UPDATE safety_quiz_questions
@@ -285,11 +285,11 @@ router.post('/:id/questions/:qid', (req, res) => {
       req.params.qid, req.params.id
     );
     req.flash('success', 'Question updated.');
-    return res.redirect('/safety-quizzes/' + req.params.id + '/questions');
+    return req.session.save(() => res.redirect('/safety-quizzes/' + req.params.id + '/questions'));
   } catch (err) {
     console.error('[safety-quizzes question PUT]', err);
     req.flash('error', 'Could not save question: ' + err.message);
-    return res.redirect('/safety-quizzes/' + req.params.id + '/questions');
+    return req.session.save(() => res.redirect('/safety-quizzes/' + req.params.id + '/questions'));
   }
 });
 
@@ -298,22 +298,22 @@ router.post('/:id/questions/:qid/delete', (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM safety_quiz_questions WHERE id = ? AND quiz_id = ?').run(req.params.qid, req.params.id);
   req.flash('success', 'Question removed.');
-  return res.redirect('/safety-quizzes/' + req.params.id + '/questions');
+  return req.session.save(() => res.redirect('/safety-quizzes/' + req.params.id + '/questions'));
 });
 
 // POST /safety-quizzes/:id/publish — requires at least one question. Fires push.
 router.post('/:id/publish', (req, res) => {
   const db = getDb();
   const quiz = db.prepare('SELECT * FROM safety_quizzes WHERE id = ?').get(req.params.id);
-  if (!quiz) { req.flash('error', 'Not found.'); return res.redirect('/safety-quizzes'); }
+  if (!quiz) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/safety-quizzes')); }
   if (quiz.status === 'published') {
     req.flash('error', 'Already published.');
-    return res.redirect('/safety-quizzes/' + quiz.id);
+    return req.session.save(() => res.redirect('/safety-quizzes/' + quiz.id));
   }
   const qCount = db.prepare('SELECT COUNT(*) AS c FROM safety_quiz_questions WHERE quiz_id = ?').get(quiz.id).c;
   if (qCount < 1) {
     req.flash('error', 'Add at least one question before publishing.');
-    return res.redirect('/safety-quizzes/' + quiz.id + '/questions');
+    return req.session.save(() => res.redirect('/safety-quizzes/' + quiz.id + '/questions'));
   }
   const userId = req.session.user ? req.session.user.id : null;
   db.prepare(`
@@ -323,7 +323,7 @@ router.post('/:id/publish', (req, res) => {
   `).run(userId, quiz.id);
   announcePublished(req, quiz);
   req.flash('success', 'Quiz published — workers have been notified.');
-  return res.redirect('/safety-quizzes/' + quiz.id);
+  return req.session.save(() => res.redirect('/safety-quizzes/' + quiz.id));
 });
 
 // POST /safety-quizzes/:id/archive
@@ -334,7 +334,7 @@ router.post('/:id/archive', (req, res) => {
   db.prepare("UPDATE safety_quizzes SET status='archived', updated_at=CURRENT_TIMESTAMP WHERE id = ?").run(quiz.id);
   try { logActivity({ user: req.session.user, action: 'archive', entityType: 'safety_quiz', entityId: quiz.id, entityLabel: quiz.title, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Quiz archived.');
-  return res.redirect('/safety-quizzes');
+  return req.session.save(() => res.redirect('/safety-quizzes'));
 });
 
 // POST /safety-quizzes/:id/delete
@@ -345,14 +345,14 @@ router.post('/:id/delete', (req, res) => {
   db.prepare('DELETE FROM safety_quizzes WHERE id = ?').run(quiz.id);
   try { logActivity({ user: req.session.user, action: 'delete', entityType: 'safety_quiz', entityId: quiz.id, entityLabel: quiz.title, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Quiz deleted.');
-  return res.redirect('/safety-quizzes');
+  return req.session.save(() => res.redirect('/safety-quizzes'));
 });
 
 // GET /safety-quizzes/:id/attempts — per-worker attempt list
 router.get('/:id/attempts', (req, res) => {
   const db = getDb();
   const quiz = db.prepare('SELECT * FROM safety_quizzes WHERE id = ?').get(req.params.id);
-  if (!quiz) { req.flash('error', 'Not found.'); return res.redirect('/safety-quizzes'); }
+  if (!quiz) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/safety-quizzes')); }
   // Latest attempt per crew member.
   const rows = db.prepare(`
     SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,

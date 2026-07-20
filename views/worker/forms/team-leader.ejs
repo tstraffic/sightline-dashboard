@@ -23,19 +23,7 @@
     <p class="text-xs text-gray-500 mt-1">Complete once your crew is on site and set up.</p>
   </div>
 
-  <% if (typeof flash_error !== 'undefined' && flash_error && flash_error.length) { %>
-    <% flash_error.forEach(function (msg) { %>
-      <div class="bg-red-50 border border-red-200 text-red-900 rounded-xl p-3 text-sm flex items-start gap-2">
-        <svg class="w-5 h-5 flex-shrink-0 mt-0.5 text-red-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/></svg>
-        <span><%= msg %></span>
-      </div>
-    <% }) %>
-  <% } %>
-  <% if (typeof flash_success !== 'undefined' && flash_success && flash_success.length) { %>
-    <% flash_success.forEach(function (msg) { %>
-      <div class="bg-emerald-50 border border-emerald-200 text-emerald-900 rounded-xl p-3 text-sm"><%= msg %></div>
-    <% }) %>
-  <% } %>
+  <%# Flash renders via the layout banner (global locals). %>
 
   <!-- Team Leader Checklist is open to every worker on the shift &mdash; there's
        no gate. Show a brief affirming note so non-TL workers don't second-

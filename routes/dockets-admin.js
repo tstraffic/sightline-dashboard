@@ -96,11 +96,11 @@ function loadDocket(db, id) {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Docket not found.'); return res.redirect('/dockets'); }
+  if (!docket) { req.flash('error', 'Docket not found.'); return req.session.save(() => res.redirect('/dockets')); }
   const status = docket.status || 'current';
   if (status !== 'current' || docket.source !== 'admin') {
     req.flash('error', 'Only an adjustment docket can be edited. Use "Adjust" to create one.');
-    return res.redirect('/dockets/' + docket.id);
+    return req.session.save(() => res.redirect('/dockets/' + docket.id));
   }
   const crewLines = getDocketCrew(db, docket);
   // Booking-based docket? Surface anyone on booking_crew who isn't on this
@@ -124,10 +124,10 @@ router.get('/:id/edit', (req, res) => {
 router.post('/:id', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Docket not found.'); return res.redirect('/dockets'); }
+  if (!docket) { req.flash('error', 'Docket not found.'); return req.session.save(() => res.redirect('/dockets')); }
   if ((docket.status || 'current') !== 'current' || docket.source !== 'admin') {
     req.flash('error', 'This docket cannot be edited.');
-    return res.redirect('/dockets/' + docket.id);
+    return req.session.save(() => res.redirect('/dockets/' + docket.id));
   }
 
   const b = req.body;
@@ -209,17 +209,17 @@ router.post('/:id', (req, res) => {
     entityLabel: 'Docket #' + docket.id, details: 'Edited adjustment docket', ip: req.ip,
   });
   req.flash('success', 'Docket updated.');
-  res.redirect('/dockets/' + docket.id);
+  req.session.save(() => res.redirect('/dockets/' + docket.id));
 });
 
 // POST /dockets/:id/adjust — clone into a new current docket, supersede original.
 router.post('/:id/adjust', (req, res) => {
   const db = getDb();
   const orig = db.prepare('SELECT * FROM docket_signatures WHERE id = ?').get(req.params.id);
-  if (!orig) { req.flash('error', 'Docket not found.'); return res.redirect('/dockets'); }
+  if (!orig) { req.flash('error', 'Docket not found.'); return req.session.save(() => res.redirect('/dockets')); }
   if ((orig.status || 'current') !== 'current') {
     req.flash('error', 'Only the current docket can be adjusted.');
-    return res.redirect('/dockets/' + orig.id);
+    return req.session.save(() => res.redirect('/dockets/' + orig.id));
   }
 
   let newId;
@@ -271,7 +271,7 @@ router.post('/:id/adjust', (req, res) => {
     entityLabel: 'Docket #' + newId, details: 'Adjustment of docket #' + orig.id + ' (superseded)', ip: req.ip,
   });
   req.flash('success', 'Adjustment created — edit the new docket. The original is kept as superseded.');
-  res.redirect('/dockets/' + newId + '/edit');
+  req.session.save(() => res.redirect('/dockets/' + newId + '/edit'));
 });
 
 // POST /dockets/:id/readjust-with-booking-crew — booking-aware adjust.
@@ -284,18 +284,18 @@ router.post('/:id/adjust', (req, res) => {
 router.post('/:id/readjust-with-booking-crew', (req, res) => {
   const db = getDb();
   const orig = db.prepare('SELECT * FROM docket_signatures WHERE id = ?').get(req.params.id);
-  if (!orig) { req.flash('error', 'Docket not found.'); return res.redirect('/dockets'); }
+  if (!orig) { req.flash('error', 'Docket not found.'); return req.session.save(() => res.redirect('/dockets')); }
   if ((orig.status || 'current') !== 'current') {
     req.flash('error', 'Only the current docket can be re-adjusted.');
-    return res.redirect('/dockets/' + orig.id);
+    return req.session.save(() => res.redirect('/dockets/' + orig.id));
   }
   if (!orig.booking_id) {
     req.flash('error', 'This docket is not tied to a booking — use Adjust instead.');
-    return res.redirect('/dockets/' + orig.id);
+    return req.session.save(() => res.redirect('/dockets/' + orig.id));
   }
 
   const shift = resolveShift(db, { bookingId: orig.booking_id });
-  if (!shift) { req.flash('error', 'Booking has no resolvable shift.'); return res.redirect('/dockets/' + orig.id); }
+  if (!shift) { req.flash('error', 'Booking has no resolvable shift.'); return req.session.save(() => res.redirect('/dockets/' + orig.id)); }
 
   const oldByCrew = new Map(
     db.prepare('SELECT * FROM docket_crew WHERE docket_id = ?').all(orig.id).map(l => [l.crew_member_id, l])
@@ -360,7 +360,7 @@ router.post('/:id/readjust-with-booking-crew', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', `New docket version created (v${(orig.version || 1) + 1}) mirroring the booking's current crew. The previous version is kept as superseded.`);
-  res.redirect('/dockets/' + newId + '/edit');
+  req.session.save(() => res.redirect('/dockets/' + newId + '/edit'));
 });
 
 // GET /dockets/:id/pdf — clean branded PDF of the docket (hours + signatures).
@@ -394,7 +394,7 @@ router.get('/:id/pdf', async (req, res) => {
 router.get('/:id', (req, res) => {
   const db = getDb();
   const docket = loadDocket(db, req.params.id);
-  if (!docket) { req.flash('error', 'Docket not found.'); return res.redirect('/dockets'); }
+  if (!docket) { req.flash('error', 'Docket not found.'); return req.session.save(() => res.redirect('/dockets')); }
 
   const crewLines = getDocketCrew(db, docket);
   const parent = docket.parent_docket_id ? db.prepare('SELECT id, version FROM docket_signatures WHERE id=?').get(docket.parent_docket_id) : null;
@@ -421,10 +421,10 @@ router.get('/:id', (req, res) => {
 router.post('/:id/signoff', (req, res) => {
   const db = getDb();
   const docket = db.prepare('SELECT * FROM docket_signatures WHERE id = ?').get(req.params.id);
-  if (!docket) { req.flash('error', 'Docket not found.'); return res.redirect('/dockets'); }
+  if (!docket) { req.flash('error', 'Docket not found.'); return req.session.save(() => res.redirect('/dockets')); }
   if ((docket.status || 'current') !== 'current') {
     req.flash('error', 'Only the current docket can be signed off.');
-    return res.redirect('/dockets/' + docket.id);
+    return req.session.save(() => res.redirect('/dockets/' + docket.id));
   }
   db.prepare("UPDATE docket_signatures SET office_signed_off_at = datetime('now'), office_signed_off_by_id = ? WHERE id = ?")
     .run(req.session.user.id, docket.id);
@@ -450,7 +450,7 @@ router.post('/:id/signoff', (req, res) => {
     details: 'Office sign-off' + (bookingId ? ' — booking #' + bookingId + ' finalised' : ''), ip: req.ip,
   });
   req.flash('success', 'Docket signed off' + (bookingId ? ' — booking finalised.' : '.'));
-  res.redirect('/dockets/' + docket.id);
+  req.session.save(() => res.redirect('/dockets/' + docket.id));
 });
 
 module.exports = router;

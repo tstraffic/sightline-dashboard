@@ -181,7 +181,7 @@ router.get('/shifts/:id', async (req, res) => {
 
   if (!allocation) {
     req.flash('error', 'Shift not found or access denied.');
-    return res.redirect('/w/shifts');
+    return req.session.save(() => res.redirect('/w/shifts'));
   }
 
   // Per-shift flags set by the planner on the bookings board (TL, FA,
@@ -262,7 +262,7 @@ router.post('/shifts/:id/confirm', (req, res) => {
   const allocation = db.prepare('SELECT * FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(req.params.id, worker.id);
   if (!allocation) {
     req.flash('error', 'Shift not found.');
-    return res.redirect('/w/shifts');
+    return req.session.save(() => res.redirect('/w/shifts'));
   }
 
   db.prepare('UPDATE crew_allocations SET status = ?, confirmed_at = CURRENT_TIMESTAMP WHERE id = ?').run('confirmed', req.params.id);
@@ -282,7 +282,7 @@ router.post('/shifts/:id/confirm', (req, res) => {
     } catch (e) { console.error('[GTG] promote failed for booking', allocation.booking_id, ':', e.message); }
   }
   req.flash('success', 'Shift confirmed.');
-  res.redirect('/w/shifts/' + req.params.id);
+  req.session.save(() => res.redirect('/w/shifts/' + req.params.id));
 });
 
 // POST /w/shifts/:id/decline — Worker declines a shift.
@@ -299,15 +299,15 @@ router.post('/shifts/:id/decline', (req, res) => {
   const allocation = db.prepare('SELECT * FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(req.params.id, worker.id);
   if (!allocation) {
     req.flash('error', 'Shift not found.');
-    return res.redirect('/w/shifts');
+    return req.session.save(() => res.redirect('/w/shifts'));
   }
   if (allocation.status === 'declined') {
     req.flash('info', 'You already declined this shift.');
-    return res.redirect('/w/shifts/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/shifts/' + req.params.id));
   }
   if (allocation.status === 'completed' || allocation.status === 'cancelled') {
     req.flash('error', `Shift is already ${allocation.status} and cannot be declined.`);
-    return res.redirect('/w/shifts/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/shifts/' + req.params.id));
   }
 
   db.prepare("UPDATE crew_allocations SET status = 'declined' WHERE id = ?").run(req.params.id);
@@ -316,7 +316,7 @@ router.post('/shifts/:id/decline', (req, res) => {
       .run(allocation.booking_id, worker.id);
   }
   req.flash('success', 'Shift declined.');
-  res.redirect('/w/shifts/' + req.params.id);
+  req.session.save(() => res.redirect('/w/shifts/' + req.params.id));
 });
 
 module.exports = router;

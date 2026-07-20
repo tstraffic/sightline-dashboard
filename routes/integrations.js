@@ -72,7 +72,7 @@ router.get('/quickbooks/connect', (req, res) => {
     res.redirect(buildAuthorizeUrl(state));
   } catch (err) {
     req.flash('error', `Could not start QuickBooks connect: ${err.message}`);
-    res.redirect('/admin/integrations');
+    req.session.save(() => res.redirect('/admin/integrations'));
   }
 });
 
@@ -86,15 +86,15 @@ router.get('/quickbooks/callback', async (req, res) => {
 
   if (error) {
     req.flash('error', `QuickBooks authorisation declined: ${error}`);
-    return res.redirect('/admin/integrations');
+    return req.session.save(() => res.redirect('/admin/integrations'));
   }
   if (!state || state !== expected) {
     req.flash('error', 'QuickBooks connect failed: state mismatch — try again.');
-    return res.redirect('/admin/integrations');
+    return req.session.save(() => res.redirect('/admin/integrations'));
   }
   if (!code || !realmId) {
     req.flash('error', 'QuickBooks connect failed: missing code or company id.');
-    return res.redirect('/admin/integrations');
+    return req.session.save(() => res.redirect('/admin/integrations'));
   }
 
   try {
@@ -109,7 +109,7 @@ router.get('/quickbooks/callback', async (req, res) => {
   } catch (err) {
     req.flash('error', `QuickBooks connect failed: ${err.message}`);
   }
-  res.redirect('/admin/integrations');
+  req.session.save(() => res.redirect('/admin/integrations'));
 });
 
 // POST /admin/integrations/google-maps — Save Google Maps API key into
@@ -136,7 +136,7 @@ router.post('/google-maps', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', raw ? 'Google Maps key saved.' : 'Google Maps key cleared.');
-  res.redirect('/admin/integrations');
+  req.session.save(() => res.redirect('/admin/integrations'));
 });
 
 // POST /admin/integrations/geoapify — Save the Geoapify autocomplete key.
@@ -163,7 +163,7 @@ router.post('/geoapify', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', raw ? 'Geoapify key saved.' : 'Geoapify key cleared.');
-  res.redirect('/admin/integrations');
+  req.session.save(() => res.redirect('/admin/integrations'));
 });
 
 // POST /admin/integrations/:provider — Save config
@@ -172,7 +172,7 @@ router.post('/:provider', (req, res) => {
   const validProviders = ['traffio', 'quickbooks', 'employment_hero', 'teams', 'sharepoint'];
   if (!validProviders.includes(provider)) {
     req.flash('error', 'Invalid provider');
-    return res.redirect('/admin/integrations');
+    return req.session.save(() => res.redirect('/admin/integrations'));
   }
 
   // Checkbox fields are paired with a hidden `value="0"` input so a value is
@@ -227,7 +227,7 @@ router.post('/:provider', (req, res) => {
   });
 
   req.flash('success', `${provider.replace('_', ' ')} settings saved`);
-  res.redirect('/admin/integrations');
+  req.session.save(() => res.redirect('/admin/integrations'));
 });
 
 // POST /admin/integrations/:provider/test — Test connection
@@ -245,7 +245,7 @@ router.post('/:provider/test', async (req, res) => {
         const webhookUrl = req.body.webhook_url || getIntegrationConfig('teams').config.webhook_url;
         if (!webhookUrl) {
           req.flash('error', 'No Teams webhook URL configured');
-          return res.redirect('/admin/integrations');
+          return req.session.save(() => res.redirect('/admin/integrations'));
         }
         await testTeamsWebhook(webhookUrl);
         req.flash('success', 'Test message sent to Teams channel successfully');
@@ -266,7 +266,7 @@ router.post('/:provider/test', async (req, res) => {
     req.flash('error', `Connection test failed: ${err.message}`);
   }
 
-  res.redirect('/admin/integrations');
+  req.session.save(() => res.redirect('/admin/integrations'));
 });
 
 // POST /admin/integrations/:provider/sync — Manual sync trigger
@@ -276,7 +276,7 @@ router.post('/:provider/sync', async (req, res) => {
   try {
     if (provider !== 'traffio') {
       req.flash('error', `Sync is only available for Traffio at this time`);
-      return res.redirect('/admin/integrations');
+      return req.session.save(() => res.redirect('/admin/integrations'));
     }
 
     const syncType = req.body.sync_type || 'all';
@@ -331,7 +331,7 @@ router.post('/:provider/sync', async (req, res) => {
     req.flash('error', `Sync failed: ${err.message}`);
   }
 
-  res.redirect('/admin/integrations');
+  req.session.save(() => res.redirect('/admin/integrations'));
 });
 
 module.exports = router;

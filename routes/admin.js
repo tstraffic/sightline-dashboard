@@ -79,7 +79,7 @@ router.post('/users', async (req, res) => {
     if (sendInvite) {
       if (!isConfigured()) {
         req.flash('error', 'Email invitations require SMTP to be configured. Go to Settings → System Configuration to set up SMTP, or add SMTP environment variables in Railway.');
-        return res.redirect('/admin/users/new');
+        return req.session.save(() => res.redirect('/admin/users/new'));
       }
       const result = db.prepare('INSERT INTO users (username, password_hash, full_name, email, role, active) VALUES (?, ?, ?, ?, ?, ?)').run(
         b.username, 'INVITE_PENDING', b.full_name, b.email, b.role, 0
@@ -98,7 +98,7 @@ router.post('/users', async (req, res) => {
     } else {
       if (!b.password) {
         req.flash('error', 'Password is required when not sending an invite.');
-        return res.redirect('/admin/users/new');
+        return req.session.save(() => res.redirect('/admin/users/new'));
       }
       const hash = bcrypt.hashSync(b.password, 12);
       const directResult = db.prepare('INSERT INTO users (username, password_hash, full_name, email, role, active) VALUES (?, ?, ?, ?, ?, ?)').run(
@@ -114,13 +114,13 @@ router.post('/users', async (req, res) => {
       req.flash('error', 'Failed to create user: ' + err.message);
     }
   }
-  res.redirect('/admin/users');
+  req.session.save(() => res.redirect('/admin/users'));
 });
 
 router.get('/users/:id/edit', (req, res) => {
   const db = getDb();
   const editUser = db.prepare('SELECT id, username, full_name, email, role, active FROM users WHERE id = ?').get(req.params.id);
-  if (!editUser) { req.flash('error', 'User not found.'); return res.redirect('/admin/users'); }
+  if (!editUser) { req.flash('error', 'User not found.'); return req.session.save(() => res.redirect('/admin/users')); }
   res.render('admin/user-form', { title: 'Edit User', editUser, user: req.session.user });
 });
 
@@ -138,19 +138,19 @@ router.post('/users/:id', (req, res) => {
     );
   }
   req.flash('success', 'User updated.');
-  res.redirect('/admin/users');
+  req.session.save(() => res.redirect('/admin/users'));
 });
 
 // DELETE USER
 router.post('/users/:id/delete', (req, res) => {
   const db = getDb();
   const targetUser = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
-  if (!targetUser) { req.flash('error', 'User not found.'); return res.redirect('/admin/users'); }
+  if (!targetUser) { req.flash('error', 'User not found.'); return req.session.save(() => res.redirect('/admin/users')); }
 
   // Prevent deleting yourself
   if (targetUser.id === req.session.user.id) {
     req.flash('error', 'You cannot delete your own account.');
-    return res.redirect('/admin/users');
+    return req.session.save(() => res.redirect('/admin/users'));
   }
 
   try {
@@ -186,19 +186,19 @@ router.post('/users/:id/delete', (req, res) => {
     console.error('[user-delete] failed for id=' + req.params.id + ':', err);
     req.flash('error', `Failed to delete user: ${err.message}`);
   }
-  res.redirect('/admin/users');
+  req.session.save(() => res.redirect('/admin/users'));
 });
 
 // Reset password
 router.post('/users/:id/reset-password', (req, res) => {
   const db = getDb();
   const targetUser = db.prepare('SELECT id, username, full_name FROM users WHERE id = ?').get(req.params.id);
-  if (!targetUser) { req.flash('error', 'User not found.'); return res.redirect('/admin/users'); }
+  if (!targetUser) { req.flash('error', 'User not found.'); return req.session.save(() => res.redirect('/admin/users')); }
 
   const newPassword = req.body.new_password;
   if (!newPassword || newPassword.length < 6) {
     req.flash('error', 'Password must be at least 6 characters.');
-    return res.redirect('/admin/users');
+    return req.session.save(() => res.redirect('/admin/users'));
   }
 
   try {
@@ -209,7 +209,7 @@ router.post('/users/:id/reset-password', (req, res) => {
   } catch (err) {
     req.flash('error', 'Failed to reset password: ' + err.message);
   }
-  res.redirect('/admin/users');
+  req.session.save(() => res.redirect('/admin/users'));
 });
 
 // Resend invitation email
@@ -218,13 +218,13 @@ router.post('/users/:id/resend-invite', async (req, res) => {
   const u = db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!u || u.password_hash !== 'INVITE_PENDING' || !u.email) {
     req.flash('error', 'No pending invitation for this user.');
-    return res.redirect('/admin/users');
+    return req.session.save(() => res.redirect('/admin/users'));
   }
   const { token } = createInvitation({ type: 'admin_user', targetId: u.id, email: u.email, createdById: req.session.user.id });
   const inviteUrl = (process.env.APP_BASE_URL || `http://localhost:${process.env.PORT || 3000}`) + '/invite/' + token;
   await sendEmail(u.email, 'You\'ve been invited to Atomis', adminInviteEmail(u.full_name, inviteUrl, TOKEN_EXPIRY_HOURS));
   req.flash('success', `Invitation resent to ${u.email}.`);
-  res.redirect('/admin/users');
+  req.session.save(() => res.redirect('/admin/users'));
 });
 
 module.exports = router;

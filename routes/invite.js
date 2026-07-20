@@ -14,8 +14,6 @@ router.get('/:token', (req, res) => {
       title: 'Invalid Link',
       error: 'This invitation link is invalid or has expired. Please contact your administrator for a new one.',
       token: null,
-      flash_error: [],
-      flash_success: [],
     });
   }
 
@@ -28,8 +26,6 @@ router.get('/:token', (req, res) => {
     error: null,
     token: req.params.token,
     fullName: user ? user.full_name : '',
-    flash_error: req.flash('error'),
-    flash_success: [],
   });
 });
 
@@ -38,19 +34,19 @@ router.post('/:token', (req, res) => {
   const invitation = validateToken(req.params.token, 'admin_user');
   if (!invitation) {
     req.flash('error', 'This invitation link is invalid or has expired.');
-    return res.redirect('/login');
+    return req.session.save(() => res.redirect('/login'));
   }
 
   const { password, password_confirm } = req.body;
 
   if (!password || password.length < 8) {
     req.flash('error', 'Password must be at least 8 characters.');
-    return res.redirect('/invite/' + req.params.token);
+    return req.session.save(() => res.redirect('/invite/' + req.params.token));
   }
 
   if (password !== password_confirm) {
     req.flash('error', 'Passwords do not match.');
-    return res.redirect('/invite/' + req.params.token);
+    return req.session.save(() => res.redirect('/invite/' + req.params.token));
   }
 
   const db = getDb();
@@ -71,7 +67,7 @@ router.post('/:token', (req, res) => {
   });
 
   req.flash('success', 'Your password has been set. You can now sign in.');
-  res.redirect('/login');
+  req.session.save(() => res.redirect('/login'));
 });
 
 module.exports = router;

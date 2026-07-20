@@ -74,7 +74,7 @@ router.post('/system', (req, res) => {
   }
 
   req.flash('success', changes.length > 0 ? `Updated ${changes.length} setting(s).` : 'No changes made.');
-  res.redirect('/settings/system');
+  req.session.save(() => res.redirect('/settings/system'));
 });
 
 // ─── Test Email ───────────────────────────────────────────────────
@@ -82,12 +82,12 @@ router.post('/system/test-email', async (req, res) => {
   const toEmail = req.body.test_email || req.session.user.email;
   if (!toEmail) {
     req.flash('error', 'No email address provided. Enter a test email or set one on your user profile.');
-    return res.redirect('/settings/system');
+    return req.session.save(() => res.redirect('/settings/system'));
   }
 
   if (!isConfigured()) {
     req.flash('error', 'SMTP is not configured. Add SMTP settings below or set environment variables in Railway.');
-    return res.redirect('/settings/system');
+    return req.session.save(() => res.redirect('/settings/system'));
   }
 
   try {
@@ -118,7 +118,7 @@ router.post('/system/test-email', async (req, res) => {
   } catch (err) {
     req.flash('error', `SMTP connection failed: ${err.message}`);
   }
-  res.redirect('/settings/system');
+  req.session.save(() => res.redirect('/settings/system'));
 });
 
 // ─── Category Editor ───────────────────────────────────────────────
@@ -127,7 +127,7 @@ router.get('/category/:category', (req, res) => {
   const meta = CATEGORY_META[category];
   if (!meta) {
     req.flash('error', 'Unknown settings category.');
-    return res.redirect('/settings');
+    return req.session.save(() => res.redirect('/settings'));
   }
 
   const db = getDb();
@@ -149,7 +149,7 @@ router.post('/category/:category/add', (req, res) => {
 
   if (!key || !label) {
     req.flash('error', 'Key and label are required.');
-    return res.redirect(`/settings/category/${category}`);
+    return req.session.save(() => res.redirect(`/settings/category/${category}`));
   }
 
   const db = getDb();
@@ -180,7 +180,7 @@ router.post('/category/:category/add', (req, res) => {
     }
   }
 
-  res.redirect(`/settings/category/${category}`);
+  req.session.save(() => res.redirect(`/settings/category/${category}`));
 });
 
 // Update item
@@ -192,7 +192,7 @@ router.post('/category/:category/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM app_settings WHERE id = ?').get(id);
   if (!existing) {
     req.flash('error', 'Setting not found.');
-    return res.redirect(`/settings/category/${category}`);
+    return req.session.save(() => res.redirect(`/settings/category/${category}`));
   }
 
   db.prepare(`
@@ -221,7 +221,7 @@ router.post('/category/:category/:id', (req, res) => {
 
   reloadSettings();
   req.flash('success', `Updated "${label}".`);
-  res.redirect(`/settings/category/${category}`);
+  req.session.save(() => res.redirect(`/settings/category/${category}`));
 });
 
 // Delete item (hard delete — only if safe)
@@ -232,7 +232,7 @@ router.post('/category/:category/:id/delete', (req, res) => {
   const existing = db.prepare('SELECT * FROM app_settings WHERE id = ?').get(id);
   if (!existing) {
     req.flash('error', 'Setting not found.');
-    return res.redirect(`/settings/category/${category}`);
+    return req.session.save(() => res.redirect(`/settings/category/${category}`));
   }
 
   // Soft-delete (deactivate) instead of hard-deleting to preserve data integrity
@@ -250,7 +250,7 @@ router.post('/category/:category/:id/delete', (req, res) => {
 
   reloadSettings();
   req.flash('success', `"${existing.label}" has been deactivated.`);
-  res.redirect(`/settings/category/${category}`);
+  req.session.save(() => res.redirect(`/settings/category/${category}`));
 });
 
 // Reorder items (bulk update display_order)
@@ -280,7 +280,7 @@ router.post('/category/:category/reorder', (req, res) => {
   }
 
   req.flash('success', 'Order updated.');
-  res.redirect(`/settings/category/${category}`);
+  req.session.save(() => res.redirect(`/settings/category/${category}`));
 });
 
 module.exports = router;

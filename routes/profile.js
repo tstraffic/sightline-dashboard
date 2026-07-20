@@ -13,7 +13,7 @@ router.get('/', (req, res) => {
 
   if (!user) {
     req.flash('error', 'User not found.');
-    return res.redirect('/dashboard');
+    return req.session.save(() => res.redirect('/dashboard'));
   }
 
   // Read preferences defensively — the column was added in migration 40
@@ -46,8 +46,6 @@ router.get('/', (req, res) => {
     currentTheme: (prefs && typeof prefs.theme === 'string') ? prefs.theme : '',
     emailEnabled: emailConfigured(),
     workerLink,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
@@ -61,7 +59,7 @@ router.get('/worker-portal', (req, res) => {
   const crew = resolveLinkedCrew(req.session.user.id);
   if (!crew) {
     req.flash('error', "Your account isn't linked to a roster profile yet. An admin can link it on your employee record (Roster → your profile → Edit → Linked user account).");
-    return res.redirect('/profile');
+    return req.session.save(() => res.redirect('/profile'));
   }
   startWorkerSession(req, crew);
   // Persist the worker session before redirecting (same store-race guard the
@@ -76,7 +74,7 @@ router.post('/', (req, res) => {
 
   if (!full_name || full_name.trim().length < 2) {
     req.flash('error', 'Full name is required (at least 2 characters).');
-    return res.redirect('/profile');
+    return req.session.save(() => res.redirect('/profile'));
   }
 
   const emailVal = (email || '').trim();
@@ -86,7 +84,7 @@ router.post('/', (req, res) => {
     const existing = db.prepare('SELECT id FROM users WHERE email = ? AND id != ?').get(emailVal, req.session.user.id);
     if (existing) {
       req.flash('error', 'That email address is already in use by another account.');
-      return res.redirect('/profile');
+      return req.session.save(() => res.redirect('/profile'));
     }
   }
 
@@ -106,7 +104,7 @@ router.post('/', (req, res) => {
   req.session.user.email = emailVal || null;
 
   req.flash('success', 'Profile updated successfully.');
-  res.redirect('/profile');
+  req.session.save(() => res.redirect('/profile'));
 });
 
 // POST /profile/theme — persist the chosen UI theme to the user's preferences
@@ -137,23 +135,23 @@ router.post('/change-password', (req, res) => {
 
   if (!current_password || !new_password) {
     req.flash('error', 'All password fields are required.');
-    return res.redirect('/profile');
+    return req.session.save(() => res.redirect('/profile'));
   }
 
   if (new_password.length < 8) {
     req.flash('error', 'New password must be at least 8 characters.');
-    return res.redirect('/profile');
+    return req.session.save(() => res.redirect('/profile'));
   }
 
   if (new_password !== confirm_password) {
     req.flash('error', 'New passwords do not match.');
-    return res.redirect('/profile');
+    return req.session.save(() => res.redirect('/profile'));
   }
 
   const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.session.user.id);
   if (!user || !bcrypt.compareSync(current_password, user.password_hash)) {
     req.flash('error', 'Current password is incorrect.');
-    return res.redirect('/profile');
+    return req.session.save(() => res.redirect('/profile'));
   }
 
   const hash = bcrypt.hashSync(new_password, 12);
@@ -177,7 +175,7 @@ router.post('/send-reset-email', async (req, res) => {
 
   if (!user || !user.email) {
     req.flash('error', 'You need an email address on your profile to use email reset.');
-    return res.redirect('/profile');
+    return req.session.save(() => res.redirect('/profile'));
   }
 
   try {
@@ -190,7 +188,7 @@ router.post('/send-reset-email', async (req, res) => {
     req.flash('error', 'Failed to send reset email. Please try again later.');
   }
 
-  res.redirect('/profile');
+  req.session.save(() => res.redirect('/profile'));
 });
 
 // POST /profile/dismiss-onboarding

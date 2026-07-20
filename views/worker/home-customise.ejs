@@ -86,10 +86,7 @@
   </form>
 </div>
 
-<% if (flash_success && flash_success.length) { %>
-  <div class="cus-toast show" id="cus-toast"><%= flash_success[0] %></div>
-  <script>setTimeout(function () { document.getElementById('cus-toast').classList.remove('show'); }, 2800);</script>
-<% } %>
+<%# Flash renders via the layout banner (global locals). %>
 
 <script>
 (function () {

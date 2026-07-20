@@ -20,7 +20,7 @@ function sanitizeNext(raw) {
 router.get('/login', (req, res) => {
   const nextPath = sanitizeNext(req.query.next);
   if (req.session.user) return res.redirect(nextPath || landingFor(req.session.user));
-  res.render('login', { layout: false, title: 'Login', user: null, nextPath, flash_error: req.flash('error') });
+  res.render('login', { layout: false, title: 'Login', user: null, nextPath });
 });
 
 router.post('/login', (req, res) => {
@@ -33,7 +33,7 @@ router.post('/login', (req, res) => {
 
   if (!user || !bcrypt.compareSync(password, user.password_hash)) {
     req.flash('error', 'Invalid username or password.');
-    return res.redirect(nextPath ? '/login?next=' + encodeURIComponent(nextPath) : '/login');
+    return req.session.save(() => res.redirect(nextPath ? '/login?next=' + encodeURIComponent(nextPath) : '/login'));
   }
 
   req.session.user = {
@@ -76,8 +76,6 @@ router.get('/forgot-password', (req, res) => {
   res.render('forgot-password', {
     layout: false,
     title: 'Forgot Password',
-    flash_error: req.flash('error'),
-    flash_success: req.flash('success'),
   });
 });
 
@@ -93,7 +91,7 @@ router.post('/forgot-password', async (req, res) => {
   }
 
   req.flash('success', 'If an account exists with that email, a reset link has been sent.');
-  res.redirect('/forgot-password');
+  req.session.save(() => res.redirect('/forgot-password'));
 });
 
 // Reset password via token
@@ -105,7 +103,6 @@ router.get('/reset/:token', (req, res) => {
       title: 'Invalid Link',
       error: 'This reset link is invalid or has expired.',
       token: null,
-      flash_error: [],
     });
   }
   res.render('reset-password', {
@@ -113,7 +110,6 @@ router.get('/reset/:token', (req, res) => {
     title: 'Reset Password',
     error: null,
     token: req.params.token,
-    flash_error: req.flash('error'),
   });
 });
 
@@ -121,17 +117,17 @@ router.post('/reset/:token', (req, res) => {
   const invitation = validateToken(req.params.token, 'password_reset');
   if (!invitation) {
     req.flash('error', 'This reset link is invalid or has expired.');
-    return res.redirect('/forgot-password');
+    return req.session.save(() => res.redirect('/forgot-password'));
   }
 
   const { password, password_confirm } = req.body;
   if (!password || password.length < 8) {
     req.flash('error', 'Password must be at least 8 characters.');
-    return res.redirect('/reset/' + req.params.token);
+    return req.session.save(() => res.redirect('/reset/' + req.params.token));
   }
   if (password !== password_confirm) {
     req.flash('error', 'Passwords do not match.');
-    return res.redirect('/reset/' + req.params.token);
+    return req.session.save(() => res.redirect('/reset/' + req.params.token));
   }
 
   const db = getDb();
@@ -140,7 +136,7 @@ router.post('/reset/:token', (req, res) => {
   markTokenUsed(req.params.token);
 
   req.flash('success', 'Your password has been reset. You can now sign in.');
-  res.redirect('/login');
+  req.session.save(() => res.redirect('/login'));
 });
 
 module.exports = router;

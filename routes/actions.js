@@ -60,14 +60,14 @@ router.post('/:id/close', (req, res) => {
   const db = getDb();
   closeAuditAction(db, req.params.id, { closedById: req.session.user.id, verificationNote: (req.body.verification || '').trim() });
   req.flash('success', 'Action closed.');
-  res.redirect(req.body.return_to || '/actions');
+  req.session.save(() => res.redirect(req.body.return_to || '/actions'));
 });
 
 router.post('/:id/reopen', (req, res) => {
   const db = getDb();
   db.prepare("UPDATE corrective_actions SET status='open', completed_date=NULL, closed_at=NULL, closed_by_id=NULL, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(req.params.id);
   req.flash('success', 'Action re-opened.');
-  res.redirect(req.body.return_to || '/actions');
+  req.session.save(() => res.redirect(req.body.return_to || '/actions'));
 });
 
 module.exports = router;

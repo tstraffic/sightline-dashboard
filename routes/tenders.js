@@ -92,7 +92,7 @@ router.post('/', requirePermission('tenders'), (req, res) => {
     const title = String(b.title || '').trim();
     if (!title) {
       req.flash('error', 'Title is required.');
-      return res.redirect('/tenders/new');
+      return req.session.save(() => res.redirect('/tenders/new'));
     }
     const status = STATUS_VALUES.includes(b.status) ? b.status : 'open';
     const tenderNumber = nextTenderNumber(db);
@@ -112,11 +112,11 @@ router.post('/', requirePermission('tenders'), (req, res) => {
     );
     try { logActivity({ user: req.session.user, action: 'create', entityType: 'tender', entityId: r.lastInsertRowid, entityLabel: tenderNumber, details: title, ip: req.ip }); } catch (e) {}
     req.flash('success', `Tender ${tenderNumber} created.`);
-    return res.redirect('/tenders/' + r.lastInsertRowid);
+    return req.session.save(() => res.redirect('/tenders/' + r.lastInsertRowid));
   } catch (err) {
     console.error('[tenders POST]', err);
     req.flash('error', 'Could not create tender: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/tenders/new');
+    return req.session.save(() => res.redirect('/tenders/new'));
   }
 });
 
@@ -131,7 +131,7 @@ router.get('/:id', requirePermission('tenders'), (req, res) => {
     LEFT JOIN users cu ON cu.id = t.created_by_id
     WHERE t.id = ?
   `).get(req.params.id);
-  if (!tender) { req.flash('error', 'Tender not found.'); return res.redirect('/tenders'); }
+  if (!tender) { req.flash('error', 'Tender not found.'); return req.session.save(() => res.redirect('/tenders')); }
 
   const linkedJobs = db.prepare(`
     SELECT id, job_number, job_name, project_name, client, status, contract_value
@@ -187,7 +187,7 @@ router.get('/:id', requirePermission('tenders'), (req, res) => {
 router.get('/:id/edit', requirePermission('tenders'), (req, res) => {
   const db = getDb();
   const tender = db.prepare("SELECT * FROM tenders WHERE id = ?").get(req.params.id);
-  if (!tender) { req.flash('error', 'Tender not found.'); return res.redirect('/tenders'); }
+  if (!tender) { req.flash('error', 'Tender not found.'); return req.session.save(() => res.redirect('/tenders')); }
   const choices = loadFormChoices(db);
   res.render('tenders/form', {
     title: 'Edit ' + tender.tender_number, currentPage: 'tenders',
@@ -202,7 +202,7 @@ router.post('/:id', requirePermission('tenders'), (req, res) => {
   try {
     const db = getDb();
     const tender = db.prepare("SELECT * FROM tenders WHERE id = ?").get(req.params.id);
-    if (!tender) { req.flash('error', 'Tender not found.'); return res.redirect('/tenders'); }
+    if (!tender) { req.flash('error', 'Tender not found.'); return req.session.save(() => res.redirect('/tenders')); }
     const b = req.body;
     const title = String(b.title || '').trim() || tender.title;
     const status = STATUS_VALUES.includes(b.status) ? b.status : tender.status;
@@ -226,11 +226,11 @@ router.post('/:id', requirePermission('tenders'), (req, res) => {
     );
     try { logActivity({ user: req.session.user, action: 'update', entityType: 'tender', entityId: tender.id, entityLabel: tender.tender_number, details: '', ip: req.ip }); } catch (e) {}
     req.flash('success', 'Tender updated.');
-    return res.redirect('/tenders/' + tender.id);
+    return req.session.save(() => res.redirect('/tenders/' + tender.id));
   } catch (err) {
     console.error('[tenders PUT]', err);
     req.flash('error', 'Update failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/tenders/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/tenders/' + req.params.id + '/edit'));
   }
 });
 
@@ -239,17 +239,17 @@ router.post('/:id/delete', requirePermission('tenders'), (req, res) => {
   try {
     const db = getDb();
     const tender = db.prepare("SELECT * FROM tenders WHERE id = ?").get(req.params.id);
-    if (!tender) { req.flash('error', 'Tender not found.'); return res.redirect('/tenders'); }
+    if (!tender) { req.flash('error', 'Tender not found.'); return req.session.save(() => res.redirect('/tenders')); }
     db.prepare("UPDATE jobs SET tender_id = NULL WHERE tender_id = ?").run(tender.id);
     db.prepare("UPDATE compliance SET tender_id = NULL WHERE tender_id = ?").run(tender.id);
     db.prepare("DELETE FROM tenders WHERE id = ?").run(tender.id);
     try { logActivity({ user: req.session.user, action: 'delete', entityType: 'tender', entityId: tender.id, entityLabel: tender.tender_number, details: 'Deleted tender; linked records detached', ip: req.ip }); } catch (e) {}
     req.flash('success', `Deleted ${tender.tender_number}. Linked jobs/plans detached.`);
-    return res.redirect('/tenders');
+    return req.session.save(() => res.redirect('/tenders'));
   } catch (err) {
     console.error('[tenders DELETE]', err);
     req.flash('error', 'Delete failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/tenders');
+    return req.session.save(() => res.redirect('/tenders'));
   }
 });
 
@@ -258,16 +258,16 @@ router.post('/:id/link-job', requirePermission('tenders'), (req, res) => {
   try {
     const db = getDb();
     const tender = db.prepare("SELECT id, tender_number FROM tenders WHERE id = ?").get(req.params.id);
-    if (!tender) { req.flash('error', 'Tender not found.'); return res.redirect('/tenders'); }
+    if (!tender) { req.flash('error', 'Tender not found.'); return req.session.save(() => res.redirect('/tenders')); }
     const jobId = parseInt(req.body.job_id, 10);
-    if (!jobId) { req.flash('error', 'Pick a job.'); return res.redirect('/tenders/' + tender.id); }
+    if (!jobId) { req.flash('error', 'Pick a job.'); return req.session.save(() => res.redirect('/tenders/' + tender.id)); }
     db.prepare("UPDATE jobs SET tender_id = ? WHERE id = ?").run(tender.id, jobId);
     req.flash('success', 'Job linked to tender.');
-    return res.redirect('/tenders/' + tender.id);
+    return req.session.save(() => res.redirect('/tenders/' + tender.id));
   } catch (err) {
     console.error('[tenders link-job]', err);
     req.flash('error', 'Link failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/tenders/' + req.params.id);
+    return req.session.save(() => res.redirect('/tenders/' + req.params.id));
   }
 });
 
@@ -278,11 +278,11 @@ router.post('/:id/unlink-job', requirePermission('tenders'), (req, res) => {
     const jobId = parseInt(req.body.job_id, 10);
     if (jobId) db.prepare("UPDATE jobs SET tender_id = NULL WHERE id = ? AND tender_id = ?").run(jobId, req.params.id);
     req.flash('success', 'Job unlinked.');
-    return res.redirect('/tenders/' + req.params.id);
+    return req.session.save(() => res.redirect('/tenders/' + req.params.id));
   } catch (err) {
     console.error('[tenders unlink-job]', err);
     req.flash('error', 'Unlink failed.');
-    return res.redirect('/tenders/' + req.params.id);
+    return req.session.save(() => res.redirect('/tenders/' + req.params.id));
   }
 });
 
@@ -291,17 +291,17 @@ router.post('/:id/link-plan', requirePermission('tenders'), (req, res) => {
   try {
     const db = getDb();
     const tender = db.prepare("SELECT id FROM tenders WHERE id = ?").get(req.params.id);
-    if (!tender) { req.flash('error', 'Tender not found.'); return res.redirect('/tenders'); }
+    if (!tender) { req.flash('error', 'Tender not found.'); return req.session.save(() => res.redirect('/tenders')); }
     const planId = parseInt(req.body.plan_id, 10);
-    if (!planId) { req.flash('error', 'Pick a plan.'); return res.redirect('/tenders/' + tender.id); }
+    if (!planId) { req.flash('error', 'Pick a plan.'); return req.session.save(() => res.redirect('/tenders/' + tender.id)); }
     // Cascade to all sub-plans of this parent so they all reflect the tender link
     db.prepare("UPDATE compliance SET tender_id = ? WHERE id = ? OR parent_id = ?").run(tender.id, planId, planId);
     req.flash('success', 'Plan linked to tender.');
-    return res.redirect('/tenders/' + tender.id);
+    return req.session.save(() => res.redirect('/tenders/' + tender.id));
   } catch (err) {
     console.error('[tenders link-plan]', err);
     req.flash('error', 'Link failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/tenders/' + req.params.id);
+    return req.session.save(() => res.redirect('/tenders/' + req.params.id));
   }
 });
 
@@ -312,11 +312,11 @@ router.post('/:id/unlink-plan', requirePermission('tenders'), (req, res) => {
     const planId = parseInt(req.body.plan_id, 10);
     if (planId) db.prepare("UPDATE compliance SET tender_id = NULL WHERE (id = ? OR parent_id = ?) AND tender_id = ?").run(planId, planId, req.params.id);
     req.flash('success', 'Plan unlinked.');
-    return res.redirect('/tenders/' + req.params.id);
+    return req.session.save(() => res.redirect('/tenders/' + req.params.id));
   } catch (err) {
     console.error('[tenders unlink-plan]', err);
     req.flash('error', 'Unlink failed.');
-    return res.redirect('/tenders/' + req.params.id);
+    return req.session.save(() => res.redirect('/tenders/' + req.params.id));
   }
 });
 

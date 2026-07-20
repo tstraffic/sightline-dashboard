@@ -71,7 +71,6 @@ router.get('/manage', requireManager, (req, res) => {
   res.render('worker/manage', {
     title: 'Manage', currentPage: 'manage',
     shifts, kpis: { activeCrew, clockedIn, startingSoon, late, pendingLeave, openIncidents, pendingReports },
-    flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });
 
@@ -130,7 +129,6 @@ router.get('/manage/shifts', requireManager, async (req, res) => {
   res.render('worker/manage-shifts', {
     title: 'All shifts', currentPage: 'manage',
     date: dateParam, jobs: jobList,
-    flash_success: req.flash('success'),
   });
 });
 
@@ -149,7 +147,6 @@ router.get('/manage/leave', requireManager, (req, res) => {
   res.render('worker/manage-leave', {
     title: 'Leave approvals', currentPage: 'manage',
     pending,
-    flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });
 
@@ -166,7 +163,7 @@ router.post('/manage/leave/:id/:action', requireManager, (req, res) => {
   const approverId = mgr && mgr.linked_user_id ? mgr.linked_user_id : null;
 
   const row = db.prepare('SELECT * FROM employee_leave WHERE id = ?').get(req.params.id);
-  if (!row) { req.flash('error', 'Leave not found.'); return res.redirect('/w/manage/leave'); }
+  if (!row) { req.flash('error', 'Leave not found.'); return req.session.save(() => res.redirect('/w/manage/leave')); }
 
   db.prepare(`UPDATE employee_leave SET status = ?, approved_by_id = ?, approved_at = datetime('now') WHERE id = ?`)
     .run(newStatus, approverId, req.params.id);
@@ -180,7 +177,7 @@ router.post('/manage/leave/:id/:action', requireManager, (req, res) => {
   });
 
   req.flash('success', action === 'approve' ? 'Leave approved.' : 'Leave rejected.');
-  res.redirect('/w/manage/leave');
+  req.session.save(() => res.redirect('/w/manage/leave'));
 });
 
 // ==========================================================

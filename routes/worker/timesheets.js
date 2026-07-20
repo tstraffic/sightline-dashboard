@@ -78,7 +78,7 @@ router.post('/timesheets', (req, res) => {
 
   if (!job_id || !work_date || !start_time || !end_time) {
     req.flash('error', 'Please fill in all required fields.');
-    return res.redirect('/w/timesheets/new');
+    return req.session.save(() => res.redirect('/w/timesheets/new'));
   }
 
   // Calculate total hours
@@ -95,7 +95,7 @@ router.post('/timesheets', (req, res) => {
   `).run(job_id, worker.id, work_date, start_time, end_time, break_minutes || 0, totalHours, shift_type || 'day', role_on_site || null, notes || null, worker.id);
 
   req.flash('success', 'Timesheet submitted successfully.');
-  res.redirect('/w/timesheets');
+  req.session.save(() => res.redirect('/w/timesheets'));
 });
 
 module.exports = router;

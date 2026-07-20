@@ -78,30 +78,30 @@ router.post('/:id/status', (req, res) => {
   const validStatuses = ['tender', 'won', 'prestart', 'active', 'on_hold', 'completed', 'closed'];
   if (!validStatuses.includes(status)) {
     req.flash('error', 'Invalid status');
-    return res.redirect('/jobs');
+    return req.session.save(() => res.redirect('/jobs'));
   }
   db.prepare('UPDATE jobs SET status = ? WHERE id = ?').run(status, req.params.id);
-  res.redirect('/jobs');
+  req.session.save(() => res.redirect('/jobs'));
 });
 
 // Close out a job — sets status = 'closed', drops it off priority, and returns to the detail page
 router.post('/:id/close', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT id, job_number FROM jobs WHERE id = ?').get(req.params.id);
-  if (!job) { req.flash('error', 'Job not found'); return res.redirect('/jobs'); }
+  if (!job) { req.flash('error', 'Job not found'); return req.session.save(() => res.redirect('/jobs')); }
   db.prepare("UPDATE jobs SET status = 'closed', priority = 'normal' WHERE id = ?").run(job.id);
   req.flash('success', `${job.job_number} closed out.`);
-  res.redirect(`/jobs/${job.id}`);
+  req.session.save(() => res.redirect(`/jobs/${job.id}`));
 });
 
 // Reopen a closed job — sets status = 'active' and returns to the detail page
 router.post('/:id/reopen', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT id, job_number FROM jobs WHERE id = ?').get(req.params.id);
-  if (!job) { req.flash('error', 'Job not found'); return res.redirect('/jobs'); }
+  if (!job) { req.flash('error', 'Job not found'); return req.session.save(() => res.redirect('/jobs')); }
   db.prepare("UPDATE jobs SET status = 'active' WHERE id = ?").run(job.id);
   req.flash('success', `${job.job_number} reopened.`);
-  res.redirect(`/jobs/${job.id}`);
+  req.session.save(() => res.redirect(`/jobs/${job.id}`));
 });
 
 // New job form
@@ -141,11 +141,11 @@ router.post('/', (req, res) => {
       });
       const monthsLbl = selectedMonths.map(m => m.name).join(', ');
       req.flash('success', `Created ${created.length} monthly job(s) — ${monthsLbl} ${monthlyYear} (${patternName}).`);
-      return res.redirect('/jobs');
+      return req.session.save(() => res.redirect('/jobs'));
     } catch (err) {
       console.error('[Jobs] monthly CREATE ERROR:', err.message);
       req.flash('error', 'Failed to create monthly jobs: ' + err.message);
-      return res.redirect('/jobs');
+      return req.session.save(() => res.redirect('/jobs'));
     }
   }
 
@@ -216,7 +216,7 @@ router.post('/', (req, res) => {
     // Land on the new job's detail page (not the long /jobs list) so the
     // planner sees their just-created job straight away rather than having
     // to hunt for it in a status-sorted register.
-    res.redirect(newJobId ? ('/jobs/' + newJobId.id) : '/jobs');
+    req.session.save(() => res.redirect(newJobId ? ('/jobs/' + newJobId.id) : '/jobs'));
   } catch (err) {
     console.error('[Jobs] CREATE ERROR:', err.message);
     if (err.message.includes('UNIQUE')) {
@@ -224,7 +224,7 @@ router.post('/', (req, res) => {
     } else {
       req.flash('error', 'Failed to create job: ' + err.message);
     }
-    res.redirect('/jobs');
+    req.session.save(() => res.redirect('/jobs'));
   }
 });
 
@@ -260,7 +260,7 @@ router.get('/:id', (req, res) => {
 
   if (!job) {
     req.flash('error', 'Job not found.');
-    return res.redirect('/jobs');
+    return req.session.save(() => res.redirect('/jobs'));
   }
 
   // Tender link (if this job is rolled up under a tender)
@@ -622,7 +622,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
-  if (!job) { req.flash('error', 'Job not found.'); return res.redirect('/jobs'); }
+  if (!job) { req.flash('error', 'Job not found.'); return req.session.save(() => res.redirect('/jobs')); }
   const users = db.prepare('SELECT id, full_name, role FROM users WHERE active = 1 ORDER BY full_name').all();
   const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
   res.render('jobs/form', { title: 'Edit Job', job, users, clients, user: req.session.user });
@@ -633,7 +633,7 @@ router.post('/:id', (req, res) => {
   const db = getDb();
   const b = req.body;
   const existing = db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(req.params.id);
-  if (!existing) { req.flash('error', 'Job not found.'); return res.redirect('/jobs'); }
+  if (!existing) { req.flash('error', 'Job not found.'); return req.session.save(() => res.redirect('/jobs')); }
   let clientName = b.client || '';
   if (b.client_id) {
     const cl = db.prepare('SELECT company_name FROM clients WHERE id = ?').get(b.client_id);
@@ -704,12 +704,12 @@ router.post('/:id', (req, res) => {
 
     if (mintedCount > 0) req.flash('success', `Job updated · added ${mintedCount} new monthly job(s).`);
     else req.flash('success', 'Job updated successfully.');
-    res.redirect(`/jobs/${req.params.id}`);
+    req.session.save(() => res.redirect(`/jobs/${req.params.id}`));
   } catch (err) {
     console.error('[Jobs] UPDATE ERROR:', err && err.stack || err);
     req.flash('error', 'Failed to update job: ' + err.message);
     // Stay on edit so the user can retry without losing their other changes.
-    res.redirect(`/jobs/${req.params.id}/edit`);
+    req.session.save(() => res.redirect(`/jobs/${req.params.id}/edit`));
   }
 });
 
@@ -718,14 +718,14 @@ router.post('/:id/delete', (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM jobs WHERE id = ?').run(req.params.id);
   req.flash('success', 'Job deleted.');
-  res.redirect('/jobs');
+  req.session.save(() => res.redirect('/jobs'));
 });
 
 // Add member to job chat
 router.post('/:id/chat/add-member', (req, res) => {
   const db = getDb();
   const userId = parseInt(req.body.user_id);
-  if (!userId) { req.flash('error', 'No user selected.'); return res.redirect(`/projects/${req.params.id}#chat`); }
+  if (!userId) { req.flash('error', 'No user selected.'); return req.session.save(() => res.redirect(`/projects/${req.params.id}#chat`)); }
   const chatThreadId = getThreadForEntity('job', parseInt(req.params.id));
   if (chatThreadId) {
     const user = db.prepare('SELECT full_name FROM users WHERE id = ?').get(userId);
@@ -734,7 +734,7 @@ router.post('/:id/chat/add-member', (req, res) => {
   } else {
     req.flash('error', 'Chat thread not found.');
   }
-  res.redirect(`/projects/${req.params.id}#chat`);
+  req.session.save(() => res.redirect(`/projects/${req.params.id}#chat`));
 });
 
 // Link an existing compliance item to this job
@@ -750,7 +750,7 @@ router.post('/:id/link-compliance', (req, res) => {
     }
   }
   const hash = req.body.redirect_hash || 'compliance';
-  res.redirect(`/projects/${req.params.id}#${hash}`);
+  req.session.save(() => res.redirect(`/projects/${req.params.id}#${hash}`));
 });
 
 // Unlink a compliance item from this job
@@ -762,7 +762,7 @@ router.post('/:id/unlink-compliance', (req, res) => {
     req.flash('success', 'Item unlinked from this job.');
   }
   const hash = req.body.redirect_hash || 'compliance';
-  res.redirect(`/projects/${req.params.id}#${hash}`);
+  req.session.save(() => res.redirect(`/projects/${req.params.id}#${hash}`));
 });
 
 // =============================================
@@ -796,7 +796,7 @@ router.post('/:id/compliance-upload', complianceDocUpload.array('files', 10), (r
 
   if (files.length === 0) {
     req.flash('error', 'No files selected.');
-    return res.redirect(`/projects/${jobId}#compliance`);
+    return req.session.save(() => res.redirect(`/projects/${jobId}#compliance`));
   }
 
   const ins = db.prepare('INSERT INTO documents (job_id, library, category, filename, original_name, file_path, file_size, uploaded_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
@@ -806,7 +806,7 @@ router.post('/:id/compliance-upload', complianceDocUpload.array('files', 10), (r
   });
 
   req.flash('success', `${files.length} document(s) uploaded.`);
-  res.redirect(`/projects/${jobId}#compliance`);
+  req.session.save(() => res.redirect(`/projects/${jobId}#compliance`));
 });
 
 router.post('/:id/compliance-doc/:docId/delete', (req, res) => {
@@ -818,7 +818,7 @@ router.post('/:id/compliance-doc/:docId/delete', (req, res) => {
     db.prepare('DELETE FROM documents WHERE id = ?').run(doc.id);
     req.flash('success', 'Document deleted.');
   }
-  res.redirect(`/projects/${req.params.id}#compliance`);
+  req.session.save(() => res.redirect(`/projects/${req.params.id}#compliance`));
 });
 
 // Serve compliance uploads
@@ -867,7 +867,7 @@ router.post('/:id/diary', diaryUpload.array('attachments', 5), (req, res) => {
     console.error('[Diary] CREATE ERROR:', err.message);
     req.flash('error', 'Failed to add diary entry: ' + err.message);
   }
-  res.redirect(`/jobs/${req.params.id}#diary`);
+  req.session.save(() => res.redirect(`/jobs/${req.params.id}#diary`));
 });
 
 // Update diary entry
@@ -899,7 +899,7 @@ router.post('/:id/diary/:entryId', diaryUpload.array('attachments', 5), (req, re
     console.error('[Diary] UPDATE ERROR:', err.message);
     req.flash('error', 'Failed to update diary entry: ' + err.message);
   }
-  res.redirect(`/jobs/${req.params.id}#diary`);
+  req.session.save(() => res.redirect(`/jobs/${req.params.id}#diary`));
 });
 
 // Delete diary entry
@@ -911,7 +911,7 @@ router.post('/:id/diary/:entryId/delete', (req, res) => {
   } catch (err) {
     req.flash('error', 'Failed to delete diary entry: ' + err.message);
   }
-  res.redirect(`/jobs/${req.params.id}#diary`);
+  req.session.save(() => res.redirect(`/jobs/${req.params.id}#diary`));
 });
 
 // =============================================
@@ -950,7 +950,7 @@ router.get('/:id/documents', (req, res) => {
   const job = db.prepare('SELECT id, job_number, job_name, client FROM jobs WHERE id = ?').get(req.params.id);
   if (!job) {
     req.flash('error', 'Job not found.');
-    return res.redirect('/jobs');
+    return req.session.save(() => res.redirect('/jobs'));
   }
   const docs = db.prepare(`
     SELECT jd.*, u.full_name AS uploaded_by_name
@@ -963,8 +963,6 @@ router.get('/:id/documents', (req, res) => {
     title: 'Site Documents — ' + (job.job_number || job.job_name),
     job,
     docs,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
@@ -978,7 +976,7 @@ router.post('/:id/documents', jobDocUpload.array('files', 10), (req, res) => {
   const files = req.files || [];
   if (!files.length) {
     req.flash('error', 'Pick at least one file to upload.');
-    return res.redirect(`/jobs/${job.id}/documents`);
+    return req.session.save(() => res.redirect(`/jobs/${job.id}/documents`));
   }
   const ins = db.prepare(`
     INSERT INTO job_documents (job_id, doc_type, title, file_path, original_name, mime_type, size_bytes, uploaded_by_id)
@@ -992,7 +990,7 @@ router.post('/:id/documents', jobDocUpload.array('files', 10), (req, res) => {
     ins.run(job.id, docType, useTitle, relPath, f.originalname || null, f.mimetype || null, f.size || 0, req.session.user.id);
   }
   req.flash('success', `${files.length} document(s) uploaded.`);
-  res.redirect(`/jobs/${job.id}/documents`);
+  req.session.save(() => res.redirect(`/jobs/${job.id}/documents`));
 });
 
 // POST /jobs/:id/documents/:docId/archive — soft-archive (workers stop seeing it)
@@ -1000,7 +998,7 @@ router.post('/:id/documents/:docId/archive', (req, res) => {
   const db = getDb();
   db.prepare('UPDATE job_documents SET archived_at = datetime(\'now\') WHERE id = ? AND job_id = ?').run(req.params.docId, req.params.id);
   req.flash('success', 'Document archived.');
-  res.redirect(`/jobs/${req.params.id}/documents`);
+  req.session.save(() => res.redirect(`/jobs/${req.params.id}/documents`));
 });
 
 // GET /jobs/:id/documents/:docId/download — open / download the file

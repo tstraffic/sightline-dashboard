@@ -41,7 +41,7 @@ router.get('/', (req, res) => {
 router.get('/job/:jobId', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.jobId);
-  if (!job) { req.flash('error', 'Job not found.'); return res.redirect('/budgets'); }
+  if (!job) { req.flash('error', 'Job not found.'); return req.session.save(() => res.redirect('/budgets')); }
 
   let budget = db.prepare('SELECT * FROM job_budgets WHERE job_id = ?').get(req.params.jobId);
 
@@ -99,14 +99,14 @@ router.post('/job/:jobId', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'budget', entityLabel: job ? job.job_number : '', jobId: parseInt(req.params.jobId), jobNumber: job ? job.job_number : '', ip: req.ip });
   req.flash('success', 'Budget updated.');
-  res.redirect(`/budgets/job/${req.params.jobId}`);
+  req.session.save(() => res.redirect(`/budgets/job/${req.params.jobId}`));
 });
 
 // ADD COST ENTRY
 router.post('/job/:jobId/costs', (req, res) => {
   const db = getDb();
   const budget = db.prepare('SELECT id FROM job_budgets WHERE job_id = ?').get(req.params.jobId);
-  if (!budget) { req.flash('error', 'Budget not found. Set up budget first.'); return res.redirect(`/budgets/job/${req.params.jobId}`); }
+  if (!budget) { req.flash('error', 'Budget not found. Set up budget first.'); return req.session.save(() => res.redirect(`/budgets/job/${req.params.jobId}`)); }
 
   const { category, description, amount, entry_date, invoice_ref, supplier, receipt_url } = req.body;
   const job = db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(req.params.jobId);
@@ -118,7 +118,7 @@ router.post('/job/:jobId/costs', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'cost_entry', entityLabel: `$${amount} - ${description.substring(0, 40)}`, jobId: parseInt(req.params.jobId), jobNumber: job ? job.job_number : '', ip: req.ip });
   req.flash('success', 'Cost entry added.');
-  res.redirect(`/budgets/job/${req.params.jobId}`);
+  req.session.save(() => res.redirect(`/budgets/job/${req.params.jobId}`));
 });
 
 // DELETE COST ENTRY
@@ -127,7 +127,7 @@ router.post('/job/:jobId/costs/:costId/delete', (req, res) => {
   db.prepare('DELETE FROM cost_entries WHERE id = ?').run(req.params.costId);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'cost_entry', entityId: parseInt(req.params.costId), jobId: parseInt(req.params.jobId), ip: req.ip });
   req.flash('success', 'Cost entry deleted.');
-  res.redirect(`/budgets/job/${req.params.jobId}`);
+  req.session.save(() => res.redirect(`/budgets/job/${req.params.jobId}`));
 });
 
 module.exports = router;

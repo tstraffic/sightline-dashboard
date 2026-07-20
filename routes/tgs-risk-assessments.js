@@ -230,10 +230,10 @@ router.post('/', (req, res) => {
       req.session.user.id
     );
     req.flash('success', 'TGS Risk Assessment created.');
-    res.redirect(`/tgs-risk-assessments/${result.lastInsertRowid}/edit`);
+    req.session.save(() => res.redirect(`/tgs-risk-assessments/${result.lastInsertRowid}/edit`));
   } catch (err) {
     req.flash('error', 'Failed to create: ' + err.message);
-    res.redirect('/tgs-risk-assessments/new');
+    req.session.save(() => res.redirect('/tgs-risk-assessments/new'));
   }
 });
 
@@ -243,7 +243,7 @@ router.get('/:id/edit', (req, res) => {
   const assessment = db.prepare('SELECT * FROM tgs_risk_assessments WHERE id = ?').get(req.params.id);
   if (!assessment) {
     req.flash('error', 'Assessment not found.');
-    return res.redirect('/tgs-risk-assessments');
+    return req.session.save(() => res.redirect('/tgs-risk-assessments'));
   }
   let responses = {};
   try { responses = JSON.parse(assessment.responses_json || '{}'); } catch (e) { responses = {}; }
@@ -257,7 +257,7 @@ router.post('/:id', (req, res) => {
   const existing = db.prepare('SELECT * FROM tgs_risk_assessments WHERE id = ?').get(req.params.id);
   if (!existing) {
     req.flash('error', 'Assessment not found.');
-    return res.redirect('/tgs-risk-assessments');
+    return req.session.save(() => res.redirect('/tgs-risk-assessments'));
   }
   const responses = buildResponsesFromForm(b);
   const residual = computeResidualRisk(responses.risk_management);
@@ -281,10 +281,10 @@ router.post('/:id', (req, res) => {
       req.params.id
     );
     req.flash('success', 'Assessment saved.');
-    res.redirect(`/tgs-risk-assessments/${req.params.id}/edit`);
+    req.session.save(() => res.redirect(`/tgs-risk-assessments/${req.params.id}/edit`));
   } catch (err) {
     req.flash('error', 'Failed to save: ' + err.message);
-    res.redirect(`/tgs-risk-assessments/${req.params.id}/edit`);
+    req.session.save(() => res.redirect(`/tgs-risk-assessments/${req.params.id}/edit`));
   }
 });
 
@@ -294,7 +294,7 @@ router.post('/:id/finalize', async (req, res) => {
   const assessment = db.prepare('SELECT * FROM tgs_risk_assessments WHERE id = ?').get(req.params.id);
   if (!assessment) {
     req.flash('error', 'Assessment not found.');
-    return res.redirect('/tgs-risk-assessments');
+    return req.session.save(() => res.redirect('/tgs-risk-assessments'));
   }
 
   let responses = {};
@@ -316,7 +316,7 @@ router.post('/:id/finalize', async (req, res) => {
     console.error('[TGS RA] Finalize/PDF error:', err);
     req.flash('error', 'Failed to generate PDF: ' + err.message);
   }
-  res.redirect(`/tgs-risk-assessments/${req.params.id}/edit`);
+  req.session.save(() => res.redirect(`/tgs-risk-assessments/${req.params.id}/edit`));
 });
 
 // ─── DOWNLOAD PDF ─────────────────────────────────
@@ -325,7 +325,7 @@ router.get('/:id/pdf', async (req, res) => {
   const assessment = db.prepare('SELECT * FROM tgs_risk_assessments WHERE id = ?').get(req.params.id);
   if (!assessment) {
     req.flash('error', 'Assessment not found.');
-    return res.redirect('/tgs-risk-assessments');
+    return req.session.save(() => res.redirect('/tgs-risk-assessments'));
   }
 
   // If a PDF was generated previously and still exists, stream it.
@@ -349,7 +349,7 @@ router.get('/:id/pdf', async (req, res) => {
   } catch (err) {
     console.error('[TGS RA] PDF stream error:', err);
     req.flash('error', 'Failed to render PDF: ' + err.message);
-    res.redirect(`/tgs-risk-assessments/${req.params.id}/edit`);
+    req.session.save(() => res.redirect(`/tgs-risk-assessments/${req.params.id}/edit`));
   }
 });
 
@@ -361,16 +361,16 @@ router.post('/:id/attach/:planId', (req, res) => {
   const assessment = db.prepare('SELECT * FROM tgs_risk_assessments WHERE id = ?').get(req.params.id);
   if (!assessment) {
     req.flash('error', 'Assessment not found.');
-    return res.redirect('/tgs-risk-assessments');
+    return req.session.save(() => res.redirect('/tgs-risk-assessments'));
   }
   const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.planId);
   if (!plan) {
     req.flash('error', 'Plan not found.');
-    return res.redirect(`/tgs-risk-assessments/${assessment.id}/edit`);
+    return req.session.save(() => res.redirect(`/tgs-risk-assessments/${assessment.id}/edit`));
   }
   if (!assessment.pdf_path) {
     req.flash('error', 'Finalize the assessment first to generate a PDF, then attach.');
-    return res.redirect(`/tgs-risk-assessments/${assessment.id}/edit`);
+    return req.session.save(() => res.redirect(`/tgs-risk-assessments/${assessment.id}/edit`));
   }
 
   try {
@@ -412,7 +412,7 @@ router.post('/:id/attach/:planId', (req, res) => {
     console.error('[TGS RA] Attach error:', err);
     req.flash('error', 'Failed to attach: ' + err.message);
   }
-  res.redirect(`/tgs-risk-assessments/${assessment.id}/edit`);
+  req.session.save(() => res.redirect(`/tgs-risk-assessments/${assessment.id}/edit`));
 });
 
 // ─── DELETE ───────────────────────────────────────
@@ -421,7 +421,7 @@ router.post('/:id/delete', (req, res) => {
   const assessment = db.prepare('SELECT * FROM tgs_risk_assessments WHERE id = ?').get(req.params.id);
   if (!assessment) {
     req.flash('error', 'Assessment not found.');
-    return res.redirect('/tgs-risk-assessments');
+    return req.session.save(() => res.redirect('/tgs-risk-assessments'));
   }
   try {
     // Remove generated PDF file if present (best-effort; ignore missing file).
@@ -434,7 +434,7 @@ router.post('/:id/delete', (req, res) => {
   } catch (err) {
     req.flash('error', 'Failed to delete: ' + err.message);
   }
-  res.redirect('/tgs-risk-assessments');
+  req.session.save(() => res.redirect('/tgs-risk-assessments'));
 });
 
 module.exports = router;

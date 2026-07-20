@@ -96,7 +96,7 @@ router.get('/project/:projectId', requirePermission(PERM), (req, res) => {
   `).all(projectId);
   if (!shifts.length) {
     req.flash('error', 'No pending shifts for that project.');
-    return res.redirect('/traffio-imports');
+    return req.session.save(() => res.redirect('/traffio-imports'));
   }
   let first = {};
   try { first = JSON.parse(shifts[0].proposed_json || '{}'); } catch (e) { first = {}; }
@@ -131,7 +131,7 @@ router.post('/project/:projectId/confirm', requirePermission(PERM), (req, res) =
   `).all(projectId);
   if (!shifts.length) {
     req.flash('error', 'No pending shifts left for that project.');
-    return res.redirect('/traffio-imports');
+    return req.session.save(() => res.redirect('/traffio-imports'));
   }
 
   let done = 0;
@@ -195,17 +195,17 @@ router.post('/project/:projectId/confirm', requirePermission(PERM), (req, res) =
     req.flash('success', `Reconciled ${done} shift${done === 1 ? '' : 's'} for the project. Future shifts of this project will now auto-match.`);
   } catch (err) {
     req.flash('error', err.message || 'Could not reconcile this project.');
-    return res.redirect('/traffio-imports/project/' + encodeURIComponent(projectId));
+    return req.session.save(() => res.redirect('/traffio-imports/project/' + encodeURIComponent(projectId)));
   }
 
-  res.redirect('/traffio-imports');
+  req.session.save(() => res.redirect('/traffio-imports'));
 });
 
 // GET /traffio-imports/:id — detail + match/create form
 router.get('/:id', requirePermission(PERM), (req, res) => {
   const db = getDb();
   const row = db.prepare('SELECT * FROM traffio_imports WHERE id = ?').get(req.params.id);
-  if (!row) { req.flash('error', 'Import not found.'); return res.redirect('/traffio-imports'); }
+  if (!row) { req.flash('error', 'Import not found.'); return req.session.save(() => res.redirect('/traffio-imports')); }
 
   const payload = parseProposed(row);
   // Active jobs for the picker
@@ -222,10 +222,10 @@ router.get('/:id', requirePermission(PERM), (req, res) => {
 router.post('/:id/confirm', requirePermission(PERM), (req, res) => {
   const db = getDb();
   const row = db.prepare('SELECT * FROM traffio_imports WHERE id = ?').get(req.params.id);
-  if (!row) { req.flash('error', 'Import not found.'); return res.redirect('/traffio-imports'); }
+  if (!row) { req.flash('error', 'Import not found.'); return req.session.save(() => res.redirect('/traffio-imports')); }
   if (row.status !== 'pending') {
     req.flash('error', 'This import has already been reconciled.');
-    return res.redirect('/traffio-imports/' + row.id);
+    return req.session.save(() => res.redirect('/traffio-imports/' + row.id));
   }
 
   const payload = parseProposed(row);
@@ -288,17 +288,17 @@ router.post('/:id/confirm', requirePermission(PERM), (req, res) => {
     req.flash('success', 'Reconciled — booking created from the Traffio record.');
   } catch (err) {
     req.flash('error', err.message || 'Could not reconcile this import.');
-    return res.redirect('/traffio-imports/' + row.id);
+    return req.session.save(() => res.redirect('/traffio-imports/' + row.id));
   }
 
-  res.redirect('/traffio-imports');
+  req.session.save(() => res.redirect('/traffio-imports'));
 });
 
 // POST /traffio-imports/:id/discard — ignore this Traffio record
 router.post('/:id/discard', requirePermission(PERM), (req, res) => {
   const db = getDb();
   const row = db.prepare('SELECT * FROM traffio_imports WHERE id = ?').get(req.params.id);
-  if (!row) { req.flash('error', 'Import not found.'); return res.redirect('/traffio-imports'); }
+  if (!row) { req.flash('error', 'Import not found.'); return req.session.save(() => res.redirect('/traffio-imports')); }
 
   db.prepare(`
     UPDATE traffio_imports
@@ -313,7 +313,7 @@ router.post('/:id/discard', requirePermission(PERM), (req, res) => {
     details: 'Discarded Traffio import', ip: req.ip,
   });
   req.flash('success', 'Import discarded.');
-  res.redirect('/traffio-imports');
+  req.session.save(() => res.redirect('/traffio-imports'));
 });
 
 module.exports = router;

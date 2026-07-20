@@ -79,7 +79,7 @@ router.post('/availability', (req, res) => {
       return res.status(400).json({ error: 'Invalid date' });
     }
     req.flash('error', 'Invalid date.');
-    return res.redirect('/w/availability');
+    return req.session.save(() => res.redirect('/w/availability'));
   }
 
   // Validate status
@@ -88,7 +88,7 @@ router.post('/availability', (req, res) => {
       return res.status(400).json({ error: 'Invalid status' });
     }
     req.flash('error', 'Invalid status.');
-    return res.redirect('/w/availability');
+    return req.session.save(() => res.redirect('/w/availability'));
   }
 
   // Don't allow setting availability for past dates
@@ -98,7 +98,7 @@ router.post('/availability', (req, res) => {
       return res.status(400).json({ error: 'Cannot set availability for past dates' });
     }
     req.flash('error', 'Cannot set availability for past dates.');
-    return res.redirect('/w/availability');
+    return req.session.save(() => res.redirect('/w/availability'));
   }
 
   // Upsert: insert or update on conflict
@@ -124,7 +124,7 @@ router.post('/availability', (req, res) => {
     return res.json({ success: true, message: 'Availability updated' });
   }
   req.flash('success', 'Availability updated.');
-  res.redirect('/w/availability');
+  req.session.save(() => res.redirect('/w/availability'));
 });
 
 // DELETE /w/availability/:id — Remove availability entry
@@ -155,12 +155,12 @@ router.post('/availability/delete', (req, res) => {
 
   if (!record) {
     req.flash('error', 'Record not found.');
-    return res.redirect('/w/availability');
+    return req.session.save(() => res.redirect('/w/availability'));
   }
 
   db.prepare('DELETE FROM worker_availability WHERE id = ?').run(id);
   req.flash('success', 'Availability removed.');
-  res.redirect('/w/availability');
+  req.session.save(() => res.redirect('/w/availability'));
 });
 
 // GET /w/availability/api — JSON API for calendar data

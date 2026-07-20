@@ -99,7 +99,7 @@ router.get('/feed/new', (req, res) => {
 // ====================================================
 router.post('/feed/send', (req, res) => {
   photoUpload.single('photo')(req, res, async function (err) {
-    if (err) { req.flash('error', err.message); return res.redirect('/w/feed/new'); }
+    if (err) { req.flash('error', err.message); return req.session.save(() => res.redirect('/w/feed/new')); }
     try {
       let recipients = req.body.recipient_crew_id;
       if (!Array.isArray(recipients)) recipients = recipients ? [recipients] : [];
@@ -159,7 +159,7 @@ router.post('/feed/:id/comment', async (req, res) => {
     if (containsProfanity(msg) && req.body.allow_profanity !== '1') {
       if (wantsJson(req)) return res.status(400).json({ ok: false, error: 'PROFANITY' });
       req.flash('error', 'Comment contains filtered language');
-      return res.redirect('/w/feed/' + req.params.id);
+      return req.session.save(() => res.redirect('/w/feed/' + req.params.id));
     }
     const { id } = addComment({
       kudosId: parseInt(req.params.id, 10),
@@ -178,7 +178,7 @@ router.post('/feed/:id/comment', async (req, res) => {
   } catch (e) {
     if (wantsJson(req)) return res.status(400).json({ ok: false, error: e.message });
     req.flash('error', e.message);
-    res.redirect('/w/feed/' + req.params.id);
+    req.session.save(() => res.redirect('/w/feed/' + req.params.id));
   }
 });
 

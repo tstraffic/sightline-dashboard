@@ -382,7 +382,7 @@ router.post('/roster/preview-worker', requirePermission('hr_employees'), (req, r
 
   if (!member || !member.active || !member.pin_hash) {
     req.flash('error', 'Test worker account not ready. Run migrations and retry.');
-    return res.redirect('/hr/roster');
+    return req.session.save(() => res.redirect('/hr/roster'));
   }
 
   req.session.worker = {
@@ -407,10 +407,10 @@ router.post('/roster/preview-worker', requirePermission('hr_employees'), (req, r
 router.post('/roster/delete', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   let ids = req.body.ids;
-  if (!ids) { req.flash('error', 'No employees selected.'); return res.redirect('/hr/roster'); }
+  if (!ids) { req.flash('error', 'No employees selected.'); return req.session.save(() => res.redirect('/hr/roster')); }
   if (!Array.isArray(ids)) ids = [ids];
   ids = ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
-  if (ids.length === 0) { req.flash('error', 'No valid employees selected.'); return res.redirect('/hr/roster'); }
+  if (ids.length === 0) { req.flash('error', 'No valid employees selected.'); return req.session.save(() => res.redirect('/hr/roster')); }
 
   const placeholders = ids.map(() => '?').join(',');
   try {
@@ -440,7 +440,7 @@ router.post('/roster/delete', requirePermission('hr_employees'), (req, res) => {
     console.error('Roster bulk soft-delete error:', err);
     req.flash('error', 'Error deleting employees: ' + err.message);
   }
-  res.redirect('/hr/roster');
+  req.session.save(() => res.redirect('/hr/roster'));
 });
 
 // ============================================
@@ -449,10 +449,10 @@ router.post('/roster/delete', requirePermission('hr_employees'), (req, res) => {
 router.post('/roster/restore', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   let ids = req.body.ids;
-  if (!ids) { req.flash('error', 'No employees selected.'); return res.redirect('/hr/roster?view=deleted'); }
+  if (!ids) { req.flash('error', 'No employees selected.'); return req.session.save(() => res.redirect('/hr/roster?view=deleted')); }
   if (!Array.isArray(ids)) ids = [ids];
   ids = ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
-  if (ids.length === 0) { req.flash('error', 'No valid employees selected.'); return res.redirect('/hr/roster?view=deleted'); }
+  if (ids.length === 0) { req.flash('error', 'No valid employees selected.'); return req.session.save(() => res.redirect('/hr/roster?view=deleted')); }
 
   const placeholders = ids.map(() => '?').join(',');
   try {
@@ -478,7 +478,7 @@ router.post('/roster/restore', requirePermission('hr_employees'), (req, res) => 
     console.error('Roster bulk restore error:', err);
     req.flash('error', 'Error restoring employees: ' + err.message);
   }
-  res.redirect('/hr/roster?view=deleted');
+  req.session.save(() => res.redirect('/hr/roster?view=deleted'));
 });
 
 // ============================================
@@ -551,7 +551,7 @@ router.post('/roster/duplicates/resolve', requirePermission('hr_employees'), (re
     const ids = String(req.body['members_' + k.slice(5)] || '').split(',').map(n => parseInt(n, 10)).filter(Boolean);
     ids.forEach(id => { if (id && id !== keepId) removeIds.push(id); });
   });
-  if (!removeIds.length) { req.flash('error', 'Nothing to resolve.'); return res.redirect('/hr/roster/duplicates'); }
+  if (!removeIds.length) { req.flash('error', 'Nothing to resolve.'); return req.session.save(() => res.redirect('/hr/roster/duplicates')); }
 
   const ph = removeIds.map(() => '?').join(',');
   try {
@@ -566,7 +566,7 @@ router.post('/roster/duplicates/resolve', requirePermission('hr_employees'), (re
     console.error('Duplicate resolve error:', err);
     req.flash('error', 'Error resolving duplicates: ' + err.message);
   }
-  res.redirect('/hr/roster/duplicates');
+  req.session.save(() => res.redirect('/hr/roster/duplicates'));
 });
 
 // ============================================
@@ -710,7 +710,7 @@ router.post('/employees', requirePermission('hr_employees'), (req, res) => {
   );
 
   req.flash('success', 'Employee created successfully.');
-  res.redirect(`/hr/employees/${result.lastInsertRowid}`);
+  req.session.save(() => res.redirect(`/hr/employees/${result.lastInsertRowid}`));
 });
 
 // ============================================
@@ -719,10 +719,10 @@ router.post('/employees', requirePermission('hr_employees'), (req, res) => {
 router.post('/employees/delete', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   let ids = req.body.ids;
-  if (!ids) { req.flash('error', 'No employees selected.'); return res.redirect('/hr/employees'); }
+  if (!ids) { req.flash('error', 'No employees selected.'); return req.session.save(() => res.redirect('/hr/employees')); }
   if (!Array.isArray(ids)) ids = [ids];
   ids = ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
-  if (ids.length === 0) { req.flash('error', 'No valid employees selected.'); return res.redirect('/hr/employees'); }
+  if (ids.length === 0) { req.flash('error', 'No valid employees selected.'); return req.session.save(() => res.redirect('/hr/employees')); }
 
   const placeholders = ids.map(() => '?').join(',');
 
@@ -772,7 +772,7 @@ router.post('/employees/delete', requirePermission('hr_employees'), (req, res) =
     console.error('Employee delete error:', e.message);
     req.flash('error', 'Could not delete employee(s): ' + e.message);
   }
-  res.redirect('/hr/employees');
+  req.session.save(() => res.redirect('/hr/employees'));
 });
 
 // ============================================
@@ -781,7 +781,7 @@ router.post('/employees/delete', requirePermission('hr_employees'), (req, res) =
 router.get('/employees/:id', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/employees')); }
 
   const manager = employee.manager_id ? db.prepare('SELECT id, full_name FROM employees WHERE id = ?').get(employee.manager_id) : null;
   const documents = db.prepare('SELECT ed.*, u.full_name as uploaded_by_name, v.full_name as verified_by_name FROM employee_documents ed LEFT JOIN users u ON ed.uploaded_by_id = u.id LEFT JOIN users v ON ed.verified_by_id = v.id WHERE ed.employee_id = ? ORDER BY ed.created_at DESC').all(employee.id);
@@ -1053,7 +1053,7 @@ function extractMentions(body) {
 router.post('/employees/:id/reviews', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(req.params.id);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/employees')); }
 
   const b = req.body || {};
   const kind = b.kind === 'review' ? 'review' : 'note';
@@ -1098,17 +1098,17 @@ router.post('/employees/:id/reviews', requirePermission('hr_employees'), (req, r
     console.error('[hr] add review failed:', e.message);
     req.flash('error', 'Could not save review.');
   }
-  res.redirect(`/hr/employees/${employee.id}#reviews`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}#reviews`));
 });
 
 // POST /hr/reviews/:id/delete — remove a review/note.
 router.post('/reviews/:id/delete', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const row = db.prepare('SELECT id, employee_id FROM employee_reviews WHERE id = ?').get(req.params.id);
-  if (!row) { req.flash('error', 'Review not found.'); return res.redirect('back'); }
+  if (!row) { req.flash('error', 'Review not found.'); return req.session.save(() => res.redirect('back')); }
   db.prepare('DELETE FROM employee_reviews WHERE id = ?').run(row.id);
   req.flash('success', 'Review removed.');
-  res.redirect(`/hr/employees/${row.employee_id}#reviews`);
+  req.session.save(() => res.redirect(`/hr/employees/${row.employee_id}#reviews`));
 });
 
 // POST /hr/reviews/:reviewId/comments — add a comment to a note/review.
@@ -1124,12 +1124,12 @@ router.post('/reviews/:reviewId/comments', requirePermission('hr_employees'), as
     JOIN employees e ON e.id = r.employee_id
     WHERE r.id = ?
   `).get(req.params.reviewId);
-  if (!review) { req.flash('error', 'Review not found.'); return res.redirect('back'); }
+  if (!review) { req.flash('error', 'Review not found.'); return req.session.save(() => res.redirect('back')); }
 
   const body = (req.body && req.body.body || '').trim();
   if (!body) {
     req.flash('error', 'Comment cannot be empty.');
-    return res.redirect(`/hr/employees/${review.employee_id}#reviews`);
+    return req.session.save(() => res.redirect(`/hr/employees/${review.employee_id}#reviews`));
   }
 
   const mentionedNames = extractMentions(body);
@@ -1184,7 +1184,7 @@ router.post('/reviews/:reviewId/comments', requirePermission('hr_employees'), as
     console.error('[hr] add review comment failed:', e.message);
     req.flash('error', 'Could not save comment.');
   }
-  res.redirect(`/hr/employees/${review.employee_id}#reviews`);
+  req.session.save(() => res.redirect(`/hr/employees/${review.employee_id}#reviews`));
 });
 
 // POST /hr/reviews/comments/:id/delete — remove a comment. Limited to
@@ -1197,19 +1197,19 @@ router.post('/reviews/comments/:id/delete', requirePermission('hr_employees'), (
     JOIN employee_reviews r ON r.id = c.review_id
     WHERE c.id = ?
   `).get(req.params.id);
-  if (!row) { req.flash('error', 'Comment not found.'); return res.redirect('back'); }
+  if (!row) { req.flash('error', 'Comment not found.'); return req.session.save(() => res.redirect('back')); }
 
   const u = req.session.user;
   const isOwner = u && u.id === row.created_by_id;
   const isPrivileged = u && ['admin', 'management'].includes((u.role || '').toLowerCase());
   if (!isOwner && !isPrivileged) {
     req.flash('error', "You can only delete your own comments.");
-    return res.redirect(`/hr/employees/${row.employee_id}#reviews`);
+    return req.session.save(() => res.redirect(`/hr/employees/${row.employee_id}#reviews`));
   }
 
   db.prepare('DELETE FROM employee_review_comments WHERE id = ?').run(row.id);
   req.flash('success', 'Comment removed.');
-  res.redirect(`/hr/employees/${row.employee_id}#reviews`);
+  req.session.save(() => res.redirect(`/hr/employees/${row.employee_id}#reviews`));
 });
 
 // ============================================
@@ -1218,7 +1218,7 @@ router.post('/reviews/comments/:id/delete', requirePermission('hr_employees'), (
 router.get('/employees/:id/edit', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/employees')); }
 
   const allEmployees = db.prepare('SELECT id, full_name FROM employees WHERE active = 1 AND id != ? ORDER BY full_name').all(employee.id);
   const crewMembers = db.prepare('SELECT id, full_name, employee_id FROM crew_members WHERE active = 1 ORDER BY full_name').all();
@@ -1441,7 +1441,7 @@ router.post('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     console.error('UPDATE employee error:', err.message, { id: req.params.id, setCount: sets.length, paramCount: params.length });
     req.flash('error', 'Error updating employee: ' + err.message);
   }
-  res.redirect(`/hr/employees/${req.params.id}`);
+  req.session.save(() => res.redirect(`/hr/employees/${req.params.id}`));
 });
 
 // ============================================
@@ -1533,7 +1533,7 @@ router.post('/employees/:id/assign-tier', requirePermission('hr_employees'), (re
   const db = getDb();
   const empId = parseInt(req.params.id, 10);
   const employee = db.prepare('SELECT id, full_name, payment_type FROM employees WHERE id = ? AND deleted_at IS NULL').get(empId);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/employees')); }
 
   const tier = parseInt(req.body.tier, 10);
   // Payment type can be overridden in the same submit — fall back to the
@@ -1543,11 +1543,11 @@ router.post('/employees/:id/assign-tier', requirePermission('hr_employees'), (re
 
   if (!tier || tier < 1 || tier > 6) {
     req.flash('error', 'Pick a tier between 1 and 6.');
-    return res.redirect(`/hr/employees/${empId}`);
+    return req.session.save(() => res.redirect(`/hr/employees/${empId}`));
   }
   if (!['cash', 'abn', 'tfn'].includes(pt)) {
     req.flash('error', 'Pick a payment type (Cash / ABN / TFN) before assigning a tier.');
-    return res.redirect(`/hr/employees/${empId}`);
+    return req.session.save(() => res.redirect(`/hr/employees/${empId}`));
   }
 
   // force = the admin ticked "reset custom rates to tier defaults". Without
@@ -1564,7 +1564,7 @@ router.post('/employees/:id/assign-tier', requirePermission('hr_employees'), (re
       } else {
         req.flash('error', `Tier stamp failed: ${result.error}`);
       }
-      return res.redirect(`/hr/employees/${empId}`);
+      return req.session.save(() => res.redirect(`/hr/employees/${empId}`));
     }
     try {
       logActivity({
@@ -1579,7 +1579,7 @@ router.post('/employees/:id/assign-tier', requirePermission('hr_employees'), (re
     console.error('[/hr/employees/:id/assign-tier]', e);
     req.flash('error', `Could not assign tier: ${e.message}`);
   }
-  return res.redirect(`/hr/employees/${empId}`);
+  return req.session.save(() => res.redirect(`/hr/employees/${empId}`));
 });
 
 // POST /employees/:id/rates — adjust an individual worker's rates + allowance
@@ -1592,7 +1592,7 @@ router.post('/employees/:id/rates', requirePermission('hr_employees'), (req, res
   const db = getDb();
   const empId = parseInt(req.params.id, 10);
   const employee = db.prepare('SELECT id, full_name, tier, payment_type, night_pattern FROM employees WHERE id = ? AND deleted_at IS NULL').get(empId);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/employees')); }
 
   try {
     const empCols = new Set(db.prepare("PRAGMA table_info(employees)").all().map(c => c.name));
@@ -1627,7 +1627,7 @@ router.post('/employees/:id/rates', requirePermission('hr_employees'), (req, res
     }
     if (empCols.has('updated_at')) sets.push('updated_at = CURRENT_TIMESTAMP');
 
-    if (!sets.length) { req.flash('error', 'No rate fields submitted.'); return res.redirect(`/hr/employees/${empId}`); }
+    if (!sets.length) { req.flash('error', 'No rate fields submitted.'); return req.session.save(() => res.redirect(`/hr/employees/${empId}`)); }
     db.prepare(`UPDATE employees SET ${sets.join(', ')} WHERE id = ?`).run(...params, empId);
 
     try {
@@ -1643,7 +1643,7 @@ router.post('/employees/:id/rates', requirePermission('hr_employees'), (req, res
     console.error('[/hr/employees/:id/rates]', e);
     req.flash('error', `Could not save rates: ${e.message}`);
   }
-  return res.redirect(`/hr/employees/${empId}`);
+  return req.session.save(() => res.redirect(`/hr/employees/${empId}`));
 });
 
 // POST /employees/:id/enable-portal — Auto-create crew member + link + activate
@@ -1654,7 +1654,7 @@ router.post('/employees/:id/enable-portal', requirePermission('hr_employees'), (
   const db = getDb();
   db.prepare('UPDATE crew_members SET active = 1 WHERE id = ?').run(data.crewMember.id);
   req.flash('success', `Portal access enabled for ${data.employee.full_name}. You can now set a PIN or send an invite.`);
-  res.redirect(`/hr/employees/${req.params.id}#workforce`);
+  req.session.save(() => res.redirect(`/hr/employees/${req.params.id}#workforce`));
 });
 
 // POST /employees/:id/set-pin — Set or reset worker portal PIN
@@ -1666,7 +1666,7 @@ router.post('/employees/:id/set-pin', requirePermission('hr_employees'), (req, r
   const { pin } = req.body;
   if (!pin || !/^\d{4,6}$/.test(pin)) {
     req.flash('error', 'PIN must be 4-6 digits.');
-    return res.redirect(`/hr/employees/${employee.id}#workforce`);
+    return req.session.save(() => res.redirect(`/hr/employees/${employee.id}#workforce`));
   }
 
   const pinHash = bcrypt.hashSync(pin, 12);
@@ -1675,7 +1675,7 @@ router.post('/employees/:id/set-pin', requirePermission('hr_employees'), (req, r
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'crew_member', entityId: crewMember.id, entityLabel: crewMember.full_name, details: 'Set worker portal PIN (from HR)', ip: req.ip });
   req.flash('success', 'Portal PIN set for ' + crewMember.full_name);
-  res.redirect(`/hr/employees/${employee.id}#workforce`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}#workforce`));
 });
 
 // POST /employees/:id/clear-pin — Remove worker portal PIN
@@ -1689,7 +1689,7 @@ router.post('/employees/:id/clear-pin', requirePermission('hr_employees'), (req,
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'crew_member', entityId: crewMember.id, entityLabel: crewMember.full_name, details: 'Cleared worker portal PIN (from HR)', ip: req.ip });
   req.flash('success', 'Portal PIN cleared for ' + crewMember.full_name);
-  res.redirect(`/hr/employees/${employee.id}#workforce`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}#workforce`));
 });
 
 // POST /employees/:id/toggle-manager — Grant or revoke manager portal access
@@ -1707,7 +1707,7 @@ router.post('/employees/:id/toggle-manager', requirePermission('hr_employees'), 
     ip: req.ip,
   });
   req.flash('success', enable ? `${crewMember.full_name} is now a manager in the portal.` : `Manager access removed for ${crewMember.full_name}.`);
-  res.redirect(`/hr/employees/${employee.id}#workforce`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}#workforce`));
 });
 
 // POST /employees/:id/payment-type — inline change to TFN / ABN / Cash
@@ -1719,13 +1719,13 @@ router.post('/employees/:id/payment-type', requirePermission('hr_employees'), (r
   const employee = db.prepare('SELECT id, first_name, last_name, payment_type FROM employees WHERE id = ?').get(req.params.id);
   if (!employee) {
     req.flash('error', 'Employee not found.');
-    return res.redirect('/hr/roster');
+    return req.session.save(() => res.redirect('/hr/roster'));
   }
   const pt = (req.body.payment_type || '').toLowerCase();
   const allowed = ['', 'cash', 'tfn', 'abn'];
   if (!allowed.includes(pt)) {
     req.flash('error', 'Invalid payment type.');
-    return res.redirect(req.headers.referer || '/hr/roster');
+    return req.session.save(() => res.redirect(req.headers.referer || '/hr/roster'));
   }
   db.prepare('UPDATE employees SET payment_type = ? WHERE id = ?').run(pt, employee.id);
   const fullName = `${employee.first_name || ''} ${employee.last_name || ''}`.trim() || ('Employee #' + employee.id);
@@ -1739,7 +1739,7 @@ router.post('/employees/:id/payment-type', requirePermission('hr_employees'), (r
     return res.json({ success: true, payment_type: pt });
   }
   req.flash('success', `${fullName} payment type set to ${friendly}.`);
-  return res.redirect(req.headers.referer || '/hr/roster');
+  return req.session.save(() => res.redirect(req.headers.referer || '/hr/roster'));
 });
 
 // POST /employees/:id/management-payroll — toggle on_management_payroll.
@@ -1753,7 +1753,7 @@ router.post('/employees/:id/management-payroll', requirePermission('payroll'), (
   if (!employee) {
     if ((req.headers.accept || '').includes('application/json')) return res.status(404).json({ error: 'Employee not found' });
     req.flash('error', 'Employee not found.');
-    return res.redirect('/hr/roster');
+    return req.session.save(() => res.redirect('/hr/roster'));
   }
   const flag = (req.body.on_management_payroll === '1' || req.body.on_management_payroll === 1 || req.body.on_management_payroll === true || req.body.on_management_payroll === 'on') ? 1 : 0;
   db.prepare('UPDATE employees SET on_management_payroll = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(flag, employee.id);
@@ -1767,7 +1767,7 @@ router.post('/employees/:id/management-payroll', requirePermission('payroll'), (
     return res.json({ success: true, on_management_payroll: flag });
   }
   req.flash('success', `${fullName} management payroll ${flag ? 'enabled' : 'disabled'}.`);
-  return res.redirect(req.headers.referer || '/hr/roster');
+  return req.session.save(() => res.redirect(req.headers.referer || '/hr/roster'));
 });
 
 // POST /employees/:id/portal-role — Set the worker's portal_role tier.
@@ -1781,7 +1781,7 @@ router.post('/employees/:id/portal-role', requirePermission('hr_employees'), (re
   const allowed = ['traffic_controller','team_leader','supervisor'];
   if (!allowed.includes(role)) {
     req.flash('error', 'Invalid portal role.');
-    return res.redirect(`/hr/employees/${employee.id}#workforce`);
+    return req.session.save(() => res.redirect(`/hr/employees/${employee.id}#workforce`));
   }
   const db = getDb();
   db.prepare('UPDATE crew_members SET portal_role = ? WHERE id = ?').run(role, crewMember.id);
@@ -1803,9 +1803,9 @@ router.post('/employees/:id/portal-role', requirePermission('hr_employees'), (re
   // dashboard, or the employee detail itself — instead of always
   // dragging the user out of the list view.
   const ref = req.get('referrer') || '';
-  if (ref.includes('/hr/roster')) return res.redirect('/hr/roster');
-  if (ref.includes('/hr') && !ref.includes('/employees/')) return res.redirect(ref);
-  res.redirect(`/hr/employees/${employee.id}#workforce`);
+  if (ref.includes('/hr/roster')) return req.session.save(() => res.redirect('/hr/roster'));
+  if (ref.includes('/hr') && !ref.includes('/employees/')) return req.session.save(() => res.redirect(ref));
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}#workforce`));
 });
 
 // POST /employees/:id/send-invite — Send email invitation for worker portal
@@ -1817,7 +1817,7 @@ router.post('/employees/:id/send-invite', requirePermission('hr_employees'), asy
   // Only send invite emails for active employees
   if (employee.employment_status !== 'active') {
     req.flash('error', 'Employee must be set to Active before sending an invite email.');
-    return res.redirect(`/hr/employees/${employee.id}#workforce`);
+    return req.session.save(() => res.redirect(`/hr/employees/${employee.id}#workforce`));
   }
 
   // Backfill the crew_member's email from the employees record if it's
@@ -1831,7 +1831,7 @@ router.post('/employees/:id/send-invite', requirePermission('hr_employees'), asy
   }
   if (!crewMember.email) {
     req.flash('error', 'Crew member needs an email address to receive an invite. Please set the worker\'s email on the HR profile first.');
-    return res.redirect(`/hr/employees/${employee.id}#workforce`);
+    return req.session.save(() => res.redirect(`/hr/employees/${employee.id}#workforce`));
   }
   if (!crewMember.active) {
     try {
@@ -1889,7 +1889,7 @@ router.post('/employees/:id/send-invite', requirePermission('hr_employees'), asy
     console.error('Send invite error:', err);
     req.flash('error', 'Failed to send invitation email.');
   }
-  res.redirect(`/hr/employees/${employee.id}#workforce`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}#workforce`));
 });
 
 // ============================================
@@ -1898,7 +1898,7 @@ router.post('/employees/:id/send-invite', requirePermission('hr_employees'), asy
 router.post('/employees/:id/documents/upload', requirePermission('hr_documents'), upload.single('file'), (req, res) => {
   const db = getDb();
   const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(req.params.id);
-  if (!employee || !req.file) { req.flash('error', 'Upload failed.'); return res.redirect('back'); }
+  if (!employee || !req.file) { req.flash('error', 'Upload failed.'); return req.session.save(() => res.redirect('back')); }
 
   const b = req.body;
   const docType = b.document_type || 'other';
@@ -1932,7 +1932,7 @@ router.post('/employees/:id/documents/upload', requirePermission('hr_documents')
   } catch (e) { console.error('competency auto-create failed:', e.message); }
 
   req.flash('success', 'Document uploaded.');
-  res.redirect(`/hr/employees/${employee.id}#documents`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}#documents`));
 });
 
 // ============================================
@@ -1941,7 +1941,7 @@ router.post('/employees/:id/documents/upload', requirePermission('hr_documents')
 router.post('/documents/:id/verify', requirePermission('hr_documents'), (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT * FROM employee_documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('back'); }
+  if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('back')); }
 
   const action = req.body.action; // 'verify' or 'reject'
   const newStatus = action === 'reject' ? 'rejected' : 'verified';
@@ -1950,7 +1950,7 @@ router.post('/documents/:id/verify', requirePermission('hr_documents'), (req, re
     .run(newStatus, req.session.user.id, doc.id);
 
   req.flash('success', `Document ${newStatus}.`);
-  res.redirect(`/hr/employees/${doc.employee_id}#documents`);
+  req.session.save(() => res.redirect(`/hr/employees/${doc.employee_id}#documents`));
 });
 
 // ============================================
@@ -1959,11 +1959,11 @@ router.post('/documents/:id/verify', requirePermission('hr_documents'), (req, re
 router.get('/documents/:id/download', requirePermission('hr_documents'), (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT * FROM employee_documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('back'); }
+  if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('back')); }
 
   if (!fs.existsSync(doc.file_path)) {
     req.flash('error', 'File not found on disk.');
-    return res.redirect('back');
+    return req.session.save(() => res.redirect('back'));
   }
 
   // If ?inline=1 or the request is for an image, serve inline for preview
@@ -1987,14 +1987,14 @@ router.get('/documents/:id/download', requirePermission('hr_documents'), (req, r
 router.post('/documents/:id/delete', requirePermission('hr_documents'), (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT * FROM employee_documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('back'); }
+  if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('back')); }
 
   // Delete file from disk
   try { if (fs.existsSync(doc.file_path)) fs.unlinkSync(doc.file_path); } catch (e) { /* ignore */ }
 
   db.prepare('DELETE FROM employee_documents WHERE id = ?').run(doc.id);
   req.flash('success', 'Document deleted.');
-  res.redirect(`/hr/employees/${doc.employee_id}#documents`);
+  req.session.save(() => res.redirect(`/hr/employees/${doc.employee_id}#documents`));
 });
 
 // ============================================
@@ -2099,7 +2099,7 @@ router.post('/employees/:id/competencies', requirePermission('hr_competencies'),
   const db = getDb();
   const b = req.body;
   const employee = db.prepare('SELECT id FROM employees WHERE id = ?').get(req.params.id);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('back'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('back')); }
 
   db.prepare(`
     INSERT INTO employee_competencies (employee_id, competency_type, competency_name, competency_level,
@@ -2114,7 +2114,7 @@ router.post('/employees/:id/competencies', requirePermission('hr_competencies'),
 
   refreshCompetencyStatuses(db, employee.id);
   req.flash('success', 'Competency added.');
-  res.redirect(`/hr/employees/${employee.id}#competencies`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}#competencies`));
 });
 
 // ============================================
@@ -2124,7 +2124,7 @@ router.post('/competencies/:id', requirePermission('hr_competencies'), (req, res
   const db = getDb();
   const b = req.body;
   const comp = db.prepare('SELECT * FROM employee_competencies WHERE id = ?').get(req.params.id);
-  if (!comp) { req.flash('error', 'Competency not found.'); return res.redirect('back'); }
+  if (!comp) { req.flash('error', 'Competency not found.'); return req.session.save(() => res.redirect('back')); }
 
   db.prepare(`
     UPDATE employee_competencies SET competency_type = ?, competency_name = ?, competency_level = ?,
@@ -2140,7 +2140,7 @@ router.post('/competencies/:id', requirePermission('hr_competencies'), (req, res
 
   refreshCompetencyStatuses(db, comp.employee_id);
   req.flash('success', 'Competency updated.');
-  res.redirect(`/hr/employees/${comp.employee_id}#competencies`);
+  req.session.save(() => res.redirect(`/hr/employees/${comp.employee_id}#competencies`));
 });
 
 // ============================================
@@ -2149,11 +2149,11 @@ router.post('/competencies/:id', requirePermission('hr_competencies'), (req, res
 router.post('/competencies/:id/delete', requirePermission('hr_competencies'), (req, res) => {
   const db = getDb();
   const comp = db.prepare('SELECT * FROM employee_competencies WHERE id = ?').get(req.params.id);
-  if (!comp) { req.flash('error', 'Competency not found.'); return res.redirect('back'); }
+  if (!comp) { req.flash('error', 'Competency not found.'); return req.session.save(() => res.redirect('back')); }
 
   db.prepare('DELETE FROM employee_competencies WHERE id = ?').run(comp.id);
   req.flash('success', 'Competency removed.');
-  res.redirect(`/hr/employees/${comp.employee_id}#competencies`);
+  req.session.save(() => res.redirect(`/hr/employees/${comp.employee_id}#competencies`));
 });
 
 // ============================================
@@ -2173,13 +2173,13 @@ router.post('/employees/:id/training-records', requirePermission('hr_competencie
   const ids = findEmployeeCrewIds(db, req.params.id);
   if (!ids) {
     req.flash('error', 'Link a crew member from the Linked Workforce tab before adding training.');
-    return res.redirect(`/hr/employees/${req.params.id}#training`);
+    return req.session.save(() => res.redirect(`/hr/employees/${req.params.id}#training`));
   }
   const b = req.body;
   const trainingName = (b.training_name || '').toString().trim().slice(0, 200);
   if (!trainingName) {
     req.flash('error', 'Training name is required.');
-    return res.redirect(`/hr/employees/${ids.employeeId}#training`);
+    return req.session.save(() => res.redirect(`/hr/employees/${ids.employeeId}#training`));
   }
   db.prepare(`
     INSERT INTO training_records
@@ -2195,18 +2195,18 @@ router.post('/employees/:id/training-records', requirePermission('hr_competencie
     req.session.user ? req.session.user.id : null
   );
   req.flash('success', `Added "${trainingName}".`);
-  res.redirect(`/hr/employees/${ids.employeeId}#training`);
+  req.session.save(() => res.redirect(`/hr/employees/${ids.employeeId}#training`));
 });
 
 router.post('/training-records/:id', requirePermission('hr_competencies'), (req, res) => {
   const db = getDb();
   const rec = db.prepare('SELECT id, employee_id FROM training_records WHERE id = ?').get(req.params.id);
-  if (!rec) { req.flash('error', 'Training record not found.'); return res.redirect('back'); }
+  if (!rec) { req.flash('error', 'Training record not found.'); return req.session.save(() => res.redirect('back')); }
   const b = req.body;
   const trainingName = (b.training_name || '').toString().trim().slice(0, 200);
   if (!trainingName) {
     req.flash('error', 'Training name is required.');
-    return res.redirect(`/hr/employees/${rec.employee_id}#training`);
+    return req.session.save(() => res.redirect(`/hr/employees/${rec.employee_id}#training`));
   }
   db.prepare(`
     UPDATE training_records SET
@@ -2222,16 +2222,16 @@ router.post('/training-records/:id', requirePermission('hr_competencies'), (req,
     rec.id
   );
   req.flash('success', 'Training record updated.');
-  res.redirect(`/hr/employees/${rec.employee_id}#training`);
+  req.session.save(() => res.redirect(`/hr/employees/${rec.employee_id}#training`));
 });
 
 router.post('/training-records/:id/delete', requirePermission('hr_competencies'), (req, res) => {
   const db = getDb();
   const rec = db.prepare('SELECT id, employee_id, training_name FROM training_records WHERE id = ?').get(req.params.id);
-  if (!rec) { req.flash('error', 'Training record not found.'); return res.redirect('back'); }
+  if (!rec) { req.flash('error', 'Training record not found.'); return req.session.save(() => res.redirect('back')); }
   db.prepare('DELETE FROM training_records WHERE id = ?').run(rec.id);
   req.flash('success', `Removed "${rec.training_name}".`);
-  res.redirect(`/hr/employees/${rec.employee_id}#training`);
+  req.session.save(() => res.redirect(`/hr/employees/${rec.employee_id}#training`));
 });
 
 // ============================================
@@ -2385,12 +2385,12 @@ router.post('/employees/:id/employment-status', requirePermission('hr_employees'
   if (!allowed.includes(next)) {
     if (isJson) return res.status(400).json({ error: 'Invalid status' });
     req.flash('error', 'Invalid status.');
-    return res.redirect(req.get('referer') || '/hr/roster');
+    return req.session.save(() => res.redirect(req.get('referer') || '/hr/roster'));
   }
   const emp = db.prepare('SELECT id FROM employees WHERE id = ? AND deleted_at IS NULL').get(req.params.id);
   if (!emp) {
     if (isJson) return res.status(404).json({ error: 'Employee not found' });
-    req.flash('error', 'Employee not found.'); return res.redirect('/hr/roster');
+    req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/roster'));
   }
   // active flag: 1 for active/reserved/on_leave (can still access portal), 0 for inactive/terminated
   const activeFlag = (next === 'inactive' || next === 'terminated') ? 0 : 1;
@@ -2398,7 +2398,7 @@ router.post('/employees/:id/employment-status', requirePermission('hr_employees'
     .run(next, activeFlag, emp.id);
   if (isJson) return res.json({ ok: true, employment_status: next });
   req.flash('success', `Status updated to ${next.replace(/_/g, ' ')}.`);
-  res.redirect(req.get('referer') || '/hr/roster');
+  req.session.save(() => res.redirect(req.get('referer') || '/hr/roster'));
 });
 
 // Bulk employment-status change — used by the roster bulk bar.
@@ -2408,19 +2408,19 @@ router.post('/roster/bulk-status', requirePermission('hr_employees'), (req, res)
   const next = String(req.body.employment_status || '').trim();
   if (!allowed.includes(next)) {
     req.flash('error', 'Invalid status.');
-    return res.redirect(req.get('referer') || '/hr/roster');
+    return req.session.save(() => res.redirect(req.get('referer') || '/hr/roster'));
   }
   let ids = req.body.employee_ids;
-  if (!ids) { req.flash('error', 'No employees selected.'); return res.redirect('/hr/roster'); }
+  if (!ids) { req.flash('error', 'No employees selected.'); return req.session.save(() => res.redirect('/hr/roster')); }
   if (!Array.isArray(ids)) ids = String(ids).split(',');
   ids = ids.map(id => parseInt(id, 10)).filter(n => Number.isFinite(n));
-  if (!ids.length) { req.flash('error', 'No valid employees selected.'); return res.redirect('/hr/roster'); }
+  if (!ids.length) { req.flash('error', 'No valid employees selected.'); return req.session.save(() => res.redirect('/hr/roster')); }
   const activeFlag = (next === 'inactive' || next === 'terminated') ? 0 : 1;
   const placeholders = ids.map(() => '?').join(',');
   const result = db.prepare(`UPDATE employees SET employment_status = ?, active = ?, updated_at = CURRENT_TIMESTAMP WHERE deleted_at IS NULL AND id IN (${placeholders})`)
     .run(next, activeFlag, ...ids);
   req.flash('success', `Updated ${result.changes} employee${result.changes === 1 ? '' : 's'} to ${next.replace(/_/g, ' ')}.`);
-  res.redirect(req.get('referer') || '/hr/roster');
+  req.session.save(() => res.redirect(req.get('referer') || '/hr/roster'));
 });
 
 // ============================================
@@ -2429,7 +2429,7 @@ router.post('/roster/bulk-status', requirePermission('hr_employees'), (req, res)
 router.post('/employees/:id/toggle-active', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const employee = db.prepare('SELECT id, employment_status, active FROM employees WHERE id = ?').get(req.params.id);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/employees'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/employees')); }
 
   const action = req.body.action; // 'deactivate' or 'reactivate'
   if (action === 'deactivate') {
@@ -2439,7 +2439,7 @@ router.post('/employees/:id/toggle-active', requirePermission('hr_employees'), (
     db.prepare('UPDATE employees SET employment_status = ?, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run('active', employee.id);
     req.flash('success', 'Employee reactivated.');
   }
-  res.redirect(`/hr/employees/${employee.id}`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}`));
 });
 
 // ============================================
@@ -2455,7 +2455,7 @@ router.post('/employees/:id/block', requirePermission('hr_employees'), (req, res
     db.prepare('UPDATE employees SET blocked_from_allocation = 1, block_reason = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.body.block_reason || '', req.params.id);
     req.flash('success', 'Employee blocked from allocation.');
   }
-  res.redirect(`/hr/employees/${req.params.id}`);
+  req.session.save(() => res.redirect(`/hr/employees/${req.params.id}`));
 });
 
 // ============================================
@@ -2492,10 +2492,10 @@ function buildSignUrl(req, token) {
 router.post('/employees/:id/sop-link', requirePermission('hr_employees'), async (req, res) => {
   const db = getDb();
   const employee = db.prepare('SELECT id, full_name, email, linked_crew_member_id FROM employees WHERE id = ?').get(req.params.id);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/roster'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/roster')); }
   if (!employee.linked_crew_member_id) {
     req.flash('error', 'This employee has no linked crew record yet — can\'t generate a sign link.');
-    return res.redirect(`/hr/employees/${employee.id}`);
+    return req.session.save(() => res.redirect(`/hr/employees/${employee.id}`));
   }
 
   const session = getOrCreateIndividualSession(db, employee.linked_crew_member_id, req.session.user.id);
@@ -2506,7 +2506,7 @@ router.post('/employees/:id/sop-link', requirePermission('hr_employees'), async 
     const recipient = (req.body.email || employee.email || '').trim();
     if (!recipient) {
       req.flash('error', 'No email on file for this person — use Copy Link instead, or set their email first.');
-      return res.redirect(`/hr/employees/${employee.id}`);
+      return req.session.save(() => res.redirect(`/hr/employees/${employee.id}`));
     }
     try {
       await sendEmail(recipient, 'Action required: SOP sign-off', sopSignLinkEmail(employee.full_name, signUrl));
@@ -2523,7 +2523,7 @@ router.post('/employees/:id/sop-link', requirePermission('hr_employees'), async 
     req.flash('success', `Copy this link: ${signUrl}`);
   }
 
-  res.redirect(`/hr/employees/${employee.id}`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}`));
 });
 
 // POST /hr/roster/sop-bulk-send — send SOP sign links to every active employee
@@ -2583,7 +2583,7 @@ router.post('/roster/sop-bulk-send', requirePermission('hr_employees'), async (r
 router.post('/employees/:id/mark-inducted', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const employee = db.prepare('SELECT id, full_name, inducted_at FROM employees WHERE id = ?').get(req.params.id);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/roster'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/roster')); }
 
   const setting = req.body.completed === 'on' || req.body.completed === '1' || req.body.completed === 'true';
   if (setting) {
@@ -2600,14 +2600,14 @@ router.post('/employees/:id/mark-inducted', requirePermission('hr_employees'), (
     ip: req.ip });
 
   req.flash('success', setting ? `${employee.full_name} marked as inducted.` : `Induction status cleared for ${employee.full_name}.`);
-  res.redirect(`/hr/employees/${employee.id}`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}`));
 });
 
 // POST /hr/employees/:id/toggle-online-training — grant/revoke online-training access
 router.post('/employees/:id/toggle-online-training', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const employee = db.prepare('SELECT id, full_name, online_training_allowed FROM employees WHERE id = ?').get(req.params.id);
-  if (!employee) { req.flash('error', 'Employee not found.'); return res.redirect('/hr/roster'); }
+  if (!employee) { req.flash('error', 'Employee not found.'); return req.session.save(() => res.redirect('/hr/roster')); }
 
   const newValue = employee.online_training_allowed ? 0 : 1;
   db.prepare('UPDATE employees SET online_training_allowed = ? WHERE id = ?').run(newValue, employee.id);
@@ -2618,7 +2618,7 @@ router.post('/employees/:id/toggle-online-training', requirePermission('hr_emplo
     ip: req.ip });
 
   req.flash('success', newValue ? `${employee.full_name} can now take training on their portal.` : `${employee.full_name}'s online training access revoked.`);
-  res.redirect(`/hr/employees/${employee.id}`);
+  req.session.save(() => res.redirect(`/hr/employees/${employee.id}`));
 });
 
 // =============================================
@@ -2671,7 +2671,7 @@ router.post('/management-contacts', requirePermission('hr_dashboard'), (req, res
     console.error('[hr management-contacts save]', e);
     req.flash('error', 'Could not save: ' + e.message);
   }
-  return res.redirect('/hr/management-contacts');
+  return req.session.save(() => res.redirect('/hr/management-contacts'));
 });
 
 // ============================================================================
@@ -2687,10 +2687,10 @@ router.get('/merge', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const a = parseInt(req.query.a, 10);
   const b = parseInt(req.query.b, 10);
-  if (!a || !b) { req.flash('error', 'Pick two profiles to merge (select two rows on the roster).'); return res.redirect('/hr/roster'); }
+  if (!a || !b) { req.flash('error', 'Pick two profiles to merge (select two rows on the roster).'); return req.session.save(() => res.redirect('/hr/roster')); }
   const { buildPreview } = require('../lib/mergeWorkers');
   const preview = buildPreview(db, a, b, req.query.winner);
-  if (preview.error) { req.flash('error', preview.error); return res.redirect('/hr/roster'); }
+  if (preview.error) { req.flash('error', preview.error); return req.session.save(() => res.redirect('/hr/roster')); }
   res.render('hr/merge', {
     title: 'Merge duplicate workers',
     currentPage: 'hr-roster',
@@ -2703,7 +2703,7 @@ router.post('/merge', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const winnerEmpId = parseInt(req.body.winner_emp_id, 10);
   const loserEmpId = parseInt(req.body.loser_emp_id, 10);
-  if (!winnerEmpId || !loserEmpId) { req.flash('error', 'Missing merge targets.'); return res.redirect('/hr/roster'); }
+  if (!winnerEmpId || !loserEmpId) { req.flash('error', 'Missing merge targets.'); return req.session.save(() => res.redirect('/hr/roster')); }
 
   // Field choices arrive as choice[emp][<col>] / choice[crew][<col>] = 'loser'.
   const raw = req.body.choice || {};
@@ -2722,11 +2722,11 @@ router.post('/merge', requirePermission('hr_employees'), (req, res) => {
       });
     } catch (e) { /* audit shouldn't block the merge */ }
     req.flash('success', `Merged ${result.loserName} into ${result.winnerName}. ${movedTotal} record(s) moved; the duplicate is archived.`);
-    return res.redirect(`/hr/employees/${result.winnerEmpId}`);
+    return req.session.save(() => res.redirect(`/hr/employees/${result.winnerEmpId}`));
   } catch (e) {
     console.error('[hr/merge]', e);
     req.flash('error', `Merge failed: ${e.message}`);
-    return res.redirect(`/hr/merge?a=${winnerEmpId}&b=${loserEmpId}`);
+    return req.session.save(() => res.redirect(`/hr/merge?a=${winnerEmpId}&b=${loserEmpId}`));
   }
 });
 

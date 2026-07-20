@@ -457,7 +457,7 @@ router.get('/jobs/:id', (req, res) => {
 
   if (!allocation) {
     req.flash('error', 'Job not found or you do not have access.');
-    return res.redirect('/w/jobs');
+    return req.session.save(() => res.redirect('/w/jobs'));
   }
 
   // Get other crew on the same job & date
@@ -680,7 +680,7 @@ router.get('/doc/:source/:id', (req, res) => {
     doc = db.prepare(`SELECT * FROM booking_documents WHERE id = ?`).get(req.params.id);
     if (doc) { bookingId = doc.booking_id; fileUrl = '/w/booking-documents/' + doc.id; }
   }
-  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/w/jobs'); }
+  if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('/w/jobs')); }
 
   const linked = bookingId
     ? db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND booking_id = ? AND status != 'cancelled' LIMIT 1`).get(worker.id, bookingId)
@@ -691,7 +691,7 @@ router.get('/doc/:source/:id', (req, res) => {
         WHERE bc.crew_member_id = @cm AND b.job_id = @job AND bc.status != 'declined'
         LIMIT 1
       `).get({ cm: worker.id, job: jobId });
-  if (!linked) { req.flash('error', 'You don’t have access to that document.'); return res.redirect('/w/jobs'); }
+  if (!linked) { req.flash('error', 'You don’t have access to that document.'); return req.session.save(() => res.redirect('/w/jobs')); }
 
   const name = doc.original_name || doc.title || 'Document';
   const ext = (name.split('.').pop() || '').toLowerCase();
@@ -748,7 +748,7 @@ router.post('/jobs/:id/respond', (req, res) => {
 
   if (!action || !['accept', 'decline'].includes(action)) {
     req.flash('error', 'Invalid action.');
-    return res.redirect('/w/jobs/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/jobs/' + req.params.id));
   }
 
   // Verify allocation belongs to this worker and is in 'allocated' status
@@ -759,12 +759,12 @@ router.post('/jobs/:id/respond', (req, res) => {
 
   if (!allocation) {
     req.flash('error', 'Allocation not found.');
-    return res.redirect('/w/jobs');
+    return req.session.save(() => res.redirect('/w/jobs'));
   }
 
   if (allocation.status !== 'allocated') {
     req.flash('error', 'This shift has already been ' + allocation.status + '.');
-    return res.redirect('/w/jobs/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/jobs/' + req.params.id));
   }
 
   // Get full allocation details for booking sync
@@ -802,7 +802,7 @@ router.post('/jobs/:id/respond', (req, res) => {
     req.flash('success', 'Shift declined.');
   }
 
-  res.redirect('/w/jobs/' + req.params.id);
+  req.session.save(() => res.redirect('/w/jobs/' + req.params.id));
 });
 
 // GET /w/booking-shift/:bookingId — Booking detail (for booking_crew-based shifts)
@@ -813,17 +813,17 @@ router.get('/booking-shift/:bookingId', (req, res) => {
 
   // Get booking details
   const booking = db.prepare('SELECT * FROM bookings WHERE id = ?').get(req.params.bookingId);
-  if (!booking) { req.flash('error', 'Booking not found.'); return res.redirect('/w/jobs'); }
+  if (!booking) { req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/w/jobs')); }
   // Cancelled/deleted bookings must not render via deep link (push
   // notifications and old links otherwise resurrect ghost shifts).
   if (booking.deleted_at || ['cancelled', 'late_cancellation'].includes(booking.status)) {
     req.flash('error', 'That shift has been cancelled.');
-    return res.redirect('/w/jobs');
+    return req.session.save(() => res.redirect('/w/jobs'));
   }
 
   // Verify this worker is assigned to this booking
   const myAssignment = db.prepare('SELECT * FROM booking_crew WHERE booking_id = ? AND crew_member_id = ?').get(booking.id, worker.id);
-  if (!myAssignment) { req.flash('error', 'You are not assigned to this booking.'); return res.redirect('/w/jobs'); }
+  if (!myAssignment) { req.flash('error', 'You are not assigned to this booking.'); return req.session.save(() => res.redirect('/w/jobs')); }
 
   // Lazy-bind a crew_allocations row to this booking_crew assignment so the
   // Job-Pack form flow (which keys off allocation_id) works for every shift,
@@ -1041,11 +1041,11 @@ router.post('/bookings/:id/respond', (req, res) => {
 
   if (!action || !['accept', 'decline'].includes(action)) {
     req.flash('error', 'Invalid action.');
-    return res.redirect('/w/booking-shift/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/booking-shift/' + req.params.id));
   }
 
   const bc = db.prepare("SELECT * FROM booking_crew WHERE booking_id = ? AND crew_member_id = ?").get(req.params.id, worker.id);
-  if (!bc) { req.flash('error', 'Assignment not found.'); return res.redirect('/w/jobs'); }
+  if (!bc) { req.flash('error', 'Assignment not found.'); return req.session.save(() => res.redirect('/w/jobs')); }
 
   if (action === 'accept') {
     db.prepare("UPDATE booking_crew SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP WHERE booking_id = ? AND crew_member_id = ?")
@@ -1070,11 +1070,11 @@ router.post('/bookings/:id/respond', (req, res) => {
     req.flash('success', 'Shift declined.');
   }
 
-  res.redirect('/w/booking-shift/' + req.params.id);
+  req.session.save(() => res.redirect('/w/booking-shift/' + req.params.id));
   } catch (err) {
     console.error('Booking respond error:', err.message);
     req.flash('error', 'Error: ' + err.message);
-    res.redirect('/w/jobs');
+    req.session.save(() => res.redirect('/w/jobs'));
   }
 });
 
@@ -1090,7 +1090,7 @@ router.post('/shift-tasks/:id/done', (req, res) => {
   const t = db.prepare('SELECT * FROM shift_tasks WHERE id = ?').get(taskId);
   if (!t || t.crew_member_id !== worker.id) {
     req.flash('error', 'Task not found or not yours.');
-    return res.redirect('back');
+    return req.session.save(() => res.redirect('back'));
   }
   if (t.group_key || t.booking_equipment_id) {
     // Grouped task (equipment return or whole-crew Team task) — one crew
@@ -1122,8 +1122,8 @@ router.post('/shift-tasks/:id/done', (req, res) => {
         });
         if (!result) {
           req.flash('error', 'Tell us the gear\'s condition and where it went to finish this task.');
-          if (t.booking_id) return res.redirect('/w/booking-shift/' + t.booking_id + '?tab=tasks');
-          return res.redirect('/w/home');
+          if (t.booking_id) return req.session.save(() => res.redirect('/w/booking-shift/' + t.booking_id + '?tab=tasks'));
+          return req.session.save(() => res.redirect('/w/home'));
         }
       }
       db.prepare(`UPDATE shift_tasks SET status = 'done', completed_at = datetime('now'), updated_at = datetime('now') WHERE ${key} = ? AND status = 'pending'`).run(val);
@@ -1137,9 +1137,9 @@ router.post('/shift-tasks/:id/done', (req, res) => {
     req.flash('success', 'Task marked done.');
   }
   // Try to send the worker back to the shift detail.
-  if (t.booking_id) return res.redirect('/w/booking-shift/' + t.booking_id + '?tab=tasks');
-  if (t.allocation_id) return res.redirect('/w/jobs/' + t.allocation_id + '?tab=tasks');
-  res.redirect('/w/home');
+  if (t.booking_id) return req.session.save(() => res.redirect('/w/booking-shift/' + t.booking_id + '?tab=tasks'));
+  if (t.allocation_id) return req.session.save(() => res.redirect('/w/jobs/' + t.allocation_id + '?tab=tasks'));
+  req.session.save(() => res.redirect('/w/home'));
 });
 
 // POST /w/shift-tasks (TL+ only) — create a quick task for a teammate
@@ -1154,12 +1154,12 @@ router.post('/shift-tasks', (req, res) => {
   const isTL = !!(me && (me.portal_role === 'team_leader' || me.portal_role === 'supervisor'));
   if (!isTL) {
     req.flash('error', 'Team Leader access only.');
-    return res.redirect('back');
+    return req.session.save(() => res.redirect('back'));
   }
   const { crew_member_id, booking_id, allocation_id, title, priority, scope } = req.body;
   if (!crew_member_id || !title || !title.trim()) {
     req.flash('error', 'Title and assignee are required.');
-    return res.redirect('back');
+    return req.session.save(() => res.redirect('back'));
   }
   const isGeneral = scope === 'general';
   // Whole-team task: fans one row per active crew member, completes as
@@ -1168,7 +1168,7 @@ router.post('/shift-tasks', (req, res) => {
   if (crew_member_id === 'team') {
     if (isGeneral || !booking_id) {
       req.flash('error', 'Team tasks need a shift — for a general task pick one person.');
-      return res.redirect('back');
+      return req.session.save(() => res.redirect('back'));
     }
     const group = createTeamTask(db, parseInt(booking_id, 10), {
       title: title.trim(),
@@ -1177,7 +1177,7 @@ router.post('/shift-tasks', (req, res) => {
     });
     if (!group) {
       req.flash('error', 'No crew on this shift yet.');
-      return res.redirect('back');
+      return req.session.save(() => res.redirect('back'));
     }
     try {
       const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(booking_id) || {};
@@ -1189,20 +1189,20 @@ router.post('/shift-tasks', (req, res) => {
       });
     } catch (e) { console.error('[worker tasks] team notify failed:', e.message); }
     req.flash('success', 'Team task added — first to finish ticks it off for everyone.');
-    return res.redirect('/w/booking-shift/' + booking_id + '?tab=tasks');
+    return req.session.save(() => res.redirect('/w/booking-shift/' + booking_id + '?tab=tasks'));
   }
   let bookingScope = null;
   let allocScope = null;
   if (!isGeneral) {
     if (!booking_id) {
       req.flash('error', 'Pick a shift or mark the task as general.');
-      return res.redirect('back');
+      return req.session.save(() => res.redirect('back'));
     }
     // Assignee must be on this booking too (no cross-booking task drops).
     const ok = db.prepare('SELECT 1 FROM booking_crew WHERE booking_id = ? AND crew_member_id = ?').get(booking_id, crew_member_id);
     if (!ok) {
       req.flash('error', "That worker isn't on this shift.");
-      return res.redirect('back');
+      return req.session.save(() => res.redirect('back'));
     }
     bookingScope = booking_id;
     allocScope = allocation_id || null;
@@ -1225,8 +1225,8 @@ router.post('/shift-tasks', (req, res) => {
     } catch (e) { console.error('[worker tasks] task-assigned notify failed:', e.message); }
   }
   req.flash('success', isGeneral ? 'General task added.' : 'Shift task added.');
-  if (bookingScope) return res.redirect('/w/booking-shift/' + bookingScope + '?tab=tasks');
-  return res.redirect('/w/home');
+  if (bookingScope) return req.session.save(() => res.redirect('/w/booking-shift/' + bookingScope + '?tab=tasks'));
+  return req.session.save(() => res.redirect('/w/home'));
 });
 
 module.exports = router;

@@ -15,8 +15,6 @@ router.get('/:token', (req, res) => {
       error: 'This setup link is invalid or has expired. Please contact your supervisor for a new one.',
       token: null,
       fullName: '',
-      flash_error: [],
-      flash_success: [],
     });
   }
 
@@ -29,8 +27,6 @@ router.get('/:token', (req, res) => {
     error: null,
     token: req.params.token,
     fullName: member ? member.full_name : '',
-    flash_error: req.flash('error'),
-    flash_success: [],
   });
 });
 
@@ -39,19 +35,19 @@ router.post('/:token', (req, res) => {
   const invitation = validateToken(req.params.token, 'crew_member');
   if (!invitation) {
     req.flash('error', 'This setup link is invalid or has expired.');
-    return res.redirect('/w/login');
+    return req.session.save(() => res.redirect('/w/login'));
   }
 
   const { pin, pin_confirm } = req.body;
 
   if (!pin || !/^\d{4,6}$/.test(pin)) {
     req.flash('error', 'PIN must be 4-6 digits.');
-    return res.redirect('/w/setup/' + req.params.token);
+    return req.session.save(() => res.redirect('/w/setup/' + req.params.token));
   }
 
   if (pin !== pin_confirm) {
     req.flash('error', 'PINs do not match.');
-    return res.redirect('/w/setup/' + req.params.token);
+    return req.session.save(() => res.redirect('/w/setup/' + req.params.token));
   }
 
   const db = getDb();

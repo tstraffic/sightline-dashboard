@@ -74,7 +74,7 @@ router.post('/unlock', (req, res) => {
     return res.redirect('/safety-workshops');
   }
   req.flash('error', 'Wrong password.');
-  return res.redirect('/safety-workshops/unlock');
+  return req.session.save(() => res.redirect('/safety-workshops/unlock'));
 });
 
 // Gate everything below this line. Anything registered AFTER this
@@ -224,14 +224,14 @@ router.get('/:slug', (req, res) => {
     .get(req.params.slug);
   if (!wk) {
     req.flash('error', 'Workshop not found.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   const module = WORKSHOPS[wk.slug];
   if (!module) {
     // Definition exists but no content module wired up. Show a stub so the
     // admin sees what's wrong rather than a 500.
     req.flash('error', 'Workshop ' + wk.slug + ' has no content module registered.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   const sessions = db
     .prepare(
@@ -266,12 +266,12 @@ router.get('/:slug/sessions/new', (req, res) => {
     .get(req.params.slug);
   if (!wk) {
     req.flash('error', 'Workshop not found.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   const module = WORKSHOPS[wk.slug];
   if (!module) {
     req.flash('error', 'Workshop ' + wk.slug + ' has no content module registered.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   res.render('safety-workshops/session-new', {
     title: 'Start session · ' + wk.title,
@@ -314,7 +314,7 @@ router.post('/:slug/sessions', (req, res) => {
     .get(req.params.slug);
   if (!wk) {
     req.flash('error', 'Workshop not found.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   const module = WORKSHOPS[wk.slug];
   const validCases = module ? module.CASES.map((c) => c.letter) : [];
@@ -326,25 +326,25 @@ router.post('/:slug/sessions', (req, res) => {
       groups = JSON.parse(String((req.body && req.body.groups_json) || '[]'));
     } catch (e) {
       req.flash('error', 'Group data was malformed — try generating the teams again.');
-      return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+      return req.session.save(() => res.redirect('/safety-workshops/' + wk.slug + '/sessions/new'));
     }
     if (!Array.isArray(groups) || groups.length === 0) {
       req.flash('error', 'Pick attendees and generate at least one group first.');
-      return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+      return req.session.save(() => res.redirect('/safety-workshops/' + wk.slug + '/sessions/new'));
     }
     // Each group must have a valid case + a name + at least one member.
     for (const g of groups) {
       if (!g || typeof g.name !== 'string' || !g.name.trim()) {
         req.flash('error', 'Every group needs a name.');
-        return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+        return req.session.save(() => res.redirect('/safety-workshops/' + wk.slug + '/sessions/new'));
       }
       if (!validCases.includes(String(g.case_letter || '').toUpperCase())) {
         req.flash('error', 'A group was assigned an unknown case (' + g.case_letter + ').');
-        return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+        return req.session.save(() => res.redirect('/safety-workshops/' + wk.slug + '/sessions/new'));
       }
       if (!Array.isArray(g.members) || g.members.length === 0) {
         req.flash('error', 'Group "' + g.name + '" has no members.');
-        return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+        return req.session.save(() => res.redirect('/safety-workshops/' + wk.slug + '/sessions/new'));
       }
     }
   }
@@ -364,7 +364,7 @@ router.post('/:slug/sessions', (req, res) => {
   }
   if (!code) {
     req.flash('error', 'Could not allocate a session code, try again.');
-    return res.redirect('/safety-workshops/' + wk.slug);
+    return req.session.save(() => res.redirect('/safety-workshops/' + wk.slug));
   }
   const facId = req.session.user && req.session.user.id;
 
@@ -400,7 +400,7 @@ router.post('/:slug/sessions', (req, res) => {
   } catch (e) {
     console.error('[safety-workshops create]', e);
     req.flash('error', 'Could not create session: ' + e.message);
-    return res.redirect('/safety-workshops/' + wk.slug + '/sessions/new');
+    return req.session.save(() => res.redirect('/safety-workshops/' + wk.slug + '/sessions/new'));
   }
   try {
     logActivity({
@@ -432,7 +432,7 @@ router.get('/sessions/:code', (req, res) => {
     .get(req.params.code);
   if (!session) {
     req.flash('error', 'Session not found.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   const module = WORKSHOPS[session.workshop_slug];
   const assignments = db
@@ -557,16 +557,16 @@ router.post('/sessions/:code/add-participant', (req, res) => {
     .get(req.params.code);
   if (!session) {
     req.flash('error', 'Session not found.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   if (session.status !== 'open') {
     req.flash('error', "Can't add — session is closed. Reopen it first.");
-    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
   }
   const module = WORKSHOPS[session.workshop_slug];
   if (!module) {
     req.flash('error', 'Workshop content module missing.');
-    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
   }
   const validCases = module.CASES.map((c) => c.letter);
 
@@ -583,11 +583,11 @@ router.post('/sessions/:code/add-participant', (req, res) => {
 
   if (name.length < 2 || name.length > 60) {
     req.flash('error', 'Name is required (2–60 characters).');
-    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
   }
   if (!validCases.includes(caseLetter)) {
     req.flash('error', 'Pick a valid case.');
-    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
   }
   // Same case-insensitive name dedupe as the public start endpoint.
   const existing = db
@@ -598,7 +598,7 @@ router.post('/sessions/:code/add-participant', (req, res) => {
     .get(session.id, name);
   if (existing && !override) {
     req.flash('error', name + ' is already on the board (Case ' + existing.case_letter + '). Tick "Override existing entry" to replace.');
-    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
   }
 
   // Inherit max_score from an existing attempt so the leaderboard's
@@ -616,7 +616,7 @@ router.post('/sessions/:code/add-participant', (req, res) => {
     score = parseInt(rawScore, 10);
     if (!Number.isFinite(score) || score < 0 || score > maxScore) {
       req.flash('error', 'Score must be between 0 and ' + maxScore + '.');
-      return res.redirect('/safety-workshops/sessions/' + session.session_code);
+      return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
     }
   }
 
@@ -655,7 +655,7 @@ router.post('/sessions/:code/add-participant', (req, res) => {
   } catch (e) {
     console.error('[safety-workshops add-participant]', e);
     req.flash('error', 'Could not add: ' + e.message);
-    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
   }
   try {
     logActivity({
@@ -673,7 +673,7 @@ router.post('/sessions/:code/add-participant', (req, res) => {
     ' → Case ' + caseLetter +
     (score != null ? ' with score ' + score + '/' + maxScore + '.' : '.')
   );
-  return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
 });
 
 // =====================================================================
@@ -689,7 +689,7 @@ router.post('/sessions/:code/close', (req, res) => {
     .get(req.params.code);
   if (!session) {
     req.flash('error', 'Session not found.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   db.prepare(
     `UPDATE workshop_sessions
@@ -707,7 +707,7 @@ router.post('/sessions/:code/close', (req, res) => {
     });
   } catch (e) {}
   req.flash('success', 'Session ' + session.session_code + ' closed.');
-  return res.redirect('/safety-workshops/sessions/' + session.session_code);
+  return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
 });
 
 // =====================================================================
@@ -724,7 +724,7 @@ router.post('/sessions/:code/restart', (req, res) => {
     .get(req.params.code);
   if (!session) {
     req.flash('error', 'Session not found.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   // In group mode we keep the team rows (they're the whole point of the
   // session — same crowd plays another round) but clear the claim so any
@@ -784,7 +784,7 @@ router.post('/sessions/:code/delete', (req, res) => {
     .get(req.params.code);
   if (!session) {
     req.flash('error', 'Session not found.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   db.prepare('DELETE FROM workshop_sessions WHERE id = ?').run(session.id);
   try {
@@ -798,7 +798,7 @@ router.post('/sessions/:code/delete', (req, res) => {
     });
   } catch (e) {}
   req.flash('success', 'Session ' + session.session_code + ' deleted.');
-  return res.redirect('/safety-workshops/' + session.slug);
+  return req.session.save(() => res.redirect('/safety-workshops/' + session.slug));
 });
 
 // =====================================================================
@@ -848,7 +848,7 @@ router.get('/sessions/:code/debrief/:attemptId', (req, res) => {
     .get(req.params.code);
   if (!session) {
     req.flash('error', 'Session not found.');
-    return res.redirect('/safety-workshops');
+    return req.session.save(() => res.redirect('/safety-workshops'));
   }
   const attempt = db
     .prepare(
@@ -858,17 +858,17 @@ router.get('/sessions/:code/debrief/:attemptId', (req, res) => {
     .get(parseInt(req.params.attemptId, 10), session.id);
   if (!attempt) {
     req.flash('error', 'Attempt not found in this session.');
-    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
   }
   const module = WORKSHOPS[session.workshop_slug];
   if (!module) {
     req.flash('error', 'Workshop content module missing — debrief needs it.');
-    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
   }
   const caseDef = module.CASES.find((c) => c.letter === attempt.case_letter);
   if (!caseDef) {
     req.flash('error', 'Case ' + attempt.case_letter + ' not in this workshop.');
-    return res.redirect('/safety-workshops/sessions/' + session.session_code);
+    return req.session.save(() => res.redirect('/safety-workshops/sessions/' + session.session_code));
   }
 
   // Parse stored answers. Older / truncated rows might have null —

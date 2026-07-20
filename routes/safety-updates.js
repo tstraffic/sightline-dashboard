@@ -115,7 +115,7 @@ router.post('/', upload.single('attachment'), (req, res) => {
     const title = String(b.title || '').trim();
     if (!title) {
       req.flash('error', 'Title is required.');
-      return res.redirect('/safety-updates/new');
+      return req.session.save(() => res.redirect('/safety-updates/new'));
     }
     const category = CATEGORY_VALUES.includes(b.category) ? b.category : 'general';
     const attachmentPath = req.file ? path.relative(path.join(__dirname, '..'), req.file.path).replace(/\\/g, '/') : '';
@@ -150,11 +150,11 @@ router.post('/', upload.single('attachment'), (req, res) => {
     } catch (e) {}
     if (wantsPublish) announcePublished(req, updateRow);
     req.flash('success', wantsPublish ? 'Safety update published.' : 'Draft saved.');
-    return res.redirect('/safety-updates/' + r.lastInsertRowid);
+    return req.session.save(() => res.redirect('/safety-updates/' + r.lastInsertRowid));
   } catch (err) {
     console.error('[safety-updates POST]', err);
     req.flash('error', 'Could not create update: ' + (err && err.message || 'unknown'));
-    return res.redirect('/safety-updates/new');
+    return req.session.save(() => res.redirect('/safety-updates/new'));
   }
 });
 
@@ -168,7 +168,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN users cu ON cu.id = u.created_by_id
     WHERE u.id = ?
   `).get(req.params.id);
-  if (!update) { req.flash('error', 'Safety update not found.'); return res.redirect('/safety-updates'); }
+  if (!update) { req.flash('error', 'Safety update not found.'); return req.session.save(() => res.redirect('/safety-updates')); }
   const stats = db.prepare(`
     SELECT
       (SELECT COUNT(*) FROM crew_members WHERE active = 1) AS total_crew,
@@ -193,7 +193,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const update = db.prepare('SELECT * FROM safety_updates WHERE id = ?').get(req.params.id);
-  if (!update) { req.flash('error', 'Safety update not found.'); return res.redirect('/safety-updates'); }
+  if (!update) { req.flash('error', 'Safety update not found.'); return req.session.save(() => res.redirect('/safety-updates')); }
   res.render('safety-updates/form', {
     title: 'Edit Safety Update', currentPage: 'safety-updates',
     update, isEdit: true,
@@ -207,7 +207,7 @@ router.post('/:id', upload.single('attachment'), (req, res) => {
   try {
     const db = getDb();
     const update = db.prepare('SELECT * FROM safety_updates WHERE id = ?').get(req.params.id);
-    if (!update) { req.flash('error', 'Not found.'); return res.redirect('/safety-updates'); }
+    if (!update) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/safety-updates')); }
     const b = req.body;
     const title = String(b.title || '').trim() || update.title;
     const category = CATEGORY_VALUES.includes(b.category) ? b.category : update.category;
@@ -232,11 +232,11 @@ router.post('/:id', upload.single('attachment'), (req, res) => {
       });
     } catch (e) {}
     req.flash('success', 'Safety update saved.');
-    return res.redirect('/safety-updates/' + update.id);
+    return req.session.save(() => res.redirect('/safety-updates/' + update.id));
   } catch (err) {
     console.error('[safety-updates PUT]', err);
     req.flash('error', 'Update failed: ' + (err && err.message || 'unknown'));
-    return res.redirect('/safety-updates/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/safety-updates/' + req.params.id + '/edit'));
   }
 });
 
@@ -245,10 +245,10 @@ router.post('/:id', upload.single('attachment'), (req, res) => {
 router.post('/:id/publish', (req, res) => {
   const db = getDb();
   const update = db.prepare('SELECT * FROM safety_updates WHERE id = ?').get(req.params.id);
-  if (!update) { req.flash('error', 'Not found.'); return res.redirect('/safety-updates'); }
+  if (!update) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/safety-updates')); }
   if (update.status === 'published') {
     req.flash('error', 'Already published.');
-    return res.redirect('/safety-updates/' + update.id);
+    return req.session.save(() => res.redirect('/safety-updates/' + update.id));
   }
   const userId = req.session.user ? req.session.user.id : null;
   db.prepare(`
@@ -258,7 +258,7 @@ router.post('/:id/publish', (req, res) => {
   `).run(userId, update.id);
   announcePublished(req, update);
   req.flash('success', 'Safety update published.');
-  return res.redirect('/safety-updates/' + update.id);
+  return req.session.save(() => res.redirect('/safety-updates/' + update.id));
 });
 
 // POST /safety-updates/:id/archive — soft archive (off the worker feed).
@@ -269,7 +269,7 @@ router.post('/:id/archive', (req, res) => {
   db.prepare("UPDATE safety_updates SET status='archived', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(update.id);
   try { logActivity({ user: req.session.user, action: 'archive', entityType: 'safety_update', entityId: update.id, entityLabel: update.title, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Safety update archived.');
-  return res.redirect('/safety-updates');
+  return req.session.save(() => res.redirect('/safety-updates'));
 });
 
 // POST /safety-updates/:id/delete
@@ -280,16 +280,16 @@ router.post('/:id/delete', (req, res) => {
   db.prepare('DELETE FROM safety_updates WHERE id = ?').run(update.id);
   try { logActivity({ user: req.session.user, action: 'delete', entityType: 'safety_update', entityId: update.id, entityLabel: update.title, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Safety update deleted.');
-  return res.redirect('/safety-updates');
+  return req.session.save(() => res.redirect('/safety-updates'));
 });
 
 // GET /safety-updates/:id/file — admin download
 router.get('/:id/file', (req, res) => {
   const db = getDb();
   const row = db.prepare('SELECT attachment_path, attachment_original_name FROM safety_updates WHERE id = ?').get(req.params.id);
-  if (!row || !row.attachment_path) { req.flash('error', 'No file attached.'); return res.redirect('/safety-updates/' + req.params.id); }
+  if (!row || !row.attachment_path) { req.flash('error', 'No file attached.'); return req.session.save(() => res.redirect('/safety-updates/' + req.params.id)); }
   const abs = path.join(__dirname, '..', row.attachment_path);
-  if (!fs.existsSync(abs)) { req.flash('error', 'File missing on disk.'); return res.redirect('/safety-updates/' + req.params.id); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'File missing on disk.'); return req.session.save(() => res.redirect('/safety-updates/' + req.params.id)); }
   return res.download(abs, row.attachment_original_name || path.basename(abs));
 });
 

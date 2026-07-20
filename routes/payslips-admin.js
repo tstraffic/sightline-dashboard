@@ -68,7 +68,6 @@ router.get('/payslips', requirePermission('hr_employees'), (req, res) => {
   res.render('payslips-admin/index', {
     title: 'Payslips', currentPage: 'payslips',
     payslips, stats, employees, filters: { emp, from, to },
-    flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });
 
@@ -81,7 +80,6 @@ router.get('/payslips/new', requirePermission('hr_employees'), (req, res) => {
   res.render('payslips-admin/new', {
     title: 'Upload payslip', currentPage: 'payslips',
     employees,
-    flash_error: req.flash('error'),
   });
 });
 
@@ -90,19 +88,19 @@ router.get('/payslips/new', requirePermission('hr_employees'), (req, res) => {
 // ====================================================
 router.post('/payslips', requirePermission('hr_employees'), (req, res) => {
   upload.single('pdf')(req, res, function (err) {
-    if (err) { req.flash('error', err.message); return res.redirect('/payroll/payslips/new'); }
+    if (err) { req.flash('error', err.message); return req.session.save(() => res.redirect('/payroll/payslips/new')); }
 
     const db = getDb();
     const b = req.body;
     const empId = parseInt(b.employee_id, 10);
     const emp = empId ? db.prepare('SELECT id, full_name, employee_code FROM employees WHERE id = ?').get(empId) : null;
-    if (!emp) { req.flash('error', 'Pick a valid employee'); return res.redirect('/payroll/payslips/new'); }
+    if (!emp) { req.flash('error', 'Pick a valid employee'); return req.session.save(() => res.redirect('/payroll/payslips/new')); }
 
     const required = ['period_start', 'period_end', 'pay_date'];
     for (const k of required) {
-      if (!b[k] || !/^\d{4}-\d{2}-\d{2}$/.test(b[k])) { req.flash('error', `Missing or invalid ${k.replace(/_/g, ' ')}`); return res.redirect('/payroll/payslips/new'); }
+      if (!b[k] || !/^\d{4}-\d{2}-\d{2}$/.test(b[k])) { req.flash('error', `Missing or invalid ${k.replace(/_/g, ' ')}`); return req.session.save(() => res.redirect('/payroll/payslips/new')); }
     }
-    if (b.period_end < b.period_start) { req.flash('error', 'Period end must be on or after period start'); return res.redirect('/payroll/payslips/new'); }
+    if (b.period_end < b.period_start) { req.flash('error', 'Period end must be on or after period start'); return req.session.save(() => res.redirect('/payroll/payslips/new')); }
 
     const num = (s) => { const n = parseFloat(s); return isFinite(n) ? n : 0; };
     const gross = num(b.gross_pay);
@@ -140,10 +138,10 @@ router.post('/payslips', requirePermission('hr_employees'), (req, res) => {
       } else {
         req.flash('error', 'Upload failed: ' + e.message);
       }
-      return res.redirect('/payroll/payslips/new');
+      return req.session.save(() => res.redirect('/payroll/payslips/new'));
     }
 
-    res.redirect('/payroll/payslips');
+    req.session.save(() => res.redirect('/payroll/payslips'));
   });
 });
 
@@ -177,7 +175,7 @@ router.get('/payslips/:id/download', requirePermission('hr_employees'), (req, re
 router.post('/payslips/:id/delete', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const p = db.prepare('SELECT p.*, e.full_name, e.employee_code FROM payslips p JOIN employees e ON e.id = p.employee_id WHERE p.id = ?').get(req.params.id);
-  if (!p) { req.flash('error', 'Not found'); return res.redirect('/payroll/payslips'); }
+  if (!p) { req.flash('error', 'Not found'); return req.session.save(() => res.redirect('/payroll/payslips')); }
   if (p.pdf_filename) {
     const filePath = path.join(PAYSLIP_DIR, `emp_${p.employee_id}`, p.pdf_filename);
     try { if (fs.existsSync(filePath)) fs.unlinkSync(filePath); } catch (e) {}
@@ -190,7 +188,7 @@ router.post('/payslips/:id/delete', requirePermission('hr_employees'), (req, res
     ip: req.ip,
   });
   req.flash('success', `Payslip removed.`);
-  res.redirect('/payroll/payslips');
+  req.session.save(() => res.redirect('/payroll/payslips'));
 });
 
 module.exports = router;

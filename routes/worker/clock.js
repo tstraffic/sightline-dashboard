@@ -162,7 +162,7 @@ router.post('/clock/in', (req, res) => {
       return res.status(400).json({ error: 'Already clocked in' });
     }
     req.flash('error', 'You are already clocked in.');
-    return res.redirect('/w/clock');
+    return req.session.save(() => res.redirect('/w/clock'));
   }
 
   const allocId = allocation_id ? parseInt(allocation_id) : null;
@@ -176,7 +176,7 @@ router.post('/clock/in', (req, res) => {
     return res.json({ success: true, message: 'Clocked in successfully' });
   }
   req.flash('success', 'Clocked in successfully!');
-  res.redirect('/w/clock');
+  req.session.save(() => res.redirect('/w/clock'));
 });
 
 // POST /w/clock/out — Clock out
@@ -191,7 +191,7 @@ router.post('/clock/out', (req, res) => {
       return res.status(400).json({ error: 'Not clocked in' });
     }
     req.flash('error', 'You are not clocked in.');
-    return res.redirect('/w/clock');
+    return req.session.save(() => res.redirect('/w/clock'));
   }
 
   // If on break, end break first
@@ -211,7 +211,7 @@ router.post('/clock/out', (req, res) => {
     return res.json({ success: true, message: 'Clocked out successfully' });
   }
   req.flash('success', 'Clocked out successfully!');
-  res.redirect('/w/clock');
+  req.session.save(() => res.redirect('/w/clock'));
 });
 
 // POST /w/clock/break — Start or end break
@@ -227,7 +227,7 @@ router.post('/clock/break', (req, res) => {
       return res.status(400).json({ error: 'Not clocked in' });
     }
     req.flash('error', 'You must be clocked in to take a break.');
-    return res.redirect('/w/clock');
+    return req.session.save(() => res.redirect('/w/clock'));
   }
 
   const eventType = current.status === 'on_break' ? 'break_end' : 'break_start';
@@ -242,7 +242,7 @@ router.post('/clock/break', (req, res) => {
     return res.json({ success: true, message });
   }
   req.flash('success', message);
-  res.redirect('/w/clock');
+  req.session.save(() => res.redirect('/w/clock'));
 });
 
 // GET /w/clock/history — Recent clock events (last 7 days)

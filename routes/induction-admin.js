@@ -430,7 +430,7 @@ router.post('/submissions/:id/suitability', (req, res) => {
   const fresh = db.prepare('SELECT id, linked_crew_member_id, suitability, suitability_note FROM induction_submissions WHERE id = ?').get(s.id);
   try { applySuitabilityToEmployee(db, fresh); } catch (e) { console.error('[suitability propagate]', e.message); }
   const wantsJson = req.headers.accept && req.headers.accept.includes('application/json');
-  if (!wantsJson) { req.flash('success', 'Suitability saved.'); return res.redirect(`/induction/admin/submissions/${s.id}`); }
+  if (!wantsJson) { req.flash('success', 'Suitability saved.'); return req.session.save(() => res.redirect(`/induction/admin/submissions/${s.id}`)); }
   return res.json({ ok: true, suitability, suitability_note: note });
 });
 
@@ -481,7 +481,7 @@ router.post('/submissions/:id/status', (req, res) => {
         const stillThere = db.prepare('SELECT id, full_name, employee_id FROM crew_members WHERE id = ?').get(fresh.linked_crew_member_id);
         if (stillThere) {
           req.flash('success', `${stillThere.full_name} is already on the roster as ${stillThere.employee_id}.`);
-          return res.redirect(dest);
+          return req.session.save(() => res.redirect(dest));
         }
         // Linked crew was deleted — clear the broken pointer and re-create.
         db.prepare('UPDATE induction_submissions SET linked_crew_member_id = NULL WHERE id = ?').run(req.params.id);
@@ -497,7 +497,7 @@ router.post('/submissions/:id/status', (req, res) => {
           UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime('now') WHERE id = ?
         `).run(matched.id, req.params.id);
         req.flash('success', `Matched to existing roster member ${matched.full_name} (${matched.employee_id}). No duplicate created.`);
-        return res.redirect(dest);
+        return req.session.save(() => res.redirect(dest));
       }
 
       // Allocate next EMP-XXX — ignores non-numeric codes (e.g. EMP-TEST) and
@@ -614,29 +614,29 @@ router.post('/submissions/:id/status', (req, res) => {
       // their roster profile.
 
       req.flash('success', `${fullName} approved and added as employee ${employeeId}. Documents imported to their profile.`);
-      return res.redirect(dest);
+      return req.session.save(() => res.redirect(dest));
     } catch (err) {
       console.error('Auto-convert error:', err);
       req.flash('error', `Approved but failed to create employee record: ${err.message}`);
-      return res.redirect(dest);
+      return req.session.save(() => res.redirect(dest));
     }
   }
 
   req.flash('success', `Submission ${status} successfully.`);
-  res.redirect(dest);
+  req.session.save(() => res.redirect(dest));
 });
 
 // POST /submissions/:id/convert — Manual convert approved submission to employee
 router.post('/submissions/:id/convert', (req, res) => {
   const db = getDb();
   const s = db.prepare('SELECT * FROM induction_submissions WHERE id = ?').get(req.params.id);
-  if (!s) { req.flash('error', 'Submission not found.'); return res.redirect('/induction/admin/submissions'); }
+  if (!s) { req.flash('error', 'Submission not found.'); return req.session.save(() => res.redirect('/induction/admin/submissions')); }
   // Honour a return_to from the list (stay put) — same rule as /status.
   const rt = typeof req.body.return_to === 'string' ? req.body.return_to : '';
   const dest = /^\/induction\/admin\/[A-Za-z0-9/_\-?=&%.]*$/.test(rt)
     ? rt
     : `/induction/admin/submissions/${req.params.id}`;
-  if (s.linked_crew_member_id) { req.flash('error', 'Already converted to employee.'); return res.redirect(dest); }
+  if (s.linked_crew_member_id) { req.flash('error', 'Already converted to employee.'); return req.session.save(() => res.redirect(dest)); }
 
   // Same strong dedup as the approve route — link to an existing roster member
   // instead of minting a duplicate when the worker already exists (re-submitted
@@ -647,7 +647,7 @@ router.post('/submissions/:id/convert', (req, res) => {
     if (matched) {
       db.prepare('UPDATE induction_submissions SET linked_crew_member_id = ?, updated_at = datetime(\'now\') WHERE id = ?').run(matched.id, req.params.id);
       req.flash('success', `Matched to existing roster member ${matched.full_name} (${matched.employee_id}). No duplicate created.`);
-      return res.redirect(dest);
+      return req.session.save(() => res.redirect(dest));
     }
   } catch (e) { /* dedup is best-effort — fall through to create on error */ }
 
@@ -724,7 +724,7 @@ router.post('/submissions/:id/convert', (req, res) => {
     console.error('Convert error:', err);
     req.flash('error', `Failed to convert: ${err.message}`);
   }
-  res.redirect(dest);
+  req.session.save(() => res.redirect(dest));
 });
 
 // POST /induction/admin/submissions/delete — bulk delete submissions
@@ -735,7 +735,7 @@ router.post('/submissions/delete', (req, res) => {
   // Support both single id and array of ids
   if (!ids) {
     req.flash('error', 'No submissions selected.');
-    return res.redirect('/induction/admin/submissions');
+    return req.session.save(() => res.redirect('/induction/admin/submissions'));
   }
   if (!Array.isArray(ids)) ids = [ids];
 
@@ -743,7 +743,7 @@ router.post('/submissions/delete', (req, res) => {
   ids = ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
   if (ids.length === 0) {
     req.flash('error', 'No valid submissions selected.');
-    return res.redirect('/induction/admin/submissions');
+    return req.session.save(() => res.redirect('/induction/admin/submissions'));
   }
 
   // Fetch submissions to clean up uploaded files
@@ -767,7 +767,7 @@ router.post('/submissions/delete', (req, res) => {
 
   const count = submissions.length;
   req.flash('success', `Deleted ${count} submission${count !== 1 ? 's' : ''}.`);
-  res.redirect('/induction/admin/submissions');
+  req.session.save(() => res.redirect('/induction/admin/submissions'));
 });
 
 // Serve uploaded induction files (authenticated)
@@ -914,7 +914,7 @@ router.post('/presentations/:id/delete', (req, res) => {
   const id = parseInt(req.params.id, 10);
   if (!id) {
     req.flash('error', 'Invalid presentation id.');
-    return res.redirect('/induction/admin/presentations');
+    return req.session.save(() => res.redirect('/induction/admin/presentations'));
   }
   try {
     getDb().prepare('DELETE FROM induction_presentations WHERE id = ?').run(id);
@@ -922,7 +922,7 @@ router.post('/presentations/:id/delete', (req, res) => {
   } catch (e) {
     req.flash('error', 'Could not delete presentation: ' + e.message);
   }
-  res.redirect('/induction/admin/presentations');
+  req.session.save(() => res.redirect('/induction/admin/presentations'));
 });
 
 // POST /induction/admin/present/:module/start — start a presentation session
@@ -1218,7 +1218,7 @@ router.post('/sop-documents', sopDocUpload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
       req.flash('error', 'No file uploaded.');
-      return res.redirect('/induction/admin/sop-documents');
+      return req.session.save(() => res.redirect('/induction/admin/sop-documents'));
     }
     const db = getDb();
     const title = (req.body.title || req.file.originalname.replace(/\.[^.]+$/, '')).toString().trim().slice(0, 200);
@@ -1272,7 +1272,7 @@ router.post('/sop-documents', sopDocUpload.single('file'), async (req, res) => {
   } catch (err) {
     console.error('[sop-documents upload] failed:', err);
     req.flash('error', `Upload failed: ${err.message}. The file may have been received but the section row could not be saved.`);
-    res.redirect('/induction/admin/sop-documents');
+    req.session.save(() => res.redirect('/induction/admin/sop-documents'));
   }
 });
 
@@ -1283,11 +1283,11 @@ router.post('/sop-documents/:id/files', sopDocUpload.single('file'), async (req,
     const section = db.prepare('SELECT id, title FROM sop_documents WHERE id = ?').get(req.params.id);
     if (!section) {
       req.flash('error', 'Section not found.');
-      return res.redirect('/induction/admin/sop-documents');
+      return req.session.save(() => res.redirect('/induction/admin/sop-documents'));
     }
     if (!req.file) {
       req.flash('error', 'No file uploaded.');
-      return res.redirect('/induction/admin/sop-documents');
+      return req.session.save(() => res.redirect('/induction/admin/sop-documents'));
     }
     const next = db.prepare(
       'SELECT COALESCE(MAX(display_order), -1) + 1 AS n FROM sop_document_files WHERE sop_document_id = ?'
@@ -1318,7 +1318,7 @@ router.post('/sop-documents/:id/files', sopDocUpload.single('file'), async (req,
   } catch (err) {
     console.error('[sop-documents file add] failed:', err);
     req.flash('error', `Could not add file: ${err.message}`);
-    res.redirect('/induction/admin/sop-documents');
+    req.session.save(() => res.redirect('/induction/admin/sop-documents'));
   }
 });
 
@@ -1329,7 +1329,7 @@ router.post('/sop-documents/:id/files/:fileId/delete', (req, res) => {
     const file = db.prepare(
       'SELECT * FROM sop_document_files WHERE id = ? AND sop_document_id = ?'
     ).get(req.params.fileId, req.params.id);
-    if (!file) { req.flash('error', 'File not found.'); return res.redirect('/induction/admin/sop-documents'); }
+    if (!file) { req.flash('error', 'File not found.'); return req.session.save(() => res.redirect('/induction/admin/sop-documents')); }
     // Clean up the actual file + its rendered pages directory.
     try { if (file.file_path) fs.unlinkSync(file.file_path); } catch (e) { /* may already be gone */ }
     if (file.page_renders_dir) {
@@ -1348,7 +1348,7 @@ router.post('/sop-documents/:id/files/:fileId/delete', (req, res) => {
     console.error('[sop-documents file delete] failed:', err);
     req.flash('error', `Delete failed: ${err.message}`);
   }
-  res.redirect('/induction/admin/sop-documents');
+  req.session.save(() => res.redirect('/induction/admin/sop-documents'));
 });
 
 // POST /induction/admin/sop-documents/:id/files/:fileId/move — up/down within a section
@@ -1380,7 +1380,7 @@ router.post('/sop-documents/:id/files/:fileId/render', async (req, res) => {
   const file = db.prepare(
     'SELECT * FROM sop_document_files WHERE id = ? AND sop_document_id = ?'
   ).get(req.params.fileId, req.params.id);
-  if (!file) { req.flash('error', 'File not found.'); return res.redirect('/induction/admin/sop-documents'); }
+  if (!file) { req.flash('error', 'File not found.'); return req.session.save(() => res.redirect('/induction/admin/sop-documents')); }
   const { pages, error } = await renderAndPersistPagesForFile(db, file);
   if (pages.length > 0) {
     req.flash('success', `Rendered ${pages.length} page${pages.length === 1 ? '' : 's'} for "${file.original_name}".`);
@@ -1389,7 +1389,7 @@ router.post('/sop-documents/:id/files/:fileId/render', async (req, res) => {
   }
   // If this was the primary file, sync the page_renders mirror onto the parent.
   if (file.display_order === 0) syncParentToFirstFile(db, file.sop_document_id);
-  res.redirect('/induction/admin/sop-documents');
+  req.session.save(() => res.redirect('/induction/admin/sop-documents'));
 });
 
 // GET /induction/admin/sop-documents/:id/files/:fileId/file — admin file serving
@@ -1411,7 +1411,7 @@ router.get('/sop-documents/:id/files/:fileId/file', (req, res) => {
 router.post('/sop-documents/:id/render', async (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT * FROM sop_documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
+  if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('/induction/admin/sop-documents')); }
 
   const files = loadFilesForSection(db, doc.id);
   if (files.length === 0) {
@@ -1420,7 +1420,7 @@ router.post('/sop-documents/:id/render', async (req, res) => {
     const { pages, error } = await renderAndPersistPages(db, doc);
     if (pages.length > 0) req.flash('success', `Rendered ${pages.length} page${pages.length === 1 ? '' : 's'} for "${doc.title}".`);
     else req.flash('error', `Couldn't render "${doc.title}": ${error || 'unknown reason'}.`);
-    return res.redirect('/induction/admin/sop-documents');
+    return req.session.save(() => res.redirect('/induction/admin/sop-documents'));
   }
 
   let totalPages = 0;
@@ -1437,7 +1437,7 @@ router.post('/sop-documents/:id/render', async (req, res) => {
   } else {
     req.flash('error', `Rendered ${totalPages} page${totalPages === 1 ? '' : 's'}, with ${errors.length} error${errors.length === 1 ? '' : 's'}: ${errors.join('; ')}`);
   }
-  res.redirect('/induction/admin/sop-documents');
+  req.session.save(() => res.redirect('/induction/admin/sop-documents'));
 });
 
 // POST /induction/admin/sop-documents/:id/update — edit title + description.
@@ -1448,10 +1448,10 @@ router.post('/sop-documents/:id/update', (req, res) => {
   try {
     const db = getDb();
     const doc = db.prepare('SELECT id FROM sop_documents WHERE id = ?').get(req.params.id);
-    if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
+    if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('/induction/admin/sop-documents')); }
     const title = (req.body.title || '').toString().trim().slice(0, 200);
     const description = (req.body.description || '').toString().slice(0, 20000);
-    if (!title) { req.flash('error', 'Title is required.'); return res.redirect('/induction/admin/sop-documents'); }
+    if (!title) { req.flash('error', 'Title is required.'); return req.session.save(() => res.redirect('/induction/admin/sop-documents')); }
     const cols = new Set(db.prepare('PRAGMA table_info(sop_documents)').all().map(c => c.name));
     if (cols.has('description')) {
       db.prepare('UPDATE sop_documents SET title = ?, description = ? WHERE id = ?').run(title, description, doc.id);
@@ -1459,11 +1459,11 @@ router.post('/sop-documents/:id/update', (req, res) => {
       db.prepare('UPDATE sop_documents SET title = ? WHERE id = ?').run(title, doc.id);
     }
     req.flash('success', `Updated "${title}".`);
-    res.redirect('/induction/admin/sop-documents');
+    req.session.save(() => res.redirect('/induction/admin/sop-documents'));
   } catch (err) {
     console.error('[sop-documents update] failed:', err);
     req.flash('error', `Update failed: ${err.message}`);
-    res.redirect('/induction/admin/sop-documents');
+    req.session.save(() => res.redirect('/induction/admin/sop-documents'));
   }
 });
 
@@ -1471,22 +1471,22 @@ router.post('/sop-documents/:id/update', (req, res) => {
 router.post('/sop-documents/:id/link', (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT id, title FROM sop_documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
+  if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('/induction/admin/sop-documents')); }
   const slug = (req.body.sop_slug || '').toString().trim() || null;
   db.prepare('UPDATE sop_documents SET sop_slug = ? WHERE id = ?').run(slug, doc.id);
   req.flash('success', slug ? `Linked "${doc.title}" to ${slug}.` : `Unlinked "${doc.title}" — will appear under Reference Documents.`);
-  res.redirect('/induction/admin/sop-documents');
+  req.session.save(() => res.redirect('/induction/admin/sop-documents'));
 });
 
 // POST /induction/admin/sop-documents/:id/toggle — activate / deactivate
 router.post('/sop-documents/:id/toggle', (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT id, title, active FROM sop_documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
+  if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('/induction/admin/sop-documents')); }
   const newVal = doc.active ? 0 : 1;
   db.prepare('UPDATE sop_documents SET active = ? WHERE id = ?').run(newVal, doc.id);
   req.flash('success', `${doc.title} is now ${newVal ? 'active' : 'hidden'}.`);
-  res.redirect('/induction/admin/sop-documents');
+  req.session.save(() => res.redirect('/induction/admin/sop-documents'));
 });
 
 // POST /induction/admin/sop-documents/:id/delete — permanently remove section
@@ -1494,7 +1494,7 @@ router.post('/sop-documents/:id/toggle', (req, res) => {
 router.post('/sop-documents/:id/delete', (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT id, title, file_path FROM sop_documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'Document not found.'); return res.redirect('/induction/admin/sop-documents'); }
+  if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('/induction/admin/sop-documents')); }
 
   // Tear down every child file's bytes + page-render directory first.
   const files = db.prepare(
@@ -1515,7 +1515,7 @@ router.post('/sop-documents/:id/delete', (req, res) => {
   // ON DELETE CASCADE on the FK takes care of the child rows in the DB.
   db.prepare('DELETE FROM sop_documents WHERE id = ?').run(doc.id);
   req.flash('success', `Deleted "${doc.title}".`);
-  res.redirect('/induction/admin/sop-documents');
+  req.session.save(() => res.redirect('/induction/admin/sop-documents'));
 });
 
 // POST /induction/admin/sop-documents/:id/move — change display order

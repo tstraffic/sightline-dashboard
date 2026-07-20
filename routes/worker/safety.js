@@ -134,7 +134,7 @@ router.get('/safety/swms/:id', (req, res) => {
   `).get(req.params.id);
   if (!swms) {
     req.flash('error', 'SWMS not found or not active.');
-    return res.redirect('/w/safety/swms');
+    return req.session.save(() => res.redirect('/w/safety/swms'));
   }
   const hasAccess = hasSwmsAccess(db, swms, workerId);
   const pendingRequest = swms.kind === 'job' ? db.prepare(`
@@ -173,23 +173,23 @@ router.post('/safety/swms/:id/request-access', (req, res) => {
   const swms = db.prepare("SELECT id, kind, title, status FROM swms WHERE id = ?").get(req.params.id);
   if (!swms || swms.status !== 'active') {
     req.flash('error', 'SWMS not available.');
-    return res.redirect('/w/safety/swms');
+    return req.session.save(() => res.redirect('/w/safety/swms'));
   }
   if (swms.kind !== 'job') {
     req.flash('error', 'This SWMS does not require an access request.');
-    return res.redirect('/w/safety/swms/' + swms.id);
+    return req.session.save(() => res.redirect('/w/safety/swms/' + swms.id));
   }
   // Already granted? Just bounce them back.
   const grant = db.prepare("SELECT id FROM crew_swms_grants WHERE swms_id = ? AND crew_member_id = ?").get(swms.id, workerId);
   if (grant) {
     req.flash('success', 'You already have access to this SWMS.');
-    return res.redirect('/w/safety/swms/' + swms.id);
+    return req.session.save(() => res.redirect('/w/safety/swms/' + swms.id));
   }
   // Block duplicate pending requests.
   const existing = db.prepare("SELECT id FROM crew_swms_access_requests WHERE swms_id = ? AND crew_member_id = ? AND status = 'pending'").get(swms.id, workerId);
   if (existing) {
     req.flash('success', 'Your request is already pending. The office will review it shortly.');
-    return res.redirect('/w/safety/swms/' + swms.id);
+    return req.session.save(() => res.redirect('/w/safety/swms/' + swms.id));
   }
   const inductedWith = String(req.body.inducted_with || '').trim().slice(0, 120);
   const inductionDate = (req.body.induction_date && /^\d{4}-\d{2}-\d{2}$/.test(req.body.induction_date)) ? req.body.induction_date : null;
@@ -219,7 +219,7 @@ router.post('/safety/swms/:id/request-access', (req, res) => {
     console.error('[w/safety] swms access request error:', e.message);
     req.flash('error', 'Could not submit request.');
   }
-  return res.redirect('/w/safety/swms/' + swms.id);
+  return req.session.save(() => res.redirect('/w/safety/swms/' + swms.id));
 });
 
 // POST /w/safety/swms/:id/acknowledge — idempotent ack with version snapshot.
@@ -233,13 +233,13 @@ router.post('/safety/swms/:id/acknowledge', (req, res) => {
   const swms = db.prepare("SELECT id, version_token, title, status FROM swms WHERE id = ?").get(req.params.id);
   if (!swms || swms.status !== 'active') {
     req.flash('error', 'SWMS not available.');
-    return res.redirect('/w/safety/swms');
+    return req.session.save(() => res.redirect('/w/safety/swms'));
   }
 
   const sigDataUrl = (req.body.signature_data || '').toString();
   if (!/^data:image\/(png|jpeg);base64,/.test(sigDataUrl)) {
     req.flash('error', 'Please draw your signature before acknowledging.');
-    return res.redirect('/w/safety/swms/' + swms.id);
+    return req.session.save(() => res.redirect('/w/safety/swms/' + swms.id));
   }
 
   // Persist the signature PNG. We tolerate write failures (fall through to
@@ -292,7 +292,7 @@ router.post('/safety/swms/:id/acknowledge', (req, res) => {
     console.error('[w/safety] ack error', e.message);
     req.flash('error', 'Could not record acknowledgement.');
   }
-  return res.redirect('/w/safety/swms/' + swms.id);
+  return req.session.save(() => res.redirect('/w/safety/swms/' + swms.id));
 });
 
 // Stream a file inline for the client-side pdfjs viewer. If the source is a
@@ -343,16 +343,16 @@ router.get('/safety/swms/:id/file', async (req, res) => {
   const swms = db.prepare("SELECT id, kind, file_path, file_original_name, version_token, status FROM swms WHERE id = ?").get(req.params.id);
   if (!swms || swms.status !== 'active' || !swms.file_path) {
     req.flash('error', 'File unavailable.');
-    return res.redirect('/w/safety/swms/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/safety/swms/' + req.params.id));
   }
   if (!hasSwmsAccess(db, swms, workerId)) {
     req.flash('error', 'You do not have access to this SWMS yet. Request access from the SWMS page.');
-    return res.redirect('/w/safety/swms/' + swms.id);
+    return req.session.save(() => res.redirect('/w/safety/swms/' + swms.id));
   }
   const abs = path.join(__dirname, '..', '..', swms.file_path);
   if (!fs.existsSync(abs)) {
     req.flash('error', 'File missing on disk.');
-    return res.redirect('/w/safety/swms/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/safety/swms/' + req.params.id));
   }
   return sendSafetyFileInline(res, abs, swms.file_original_name, {
     scope: 'swms', id: swms.id, cacheKey: swms.version_token || docxToPdf.fileStatHash(abs),
@@ -372,11 +372,11 @@ router.get('/safety/swms/:id/view', (req, res) => {
   `).get(req.params.id);
   if (!swms) {
     req.flash('error', 'SWMS not found or not active.');
-    return res.redirect('/w/safety/swms');
+    return req.session.save(() => res.redirect('/w/safety/swms'));
   }
   if (!hasSwmsAccess(db, swms, workerId)) {
     req.flash('error', 'You do not have access to this SWMS yet.');
-    return res.redirect('/w/safety/swms/' + swms.id);
+    return req.session.save(() => res.redirect('/w/safety/swms/' + swms.id));
   }
   const currentAck = db.prepare(`
     SELECT * FROM swms_acknowledgements
@@ -435,7 +435,7 @@ router.get('/safety/sop-register/:id', (req, res) => {
   `).get(req.params.id);
   if (!sop) {
     req.flash('error', 'SOP not found or not active.');
-    return res.redirect('/w/safety/sop-register');
+    return req.session.save(() => res.redirect('/w/safety/sop-register'));
   }
   const currentAck = db.prepare(`
     SELECT * FROM sop_register_acknowledgements
@@ -465,7 +465,7 @@ router.post('/safety/sop-register/:id/acknowledge', (req, res) => {
   const sop = db.prepare("SELECT id, version_token, title, status FROM sop_register WHERE id = ?").get(req.params.id);
   if (!sop || sop.status !== 'active') {
     req.flash('error', 'SOP not available.');
-    return res.redirect('/w/safety/sop-register');
+    return req.session.save(() => res.redirect('/w/safety/sop-register'));
   }
 
   const sigDataUrl = (req.body.signature_data || '').toString();
@@ -528,7 +528,7 @@ router.post('/safety/sop-register/:id/acknowledge', (req, res) => {
     console.error('[w/safety] sop ack error', e.message);
     req.flash('error', 'Could not record acknowledgement.');
   }
-  return res.redirect('/w/safety/sop-register/' + sop.id);
+  return req.session.save(() => res.redirect('/w/safety/sop-register/' + sop.id));
 });
 
 // GET /w/safety/sop-register/:id/file — auth-gated inline serve. Word docs
@@ -538,12 +538,12 @@ router.get('/safety/sop-register/:id/file', async (req, res) => {
   const sop = db.prepare("SELECT id, file_path, file_original_name, version_token, status FROM sop_register WHERE id = ?").get(req.params.id);
   if (!sop || sop.status !== 'active' || !sop.file_path) {
     req.flash('error', 'File unavailable.');
-    return res.redirect('/w/safety/sop-register/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/safety/sop-register/' + req.params.id));
   }
   const abs = path.join(__dirname, '..', '..', sop.file_path);
   if (!fs.existsSync(abs)) {
     req.flash('error', 'File missing on disk.');
-    return res.redirect('/w/safety/sop-register/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/safety/sop-register/' + req.params.id));
   }
   return sendSafetyFileInline(res, abs, sop.file_original_name, {
     scope: 'sop', id: sop.id, cacheKey: sop.version_token || docxToPdf.fileStatHash(abs),
@@ -561,7 +561,7 @@ router.get('/safety/sop-register/:id/view', (req, res) => {
   `).get(req.params.id);
   if (!sop) {
     req.flash('error', 'SOP not found or not active.');
-    return res.redirect('/w/safety/sop-register');
+    return req.session.save(() => res.redirect('/w/safety/sop-register'));
   }
   const currentAck = db.prepare(`
     SELECT * FROM sop_register_acknowledgements
@@ -607,7 +607,7 @@ router.get('/safety/updates/:id', (req, res) => {
   `).get(req.params.id);
   if (!update) {
     req.flash('error', 'Safety update not found.');
-    return res.redirect('/w/safety/updates');
+    return req.session.save(() => res.redirect('/w/safety/updates'));
   }
   const isPdfAttachment = !!(update.attachment_original_name && /\.pdf$/i.test(update.attachment_original_name));
   res.render('worker/safety/update-detail', {
@@ -643,12 +643,12 @@ router.get('/safety/updates/:id/file', async (req, res) => {
   const row = db.prepare('SELECT id, attachment_path, attachment_original_name, status FROM safety_updates WHERE id = ?').get(req.params.id);
   if (!row || row.status !== 'published' || !row.attachment_path) {
     req.flash('error', 'Attachment unavailable.');
-    return res.redirect('/w/safety/updates/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/safety/updates/' + req.params.id));
   }
   const abs = path.join(__dirname, '..', '..', row.attachment_path);
   if (!fs.existsSync(abs)) {
     req.flash('error', 'File missing on disk.');
-    return res.redirect('/w/safety/updates/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/safety/updates/' + req.params.id));
   }
   return sendSafetyFileInline(res, abs, row.attachment_original_name, {
     scope: 'safety_update', id: row.id, cacheKey: docxToPdf.fileStatHash(abs),
@@ -693,7 +693,7 @@ router.get('/safety/toolboxes/:id', (req, res) => {
   `).get(req.params.id);
   if (!toolbox) {
     req.flash('error', 'Toolbox not found.');
-    return res.redirect('/w/safety/toolboxes');
+    return req.session.save(() => res.redirect('/w/safety/toolboxes'));
   }
   const myAttendance = db.prepare(`
     SELECT * FROM toolbox_attendance WHERE toolbox_id = ? AND crew_member_id = ?
@@ -779,7 +779,7 @@ router.post('/safety/toolboxes/:id/accept', (req, res) => {
   const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
   if (!toolbox || toolbox.status !== 'published') {
     req.flash('error', 'Toolbox not available.');
-    return res.redirect('/w/safety/toolboxes');
+    return req.session.save(() => res.redirect('/w/safety/toolboxes'));
   }
   try {
     const existing = db.prepare(
@@ -801,7 +801,7 @@ router.post('/safety/toolboxes/:id/accept', (req, res) => {
     console.error('[w/safety] toolbox accept error', e.message);
     req.flash('error', 'Could not record.');
   }
-  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+  return req.session.save(() => res.redirect('/w/safety/toolboxes/' + toolbox.id));
 });
 
 // POST /w/safety/toolboxes/:id/decline — worker can't attend.
@@ -814,7 +814,7 @@ router.post('/safety/toolboxes/:id/decline', (req, res) => {
   const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
   if (!toolbox || toolbox.status !== 'published') {
     req.flash('error', 'Toolbox not available.');
-    return res.redirect('/w/safety/toolboxes');
+    return req.session.save(() => res.redirect('/w/safety/toolboxes'));
   }
   const reason = (req.body.absence_reason || '').toString().trim().slice(0, 1000) || null;
   try {
@@ -838,7 +838,7 @@ router.post('/safety/toolboxes/:id/decline', (req, res) => {
     console.error('[w/safety] toolbox decline error', e.message);
     req.flash('error', 'Could not record.');
   }
-  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+  return req.session.save(() => res.redirect('/w/safety/toolboxes/' + toolbox.id));
 });
 
 // POST /w/safety/toolboxes/:id/sign-off — worker confirms they attended.
@@ -852,7 +852,7 @@ router.post('/safety/toolboxes/:id/sign-off', (req, res) => {
   const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
   if (!toolbox || toolbox.status !== 'published') {
     req.flash('error', 'Toolbox not available.');
-    return res.redirect('/w/safety/toolboxes');
+    return req.session.save(() => res.redirect('/w/safety/toolboxes'));
   }
   const sigRaw = (req.body.signature_data || '').toString();
   // Cap at ~250 KB. PNG dataURLs from a 320×130 canvas with a couple of
@@ -860,7 +860,7 @@ router.post('/safety/toolboxes/:id/sign-off', (req, res) => {
   // dense payload from bloating the row.
   if (!sigRaw.startsWith('data:image/') || sigRaw.length > 260000) {
     req.flash('error', 'Please draw your signature before signing off.');
-    return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+    return req.session.save(() => res.redirect('/w/safety/toolboxes/' + toolbox.id));
   }
   try {
     db.prepare(`
@@ -879,7 +879,7 @@ router.post('/safety/toolboxes/:id/sign-off', (req, res) => {
     console.error('[w/safety] toolbox sign-off error', e.message);
     req.flash('error', 'Could not record sign-off.');
   }
-  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+  return req.session.save(() => res.redirect('/w/safety/toolboxes/' + toolbox.id));
 });
 
 // POST /w/safety/toolboxes/:id/caught-up — worker self-claim. Idempotent via
@@ -891,7 +891,7 @@ router.post('/safety/toolboxes/:id/caught-up', (req, res) => {
   const toolbox = db.prepare("SELECT id, title, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
   if (!toolbox || toolbox.status !== 'published') {
     req.flash('error', 'Toolbox not available.');
-    return res.redirect('/w/safety/toolboxes');
+    return req.session.save(() => res.redirect('/w/safety/toolboxes'));
   }
   try {
     db.prepare(`
@@ -904,7 +904,7 @@ router.post('/safety/toolboxes/:id/caught-up', (req, res) => {
     console.error('[w/safety] toolbox caught-up error', e.message);
     req.flash('error', 'Could not record.');
   }
-  return res.redirect('/w/safety/toolboxes/' + toolbox.id);
+  return req.session.save(() => res.redirect('/w/safety/toolboxes/' + toolbox.id));
 });
 
 // GET /w/safety/toolboxes/:id/slides — worker-auth slides serve. Word /
@@ -914,12 +914,12 @@ router.get('/safety/toolboxes/:id/slides', async (req, res) => {
   const row = db.prepare("SELECT id, slides_path, slides_original_name, status FROM toolbox_talks WHERE id = ?").get(req.params.id);
   if (!row || row.status !== 'published' || !row.slides_path) {
     req.flash('error', 'Slides unavailable.');
-    return res.redirect('/w/safety/toolboxes/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/safety/toolboxes/' + req.params.id));
   }
   const abs = path.join(__dirname, '..', '..', row.slides_path);
   if (!fs.existsSync(abs)) {
     req.flash('error', 'File missing on disk.');
-    return res.redirect('/w/safety/toolboxes/' + req.params.id);
+    return req.session.save(() => res.redirect('/w/safety/toolboxes/' + req.params.id));
   }
   return sendSafetyFileInline(res, abs, row.slides_original_name, {
     scope: 'toolbox', id: row.id, cacheKey: docxToPdf.fileStatHash(abs),
@@ -1000,7 +1000,7 @@ router.post('/safety/comments', (req, res) => {
   commentUpload(req, res, (multerErr) => {
     if (multerErr) {
       req.flash('error', multerErr.message || 'Upload failed.');
-      return res.redirect('/w/safety/comments/new');
+      return req.session.save(() => res.redirect('/w/safety/comments/new'));
     }
     const db = getDb();
     const worker = req.session.worker;
@@ -1008,7 +1008,7 @@ router.post('/safety/comments', (req, res) => {
     const body = String(b.body || '').trim();
     if (!body) {
       req.flash('error', 'Please write something before submitting.');
-      return res.redirect('/w/safety/comments/new');
+      return req.session.save(() => res.redirect('/w/safety/comments/new'));
     }
     const category = COMMENT_CATEGORY_VALUES.includes(b.category) ? b.category : 'general';
     const jobId = b.job_id ? (parseInt(b.job_id, 10) || null) : null;
@@ -1062,11 +1062,11 @@ router.post('/safety/comments', (req, res) => {
       } catch (e) { console.error('[w/safety] notify admins error:', e.message); }
 
       req.flash('success', 'Submitted. The safety team will review and respond.');
-      return res.redirect('/w/safety/comments/' + newId);
+      return req.session.save(() => res.redirect('/w/safety/comments/' + newId));
     } catch (err) {
       console.error('[w/safety] comment submit error:', err.message);
       req.flash('error', 'Could not submit comment.');
-      return res.redirect('/w/safety/comments/new');
+      return req.session.save(() => res.redirect('/w/safety/comments/new'));
     }
   });
 });
@@ -1085,7 +1085,7 @@ router.get('/safety/comments/:id', (req, res) => {
   `).get(req.params.id, token);
   if (!comment) {
     req.flash('error', 'Comment not found.');
-    return res.redirect('/w/safety/comments');
+    return req.session.save(() => res.redirect('/w/safety/comments'));
   }
   // internal_notes is office-only — strip it before render so a stray template
   // expression can't leak it. The view doesn't reference it either, but
@@ -1181,7 +1181,7 @@ router.get('/safety/quizzes/:id', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
   const quiz = db.prepare(`SELECT * FROM safety_quizzes WHERE id = ? AND status = 'published'`).get(req.params.id);
-  if (!quiz) { req.flash('error', 'Quiz not found.'); return res.redirect('/w/safety/quizzes'); }
+  if (!quiz) { req.flash('error', 'Quiz not found.'); return req.session.save(() => res.redirect('/w/safety/quizzes')); }
   const questionCount = db.prepare('SELECT COUNT(*) AS c FROM safety_quiz_questions WHERE quiz_id = ?').get(quiz.id).c;
   const latest = latestAttempt(db, quiz.id, workerId);
   const count = attemptCount(db, quiz.id, workerId);
@@ -1197,24 +1197,24 @@ router.post('/safety/quizzes/:id/start', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
   const quiz = db.prepare(`SELECT * FROM safety_quizzes WHERE id = ? AND status = 'published'`).get(req.params.id);
-  if (!quiz) { req.flash('error', 'Quiz not found.'); return res.redirect('/w/safety/quizzes'); }
+  if (!quiz) { req.flash('error', 'Quiz not found.'); return req.session.save(() => res.redirect('/w/safety/quizzes')); }
   const latest = latestAttempt(db, quiz.id, workerId);
   // Resume an in-progress attempt rather than spawning a duplicate.
   if (latest && latest.status === 'in_progress') {
-    return res.redirect('/w/safety/quizzes/' + quiz.id + '/take');
+    return req.session.save(() => res.redirect('/w/safety/quizzes/' + quiz.id + '/take'));
   }
   const count = attemptCount(db, quiz.id, workerId);
   const blocked = blockedReason(quiz, latest, count);
   if (blocked) {
     req.flash('error', blocked);
-    return res.redirect('/w/safety/quizzes/' + quiz.id);
+    return req.session.save(() => res.redirect('/w/safety/quizzes/' + quiz.id));
   }
   const nextAttempt = (count || 0) + 1;
   db.prepare(`
     INSERT INTO safety_quiz_attempts (quiz_id, crew_member_id, attempt_number, status)
     VALUES (?, ?, ?, 'in_progress')
   `).run(quiz.id, workerId, nextAttempt);
-  return res.redirect('/w/safety/quizzes/' + quiz.id + '/take');
+  return req.session.save(() => res.redirect('/w/safety/quizzes/' + quiz.id + '/take'));
 });
 
 // GET /w/safety/quizzes/:id/take — single-question-at-a-time view.
@@ -1224,18 +1224,18 @@ router.get('/safety/quizzes/:id/take', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
   const quiz = db.prepare(`SELECT * FROM safety_quizzes WHERE id = ? AND status = 'published'`).get(req.params.id);
-  if (!quiz) { req.flash('error', 'Quiz not found.'); return res.redirect('/w/safety/quizzes'); }
+  if (!quiz) { req.flash('error', 'Quiz not found.'); return req.session.save(() => res.redirect('/w/safety/quizzes')); }
   const attempt = db.prepare(`
     SELECT * FROM safety_quiz_attempts
     WHERE quiz_id = ? AND crew_member_id = ? AND status = 'in_progress'
     ORDER BY attempt_number DESC LIMIT 1
   `).get(quiz.id, workerId);
-  if (!attempt) return res.redirect('/w/safety/quizzes/' + quiz.id);
+  if (!attempt) return req.session.save(() => res.redirect('/w/safety/quizzes/' + quiz.id));
   const questions = db.prepare('SELECT * FROM safety_quiz_questions WHERE quiz_id = ? ORDER BY sort_order ASC, id ASC').all(quiz.id)
     .map(q => Object.assign({}, q, { options: safeJson(q.options_json, []) }));
   if (!questions.length) {
     req.flash('error', 'This quiz has no questions yet.');
-    return res.redirect('/w/safety/quizzes');
+    return req.session.save(() => res.redirect('/w/safety/quizzes'));
   }
   let idx = parseInt(req.query.q, 10);
   if (!idx || idx < 1) idx = 1;
@@ -1256,13 +1256,13 @@ router.post('/safety/quizzes/:id/take', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
   const quiz = db.prepare(`SELECT * FROM safety_quizzes WHERE id = ? AND status = 'published'`).get(req.params.id);
-  if (!quiz) { req.flash('error', 'Quiz not found.'); return res.redirect('/w/safety/quizzes'); }
+  if (!quiz) { req.flash('error', 'Quiz not found.'); return req.session.save(() => res.redirect('/w/safety/quizzes')); }
   const attempt = db.prepare(`
     SELECT * FROM safety_quiz_attempts
     WHERE quiz_id = ? AND crew_member_id = ? AND status = 'in_progress'
     ORDER BY attempt_number DESC LIMIT 1
   `).get(quiz.id, workerId);
-  if (!attempt) return res.redirect('/w/safety/quizzes/' + quiz.id);
+  if (!attempt) return req.session.save(() => res.redirect('/w/safety/quizzes/' + quiz.id));
 
   const questionId = parseInt(req.body.question_id, 10) || 0;
   const answerValue = String(req.body.answer_value || '').trim();
@@ -1296,18 +1296,18 @@ router.post('/safety/quizzes/:id/submit', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
   const quiz = db.prepare(`SELECT * FROM safety_quizzes WHERE id = ? AND status = 'published'`).get(req.params.id);
-  if (!quiz) { req.flash('error', 'Quiz not found.'); return res.redirect('/w/safety/quizzes'); }
+  if (!quiz) { req.flash('error', 'Quiz not found.'); return req.session.save(() => res.redirect('/w/safety/quizzes')); }
   const attempt = db.prepare(`
     SELECT * FROM safety_quiz_attempts
     WHERE quiz_id = ? AND crew_member_id = ? AND status = 'in_progress'
     ORDER BY attempt_number DESC LIMIT 1
   `).get(quiz.id, workerId);
-  if (!attempt) return res.redirect('/w/safety/quizzes/' + quiz.id);
+  if (!attempt) return req.session.save(() => res.redirect('/w/safety/quizzes/' + quiz.id));
 
   const questions = db.prepare('SELECT id, question_type, correct_value FROM safety_quiz_questions WHERE quiz_id = ?').all(quiz.id);
   if (!questions.length) {
     req.flash('error', 'Quiz has no questions.');
-    return res.redirect('/w/safety/quizzes');
+    return req.session.save(() => res.redirect('/w/safety/quizzes'));
   }
   const answers = db.prepare('SELECT question_id, answer_value FROM safety_quiz_answers WHERE attempt_id = ?').all(attempt.id);
   const ansMap = new Map(answers.map(a => [a.question_id, a.answer_value]));
@@ -1359,14 +1359,14 @@ router.get('/safety/quizzes/:id/results', (req, res) => {
   const db = getDb();
   const workerId = req.session.worker.id;
   const quiz = db.prepare(`SELECT * FROM safety_quizzes WHERE id = ?`).get(req.params.id);
-  if (!quiz) { req.flash('error', 'Quiz not found.'); return res.redirect('/w/safety/quizzes'); }
+  if (!quiz) { req.flash('error', 'Quiz not found.'); return req.session.save(() => res.redirect('/w/safety/quizzes')); }
   const attempt = db.prepare(`
     SELECT * FROM safety_quiz_attempts
     WHERE quiz_id = ? AND crew_member_id = ?
     ORDER BY attempt_number DESC LIMIT 1
   `).get(quiz.id, workerId);
   if (!attempt || attempt.status !== 'submitted') {
-    return res.redirect('/w/safety/quizzes/' + quiz.id);
+    return req.session.save(() => res.redirect('/w/safety/quizzes/' + quiz.id));
   }
   const questions = db.prepare('SELECT * FROM safety_quiz_questions WHERE quiz_id = ? ORDER BY sort_order ASC, id ASC').all(quiz.id)
     .map(q => Object.assign({}, q, { options: safeJson(q.options_json, []) }));

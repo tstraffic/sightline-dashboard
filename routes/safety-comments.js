@@ -101,7 +101,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN users ru ON ru.id = c.response_by_id
     WHERE c.id = ?
   `).get(req.params.id);
-  if (!comment) { req.flash('error', 'Comment not found.'); return res.redirect('/safety-comments'); }
+  if (!comment) { req.flash('error', 'Comment not found.'); return req.session.save(() => res.redirect('/safety-comments')); }
   const photos = db.prepare('SELECT * FROM safety_comment_attachments WHERE comment_id = ? ORDER BY id ASC').all(comment.id);
   const officeUsers = db.prepare("SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name").all();
   res.render('safety-comments/show', {
@@ -117,7 +117,7 @@ router.get('/:id', (req, res) => {
 router.post('/:id', (req, res) => {
   const db = getDb();
   const comment = db.prepare('SELECT * FROM safety_comments WHERE id = ?').get(req.params.id);
-  if (!comment) { req.flash('error', 'Not found.'); return res.redirect('/safety-comments'); }
+  if (!comment) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/safety-comments')); }
   const b = req.body;
   const status = STATUS_VALUES.includes(b.status) ? b.status : comment.status;
   const assignedToId = b.assigned_to_id ? (parseInt(b.assigned_to_id, 10) || null) : null;
@@ -135,7 +135,7 @@ router.post('/:id', (req, res) => {
     });
   } catch (e) {}
   req.flash('success', 'Comment updated.');
-  return res.redirect('/safety-comments/' + comment.id);
+  return req.session.save(() => res.redirect('/safety-comments/' + comment.id));
 });
 
 // POST /safety-comments/:id/respond — record office response, set status=closed,
@@ -144,11 +144,11 @@ router.post('/:id', (req, res) => {
 router.post('/:id/respond', (req, res) => {
   const db = getDb();
   const comment = db.prepare('SELECT * FROM safety_comments WHERE id = ?').get(req.params.id);
-  if (!comment) { req.flash('error', 'Not found.'); return res.redirect('/safety-comments'); }
+  if (!comment) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/safety-comments')); }
   const responseText = String(req.body.response || '').trim();
   if (!responseText) {
     req.flash('error', 'Response cannot be empty.');
-    return res.redirect('/safety-comments/' + comment.id);
+    return req.session.save(() => res.redirect('/safety-comments/' + comment.id));
   }
   const userId = req.session.user ? req.session.user.id : null;
   db.prepare(`
@@ -185,7 +185,7 @@ router.post('/:id/respond', (req, res) => {
     });
   } catch (e) {}
   req.flash('success', 'Response sent and comment closed.');
-  return res.redirect('/safety-comments/' + comment.id);
+  return req.session.save(() => res.redirect('/safety-comments/' + comment.id));
 });
 
 // POST /safety-comments/:id/delete
@@ -196,7 +196,7 @@ router.post('/:id/delete', (req, res) => {
   db.prepare('DELETE FROM safety_comments WHERE id = ?').run(comment.id);
   try { logActivity({ user: req.session.user, action: 'delete', entityType: 'safety_comment', entityId: comment.id, entityLabel: 'Comment #' + comment.id, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Comment deleted.');
-  return res.redirect('/safety-comments');
+  return req.session.save(() => res.redirect('/safety-comments'));
 });
 
 // GET /safety-comments/:id/photos/:photoId — inline serve for the admin gallery.

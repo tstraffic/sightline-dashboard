@@ -18,12 +18,7 @@
     </div>
   </div>
 
-  <% if (flash_success && flash_success.length) { %>
-    <div class="rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 text-sm"><%= flash_success[0] %></div>
-  <% } %>
-  <% if (flash_error && flash_error.length) { %>
-    <div class="rounded-lg bg-red-50 border border-red-200 text-red-800 px-4 py-3 text-sm"><%= flash_error[0] %></div>
-  <% } %>
+  <%# Flash renders via the layout banner (global locals). %>
 
   <!-- Upload form -->
   <form method="POST" action="/jobs/<%= job.id %>/documents" enctype="multipart/form-data"

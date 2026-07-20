@@ -95,7 +95,7 @@ router.post('/', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'equipment', entityId: result.lastInsertRowid, entityLabel: `${b.asset_number} - ${b.name}`, ip: req.ip });
   req.flash('success', `Equipment ${b.asset_number} added.`);
-  res.redirect('/equipment');
+  req.session.save(() => res.redirect('/equipment'));
 });
 
 // POST /bulk — Bulk actions on equipment
@@ -116,14 +116,14 @@ router.post('/bulk', (req, res) => {
     logActivity({ user: req.session.user, action: 'update', entityType: 'equipment', entityLabel: `Bulk set maintenance for ${ids.length} items`, ip: req.ip });
     req.flash('success', ids.length + ' equipment item(s) flagged for maintenance.');
   }
-  res.redirect('/equipment');
+  req.session.save(() => res.redirect('/equipment'));
 });
 
 // SHOW EQUIPMENT DETAIL
 router.get('/:id', (req, res) => {
   const db = getDb();
   const item = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
-  if (!item) { req.flash('error', 'Equipment not found.'); return res.redirect('/equipment'); }
+  if (!item) { req.flash('error', 'Equipment not found.'); return req.session.save(() => res.redirect('/equipment')); }
 
   const assignments = db.prepare(`
     SELECT ea.*, j.job_number, j.client, u.full_name as assigned_by_name
@@ -181,7 +181,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const item = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
-  if (!item) { req.flash('error', 'Equipment not found.'); return res.redirect('/equipment'); }
+  if (!item) { req.flash('error', 'Equipment not found.'); return req.session.save(() => res.redirect('/equipment')); }
   res.render('equipment/form', { title: `Edit ${item.asset_number}`, currentPage: 'equipment', item, equipmentTypes: EQUIPMENT_TYPES });
 });
 
@@ -203,19 +203,19 @@ router.post('/:id', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'equipment', entityId: parseInt(req.params.id), entityLabel: `${b.asset_number} - ${b.name}`, ip: req.ip });
   req.flash('success', 'Equipment updated.');
-  res.redirect(`/equipment/${req.params.id}`);
+  req.session.save(() => res.redirect(`/equipment/${req.params.id}`));
 });
 
 // DELETE EQUIPMENT
 router.post('/:id/delete', (req, res) => {
   const db = getDb();
   const item = db.prepare('SELECT * FROM equipment WHERE id = ?').get(req.params.id);
-  if (!item) { req.flash('error', 'Equipment not found.'); return res.redirect('/equipment'); }
+  if (!item) { req.flash('error', 'Equipment not found.'); return req.session.save(() => res.redirect('/equipment')); }
 
   const assignments = db.prepare('SELECT COUNT(*) as count FROM equipment_assignments WHERE equipment_id = ? AND actual_return_date IS NULL').get(req.params.id).count;
   if (assignments > 0) {
     req.flash('error', `Cannot delete ${item.asset_number} — it is currently deployed. Return it first or deactivate instead.`);
-    return res.redirect('/equipment/' + item.id);
+    return req.session.save(() => res.redirect('/equipment/' + item.id));
   }
 
   db.prepare('DELETE FROM equipment_maintenance WHERE equipment_id = ?').run(req.params.id);
@@ -223,7 +223,7 @@ router.post('/:id/delete', (req, res) => {
   db.prepare('DELETE FROM equipment WHERE id = ?').run(req.params.id);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'equipment', entityId: item.id, entityLabel: `${item.asset_number} - ${item.name}`, ip: req.ip });
   req.flash('success', `Equipment ${item.asset_number} deleted.`);
-  res.redirect('/equipment');
+  req.session.save(() => res.redirect('/equipment'));
 });
 
 // ASSIGN TO JOB
@@ -240,7 +240,7 @@ router.post('/:id/assign', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'equipment_assignment', entityLabel: `${item ? item.asset_number : ''} -> ${job ? job.job_number : ''}`, jobId: parseInt(job_id), jobNumber: job ? job.job_number : '', ip: req.ip });
   req.flash('success', 'Equipment assigned to job.');
-  res.redirect(`/equipment/${req.params.id}`);
+  req.session.save(() => res.redirect(`/equipment/${req.params.id}`));
 });
 
 // RETURN EQUIPMENT
@@ -250,7 +250,7 @@ router.post('/:id/assignments/:assignId/return', (req, res) => {
   db.prepare('UPDATE equipment_assignments SET actual_return_date = ? WHERE id = ?').run(today, req.params.assignId);
   logActivity({ user: req.session.user, action: 'update', entityType: 'equipment_assignment', entityId: parseInt(req.params.assignId), details: 'Returned', ip: req.ip });
   req.flash('success', 'Equipment returned.');
-  res.redirect(`/equipment/${req.params.id}`);
+  req.session.save(() => res.redirect(`/equipment/${req.params.id}`));
 });
 
 // LOG MAINTENANCE
@@ -270,7 +270,7 @@ router.post('/:id/maintenance', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'equipment_maintenance', details: `${maintenance_type}: ${description.substring(0, 40)}`, ip: req.ip });
   req.flash('success', 'Maintenance record added.');
-  res.redirect(`/equipment/${req.params.id}`);
+  req.session.save(() => res.redirect(`/equipment/${req.params.id}`));
 });
 
 // POST /:id/hire-checklist — Submit a hire pickup/return checklist
@@ -292,7 +292,7 @@ router.post('/:id/hire-checklist', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'equipment', entityId: parseInt(req.params.id), details: `Hire ${b.checklist_type || 'pickup'} checklist`, ip: req.ip });
   req.flash('success', `Hire ${b.checklist_type || 'pickup'} checklist saved.`);
-  res.redirect(`/equipment/${req.params.id}`);
+  req.session.save(() => res.redirect(`/equipment/${req.params.id}`));
 });
 
 module.exports = router;

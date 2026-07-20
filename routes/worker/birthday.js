@@ -37,7 +37,7 @@ router.get('/birthday/:targetId', (req, res) => {
   if (!target) {
     // Not actually a birthday today (or worker not active) — soft redirect
     req.flash('error', "That isn't a birthday today.");
-    return res.redirect('/w/home');
+    return req.session.save(() => res.redirect('/w/home'));
   }
 
   const today = localIso();
@@ -62,19 +62,19 @@ router.post('/birthday/:targetId', (req, res) => {
   const target = findTodayBirthday(db, targetId);
   if (!target) {
     req.flash('error', "That isn't a birthday today.");
-    return res.redirect('/w/home');
+    return req.session.save(() => res.redirect('/w/home'));
   }
 
   if (worker.id === target.crew_member_id) {
     // Can't wish yourself.
     req.flash('error', "You can't wish yourself — enjoy the day!");
-    return res.redirect(`/w/birthday/${targetId}`);
+    return req.session.save(() => res.redirect(`/w/birthday/${targetId}`));
   }
 
   const message = (req.body.message || '').toString().trim().slice(0, 500);
   if (!message) {
     req.flash('error', 'Write a quick message before sending.');
-    return res.redirect(`/w/birthday/${targetId}`);
+    return req.session.save(() => res.redirect(`/w/birthday/${targetId}`));
   }
 
   const today = localIso();
@@ -82,7 +82,7 @@ router.post('/birthday/:targetId', (req, res) => {
   if (!newId) {
     // UNIQUE constraint — they already wished this person today
     req.flash('error', "You've already wished them today.");
-    return res.redirect(`/w/birthday/${targetId}`);
+    return req.session.save(() => res.redirect(`/w/birthday/${targetId}`));
   }
 
   // Fan the wish straight to the birthday person's device(s). Fire-and-
@@ -96,7 +96,7 @@ router.post('/birthday/:targetId', (req, res) => {
   }).catch(e => console.error('[birthday] push failed:', e.message));
 
   req.flash('success', `Wish sent to ${target.full_name.split(' ')[0]} 🎂`);
-  res.redirect(`/w/birthday/${targetId}`);
+  req.session.save(() => res.redirect(`/w/birthday/${targetId}`));
 });
 
 module.exports = router;

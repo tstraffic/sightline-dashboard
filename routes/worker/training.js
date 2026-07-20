@@ -68,7 +68,7 @@ router.get('/training', (req, res) => {
 // admin presenter, just rendered in personal mode (no attendee picker).
 router.get('/training/:slug', (req, res) => {
   const cfg = MODULES[req.params.slug];
-  if (!cfg) { req.flash('error', 'Unknown training module.'); return res.redirect('/w/training'); }
+  if (!cfg) { req.flash('error', 'Unknown training module.'); return req.session.save(() => res.redirect('/w/training')); }
 
   const db = getDb();
   const employee = workerEmployee(db, req.session.worker.id);

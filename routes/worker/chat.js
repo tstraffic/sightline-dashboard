@@ -86,7 +86,7 @@ router.get('/chat/dm/:userId', (req, res) => {
   const otherUser = db.prepare('SELECT id, full_name, role FROM users WHERE id = ?').get(otherUserId);
   if (!otherUser) {
     req.flash('error', 'User not found.');
-    return res.redirect('/w/chat');
+    return req.session.save(() => res.redirect('/w/chat'));
   }
 
   const chatThreadId = findOrCreateDM(workerId, otherUserId);
@@ -107,7 +107,7 @@ router.get('/chat/channel/:id', (req, res) => {
   const thread = db.prepare('SELECT * FROM chat_threads WHERE id = ? AND thread_type IN (?, ?)').get(req.params.id, 'channel', 'announcement');
   if (!thread) {
     req.flash('error', 'Channel not found.');
-    return res.redirect('/w/chat');
+    return req.session.save(() => res.redirect('/w/chat'));
   }
 
   const memberCount = db.prepare('SELECT COUNT(*) as c FROM chat_thread_members WHERE thread_id = ?').get(thread.id).c;

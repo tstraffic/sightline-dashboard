@@ -77,7 +77,7 @@ router.post('/', (req, res) => {
   // Validation: healthy must be > watch, both > 0
   if (update.margin_healthy_threshold <= update.margin_watch_threshold) {
     req.flash('error', 'Healthy margin threshold must be greater than the watch threshold.');
-    return res.redirect('/rate-cards/settings');
+    return req.session.save(() => res.redirect('/rate-cards/settings'));
   }
 
   db.prepare(`
@@ -127,7 +127,7 @@ router.post('/', (req, res) => {
   }
 
   req.flash('success', changes.length > 0 ? `Updated ${changes.length} setting(s).` : 'No changes made.');
-  res.redirect('/rate-cards/settings');
+  req.session.save(() => res.redirect('/rate-cards/settings'));
 });
 
 module.exports = router;

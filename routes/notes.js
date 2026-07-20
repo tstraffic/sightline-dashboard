@@ -111,7 +111,7 @@ router.post('/', (req, res) => {
 
   if (!content) {
     req.flash('error', 'Note content required.');
-    return res.redirect('/notes');
+    return req.session.save(() => res.redirect('/notes'));
   }
 
   try {
@@ -131,7 +131,7 @@ router.post('/', (req, res) => {
     console.error('[notes] create failed:', e.message);
     req.flash('error', 'Failed to save note: ' + e.message);
   }
-  res.redirect('/notes');
+  req.session.save(() => res.redirect('/notes'));
 });
 
 // GET /notes/:id — JSON (for inline editor)
@@ -152,18 +152,18 @@ router.post('/:id', (req, res) => {
   const db = getDb();
   const user = req.session.user;
   const note = db.prepare("SELECT * FROM user_notes WHERE id = ?").get(req.params.id);
-  if (!note) { req.flash('error', 'Note not found.'); return res.redirect('/notes'); }
+  if (!note) { req.flash('error', 'Note not found.'); return req.session.save(() => res.redirect('/notes')); }
   if (!authorOnly(db, note, user.id)) return res.status(403).send('Forbidden');
 
   const content = String(req.body.content || '').trim();
   const tag = VALID_TAGS.has(req.body.tag) ? req.body.tag : note.tag;
   const noteDate = String(req.body.note_date || note.note_date).slice(0, 10);
-  if (!content) { req.flash('error', 'Note content required.'); return res.redirect('/notes'); }
+  if (!content) { req.flash('error', 'Note content required.'); return req.session.save(() => res.redirect('/notes')); }
 
   db.prepare("UPDATE user_notes SET content = ?, tag = ?, note_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?")
     .run(content, tag, noteDate, note.id);
   req.flash('success', 'Note updated.');
-  res.redirect('/notes');
+  req.session.save(() => res.redirect('/notes'));
 });
 
 // POST /notes/:id/share — replace share list
@@ -171,7 +171,7 @@ router.post('/:id/share', (req, res) => {
   const db = getDb();
   const user = req.session.user;
   const note = db.prepare("SELECT * FROM user_notes WHERE id = ?").get(req.params.id);
-  if (!note) { req.flash('error', 'Note not found.'); return res.redirect('/notes'); }
+  if (!note) { req.flash('error', 'Note not found.'); return req.session.save(() => res.redirect('/notes')); }
   if (!authorOnly(db, note, user.id)) return res.status(403).send('Forbidden');
 
   const shareIds = parseShareIds(req.body.share_user_ids);
@@ -193,7 +193,7 @@ router.post('/:id/share', (req, res) => {
     console.error('[notes] share failed:', e.message);
     req.flash('error', 'Share update failed: ' + e.message);
   }
-  res.redirect('/notes');
+  req.session.save(() => res.redirect('/notes'));
 });
 
 // POST /notes/:id/unshare — drop everyone from the share list
@@ -201,7 +201,7 @@ router.post('/:id/unshare', (req, res) => {
   const db = getDb();
   const user = req.session.user;
   const note = db.prepare("SELECT * FROM user_notes WHERE id = ?").get(req.params.id);
-  if (!note) { req.flash('error', 'Note not found.'); return res.redirect('/notes'); }
+  if (!note) { req.flash('error', 'Note not found.'); return req.session.save(() => res.redirect('/notes')); }
   if (!authorOnly(db, note, user.id)) return res.status(403).send('Forbidden');
   const tx = db.transaction(() => {
     db.prepare("DELETE FROM user_note_shares WHERE note_id = ?").run(note.id);
@@ -209,7 +209,7 @@ router.post('/:id/unshare', (req, res) => {
   });
   tx();
   req.flash('success', 'Note is private again.');
-  res.redirect('/notes');
+  req.session.save(() => res.redirect('/notes'));
 });
 
 // POST /notes/:id/pin — toggle pin
@@ -217,10 +217,10 @@ router.post('/:id/pin', (req, res) => {
   const db = getDb();
   const user = req.session.user;
   const note = db.prepare("SELECT * FROM user_notes WHERE id = ?").get(req.params.id);
-  if (!note) { req.flash('error', 'Note not found.'); return res.redirect('/notes'); }
+  if (!note) { req.flash('error', 'Note not found.'); return req.session.save(() => res.redirect('/notes')); }
   if (!authorOnly(db, note, user.id)) return res.status(403).send('Forbidden');
   db.prepare("UPDATE user_notes SET pinned = CASE pinned WHEN 1 THEN 0 ELSE 1 END, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(note.id);
-  res.redirect('/notes');
+  req.session.save(() => res.redirect('/notes'));
 });
 
 // POST /notes/:id/delete — hard delete (share rows cascade)
@@ -228,11 +228,11 @@ router.post('/:id/delete', (req, res) => {
   const db = getDb();
   const user = req.session.user;
   const note = db.prepare("SELECT * FROM user_notes WHERE id = ?").get(req.params.id);
-  if (!note) { req.flash('error', 'Note not found.'); return res.redirect('/notes'); }
+  if (!note) { req.flash('error', 'Note not found.'); return req.session.save(() => res.redirect('/notes')); }
   if (!authorOnly(db, note, user.id)) return res.status(403).send('Forbidden');
   db.prepare("DELETE FROM user_notes WHERE id = ?").run(note.id);
   req.flash('success', 'Note deleted.');
-  res.redirect('/notes');
+  req.session.save(() => res.redirect('/notes'));
 });
 
 module.exports = router;

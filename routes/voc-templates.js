@@ -46,7 +46,7 @@ router.get('/', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const tpl = db.prepare('SELECT * FROM voc_templates WHERE id = ?').get(req.params.id);
-  if (!tpl) { req.flash('error', 'Template not found.'); return res.redirect('/voc-templates'); }
+  if (!tpl) { req.flash('error', 'Template not found.'); return req.session.save(() => res.redirect('/voc-templates')); }
   res.render('voc-templates/form', {
     title: `Edit ${tpl.name}`,
     template: tpl,
@@ -60,7 +60,7 @@ router.get('/:id/edit', (req, res) => {
 router.post('/:id', (req, res) => {
   const db = getDb();
   const tpl = db.prepare('SELECT id FROM voc_templates WHERE id = ?').get(req.params.id);
-  if (!tpl) { req.flash('error', 'Template not found.'); return res.redirect('/voc-templates'); }
+  if (!tpl) { req.flash('error', 'Template not found.'); return req.session.save(() => res.redirect('/voc-templates')); }
   const b = req.body;
 
   const arr = (v) => v == null ? [] : (Array.isArray(v) ? v : [v]);
@@ -94,7 +94,7 @@ router.post('/:id', (req, res) => {
     console.error('[voc-templates] update error:', err);
     req.flash('error', 'Failed to save: ' + err.message);
   }
-  res.redirect(`/voc-templates/${req.params.id}/edit`);
+  req.session.save(() => res.redirect(`/voc-templates/${req.params.id}/edit`));
 });
 
 module.exports = router;

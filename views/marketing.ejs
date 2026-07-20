@@ -124,17 +124,7 @@
   <!-- ══════════════════════════════ Main content ══════════════════════════════ -->
   <div class="min-w-0" id="sec-top">
 
-    <!-- Flash messages -->
-    <% if (flash_success && flash_success.length) { %>
-      <div class="p-3 mb-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
-        <%= flash_success.join(' ') %>
-      </div>
-    <% } %>
-    <% if (flash_error && flash_error.length) { %>
-      <div class="p-3 mb-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm">
-        <%= flash_error.join(' ') %>
-      </div>
-    <% } %>
+    <%# Flash renders via the layout banner (global locals). %>
 
     <!-- Scope banner -->
     <div class="flex items-start gap-2 p-3 mb-4 rounded-xl bg-brand-50 border border-brand-200 text-brand-800 text-xs">

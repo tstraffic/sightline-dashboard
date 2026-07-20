@@ -422,11 +422,11 @@ router.post('/', (req, res) => {
     }
     const reviewMsg = pushAuditReviews(db, newId, status, req.session.user.id);
     req.flash('success', (status === 'submitted' ? 'Audit submitted.' : 'Audit saved as draft.') + reviewMsg);
-    res.redirect('/audits/' + newId);
+    req.session.save(() => res.redirect('/audits/' + newId));
   } catch (err) {
     console.error('[Audits] Create error:', err.message, err.stack);
     req.flash('error', 'Failed to save audit: ' + err.message);
-    res.redirect('/audits/new');
+    req.session.save(() => res.redirect('/audits/new'));
   }
 });
 
@@ -483,7 +483,7 @@ router.get('/:id/pdf', (req, res) => {
       LEFT JOIN users creator ON a.created_by_id = creator.id
       LEFT JOIN users signer ON a.signed_off_by_id = signer.id
       WHERE a.id = ?`).get(req.params.id);
-    if (!audit) { req.flash('error', 'Audit not found.'); return res.redirect('/audits'); }
+    if (!audit) { req.flash('error', 'Audit not found.'); return req.session.save(() => res.redirect('/audits')); }
     const v = loadAuditView(db, audit);
     const safeName = (audit.project_site || 'audit').replace(/[^a-z0-9_-]/gi, '_').slice(0, 40);
     res.setHeader('Content-Type', 'application/pdf');
@@ -492,7 +492,7 @@ router.get('/:id/pdf', (req, res) => {
   } catch (err) {
     console.error('[Audits] PDF export error:', err.message, err.stack);
     req.flash('error', 'PDF export failed: ' + err.message);
-    res.redirect('/audits/' + req.params.id);
+    req.session.save(() => res.redirect('/audits/' + req.params.id));
   }
 });
 
@@ -508,7 +508,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN users signer ON a.signed_off_by_id = signer.id
     LEFT JOIN users auditor ON a.auditor_id = auditor.id
     WHERE a.id = ?`).get(req.params.id);
-  if (!audit) { req.flash('error', 'Audit not found.'); return res.redirect('/audits'); }
+  if (!audit) { req.flash('error', 'Audit not found.'); return req.session.save(() => res.redirect('/audits')); }
   const v = loadAuditView(db, audit);
   res.render('audits/show', {
     title: 'Audit #' + audit.id, audit,
@@ -525,10 +525,10 @@ router.get('/:id', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const audit = db.prepare('SELECT * FROM site_audits WHERE id = ?').get(req.params.id);
-  if (!audit) { req.flash('error', 'Audit not found.'); return res.redirect('/audits'); }
+  if (!audit) { req.flash('error', 'Audit not found.'); return req.session.save(() => res.redirect('/audits')); }
   if (audit.status === 'signed_off' && (req.session.user.role || '').toLowerCase() !== 'admin') {
     req.flash('error', 'Signed-off audits can only be edited by admin.');
-    return res.redirect('/audits/' + audit.id);
+    return req.session.save(() => res.redirect('/audits/' + audit.id));
   }
   const v = loadAuditView(db, audit);
   const jobs = db.prepare("SELECT id, job_number, job_name, client, site_address, suburb FROM jobs ORDER BY job_number").all();
@@ -552,7 +552,7 @@ router.post('/:id', (req, res) => {
     const db = getDb();
     const b = req.body;
     const existing = db.prepare('SELECT * FROM site_audits WHERE id = ?').get(req.params.id);
-    if (!existing) { req.flash('error', 'Audit not found.'); return res.redirect('/audits'); }
+    if (!existing) { req.flash('error', 'Audit not found.'); return req.session.save(() => res.redirect('/audits')); }
 
     const ctx = contextFor(db, { audit: existing, b });
     const { responses, sectionComments } = buildResponsesFromBody(b, ctx.tpl.scoringQuestions);
@@ -605,11 +605,11 @@ router.post('/:id', (req, res) => {
     }
     const reviewMsg = pushAuditReviews(db, existing.id, newStatus, req.session.user.id);
     req.flash('success', 'Audit updated.' + reviewMsg);
-    res.redirect('/audits/' + req.params.id);
+    req.session.save(() => res.redirect('/audits/' + req.params.id));
   } catch (err) {
     console.error('[Audits] Update error:', err.message, err.stack);
     req.flash('error', 'Failed to update audit: ' + err.message);
-    res.redirect('/audits/' + req.params.id + '/edit');
+    req.session.save(() => res.redirect('/audits/' + req.params.id + '/edit'));
   }
 });
 
@@ -619,8 +619,8 @@ router.post('/:id/attachments', auditUpload.array('files', 20), (req, res) => {
   try {
     const db = getDb();
     const audit = db.prepare('SELECT id FROM site_audits WHERE id = ?').get(req.params.id);
-    if (!audit) { if (wantJson) return res.status(404).json({ ok: false, error: 'Audit not found' }); req.flash('error', 'Audit not found.'); return res.redirect('/audits'); }
-    if (!req.files || !req.files.length) { if (wantJson) return res.status(400).json({ ok: false, error: 'No files uploaded' }); req.flash('error', 'No files uploaded.'); return res.redirect('/audits/' + req.params.id); }
+    if (!audit) { if (wantJson) return res.status(404).json({ ok: false, error: 'Audit not found' }); req.flash('error', 'Audit not found.'); return req.session.save(() => res.redirect('/audits')); }
+    if (!req.files || !req.files.length) { if (wantJson) return res.status(400).json({ ok: false, error: 'No files uploaded' }); req.flash('error', 'No files uploaded.'); return req.session.save(() => res.redirect('/audits/' + req.params.id)); }
     const context = (req.body.context_key || 'general').trim();
     const caption = (req.body.caption || '').trim();
     const insert = db.prepare(`INSERT INTO audit_attachments (audit_id, context_key, caption, filename, original_name, file_path, file_size, mime_type, uploaded_by_id) VALUES (?,?,?,?,?,?,?,?,?)`);
@@ -632,12 +632,12 @@ router.post('/:id/attachments', auditUpload.array('files', 20), (req, res) => {
     }
     if (wantJson) return res.json({ ok: true, attachments: inserted });
     req.flash('success', `${req.files.length} file(s) uploaded.`);
-    res.redirect(req.body.return_to || ('/audits/' + req.params.id));
+    req.session.save(() => res.redirect(req.body.return_to || ('/audits/' + req.params.id)));
   } catch (err) {
     console.error('[Audits] Upload error:', err.message);
     if (wantJson) return res.status(500).json({ ok: false, error: err.message });
     req.flash('error', 'Upload failed: ' + err.message);
-    res.redirect('/audits/' + req.params.id);
+    req.session.save(() => res.redirect('/audits/' + req.params.id));
   }
 });
 
@@ -652,7 +652,7 @@ router.post('/:id/attachments/:attId/delete', (req, res) => {
   }
   if (wantJson) return res.json({ ok: true });
   req.flash('success', 'Attachment deleted.');
-  res.redirect(req.body.return_to || ('/audits/' + req.params.id));
+  req.session.save(() => res.redirect(req.body.return_to || ('/audits/' + req.params.id)));
 });
 
 // POST /:id/signature/:slot — save a drawn signature (base64 PNG → disk)
@@ -662,28 +662,28 @@ router.post('/:id/signature/:slot', (req, res) => {
   const slot = req.params.slot;
   if (!AUDIT_SIG_SLOTS.has(slot)) { if (wantJson) return res.status(400).json({ ok: false, error: 'Invalid slot' }); return res.redirect('/audits/' + req.params.id); }
   const audit = db.prepare('SELECT id FROM site_audits WHERE id = ?').get(req.params.id);
-  if (!audit) { if (wantJson) return res.status(404).json({ ok: false, error: 'Audit not found' }); req.flash('error', 'Audit not found.'); return res.redirect('/audits'); }
+  if (!audit) { if (wantJson) return res.status(404).json({ ok: false, error: 'Audit not found' }); req.flash('error', 'Audit not found.'); return req.session.save(() => res.redirect('/audits')); }
   const filename = slot + '-' + Date.now() + '.png';
   const dest = path.join(__dirname, '..', 'data', 'uploads', 'audits', String(req.params.id), 'signatures', filename);
   if (!writeSignaturePng(dest, req.body.signature_data)) {
     if (wantJson) return res.status(400).json({ ok: false, error: 'Invalid signature image' });
-    req.flash('error', 'Could not save signature.'); return res.redirect('/audits/' + req.params.id + '/edit');
+    req.flash('error', 'Could not save signature.'); return req.session.save(() => res.redirect('/audits/' + req.params.id + '/edit'));
   }
   db.prepare(`UPDATE site_audits SET ${slot}_signature_path = ?, ${slot}_signed_at = COALESCE(${slot}_signed_at, CURRENT_TIMESTAMP), updated_at = CURRENT_TIMESTAMP WHERE id = ?`)
     .run(filename, req.params.id);
   if (wantJson) return res.json({ ok: true, path: filename });
-  res.redirect('/audits/' + req.params.id + '/edit#signoff');
+  req.session.save(() => res.redirect('/audits/' + req.params.id + '/edit#signoff'));
 });
 
 // POST /:id/sign-off — final sign-off + write tagged exceptions to HR Reviews
 router.post('/:id/sign-off', (req, res) => {
   const db = getDb();
   const audit = db.prepare('SELECT * FROM site_audits WHERE id = ?').get(req.params.id);
-  if (!audit) { req.flash('error', 'Audit not found.'); return res.redirect('/audits'); }
+  if (!audit) { req.flash('error', 'Audit not found.'); return req.session.save(() => res.redirect('/audits')); }
   // Require at least the auditor's signature (drawn or typed) before locking.
   if (!audit.auditor_signature_path && !audit.auditor_signature_text) {
     req.flash('error', 'Capture the auditor signature before signing off.');
-    return res.redirect('/audits/' + req.params.id + '/edit#signoff');
+    return req.session.save(() => res.redirect('/audits/' + req.params.id + '/edit#signoff'));
   }
   db.prepare(`UPDATE site_audits SET status='signed_off', signed_off_by_id=?, signed_off_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?`).run(req.session.user.id, req.params.id);
 
@@ -700,17 +700,17 @@ router.post('/:id/sign-off', (req, res) => {
     if (review.skipped && review.skipped.length) msg += ` ${review.skipped.length} tag(s) skipped — worker not linked to an HR profile.`;
   }
   req.flash('success', msg);
-  res.redirect('/audits/' + req.params.id);
+  req.session.save(() => res.redirect('/audits/' + req.params.id));
 });
 
 // POST /:id/delete
 router.post('/:id/delete', (req, res) => {
   const db = getDb();
   const role = (req.session.user.role || '').toLowerCase();
-  if (!['admin', 'management'].includes(role)) { req.flash('error', 'Only admin or management can delete audits.'); return res.redirect('/audits/' + req.params.id); }
+  if (!['admin', 'management'].includes(role)) { req.flash('error', 'Only admin or management can delete audits.'); return req.session.save(() => res.redirect('/audits/' + req.params.id)); }
   db.prepare('DELETE FROM site_audits WHERE id = ?').run(req.params.id);
   req.flash('success', 'Audit deleted.');
-  res.redirect('/audits');
+  req.session.save(() => res.redirect('/audits'));
 });
 
 module.exports = router;

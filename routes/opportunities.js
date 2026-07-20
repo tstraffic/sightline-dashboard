@@ -262,10 +262,10 @@ router.post('/', (req, res) => {
       return res.json({ success: true, opportunity: newOpp });
     }
 
-    res.redirect('/opportunities/' + result.lastInsertRowid);
+    req.session.save(() => res.redirect('/opportunities/' + result.lastInsertRowid));
   } catch (err) {
     req.flash('error', 'Failed to create opportunity: ' + err.message);
-    res.redirect('/opportunities/new');
+    req.session.save(() => res.redirect('/opportunities/new'));
   }
 });
 
@@ -291,7 +291,7 @@ router.get('/:id', (req, res, next) => {
 
     if (!opportunity) {
       req.flash('error', 'Opportunity not found.');
-      return res.redirect('/opportunities');
+      return req.session.save(() => res.redirect('/opportunities'));
     }
 
     // CRM activities linked to this opportunity
@@ -335,7 +335,7 @@ router.get('/:id/edit', (req, res, next) => {
     const opportunity = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(req.params.id);
     if (!opportunity) {
       req.flash('error', 'Opportunity not found.');
-      return res.redirect('/opportunities');
+      return req.session.save(() => res.redirect('/opportunities'));
     }
 
     const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
@@ -366,7 +366,7 @@ router.post('/:id', (req, res) => {
     const current = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(req.params.id);
     if (!current) {
       req.flash('error', 'Opportunity not found.');
-      return res.redirect('/opportunities');
+      return req.session.save(() => res.redirect('/opportunities'));
     }
 
     const estimatedValue = parseFloat(b.estimated_value) || 0;
@@ -444,10 +444,10 @@ router.post('/:id', (req, res) => {
     });
 
     req.flash('success', 'Opportunity updated successfully.');
-    res.redirect('/opportunities/' + req.params.id);
+    req.session.save(() => res.redirect('/opportunities/' + req.params.id));
   } catch (err) {
     req.flash('error', 'Failed to update opportunity: ' + err.message);
-    res.redirect('/opportunities/' + req.params.id + '/edit');
+    req.session.save(() => res.redirect('/opportunities/' + req.params.id + '/edit'));
   }
 });
 
@@ -459,12 +459,12 @@ router.post('/:id/delete', (req, res) => {
     const opportunity = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(req.params.id);
     if (!opportunity) {
       req.flash('error', 'Opportunity not found.');
-      return res.redirect('/opportunities');
+      return req.session.save(() => res.redirect('/opportunities'));
     }
 
     if (opportunity.related_job_id) {
       req.flash('error', 'Cannot delete opportunity with a linked job. Remove the job link first.');
-      return res.redirect('/opportunities/' + req.params.id);
+      return req.session.save(() => res.redirect('/opportunities/' + req.params.id));
     }
 
     // Delete linked CRM activities first
@@ -483,10 +483,10 @@ router.post('/:id/delete', (req, res) => {
     });
 
     req.flash('success', 'Opportunity deleted.');
-    res.redirect('/opportunities');
+    req.session.save(() => res.redirect('/opportunities'));
   } catch (err) {
     req.flash('error', 'Failed to delete opportunity: ' + err.message);
-    res.redirect('/opportunities/' + req.params.id);
+    req.session.save(() => res.redirect('/opportunities/' + req.params.id));
   }
 });
 
@@ -574,7 +574,7 @@ router.post('/:id/convert', (req, res) => {
 
     if (!opportunity) {
       req.flash('error', 'Opportunity not found.');
-      return res.redirect('/opportunities');
+      return req.session.save(() => res.redirect('/opportunities'));
     }
 
     // Set status to won if not already
@@ -637,10 +637,10 @@ router.post('/:id/convert', (req, res) => {
     });
 
     req.flash('success', `Opportunity converted to job ${jobNumber} successfully.`);
-    res.redirect('/jobs/' + newJobId);
+    req.session.save(() => res.redirect('/jobs/' + newJobId));
   } catch (err) {
     req.flash('error', 'Failed to convert opportunity: ' + err.message);
-    res.redirect('/opportunities/' + req.params.id);
+    req.session.save(() => res.redirect('/opportunities/' + req.params.id));
   }
 });
 

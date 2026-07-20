@@ -232,7 +232,7 @@ router.post('/', swmsUpload.single('swms_file'), (req, res) => {
     const title = String(b.title || '').trim();
     if (!title) {
       req.flash('error', 'Title is required.');
-      return res.redirect('/swms/new');
+      return req.session.save(() => res.redirect('/swms/new'));
     }
     const kind = KIND_VALUES.includes(b.kind) ? b.kind : 'job';
     // Status defaults: file uploaded → active; no file → draft. Templates
@@ -273,11 +273,11 @@ router.post('/', swmsUpload.single('swms_file'), (req, res) => {
     // SWMS gets an instant render instead of waiting on LibreOffice cold start.
     prewarmConversion(r.lastInsertRowid, fileName, filePath, versionToken);
     req.flash('success', kind === 'template' ? 'SWMS template imported.' : 'SWMS created.');
-    return res.redirect('/swms/' + r.lastInsertRowid);
+    return req.session.save(() => res.redirect('/swms/' + r.lastInsertRowid));
   } catch (err) {
     console.error('[swms POST]', err);
     req.flash('error', 'Could not create SWMS: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/swms/new');
+    return req.session.save(() => res.redirect('/swms/new'));
   }
 });
 
@@ -294,7 +294,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN users cu ON cu.id = s.created_by_id
     WHERE s.id = ?
   `).get(req.params.id);
-  if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/swms'); }
+  if (!swms) { req.flash('error', 'SWMS not found.'); return req.session.save(() => res.redirect('/swms')); }
   const ackSummary = db.prepare(`
     SELECT
       (SELECT COUNT(*) FROM crew_members WHERE active = 1) AS total_crew,
@@ -317,7 +317,7 @@ router.get('/:id/acknowledgements', (req, res) => {
     LEFT JOIN jobs j ON j.id = s.job_id
     WHERE s.id = ?
   `).get(req.params.id);
-  if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/swms'); }
+  if (!swms) { req.flash('error', 'SWMS not found.'); return req.session.save(() => res.redirect('/swms')); }
   const rows = db.prepare(`
     SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
            a.signed_at, a.version_token AS acked_token, a.signed_via
@@ -339,7 +339,7 @@ router.get('/:id/acknowledgements', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const swms = db.prepare("SELECT * FROM swms WHERE id = ?").get(req.params.id);
-  if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/swms'); }
+  if (!swms) { req.flash('error', 'SWMS not found.'); return req.session.save(() => res.redirect('/swms')); }
   const choices = loadFormChoices(db);
   res.render('swms/form', {
     title: 'Edit SWMS', currentPage: 'swms',
@@ -355,7 +355,7 @@ router.post('/:id', swmsUpload.single('swms_file'), (req, res) => {
   try {
     const db = getDb();
     const swms = db.prepare("SELECT * FROM swms WHERE id = ?").get(req.params.id);
-    if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/swms'); }
+    if (!swms) { req.flash('error', 'SWMS not found.'); return req.session.save(() => res.redirect('/swms')); }
     const b = req.body;
     const title = String(b.title || '').trim() || swms.title;
     const kind = KIND_VALUES.includes(b.kind) ? b.kind : swms.kind;
@@ -413,11 +413,11 @@ router.post('/:id', swmsUpload.single('swms_file'), (req, res) => {
       prewarmConversion(swms.id, fileName, filePath, versionToken);
     }
     req.flash('success', 'SWMS updated.');
-    return res.redirect('/swms/' + swms.id);
+    return req.session.save(() => res.redirect('/swms/' + swms.id));
   } catch (err) {
     console.error('[swms PUT]', err);
     req.flash('error', 'Update failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/swms/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/swms/' + req.params.id + '/edit'));
   }
 });
 
@@ -425,9 +425,9 @@ router.post('/:id', swmsUpload.single('swms_file'), (req, res) => {
 router.get('/:id/file', (req, res) => {
   const db = getDb();
   const swms = db.prepare("SELECT file_path, file_original_name FROM swms WHERE id = ?").get(req.params.id);
-  if (!swms || !swms.file_path) { req.flash('error', 'No file attached.'); return res.redirect('/swms/' + req.params.id); }
+  if (!swms || !swms.file_path) { req.flash('error', 'No file attached.'); return req.session.save(() => res.redirect('/swms/' + req.params.id)); }
   const abs = path.join(__dirname, '..', swms.file_path);
-  if (!fs.existsSync(abs)) { req.flash('error', 'File missing on disk.'); return res.redirect('/swms/' + req.params.id); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'File missing on disk.'); return req.session.save(() => res.redirect('/swms/' + req.params.id)); }
   return res.download(abs, swms.file_original_name || path.basename(abs));
 });
 
@@ -437,17 +437,17 @@ router.post('/:id/archive', (req, res) => {
   try {
     const db = getDb();
     const swms = db.prepare("SELECT * FROM swms WHERE id = ?").get(req.params.id);
-    if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/swms'); }
+    if (!swms) { req.flash('error', 'SWMS not found.'); return req.session.save(() => res.redirect('/swms')); }
     const nextStatus = swms.status === 'archived' ? 'active' : 'archived';
     db.prepare("UPDATE swms SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(nextStatus, swms.id);
     try { logActivity({ user: req.session.user, action: nextStatus === 'archived' ? 'archive' : 'restore', entityType: 'swms', entityId: swms.id, entityLabel: swms.title, details: '', ip: req.ip }); } catch (e) {}
     req.flash('success', nextStatus === 'archived' ? 'SWMS archived.' : 'SWMS restored.');
     const back = req.get('referer') || '/swms';
-    return res.redirect(back);
+    return req.session.save(() => res.redirect(back));
   } catch (err) {
     console.error('[swms archive]', err);
     req.flash('error', 'Archive failed.');
-    return res.redirect('/swms');
+    return req.session.save(() => res.redirect('/swms'));
   }
 });
 
@@ -460,10 +460,10 @@ router.post('/access-requests/:requestId/approve', (req, res) => {
   const request = db.prepare(
     'SELECT * FROM crew_swms_access_requests WHERE id = ?'
   ).get(req.params.requestId);
-  if (!request) { req.flash('error', 'Request not found.'); return res.redirect('/swms?view=access-requests'); }
-  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return res.redirect('/swms?view=access-requests'); }
+  if (!request) { req.flash('error', 'Request not found.'); return req.session.save(() => res.redirect('/swms?view=access-requests')); }
+  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return req.session.save(() => res.redirect('/swms?view=access-requests')); }
   const member = db.prepare('SELECT id, full_name FROM crew_members WHERE id = ?').get(request.crew_member_id);
-  if (!member) { req.flash('error', 'Crew member missing.'); return res.redirect('/swms?view=access-requests'); }
+  if (!member) { req.flash('error', 'Crew member missing.'); return req.session.save(() => res.redirect('/swms?view=access-requests')); }
   const decisionNote = String(req.body.decision_note || '').trim().slice(0, 500);
   try {
     const tx = db.transaction(() => {
@@ -486,7 +486,7 @@ router.post('/access-requests/:requestId/approve', (req, res) => {
     console.error('[swms] access-request approve error:', e.message);
     req.flash('error', 'Could not approve request.');
   }
-  return res.redirect('/swms?view=access-requests');
+  return req.session.save(() => res.redirect('/swms?view=access-requests'));
 });
 
 // POST /swms/access-requests/:requestId/reject — decline with an optional note.
@@ -495,10 +495,10 @@ router.post('/access-requests/:requestId/reject', (req, res) => {
   const request = db.prepare(
     'SELECT * FROM crew_swms_access_requests WHERE id = ?'
   ).get(req.params.requestId);
-  if (!request) { req.flash('error', 'Request not found.'); return res.redirect('/swms?view=access-requests'); }
-  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return res.redirect('/swms?view=access-requests'); }
+  if (!request) { req.flash('error', 'Request not found.'); return req.session.save(() => res.redirect('/swms?view=access-requests')); }
+  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return req.session.save(() => res.redirect('/swms?view=access-requests')); }
   const member = db.prepare('SELECT id, full_name FROM crew_members WHERE id = ?').get(request.crew_member_id);
-  if (!member) { req.flash('error', 'Crew member missing.'); return res.redirect('/swms?view=access-requests'); }
+  if (!member) { req.flash('error', 'Crew member missing.'); return req.session.save(() => res.redirect('/swms?view=access-requests')); }
   const decisionNote = String(req.body.decision_note || '').trim().slice(0, 500);
   try {
     db.prepare(`
@@ -512,7 +512,7 @@ router.post('/access-requests/:requestId/reject', (req, res) => {
     console.error('[swms] access-request reject error:', e.message);
     req.flash('error', 'Could not reject request.');
   }
-  return res.redirect('/swms?view=access-requests');
+  return req.session.save(() => res.redirect('/swms?view=access-requests'));
 });
 
 // POST /swms/grants/:grantId/revoke — revoke a granted SWMS competency.
@@ -525,7 +525,7 @@ router.post('/grants/:grantId/revoke', (req, res) => {
     JOIN crew_members c ON c.id = g.crew_member_id
     WHERE g.id = ?
   `).get(req.params.grantId);
-  if (!grant) { req.flash('error', 'Grant not found.'); return res.redirect('/swms?view=access-requests'); }
+  if (!grant) { req.flash('error', 'Grant not found.'); return req.session.save(() => res.redirect('/swms?view=access-requests')); }
   try {
     db.prepare('DELETE FROM crew_swms_grants WHERE id = ?').run(grant.id);
     try { logActivity({ user: req.session.user, action: 'delete', entityType: 'crew_member', entityId: grant.crew_member_id, entityLabel: grant.worker_name, details: 'Revoked SWMS competency: ' + grant.title, ip: req.ip }); } catch (e) {}
@@ -534,7 +534,7 @@ router.post('/grants/:grantId/revoke', (req, res) => {
     console.error('[swms] grant revoke error:', e.message);
     req.flash('error', 'Could not revoke access.');
   }
-  return res.redirect('/swms?view=access-requests');
+  return req.session.save(() => res.redirect('/swms?view=access-requests'));
 });
 
 // POST /swms/:id/delete
@@ -542,15 +542,15 @@ router.post('/:id/delete', (req, res) => {
   try {
     const db = getDb();
     const swms = db.prepare("SELECT * FROM swms WHERE id = ?").get(req.params.id);
-    if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/swms'); }
+    if (!swms) { req.flash('error', 'SWMS not found.'); return req.session.save(() => res.redirect('/swms')); }
     db.prepare("DELETE FROM swms WHERE id = ?").run(swms.id);
     try { logActivity({ user: req.session.user, action: 'delete', entityType: 'swms', entityId: swms.id, entityLabel: swms.title, details: '', ip: req.ip }); } catch (e) {}
     req.flash('success', 'SWMS deleted.');
-    return res.redirect('/swms');
+    return req.session.save(() => res.redirect('/swms'));
   } catch (err) {
     console.error('[swms DELETE]', err);
     req.flash('error', 'Delete failed.');
-    return res.redirect('/swms');
+    return req.session.save(() => res.redirect('/swms'));
   }
 });
 

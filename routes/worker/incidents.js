@@ -104,19 +104,19 @@ router.post('/incidents', upload.array('photos', 5), (req, res) => {
   // Validation
   if (!job_id || !incident_type || !description) {
     req.flash('error', 'Please fill in all required fields.');
-    return res.redirect('/w/incidents/new');
+    return req.session.save(() => res.redirect('/w/incidents/new'));
   }
 
   const validTypes = ['near_miss', 'traffic_incident', 'worker_injury', 'vehicle_damage', 'public_complaint', 'environmental', 'injury', 'hazard', 'property_damage', 'vehicle', 'other'];
   if (!validTypes.includes(incident_type)) {
     req.flash('error', 'Invalid incident type.');
-    return res.redirect('/w/incidents/new');
+    return req.session.save(() => res.redirect('/w/incidents/new'));
   }
 
   const validSeverity = ['low', 'medium', 'high', 'critical'];
   if (!validSeverity.includes(severity)) {
     req.flash('error', 'Invalid severity level.');
-    return res.redirect('/w/incidents/new');
+    return req.session.save(() => res.redirect('/w/incidents/new'));
   }
 
   try {
@@ -165,11 +165,11 @@ router.post('/incidents', upload.array('photos', 5), (req, res) => {
     }
 
     req.flash('success', `Incident ${incidentNumber} reported successfully.`);
-    res.redirect('/w/incidents');
+    req.session.save(() => res.redirect('/w/incidents'));
   } catch (err) {
     console.error('Worker incident submission error:', err);
     req.flash('error', 'Failed to submit incident report. Please try again.');
-    res.redirect('/w/incidents/new');
+    req.session.save(() => res.redirect('/w/incidents/new'));
   }
 });
 
@@ -191,7 +191,7 @@ router.get('/incidents/:id', (req, res) => {
 
   if (!incident) {
     req.flash('error', 'Incident not found.');
-    return res.redirect('/w/incidents');
+    return req.session.save(() => res.redirect('/w/incidents'));
   }
 
   // Get corrective actions if any

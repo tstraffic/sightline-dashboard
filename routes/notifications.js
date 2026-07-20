@@ -81,7 +81,7 @@ router.post('/mark-all-read', (req, res) => {
   const db = getDb();
   db.prepare('UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0').run(req.session.user.id);
   req.flash('success', 'All notifications marked as read.');
-  res.redirect('/notifications');
+  req.session.save(() => res.redirect('/notifications'));
 });
 
 // ============================================
@@ -92,7 +92,7 @@ router.post('/clear-old', (req, res) => {
   const thirtyDaysAgo = new Date(Date.now() - 30 * 86400000).toISOString();
   db.prepare('DELETE FROM notifications WHERE user_id = ? AND created_at < ?').run(req.session.user.id, thirtyDaysAgo);
   req.flash('success', 'Old notifications cleared.');
-  res.redirect('/notifications');
+  req.session.save(() => res.redirect('/notifications'));
 });
 
 // ============================================

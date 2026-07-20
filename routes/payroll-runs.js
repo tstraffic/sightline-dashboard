@@ -133,7 +133,7 @@ function assertEditable(req, res, run) {
     res.status(423).json({ error: msg });
   } else {
     req.flash('error', msg);
-    res.redirect('/payroll/runs/' + run.id);
+    req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
   return false;
 }
@@ -213,7 +213,7 @@ function createManagementRun(req, res) {
     const period_end = (req.body.period_end || '').trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(period_start) || !/^\d{4}-\d{2}-\d{2}$/.test(period_end)) {
       req.flash('error', 'Period start + end dates are required (YYYY-MM-DD).');
-      return res.redirect('/payroll/runs/new?type=management');
+      return req.session.save(() => res.redirect('/payroll/runs/new?type=management'));
     }
     const label = (req.body.label || '').trim() || ('Management — ' + periodLabel(period_start, period_end));
     const notes = (req.body.notes || '').trim();
@@ -274,11 +274,11 @@ function createManagementRun(req, res) {
     req.flash('success', seeded > 0
       ? `Created Management pay run with ${seeded} starter line(s).`
       : 'Created Management pay run. No staff are flagged for management payroll yet — tick "On management payroll" on an employee record to populate it.');
-    return res.redirect('/payroll/runs/' + runId);
+    return req.session.save(() => res.redirect('/payroll/runs/' + runId));
   } catch (err) {
     console.error('[payroll/runs] createManagementRun:', err);
     req.flash('error', 'Failed to create Management pay run: ' + (err && err.message ? err.message : 'unknown error'));
-    return res.redirect('/payroll/runs/new?type=management');
+    return req.session.save(() => res.redirect('/payroll/runs/new?type=management'));
   }
 }
 
@@ -398,28 +398,28 @@ router.post('/runs', requirePermission('payroll'), (req, res) => {
     return createManagementRun(req, res);
   }
   upload.single('csv')(req, res, function (err) {
-    if (err) { req.flash('error', err.message); return res.redirect('/payroll/runs/new'); }
-    if (!req.file) { req.flash('error', 'CSV file is required.'); return res.redirect('/payroll/runs/new'); }
+    if (err) { req.flash('error', err.message); return req.session.save(() => res.redirect('/payroll/runs/new')); }
+    if (!req.file) { req.flash('error', 'CSV file is required.'); return req.session.save(() => res.redirect('/payroll/runs/new')); }
 
     let raw;
     try { raw = fs.readFileSync(req.file.path, 'utf8'); }
     catch (e) {
       req.flash('error', 'Could not read uploaded file: ' + e.message);
-      return res.redirect('/payroll/runs/new');
+      return req.session.save(() => res.redirect('/payroll/runs/new'));
     }
 
     const { rows } = parseCsv(raw);
     if (rows.length === 0) {
       req.flash('error', 'CSV had no data rows.');
       try { fs.unlinkSync(req.file.path); } catch (e) {}
-      return res.redirect('/payroll/runs/new');
+      return req.session.save(() => res.redirect('/payroll/runs/new'));
     }
 
     const shifts = rows.map(normalizeShift).filter(Boolean);
     if (shifts.length === 0) {
       req.flash('error', 'CSV had no usable shifts.');
       try { fs.unlinkSync(req.file.path); } catch (e) {}
-      return res.redirect('/payroll/runs/new');
+      return req.session.save(() => res.redirect('/payroll/runs/new'));
     }
 
     const inferred = inferPeriod(shifts);
@@ -478,7 +478,7 @@ router.post('/runs', requirePermission('payroll'), (req, res) => {
       console.error('Pay run import failed:', e);
       req.flash('error', 'Import failed: ' + e.message);
       try { fs.unlinkSync(req.file.path); } catch (er) {}
-      return res.redirect('/payroll/runs/new');
+      return req.session.save(() => res.redirect('/payroll/runs/new'));
     }
 
     logActivity({
@@ -489,7 +489,7 @@ router.post('/runs', requirePermission('payroll'), (req, res) => {
     });
 
     req.flash('success', `Imported ${workers.length} workers from ${shifts.length} shifts.`);
-    res.redirect('/payroll/runs/' + runId);
+    req.session.save(() => res.redirect('/payroll/runs/' + runId));
   });
 });
 
@@ -499,7 +499,7 @@ router.post('/runs', requirePermission('payroll'), (req, res) => {
 router.get('/runs/:id', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   const run = db.prepare('SELECT * FROM pay_runs WHERE id = ?').get(req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
   run.pay_run_type = run.pay_run_type || 'traffic_control';
 
   // Management runs use a salary-grid view: one row per income line,
@@ -964,15 +964,15 @@ router.post('/runs/:id/lines/:lineId', requirePermission('payroll'), (req, res) 
 router.post('/runs/:id/lines/:lineId/match', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   const run = getRunForLineRoute(db, req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
   if (!assertEditable(req, res, run)) return;
   const line = db.prepare('SELECT * FROM pay_run_lines WHERE id = ? AND pay_run_id = ?').get(req.params.lineId, req.params.id);
-  if (!line) { req.flash('error', 'Line not found'); return res.redirect('/payroll/runs/' + req.params.id); }
+  if (!line) { req.flash('error', 'Line not found'); return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id)); }
 
   const empId = parseInt(req.body.employee_id, 10);
-  if (!empId) { req.flash('error', 'Pick an employee'); return res.redirect('/payroll/runs/' + req.params.id); }
+  if (!empId) { req.flash('error', 'Pick an employee'); return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id)); }
   const emp = db.prepare('SELECT * FROM employees WHERE id = ?').get(empId);
-  if (!emp) { req.flash('error', 'Employee not found'); return res.redirect('/payroll/runs/' + req.params.id); }
+  if (!emp) { req.flash('error', 'Employee not found'); return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id)); }
 
   const newPT = (emp.payment_type && ['cash', 'tfn', 'abn'].includes(String(emp.payment_type).toLowerCase()))
     ? String(emp.payment_type).toLowerCase() : (line.payment_type || '');
@@ -1001,7 +1001,7 @@ router.post('/runs/:id/lines/:lineId/match', requirePermission('payroll'), (req,
   db.prepare(`UPDATE pay_run_lines SET ${setSql} WHERE id = ?`).run(...params);
 
   req.flash('success', `Linked ${line.full_name} → ${emp.full_name}.`);
-  res.redirect('/payroll/runs/' + req.params.id);
+  req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
 });
 
 // ============================================================================
@@ -1011,7 +1011,7 @@ router.post('/runs/:id/lines/:lineId/match', requirePermission('payroll'), (req,
 router.post('/runs/:id/refresh', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   const run = db.prepare('SELECT * FROM pay_runs WHERE id = ?').get(req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
   if (!assertEditable(req, res, run)) return;
 
   const isPH = makeIsPH(loadPHSet(db));
@@ -1049,7 +1049,7 @@ router.post('/runs/:id/refresh', requirePermission('payroll'), (req, res) => {
   const n = tx();
 
   req.flash('success', `Refreshed ${n} lines from current rates and classifications.`);
-  res.redirect('/payroll/runs/' + run.id);
+  req.session.save(() => res.redirect('/payroll/runs/' + run.id));
 });
 
 // ============================================================================
@@ -1062,10 +1062,10 @@ router.post('/runs/:id/refresh', requirePermission('payroll'), (req, res) => {
 router.post('/runs/:id/lines', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   const run = db.prepare("SELECT *, COALESCE(pay_run_type, 'traffic_control') AS pay_run_type FROM pay_runs WHERE id = ?").get(req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
   if (run.pay_run_type === 'management') {
     req.flash('error', 'Management runs use the Add income line form instead.');
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
   if (!assertEditable(req, res, run)) return;
 
@@ -1073,11 +1073,11 @@ router.post('/runs/:id/lines', requirePermission('payroll'), (req, res) => {
   const paymentType = String(req.body.payment_type || '').toLowerCase();
   if (!fullName) {
     req.flash('error', 'Worker name is required.');
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
   if (!['cash', 'tfn', 'abn'].includes(paymentType)) {
     req.flash('error', 'Pick a section (Cash, TFN or ABN).');
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
 
   // Optional employee link — if provided, pull in BSB/account + classification
@@ -1122,7 +1122,7 @@ router.post('/runs/:id/lines', requirePermission('payroll'), (req, res) => {
   });
 
   req.flash('success', `Added ${fullName} to ${paymentType.toUpperCase()}. Click Edit to fill in hours.`);
-  res.redirect('/payroll/runs/' + run.id);
+  req.session.save(() => res.redirect('/payroll/runs/' + run.id));
 });
 
 // ============================================================================
@@ -1148,13 +1148,13 @@ router.post('/runs/:id/management-lines', requirePermission('payroll'), (req, re
     const run = db.prepare("SELECT *, COALESCE(pay_run_type, 'traffic_control') AS pay_run_type FROM pay_runs WHERE id = ?").get(req.params.id);
     if (!run || run.pay_run_type !== 'management') {
       req.flash('error', 'Management pay run not found.');
-      return res.redirect('/payroll/runs');
+      return req.session.save(() => res.redirect('/payroll/runs'));
     }
     if (!assertEditable(req, res, run)) return;
     const empId = parseInt(req.body.employee_id, 10);
     if (!empId) {
       req.flash('error', 'Employee is required.');
-      return res.redirect('/payroll/runs/' + run.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
     }
     const emp = db.prepare(`
       SELECT id, first_name, last_name, payment_type,
@@ -1166,7 +1166,7 @@ router.post('/runs/:id/management-lines', requirePermission('payroll'), (req, re
     `).get(empId);
     if (!emp) {
       req.flash('error', 'Employee not found.');
-      return res.redirect('/payroll/runs/' + run.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
     }
     const incomeLabel = String(req.body.income_label || 'Salary').trim().slice(0, 80) || 'Salary';
     const salary = round2(toNum(req.body.salary_amount));
@@ -1189,11 +1189,11 @@ router.post('/runs/:id/management-lines', requirePermission('payroll'), (req, re
       999);
 
     req.flash('success', `Added "${incomeLabel}" line for ${fullName}.`);
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   } catch (err) {
     console.error('[payroll/runs] add management line:', err);
     req.flash('error', 'Failed to add line: ' + (err && err.message ? err.message : 'unknown error'));
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
 });
 
@@ -1203,13 +1203,13 @@ router.post('/runs/:id/management-lines/:lineId', requirePermission('payroll'), 
   try {
     const db = getDb();
     const run = getRunForLineRoute(db, req.params.id);
-    if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+    if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
     if (!assertEditable(req, res, run)) return;
     const line = getManagementLine(db, req.params.id, req.params.lineId);
     if (!line) {
       if (req.headers.accept && req.headers.accept.includes('json')) return res.status(404).json({ error: 'Line not found' });
       req.flash('error', 'Management pay run line not found.');
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     }
     const incomeLabel = req.body.income_label != null ? String(req.body.income_label).trim().slice(0, 80) : line.income_label;
     const salary = req.body.salary_amount != null ? round2(toNum(req.body.salary_amount)) : toNum(line.salary_amount);
@@ -1224,12 +1224,12 @@ router.post('/runs/:id/management-lines/:lineId', requirePermission('payroll'), 
       return res.json({ success: true, income_label: incomeLabel, salary_amount: salary, super_amount: superAmt });
     }
     req.flash('success', 'Line updated.');
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   } catch (err) {
     console.error('[payroll/runs] edit management line:', err);
     if (req.headers.accept && req.headers.accept.includes('json')) return res.status(500).json({ error: err.message });
     req.flash('error', 'Failed to update line: ' + (err && err.message ? err.message : 'unknown error'));
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
 });
 
@@ -1238,20 +1238,20 @@ router.post('/runs/:id/management-lines/:lineId/delete', requirePermission('payr
   try {
     const db = getDb();
     const run = getRunForLineRoute(db, req.params.id);
-    if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+    if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
     if (!assertEditable(req, res, run)) return;
     const line = getManagementLine(db, req.params.id, req.params.lineId);
     if (!line) {
       req.flash('error', 'Management pay run line not found.');
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     }
     db.prepare('DELETE FROM pay_run_lines WHERE id = ?').run(line.id);
     req.flash('success', `Removed "${line.income_label || 'line'}" for ${line.full_name}.`);
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   } catch (err) {
     console.error('[payroll/runs] delete management line:', err);
     req.flash('error', 'Failed to delete line: ' + (err && err.message ? err.message : 'unknown error'));
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
 });
 
@@ -1267,10 +1267,10 @@ router.post('/runs/:id/management-lines/:lineId/delete', requirePermission('payr
 router.post('/runs/:id/submit-for-approval', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   const run = db.prepare('SELECT * FROM pay_runs WHERE id = ?').get(req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
   if (run.status !== 'draft' && run.status !== 'finalized') {
     req.flash('error', `Pay run is already ${statusLabel(run.status).toLowerCase()}.`);
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
   db.prepare(`
     UPDATE pay_runs SET status = 'pending_approval',
@@ -1293,17 +1293,17 @@ router.post('/runs/:id/submit-for-approval', requirePermission('payroll'), (req,
     details: `Submitted pay run for approval: ${period}`, ip: req.ip,
   });
   req.flash('success', 'Sent for approval. Saadat has been notified.');
-  res.redirect('/payroll/runs/' + run.id);
+  req.session.save(() => res.redirect('/payroll/runs/' + run.id));
 });
 
 // POST /payroll/runs/:id/recall — pull back a submission before it's approved
 router.post('/runs/:id/recall', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   const run = db.prepare('SELECT * FROM pay_runs WHERE id = ?').get(req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
   if (run.status !== 'pending_approval') {
     req.flash('error', 'Only pending pay runs can be recalled.');
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
   db.prepare(`
     UPDATE pay_runs SET status = 'draft',
@@ -1318,7 +1318,7 @@ router.post('/runs/:id/recall', requirePermission('payroll'), (req, res) => {
     details: 'Recalled pay run from pending approval', ip: req.ip,
   });
   req.flash('success', 'Recalled. Pay run is back to draft.');
-  res.redirect('/payroll/runs/' + run.id);
+  req.session.save(() => res.redirect('/payroll/runs/' + run.id));
 });
 
 // POST /payroll/runs/:id/approve — Saadat signs off.
@@ -1329,13 +1329,13 @@ router.post('/runs/:id/approve', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   if (!isApprover(db, req.session.user)) {
     req.flash('error', 'Only Saadat can approve pay runs.');
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
   const run = db.prepare('SELECT * FROM pay_runs WHERE id = ?').get(req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
   if (run.status !== 'pending_approval' && run.status !== 'draft' && run.status !== 'finalized') {
     req.flash('error', `Can't approve a ${statusLabel(run.status).toLowerCase()} pay run.`);
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
   db.prepare(`
     UPDATE pay_runs SET status = 'approved',
@@ -1361,7 +1361,7 @@ router.post('/runs/:id/approve', requirePermission('payroll'), (req, res) => {
     details: `Approved pay run: ${period}`, ip: req.ip,
   });
   req.flash('success', 'Approved. Finance team has been notified.');
-  res.redirect('/payroll/runs/' + run.id);
+  req.session.save(() => res.redirect('/payroll/runs/' + run.id));
 });
 
 // POST /payroll/runs/:id/unlock — Saadat or Sajid send it back to draft
@@ -1369,13 +1369,13 @@ router.post('/runs/:id/unlock', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   if (!isUnlocker(db, req.session.user)) {
     req.flash('error', 'Only Saadat or Sajid can unlock pay runs.');
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
   const run = db.prepare('SELECT * FROM pay_runs WHERE id = ?').get(req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
   if (!isRunLocked(run)) {
     req.flash('error', 'Pay run is not locked.');
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
   db.prepare(`
     UPDATE pay_runs SET status = 'draft',
@@ -1405,17 +1405,17 @@ router.post('/runs/:id/unlock', requirePermission('payroll'), (req, res) => {
     details: `Unlocked pay run: ${period}`, ip: req.ip,
   });
   req.flash('success', 'Unlocked — back to draft. Finance team notified.');
-  res.redirect('/payroll/runs/' + run.id);
+  req.session.save(() => res.redirect('/payroll/runs/' + run.id));
 });
 
 // POST /payroll/runs/:id/mark-paid — finance confirms payment went out
 router.post('/runs/:id/mark-paid', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   const run = db.prepare('SELECT * FROM pay_runs WHERE id = ?').get(req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found.'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found.'); return req.session.save(() => res.redirect('/payroll/runs')); }
   if (run.status !== 'approved') {
     req.flash('error', 'Only approved pay runs can be marked as paid.');
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
   db.prepare(`
     UPDATE pay_runs SET status = 'paid',
@@ -1432,7 +1432,7 @@ router.post('/runs/:id/mark-paid', requirePermission('payroll'), (req, res) => {
     ip: req.ip,
   });
   req.flash('success', 'Marked as paid.');
-  res.redirect('/payroll/runs/' + run.id);
+  req.session.save(() => res.redirect('/payroll/runs/' + run.id));
 });
 
 // ============================================================================
@@ -1441,10 +1441,10 @@ router.post('/runs/:id/mark-paid', requirePermission('payroll'), (req, res) => {
 router.post('/runs/:id/delete', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   const run = db.prepare('SELECT * FROM pay_runs WHERE id = ?').get(req.params.id);
-  if (!run) { req.flash('error', 'Pay run not found'); return res.redirect('/payroll/runs'); }
+  if (!run) { req.flash('error', 'Pay run not found'); return req.session.save(() => res.redirect('/payroll/runs')); }
   if (isRunLocked(run)) {
     req.flash('error', `Can't delete a ${statusLabel(run.status).toLowerCase()} pay run — unlock it first.`);
-    return res.redirect('/payroll/runs/' + run.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + run.id));
   }
   db.prepare('DELETE FROM pay_runs WHERE id = ?').run(run.id);
   if (run.csv_filename) {
@@ -1457,7 +1457,7 @@ router.post('/runs/:id/delete', requirePermission('payroll'), (req, res) => {
     ip: req.ip,
   });
   req.flash('success', `Pay run ${run.label} removed.`);
-  res.redirect('/payroll/runs');
+  req.session.save(() => res.redirect('/payroll/runs'));
 });
 
 // ============================================================================
@@ -1681,7 +1681,7 @@ router.get('/rates', requirePermission('payroll'), (req, res) => {
     // proper migration run.
     if (!cols.includes('id') || !cols.includes('full_name')) {
       req.flash('error', 'Employee table is missing core columns — check that migrations have run.');
-      return res.redirect('/payroll/runs');
+      return req.session.save(() => res.redirect('/payroll/runs'));
     }
     const activeClause = empCols.has('active') ? 'WHERE active = 1' : '';
     // Pull base_rate_day off the employee's award classification (when set) so the
@@ -1713,7 +1713,7 @@ router.get('/rates', requirePermission('payroll'), (req, res) => {
   } catch (err) {
     console.error('[payroll/rates GET] Unhandled error:', err);
     req.flash('error', 'Could not load Worker Rates: ' + (err && err.message ? err.message : 'unknown error'));
-    return res.redirect('/payroll/runs');
+    return req.session.save(() => res.redirect('/payroll/runs'));
   }
 });
 
@@ -1729,7 +1729,7 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
     const data = req.body && req.body.rows;
     if (!data || typeof data !== 'object') {
       req.flash('error', 'No rate data submitted.');
-      return res.redirect('/payroll/rates');
+      return req.session.save(() => res.redirect('/payroll/rates'));
     }
 
     // Probe which rate/payroll columns actually exist on this DB. Earlier
@@ -1764,7 +1764,7 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
     ].filter(f => empCols.has(f.col));
     if (FIELDS.length === 0) {
       req.flash('error', 'Rate columns missing from database — migrations may not have run.');
-      return res.redirect('/payroll/rates');
+      return req.session.save(() => res.redirect('/payroll/rates'));
     }
 
     // Pre-validate award_classification_id values so a stale/missing row
@@ -1844,13 +1844,13 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
     } else {
       req.flash('error', `Save failed for all ${failures.length} employees. ${failures[0] ? 'First error: ' + failures[0].error : ''}`);
     }
-    return res.redirect('/payroll/rates');
+    return req.session.save(() => res.redirect('/payroll/rates'));
   } catch (err) {
     // Catch-all — turns any unhandled exception (schema drift, FK trip,
     // anything else) into a flash banner instead of a generic 500 page.
     console.error('[payroll/rates] Unhandled error:', err);
     req.flash('error', 'Save failed: ' + (err && err.message ? err.message : 'unknown error') + '. Check the server log.');
-    return res.redirect('/payroll/rates');
+    return req.session.save(() => res.redirect('/payroll/rates'));
   }
 });
 
@@ -1896,7 +1896,7 @@ router.get('/wage-tiers', requirePermission('payroll'), (req, res) => {
   } catch (err) {
     console.error('[payroll/wage-tiers GET]', err);
     req.flash('error', 'Could not load Wage Tiers: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/runs');
+    return req.session.save(() => res.redirect('/payroll/runs'));
   }
 });
 
@@ -1985,11 +1985,11 @@ router.post('/wage-tiers', requirePermission('payroll'), (req, res) => {
     } else {
       req.flash('error', `Saved ${presetSaved + allowanceSaved} row(s), ${failures.length} failed: ${failures.slice(0, 3).join(', ')}${failures.length > 3 ? '…' : ''}.`);
     }
-    return res.redirect('/payroll/wage-tiers');
+    return req.session.save(() => res.redirect('/payroll/wage-tiers'));
   } catch (err) {
     console.error('[payroll/wage-tiers POST]', err);
     req.flash('error', 'Save failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/wage-tiers');
+    return req.session.save(() => res.redirect('/payroll/wage-tiers'));
   }
 });
 
@@ -2004,11 +2004,11 @@ router.post('/rates/bulk-tier', requirePermission('payroll'), (req, res) => {
     const pt = String(req.body.payment_type || '').toLowerCase();
     if (tier < 1 || tier > 6) {
       req.flash('error', 'Tier must be between 1 and 6.');
-      return res.redirect('/payroll/rates');
+      return req.session.save(() => res.redirect('/payroll/rates'));
     }
     if (!['cash', 'abn', 'tfn'].includes(pt)) {
       req.flash('error', 'Pick a payment type (Cash / ABN / TFN) for the bulk assign.');
-      return res.redirect('/payroll/rates');
+      return req.session.save(() => res.redirect('/payroll/rates'));
     }
     // Find every active employee on this payment type with no tier set.
     // tier IS NULL covers both NULL and unset rows.
@@ -2019,7 +2019,7 @@ router.post('/rates/bulk-tier', requirePermission('payroll'), (req, res) => {
     `).all(pt);
     if (targets.length === 0) {
       req.flash('success', `No unassigned ${pt.toUpperCase()} workers to stamp — every active worker on this section already has a tier.`);
-      return res.redirect('/payroll/rates');
+      return req.session.save(() => res.redirect('/payroll/rates'));
     }
     const { stampEmployeeRates } = require('../lib/wageTiers');
     let stamped = 0;
@@ -2042,11 +2042,11 @@ router.post('/rates/bulk-tier', requirePermission('payroll'), (req, res) => {
     } else {
       req.flash('success', `Defaulted ${stamped} ${pt.toUpperCase()} worker${stamped === 1 ? '' : 's'} to Tier ${tier}. Rates stamped from the wage panel.`);
     }
-    return res.redirect('/payroll/rates');
+    return req.session.save(() => res.redirect('/payroll/rates'));
   } catch (e) {
     console.error('[payroll/rates/bulk-tier]', e);
     req.flash('error', `Bulk tier failed: ${e.message}`);
-    return res.redirect('/payroll/rates');
+    return req.session.save(() => res.redirect('/payroll/rates'));
   }
 });
 
@@ -2098,7 +2098,7 @@ router.get('/income-labels', requirePermission('payroll'), (req, res) => {
   } catch (err) {
     console.error('[payroll/income-labels GET]', err);
     req.flash('error', 'Could not load income labels: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/runs');
+    return req.session.save(() => res.redirect('/payroll/runs'));
   }
 });
 
@@ -2109,7 +2109,7 @@ router.post('/income-labels', requirePermission('payroll'), (req, res) => {
     const sortOrder = parseInt(req.body.sort_order, 10) || 100;
     if (!label) {
       req.flash('error', 'Label is required.');
-      return res.redirect('/payroll/income-labels');
+      return req.session.save(() => res.redirect('/payroll/income-labels'));
     }
     try {
       db.prepare("INSERT INTO income_labels (label, sort_order, active) VALUES (?, ?, 1)").run(label, sortOrder);
@@ -2118,11 +2118,11 @@ router.post('/income-labels', requirePermission('payroll'), (req, res) => {
       if (/UNIQUE/i.test(e.message)) req.flash('error', `"${label}" already exists.`);
       else throw e;
     }
-    return res.redirect('/payroll/income-labels');
+    return req.session.save(() => res.redirect('/payroll/income-labels'));
   } catch (err) {
     console.error('[payroll/income-labels POST]', err);
     req.flash('error', 'Could not add label: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/income-labels');
+    return req.session.save(() => res.redirect('/payroll/income-labels'));
   }
 });
 
@@ -2131,12 +2131,12 @@ router.post('/income-labels/:id', requirePermission('payroll'), (req, res) => {
     const db = getDb();
     const id = parseInt(req.params.id, 10);
     const existing = db.prepare("SELECT * FROM income_labels WHERE id = ?").get(id);
-    if (!existing) { req.flash('error', 'Label not found.'); return res.redirect('/payroll/income-labels'); }
+    if (!existing) { req.flash('error', 'Label not found.'); return req.session.save(() => res.redirect('/payroll/income-labels')); }
     const updates = [];
     const params = [];
     if (req.body.label !== undefined) {
       const newLabel = String(req.body.label || '').trim().slice(0, 80);
-      if (!newLabel) { req.flash('error', 'Label cannot be empty.'); return res.redirect('/payroll/income-labels'); }
+      if (!newLabel) { req.flash('error', 'Label cannot be empty.'); return req.session.save(() => res.redirect('/payroll/income-labels')); }
       updates.push('label = ?'); params.push(newLabel);
       // Cascade rename to existing pay_run_lines so denormalised data stays consistent
       if (newLabel !== existing.label) {
@@ -2156,11 +2156,11 @@ router.post('/income-labels/:id', requirePermission('payroll'), (req, res) => {
       db.prepare(`UPDATE income_labels SET ${updates.join(', ')} WHERE id = ?`).run(...params);
       req.flash('success', 'Label updated.');
     }
-    return res.redirect('/payroll/income-labels');
+    return req.session.save(() => res.redirect('/payroll/income-labels'));
   } catch (err) {
     console.error('[payroll/income-labels PUT]', err);
     req.flash('error', 'Update failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/income-labels');
+    return req.session.save(() => res.redirect('/payroll/income-labels'));
   }
 });
 
@@ -2169,19 +2169,19 @@ router.post('/income-labels/:id/delete', requirePermission('payroll'), (req, res
     const db = getDb();
     const id = parseInt(req.params.id, 10);
     const row = db.prepare("SELECT * FROM income_labels WHERE id = ?").get(id);
-    if (!row) { req.flash('error', 'Label not found.'); return res.redirect('/payroll/income-labels'); }
+    if (!row) { req.flash('error', 'Label not found.'); return req.session.save(() => res.redirect('/payroll/income-labels')); }
     const inUse = db.prepare("SELECT COUNT(*) AS c FROM pay_run_lines WHERE income_label = ?").get(row.label).c;
     if (inUse > 0) {
       req.flash('error', `Cannot delete "${row.label}" — it's used by ${inUse} pay-run line${inUse === 1 ? '' : 's'}. Disable it instead.`);
-      return res.redirect('/payroll/income-labels');
+      return req.session.save(() => res.redirect('/payroll/income-labels'));
     }
     db.prepare("DELETE FROM income_labels WHERE id = ?").run(id);
     req.flash('success', `Deleted "${row.label}".`);
-    return res.redirect('/payroll/income-labels');
+    return req.session.save(() => res.redirect('/payroll/income-labels'));
   } catch (err) {
     console.error('[payroll/income-labels DELETE]', err);
     req.flash('error', 'Delete failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/income-labels');
+    return req.session.save(() => res.redirect('/payroll/income-labels'));
   }
 });
 
@@ -2226,7 +2226,7 @@ router.post('/runs/:id/lines/:lineId/expenses', requirePermission('payroll'), (r
       if (multerErr) {
         if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(400).json({ error: multerErr.message });
         req.flash('error', 'Upload failed: ' + multerErr.message);
-        return res.redirect('/payroll/runs/' + req.params.id);
+        return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
       }
       const db = getDb();
       const run = getRunForLineRoute(db, req.params.id);
@@ -2234,7 +2234,7 @@ router.post('/runs/:id/lines/:lineId/expenses', requirePermission('payroll'), (r
         if (req.file) try { fs.unlinkSync(req.file.path); } catch (e) {}
         if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Pay run not found' });
         req.flash('error', 'Pay run not found.');
-        return res.redirect('/payroll/runs');
+        return req.session.save(() => res.redirect('/payroll/runs'));
       }
       if (isRunLocked(run)) {
         if (req.file) try { fs.unlinkSync(req.file.path); } catch (e) {}
@@ -2245,7 +2245,7 @@ router.post('/runs/:id/lines/:lineId/expenses', requirePermission('payroll'), (r
         if (req.file) try { fs.unlinkSync(req.file.path); } catch (e) {}
         if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Line not found' });
         req.flash('error', 'Line not found.');
-        return res.redirect('/payroll/runs/' + req.params.id);
+        return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
       }
 
       const labelRaw = String(req.body.label || 'Fuel').trim().slice(0, 40) || 'Fuel';
@@ -2274,13 +2274,13 @@ router.post('/runs/:id/lines/:lineId/expenses', requirePermission('payroll'), (r
         return res.json({ ok: true, expense: fresh, line: lineFresh });
       }
       req.flash('success', 'Expense added.');
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     } catch (err) {
       console.error('[expenses POST]', err);
       if (req.file) try { fs.unlinkSync(req.file.path); } catch (e) {}
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(500).json({ error: err.message });
       req.flash('error', 'Add expense failed: ' + (err && err.message || 'unknown error'));
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     }
   });
 });
@@ -2294,7 +2294,7 @@ router.post('/runs/:id/lines/:lineId/expenses/:expenseId', requirePermission('pa
     if (!run) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Pay run not found' });
       req.flash('error', 'Pay run not found.');
-      return res.redirect('/payroll/runs');
+      return req.session.save(() => res.redirect('/payroll/runs'));
     }
     if (!assertEditable(req, res, run)) return;
     const line = db.prepare('SELECT * FROM pay_run_lines WHERE id = ? AND pay_run_id = ?').get(req.params.lineId, req.params.id);
@@ -2302,7 +2302,7 @@ router.post('/runs/:id/lines/:lineId/expenses/:expenseId', requirePermission('pa
     if (!line || !exp) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Not found' });
       req.flash('error', 'Expense not found.');
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     }
     const updates = [];
     const params = [];
@@ -2333,12 +2333,12 @@ router.post('/runs/:id/lines/:lineId/expenses/:expenseId', requirePermission('pa
       return res.json({ ok: true, expense: fresh, line: lineFresh });
     }
     req.flash('success', 'Expense updated.');
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   } catch (err) {
     console.error('[expenses PUT]', err);
     if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(500).json({ error: err.message });
     req.flash('error', 'Update failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
 });
 
@@ -2350,7 +2350,7 @@ router.post('/runs/:id/lines/:lineId/expenses/:expenseId/delete', requirePermiss
     if (!run) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Pay run not found' });
       req.flash('error', 'Pay run not found.');
-      return res.redirect('/payroll/runs');
+      return req.session.save(() => res.redirect('/payroll/runs'));
     }
     if (!assertEditable(req, res, run)) return;
     const line = db.prepare('SELECT * FROM pay_run_lines WHERE id = ? AND pay_run_id = ?').get(req.params.lineId, req.params.id);
@@ -2358,7 +2358,7 @@ router.post('/runs/:id/lines/:lineId/expenses/:expenseId/delete', requirePermiss
     if (!line || !exp) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Not found' });
       req.flash('error', 'Expense not found.');
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     }
     if (exp.receipt_path) {
       const abs = path.join(payrollReceiptsDir, exp.receipt_path);
@@ -2371,12 +2371,12 @@ router.post('/runs/:id/lines/:lineId/expenses/:expenseId/delete', requirePermiss
       return res.json({ ok: true, line: lineFresh });
     }
     req.flash('success', 'Expense removed.');
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   } catch (err) {
     console.error('[expenses DELETE]', err);
     if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(500).json({ error: err.message });
     req.flash('error', 'Delete failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
 });
 
@@ -2411,21 +2411,21 @@ router.post('/runs/:id/lines/:lineId/deductions', requirePermission('payroll'), 
     if (!run) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Pay run not found' });
       req.flash('error', 'Pay run not found.');
-      return res.redirect('/payroll/runs');
+      return req.session.save(() => res.redirect('/payroll/runs'));
     }
     if (!assertEditable(req, res, run)) return;
     const line = db.prepare('SELECT * FROM pay_run_lines WHERE id = ? AND pay_run_id = ?').get(req.params.lineId, req.params.id);
     if (!line) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Line not found' });
       req.flash('error', 'Line not found.');
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     }
     const description = String(req.body.description || '').trim().slice(0, 200);
     const amount = round2(toNum(req.body.amount));
     if (!description) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(400).json({ error: 'Description required' });
       req.flash('error', 'Description is required.');
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     }
     const result = db.prepare(`
       INSERT INTO pay_run_line_deductions (pay_run_line_id, description, amount, sort_order)
@@ -2438,12 +2438,12 @@ router.post('/runs/:id/lines/:lineId/deductions', requirePermission('payroll'), 
       return res.json({ ok: true, deduction: fresh, line: lineFresh });
     }
     req.flash('success', 'Deduction added.');
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   } catch (err) {
     console.error('[deductions POST]', err);
     if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(500).json({ error: err.message });
     req.flash('error', 'Add deduction failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
 });
 
@@ -2454,7 +2454,7 @@ router.post('/runs/:id/lines/:lineId/deductions/:dedId', requirePermission('payr
     if (!run) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Pay run not found' });
       req.flash('error', 'Pay run not found.');
-      return res.redirect('/payroll/runs');
+      return req.session.save(() => res.redirect('/payroll/runs'));
     }
     if (!assertEditable(req, res, run)) return;
     const line = db.prepare('SELECT * FROM pay_run_lines WHERE id = ? AND pay_run_id = ?').get(req.params.lineId, req.params.id);
@@ -2462,7 +2462,7 @@ router.post('/runs/:id/lines/:lineId/deductions/:dedId', requirePermission('payr
     if (!line || !ded) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Not found' });
       req.flash('error', 'Deduction not found.');
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     }
     const updates = [];
     const params = [];
@@ -2471,7 +2471,7 @@ router.post('/runs/:id/lines/:lineId/deductions/:dedId', requirePermission('payr
       if (!desc) {
         if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(400).json({ error: 'Description required' });
         req.flash('error', 'Description is required.');
-        return res.redirect('/payroll/runs/' + req.params.id);
+        return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
       }
       updates.push('description = ?'); params.push(desc);
     }
@@ -2490,12 +2490,12 @@ router.post('/runs/:id/lines/:lineId/deductions/:dedId', requirePermission('payr
       return res.json({ ok: true, deduction: fresh, line: lineFresh });
     }
     req.flash('success', 'Deduction updated.');
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   } catch (err) {
     console.error('[deductions PUT]', err);
     if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(500).json({ error: err.message });
     req.flash('error', 'Update failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
 });
 
@@ -2506,7 +2506,7 @@ router.post('/runs/:id/lines/:lineId/deductions/:dedId/delete', requirePermissio
     if (!run) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Pay run not found' });
       req.flash('error', 'Pay run not found.');
-      return res.redirect('/payroll/runs');
+      return req.session.save(() => res.redirect('/payroll/runs'));
     }
     if (!assertEditable(req, res, run)) return;
     const line = db.prepare('SELECT * FROM pay_run_lines WHERE id = ? AND pay_run_id = ?').get(req.params.lineId, req.params.id);
@@ -2514,7 +2514,7 @@ router.post('/runs/:id/lines/:lineId/deductions/:dedId/delete', requirePermissio
     if (!line || !ded) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Not found' });
       req.flash('error', 'Deduction not found.');
-      return res.redirect('/payroll/runs/' + req.params.id);
+      return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
     }
     db.prepare("DELETE FROM pay_run_line_deductions WHERE id = ?").run(ded.id);
     recalcDeductionsAndTotals(db, line);
@@ -2523,12 +2523,12 @@ router.post('/runs/:id/lines/:lineId/deductions/:dedId/delete', requirePermissio
       return res.json({ ok: true, line: lineFresh });
     }
     req.flash('success', 'Deduction removed.');
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   } catch (err) {
     console.error('[deductions DELETE]', err);
     if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(500).json({ error: err.message });
     req.flash('error', 'Delete failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/payroll/runs/' + req.params.id);
+    return req.session.save(() => res.redirect('/payroll/runs/' + req.params.id));
   }
 });
 
@@ -2617,7 +2617,7 @@ router.post('/award-rates', requirePermission('payroll'), (req, res) => {
   };
   if (!fields.classification) {
     req.flash('error', 'Classification name is required.');
-    return res.redirect('/payroll/award-rates');
+    return req.session.save(() => res.redirect('/payroll/award-rates'));
   }
 
   if (id) {
@@ -2634,17 +2634,17 @@ router.post('/award-rates', requirePermission('payroll'), (req, res) => {
     db.prepare(`INSERT INTO award_classifications (${cols.join(', ')}) VALUES (${placeholders})`).run(...params);
     req.flash('success', `Added ${fields.classification}.`);
   }
-  res.redirect('/payroll/award-rates');
+  req.session.save(() => res.redirect('/payroll/award-rates'));
 });
 
 router.post('/award-rates/:id/delete', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   const cls = db.prepare('SELECT * FROM award_classifications WHERE id = ?').get(req.params.id);
-  if (!cls) { req.flash('error', 'Classification not found.'); return res.redirect('/payroll/award-rates'); }
+  if (!cls) { req.flash('error', 'Classification not found.'); return req.session.save(() => res.redirect('/payroll/award-rates')); }
   // Soft-delete: set active = 0 (so historical pay runs aren't broken)
   db.prepare('UPDATE award_classifications SET active = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(cls.id);
   req.flash('success', `Deactivated ${cls.classification}.`);
-  res.redirect('/payroll/award-rates');
+  req.session.save(() => res.redirect('/payroll/award-rates'));
 });
 
 // ============================================================================
@@ -2668,7 +2668,7 @@ router.post('/holidays', requirePermission('payroll'), (req, res) => {
   const jurisdiction = String(b.jurisdiction || 'NSW').trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !label) {
     req.flash('error', 'Date (YYYY-MM-DD) and label required.');
-    return res.redirect('/payroll/holidays');
+    return req.session.save(() => res.redirect('/payroll/holidays'));
   }
   try {
     db.prepare('INSERT INTO public_holidays (date, label, jurisdiction) VALUES (?, ?, ?)').run(date, label, jurisdiction);
@@ -2676,14 +2676,14 @@ router.post('/holidays', requirePermission('payroll'), (req, res) => {
   } catch (e) {
     req.flash('error', String(e.message).includes('UNIQUE') ? `${date} already exists` : e.message);
   }
-  res.redirect('/payroll/holidays');
+  req.session.save(() => res.redirect('/payroll/holidays'));
 });
 
 router.post('/holidays/:id/delete', requirePermission('payroll'), (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM public_holidays WHERE id = ?').run(req.params.id);
   req.flash('success', 'Holiday removed.');
-  res.redirect('/payroll/holidays');
+  req.session.save(() => res.redirect('/payroll/holidays'));
 });
 
 module.exports = router;

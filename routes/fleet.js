@@ -171,7 +171,7 @@ router.get('/depots', (req, res) => {
 router.post('/depots', (req, res) => {
   const db = getDb();
   const name = (req.body.name || '').trim();
-  if (!name) { req.flash('error', 'Depot name is required.'); return res.redirect('/fleet/depots'); }
+  if (!name) { req.flash('error', 'Depot name is required.'); return req.session.save(() => res.redirect('/fleet/depots')); }
   // Get next sort_order
   const maxSort = db.prepare("SELECT COALESCE(MAX(sort_order), -1) + 1 AS n FROM depots").get();
   try {
@@ -193,15 +193,15 @@ router.post('/depots', (req, res) => {
     if (/UNIQUE/i.test(e.message)) req.flash('error', `A depot named "${name}" already exists.`);
     else req.flash('error', 'Could not add depot: ' + e.message);
   }
-  res.redirect('/fleet/depots');
+  req.session.save(() => res.redirect('/fleet/depots'));
 });
 
 router.post('/depots/:id', (req, res) => {
   const db = getDb();
   const existing = db.prepare("SELECT id, name FROM depots WHERE id = ?").get(req.params.id);
-  if (!existing) { req.flash('error', 'Depot not found.'); return res.redirect('/fleet/depots'); }
+  if (!existing) { req.flash('error', 'Depot not found.'); return req.session.save(() => res.redirect('/fleet/depots')); }
   const newName = (req.body.name || '').trim();
-  if (!newName) { req.flash('error', 'Depot name is required.'); return res.redirect('/fleet/depots'); }
+  if (!newName) { req.flash('error', 'Depot name is required.'); return req.session.save(() => res.redirect('/fleet/depots')); }
   const active = req.body.active === '1' || req.body.active === 'on' || req.body.active === 'true' ? 1 : 0;
   try {
     db.prepare(`
@@ -228,25 +228,25 @@ router.post('/depots/:id', (req, res) => {
     if (/UNIQUE/i.test(e.message)) req.flash('error', `A depot named "${newName}" already exists.`);
     else req.flash('error', 'Could not update depot: ' + e.message);
   }
-  res.redirect('/fleet/depots');
+  req.session.save(() => res.redirect('/fleet/depots'));
 });
 
 router.post('/depots/:id/delete', (req, res) => {
   const db = getDb();
   const depot = db.prepare("SELECT id, name FROM depots WHERE id = ?").get(req.params.id);
-  if (!depot) { req.flash('error', 'Depot not found.'); return res.redirect('/fleet/depots'); }
+  if (!depot) { req.flash('error', 'Depot not found.'); return req.session.save(() => res.redirect('/fleet/depots')); }
   // Block delete if any bookings still reference it — soft-deactivate
   // is the planner-safe path.
   let inUse = 0;
   try { inUse = db.prepare("SELECT COUNT(*) AS n FROM bookings WHERE depot = ? AND deleted_at IS NULL").get(depot.name).n; } catch (e) {}
   if (inUse > 0) {
     req.flash('error', `Cannot delete "${depot.name}" — still used by ${inUse} booking${inUse === 1 ? '' : 's'}. Untick "Active" to retire it without deleting.`);
-    return res.redirect('/fleet/depots');
+    return req.session.save(() => res.redirect('/fleet/depots'));
   }
   db.prepare("DELETE FROM depots WHERE id = ?").run(req.params.id);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'depot', entityId: req.params.id, entityLabel: depot.name, ip: req.ip });
   req.flash('success', `Depot "${depot.name}" deleted.`);
-  res.redirect('/fleet/depots');
+  req.session.save(() => res.redirect('/fleet/depots'));
 });
 
 // ── FLEET REGISTER (list) ────────────────────────────────────────────
@@ -429,13 +429,13 @@ router.post('/reconcile/:equipmentId/link', (req, res) => {
   const fleetId = parseInt(req.body.fleet_vehicle_id, 10);
   if (!eqId || !fleetId) {
     req.flash('error', 'Pick a Fleet vehicle first.');
-    return res.redirect('/fleet/reconcile');
+    return req.session.save(() => res.redirect('/fleet/reconcile'));
   }
   const eq = db.prepare('SELECT id, asset_number, name FROM equipment WHERE id = ?').get(eqId);
   const fv = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(fleetId);
   if (!eq || !fv) {
     req.flash('error', 'Equipment or Fleet vehicle not found.');
-    return res.redirect('/fleet/reconcile');
+    return req.session.save(() => res.redirect('/fleet/reconcile'));
   }
   const keepActive = req.body.keep_active === '1';
   db.prepare(`
@@ -449,7 +449,7 @@ router.post('/reconcile/:equipmentId/link', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', `Linked ${eq.asset_number || eq.name} to Fleet/${fv.asset_id}${keepActive ? '.' : ' and deactivated the equipment row.'}`);
-  res.redirect('/fleet/reconcile');
+  req.session.save(() => res.redirect('/fleet/reconcile'));
 });
 
 // Mark an equipment row as a standalone (not in Fleet). No DB change —
@@ -459,7 +459,7 @@ router.post('/reconcile/:equipmentId/link', (req, res) => {
 router.post('/reconcile/:equipmentId/standalone', (req, res) => {
   const db = getDb();
   const eq = db.prepare('SELECT id, asset_number, name FROM equipment WHERE id = ?').get(req.params.equipmentId);
-  if (!eq) { req.flash('error', 'Equipment not found.'); return res.redirect('/fleet/reconcile'); }
+  if (!eq) { req.flash('error', 'Equipment not found.'); return req.session.save(() => res.redirect('/fleet/reconcile')); }
   db.prepare('UPDATE equipment SET fleet_vehicle_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(eq.id);
   logActivity({
     user: req.session.user, action: 'update', entityType: 'equipment',
@@ -468,7 +468,7 @@ router.post('/reconcile/:equipmentId/standalone', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', `${eq.asset_number || eq.name} marked as standalone.`);
-  res.redirect('/fleet/reconcile');
+  req.session.save(() => res.redirect('/fleet/reconcile'));
 });
 
 // Undo: clear the link + reactivate the equipment row. For when the
@@ -476,7 +476,7 @@ router.post('/reconcile/:equipmentId/standalone', (req, res) => {
 router.post('/reconcile/:equipmentId/unlink', (req, res) => {
   const db = getDb();
   const eq = db.prepare('SELECT id, asset_number, name, fleet_vehicle_id FROM equipment WHERE id = ?').get(req.params.equipmentId);
-  if (!eq) { req.flash('error', 'Equipment not found.'); return res.redirect('/fleet/reconcile'); }
+  if (!eq) { req.flash('error', 'Equipment not found.'); return req.session.save(() => res.redirect('/fleet/reconcile')); }
   db.prepare('UPDATE equipment SET fleet_vehicle_id = NULL, active = 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(eq.id);
   logActivity({
     user: req.session.user, action: 'update', entityType: 'equipment',
@@ -485,7 +485,7 @@ router.post('/reconcile/:equipmentId/unlink', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', `${eq.asset_number || eq.name} unlinked.`);
-  res.redirect('/fleet/reconcile?show=all');
+  req.session.save(() => res.redirect('/fleet/reconcile?show=all'));
 });
 
 // ── COMPLIANCE ALERTS (page) ─────────────────────────────────────────
@@ -528,7 +528,7 @@ router.post('/', (req, res) => {
   const b = req.body;
   if (!b.asset_id || !b.asset_id.trim()) {
     req.flash('error', 'Asset ID is required.');
-    return res.redirect('/fleet/new');
+    return req.session.save(() => res.redirect('/fleet/new'));
   }
   const status = VEHICLE_STATUSES.includes(b.status) ? b.status : 'Active';
   const vehicleType = VEHICLE_TYPES.includes(b.vehicle_type) ? b.vehicle_type : null;
@@ -549,14 +549,14 @@ router.post('/', (req, res) => {
     );
     logActivity({ user: req.session.user, action: 'create', entityType: 'vehicle', entityId: result.lastInsertRowid, entityLabel: b.asset_id, ip: req.ip });
     req.flash('success', `Vehicle ${b.asset_id} added.`);
-    res.redirect(`/fleet/${result.lastInsertRowid}`);
+    req.session.save(() => res.redirect(`/fleet/${result.lastInsertRowid}`));
   } catch (e) {
     if (/UNIQUE/i.test(e.message)) {
       req.flash('error', `Asset ID "${b.asset_id}" is already in use.`);
     } else {
       req.flash('error', 'Could not save vehicle: ' + e.message);
     }
-    res.redirect('/fleet/new');
+    req.session.save(() => res.redirect('/fleet/new'));
   }
 });
 
@@ -564,7 +564,7 @@ router.post('/', (req, res) => {
 router.get('/:id', (req, res) => {
   const db = getDb();
   const vehicle = db.prepare('SELECT * FROM vehicle_summary WHERE id = ?').get(req.params.id);
-  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return req.session.save(() => res.redirect('/fleet')); }
   const services = db.prepare(`
     SELECT * FROM service_records WHERE vehicle_id = ?
     ORDER BY COALESCE(service_date, '0000-00-00') DESC, id DESC
@@ -611,10 +611,10 @@ router.get('/:id', (req, res) => {
 router.get('/:id/service/:sid/invoice', (req, res) => {
   const db = getDb();
   const record = db.prepare('SELECT invoice_file_path, invoice_file_name FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
-  if (!record || !record.invoice_file_path) { req.flash('error', 'Invoice file not found.'); return res.redirect('/fleet/' + req.params.id); }
+  if (!record || !record.invoice_file_path) { req.flash('error', 'Invoice file not found.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
   const abs = path.resolve(record.invoice_file_path);
   if (!abs.startsWith(path.resolve(INVOICE_UPLOAD_DIR))) { return res.status(403).send('Forbidden'); }
-  if (!fs.existsSync(abs)) { req.flash('error', 'Invoice file missing on disk.'); return res.redirect('/fleet/' + req.params.id); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'Invoice file missing on disk.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
   res.download(abs, record.invoice_file_name || path.basename(abs));
 });
 
@@ -636,13 +636,13 @@ router.post('/:id/service/:sid/invoice/delete', (req, res) => {
 router.post('/:id/service/:sid/invoices/add', invoiceUpload.array('invoice_file', 10), (req, res) => {
   const db = getDb();
   const record = db.prepare('SELECT id FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
-  if (!record) { req.flash('error', 'Service record not found.'); return res.redirect('/fleet/' + req.params.id); }
+  if (!record) { req.flash('error', 'Service record not found.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
   const files = req.files || [];
-  if (!files.length) { req.flash('error', 'Choose a file first.'); return res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`); }
+  if (!files.length) { req.flash('error', 'Choose a file first.'); return req.session.save(() => res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`)); }
   const insInv = db.prepare('INSERT INTO service_record_invoices (service_record_id, file_path, file_name) VALUES (?, ?, ?)');
   files.forEach(f => insInv.run(req.params.sid, f.path, f.originalname));
   req.flash('success', files.length === 1 ? 'Invoice added.' : (files.length + ' invoices added.'));
-  res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`);
+  req.session.save(() => res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`));
 });
 
 // ── DOWNLOAD a specific invoice attachment (multiple per record) ─────
@@ -653,10 +653,10 @@ router.get('/:id/service/:sid/invoice/:invId', (req, res) => {
     JOIN service_records sr ON sr.id = sri.service_record_id
     WHERE sri.id = ? AND sri.service_record_id = ? AND sr.vehicle_id = ?
   `).get(req.params.invId, req.params.sid, req.params.id);
-  if (!inv || !inv.file_path) { req.flash('error', 'Invoice file not found.'); return res.redirect('/fleet/' + req.params.id); }
+  if (!inv || !inv.file_path) { req.flash('error', 'Invoice file not found.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
   const abs = path.resolve(inv.file_path);
   if (!abs.startsWith(path.resolve(INVOICE_UPLOAD_DIR))) { return res.status(403).send('Forbidden'); }
-  if (!fs.existsSync(abs)) { req.flash('error', 'Invoice file missing on disk.'); return res.redirect('/fleet/' + req.params.id); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'Invoice file missing on disk.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
   res.download(abs, inv.file_name || path.basename(abs));
 });
 
@@ -681,7 +681,7 @@ router.post('/:id/service/:sid/invoice/:invId/delete', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id);
-  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return req.session.save(() => res.redirect('/fleet')); }
   res.render('fleet/form', {
     title: `Edit ${vehicle.asset_id}`,
     currentPage: 'fleet',
@@ -697,10 +697,10 @@ router.post('/:id', (req, res) => {
   const db = getDb();
   const b = req.body;
   const existing = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
-  if (!existing) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  if (!existing) { req.flash('error', 'Vehicle not found.'); return req.session.save(() => res.redirect('/fleet')); }
   if (!b.asset_id || !b.asset_id.trim()) {
     req.flash('error', 'Asset ID is required.');
-    return res.redirect(`/fleet/${req.params.id}/edit`);
+    return req.session.save(() => res.redirect(`/fleet/${req.params.id}/edit`));
   }
   const status = VEHICLE_STATUSES.includes(b.status) ? b.status : 'Active';
   const vehicleType = VEHICLE_TYPES.includes(b.vehicle_type) ? b.vehicle_type : null;
@@ -724,14 +724,14 @@ router.post('/:id', (req, res) => {
     );
     logActivity({ user: req.session.user, action: 'update', entityType: 'vehicle', entityId: req.params.id, entityLabel: b.asset_id, ip: req.ip });
     req.flash('success', `${b.asset_id} updated.`);
-    res.redirect(`/fleet/${req.params.id}`);
+    req.session.save(() => res.redirect(`/fleet/${req.params.id}`));
   } catch (e) {
     if (/UNIQUE/i.test(e.message)) {
       req.flash('error', `Asset ID "${b.asset_id}" is already in use.`);
     } else {
       req.flash('error', 'Could not update vehicle: ' + e.message);
     }
-    res.redirect(`/fleet/${req.params.id}/edit`);
+    req.session.save(() => res.redirect(`/fleet/${req.params.id}/edit`));
   }
 });
 
@@ -741,34 +741,34 @@ router.post('/:id/traffic-class', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const v = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
-  if (!v) { if (isJson) return res.status(404).json({ error: 'Vehicle not found' }); req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  if (!v) { if (isJson) return res.status(404).json({ error: 'Vehicle not found' }); req.flash('error', 'Vehicle not found.'); return req.session.save(() => res.redirect('/fleet')); }
   if (!TRAFFIC_CLASS_VALUES.has(req.body.traffic_class)) {
     if (isJson) return res.status(400).json({ error: 'Invalid class' });
-    req.flash('error', 'Invalid class.'); return res.redirect('/fleet/' + req.params.id);
+    req.flash('error', 'Invalid class.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id));
   }
   db.prepare('UPDATE vehicles SET traffic_class = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.body.traffic_class, v.id);
   logActivity({ user: req.session.user, action: 'update', entityType: 'vehicle', entityId: v.id, entityLabel: v.asset_id, ip: req.ip });
   if (isJson) return res.json({ ok: true, traffic_class: req.body.traffic_class });
   req.flash('success', `${v.asset_id} classified.`);
-  res.redirect('/fleet/' + req.params.id);
+  req.session.save(() => res.redirect('/fleet/' + req.params.id));
 });
 
 // ── DELETE VEHICLE ───────────────────────────────────────────────────
 router.post('/:id/delete', (req, res) => {
   const db = getDb();
   const vehicle = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
-  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return req.session.save(() => res.redirect('/fleet')); }
   db.prepare('DELETE FROM vehicles WHERE id = ?').run(req.params.id); // cascade removes service_records
   logActivity({ user: req.session.user, action: 'delete', entityType: 'vehicle', entityId: req.params.id, entityLabel: vehicle.asset_id, ip: req.ip });
   req.flash('success', `${vehicle.asset_id} removed.`);
-  res.redirect('/fleet');
+  req.session.save(() => res.redirect('/fleet'));
 });
 
 // ── NEW SERVICE RECORD FORM ──────────────────────────────────────────
 router.get('/:id/service/new', (req, res) => {
   const db = getDb();
   const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id);
-  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return req.session.save(() => res.redirect('/fleet')); }
   res.render('fleet/service-form', {
     title: `New Service Record — ${vehicle.asset_id}`,
     currentPage: 'fleet',
@@ -782,7 +782,7 @@ router.get('/:id/service/new', (req, res) => {
 router.post('/:id/service', invoiceUpload.array('invoice_file', 10), (req, res) => {
   const db = getDb();
   const vehicle = db.prepare('SELECT id, asset_id FROM vehicles WHERE id = ?').get(req.params.id);
-  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return res.redirect('/fleet'); }
+  if (!vehicle) { req.flash('error', 'Vehicle not found.'); return req.session.save(() => res.redirect('/fleet')); }
   const b = req.body;
   const serviceType = SERVICE_TYPES.includes(b.service_type) ? b.service_type : 'Other';
   const files = req.files || [];
@@ -805,7 +805,7 @@ router.post('/:id/service', invoiceUpload.array('invoice_file', 10), (req, res) 
     ip: req.ip,
   });
   req.flash('success', 'Service record added.');
-  res.redirect(`/fleet/${vehicle.id}?tab=service`);
+  req.session.save(() => res.redirect(`/fleet/${vehicle.id}?tab=service`));
 });
 
 // ── EDIT SERVICE RECORD FORM ─────────────────────────────────────────
@@ -813,7 +813,7 @@ router.get('/:id/service/:sid/edit', (req, res) => {
   const db = getDb();
   const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(req.params.id);
   const record  = db.prepare('SELECT * FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
-  if (!vehicle || !record) { req.flash('error', 'Service record not found.'); return res.redirect('/fleet'); }
+  if (!vehicle || !record) { req.flash('error', 'Service record not found.'); return req.session.save(() => res.redirect('/fleet')); }
   record.invoices = db.prepare('SELECT id, file_name FROM service_record_invoices WHERE service_record_id = ? ORDER BY id').all(record.id);
   res.render('fleet/service-form', {
     title: `Edit Service Record — ${vehicle.asset_id}`,
@@ -828,7 +828,7 @@ router.get('/:id/service/:sid/edit', (req, res) => {
 router.post('/:id/service/:sid', invoiceUpload.array('invoice_file', 10), (req, res) => {
   const db = getDb();
   const record = db.prepare('SELECT id FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
-  if (!record) { req.flash('error', 'Service record not found.'); return res.redirect(`/fleet/${req.params.id}`); }
+  if (!record) { req.flash('error', 'Service record not found.'); return req.session.save(() => res.redirect(`/fleet/${req.params.id}`)); }
   const b = req.body;
   const serviceType = SERVICE_TYPES.includes(b.service_type) ? b.service_type : 'Other';
   const files = req.files || [];
@@ -850,7 +850,7 @@ router.post('/:id/service/:sid', invoiceUpload.array('invoice_file', 10), (req, 
   req.flash('success', 'Service record updated.');
   // Stay on the edit page after saving so the user can keep working (add an
   // invoice, tweak a field) without bouncing back to the history list.
-  res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`);
+  req.session.save(() => res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`));
 });
 
 // ── DELETE SERVICE RECORD ────────────────────────────────────────────
@@ -859,7 +859,7 @@ router.post('/:id/service/:sid/delete', (req, res) => {
   db.prepare('DELETE FROM service_records WHERE id = ? AND vehicle_id = ?').run(req.params.sid, req.params.id);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Service record #${req.params.sid}`, ip: req.ip });
   req.flash('success', 'Service record removed.');
-  res.redirect(`/fleet/${req.params.id}`);
+  req.session.save(() => res.redirect(`/fleet/${req.params.id}`));
 });
 
 module.exports = router;

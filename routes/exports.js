@@ -270,7 +270,7 @@ router.get('/allocations.csv', (req, res) => {
 router.get('/budgets.csv', (req, res) => {
   if (!canViewAccounts(req.session.user)) {
     req.flash('error', 'Access denied');
-    return res.redirect('/dashboard');
+    return req.session.save(() => res.redirect('/dashboard'));
   }
   const db = getDb();
   const rows = db.prepare(`
@@ -300,11 +300,11 @@ router.get('/budgets.csv', (req, res) => {
 router.get('/cost-entries.csv', (req, res) => {
   if (!canViewAccounts(req.session.user)) {
     req.flash('error', 'Access denied');
-    return res.redirect('/dashboard');
+    return req.session.save(() => res.redirect('/dashboard'));
   }
   const db = getDb();
   const jobId = req.query.job_id;
-  if (!jobId) { req.flash('error', 'Job ID required'); return res.redirect('/budgets'); }
+  if (!jobId) { req.flash('error', 'Job ID required'); return req.session.save(() => res.redirect('/budgets')); }
 
   const job = db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(jobId);
   const rows = db.prepare(`
@@ -329,10 +329,10 @@ router.get('/cost-entries.csv', (req, res) => {
 router.get('/job-report.pdf', (req, res) => {
   const db = getDb();
   const jobId = req.query.job_id;
-  if (!jobId) { req.flash('error', 'Job ID required'); return res.redirect('/jobs'); }
+  if (!jobId) { req.flash('error', 'Job ID required'); return req.session.save(() => res.redirect('/jobs')); }
 
   const job = db.prepare('SELECT j.*, u.full_name as pm_name FROM jobs j LEFT JOIN users u ON j.project_manager_id = u.id WHERE j.id = ?').get(jobId);
-  if (!job) { req.flash('error', 'Job not found'); return res.redirect('/jobs'); }
+  if (!job) { req.flash('error', 'Job not found'); return req.session.save(() => res.redirect('/jobs')); }
 
   const budget = db.prepare('SELECT * FROM job_budgets WHERE job_id = ?').get(jobId);
   const totalSpent = db.prepare('SELECT COALESCE(SUM(amount), 0) as total FROM cost_entries WHERE job_id = ?').get(jobId).total;

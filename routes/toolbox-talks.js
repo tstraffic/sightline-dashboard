@@ -64,7 +64,7 @@ function blockWhenLocked(req, res, next) {
       return res.status(423).json({ ok: false, error: 'Record is locked — it was signed off by the presenter.' });
     }
     req.flash('error', 'This record is locked — it was signed off by the presenter. Add a supplementary note instead.');
-    return res.redirect('/toolbox-talks/' + tb.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
   }
   next();
 }
@@ -182,7 +182,7 @@ function formUploads(req, res, next) {
     const backTo = req.params.id
       ? '/toolbox-talks/' + req.params.id + '/edit'
       : '/toolbox-talks/new';
-    return res.redirect(backTo);
+    return req.session.save(() => res.redirect(backTo));
   });
 }
 
@@ -265,7 +265,7 @@ router.post('/', formUploads, (req, res) => {
     const title = String(b.title || '').trim();
     if (!title) {
       req.flash('error', 'Title is required.');
-      return res.redirect('/toolbox-talks/new');
+      return req.session.save(() => res.redirect('/toolbox-talks/new'));
     }
     const heldAt = (b.held_at && /^\d{4}-\d{2}-\d{2}$/.test(b.held_at)) ? b.held_at : new Date().toISOString().slice(0, 10);
     const wantsPublish = b.action === 'publish';
@@ -352,11 +352,11 @@ router.post('/', formUploads, (req, res) => {
       try { getOrCreateAttendanceSession(r.lastInsertRowid, userId); } catch (e) { console.error('[toolbox session]', e.message); }
     }
     req.flash('success', wantsPublish ? 'Toolbox talk published — share the attendance link with the crew.' : 'Draft saved.');
-    return res.redirect('/toolbox-talks/' + r.lastInsertRowid);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + r.lastInsertRowid));
   } catch (err) {
     console.error('[toolbox-talks POST]', err);
     req.flash('error', 'Could not create toolbox: ' + (err && err.message || 'unknown'));
-    return res.redirect('/toolbox-talks/new');
+    return req.session.save(() => res.redirect('/toolbox-talks/new'));
   }
 });
 
@@ -374,7 +374,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN jobs j ON j.id = t.job_id
     WHERE t.id = ?
   `).get(req.params.id);
-  if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  if (!toolbox) { req.flash('error', 'Toolbox not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   const photos = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
   const documents = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'doc' ORDER BY id ASC`).all(toolbox.id);
   const prepDocuments = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'prep' ORDER BY id ASC`).all(toolbox.id);
@@ -493,7 +493,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/edit', blockWhenLocked, (req, res) => {
   const db = getDb();
   const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!toolbox) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  if (!toolbox) { req.flash('error', 'Toolbox not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   const photos = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'photo' ORDER BY id ASC`).all(toolbox.id);
   const documents = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'doc' ORDER BY id ASC`).all(toolbox.id);
   const prepDocuments = db.prepare(`SELECT * FROM toolbox_attachments WHERE toolbox_id = ? AND kind = 'prep' ORDER BY id ASC`).all(toolbox.id);
@@ -513,7 +513,7 @@ router.post('/:id', blockWhenLocked, formUploads, (req, res) => {
   try {
     const db = getDb();
     const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
-    if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
+    if (!toolbox) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
     const b = req.body;
     const title = String(b.title || '').trim() || toolbox.title;
     const heldAt = (b.held_at && /^\d{4}-\d{2}-\d{2}$/.test(b.held_at)) ? b.held_at : toolbox.held_at;
@@ -598,11 +598,11 @@ router.post('/:id', blockWhenLocked, formUploads, (req, res) => {
       });
     } catch (e) {}
     req.flash('success', 'Toolbox saved.');
-    return res.redirect('/toolbox-talks/' + toolbox.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + toolbox.id));
   } catch (err) {
     console.error('[toolbox-talks PUT]', err);
     req.flash('error', 'Update failed: ' + (err && err.message || 'unknown'));
-    return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id + '/edit'));
   }
 });
 
@@ -610,10 +610,10 @@ router.post('/:id', blockWhenLocked, formUploads, (req, res) => {
 router.post('/:id/publish', (req, res) => {
   const db = getDb();
   const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
+  if (!toolbox) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   if (toolbox.status === 'published') {
     req.flash('error', 'Already published.');
-    return res.redirect('/toolbox-talks/' + toolbox.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + toolbox.id));
   }
   const userId = req.session.user ? req.session.user.id : null;
   db.prepare(`
@@ -624,7 +624,7 @@ router.post('/:id/publish', (req, res) => {
   announcePublished(req, toolbox);
   try { getOrCreateAttendanceSession(toolbox.id, userId); } catch (e) { console.error('[toolbox session]', e.message); }
   req.flash('success', 'Toolbox talk published — share the attendance link with the crew.');
-  return res.redirect('/toolbox-talks/' + toolbox.id);
+  return req.session.save(() => res.redirect('/toolbox-talks/' + toolbox.id));
 });
 
 // POST /toolbox-talks/:id/attendance-session/regenerate — invalidate
@@ -633,11 +633,11 @@ router.post('/:id/publish', (req, res) => {
 router.post('/:id/attendance-session/regenerate', blockWhenLocked, (req, res) => {
   const db = getDb();
   const tb = db.prepare('SELECT id FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   db.prepare("UPDATE toolbox_attendance_sessions SET closed_at = datetime('now') WHERE toolbox_id = ? AND closed_at IS NULL").run(tb.id);
   getOrCreateAttendanceSession(tb.id, req.session.user && req.session.user.id);
   req.flash('success', 'Generated a fresh attendance link.');
-  return res.redirect('/toolbox-talks/' + tb.id);
+  return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
 });
 
 // POST /toolbox-talks/:id/archive
@@ -648,7 +648,7 @@ router.post('/:id/archive', (req, res) => {
   db.prepare("UPDATE toolbox_talks SET status='archived', updated_at=CURRENT_TIMESTAMP WHERE id = ?").run(tb.id);
   try { logActivity({ user: req.session.user, action: 'archive', entityType: 'toolbox_talk', entityId: tb.id, entityLabel: tb.title, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Toolbox archived.');
-  return res.redirect('/toolbox-talks');
+  return req.session.save(() => res.redirect('/toolbox-talks'));
 });
 
 // POST /toolbox-talks/:id/delete
@@ -659,14 +659,14 @@ router.post('/:id/delete', blockWhenLocked, (req, res) => {
   db.prepare('DELETE FROM toolbox_talks WHERE id = ?').run(tb.id);
   try { logActivity({ user: req.session.user, action: 'delete', entityType: 'toolbox_talk', entityId: tb.id, entityLabel: tb.title, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Toolbox deleted.');
-  return res.redirect('/toolbox-talks');
+  return req.session.save(() => res.redirect('/toolbox-talks'));
 });
 
 // GET /toolbox-talks/:id/attendance — manage attendees
 router.get('/:id/attendance', (req, res) => {
   const db = getDb();
   const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
+  if (!toolbox) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   // If the toolbox has an invitee list, only show those workers — same
   // scope as the public attendance picker so the admin tab matches what
   // the worker sees. Otherwise (open-to-all toolbox) show every active
@@ -998,7 +998,7 @@ router.post('/:id/invitees/:crewId/remove', blockWhenLocked, (req, res) => {
 router.post('/:id/attendance', blockWhenLocked, (req, res) => {
   const db = getDb();
   const toolbox = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!toolbox) { req.flash('error', 'Not found.'); return res.redirect('/toolbox-talks'); }
+  if (!toolbox) { req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   const userId = req.session.user ? req.session.user.id : null;
   const manageable = []
     .concat(req.body.manageable_crew_ids || [])
@@ -1018,12 +1018,12 @@ router.post('/:id/attendance', blockWhenLocked, (req, res) => {
     }
     if (!VALID.has(s)) {
       req.flash('error', 'Invalid status submitted.');
-      return res.redirect('/toolbox-talks/' + toolbox.id + '/attendance');
+      return req.session.save(() => res.redirect('/toolbox-talks/' + toolbox.id + '/attendance'));
     }
   }
   if (missingReason.length) {
     req.flash('error', "Add a reason for each worker marked 'Not attending' before saving.");
-    return res.redirect('/toolbox-talks/' + toolbox.id + '/attendance');
+    return req.session.save(() => res.redirect('/toolbox-talks/' + toolbox.id + '/attendance'));
   }
 
   const counts = { attended: 0, attending: 0, absent: 0, caught_up: 0, pending: 0 };
@@ -1134,16 +1134,16 @@ router.post('/:id/attendance', blockWhenLocked, (req, res) => {
     counts.caught_up + ' caught up · ' +
     counts.pending + ' pending.'
   );
-  return res.redirect('/toolbox-talks/' + toolbox.id + '/attendance');
+  return req.session.save(() => res.redirect('/toolbox-talks/' + toolbox.id + '/attendance'));
 });
 
 // GET /toolbox-talks/:id/slides — auth-gated slides download
 router.get('/:id/slides', (req, res) => {
   const db = getDb();
   const tb = db.prepare('SELECT slides_path, slides_original_name FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!tb || !tb.slides_path) { req.flash('error', 'No slides attached.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  if (!tb || !tb.slides_path) { req.flash('error', 'No slides attached.'); return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id)); }
   const abs = path.join(__dirname, '..', tb.slides_path);
-  if (!fs.existsSync(abs)) { req.flash('error', 'File missing.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'File missing.'); return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id)); }
   return res.download(abs, tb.slides_original_name || path.basename(abs));
 });
 
@@ -1151,9 +1151,9 @@ router.get('/:id/slides', (req, res) => {
 router.get('/:id/signon', (req, res) => {
   const db = getDb();
   const tb = db.prepare('SELECT signon_path, signon_original_name FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!tb || !tb.signon_path) { req.flash('error', 'No sign-on sheet attached.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  if (!tb || !tb.signon_path) { req.flash('error', 'No sign-on sheet attached.'); return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id)); }
   const abs = path.join(__dirname, '..', tb.signon_path);
-  if (!fs.existsSync(abs)) { req.flash('error', 'File missing.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'File missing.'); return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id)); }
   return res.download(abs, tb.signon_original_name || path.basename(abs));
 });
 
@@ -1174,7 +1174,7 @@ router.post('/:id/photos/:photoId/delete', blockWhenLocked, (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ?').run(req.params.photoId, req.params.id);
   req.flash('success', 'Photo removed.');
-  return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
+  return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id + '/edit'));
 });
 
 // GET /toolbox-talks/:id/documents/:docId — auth-gated download of a
@@ -1200,7 +1200,7 @@ router.post('/:id/documents/:docId/delete', blockWhenLocked, (req, res) => {
     `DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ? AND kind = 'doc'`
   ).run(req.params.docId, req.params.id);
   req.flash('success', 'Document removed.');
-  return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
+  return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id + '/edit'));
 });
 
 // GET /toolbox-talks/:id/prep/:prepId — admin download of a prep doc.
@@ -1223,7 +1223,7 @@ router.post('/:id/prep/:prepId/delete', blockWhenLocked, (req, res) => {
     `DELETE FROM toolbox_attachments WHERE id = ? AND toolbox_id = ? AND kind = 'prep'`
   ).run(req.params.prepId, req.params.id);
   req.flash('success', 'Prep document removed.');
-  return res.redirect('/toolbox-talks/' + req.params.id + '/edit');
+  return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id + '/edit'));
 });
 
 // ============================================================
@@ -1237,19 +1237,19 @@ router.post('/:id/prep/:prepId/delete', blockWhenLocked, (req, res) => {
 router.post('/:id/sign-off', (req, res) => {
   const db = getDb();
   const tb = db.prepare('SELECT * FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   if (isLocked(tb)) {
     req.flash('error', 'This record is already signed off.');
-    return res.redirect('/toolbox-talks/' + tb.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
   }
   if (tb.status !== 'published') {
     req.flash('error', 'Publish the toolbox before signing off — workers need to sign on first.');
-    return res.redirect('/toolbox-talks/' + tb.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
   }
   const sigRaw = (req.body.signature_data || '').toString();
   if (!sigRaw.startsWith('data:image/') || sigRaw.length > 260000) {
     req.flash('error', 'Draw your signature before submitting the sign-off.');
-    return res.redirect('/toolbox-talks/' + tb.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
   }
   const userId = req.session.user ? req.session.user.id : null;
   db.prepare(`
@@ -1269,18 +1269,18 @@ router.post('/:id/sign-off', (req, res) => {
     });
   } catch (e) {}
   req.flash('success', 'Record signed off and locked. You can now download the FRM-005 PDF or send it to the client.');
-  return res.redirect('/toolbox-talks/' + tb.id);
+  return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
 });
 
 // POST /toolbox-talks/:id/actions — add an action raised (section 5).
 router.post('/:id/actions', blockWhenLocked, (req, res) => {
   const db = getDb();
   const tb = db.prepare('SELECT id, title FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   const description = String(req.body.description || '').trim().slice(0, 2000);
   if (!description) {
     req.flash('error', 'Describe the action raised before adding it.');
-    return res.redirect('/toolbox-talks/' + tb.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
   }
   db.prepare(`
     INSERT INTO toolbox_actions (toolbox_id, description, raised_by, linked_record, created_by_id)
@@ -1298,7 +1298,7 @@ router.post('/:id/actions', blockWhenLocked, (req, res) => {
     });
   } catch (e) {}
   req.flash('success', 'Action recorded — remember to log it as its own hazard / near-miss record and track it to closure.');
-  return res.redirect('/toolbox-talks/' + tb.id);
+  return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
 });
 
 // POST /toolbox-talks/:id/actions/:actionId/toggle — open <-> closed.
@@ -1307,14 +1307,14 @@ router.post('/:id/actions', blockWhenLocked, (req, res) => {
 router.post('/:id/actions/:actionId/toggle', (req, res) => {
   const db = getDb();
   const a = db.prepare('SELECT * FROM toolbox_actions WHERE id = ? AND toolbox_id = ?').get(req.params.actionId, req.params.id);
-  if (!a) { req.flash('error', 'Action not found.'); return res.redirect('/toolbox-talks/' + req.params.id); }
+  if (!a) { req.flash('error', 'Action not found.'); return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id)); }
   if (a.status === 'open') {
     db.prepare("UPDATE toolbox_actions SET status = 'closed', closed_at = datetime('now') WHERE id = ?").run(a.id);
   } else {
     db.prepare("UPDATE toolbox_actions SET status = 'open', closed_at = NULL WHERE id = ?").run(a.id);
   }
   req.flash('success', a.status === 'open' ? 'Action closed.' : 'Action reopened.');
-  return res.redirect('/toolbox-talks/' + req.params.id);
+  return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id));
 });
 
 // POST /toolbox-talks/:id/actions/:actionId/delete — pre-lock only.
@@ -1322,7 +1322,7 @@ router.post('/:id/actions/:actionId/delete', blockWhenLocked, (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM toolbox_actions WHERE id = ? AND toolbox_id = ?').run(req.params.actionId, req.params.id);
   req.flash('success', 'Action removed.');
-  return res.redirect('/toolbox-talks/' + req.params.id);
+  return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id));
 });
 
 // POST /toolbox-talks/:id/notes — add a supplementary note. The ONLY
@@ -1331,11 +1331,11 @@ router.post('/:id/actions/:actionId/delete', blockWhenLocked, (req, res) => {
 router.post('/:id/notes', (req, res) => {
   const db = getDb();
   const tb = db.prepare('SELECT id, title FROM toolbox_talks WHERE id = ?').get(req.params.id);
-  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   const note = String(req.body.note || '').trim().slice(0, 4000);
   if (!note) {
     req.flash('error', 'Write the note before adding it.');
-    return res.redirect('/toolbox-talks/' + tb.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
   }
   db.prepare('INSERT INTO toolbox_supplementary_notes (toolbox_id, note, created_by_id) VALUES (?, ?, ?)')
     .run(tb.id, note, req.session.user ? req.session.user.id : null);
@@ -1346,7 +1346,7 @@ router.post('/:id/notes', (req, res) => {
     });
   } catch (e) {}
   req.flash('success', 'Supplementary note added.');
-  return res.redirect('/toolbox-talks/' + tb.id);
+  return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
 });
 
 // GET /toolbox-talks/:id/record.pdf — download the FRM-005 PDF.
@@ -1361,7 +1361,7 @@ router.get('/:id/record.pdf', async (req, res) => {
   } catch (err) {
     console.error('[toolbox record.pdf]', err);
     req.flash('error', 'Could not generate the record PDF: ' + (err && err.message || 'unknown'));
-    return res.redirect('/toolbox-talks/' + req.params.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + req.params.id));
   }
 });
 
@@ -1376,19 +1376,19 @@ router.post('/:id/send-to-client', async (req, res) => {
     FROM toolbox_talks t LEFT JOIN jobs j ON j.id = t.job_id
     WHERE t.id = ?
   `).get(req.params.id);
-  if (!tb) { req.flash('error', 'Toolbox not found.'); return res.redirect('/toolbox-talks'); }
+  if (!tb) { req.flash('error', 'Toolbox not found.'); return req.session.save(() => res.redirect('/toolbox-talks')); }
   if (!isLocked(tb)) {
     req.flash('error', 'Sign off the record before sending it to the client — they should only receive the signed form.');
-    return res.redirect('/toolbox-talks/' + tb.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
   }
   const recipientEmail = String(req.body.recipient_email || '').trim().slice(0, 200);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
     req.flash('error', 'Enter a valid recipient email address.');
-    return res.redirect('/toolbox-talks/' + tb.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
   }
   if (!emailConfigured()) {
     req.flash('error', 'Email is not configured on this server — download the PDF and send it manually instead.');
-    return res.redirect('/toolbox-talks/' + tb.id);
+    return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
   }
   const clientId = parseInt(req.body.client_id, 10) > 0 ? parseInt(req.body.client_id, 10) : null;
   const client = clientId ? db.prepare('SELECT * FROM clients WHERE id = ?').get(clientId) : null;
@@ -1438,7 +1438,7 @@ router.post('/:id/send-to-client', async (req, res) => {
     console.error('[toolbox send-to-client]', err);
     req.flash('error', 'Could not send: ' + (err && err.message || 'unknown'));
   }
-  return res.redirect('/toolbox-talks/' + tb.id);
+  return req.session.save(() => res.redirect('/toolbox-talks/' + tb.id));
 });
 
 module.exports = router;

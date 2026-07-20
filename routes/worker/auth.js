@@ -14,8 +14,6 @@ router.get('/login', (req, res) => {
   res.render('worker/login', {
     layout: false,
     title: 'Sign In',
-    flash_error: req.flash('error'),
-    flash_success: req.flash('success'),
   });
 });
 
@@ -38,7 +36,7 @@ router.post('/login', (req, res) => {
   function loginError(msg) {
     console.log('Worker login failed:', msg, { loginId });
     req.flash('error', msg);
-    return res.redirect('/w/login?err=' + encodeURIComponent(msg));
+    return req.session.save(() => res.redirect('/w/login?err=' + encodeURIComponent(msg)));
   }
 
   if (!loginId || !pin) {
@@ -149,9 +147,9 @@ router.post('/login', (req, res) => {
     if (err) {
       console.error('[worker login] session save failed:', err.message);
       req.flash('error', 'Login succeeded but the session could not be saved. Please try again.');
-      return res.redirect('/w/login');
+      return req.session.save(() => res.redirect('/w/login'));
     }
-    res.redirect(returnTo);
+    req.session.save(() => res.redirect(returnTo));
   });
 });
 
@@ -189,8 +187,6 @@ router.get('/forgot-pin', (req, res) => {
   res.render('worker/forgot-pin', {
     layout: false,
     title: 'Forgot PIN',
-    flash_error: req.flash('error'),
-    flash_success: req.flash('success'),
   });
 });
 
@@ -206,7 +202,7 @@ router.post('/forgot-pin', async (req, res) => {
   }
 
   req.flash('success', 'If a matching account exists, a reset link has been sent to your email.');
-  res.redirect('/w/forgot-pin');
+  req.session.save(() => res.redirect('/w/forgot-pin'));
 });
 
 // Reset PIN via token
@@ -218,7 +214,6 @@ router.get('/reset-pin/:token', (req, res) => {
       title: 'Invalid Link',
       error: 'This reset link is invalid or has expired.',
       token: null,
-      flash_error: [],
     });
   }
   res.render('worker/reset-pin', {
@@ -226,7 +221,6 @@ router.get('/reset-pin/:token', (req, res) => {
     title: 'Reset PIN',
     error: null,
     token: req.params.token,
-    flash_error: req.flash('error'),
   });
 });
 
@@ -234,17 +228,17 @@ router.post('/reset-pin/:token', (req, res) => {
   const invitation = validateToken(req.params.token, 'pin_reset');
   if (!invitation) {
     req.flash('error', 'This reset link is invalid or has expired.');
-    return res.redirect('/w/forgot-pin');
+    return req.session.save(() => res.redirect('/w/forgot-pin'));
   }
 
   const { pin, pin_confirm } = req.body;
   if (!pin || !/^\d{4,6}$/.test(pin)) {
     req.flash('error', 'PIN must be 4-6 digits.');
-    return res.redirect('/w/reset-pin/' + req.params.token);
+    return req.session.save(() => res.redirect('/w/reset-pin/' + req.params.token));
   }
   if (pin !== pin_confirm) {
     req.flash('error', 'PINs do not match.');
-    return res.redirect('/w/reset-pin/' + req.params.token);
+    return req.session.save(() => res.redirect('/w/reset-pin/' + req.params.token));
   }
 
   const db = getDb();

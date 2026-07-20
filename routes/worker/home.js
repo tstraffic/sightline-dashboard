@@ -481,7 +481,7 @@ router.post('/home/preferences', (req, res) => {
   );
 
   req.flash('success', 'Home preferences saved.');
-  res.redirect('/w/home/customise');
+  req.session.save(() => res.redirect('/w/home/customise'));
 });
 
 // GET /w/home/customise — Customise Home settings page
@@ -503,7 +503,6 @@ router.get('/home/customise', (req, res) => {
   res.render('worker/home-customise', {
     title: 'Customise Home', currentPage: 'more',
     prefs,
-    flash_success: req.flash('success'),
   });
 });
 

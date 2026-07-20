@@ -334,7 +334,7 @@ router.get('/', (req, res) => {
 router.post('/regenerate-all-pdfs', async (req, res) => {
   if (normaliseRole(req.session.user.role) !== 'admin') {
     req.flash('error', 'Only admins can bulk-regenerate certs.');
-    return res.redirect('/voc-assessments');
+    return req.session.save(() => res.redirect('/voc-assessments'));
   }
   const db = getDb();
   // Every issued + active cert is in scope. Revoked certs are skipped
@@ -354,7 +354,7 @@ router.post('/regenerate-all-pdfs', async (req, res) => {
     if (result) ok++; else fail++;
   }
   req.flash('success', `Regenerated ${ok} cert PDF${ok === 1 ? '' : 's'}${fail ? ` (${fail} failed — see logs)` : ''}.`);
-  res.redirect('/voc-assessments');
+  req.session.save(() => res.redirect('/voc-assessments'));
 });
 
 // ────────────────────────────────────────────────
@@ -441,12 +441,12 @@ router.post('/quick', async (req, res) => {
   const typedName = String(b.worker_name || '').trim();
   if (!templateId || !typedName) {
     req.flash('error', 'Pick an equipment template and type a worker name.');
-    return res.redirect('/voc-assessments/quick');
+    return req.session.save(() => res.redirect('/voc-assessments/quick'));
   }
   const tpl = db.prepare('SELECT id, default_validity_months FROM voc_templates WHERE id = ? AND active = 1').get(templateId);
   if (!tpl) {
     req.flash('error', 'That equipment template is no longer active.');
-    return res.redirect('/voc-assessments/quick');
+    return req.session.save(() => res.redirect('/voc-assessments/quick'));
   }
 
   // Find-or-create the crew_member. Resolution order:
@@ -606,11 +606,11 @@ router.post('/quick', async (req, res) => {
     };
 
     req.flash('success', `Cert issued for ${typedName} (${certId}). Theory + practical pending marking.`);
-    res.redirect('/voc-assessments/quick');
+    req.session.save(() => res.redirect('/voc-assessments/quick'));
   } catch (err) {
     console.error('[voc-quick] create error:', err);
     req.flash('error', 'Failed to create quick cert: ' + err.message);
-    res.redirect('/voc-assessments/quick');
+    req.session.save(() => res.redirect('/voc-assessments/quick'));
   }
 });
 
@@ -650,13 +650,13 @@ router.post('/', (req, res) => {
   const crewId = parseInt(b.crew_member_id, 10);
   if (!templateId || !crewId) {
     req.flash('error', 'Pick a worker and an equipment template.');
-    return res.redirect('/voc-assessments/new');
+    return req.session.save(() => res.redirect('/voc-assessments/new'));
   }
   const tpl = db.prepare('SELECT id FROM voc_templates WHERE id = ?').get(templateId);
   const worker = db.prepare('SELECT id FROM crew_members WHERE id = ?').get(crewId);
   if (!tpl || !worker) {
     req.flash('error', 'Invalid worker or template.');
-    return res.redirect('/voc-assessments/new');
+    return req.session.save(() => res.redirect('/voc-assessments/new'));
   }
   const vocNumber = nextVocNumber(db);
   const today = new Date().toISOString().slice(0, 10);
@@ -672,11 +672,11 @@ router.post('/', (req, res) => {
       b.assessment_type || 'initial', today, req.session.user.id
     );
     req.flash('success', `Created ${vocNumber}.`);
-    res.redirect(`/voc-assessments/${result.lastInsertRowid}/edit`);
+    req.session.save(() => res.redirect(`/voc-assessments/${result.lastInsertRowid}/edit`));
   } catch (err) {
     console.error('[voc-assessments] create error:', err);
     req.flash('error', 'Failed to create VOC: ' + err.message);
-    res.redirect('/voc-assessments/new');
+    req.session.save(() => res.redirect('/voc-assessments/new'));
   }
 });
 
@@ -686,7 +686,7 @@ router.post('/', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const a = getAssessmentWithTemplate(db, req.params.id);
-  if (!a) { req.flash('error', 'VOC not found.'); return res.redirect('/voc-assessments'); }
+  if (!a) { req.flash('error', 'VOC not found.'); return req.session.save(() => res.redirect('/voc-assessments')); }
 
   const theoryQs = safeJsonParse(a.theory_questions_json, []);
   const practicalSections = safeJsonParse(a.practical_checklist_json, []);
@@ -726,7 +726,7 @@ router.get('/:id/edit', (req, res) => {
 router.post('/:id', (req, res) => {
   const db = getDb();
   const existing = getAssessmentWithTemplate(db, req.params.id);
-  if (!existing) { req.flash('error', 'VOC not found.'); return res.redirect('/voc-assessments'); }
+  if (!existing) { req.flash('error', 'VOC not found.'); return req.session.save(() => res.redirect('/voc-assessments')); }
   const b = req.body;
   const responses = buildResponses(b, existing);
 
@@ -808,7 +808,7 @@ router.post('/:id', (req, res) => {
     console.error('[voc-assessments] update error:', err);
     req.flash('error', 'Failed to save: ' + err.message);
   }
-  res.redirect(`/voc-assessments/${existing.id}/edit`);
+  req.session.save(() => res.redirect(`/voc-assessments/${existing.id}/edit`));
 });
 
 // ────────────────────────────────────────────────
@@ -817,7 +817,7 @@ router.post('/:id', (req, res) => {
 router.post('/:id/submit', async (req, res) => {
   const db = getDb();
   const existing = getAssessmentWithTemplate(db, req.params.id);
-  if (!existing) { req.flash('error', 'VOC not found.'); return res.redirect('/voc-assessments'); }
+  if (!existing) { req.flash('error', 'VOC not found.'); return req.session.save(() => res.redirect('/voc-assessments')); }
   const b = req.body;
   const responses = buildResponses(b, existing);
 
@@ -833,12 +833,12 @@ router.post('/:id/submit', async (req, res) => {
   if (outcome === 'nyc') {
     if (!b.manager_signed_name || !b.manager_signed_date) {
       req.flash('error', 'NYC outcomes require Manager / Supervisor sign-off (name + date).');
-      return res.redirect(`/voc-assessments/${existing.id}/edit`);
+      return req.session.save(() => res.redirect(`/voc-assessments/${existing.id}/edit`));
     }
   }
   if (!b.assessor_signed_name) {
     req.flash('error', 'Assessor signature name is required to submit.');
-    return res.redirect(`/voc-assessments/${existing.id}/edit`);
+    return req.session.save(() => res.redirect(`/voc-assessments/${existing.id}/edit`));
   }
 
   const validFrom = b.valid_from || existing.assessment_date || new Date().toISOString().slice(0, 10);
@@ -947,7 +947,7 @@ router.post('/:id/submit', async (req, res) => {
     console.error('[voc-assessments] submit error:', err);
     req.flash('error', 'Failed to submit: ' + err.message);
   }
-  res.redirect(`/voc-assessments/${existing.id}/edit`);
+  req.session.save(() => res.redirect(`/voc-assessments/${existing.id}/edit`));
 });
 
 // ────────────────────────────────────────────────
@@ -962,10 +962,10 @@ router.post('/:id/submit', async (req, res) => {
 router.get('/:id/certificate', async (req, res) => {
   const db = getDb();
   const a = getAssessmentWithTemplate(db, req.params.id);
-  if (!a) { req.flash('error', 'VOC not found.'); return res.redirect('/voc-assessments'); }
+  if (!a) { req.flash('error', 'VOC not found.'); return req.session.save(() => res.redirect('/voc-assessments')); }
   if (a.outcome !== 'competent') {
     req.flash('error', 'Only Competent assessments have a certificate.');
-    return res.redirect(`/voc-assessments/${a.id}/edit`);
+    return req.session.save(() => res.redirect(`/voc-assessments/${a.id}/edit`));
   }
   const certId = a.certificate_id || deriveCertId(a);
   const verifyUrl = verifyUrlFor(certId);
@@ -1045,18 +1045,18 @@ router.get('/:id/pdf', async (req, res) => {
 router.post('/:id/revoke', (req, res) => {
   if (normaliseRole(req.session.user.role) !== 'admin') {
     req.flash('error', 'Only admins can revoke certificates.');
-    return res.redirect(`/voc-assessments/${req.params.id}/edit`);
+    return req.session.save(() => res.redirect(`/voc-assessments/${req.params.id}/edit`));
   }
   const db = getDb();
   const a = db.prepare('SELECT id, certificate_id, certificate_status FROM voc_assessments WHERE id = ?').get(req.params.id);
   if (!a || !a.certificate_id) {
     req.flash('error', 'No certificate to revoke.');
-    return res.redirect(`/voc-assessments/${req.params.id}/edit`);
+    return req.session.save(() => res.redirect(`/voc-assessments/${req.params.id}/edit`));
   }
   const reason = (req.body.reason || '').trim();
   if (!reason) {
     req.flash('error', 'Provide a revocation reason.');
-    return res.redirect(`/voc-assessments/${req.params.id}/edit`);
+    return req.session.save(() => res.redirect(`/voc-assessments/${req.params.id}/edit`));
   }
   db.prepare(`
     UPDATE voc_assessments
@@ -1068,7 +1068,7 @@ router.post('/:id/revoke', (req, res) => {
     WHERE id = ?
   `).run(req.session.user.id, reason, a.id);
   req.flash('success', `Certificate ${a.certificate_id} revoked.`);
-  res.redirect(`/voc-assessments/${a.id}/edit`);
+  req.session.save(() => res.redirect(`/voc-assessments/${a.id}/edit`));
 });
 
 // ────────────────────────────────────────────────
@@ -1079,7 +1079,7 @@ router.post('/:id/revoke', (req, res) => {
 router.post('/:id/unrevoke', (req, res) => {
   if (normaliseRole(req.session.user.role) !== 'admin') {
     req.flash('error', 'Only admins can change certificate status.');
-    return res.redirect(`/voc-assessments/${req.params.id}/edit`);
+    return req.session.save(() => res.redirect(`/voc-assessments/${req.params.id}/edit`));
   }
   const db = getDb();
   db.prepare(`
@@ -1092,7 +1092,7 @@ router.post('/:id/unrevoke', (req, res) => {
     WHERE id = ?
   `).run(req.params.id);
   req.flash('success', 'Certificate restored to active.');
-  res.redirect(`/voc-assessments/${req.params.id}/edit`);
+  req.session.save(() => res.redirect(`/voc-assessments/${req.params.id}/edit`));
 });
 
 // ────────────────────────────────────────────────
@@ -1101,7 +1101,7 @@ router.post('/:id/unrevoke', (req, res) => {
 router.post('/:id/delete', (req, res) => {
   if (normaliseRole(req.session.user.role) !== 'admin') {
     req.flash('error', 'Only admins can delete VOCs.');
-    return res.redirect(`/voc-assessments/${req.params.id}/edit`);
+    return req.session.save(() => res.redirect(`/voc-assessments/${req.params.id}/edit`));
   }
   const db = getDb();
   try {
@@ -1110,7 +1110,7 @@ router.post('/:id/delete', (req, res) => {
   } catch (err) {
     req.flash('error', 'Delete failed: ' + err.message);
   }
-  res.redirect('/voc-assessments');
+  req.session.save(() => res.redirect('/voc-assessments'));
 });
 
 module.exports = router;

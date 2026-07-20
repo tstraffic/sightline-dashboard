@@ -91,12 +91,12 @@ router.post('/:id/:action', requirePermission('leave_approvals'), (req, res) => 
   const action = req.params.action;
   if (!['approve', 'reject', 'cancel'].includes(action)) {
     req.flash('error', 'Invalid action.');
-    return res.redirect('/leave-approvals');
+    return req.session.save(() => res.redirect('/leave-approvals'));
   }
   const newStatus = action === 'approve' ? 'approved' : action === 'reject' ? 'rejected' : 'cancelled';
 
   const row = db.prepare('SELECT * FROM employee_leave WHERE id = ?').get(req.params.id);
-  if (!row) { req.flash('error', 'Leave not found.'); return res.redirect('/leave-approvals'); }
+  if (!row) { req.flash('error', 'Leave not found.'); return req.session.save(() => res.redirect('/leave-approvals')); }
 
   // Cancel is a "second-decision" override — the leave was already
   // approved (or pending) but ops needs to retract it (worker recalled,
@@ -125,7 +125,7 @@ router.post('/:id/:action', requirePermission('leave_approvals'), (req, res) => 
   };
   req.flash('success', flashMap[action]);
   const ref = req.get('referrer') || '/leave-approvals';
-  res.redirect(ref.includes('/leave-approvals') ? ref : '/leave-approvals');
+  req.session.save(() => res.redirect(ref.includes('/leave-approvals') ? ref : '/leave-approvals'));
 });
 
 // POST /leave-approvals/bulk — approve / reject all checked rows in one go.
@@ -137,7 +137,7 @@ router.post('/bulk', requirePermission('leave_approvals'), (req, res) => {
   ids = ids.map(Number).filter(Boolean);
   if (!['approve','reject'].includes(action) || ids.length === 0) {
     req.flash('error', 'Pick at least one request and an action.');
-    return res.redirect('/leave-approvals');
+    return req.session.save(() => res.redirect('/leave-approvals'));
   }
   const newStatus = action === 'approve' ? 'approved' : 'rejected';
   const upd = db.prepare(`UPDATE employee_leave SET status = ?, approved_by_id = ?, approved_at = datetime('now') WHERE id = ? AND status = 'pending'`);
@@ -155,7 +155,7 @@ router.post('/bulk', requirePermission('leave_approvals'), (req, res) => {
     ip: req.ip,
   });
   req.flash('success', `${n} leave request${n === 1 ? '' : 's'} ${newStatus}.`);
-  res.redirect('/leave-approvals');
+  req.session.save(() => res.redirect('/leave-approvals'));
 });
 
 module.exports = router;

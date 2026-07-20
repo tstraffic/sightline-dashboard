@@ -140,7 +140,7 @@ router.post('/', (req, res) => {
   const { crew_member_id, scope, booking_id, title, description, priority, due_at } = req.body;
   if (!crew_member_id || !title || !title.trim()) {
     req.flash('error', 'Title and assignee are required.');
-    return res.redirect('/shift-tasks');
+    return req.session.save(() => res.redirect('/shift-tasks'));
   }
   // Whole-team task: needs a shift roster to fan to — a "team" general
   // task would mean the whole company, which is the office tasks system's
@@ -149,7 +149,7 @@ router.post('/', (req, res) => {
   if (crew_member_id === 'team') {
     if (scope === 'general' || !booking_id) {
       req.flash('error', 'Team tasks need a shift — pick a booking, or assign a general task to one person.');
-      return res.redirect('/shift-tasks');
+      return req.session.save(() => res.redirect('/shift-tasks'));
     }
     const group = createTeamTask(db, parseInt(booking_id, 10), {
       title: title.trim(),
@@ -160,24 +160,24 @@ router.post('/', (req, res) => {
     });
     if (!group) {
       req.flash('error', 'No crew on that booking yet — add workers first.');
-      return res.redirect('/shift-tasks');
+      return req.session.save(() => res.redirect('/shift-tasks'));
     }
     logActivity({ user: req.session.user, action: 'create', entityType: 'shift_task', details: 'Created team task: ' + title.trim() + ' (' + group.crewIds.length + ' crew)', req });
     bookingNotify.notifyTaskAssigned(group.crewIds, taskNotifyMeta(db, booking_id, title.trim()));
     req.flash('success', 'Team task created — whole crew (' + group.crewIds.length + '), first to finish ticks it off for everyone.');
-    return res.redirect('/shift-tasks');
+    return req.session.save(() => res.redirect('/shift-tasks'));
   }
   let bookingScope = null, allocScope = null;
   if (scope !== 'general') {
     if (!booking_id) {
       req.flash('error', 'Pick a shift, or mark the task as general.');
-      return res.redirect('/shift-tasks');
+      return req.session.save(() => res.redirect('/shift-tasks'));
     }
     // Assignee must be on this booking — block cross-booking task drops.
     const ok = db.prepare("SELECT 1 FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(booking_id, crew_member_id);
     if (!ok) {
       req.flash('error', "Worker isn't assigned to that booking.");
-      return res.redirect('/shift-tasks');
+      return req.session.save(() => res.redirect('/shift-tasks'));
     }
     bookingScope = booking_id;
     const alloc = db.prepare("SELECT id FROM crew_allocations WHERE booking_id=? AND crew_member_id=? LIMIT 1").get(booking_id, crew_member_id);
@@ -195,7 +195,7 @@ router.post('/', (req, res) => {
   // Ping the worker it was assigned to.
   bookingNotify.notifyTaskAssigned([crew_member_id], taskNotifyMeta(db, bookingScope, title.trim()));
   req.flash('success', scope === 'general' ? 'General task created.' : 'Shift task created.');
-  res.redirect('/shift-tasks');
+  req.session.save(() => res.redirect('/shift-tasks'));
 });
 
 // POST /shift-tasks/:id/status — toggle / set status. Grouped tasks
@@ -232,7 +232,7 @@ router.post('/:id/status', (req, res) => {
 router.post('/:id/update', (req, res) => {
   const db = getDb();
   const task = db.prepare('SELECT * FROM shift_tasks WHERE id = ?').get(req.params.id);
-  if (!task) { req.flash('error', 'Task not found.'); return res.redirect(boardQuery(req.body)); }
+  if (!task) { req.flash('error', 'Task not found.'); return req.session.save(() => res.redirect(boardQuery(req.body))); }
   const b = req.body;
   const title = (b.title || '').trim() || task.title;
   const priority = ['low', 'normal', 'high'].includes(b.priority) ? b.priority : task.priority;
@@ -242,7 +242,7 @@ router.post('/:id/update', (req, res) => {
   if (task.group_key) {
     if (b.crew_member_id && String(b.crew_member_id) !== 'team' && parseInt(b.crew_member_id, 10) !== task.crew_member_id) {
       req.flash('error', 'Team tasks belong to the whole crew — delete it and create a personal task instead.');
-      return res.redirect(boardQuery(b));
+      return req.session.save(() => res.redirect(boardQuery(b)));
     }
     db.prepare(`
       UPDATE shift_tasks SET title=?, priority=?, due_at=?, updated_at=datetime('now')
@@ -250,14 +250,14 @@ router.post('/:id/update', (req, res) => {
     `).run(title, priority, dueAt, task.group_key);
     logActivity({ user: req.session.user, action: 'update', entityType: 'shift_task', entityId: task.id, details: 'Edited team task: ' + title, req });
     req.flash('success', 'Task updated for the whole crew.');
-    return res.redirect(boardQuery(b));
+    return req.session.save(() => res.redirect(boardQuery(b)));
   }
   let crewId = parseInt(b.crew_member_id, 10) || task.crew_member_id;
   let allocId = task.allocation_id;
   if (crewId !== task.crew_member_id) {
     if (task.booking_id) {
       const ok = db.prepare('SELECT 1 FROM booking_crew WHERE booking_id=? AND crew_member_id=?').get(task.booking_id, crewId);
-      if (!ok) { req.flash('error', "Worker isn't assigned to that task's booking."); return res.redirect(boardQuery(b)); }
+      if (!ok) { req.flash('error', "Worker isn't assigned to that task's booking."); return req.session.save(() => res.redirect(boardQuery(b))); }
       const alloc = db.prepare('SELECT id FROM crew_allocations WHERE booking_id=? AND crew_member_id=? LIMIT 1').get(task.booking_id, crewId);
       allocId = alloc ? alloc.id : null;
     } else {
@@ -273,7 +273,7 @@ router.post('/:id/update', (req, res) => {
   }
   logActivity({ user: req.session.user, action: 'update', entityType: 'shift_task', entityId: task.id, details: 'Edited task: ' + title, req });
   req.flash('success', 'Task updated.');
-  res.redirect(boardQuery(b));
+  req.session.save(() => res.redirect(boardQuery(b)));
 });
 
 // POST /shift-tasks/:id/delete — grouped tasks delete as one; return
@@ -293,7 +293,7 @@ router.post('/:id/delete', (req, res) => {
     db.prepare('DELETE FROM shift_tasks WHERE id = ?').run(req.params.id);
   }
   req.flash('success', 'Task removed.');
-  res.redirect(boardQuery(req.body));
+  req.session.save(() => res.redirect(boardQuery(req.body)));
 });
 
 module.exports = router;

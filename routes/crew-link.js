@@ -39,14 +39,14 @@ router.post('/:crewId/link', (req, res) => {
     })();
     req.flash('success', 'Linked.');
   }
-  res.redirect('/crew-link');
+  req.session.save(() => res.redirect('/crew-link'));
 });
 
 router.post('/:crewId/unlink', (req, res) => {
   const db = getDb();
   db.prepare('UPDATE employees SET linked_crew_member_id = NULL WHERE linked_crew_member_id = ?').run(parseInt(req.params.crewId, 10));
   req.flash('success', 'Unlinked.');
-  res.redirect('/crew-link');
+  req.session.save(() => res.redirect('/crew-link'));
 });
 
 // Bulk: link every unlinked crew member that has an exact-name free employee
@@ -59,7 +59,7 @@ router.post('/auto-link', (req, res) => {
     for (const c of unlinkedCrew) { if (c.suggest) { upd.run(c.id, c.suggest.id); n++; } }
   })();
   req.flash('success', n + ' crew member(s) auto-linked by exact name match.');
-  res.redirect('/crew-link');
+  req.session.save(() => res.redirect('/crew-link'));
 });
 
 module.exports = router;

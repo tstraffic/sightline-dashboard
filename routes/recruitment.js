@@ -367,7 +367,7 @@ function pumpInductionReminders(db, user, todayIso) {
 router.post('/', (req, res) => {
   const db = getDb();
   const name = (req.body.applicant_name || '').toString().trim().slice(0, 200);
-  if (!name) { req.flash('error', 'Applicant name is required.'); return res.redirect(backUrl(req)); }
+  if (!name) { req.flash('error', 'Applicant name is required.'); return req.session.save(() => res.redirect(backUrl(req))); }
   db.prepare(`
     INSERT INTO seek_applicants (applicant_name, phone, email, date_applied, stage, notes, created_by_id)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -381,7 +381,7 @@ router.post('/', (req, res) => {
     req.session.user.id,
   );
   req.flash('success', `Added ${name}.`);
-  res.redirect(backUrl(req));
+  req.session.save(() => res.redirect(backUrl(req)));
 });
 
 // POST /induction/admin/recruitment/:id — partial update. Only the fields
@@ -392,7 +392,7 @@ router.post('/:id', async (req, res) => {
   const row = db.prepare('SELECT id, stage, date_called, induction_date, induction_time, applicant_name, email, linked_crew_member_id, induction_email_sent_at FROM seek_applicants WHERE id = ?').get(req.params.id);
   if (!row) {
     if (wantsJson(req)) return res.status(404).json({ ok: false, error: 'Applicant not found.' });
-    req.flash('error', 'Applicant not found.'); return res.redirect(backUrl(req));
+    req.flash('error', 'Applicant not found.'); return req.session.save(() => res.redirect(backUrl(req)));
   }
 
   const sets = [];
@@ -460,7 +460,7 @@ router.post('/:id', async (req, res) => {
           return res.status(422).json({ ok: false, error: 'needs_induction_date', message: 'Set an induction date before booking.' });
         }
         req.flash('error', 'Set an induction date before booking.');
-        return res.redirect(backUrl(req));
+        return req.session.save(() => res.redirect(backUrl(req)));
       }
       sets.push('stage = ?'); params.push(candidate);
       newStage = candidate;
@@ -522,7 +522,7 @@ router.post('/:id', async (req, res) => {
   if (wantsJson(req)) {
     return res.json({ ok: true, stage: newStage, inductionEmailed, reEmail: wasReEmail });
   }
-  res.redirect(backUrl(req));
+  req.session.save(() => res.redirect(backUrl(req)));
 });
 
 // POST /induction/admin/recruitment/:id/resend-confirmation — manually re-send
@@ -549,7 +549,7 @@ router.post('/:id/delete', (req, res) => {
   db.prepare('DELETE FROM seek_applicants WHERE id = ?').run(req.params.id);
   if (wantsJson(req)) return res.json({ ok: true });
   req.flash('success', 'Applicant removed.');
-  res.redirect(backUrl(req));
+  req.session.save(() => res.redirect(backUrl(req)));
 });
 
 // GET /induction/admin/recruitment/export.csv — current month as CSV.

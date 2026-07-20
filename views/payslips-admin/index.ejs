@@ -127,7 +127,4 @@
   </div>
 </div>
 
-<% if (flash_success && flash_success.length) { %>
-  <div class="fixed top-20 right-4 px-4 py-2 rounded-lg bg-emerald-500 text-white text-sm font-semibold shadow-lg z-50" id="flash"><%= flash_success[0] %></div>
-  <script>setTimeout(()=>document.getElementById('flash')?.remove(), 2800);</script>
-<% } %>
+<%# Flash renders via the layout banner (global locals). %>

@@ -28,7 +28,7 @@ function loadParent(db, planId) {
 router.get('/new', (req, res) => {
   const db = getDb();
   const parent = loadParent(db, req.query.plan_id);
-  if (!parent) { req.flash('error', 'A parent plan is required to create a CTMP.'); return res.redirect('/plans'); }
+  if (!parent) { req.flash('error', 'A parent plan is required to create a CTMP.'); return req.session.save(() => res.redirect('/plans')); }
   res.render('ctmps/form', { title: 'New CTMP', ctmp: null, parent, user: req.session.user });
 });
 
@@ -37,7 +37,7 @@ router.post('/', upload.single('ctmp_file'), (req, res) => {
   const db = getDb();
   const b = req.body;
   const parent = loadParent(db, b.plan_id);
-  if (!parent) { req.flash('error', 'Parent plan not found.'); return res.redirect('/plans'); }
+  if (!parent) { req.flash('error', 'Parent plan not found.'); return req.session.save(() => res.redirect('/plans')); }
 
   // CTMP number: derive from parent plan + sequence
   const count = db.prepare('SELECT COUNT(*) AS c FROM ctmps WHERE plan_id = ?').get(parent.id).c;
@@ -54,10 +54,10 @@ router.post('/', upload.single('ctmp_file'), (req, res) => {
     logActivity({ user: req.session.user, action: 'create', entityType: 'ctmp', entityId: result.lastInsertRowid, entityLabel: ctmpNumber, jobId: parent.job_id, details: `Created CTMP linked to ${parent.plan_number}`, ip: req.ip });
     autoLogDiary(db, { jobId: parent.job_id, summary: `[${req.session.user.full_name}] CTMP ${ctmpNumber} created (linked to ${parent.plan_number}).`, userId: req.session.user.id });
     req.flash('success', `CTMP ${ctmpNumber} created.`);
-    res.redirect(`/ctmps/${result.lastInsertRowid}`);
+    req.session.save(() => res.redirect(`/ctmps/${result.lastInsertRowid}`));
   } catch (err) {
     req.flash('error', 'Failed to create CTMP: ' + err.message);
-    res.redirect(`/ctmps/new?plan_id=${parent.id}`);
+    req.session.save(() => res.redirect(`/ctmps/new?plan_id=${parent.id}`));
   }
 });
 
@@ -70,7 +70,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN traffic_plans tp ON c.plan_id = tp.id
     LEFT JOIN jobs j ON c.job_id = j.id
     WHERE c.id = ?`).get(req.params.id);
-  if (!ctmp) { req.flash('error', 'CTMP not found.'); return res.redirect('/plans'); }
+  if (!ctmp) { req.flash('error', 'CTMP not found.'); return req.session.save(() => res.redirect('/plans')); }
   const revisions = db.prepare('SELECT cr.*, u.full_name AS created_by_name FROM ctmp_revisions cr LEFT JOIN users u ON cr.created_by = u.id WHERE cr.ctmp_id = ? ORDER BY cr.id DESC').all(ctmp.id);
   const activity = db.prepare("SELECT * FROM activity_log WHERE entity_type = 'ctmp' AND entity_id = ? ORDER BY created_at DESC LIMIT 50").all(ctmp.id);
   res.render('ctmps/show', { title: ctmp.title || ctmp.ctmp_number, ctmp, revisions, activity, user: req.session.user });
@@ -80,7 +80,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const ctmp = db.prepare('SELECT * FROM ctmps WHERE id = ?').get(req.params.id);
-  if (!ctmp) { req.flash('error', 'CTMP not found.'); return res.redirect('/plans'); }
+  if (!ctmp) { req.flash('error', 'CTMP not found.'); return req.session.save(() => res.redirect('/plans')); }
   const parent = loadParent(db, ctmp.plan_id);
   res.render('ctmps/form', { title: 'Edit CTMP', ctmp, parent, user: req.session.user });
 });
@@ -89,7 +89,7 @@ router.get('/:id/edit', (req, res) => {
 router.post('/:id', upload.single('ctmp_file'), (req, res) => {
   const db = getDb();
   const ctmp = db.prepare('SELECT * FROM ctmps WHERE id = ?').get(req.params.id);
-  if (!ctmp) { req.flash('error', 'CTMP not found.'); return res.redirect('/plans'); }
+  if (!ctmp) { req.flash('error', 'CTMP not found.'); return req.session.save(() => res.redirect('/plans')); }
   const b = req.body;
   let filePath = ctmp.file_path || '';
   let fileName = ctmp.file_original_name || '';
@@ -100,14 +100,14 @@ router.post('/:id', upload.single('ctmp_file'), (req, res) => {
     logActivity({ user: req.session.user, action: 'update', entityType: 'ctmp', entityId: ctmp.id, entityLabel: ctmp.ctmp_number, jobId: ctmp.job_id, details: 'Updated CTMP', beforeValue: ctmp.qa_status || '', afterValue: b.qa_status || '', ip: req.ip });
     req.flash('success', 'CTMP updated.');
   } catch (err) { req.flash('error', 'Failed to update CTMP: ' + err.message); }
-  res.redirect(`/ctmps/${ctmp.id}`);
+  req.session.save(() => res.redirect(`/ctmps/${ctmp.id}`));
 });
 
 // Add a revision (auto Draft → Rev A → Rev B …)
 router.post('/:id/revisions', upload.single('revision_file'), (req, res) => {
   const db = getDb();
   const ctmp = db.prepare('SELECT * FROM ctmps WHERE id = ?').get(req.params.id);
-  if (!ctmp) { req.flash('error', 'CTMP not found.'); return res.redirect('/plans'); }
+  if (!ctmp) { req.flash('error', 'CTMP not found.'); return req.session.save(() => res.redirect('/plans')); }
   const b = req.body;
   const label = nextCtmpRevision(db, ctmp);
   const filePath = req.file ? 'uploads/' + req.file.filename : '';
@@ -121,35 +121,35 @@ router.post('/:id/revisions', upload.single('revision_file'), (req, res) => {
     autoLogDiary(db, { jobId: ctmp.job_id, summary: `[${req.session.user.full_name}] CTMP ${ctmp.ctmp_number} revised to ${label}. ${b.notes || ''}`, userId: req.session.user.id });
     req.flash('success', `Revision ${label} added.`);
   } catch (err) { req.flash('error', 'Failed to add revision: ' + err.message); }
-  res.redirect(`/ctmps/${ctmp.id}`);
+  req.session.save(() => res.redirect(`/ctmps/${ctmp.id}`));
 });
 
 // Update QA status only
 router.post('/:id/qa', (req, res) => {
   const db = getDb();
   const ctmp = db.prepare('SELECT * FROM ctmps WHERE id = ?').get(req.params.id);
-  if (!ctmp) { req.flash('error', 'CTMP not found.'); return res.redirect('/plans'); }
+  if (!ctmp) { req.flash('error', 'CTMP not found.'); return req.session.save(() => res.redirect('/plans')); }
   const qa = req.body.qa_status || 'pending';
   try {
     db.prepare('UPDATE ctmps SET qa_status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(qa, ctmp.id);
     logActivity({ user: req.session.user, action: 'update', entityType: 'ctmp', entityId: ctmp.id, entityLabel: ctmp.ctmp_number, jobId: ctmp.job_id, details: `QA status → ${qa}`, beforeValue: ctmp.qa_status || '', afterValue: qa, ip: req.ip });
     req.flash('success', `QA status set to ${qa}.`);
   } catch (err) { req.flash('error', 'Failed to update QA: ' + err.message); }
-  res.redirect(`/ctmps/${ctmp.id}`);
+  req.session.save(() => res.redirect(`/ctmps/${ctmp.id}`));
 });
 
 // Delete CTMP
 router.post('/:id/delete', (req, res) => {
   const db = getDb();
   const ctmp = db.prepare('SELECT * FROM ctmps WHERE id = ?').get(req.params.id);
-  if (!ctmp) { req.flash('error', 'CTMP not found.'); return res.redirect('/plans'); }
+  if (!ctmp) { req.flash('error', 'CTMP not found.'); return req.session.save(() => res.redirect('/plans')); }
   const planId = ctmp.plan_id;
   try {
     db.prepare('DELETE FROM ctmps WHERE id = ?').run(ctmp.id);
     autoLogDiary(db, { jobId: ctmp.job_id, summary: `[${req.session.user.full_name}] CTMP ${ctmp.ctmp_number} deleted.`, userId: req.session.user.id });
     req.flash('success', `CTMP ${ctmp.ctmp_number} deleted.`);
   } catch (err) { req.flash('error', 'Failed to delete CTMP: ' + err.message); }
-  res.redirect(planId ? `/plans/${planId}` : '/plans');
+  req.session.save(() => res.redirect(planId ? `/plans/${planId}` : '/plans'));
 });
 
 module.exports = router;

@@ -160,7 +160,7 @@ router.post('/', sopUpload.single('sop_file'), (req, res) => {
     const title = String(b.title || '').trim();
     if (!title) {
       req.flash('error', 'Title is required.');
-      return res.redirect('/sop-register/new');
+      return req.session.save(() => res.redirect('/sop-register/new'));
     }
     const kind = KIND_VALUES.includes(b.kind) ? b.kind : 'job';
     // Status defaults: file uploaded → active; no file → draft. Templates
@@ -198,11 +198,11 @@ router.post('/', sopUpload.single('sop_file'), (req, res) => {
       notifyCrewSopUpdate({ id: r.lastInsertRowid, title });
     }
     req.flash('success', kind === 'template' ? 'SOP template imported.' : 'SOP created.');
-    return res.redirect('/sop-register/' + r.lastInsertRowid);
+    return req.session.save(() => res.redirect('/sop-register/' + r.lastInsertRowid));
   } catch (err) {
     console.error('[sop-register POST]', err);
     req.flash('error', 'Could not create SOP: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/sop-register/new');
+    return req.session.save(() => res.redirect('/sop-register/new'));
   }
 });
 
@@ -219,7 +219,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN users cu ON cu.id = s.created_by_id
     WHERE s.id = ?
   `).get(req.params.id);
-  if (!sop) { req.flash('error', 'SOP not found.'); return res.redirect('/sop-register'); }
+  if (!sop) { req.flash('error', 'SOP not found.'); return req.session.save(() => res.redirect('/sop-register')); }
   const ackSummary = db.prepare(`
     SELECT
       (SELECT COUNT(*) FROM crew_members WHERE active = 1) AS total_crew,
@@ -242,7 +242,7 @@ router.get('/:id/acknowledgements', (req, res) => {
     LEFT JOIN jobs j ON j.id = s.job_id
     WHERE s.id = ?
   `).get(req.params.id);
-  if (!sop) { req.flash('error', 'SOP not found.'); return res.redirect('/sop-register'); }
+  if (!sop) { req.flash('error', 'SOP not found.'); return req.session.save(() => res.redirect('/sop-register')); }
   const rows = db.prepare(`
     SELECT cm.id AS crew_id, cm.full_name, cm.employee_id,
            a.signed_at, a.version_token AS acked_token, a.signed_via
@@ -264,7 +264,7 @@ router.get('/:id/acknowledgements', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const sop = db.prepare("SELECT * FROM sop_register WHERE id = ?").get(req.params.id);
-  if (!sop) { req.flash('error', 'SOP not found.'); return res.redirect('/sop-register'); }
+  if (!sop) { req.flash('error', 'SOP not found.'); return req.session.save(() => res.redirect('/sop-register')); }
   const choices = loadFormChoices(db);
   res.render('sop-register/form', {
     title: 'Edit SOP', currentPage: 'sop-register',
@@ -280,7 +280,7 @@ router.post('/:id', sopUpload.single('sop_file'), (req, res) => {
   try {
     const db = getDb();
     const sop = db.prepare("SELECT * FROM sop_register WHERE id = ?").get(req.params.id);
-    if (!sop) { req.flash('error', 'SOP not found.'); return res.redirect('/sop-register'); }
+    if (!sop) { req.flash('error', 'SOP not found.'); return req.session.save(() => res.redirect('/sop-register')); }
     const b = req.body;
     const title = String(b.title || '').trim() || sop.title;
     const kind = KIND_VALUES.includes(b.kind) ? b.kind : sop.kind;
@@ -335,11 +335,11 @@ router.post('/:id', sopUpload.single('sop_file'), (req, res) => {
       notifyCrewSopUpdate({ id: sop.id, title });
     }
     req.flash('success', 'SOP updated.');
-    return res.redirect('/sop-register/' + sop.id);
+    return req.session.save(() => res.redirect('/sop-register/' + sop.id));
   } catch (err) {
     console.error('[sop-register PUT]', err);
     req.flash('error', 'Update failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/sop-register/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/sop-register/' + req.params.id + '/edit'));
   }
 });
 
@@ -347,9 +347,9 @@ router.post('/:id', sopUpload.single('sop_file'), (req, res) => {
 router.get('/:id/file', (req, res) => {
   const db = getDb();
   const sop = db.prepare("SELECT file_path, file_original_name FROM sop_register WHERE id = ?").get(req.params.id);
-  if (!sop || !sop.file_path) { req.flash('error', 'No file attached.'); return res.redirect('/sop-register/' + req.params.id); }
+  if (!sop || !sop.file_path) { req.flash('error', 'No file attached.'); return req.session.save(() => res.redirect('/sop-register/' + req.params.id)); }
   const abs = path.join(__dirname, '..', sop.file_path);
-  if (!fs.existsSync(abs)) { req.flash('error', 'File missing on disk.'); return res.redirect('/sop-register/' + req.params.id); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'File missing on disk.'); return req.session.save(() => res.redirect('/sop-register/' + req.params.id)); }
   return res.download(abs, sop.file_original_name || path.basename(abs));
 });
 
@@ -359,17 +359,17 @@ router.post('/:id/archive', (req, res) => {
   try {
     const db = getDb();
     const sop = db.prepare("SELECT * FROM sop_register WHERE id = ?").get(req.params.id);
-    if (!sop) { req.flash('error', 'SOP not found.'); return res.redirect('/sop-register'); }
+    if (!sop) { req.flash('error', 'SOP not found.'); return req.session.save(() => res.redirect('/sop-register')); }
     const nextStatus = sop.status === 'archived' ? 'active' : 'archived';
     db.prepare("UPDATE sop_register SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(nextStatus, sop.id);
     try { logActivity({ user: req.session.user, action: nextStatus === 'archived' ? 'archive' : 'restore', entityType: 'sop_register', entityId: sop.id, entityLabel: sop.title, details: '', ip: req.ip }); } catch (e) {}
     req.flash('success', nextStatus === 'archived' ? 'SOP archived.' : 'SOP restored.');
     const back = req.get('referer') || '/sop-register';
-    return res.redirect(back);
+    return req.session.save(() => res.redirect(back));
   } catch (err) {
     console.error('[sop-register archive]', err);
     req.flash('error', 'Archive failed.');
-    return res.redirect('/sop-register');
+    return req.session.save(() => res.redirect('/sop-register'));
   }
 });
 
@@ -378,15 +378,15 @@ router.post('/:id/delete', (req, res) => {
   try {
     const db = getDb();
     const sop = db.prepare("SELECT * FROM sop_register WHERE id = ?").get(req.params.id);
-    if (!sop) { req.flash('error', 'SOP not found.'); return res.redirect('/sop-register'); }
+    if (!sop) { req.flash('error', 'SOP not found.'); return req.session.save(() => res.redirect('/sop-register')); }
     db.prepare("DELETE FROM sop_register WHERE id = ?").run(sop.id);
     try { logActivity({ user: req.session.user, action: 'delete', entityType: 'sop_register', entityId: sop.id, entityLabel: sop.title, details: '', ip: req.ip }); } catch (e) {}
     req.flash('success', 'SOP deleted.');
-    return res.redirect('/sop-register');
+    return req.session.save(() => res.redirect('/sop-register'));
   } catch (err) {
     console.error('[sop-register DELETE]', err);
     req.flash('error', 'Delete failed.');
-    return res.redirect('/sop-register');
+    return req.session.save(() => res.redirect('/sop-register'));
   }
 });
 

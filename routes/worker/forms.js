@@ -77,7 +77,7 @@ function withPhotoUploadError(fields) {
       }
       console.error('[forms] photo upload error:', err.code || err.message);
       req.flash('error', msg);
-      return res.redirect('back');
+      return req.session.save(() => res.redirect('back'));
     });
   };
 }
@@ -207,7 +207,7 @@ router.post('/forms/draft/:id/delete', (req, res) => {
   const db = getDb();
   const worker = req.session.worker;
   const draft = db.prepare("SELECT * FROM safety_forms WHERE id = ? AND status = 'draft'").get(req.params.id);
-  if (!draft) { req.flash('error', 'Draft not found or already submitted.'); return res.redirect('back'); }
+  if (!draft) { req.flash('error', 'Draft not found or already submitted.'); return req.session.save(() => res.redirect('back')); }
   // Guard: worker has to be on this draft's shift.
   let allowed = false;
   if (draft.shift_key && draft.shift_key.startsWith('b:')) {
@@ -216,7 +216,7 @@ router.post('/forms/draft/:id/delete', (req, res) => {
     const parts = draft.shift_key.slice(2).split(':');
     if (parts.length === 2) allowed = !!db.prepare("SELECT 1 FROM crew_allocations WHERE job_id = ? AND allocation_date = ? AND crew_member_id = ? AND status != 'cancelled'").get(parts[0], parts[1], worker.id);
   }
-  if (!allowed) { req.flash('error', "You're not on this shift."); return res.redirect('back'); }
+  if (!allowed) { req.flash('error', "You're not on this shift."); return req.session.save(() => res.redirect('back')); }
 
   // Photo files on disk get cleaned along with the row (FK ON DELETE CASCADE
   // wipes safety_form_photos automatically; here we also unlink the files).
@@ -236,7 +236,7 @@ router.post('/forms/draft/:id/delete', (req, res) => {
   } catch (_) {}
 
   req.flash('success', 'Draft deleted.');
-  return res.redirect('back');
+  return req.session.save(() => res.redirect('back'));
 });
 
 // GET /w/forms — Form type selector with today's status
@@ -368,9 +368,9 @@ router.post('/forms/prestart', (req, res) => {
 
   // Redirect back to job detail if came from there
   if (allocation_id) {
-    return res.redirect('/w/jobs/' + allocation_id + '?tab=forms');
+    return req.session.save(() => res.redirect('/w/jobs/' + allocation_id + '?tab=forms'));
   }
-  res.redirect('/w/forms');
+  req.session.save(() => res.redirect('/w/forms'));
 });
 
 // GET /w/forms/take5
@@ -411,9 +411,9 @@ router.post('/forms/take5', (req, res) => {
 
   req.flash('success', 'Take 5 submitted.');
   if (allocation_id) {
-    return res.redirect('/w/jobs/' + allocation_id + '?tab=forms');
+    return req.session.save(() => res.redirect('/w/jobs/' + allocation_id + '?tab=forms'));
   }
-  res.redirect('/w/forms');
+  req.session.save(() => res.redirect('/w/forms'));
 });
 
 // GET /w/forms/incident
@@ -436,7 +436,7 @@ router.post('/forms/incident', (req, res) => {
 
   if (!title || !description) {
     req.flash('error', 'Title and description are required.');
-    return res.redirect('/w/forms/incident');
+    return req.session.save(() => res.redirect('/w/forms/incident'));
   }
 
   // Generate incident number
@@ -464,7 +464,7 @@ router.post('/forms/incident', (req, res) => {
   `).run(worker.id, JSON.stringify({ incident_type, severity, title, description, location, incident_number: incidentNumber }), latitude || null, longitude || null);
 
   req.flash('success', 'Incident reported: ' + incidentNumber);
-  res.redirect('/w/forms');
+  req.session.save(() => res.redirect('/w/forms'));
 });
 
 // GET /w/forms/hazard
@@ -489,7 +489,7 @@ router.post('/forms/hazard', (req, res) => {
   `).run(worker.id, JSON.stringify(formData), req.body.latitude || null, req.body.longitude || null);
 
   req.flash('success', 'Hazard reported.');
-  res.redirect('/w/forms');
+  req.session.save(() => res.redirect('/w/forms'));
 });
 
 // GET /w/forms/equipment
@@ -516,9 +516,9 @@ router.post('/forms/equipment', (req, res) => {
 
   req.flash('success', 'Equipment check submitted.');
   if (allocation_id) {
-    return res.redirect('/w/jobs/' + allocation_id + '?tab=forms');
+    return req.session.save(() => res.redirect('/w/jobs/' + allocation_id + '?tab=forms'));
   }
-  res.redirect('/w/forms');
+  req.session.save(() => res.redirect('/w/forms'));
 });
 
 // GET /w/forms/history — My submitted forms
@@ -596,7 +596,7 @@ function requireAllocation(req, res) {
   const allocationId = req.query.allocationId ? Number(req.query.allocationId) : null;
   if (!allocationId) {
     req.flash('error', 'Open this checklist from the shift it belongs to.');
-    res.redirect('/w/jobs');
+    req.session.save(() => res.redirect('/w/jobs'));
     return null;
   }
   const allocation = db.prepare(`
@@ -607,7 +607,7 @@ function requireAllocation(req, res) {
   `).get(allocationId, worker.id);
   if (!allocation) {
     req.flash('error', 'Shift not found or not yours.');
-    res.redirect('/w/jobs');
+    req.session.save(() => res.redirect('/w/jobs'));
     return null;
   }
   return allocation;
@@ -676,8 +676,6 @@ router.get('/forms/vehicle-prestart', (req, res) => {
     items, sections,
     allocation,
     recentVehicles,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
@@ -694,7 +692,7 @@ router.post('/forms/vehicle-prestart', photoUpload.array('answer_arrow_board_pho
     allocation = db.prepare('SELECT id, job_id FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
     if (!allocation) {
       req.flash('error', 'Allocation not found or not yours.');
-      return res.redirect('/w/forms/vehicle-prestart');
+      return req.session.save(() => res.redirect('/w/forms/vehicle-prestart'));
     }
   }
 
@@ -792,8 +790,8 @@ router.post('/forms/vehicle-prestart', photoUpload.array('answer_arrow_board_pho
   fireOpsNotification(db, safetyFormId);
 
   req.flash('success', 'Vehicle Pre-Start submitted.');
-  if (allocation) return res.redirect('/w/jobs/' + allocation.id + '?tab=forms');
-  return res.redirect('/w/forms');
+  if (allocation) return req.session.save(() => res.redirect('/w/jobs/' + allocation.id + '?tab=forms'));
+  return req.session.save(() => res.redirect('/w/forms'));
 });
 
 // SWMS dropdown is shared between Risk Assessment & TC Prestart Declaration —
@@ -899,8 +897,6 @@ router.get('/forms/risk-assessment', (req, res) => {
     currentPage: 'forms',
     allocation,
     questions,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
@@ -915,7 +911,7 @@ router.post('/forms/risk-assessment', (req, res) => {
     allocation = db.prepare('SELECT id, job_id FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
     if (!allocation) {
       req.flash('error', 'Allocation not found or not yours.');
-      return res.redirect('/w/forms/risk-assessment');
+      return req.session.save(() => res.redirect('/w/forms/risk-assessment'));
     }
   }
 
@@ -970,8 +966,8 @@ router.post('/forms/risk-assessment', (req, res) => {
   fireOpsNotification(db, raResult.lastInsertRowid);
 
   req.flash('success', 'Risk Assessment & Toolbox submitted.');
-  if (allocation) return res.redirect('/w/jobs/' + allocation.id + '?tab=forms');
-  return res.redirect('/w/forms');
+  if (allocation) return req.session.save(() => res.redirect('/w/jobs/' + allocation.id + '?tab=forms'));
+  return req.session.save(() => res.redirect('/w/forms'));
 });
 
 // ============================================
@@ -989,8 +985,6 @@ router.get('/forms/tc-prestart', (req, res) => {
     currentPage: 'forms',
     allocation,
     swmsOptions: SWMS_OPTIONS,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
@@ -1005,7 +999,7 @@ router.post('/forms/tc-prestart', (req, res) => {
     allocation = db.prepare('SELECT id, job_id FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
     if (!allocation) {
       req.flash('error', 'Allocation not found or not yours.');
-      return res.redirect('/w/forms/tc-prestart');
+      return req.session.save(() => res.redirect('/w/forms/tc-prestart'));
     }
   }
 
@@ -1034,8 +1028,8 @@ router.post('/forms/tc-prestart', (req, res) => {
   fireOpsNotification(db, tcResult.lastInsertRowid);
 
   req.flash('success', 'TC Prestart Declaration submitted.');
-  if (allocation) return res.redirect('/w/jobs/' + allocation.id + '?tab=forms');
-  return res.redirect('/w/forms');
+  if (allocation) return req.session.save(() => res.redirect('/w/jobs/' + allocation.id + '?tab=forms'));
+  return req.session.save(() => res.redirect('/w/forms'));
 });
 
 // ============================================
@@ -1066,8 +1060,6 @@ router.get('/forms/post-shift-vehicle', (req, res) => {
     currentPage: 'forms',
     allocation,
     suggestedVehicle,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
@@ -1087,7 +1079,7 @@ router.post('/forms/post-shift-vehicle', photoUpload.fields([
     allocation = db.prepare('SELECT id, job_id FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
     if (!allocation) {
       req.flash('error', 'Allocation not found or not yours.');
-      return res.redirect('/w/forms/post-shift-vehicle');
+      return req.session.save(() => res.redirect('/w/forms/post-shift-vehicle'));
     }
     // Note: T&S crews don't use a clock in/out flow — the post-shift
     // vehicle checklist is filed at end of shift on its own merit, so we
@@ -1135,8 +1127,8 @@ router.post('/forms/post-shift-vehicle', photoUpload.fields([
   fireOpsNotification(db, safetyFormId);
 
   req.flash('success', 'Post-Shift Vehicle Checklist submitted.');
-  if (allocation) return res.redirect('/w/jobs/' + allocation.id + '?tab=forms');
-  return res.redirect('/w/forms');
+  if (allocation) return req.session.save(() => res.redirect('/w/jobs/' + allocation.id + '?tab=forms'));
+  return req.session.save(() => res.redirect('/w/forms'));
 });
 
 // ============================================
@@ -1197,8 +1189,6 @@ router.get('/forms/team-leader', (req, res) => {
     draft,
     draftData,
     draftPhotos,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
@@ -1220,7 +1210,7 @@ router.post('/forms/team-leader', withPhotoUploadError([
     `).get(allocationId, worker.id);
     if (!allocation) {
       req.flash('error', "We couldn't match this shift to you — please reopen it from your Jobs list.");
-      return res.redirect('/w/forms/team-leader');
+      return req.session.save(() => res.redirect('/w/forms/team-leader'));
     }
   }
 
@@ -1262,7 +1252,7 @@ router.post('/forms/team-leader', withPhotoUploadError([
         const allFiles = collectMulterFiles(req);
         if (allFiles.length) await persistFormPhotos(db, draftRow.id, allFiles, tagForTeamLeader);
       } catch (e) { console.error('[team-leader] auto-draft on validation fail:', e.message); }
-      return allocation ? res.redirect('/w/forms/team-leader?allocationId=' + allocation.id) : res.redirect('/w/forms/team-leader');
+      return allocation ? req.session.save(() => res.redirect('/w/forms/team-leader?allocationId=' + allocation.id)) : req.session.save(() => res.redirect('/w/forms/team-leader'));
     }
   }
 
@@ -1286,14 +1276,14 @@ router.post('/forms/team-leader', withPhotoUploadError([
 
   if (isSaveDraft) {
     req.flash('success', existingDraft ? 'Draft updated. Your team can pick this up.' : 'Draft saved. Your team can resume it here.');
-    return allocation ? res.redirect('/w/forms/team-leader?allocationId=' + allocation.id) : res.redirect('/w/forms/team-leader');
+    return allocation ? req.session.save(() => res.redirect('/w/forms/team-leader?allocationId=' + allocation.id)) : req.session.save(() => res.redirect('/w/forms/team-leader'));
   }
 
   fireOpsNotification(db, safetyFormId);
 
   req.flash('success', 'Team Leader Checklist submitted.');
-  if (allocation) return res.redirect('/w/jobs/' + allocation.id + '?tab=forms');
-  return res.redirect('/w/forms');
+  if (allocation) return req.session.save(() => res.redirect('/w/jobs/' + allocation.id + '?tab=forms'));
+  return req.session.save(() => res.redirect('/w/forms'));
 });
 
 function collectMulterFiles(req) {

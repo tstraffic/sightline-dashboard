@@ -42,14 +42,14 @@ router.post('/', (req, res) => {
     );
     logActivity({ user: req.session.user, action: 'create', entityType: 'crew_member', entityId: result.lastInsertRowid, entityLabel: b.full_name, details: 'Added crew member', ip: req.ip });
     req.flash('success', b.full_name + ' added to workforce.');
-    res.redirect('/crew/' + result.lastInsertRowid);
+    req.session.save(() => res.redirect('/crew/' + result.lastInsertRowid));
   } catch (err) {
     if (err.message.includes('UNIQUE')) {
       req.flash('error', 'Employee ID "' + b.employee_id + '" already exists.');
     } else {
       req.flash('error', 'Failed to add crew member: ' + err.message);
     }
-    res.redirect('/crew/new');
+    req.session.save(() => res.redirect('/crew/new'));
   }
 });
 
@@ -63,12 +63,12 @@ router.post('/', (req, res) => {
 router.post('/:id/deactivate', (req, res) => {
   const db = getDb();
   const id = parseInt(req.params.id, 10);
-  if (!id) { req.flash('error', 'No crew member specified.'); return res.redirect('back'); }
+  if (!id) { req.flash('error', 'No crew member specified.'); return req.session.save(() => res.redirect('back')); }
   const m = db.prepare('SELECT id, full_name, employee_id, active FROM crew_members WHERE id = ?').get(id);
-  if (!m) { req.flash('error', 'Crew member not found.'); return res.redirect('back'); }
+  if (!m) { req.flash('error', 'Crew member not found.'); return req.session.save(() => res.redirect('back')); }
   if (!m.active) {
     req.flash('success', `${m.full_name} is already deactivated.`);
-    return res.redirect(req.get('referer') || '/crew');
+    return req.session.save(() => res.redirect(req.get('referer') || '/crew'));
   }
   try {
     db.prepare('UPDATE crew_members SET active = 0 WHERE id = ?').run(id);
@@ -94,7 +94,7 @@ router.post('/:id/deactivate', (req, res) => {
     console.error('[crew] single-row deactivate error:', err);
     req.flash('error', 'Failed to deactivate: ' + err.message);
   }
-  res.redirect(req.get('referer') || '/crew');
+  req.session.save(() => res.redirect(req.get('referer') || '/crew'));
 });
 
 // POST /bulk — Bulk actions on crew members
@@ -110,14 +110,14 @@ router.post('/bulk', (req, res) => {
     logActivity({ user: req.session.user, action: 'update', entityType: 'crew_member', entityLabel: `Bulk deactivated ${ids.length} crew members`, ip: req.ip });
     req.flash('success', ids.length + ' crew member(s) deactivated.');
   }
-  res.redirect('/crew');
+  req.session.save(() => res.redirect('/crew'));
 });
 
 // GET /:id/edit — Edit Crew Member form
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const editMember = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
-  if (!editMember) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  if (!editMember) { req.flash('error', 'Crew member not found'); return req.session.save(() => res.redirect('/crew')); }
   res.render('crew/form', { title: 'Edit ' + editMember.full_name, currentPage: 'crew', editMember });
 });
 
@@ -126,7 +126,7 @@ router.post('/:id', (req, res) => {
   const db = getDb();
   const b = req.body;
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
-  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  if (!member) { req.flash('error', 'Crew member not found'); return req.session.save(() => res.redirect('/crew')); }
   try {
     db.prepare(`
       UPDATE crew_members SET full_name=?, employee_id=?, role=?, tcp_level=?, phone=?, email=?, company=?, employment_type=?, hourly_rate=?, licence_type=?, licence_expiry=?, white_card=?, white_card_expiry=?, induction_date=?, medical_expiry=?, active=? WHERE id=?
@@ -150,10 +150,10 @@ router.post('/:id', (req, res) => {
     } catch (e) { /* column drift ok */ }
     logActivity({ user: req.session.user, action: 'update', entityType: 'crew_member', entityId: member.id, entityLabel: b.full_name, details: 'Updated crew member details', ip: req.ip });
     req.flash('success', b.full_name + ' updated.');
-    res.redirect('/crew/' + member.id);
+    req.session.save(() => res.redirect('/crew/' + member.id));
   } catch (err) {
     req.flash('error', 'Failed to update: ' + err.message);
-    res.redirect('/crew/' + member.id + '/edit');
+    req.session.save(() => res.redirect('/crew/' + member.id + '/edit'));
   }
 });
 
@@ -165,7 +165,7 @@ router.get('/:id', (req, res) => {
 
   if (!member) {
     req.flash('error', 'Crew member not found');
-    return res.redirect('/crew');
+    return req.session.save(() => res.redirect('/crew'));
   }
 
   const compliance = getComplianceStatus(member, today);
@@ -341,10 +341,10 @@ router.get('/:id', (req, res) => {
 router.post('/:id/swms-requests/:requestId/approve', requirePermission('swms'), (req, res) => {
   const db = getDb();
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
-  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  if (!member) { req.flash('error', 'Crew member not found'); return req.session.save(() => res.redirect('/crew')); }
   const request = db.prepare('SELECT * FROM crew_swms_access_requests WHERE id = ? AND crew_member_id = ?').get(req.params.requestId, member.id);
-  if (!request) { req.flash('error', 'Request not found.'); return res.redirect('/crew/' + member.id); }
-  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return res.redirect('/crew/' + member.id); }
+  if (!request) { req.flash('error', 'Request not found.'); return req.session.save(() => res.redirect('/crew/' + member.id)); }
+  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return req.session.save(() => res.redirect('/crew/' + member.id)); }
   const decisionNote = String(req.body.decision_note || '').trim().slice(0, 500);
   try {
     const tx = db.transaction(() => {
@@ -367,17 +367,17 @@ router.post('/:id/swms-requests/:requestId/approve', requirePermission('swms'), 
     console.error('[crew] swms request approve error:', e.message);
     req.flash('error', 'Could not approve request.');
   }
-  return res.redirect('/crew/' + member.id + '#swms-requests');
+  return req.session.save(() => res.redirect('/crew/' + member.id + '#swms-requests'));
 });
 
 // POST /:id/swms-requests/:requestId/reject — decline with an optional note.
 router.post('/:id/swms-requests/:requestId/reject', requirePermission('swms'), (req, res) => {
   const db = getDb();
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
-  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  if (!member) { req.flash('error', 'Crew member not found'); return req.session.save(() => res.redirect('/crew')); }
   const request = db.prepare('SELECT * FROM crew_swms_access_requests WHERE id = ? AND crew_member_id = ?').get(req.params.requestId, member.id);
-  if (!request) { req.flash('error', 'Request not found.'); return res.redirect('/crew/' + member.id); }
-  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return res.redirect('/crew/' + member.id); }
+  if (!request) { req.flash('error', 'Request not found.'); return req.session.save(() => res.redirect('/crew/' + member.id)); }
+  if (request.status !== 'pending') { req.flash('error', 'Request already decided.'); return req.session.save(() => res.redirect('/crew/' + member.id)); }
   const decisionNote = String(req.body.decision_note || '').trim().slice(0, 500);
   try {
     db.prepare(`
@@ -391,7 +391,7 @@ router.post('/:id/swms-requests/:requestId/reject', requirePermission('swms'), (
     console.error('[crew] swms request reject error:', e.message);
     req.flash('error', 'Could not reject request.');
   }
-  return res.redirect('/crew/' + member.id + '#swms-requests');
+  return req.session.save(() => res.redirect('/crew/' + member.id + '#swms-requests'));
 });
 
 // POST /:id/swms-grants — admin manually attaches a job-linked SWMS to a
@@ -400,12 +400,12 @@ router.post('/:id/swms-requests/:requestId/reject', requirePermission('swms'), (
 router.post('/:id/swms-grants', requirePermission('swms'), (req, res) => {
   const db = getDb();
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
-  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  if (!member) { req.flash('error', 'Crew member not found'); return req.session.save(() => res.redirect('/crew')); }
   const swmsId = parseInt(req.body.swms_id, 10) || 0;
-  if (!swmsId) { req.flash('error', 'Pick a SWMS to attach.'); return res.redirect('/crew/' + member.id); }
+  if (!swmsId) { req.flash('error', 'Pick a SWMS to attach.'); return req.session.save(() => res.redirect('/crew/' + member.id)); }
   const swms = db.prepare("SELECT id, title, kind, status FROM swms WHERE id = ?").get(swmsId);
-  if (!swms) { req.flash('error', 'SWMS not found.'); return res.redirect('/crew/' + member.id); }
-  if (swms.kind !== 'job') { req.flash('error', 'Only job-linked SWMS are grantable as competencies.'); return res.redirect('/crew/' + member.id); }
+  if (!swms) { req.flash('error', 'SWMS not found.'); return req.session.save(() => res.redirect('/crew/' + member.id)); }
+  if (swms.kind !== 'job') { req.flash('error', 'Only job-linked SWMS are grantable as competencies.'); return req.session.save(() => res.redirect('/crew/' + member.id)); }
   const notes = String(req.body.notes || '').trim().slice(0, 500);
   try {
     db.prepare(`
@@ -426,20 +426,20 @@ router.post('/:id/swms-grants', requirePermission('swms'), (req, res) => {
     console.error('[crew] swms grant error:', e.message);
     req.flash('error', 'Could not attach SWMS.');
   }
-  return res.redirect('/crew/' + member.id + '#swms-competencies');
+  return req.session.save(() => res.redirect('/crew/' + member.id + '#swms-competencies'));
 });
 
 // POST /:id/swms-grants/:grantId/delete — revoke a granted SWMS competency.
 router.post('/:id/swms-grants/:grantId/delete', requirePermission('swms'), (req, res) => {
   const db = getDb();
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
-  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  if (!member) { req.flash('error', 'Crew member not found'); return req.session.save(() => res.redirect('/crew')); }
   const grant = db.prepare(`
     SELECT g.id, s.title FROM crew_swms_grants g
     JOIN swms s ON s.id = g.swms_id
     WHERE g.id = ? AND g.crew_member_id = ?
   `).get(req.params.grantId, member.id);
-  if (!grant) { req.flash('error', 'Grant not found.'); return res.redirect('/crew/' + member.id); }
+  if (!grant) { req.flash('error', 'Grant not found.'); return req.session.save(() => res.redirect('/crew/' + member.id)); }
   try {
     db.prepare('DELETE FROM crew_swms_grants WHERE id = ?').run(grant.id);
     logActivity({ user: req.session.user, action: 'delete', entityType: 'crew_member', entityId: member.id, entityLabel: member.full_name, details: 'Revoked SWMS competency: ' + grant.title, ip: req.ip });
@@ -448,27 +448,27 @@ router.post('/:id/swms-grants/:grantId/delete', requirePermission('swms'), (req,
     console.error('[crew] swms grant revoke error:', e.message);
     req.flash('error', 'Could not revoke grant.');
   }
-  return res.redirect('/crew/' + member.id + '#swms-competencies');
+  return req.session.save(() => res.redirect('/crew/' + member.id + '#swms-competencies'));
 });
 
 // POST /:id/delete — Delete Crew Member
 router.post('/:id/delete', requireRole('admin', 'operations'), (req, res) => {
   const db = getDb();
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
-  if (!member) { req.flash('error', 'Crew member not found'); return res.redirect('/crew'); }
+  if (!member) { req.flash('error', 'Crew member not found'); return req.session.save(() => res.redirect('/crew')); }
 
   // Check for linked records
   const allocations = db.prepare('SELECT COUNT(*) as count FROM crew_allocations WHERE crew_member_id = ?').get(req.params.id).count;
   const timesheets = db.prepare('SELECT COUNT(*) as count FROM timesheets WHERE crew_member_id = ?').get(req.params.id).count;
   if (allocations > 0 || timesheets > 0) {
     req.flash('error', `Cannot delete ${member.full_name} — they have ${allocations} allocation(s) and ${timesheets} timesheet(s). Deactivate instead.`);
-    return res.redirect('/crew/' + member.id);
+    return req.session.save(() => res.redirect('/crew/' + member.id));
   }
 
   db.prepare('DELETE FROM crew_members WHERE id = ?').run(req.params.id);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'crew_member', entityId: member.id, entityLabel: member.full_name, details: 'Deleted crew member', ip: req.ip });
   req.flash('success', member.full_name + ' deleted.');
-  res.redirect('/crew');
+  req.session.save(() => res.redirect('/crew'));
 });
 
 // POST /:id/supervisor-approve — Toggle supervisor approval
@@ -477,7 +477,7 @@ router.post('/:id/supervisor-approve', requireRole('admin', 'operations'), (req,
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
   if (!member) {
     req.flash('error', 'Crew member not found');
-    return res.redirect('/crew');
+    return req.session.save(() => res.redirect('/crew'));
   }
 
   const newStatus = member.supervisor_approved ? 0 : 1;
@@ -502,7 +502,7 @@ router.post('/:id/supervisor-approve', requireRole('admin', 'operations'), (req,
   });
 
   req.flash('success', newStatus ? member.full_name + ' approved' : 'Approval revoked for ' + member.full_name);
-  res.redirect('/crew/' + member.id);
+  req.session.save(() => res.redirect('/crew/' + member.id));
 });
 
 // POST /:id/set-pin — Set or reset worker portal PIN
@@ -511,7 +511,7 @@ router.post('/:id/set-pin', requireRole('admin', 'operations'), (req, res) => {
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
   if (!member) {
     req.flash('error', 'Crew member not found');
-    return res.redirect('/crew');
+    return req.session.save(() => res.redirect('/crew'));
   }
 
   const { pin } = req.body;
@@ -519,7 +519,7 @@ router.post('/:id/set-pin', requireRole('admin', 'operations'), (req, res) => {
   // Validate PIN: 4-6 digits
   if (!pin || !/^\d{4,6}$/.test(pin)) {
     req.flash('error', 'PIN must be 4-6 digits.');
-    return res.redirect('/crew/' + member.id);
+    return req.session.save(() => res.redirect('/crew/' + member.id));
   }
 
   // Hash and save
@@ -539,7 +539,7 @@ router.post('/:id/set-pin', requireRole('admin', 'operations'), (req, res) => {
   });
 
   req.flash('success', 'Portal PIN set for ' + member.full_name);
-  res.redirect('/crew/' + member.id);
+  req.session.save(() => res.redirect('/crew/' + member.id));
 });
 
 // POST /:id/send-invite — Send email invitation for worker portal
@@ -548,12 +548,12 @@ router.post('/:id/send-invite', requireRole('admin', 'operations'), async (req, 
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
   if (!member) {
     req.flash('error', 'Crew member not found');
-    return res.redirect('/crew');
+    return req.session.save(() => res.redirect('/crew'));
   }
 
   if (!member.email || !member.employee_id) {
     req.flash('error', 'Crew member needs both an email and Employee ID to receive an invite.');
-    return res.redirect('/crew/' + member.id);
+    return req.session.save(() => res.redirect('/crew/' + member.id));
   }
 
   const { token } = createInvitation({ type: 'crew_member', targetId: member.id, email: member.email, createdById: req.session.user.id });
@@ -571,7 +571,7 @@ router.post('/:id/send-invite', requireRole('admin', 'operations'), async (req, 
   });
 
   req.flash('success', `Invitation email sent to ${member.email}`);
-  res.redirect('/crew/' + member.id);
+  req.session.save(() => res.redirect('/crew/' + member.id));
 });
 
 // POST /:id/clear-pin — Remove worker portal PIN
@@ -580,7 +580,7 @@ router.post('/:id/clear-pin', requireRole('admin', 'operations'), (req, res) => 
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
   if (!member) {
     req.flash('error', 'Crew member not found');
-    return res.redirect('/crew');
+    return req.session.save(() => res.redirect('/crew'));
   }
 
   db.prepare(`
@@ -598,7 +598,7 @@ router.post('/:id/clear-pin', requireRole('admin', 'operations'), (req, res) => 
   });
 
   req.flash('success', 'Portal PIN cleared for ' + member.full_name);
-  res.redirect('/crew/' + member.id);
+  req.session.save(() => res.redirect('/crew/' + member.id));
 });
 
 module.exports = router;

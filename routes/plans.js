@@ -50,7 +50,7 @@ function uploadPlanFile(jsonResponse) {
         const msg = multerErrorMessage(err);
         if (jsonResponse) return res.status(400).json({ error: msg });
         req.flash('error', msg);
-        return res.redirect(req.get('referer') || '/plans/new');
+        return req.session.save(() => res.redirect(req.get('referer') || '/plans/new'));
       }
       next();
     });
@@ -135,7 +135,7 @@ router.post('/', uploadPlanFile(false), (req, res) => {
   const dateErrors = missingRequiredDates(planTypes, b);
   if (dateErrors.length) {
     req.flash('error', 'Missing required date(s): ' + dateErrors.join(', ') + '.');
-    return res.redirect(b.return_to && b.return_to !== '/plans' ? b.return_to : '/plans/new');
+    return req.session.save(() => res.redirect(b.return_to && b.return_to !== '/plans' ? b.return_to : '/plans/new'));
   }
 
   // Handle file upload. Store the public URL path (uploads/<filename>),
@@ -230,10 +230,10 @@ router.post('/', uploadPlanFile(false), (req, res) => {
 
     req.flash('success', `Traffic Plan ${planNumber} created successfully${markFinal ? ' and pushed to Final Plans.' : '.'}`);
     const returnTo = b.return_to && b.return_to !== '/plans' ? b.return_to : '/plans';
-    res.redirect(returnTo);
+    req.session.save(() => res.redirect(returnTo));
   } catch (err) {
     req.flash('error', 'Failed to create plan: ' + err.message);
-    res.redirect('/plans/new');
+    req.session.save(() => res.redirect('/plans/new'));
   }
 });
 
@@ -339,7 +339,7 @@ router.post('/quick-upload', uploadPlanFile(true), (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
   const jobs = db.prepare("SELECT id, job_number, client, project_name, site_address, suburb FROM jobs WHERE status IN ('active','on_hold','won','prestart','tender') ORDER BY job_number DESC").all();
   const users = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
   res.render('plans/form', { title: 'Edit Traffic Plan', plan, jobs, users, user: req.session.user, preselectedJobId: null, query: req.query });
@@ -358,7 +358,7 @@ router.post('/:id', upload.single('plan_file'), (req, res) => {
   const dateErrors = missingRequiredDates(planTypes, b);
   if (dateErrors.length) {
     req.flash('error', 'Missing required date(s): ' + dateErrors.join(', ') + '.');
-    return res.redirect(`/plans/${req.params.id}/edit`);
+    return req.session.save(() => res.redirect(`/plans/${req.params.id}/edit`));
   }
 
   // Handle file upload (keep existing file if no new upload). Store the
@@ -412,10 +412,10 @@ router.post('/:id', upload.single('plan_file'), (req, res) => {
 
     req.flash('success', 'Traffic plan updated successfully.');
     const returnTo = b.return_to && b.return_to !== '/plans' ? b.return_to : `/plans/${req.params.id}`;
-    res.redirect(returnTo);
+    req.session.save(() => res.redirect(returnTo));
   } catch (err) {
     req.flash('error', 'Failed to update plan: ' + err.message);
-    res.redirect(`/plans/${req.params.id}/edit`);
+    req.session.save(() => res.redirect(`/plans/${req.params.id}/edit`));
   }
 });
 
@@ -427,7 +427,7 @@ router.post('/:id/delete', (req, res) => {
     const plan = db.prepare('SELECT id, plan_number, job_id, file_path, file_original_name FROM traffic_plans WHERE id = ?').get(req.params.id);
     if (!plan) {
       req.flash('error', 'Plan not found.');
-      return res.redirect(returnTo);
+      return req.session.save(() => res.redirect(returnTo));
     }
 
     // Delete physical file if exists
@@ -451,11 +451,11 @@ router.post('/:id/delete', (req, res) => {
       });
       req.flash('success', `Traffic plan ${plan.plan_number} deleted.`);
     }
-    res.redirect(returnTo);
+    req.session.save(() => res.redirect(returnTo));
   } catch (err) {
     console.error('[Plans] Delete error:', err.message, err.stack);
     req.flash('error', 'Failed to delete plan: ' + err.message);
-    res.redirect(returnTo);
+    req.session.save(() => res.redirect(returnTo));
   }
 });
 
@@ -463,7 +463,7 @@ router.post('/:id/delete', (req, res) => {
 router.post('/:id/delete-file', (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
 
   // Delete physical file
   if (plan.file_path) {
@@ -481,14 +481,14 @@ router.post('/:id/delete-file', (req, res) => {
   });
 
   req.flash('success', `File deleted from plan ${plan.plan_number}.`);
-  res.redirect(req.body.return_to || `/plans/${plan.id}/edit`);
+  req.session.save(() => res.redirect(req.body.return_to || `/plans/${plan.id}/edit`));
 });
 
 // ─── MARK AS FINAL ───────────────────────────────
 router.post('/:id/mark-final', (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT tp.*, j.job_number FROM traffic_plans tp LEFT JOIN jobs j ON tp.job_id = j.id WHERE tp.id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
 
   try {
     db.prepare('UPDATE traffic_plans SET is_final = 1, marked_final_at = CURRENT_TIMESTAMP, marked_final_by = ?, status = ? WHERE id = ?')
@@ -505,14 +505,14 @@ router.post('/:id/mark-final', (req, res) => {
   } catch (err) {
     req.flash('error', 'Failed to mark plan as final: ' + err.message);
   }
-  res.redirect(req.body.return_to || `/plans/${plan.id}`);
+  req.session.save(() => res.redirect(req.body.return_to || `/plans/${plan.id}`));
 });
 
 // ─── REVOKE FINAL ────────────────────────────────
 router.post('/:id/revoke-final', (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT tp.*, j.job_number FROM traffic_plans tp LEFT JOIN jobs j ON tp.job_id = j.id WHERE tp.id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
 
   try {
     db.prepare('UPDATE traffic_plans SET is_final = 0, status = ? WHERE id = ?')
@@ -529,14 +529,14 @@ router.post('/:id/revoke-final', (req, res) => {
   } catch (err) {
     req.flash('error', 'Failed to revoke plan: ' + err.message);
   }
-  res.redirect(req.body.return_to || `/plans/${plan.id}`);
+  req.session.save(() => res.redirect(req.body.return_to || `/plans/${plan.id}`));
 });
 
 // ─── ADD REVISION ────────────────────────────────
 router.post('/:id/revisions', upload.single('revision_file'), (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
 
   const b = req.body;
   const filePath = req.file ? 'uploads/' + req.file.filename : '';
@@ -570,19 +570,19 @@ router.post('/:id/revisions', upload.single('revision_file'), (req, res) => {
   } catch (err) {
     req.flash('error', 'Failed to add revision: ' + err.message);
   }
-  res.redirect(req.body.return_to || `/plans/${plan.id}`);
+  req.session.save(() => res.redirect(req.body.return_to || `/plans/${plan.id}`));
 });
 
 // ─── FLAG FOR REVIEW (Operations → Planning) ────
 router.post('/:id/flag', (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT tp.*, j.job_number, j.id as jid FROM traffic_plans tp LEFT JOIN jobs j ON tp.job_id = j.id WHERE tp.id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
 
   const description = req.body.description;
   if (!description || !description.trim()) {
     req.flash('error', 'Please describe the issue.');
-    return res.redirect(req.body.return_to || `/jobs/${plan.jid}#final-plans`);
+    return req.session.save(() => res.redirect(req.body.return_to || `/jobs/${plan.jid}#final-plans`));
   }
 
   try {
@@ -602,7 +602,7 @@ router.post('/:id/flag', (req, res) => {
   } catch (err) {
     req.flash('error', 'Failed to flag issue: ' + err.message);
   }
-  res.redirect(req.body.return_to || `/jobs/${plan.jid}#final-plans`);
+  req.session.save(() => res.redirect(req.body.return_to || `/jobs/${plan.jid}#final-plans`));
 });
 
 // ─── PLAN DETAIL PAGE (the hub) ──────────────────
@@ -617,7 +617,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN jobs j ON tp.job_id = j.id
     LEFT JOIN users u ON tp.created_by_id = u.id
     WHERE tp.id = ?`).get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
 
   const fees = db.prepare('SELECT pf.*, u.full_name AS created_by_name FROM plan_fees pf LEFT JOIN users u ON pf.created_by = u.id WHERE pf.plan_id = ? ORDER BY pf.created_at DESC').all(plan.id);
   const extensions = db.prepare('SELECT pe.*, u.full_name AS created_by_name FROM plan_extensions pe LEFT JOIN users u ON pe.created_by = u.id WHERE pe.plan_id = ? ORDER BY pe.created_at DESC').all(plan.id);
@@ -640,7 +640,7 @@ router.get('/:id', (req, res) => {
 router.post('/:id/fees', upload.single('receipt'), (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT id, plan_number, job_id FROM traffic_plans WHERE id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
   const receiptPath = req.file ? 'uploads/' + req.file.filename : '';
   const receiptName = req.file ? req.file.originalname : '';
   const amount = parseFloat(req.body.amount) || 0;
@@ -650,7 +650,7 @@ router.post('/:id/fees', upload.single('receipt'), (req, res) => {
     logActivity({ user: req.session.user, action: 'create', entityType: 'plan', entityId: plan.id, entityLabel: plan.plan_number, jobId: plan.job_id, details: `Added fee: ${req.body.description || ''} ($${amount.toFixed(2)})`, ip: req.ip });
     req.flash('success', 'Fee added.');
   } catch (err) { req.flash('error', 'Failed to add fee: ' + err.message); }
-  res.redirect(`/plans/${plan.id}`);
+  req.session.save(() => res.redirect(`/plans/${plan.id}`));
 });
 
 router.post('/:id/fees/:feeId/delete', (req, res) => {
@@ -667,7 +667,7 @@ router.post('/:id/fees/:feeId/delete', (req, res) => {
 router.post('/:id/extensions', upload.single('extension_file'), (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT id, plan_number, job_id FROM traffic_plans WHERE id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
   const filePath = req.file ? 'uploads/' + req.file.filename : '';
   const fileName = req.file ? req.file.originalname : '';
   try {
@@ -677,7 +677,7 @@ router.post('/:id/extensions', upload.single('extension_file'), (req, res) => {
     autoLogDiary(db, { jobId: plan.job_id, summary: `[${req.session.user.full_name}] Extension added to ${plan.plan_number}${req.body.extended_to ? ' (extended to ' + req.body.extended_to + ')' : ''}.`, userId: req.session.user.id });
     req.flash('success', 'Extension added.');
   } catch (err) { req.flash('error', 'Failed to add extension: ' + err.message); }
-  res.redirect(`/plans/${plan.id}`);
+  req.session.save(() => res.redirect(`/plans/${plan.id}`));
 });
 
 router.post('/:id/extensions/:extId/delete', (req, res) => {
@@ -718,7 +718,7 @@ function saveShiftsJson(db, planId, source, json) {
 router.post('/:id/rola', upload.single('rola_file'), (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
   const b = req.body;
   const filePath = req.file ? 'uploads/' + req.file.filename : (b.existing_rola_file_path || plan.rola_file_path || '');
   const fileName = req.file ? req.file.originalname : (b.existing_rola_file_original_name || plan.rola_file_original_name || '');
@@ -732,14 +732,14 @@ router.post('/:id/rola', upload.single('rola_file'), (req, res) => {
     logActivity({ user: req.session.user, action: 'update', entityType: 'plan', entityId: plan.id, entityLabel: plan.plan_number, jobId: plan.job_id, details: `Logged ROLA application ${b.rola_application_number || ''}`, ip: req.ip });
     req.flash('success', 'ROLA application saved.');
   } catch (err) { req.flash('error', 'Failed to save ROLA: ' + err.message); }
-  res.redirect(`/plans/${plan.id}`);
+  req.session.save(() => res.redirect(`/plans/${plan.id}`));
 });
 
 // ─── ROL STAGE 2: issued ROL (spec §8) ───────────
 router.post('/:id/rol', upload.single('rol_file'), (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
-  if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
+  if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
   const b = req.body;
   const filePath = req.file ? 'uploads/' + req.file.filename : (b.existing_rol_file_path || plan.rol_file_path || '');
   const fileName = req.file ? req.file.originalname : (b.existing_rol_file_original_name || plan.rol_file_original_name || '');
@@ -754,7 +754,7 @@ router.post('/:id/rol', upload.single('rol_file'), (req, res) => {
     autoLogDiary(db, { jobId: plan.job_id, summary: `[${req.session.user.full_name}] Issued ROL ${b.rol_actual_number || ''} recorded on ${plan.plan_number}.`, userId: req.session.user.id });
     req.flash('success', 'Issued ROL saved.');
   } catch (err) { req.flash('error', 'Failed to save ROL: ' + err.message); }
-  res.redirect(`/plans/${plan.id}`);
+  req.session.save(() => res.redirect(`/plans/${plan.id}`));
 });
 
 // ─── PDF AUTO-EXTRACTION (Phase 2 — parse-then-confirm) ──
@@ -766,8 +766,8 @@ function parsePlanPdf(stage, fileField) {
   return async (req, res) => {
     const db = getDb();
     const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
-    if (!plan) { req.flash('error', 'Plan not found.'); return res.redirect('/plans'); }
-    if (!req.file) { req.flash('error', 'Please choose a PDF to extract.'); return res.redirect(`/plans/${plan.id}`); }
+    if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
+    if (!req.file) { req.flash('error', 'Please choose a PDF to extract.'); return req.session.save(() => res.redirect(`/plans/${plan.id}`)); }
     const filePath = 'uploads/' + req.file.filename;
     try {
       const { parseRolPdf } = require('../services/rolParser');
@@ -780,7 +780,7 @@ function parsePlanPdf(stage, fileField) {
     } catch (err) {
       console.error(`[Plans] ${stage} parse failed:`, err.message);
       req.flash('error', 'Could not read that PDF automatically — enter the details manually. (' + err.message + ')');
-      res.redirect(`/plans/${plan.id}`);
+      req.session.save(() => res.redirect(`/plans/${plan.id}`));
     }
   };
 }

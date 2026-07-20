@@ -123,7 +123,7 @@ router.post('/permissions', (req, res) => {
   refreshRolePermissionOverrides();
   logActivity({ user: req.session.user, action: 'update', entityType: 'role_permissions', entityId: 0, entityLabel: `Saved role permissions (${writes} overrides, ${deletes} reverted to default)`, req });
   req.flash('success', `Saved · ${writes} override${writes === 1 ? '' : 's'} active, ${deletes} reverted to default.`);
-  res.redirect('/admin/permissions');
+  req.session.save(() => res.redirect('/admin/permissions'));
 });
 
 // POST /admin/permissions/reset — wipe all overrides, back to PERMISSIONS map
@@ -133,7 +133,7 @@ router.post('/permissions/reset', (req, res) => {
   refreshRolePermissionOverrides();
   logActivity({ user: req.session.user, action: 'delete', entityType: 'role_permissions', entityId: 0, entityLabel: `Reset all role permissions (${r.changes} overrides removed)`, req });
   req.flash('success', `Reset · ${r.changes} override${r.changes === 1 ? '' : 's'} cleared.`);
-  res.redirect('/admin/permissions');
+  req.session.save(() => res.redirect('/admin/permissions'));
 });
 
 module.exports = router;

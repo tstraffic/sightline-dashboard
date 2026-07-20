@@ -77,9 +77,7 @@
     <button type="submit" id="kd-submit" style="width: 100%; padding: 0.8rem; background: linear-gradient(135deg, #F59E0B, #EC4899); color: #fff; font-weight: 800; font-size: 0.9rem; border-radius: 12px; box-shadow: 0 6px 18px rgba(245,158,11,0.3);">Send kudos ✨</button>
   </form>
 
-  <% if (flash_error && flash_error.length) { %>
-    <p style="margin-top: 10px; padding: 10px; background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.25); border-radius: 10px; color: #FCA5A5; font-size: 0.78rem; text-align: center;"><%= flash_error[0] %></p>
-  <% } %>
+  <%# Flash renders via the layout banner (global locals). %>
 </div>
 
 <script>

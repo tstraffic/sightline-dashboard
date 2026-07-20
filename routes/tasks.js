@@ -262,15 +262,15 @@ router.post('/:id/restore', (req, res) => {
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (!task) {
     req.flash('error', 'Task not found.');
-    return res.redirect('/tasks/deleted');
+    return req.session.save(() => res.redirect('/tasks/deleted'));
   }
   if (!task.deleted_at) {
     req.flash('error', 'Task is not deleted.');
-    return res.redirect('/tasks/deleted');
+    return req.session.save(() => res.redirect('/tasks/deleted'));
   }
   if (!canModifyTask(task, req.session.user)) {
     req.flash('error', 'You can only restore your own tasks.');
-    return res.redirect('/tasks/deleted');
+    return req.session.save(() => res.redirect('/tasks/deleted'));
   }
 
   db.prepare('UPDATE tasks SET deleted_at = NULL, deleted_by = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
@@ -285,7 +285,7 @@ router.post('/:id/restore', (req, res) => {
   }
 
   req.flash('success', 'Task restored.');
-  res.redirect('/tasks/deleted');
+  req.session.save(() => res.redirect('/tasks/deleted'));
 });
 
 // POST /:id/purge — Permanently delete a soft-deleted task (admin/management only)
@@ -294,16 +294,16 @@ router.post('/:id/purge', (req, res) => {
   const role = (req.session.user.role || '').toLowerCase();
   if (!['admin', 'management'].includes(role)) {
     req.flash('error', 'Only admin/management can permanently delete tasks.');
-    return res.redirect('/tasks/deleted');
+    return req.session.save(() => res.redirect('/tasks/deleted'));
   }
   const task = db.prepare('SELECT * FROM tasks WHERE id = ? AND deleted_at IS NOT NULL').get(req.params.id);
   if (!task) {
     req.flash('error', 'Deleted task not found.');
-    return res.redirect('/tasks/deleted');
+    return req.session.save(() => res.redirect('/tasks/deleted'));
   }
   db.prepare('DELETE FROM tasks WHERE id = ?').run(req.params.id);
   req.flash('success', 'Task permanently deleted.');
-  res.redirect('/tasks/deleted');
+  req.session.save(() => res.redirect('/tasks/deleted'));
 });
 
 // GET /new — Create form
@@ -398,11 +398,11 @@ router.post('/', (req, res) => {
     }
 
     req.flash('success', 'Task created.');
-    res.redirect(b.return_to || '/tasks');
+    req.session.save(() => res.redirect(b.return_to || '/tasks'));
   } catch (err) {
     console.error('[Tasks] Create error:', err.message, err.stack);
     req.flash('error', 'Failed to create task: ' + err.message);
-    res.redirect('/tasks/new');
+    req.session.save(() => res.redirect('/tasks/new'));
   }
 });
 
@@ -422,7 +422,7 @@ router.post('/bulk', (req, res) => {
 
   if (allowedIds.length === 0) {
     req.flash('error', 'You can only modify tasks assigned to you.');
-    return res.redirect('/tasks');
+    return req.session.save(() => res.redirect('/tasks'));
   }
 
   if (action === 'complete') {
@@ -463,7 +463,7 @@ router.post('/bulk', (req, res) => {
     });
     req.flash('success', allowedIds.length + ' task(s) deleted.');
   }
-  res.redirect('/tasks');
+  req.session.save(() => res.redirect('/tasks'));
 });
 
 // GET /:id/edit — Edit form
@@ -474,13 +474,13 @@ router.get('/:id/edit', (req, res) => {
     FROM tasks t LEFT JOIN users cb ON t.created_by = cb.id
     WHERE t.id = ?
   `).get(req.params.id);
-  if (!task) { req.flash('error', 'Task not found.'); return res.redirect('/tasks'); }
+  if (!task) { req.flash('error', 'Task not found.'); return req.session.save(() => res.redirect('/tasks')); }
 
   // Soft-deleted tasks are not editable — redirect to the deleted list so the
   // user can restore if needed.
   if (task.deleted_at) {
     req.flash('error', 'This task has been deleted. Restore it to edit.');
-    return res.redirect('/tasks/deleted');
+    return req.session.save(() => res.redirect('/tasks/deleted'));
   }
 
   // Watchers (people @mentioned on the task or manually added by an owner)
@@ -493,11 +493,11 @@ router.get('/:id/edit', (req, res) => {
   // Return the same "not found" message so non-admins can't probe for task existence.
   if (task.division === 'admin' && !isAdminRole(req.session.user) && !viewable) {
     req.flash('error', 'Task not found.');
-    return res.redirect('/tasks');
+    return req.session.save(() => res.redirect('/tasks'));
   }
   if (!viewable && !isAdminRole(req.session.user)) {
     req.flash('error', 'You don\'t have access to this task.');
-    return res.redirect('/tasks');
+    return req.session.save(() => res.redirect('/tasks'));
   }
 
   const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs WHERE status NOT IN ('closed','completed','cancelled') ORDER BY job_number").all();
@@ -622,21 +622,21 @@ router.post('/:id', (req, res) => {
     const existingTask = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
     if (!existingTask) {
       req.flash('error', 'Task not found.');
-      return res.redirect('/tasks');
+      return req.session.save(() => res.redirect('/tasks'));
     }
     if (existingTask.deleted_at) {
       req.flash('error', 'Cannot edit a deleted task. Restore it first.');
-      return res.redirect('/tasks/deleted');
+      return req.session.save(() => res.redirect('/tasks/deleted'));
     }
     // Admin-division tasks are admin-only, even for writes — present as "not found"
     // so non-admins can't confirm the task exists via a crafted POST.
     if (existingTask.division === 'admin' && !isAdminRole(req.session.user)) {
       req.flash('error', 'Task not found.');
-      return res.redirect('/tasks');
+      return req.session.save(() => res.redirect('/tasks'));
     }
     if (!canModifyTask(existingTask, req.session.user)) {
       req.flash('error', 'You can only edit tasks assigned to you.');
-      return res.redirect('/tasks/' + req.params.id + '/edit');
+      return req.session.save(() => res.redirect('/tasks/' + req.params.id + '/edit'));
     }
 
     // Handle multiple owners
@@ -720,11 +720,11 @@ router.post('/:id', (req, res) => {
     }
 
     req.flash('success', 'Task updated.');
-    res.redirect(b.return_to || '/tasks');
+    req.session.save(() => res.redirect(b.return_to || '/tasks'));
   } catch (err) {
     console.error('[Tasks] Update error:', err.message, err.stack);
     req.flash('error', 'Failed to update task: ' + err.message);
-    res.redirect('/tasks/' + req.params.id + '/edit');
+    req.session.save(() => res.redirect('/tasks/' + req.params.id + '/edit'));
   }
 });
 
@@ -736,18 +736,18 @@ router.post('/:id/status', (req, res) => {
     const validStatuses = ['not_started', 'in_progress', 'blocked', 'complete'];
     if (!validStatuses.includes(newStatus)) {
       req.flash('error', 'Invalid status.');
-      return res.redirect(req.headers.referer || '/tasks');
+      return req.session.save(() => res.redirect(req.headers.referer || '/tasks'));
     }
 
     // Check ownership
     const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
     if (!task) {
       req.flash('error', 'Task not found.');
-      return res.redirect(req.headers.referer || '/tasks');
+      return req.session.save(() => res.redirect(req.headers.referer || '/tasks'));
     }
     if (!canModifyTask(task, req.session.user)) {
       req.flash('error', 'You can only update status on your own tasks.');
-      return res.redirect(req.headers.referer || '/tasks');
+      return req.session.save(() => res.redirect(req.headers.referer || '/tasks'));
     }
 
     const today = new Date().toISOString().split('T')[0];
@@ -793,11 +793,11 @@ router.post('/:id/status', (req, res) => {
     }
 
     req.flash('success', 'Status updated.');
-    res.redirect(req.headers.referer || '/tasks');
+    req.session.save(() => res.redirect(req.headers.referer || '/tasks'));
   } catch (err) {
     console.error('[Tasks] Status change error:', err.message, err.stack);
     req.flash('error', 'Failed to update status.');
-    res.redirect(req.headers.referer || '/tasks');
+    req.session.save(() => res.redirect(req.headers.referer || '/tasks'));
   }
 });
 
@@ -807,7 +807,7 @@ router.post('/:id/complete', (req, res) => {
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (task && !canModifyTask(task, req.session.user)) {
     req.flash('error', 'You can only complete your own tasks.');
-    return res.redirect(req.headers.referer || '/tasks');
+    return req.session.save(() => res.redirect(req.headers.referer || '/tasks'));
   }
   const today = new Date().toISOString().split('T')[0];
   db.prepare("UPDATE tasks SET status = 'complete', completed_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(today, req.params.id);
@@ -827,7 +827,7 @@ router.post('/:id/complete', (req, res) => {
   }
 
   req.flash('success', 'Task completed.');
-  res.redirect(req.headers.referer || '/tasks');
+  req.session.save(() => res.redirect(req.headers.referer || '/tasks'));
 });
 
 // POST /:id/delete — Soft-delete task (owner + admin/management only)
@@ -836,7 +836,7 @@ router.post('/:id/delete', (req, res) => {
   const task = db.prepare('SELECT * FROM tasks WHERE id = ?').get(req.params.id);
   if (task && !canModifyTask(task, req.session.user)) {
     req.flash('error', 'You can only delete your own tasks.');
-    return res.redirect(req.body.return_to || '/tasks');
+    return req.session.save(() => res.redirect(req.body.return_to || '/tasks'));
   }
   const userId = req.session.user ? req.session.user.id : null;
   db.prepare('UPDATE tasks SET deleted_at = CURRENT_TIMESTAMP, deleted_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND deleted_at IS NULL').run(userId, req.params.id);
@@ -852,7 +852,7 @@ router.post('/:id/delete', (req, res) => {
   }
 
   req.flash('success', 'Task deleted. View it from the Deleted Tasks page.');
-  res.redirect(req.body.return_to || '/tasks');
+  req.session.save(() => res.redirect(req.body.return_to || '/tasks'));
 });
 
 // POST /:id/renotify — Re-send notification to assigned user
@@ -869,7 +869,7 @@ router.post('/:id/renotify', (req, res) => {
 
     if (!task || !task.owner_id) {
       req.flash('error', 'Task not found or no one assigned.');
-      return res.redirect(req.headers.referer || '/dashboard');
+      return req.session.save(() => res.redirect(req.headers.referer || '/dashboard'));
     }
 
     const senderName = req.session.user.full_name;
@@ -890,11 +890,11 @@ router.post('/:id/renotify', (req, res) => {
     sendTaskAssignmentEmail(taskData, ownerUser, jobLabel, senderName + ' (reminder)', baseUrl).catch(e => console.error('[Tasks] Renotify email error:', e.message));
 
     req.flash('success', `Reminder sent to ${task.owner_name}.`);
-    res.redirect(req.headers.referer || '/dashboard');
+    req.session.save(() => res.redirect(req.headers.referer || '/dashboard'));
   } catch (err) {
     console.error('[Tasks] Renotify error:', err.message);
     req.flash('error', 'Failed to send reminder.');
-    res.redirect(req.headers.referer || '/dashboard');
+    req.session.save(() => res.redirect(req.headers.referer || '/dashboard'));
   }
 });
 
@@ -921,11 +921,11 @@ router.post('/:id/comments', (req, res) => {
     SELECT t.id, t.title, t.owner_id, t.job_id, t.division
     FROM tasks t WHERE t.id = ?
   `).get(taskId);
-  if (!task) { req.flash('error', 'Task not found.'); return res.redirect('/tasks'); }
+  if (!task) { req.flash('error', 'Task not found.'); return req.session.save(() => res.redirect('/tasks')); }
   // Anyone with view rights can comment (owners, co-owners, watchers, admin).
   if (!canViewTask(task, req.session.user)) {
     req.flash('error', 'You can\'t comment on this task.');
-    return res.redirect('/tasks');
+    return req.session.save(() => res.redirect('/tasks'));
   }
 
   const body = comment.trim();
@@ -1025,15 +1025,15 @@ router.post('/:id/watchers', (req, res) => {
   const db = getDb();
   const taskId = parseInt(req.params.id, 10);
   const task = db.prepare('SELECT id, owner_id, title FROM tasks WHERE id = ?').get(taskId);
-  if (!task) { req.flash('error', 'Task not found.'); return res.redirect('/tasks'); }
+  if (!task) { req.flash('error', 'Task not found.'); return req.session.save(() => res.redirect('/tasks')); }
   if (!canModifyTask(task, req.session.user)) {
     req.flash('error', 'Only task owners can manage watchers.');
-    return res.redirect('/tasks/' + taskId + '/edit');
+    return req.session.save(() => res.redirect('/tasks/' + taskId + '/edit'));
   }
   const userId = parseInt(req.body.user_id, 10);
-  if (!userId) { req.flash('error', 'Pick a user to add.'); return res.redirect('/tasks/' + taskId + '/edit'); }
+  if (!userId) { req.flash('error', 'Pick a user to add.'); return req.session.save(() => res.redirect('/tasks/' + taskId + '/edit')); }
   const u = db.prepare('SELECT id, full_name FROM users WHERE id = ? AND active = 1').get(userId);
-  if (!u) { req.flash('error', 'User not found.'); return res.redirect('/tasks/' + taskId + '/edit'); }
+  if (!u) { req.flash('error', 'User not found.'); return req.session.save(() => res.redirect('/tasks/' + taskId + '/edit')); }
   try {
     db.prepare("INSERT OR IGNORE INTO task_watchers (task_id, user_id, source, added_by_id) VALUES (?, ?, 'manual', ?)").run(taskId, userId, req.session.user.id);
     // Friendly heads-up so the new watcher knows they were added.
@@ -1054,7 +1054,7 @@ router.post('/:id/watchers', (req, res) => {
     console.error('[Tasks] watcher add error:', e.message);
     req.flash('error', 'Could not add watcher.');
   }
-  res.redirect('/tasks/' + taskId + '/edit');
+  req.session.save(() => res.redirect('/tasks/' + taskId + '/edit'));
 });
 
 // POST /:id/watchers/:userId/remove — drop a watcher (owners + admin, OR self).
@@ -1063,11 +1063,11 @@ router.post('/:id/watchers/:userId/remove', (req, res) => {
   const taskId = parseInt(req.params.id, 10);
   const userId = parseInt(req.params.userId, 10);
   const task = db.prepare('SELECT id, owner_id FROM tasks WHERE id = ?').get(taskId);
-  if (!task) { req.flash('error', 'Task not found.'); return res.redirect('/tasks'); }
+  if (!task) { req.flash('error', 'Task not found.'); return req.session.save(() => res.redirect('/tasks')); }
   const isSelf = req.session.user && req.session.user.id === userId;
   if (!isSelf && !canModifyTask(task, req.session.user)) {
     req.flash('error', 'You can\'t change watchers on this task.');
-    return res.redirect('/tasks/' + taskId + '/edit');
+    return req.session.save(() => res.redirect('/tasks/' + taskId + '/edit'));
   }
   try {
     db.prepare('DELETE FROM task_watchers WHERE task_id = ? AND user_id = ?').run(taskId, userId);
@@ -1077,7 +1077,7 @@ router.post('/:id/watchers/:userId/remove', (req, res) => {
     req.flash('error', 'Could not remove watcher.');
   }
   // Self-remove may revoke view rights — bounce to /tasks rather than the now-forbidden page.
-  res.redirect(isSelf ? '/tasks' : '/tasks/' + taskId + '/edit');
+  req.session.save(() => res.redirect(isSelf ? '/tasks' : '/tasks/' + taskId + '/edit'));
 });
 
 // GET /api/mention-search?q= — search active office users for the @mention picker.
@@ -1198,7 +1198,7 @@ router.post('/:id/subtasks/:sid/toggle', (req, res) => {
   if (!canModifyTask(task, req.session.user)) {
     if (wantsJson) return res.status(403).json({ error: 'You can only update your own tasks.' });
     req.flash('error', 'You can only update your own tasks.');
-    return res.redirect('/tasks/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/tasks/' + req.params.id + '/edit'));
   }
 
   const nowCompleted = subtask.completed ? 0 : 1;
@@ -1212,7 +1212,7 @@ router.post('/:id/subtasks/:sid/toggle', (req, res) => {
     const agg = db.prepare('SELECT COUNT(*) AS total, COALESCE(SUM(completed), 0) AS done FROM subtasks WHERE task_id = ?').get(req.params.id);
     return res.json({ ok: true, id: Number(req.params.sid), completed: !!nowCompleted, total: agg.total, done: agg.done });
   }
-  res.redirect('/tasks/' + req.params.id + '/edit');
+  req.session.save(() => res.redirect('/tasks/' + req.params.id + '/edit'));
 });
 
 // POST /:id/subtasks/:sid/delete — Delete a subtask
@@ -1234,13 +1234,13 @@ router.post('/:id/dependencies', (req, res) => {
   // Prevent self-dependency
   if (String(depends_on_id) === String(req.params.id)) {
     req.flash('error', 'A task cannot depend on itself.');
-    return res.redirect('/tasks/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/tasks/' + req.params.id + '/edit'));
   }
   // Prevent circular dependencies (check if depends_on_id already depends on this task)
   const circular = db.prepare('SELECT 1 FROM task_dependencies WHERE task_id = ? AND depends_on_id = ?').get(depends_on_id, req.params.id);
   if (circular) {
     req.flash('error', 'Cannot add dependency — it would create a circular reference.');
-    return res.redirect('/tasks/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/tasks/' + req.params.id + '/edit'));
   }
   try {
     db.prepare('INSERT INTO task_dependencies (task_id, depends_on_id) VALUES (?, ?)').run(req.params.id, depends_on_id);
@@ -1248,7 +1248,7 @@ router.post('/:id/dependencies', (req, res) => {
     // UNIQUE constraint — dependency already exists
     req.flash('error', 'This dependency already exists.');
   }
-  res.redirect('/tasks/' + req.params.id + '/edit');
+  req.session.save(() => res.redirect('/tasks/' + req.params.id + '/edit'));
 });
 
 // POST /:id/dependencies/:did/delete — Remove a dependency

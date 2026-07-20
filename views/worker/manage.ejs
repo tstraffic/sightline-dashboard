@@ -60,7 +60,4 @@
   <% } %>
 </div>
 
-<% if (flash_success && flash_success.length) { %>
-  <div class="fixed left-1/2 -translate-x-1/2 bottom-[90px] px-4 py-2 rounded-xl text-sm font-semibold text-white bg-emerald-500 shadow-lg z-50" id="mg-toast"><%= flash_success[0] %></div>
-  <script>setTimeout(()=>document.getElementById('mg-toast')?.remove(), 2800);</script>
-<% } %>
+<%# Flash renders via the layout banner (global locals). %>

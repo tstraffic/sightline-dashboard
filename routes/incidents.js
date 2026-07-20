@@ -98,9 +98,9 @@ router.post('/:id/status', (req, res) => {
   const db = getDb();
   const { status } = req.body;
   const valid = ['reported', 'investigating', 'resolved', 'closed'];
-  if (!valid.includes(status)) { req.flash('error', 'Invalid status'); return res.redirect('/incidents'); }
+  if (!valid.includes(status)) { req.flash('error', 'Invalid status'); return req.session.save(() => res.redirect('/incidents')); }
   db.prepare('UPDATE incidents SET investigation_status = ? WHERE id = ?').run(status, req.params.id);
-  res.redirect('/incidents');
+  req.session.save(() => res.redirect('/incidents'));
 });
 
 // NEW FORM
@@ -163,7 +163,7 @@ router.post('/', upload.single('photo'), (req, res) => {
   postSystemMessage(threadId, `Incident ${incident_number} reported — ${severity} severity`);
 
   req.flash('success', `Incident ${incident_number} reported successfully.`);
-  res.redirect(`/incidents/${incidentId}`);
+  req.session.save(() => res.redirect(`/incidents/${incidentId}`));
 });
 
 // SHOW
@@ -182,7 +182,7 @@ router.get('/:id', (req, res) => {
 
   if (!incident) {
     req.flash('error', 'Incident not found.');
-    return res.redirect('/incidents');
+    return req.session.save(() => res.redirect('/incidents'));
   }
 
   const correctiveActions = db.prepare(`
@@ -241,7 +241,7 @@ router.get('/:id/edit', (req, res) => {
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(req.params.id);
   if (!incident) {
     req.flash('error', 'Incident not found.');
-    return res.redirect('/incidents');
+    return req.session.save(() => res.redirect('/incidents'));
   }
   const jobs = db.prepare("SELECT id, job_number, client, project_name FROM jobs ORDER BY job_number DESC").all();
   const crewMembers = db.prepare("SELECT id, full_name, role FROM crew_members WHERE active = 1 ORDER BY full_name").all();
@@ -303,7 +303,7 @@ router.post('/:id', upload.single('photo'), (req, res) => {
   }
 
   req.flash('success', 'Incident updated.');
-  res.redirect(`/incidents/${req.params.id}`);
+  req.session.save(() => res.redirect(`/incidents/${req.params.id}`));
 });
 
 // DELETE
@@ -315,7 +315,7 @@ router.post('/:id/delete', (req, res) => {
     logActivity({ user: req.session.user, action: 'delete', entityType: 'incident', entityId: parseInt(req.params.id), entityLabel: incident.incident_number, jobId: incident.job_id, ip: req.ip });
   }
   req.flash('success', 'Incident deleted.');
-  res.redirect('/incidents');
+  req.session.save(() => res.redirect('/incidents'));
 });
 
 // ADD CORRECTIVE ACTION
@@ -325,7 +325,7 @@ router.post('/:id/delete', (req, res) => {
 router.post('/:id/corrective-actions', (req, res) => {
   const db = getDb();
   const incident = db.prepare('SELECT * FROM incidents WHERE id = ?').get(req.params.id);
-  if (!incident) { req.flash('error', 'Incident not found.'); return res.redirect('/incidents'); }
+  if (!incident) { req.flash('error', 'Incident not found.'); return req.session.save(() => res.redirect('/incidents')); }
 
   const { description, assigned_to_id, due_date, priority } = req.body;
   const ownerId = assigned_to_id || null;
@@ -347,7 +347,7 @@ router.post('/:id/corrective-actions', (req, res) => {
   logActivity({ user: req.session.user, action: 'create', entityType: 'corrective_action', entityId: result.lastInsertRowid, entityLabel: description.substring(0, 60), jobId: incident.job_id, ip: req.ip });
 
   req.flash('success', taskId ? 'Corrective action added and assigned as a task.' : 'Corrective action added.');
-  res.redirect(`/incidents/${req.params.id}`);
+  req.session.save(() => res.redirect(`/incidents/${req.params.id}`));
 });
 
 // COMPLETE CORRECTIVE ACTION — closes the linked task too if any.
@@ -363,7 +363,7 @@ router.post('/:id/corrective-actions/:caId/complete', (req, res) => {
   logActivity({ user: req.session.user, action: 'complete', entityType: 'corrective_action', entityId: parseInt(req.params.caId), ip: req.ip });
 
   req.flash('success', flippedTask ? 'Corrective action completed and linked task closed.' : 'Corrective action completed.');
-  res.redirect(`/incidents/${req.params.id}`);
+  req.session.save(() => res.redirect(`/incidents/${req.params.id}`));
 });
 
 // ESCALATE INCIDENT
@@ -373,13 +373,13 @@ router.post('/:id/escalate', (req, res) => {
   const allowed = ['standard', 'elevated', 'critical', 'regulator'];
   if (!allowed.includes(escalation_level)) {
     req.flash('error', 'Invalid escalation level.');
-    return res.redirect('/incidents/' + req.params.id);
+    return req.session.save(() => res.redirect('/incidents/' + req.params.id));
   }
 
   const incident = db.prepare('SELECT incident_number, job_id, escalation_level as old_level FROM incidents WHERE id = ?').get(req.params.id);
   if (!incident) {
     req.flash('error', 'Incident not found.');
-    return res.redirect('/incidents');
+    return req.session.save(() => res.redirect('/incidents'));
   }
 
   db.prepare('UPDATE incidents SET escalation_level = ?, escalated_at = CURRENT_TIMESTAMP, escalated_by_id = ? WHERE id = ?')
@@ -388,7 +388,7 @@ router.post('/:id/escalate', (req, res) => {
   logActivity({ user: req.session.user, action: 'escalate', entityType: 'incident', entityId: parseInt(req.params.id), entityLabel: `${incident.incident_number} escalation: ${incident.old_level || 'standard'} -> ${escalation_level}`, jobId: incident.job_id, ip: req.ip });
 
   req.flash('success', `Escalation level updated to ${escalation_level}.`);
-  res.redirect('/incidents/' + req.params.id);
+  req.session.save(() => res.redirect('/incidents/' + req.params.id));
 });
 
 module.exports = router;

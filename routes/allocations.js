@@ -221,7 +221,7 @@ router.post('/', (req, res) => {
   if (!check.allowed && !force_override) {
     for (const b of check.blocks) req.flash('error', 'BLOCKED: ' + b);
     for (const w of check.warnings) req.flash('error', w);
-    return res.redirect('/allocations?date=' + allocation_date);
+    return req.session.save(() => res.redirect('/allocations?date=' + allocation_date));
   }
 
   // If override requested, check authorisation
@@ -229,7 +229,7 @@ router.post('/', (req, res) => {
     const userRole = req.session.user.role;
     if (userRole !== 'admin' && userRole !== 'management' && userRole !== 'operations') {
       req.flash('error', 'Only Admin, Management or Operations can override allocation blocks');
-      return res.redirect('/allocations?date=' + allocation_date);
+      return req.session.save(() => res.redirect('/allocations?date=' + allocation_date));
     }
     logActivity({
       user: req.session.user, action: 'update', entityType: 'allocation_override',
@@ -279,7 +279,7 @@ router.post('/', (req, res) => {
     req.flash('success', 'Crew member allocated successfully');
   }
 
-  res.redirect('/allocations?date=' + allocation_date);
+  req.session.save(() => res.redirect('/allocations?date=' + allocation_date));
 });
 
 // ============================================================
@@ -438,7 +438,7 @@ router.post('/:id/confirm', (req, res) => {
   logActivity({ user: req.session.user, action: 'update', entityType: 'crew_allocation',
     entityId: parseInt(req.params.id), details: 'Confirmed allocation', ip: req.ip });
   req.flash('success', 'Allocation confirmed');
-  res.redirect('/allocations?date=' + date);
+  req.session.save(() => res.redirect('/allocations?date=' + date));
 });
 
 // POST /:id/cancel — Cancel allocation
@@ -453,7 +453,7 @@ router.post('/:id/cancel', (req, res) => {
   logActivity({ user: req.session.user, action: 'update', entityType: 'crew_allocation',
     entityId: parseInt(req.params.id), details: 'Cancelled allocation', ip: req.ip });
   req.flash('success', 'Allocation cancelled');
-  res.redirect('/allocations?date=' + date);
+  req.session.save(() => res.redirect('/allocations?date=' + date));
 });
 
 // POST /:id/delete — Delete allocation (only if still allocated)
@@ -466,7 +466,7 @@ router.post('/:id/delete', (req, res) => {
   `).run(req.params.id);
 
   req.flash('success', 'Allocation removed');
-  res.redirect('/allocations?date=' + date);
+  req.session.save(() => res.redirect('/allocations?date=' + date));
 });
 
 // POST /confirm-all — Bulk confirm all for a date
@@ -482,7 +482,7 @@ router.post('/confirm-all', (req, res) => {
   logActivity({ user: req.session.user, action: 'update', entityType: 'crew_allocation',
     details: 'Bulk confirmed ' + result.changes + ' allocations for ' + allocation_date, ip: req.ip });
   req.flash('success', result.changes + ' allocations confirmed');
-  res.redirect('/allocations?date=' + allocation_date);
+  req.session.save(() => res.redirect('/allocations?date=' + allocation_date));
 });
 
 // POST /copy-day — Copy allocations from one day to another
@@ -497,7 +497,7 @@ router.post('/copy-day', (req, res) => {
 
   if (existingCount > 0) {
     req.flash('error', to_date + ' already has ' + existingCount + ' allocations. Clear them first or allocate manually.');
-    return res.redirect('/allocations?date=' + to_date);
+    return req.session.save(() => res.redirect('/allocations?date=' + to_date));
   }
 
   const result = db.prepare(`
@@ -510,7 +510,7 @@ router.post('/copy-day', (req, res) => {
   logActivity({ user: req.session.user, action: 'create', entityType: 'crew_allocation',
     details: 'Copied ' + result.changes + ' allocations from ' + from_date + ' to ' + to_date, ip: req.ip });
   req.flash('success', result.changes + ' allocations copied from ' + from_date + ' to ' + to_date);
-  res.redirect('/allocations?date=' + to_date);
+  req.session.save(() => res.redirect('/allocations?date=' + to_date));
 });
 
 // POST /create-shift — Quick create a shift (lightweight job entry for daily allocation)
@@ -551,10 +551,10 @@ router.post('/create-shift', (req, res) => {
       jobId: result.lastInsertRowid, details: 'Quick-created shift ' + shiftNumber + ' for ' + date, ip: req.ip });
 
     req.flash('success', 'Shift ' + shiftNumber + ' created for ' + date);
-    res.redirect('/allocations?date=' + date);
+    req.session.save(() => res.redirect('/allocations?date=' + date));
   } catch (err) {
     req.flash('error', 'Failed to create shift: ' + err.message);
-    res.redirect('/allocations?date=' + date);
+    req.session.save(() => res.redirect('/allocations?date=' + date));
   }
 });
 

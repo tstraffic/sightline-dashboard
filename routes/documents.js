@@ -56,7 +56,7 @@ router.get('/', (req, res) => {
 router.get('/job/:jobId', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.jobId);
-  if (!job) { req.flash('error', 'Job not found.'); return res.redirect('/jobs'); }
+  if (!job) { req.flash('error', 'Job not found.'); return req.session.save(() => res.redirect('/jobs')); }
 
   const deliveryDocs = db.prepare(`
     SELECT d.*, u.full_name as uploaded_by_name FROM documents d
@@ -93,12 +93,12 @@ router.post('/upload', upload.single('file'), (req, res) => {
   if (b.library === 'accounts' && !canViewAccounts(req.session.user)) {
     if (req.file) fs.unlinkSync(req.file.path);
     req.flash('error', 'You do not have permission to upload to Accounts.');
-    return res.redirect(`/documents/job/${b.job_id}`);
+    return req.session.save(() => res.redirect(`/documents/job/${b.job_id}`));
   }
 
   if (!req.file) {
     req.flash('error', 'No file selected.');
-    return res.redirect(`/documents/job/${b.job_id}`);
+    return req.session.save(() => res.redirect(`/documents/job/${b.job_id}`));
   }
 
   db.prepare(`
@@ -107,14 +107,14 @@ router.post('/upload', upload.single('file'), (req, res) => {
   `).run(b.job_id, b.library, b.category, req.file.filename, req.file.originalname, req.file.path, req.file.size, req.session.user.id);
 
   req.flash('success', `Uploaded: ${req.file.originalname}`);
-  res.redirect(`/documents/job/${b.job_id}`);
+  req.session.save(() => res.redirect(`/documents/job/${b.job_id}`));
 });
 
 // Download document
 router.get('/download/:id', (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'File not found.'); return res.redirect('/jobs'); }
+  if (!doc) { req.flash('error', 'File not found.'); return req.session.save(() => res.redirect('/jobs')); }
 
   // Enforce accounts access
   if (doc.library === 'accounts' && !canViewAccounts(req.session.user)) {
@@ -123,7 +123,7 @@ router.get('/download/:id', (req, res) => {
 
   if (!fs.existsSync(doc.file_path)) {
     req.flash('error', 'File not found on disk.');
-    return res.redirect(`/documents/job/${doc.job_id}`);
+    return req.session.save(() => res.redirect(`/documents/job/${doc.job_id}`));
   }
 
   res.download(doc.file_path, doc.original_name);
@@ -133,7 +133,7 @@ router.get('/download/:id', (req, res) => {
 router.post('/delete/:id', (req, res) => {
   const db = getDb();
   const doc = db.prepare('SELECT * FROM documents WHERE id = ?').get(req.params.id);
-  if (!doc) { req.flash('error', 'File not found.'); return res.redirect('/jobs'); }
+  if (!doc) { req.flash('error', 'File not found.'); return req.session.save(() => res.redirect('/jobs')); }
 
   if (doc.library === 'accounts' && !canViewAccounts(req.session.user)) {
     return res.status(403).render('error', { title: 'Access Denied', message: 'You do not have access to Accounts documents.', user: req.session.user });
@@ -142,7 +142,7 @@ router.post('/delete/:id', (req, res) => {
   if (fs.existsSync(doc.file_path)) fs.unlinkSync(doc.file_path);
   db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id);
   req.flash('success', 'File deleted.');
-  res.redirect(`/documents/job/${doc.job_id}`);
+  req.session.save(() => res.redirect(`/documents/job/${doc.job_id}`));
 });
 
 module.exports = router;

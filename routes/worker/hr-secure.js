@@ -106,14 +106,12 @@ router.get('/hr/bank', (req, res) => {
     currentPage: 'more',
     employee,
     current,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
 router.post('/hr/bank', requirePinConfirm('bank'), (req, res) => {
   const employee = loadEmployee(req.session.worker);
-  if (!employee) { req.flash('error', 'Linked employee not found.'); return res.redirect('/w/hr/bank'); }
+  if (!employee) { req.flash('error', 'Linked employee not found.'); return req.session.save(() => res.redirect('/w/hr/bank')); }
 
   const account_name = (req.body.account_name || '').trim();
   const bsb = (req.body.bsb || '').replace(/\s|-/g, '').trim();
@@ -121,15 +119,15 @@ router.post('/hr/bank', requirePinConfirm('bank'), (req, res) => {
 
   if (!account_name || !bsb || !account_number) {
     req.flash('error', 'All bank fields are required.');
-    return res.redirect('/w/hr/bank');
+    return req.session.save(() => res.redirect('/w/hr/bank'));
   }
   if (!/^\d{6}$/.test(bsb)) {
     req.flash('error', 'BSB must be 6 digits (e.g. 062-000).');
-    return res.redirect('/w/hr/bank');
+    return req.session.save(() => res.redirect('/w/hr/bank'));
   }
   if (!/^\d{6,10}$/.test(account_number)) {
     req.flash('error', 'Account number must be 6–10 digits.');
-    return res.redirect('/w/hr/bank');
+    return req.session.save(() => res.redirect('/w/hr/bank'));
   }
 
   const db = getDb();
@@ -151,7 +149,7 @@ router.post('/hr/bank', requirePinConfirm('bank'), (req, res) => {
   notifyAdminsOfPending('bank_account', employee.full_name);
 
   req.flash('success', 'Bank details submitted — pending admin approval.');
-  res.redirect('/w/hr/bank');
+  req.session.save(() => res.redirect('/w/hr/bank'));
 });
 
 // ==============================================================
@@ -178,20 +176,18 @@ router.get('/hr/super', (req, res) => {
     employee,
     current,
     defaultFund: getDefaultSuper(),
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
 router.post('/hr/super', (req, res) => {
   // multer first (for optional PDF), then PIN check, then handler.
   choiceUpload.single('choice_form')(req, res, function (err) {
-    if (err) { req.flash('error', err.message); return res.redirect('/w/hr/super'); }
+    if (err) { req.flash('error', err.message); return req.session.save(() => res.redirect('/w/hr/super')); }
 
     // Re-use PIN middleware (multer populates req.body)
     return requirePinConfirm('super')(req, res, function () {
       const employee = loadEmployee(req.session.worker);
-      if (!employee) { req.flash('error', 'Linked employee not found.'); return res.redirect('/w/hr/super'); }
+      if (!employee) { req.flash('error', 'Linked employee not found.'); return req.session.save(() => res.redirect('/w/hr/super')); }
 
       const useDefault = !!req.body.use_default;
       let fund_name = (req.body.fund_name || '').trim();
@@ -206,11 +202,11 @@ router.post('/hr/super', (req, res) => {
 
       if (!useDefault && !req.file && (!fund_name || !usi || !member_number)) {
         req.flash('error', 'Provide fund name, USI and member number — or upload a Super Choice form.');
-        return res.redirect('/w/hr/super');
+        return req.session.save(() => res.redirect('/w/hr/super'));
       }
       if (fund_abn && !/^\d{11}$/.test(fund_abn)) {
         req.flash('error', 'Fund ABN must be 11 digits.');
-        return res.redirect('/w/hr/super');
+        return req.session.save(() => res.redirect('/w/hr/super'));
       }
 
       const choiceUrl = req.file ? `/data/uploads/hr/emp_${req.session.worker.id}/super/${req.file.filename}` : null;
@@ -230,7 +226,7 @@ router.post('/hr/super', (req, res) => {
       notifyAdminsOfPending('super_fund', employee.full_name);
 
       req.flash('success', 'Superannuation details submitted — pending admin approval.');
-      res.redirect('/w/hr/super');
+      req.session.save(() => res.redirect('/w/hr/super'));
     });
   });
 });
@@ -268,23 +264,21 @@ router.get('/hr/tfn', (req, res) => {
     currentPage: 'more',
     employee,
     current,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
 router.post('/hr/tfn', requirePinConfirm('tfn'), async (req, res) => {
   const employee = loadEmployee(req.session.worker);
-  if (!employee) { req.flash('error', 'Linked employee not found.'); return res.redirect('/w/hr/tfn'); }
+  if (!employee) { req.flash('error', 'Linked employee not found.'); return req.session.save(() => res.redirect('/w/hr/tfn')); }
 
   const tfnRaw = (req.body.tfn || '').replace(/\D/g, '');
   if (!/^\d{9}$/.test(tfnRaw) || !validateTfnChecksum(tfnRaw)) {
     req.flash('error', 'Enter a valid 9-digit TFN.');
-    return res.redirect('/w/hr/tfn');
+    return req.session.save(() => res.redirect('/w/hr/tfn'));
   }
   const residency = req.body.residency_status;
   if (!['resident','foreign','working_holiday'].includes(residency)) {
-    req.flash('error', 'Select a residency status.'); return res.redirect('/w/hr/tfn');
+    req.flash('error', 'Select a residency status.'); return req.session.save(() => res.redirect('/w/hr/tfn'));
   }
   const claim = req.body.claim_threshold ? 1 : 0;
   const help = req.body.has_help_debt ? 1 : 0;
@@ -292,7 +286,7 @@ router.post('/hr/tfn', requirePinConfirm('tfn'), async (req, res) => {
   const medicare = ['none','reduction','exemption'].includes(req.body.medicare_variation) ? req.body.medicare_variation : 'none';
   const signatureDataUrl = req.body.signature_data || '';
   if (!/^data:image\/(png|jpeg);base64,/.test(signatureDataUrl)) {
-    req.flash('error', 'Please sign the declaration.'); return res.redirect('/w/hr/tfn');
+    req.flash('error', 'Please sign the declaration.'); return req.session.save(() => res.redirect('/w/hr/tfn'));
   }
 
   const db = getDb();
@@ -344,7 +338,7 @@ router.post('/hr/tfn', requirePinConfirm('tfn'), async (req, res) => {
   notifyAdminsOfPending('tfn_declaration', employee.full_name);
 
   req.flash('success', 'TFN declaration submitted — admin notified for QBO action.');
-  res.redirect('/w/hr/tfn');
+  req.session.save(() => res.redirect('/w/hr/tfn'));
 });
 
 module.exports = router;

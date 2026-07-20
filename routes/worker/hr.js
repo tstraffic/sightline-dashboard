@@ -259,12 +259,12 @@ router.post('/hr/vocs/:id/sign', async (req, res) => {
   const m = String(dataUrl).match(VOC_SIG_DATA_URL_RE);
   if (!m) {
     req.flash('error', 'Please draw your signature first.');
-    return res.redirect('/w/hr/vocs/' + a.id + '/sign');
+    return req.session.save(() => res.redirect('/w/hr/vocs/' + a.id + '/sign'));
   }
   const approxBytes = Math.floor(m[1].length * 3 / 4);
   if (approxBytes > VOC_MAX_SIG_BYTES) {
     req.flash('error', 'Signature too large — try a simpler stroke.');
-    return res.redirect('/w/hr/vocs/' + a.id + '/sign');
+    return req.session.save(() => res.redirect('/w/hr/vocs/' + a.id + '/sign'));
   }
 
   // Write the PNG and stamp the row.
@@ -286,7 +286,7 @@ router.post('/hr/vocs/:id/sign', async (req, res) => {
   } catch (e) {
     console.error('[w-hr-vocs-sign] write failed:', e);
     req.flash('error', 'Could not save your signature — please try again.');
-    return res.redirect('/w/hr/vocs/' + a.id + '/sign');
+    return req.session.save(() => res.redirect('/w/hr/vocs/' + a.id + '/sign'));
   }
 
   // Regenerate the cert PDF so the embedded signature reflects what
@@ -303,7 +303,7 @@ router.post('/hr/vocs/:id/sign', async (req, res) => {
   }
 
   req.flash('success', 'Thanks — your signature is on file. The cert PDF has been updated.');
-  res.redirect('/w/hr/certs');
+  req.session.save(() => res.redirect('/w/hr/certs'));
 });
 
 // GET /w/hr/documents/:id — Stream a worker's own uploaded document.
@@ -530,7 +530,7 @@ router.post('/hr/leave', (req, res) => {
     if (req.body.mode === 'recurring') msg = 'Pick a start, an end, and at least one weekday for the recurring leave.';
     else if (req.body.mode === 'multiple') msg = 'Add at least one date to the multiple-date list.';
     req.flash('error', msg);
-    return res.redirect('/w/hr/leave');
+    return req.session.save(() => res.redirect('/w/hr/leave'));
   }
 
   // Cap at 180 dates as a safety
@@ -554,18 +554,18 @@ router.post('/hr/leave', (req, res) => {
   } catch (e) {
     console.error('[leave] insert failed:', e.message, { worker_id: worker.id, dates: capped });
     req.flash('error', 'Could not save leave: ' + e.message);
-    return res.redirect('/w/hr/leave');
+    return req.session.save(() => res.redirect('/w/hr/leave'));
   }
 
   if (inserted === 0) {
     console.warn('[leave] tx ran but inserted 0 rows', { worker_id: worker.id, dates: capped });
     req.flash('error', 'Submission accepted but no rows saved — try again or contact the office.');
-    return res.redirect('/w/hr/leave');
+    return req.session.save(() => res.redirect('/w/hr/leave'));
   }
 
   console.log('[leave] submitted', { worker_id: worker.id, count: inserted, dates: capped });
   req.flash('success', inserted === 1 ? 'Leave submitted — pending approval.' : `${inserted} leave days submitted — pending approval.`);
-  res.redirect('/w/hr/leave');
+  req.session.save(() => res.redirect('/w/hr/leave'));
 });
 
 // POST /w/hr/leave/:id/cancel — Cancel a leave record
@@ -573,14 +573,14 @@ router.post('/hr/leave/:id/cancel', (req, res) => {
   const db = getDb();
   const worker = req.session.worker;
   const record = db.prepare('SELECT * FROM employee_leave WHERE id = ? AND crew_member_id = ?').get(req.params.id, worker.id);
-  if (!record) { req.flash('error', 'Leave not found.'); return res.redirect('/w/hr/leave'); }
+  if (!record) { req.flash('error', 'Leave not found.'); return req.session.save(() => res.redirect('/w/hr/leave')); }
   if (record.status === 'approved') {
     req.flash('error', 'Approved leave cannot be cancelled — contact your supervisor.');
-    return res.redirect('/w/hr/leave');
+    return req.session.save(() => res.redirect('/w/hr/leave'));
   }
   db.prepare("UPDATE employee_leave SET status = 'cancelled' WHERE id = ?").run(req.params.id);
   req.flash('success', 'Leave cancelled.');
-  res.redirect('/w/hr/leave');
+  req.session.save(() => res.redirect('/w/hr/leave'));
 });
 
 // ============================================
@@ -612,7 +612,6 @@ router.get('/hr/payslips', (req, res) => {
     return res.render('worker/hr-payslips', {
       title: 'Payslips', currentPage: 'more',
       payslips: [], summary: null, notLinked: true,
-      flash_success: req.flash('success'), flash_error: req.flash('error'),
     });
   }
   const payslips = db.prepare(`
@@ -631,7 +630,6 @@ router.get('/hr/payslips', (req, res) => {
   res.render('worker/hr-payslips', {
     title: 'Payslips', currentPage: 'more',
     payslips, summary, notLinked: false,
-    flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });
 
@@ -687,7 +685,6 @@ router.get('/hr/pay-runs', (req, res) => {
     return res.render('worker/hr-pay-runs', {
       title: 'Pay breakdown', currentPage: 'more',
       lines: [], notLinked: true,
-      flash_success: req.flash('success'), flash_error: req.flash('error'),
     });
   }
   // Guarded: the pay_runs/pay_run_lines tables come from a conditional
@@ -711,7 +708,6 @@ router.get('/hr/pay-runs', (req, res) => {
   res.render('worker/hr-pay-runs', {
     title: 'Pay breakdown', currentPage: 'more',
     lines, notLinked: false, fmtMoney,
-    flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });
 
@@ -773,7 +769,6 @@ router.get('/hr/pay-runs/:lineId', (req, res) => {
   res.render('worker/hr-pay-run-detail', {
     title: 'Pay breakdown', currentPage: 'more',
     line, visibleBuckets, showTravel, showMeal, expenses, deductions, fmtMoney,
-    flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });
 
@@ -809,7 +804,6 @@ router.get('/reviews', (req, res) => {
   res.render('worker/reviews', {
     title: 'My Reviews', currentPage: 'more',
     reviews,
-    flash_success: req.flash('success'), flash_error: req.flash('error'),
   });
 });
 

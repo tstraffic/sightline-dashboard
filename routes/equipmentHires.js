@@ -189,23 +189,23 @@ router.post('/rates/companies', (req, res) => {
   const db = getDb();
   const b = req.body;
   const name = (b.name || '').toString().trim().slice(0, 200);
-  if (!name) { req.flash('error', 'Company name is required.'); return res.redirect('/equipment/hire/rates'); }
+  if (!name) { req.flash('error', 'Company name is required.'); return req.session.save(() => res.redirect('/equipment/hire/rates')); }
   if (b.id) {
     db.prepare(`UPDATE hire_companies SET name=?, contact_person=?, phone=?, email=?, notes=?, active=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
       .run(name, b.contact_person || '', b.phone || '', b.email || '', b.notes || '', b.active === '0' ? 0 : 1, b.id);
-    return res.redirect('/equipment/hire/rates?company=' + encodeURIComponent(b.id));
+    return req.session.save(() => res.redirect('/equipment/hire/rates?company=' + encodeURIComponent(b.id)));
   }
   const r = db.prepare(`INSERT INTO hire_companies (name, contact_person, phone, email, notes, created_by_id) VALUES (?,?,?,?,?,?)`)
     .run(name, b.contact_person || '', b.phone || '', b.email || '', b.notes || '', req.session.user.id);
   req.flash('success', `Added ${name}.`);
-  res.redirect('/equipment/hire/rates?company=' + r.lastInsertRowid);
+  req.session.save(() => res.redirect('/equipment/hire/rates?company=' + r.lastInsertRowid));
 });
 
 router.post('/rates/companies/:id/delete', (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM hire_companies WHERE id = ?').run(req.params.id); // CASCADE clears its rates
   req.flash('success', 'Company removed.');
-  res.redirect('/equipment/hire/rates');
+  req.session.save(() => res.redirect('/equipment/hire/rates'));
 });
 
 // Upsert the per-type rate matrix for a company. Fields: r_<type>_<unit>.
@@ -213,7 +213,7 @@ router.post('/rates/companies/:id/rates', (req, res) => {
   const db = getDb();
   const companyId = parseInt(req.params.id, 10);
   if (!db.prepare('SELECT 1 FROM hire_companies WHERE id = ?').get(companyId)) {
-    req.flash('error', 'Company not found.'); return res.redirect('/equipment/hire/rates');
+    req.flash('error', 'Company not found.'); return req.session.save(() => res.redirect('/equipment/hire/rates'));
   }
   const upsert = db.prepare(`
     INSERT INTO equipment_hire_rates (company_id, equipment_type, rate_unit, rate, updated_at)
@@ -236,7 +236,7 @@ router.post('/rates/companies/:id/rates', (req, res) => {
   });
   tx();
   req.flash('success', 'Rates saved.');
-  res.redirect('/equipment/hire/rates?company=' + companyId);
+  req.session.save(() => res.redirect('/equipment/hire/rates?company=' + companyId));
 });
 
 // ---------- HIRE CRUD ----------
@@ -313,13 +313,13 @@ router.post('/', (req, res) => {
   syncUnits(db, result.lastInsertRowid, h.quantity, parseUnitNumbers(b['unit_numbers[]'] || b.unit_numbers));
   try { logActivity({ user: req.session.user, action: 'create', entityType: 'equipment_hire', entityId: result.lastInsertRowid, entityLabel: `${h.company_name} — ${typeLabel(h.equipment_type)}`, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Hire added — ' + h.quantity + ' unit' + (h.quantity === 1 ? '' : 's') + ' on hire.');
-  res.redirect(redirectToMonth(h.start_date));
+  req.session.save(() => res.redirect(redirectToMonth(h.start_date)));
 });
 
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const hire = db.prepare('SELECT * FROM equipment_hires WHERE id = ?').get(req.params.id);
-  if (!hire) { req.flash('error', 'Hire not found.'); return res.redirect('/equipment/hire'); }
+  if (!hire) { req.flash('error', 'Hire not found.'); return req.session.save(() => res.redirect('/equipment/hire')); }
   res.render('equipment/hire/form', {
     title: 'Edit Hire',
     currentPage: 'equipment',
@@ -335,7 +335,7 @@ router.get('/:id/edit', (req, res) => {
 router.post('/:id', (req, res) => {
   const db = getDb();
   const exists = db.prepare('SELECT id FROM equipment_hires WHERE id = ?').get(req.params.id);
-  if (!exists) { req.flash('error', 'Hire not found.'); return res.redirect('/equipment/hire'); }
+  if (!exists) { req.flash('error', 'Hire not found.'); return req.session.save(() => res.redirect('/equipment/hire')); }
   const h = applyHireBody(req.body);
   if (h.company_id && !h.company_name) {
     const c = db.prepare('SELECT name FROM hire_companies WHERE id = ?').get(h.company_id);
@@ -364,7 +364,7 @@ router.post('/:id', (req, res) => {
   `).run({ ...h, id: req.params.id });
   try { logActivity({ user: req.session.user, action: 'update', entityType: 'equipment_hire', entityId: parseInt(req.params.id), entityLabel: `${h.company_name} — ${typeLabel(h.equipment_type)}`, ip: req.ip }); } catch (e) {}
   req.flash('success', 'Hire updated.');
-  res.redirect(redirectToMonth(h.start_date));
+  req.session.save(() => res.redirect(redirectToMonth(h.start_date)));
 });
 
 // ---------- RETURN / OFF-HIRE FLOW ----------
@@ -378,7 +378,7 @@ router.get('/:id/return', (req, res) => {
     SELECT h.*, c.name AS company_current_name FROM equipment_hires h
     LEFT JOIN hire_companies c ON c.id = h.company_id WHERE h.id = ?
   `).get(req.params.id);
-  if (!hire) { req.flash('error', 'Hire not found.'); return res.redirect('/equipment/hire'); }
+  if (!hire) { req.flash('error', 'Hire not found.'); return req.session.save(() => res.redirect('/equipment/hire')); }
   const units = unitsFor(db, hire.id);
   res.render('equipment/hire/return', {
     title: 'Return — ' + typeLabel(hire.equipment_type),
@@ -394,7 +394,7 @@ router.get('/:id/return', (req, res) => {
 router.post('/:id/return', (req, res) => {
   const db = getDb();
   const hire = db.prepare('SELECT * FROM equipment_hires WHERE id = ?').get(req.params.id);
-  if (!hire) { req.flash('error', 'Hire not found.'); return res.redirect('/equipment/hire'); }
+  if (!hire) { req.flash('error', 'Hire not found.'); return req.session.save(() => res.redirect('/equipment/hire')); }
   const b = req.body;
   const returnDate = /^\d{4}-\d{2}-\d{2}$/.test(b.return_date || '') ? b.return_date : todayISO();
   const note = String(b.return_note || '').trim().slice(0, 500);
@@ -403,7 +403,7 @@ router.post('/:id/return', (req, res) => {
   const ids = Object.keys(b)
     .filter(k => /^unit_\d+$/.test(k))
     .map(k => parseInt(k.slice(5), 10));
-  if (!ids.length) { req.flash('error', 'Tick the unit numbers that came back.'); return res.redirect('/equipment/hire/' + hire.id + '/return'); }
+  if (!ids.length) { req.flash('error', 'Tick the unit numbers that came back.'); return req.session.save(() => res.redirect('/equipment/hire/' + hire.id + '/return')); }
 
   const mark = db.prepare(`
     UPDATE equipment_hire_units SET returned_at = ?, returned_by = ?, return_note = ?
@@ -424,27 +424,27 @@ router.post('/:id/return', (req, res) => {
   req.flash('success', outstanding
     ? `${marked} unit${marked === 1 ? '' : 's'} returned — ${outstanding} still on hire.`
     : `All units returned — hire off-hired as of ${returnDate}.`);
-  res.redirect(outstanding ? '/equipment/hire/' + hire.id + '/return' : redirectToMonth(hire.start_date));
+  req.session.save(() => res.redirect(outstanding ? '/equipment/hire/' + hire.id + '/return' : redirectToMonth(hire.start_date)));
 });
 
 // Undo a mistaken return: the unit goes back on hire (and so does the hire).
 router.post('/:id/units/:unitId/unreturn', (req, res) => {
   const db = getDb();
   const unit = db.prepare('SELECT * FROM equipment_hire_units WHERE id = ? AND hire_id = ?').get(req.params.unitId, req.params.id);
-  if (!unit) { req.flash('error', 'Unit not found.'); return res.redirect('/equipment/hire'); }
+  if (!unit) { req.flash('error', 'Unit not found.'); return req.session.save(() => res.redirect('/equipment/hire')); }
   db.prepare("UPDATE equipment_hire_units SET returned_at = NULL, returned_by = '', return_note = '' WHERE id = ?").run(unit.id);
   // Re-opening an off-hired hire also clears the (auto-set) end date so the
   // hire reads as ongoing again and stays visible in the current month.
   db.prepare("UPDATE equipment_hires SET status = 'on_hire', end_date = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'off_hired'").run(req.params.id);
   req.flash('success', 'Return undone — unit is back on hire.');
-  res.redirect('/equipment/hire/' + req.params.id + '/return');
+  req.session.save(() => res.redirect('/equipment/hire/' + req.params.id + '/return'));
 });
 
 router.post('/:id/delete', (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM equipment_hires WHERE id = ?').run(req.params.id);
   req.flash('success', 'Hire removed.');
-  res.redirect('/equipment/hire');
+  req.session.save(() => res.redirect('/equipment/hire'));
 });
 
 // Redirect back to the month a hire's start_date falls in (so the user lands

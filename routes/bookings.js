@@ -515,7 +515,7 @@ router.get('/new', (req, res) => {
   } catch (err) {
     console.error('Bookings /new error:', err);
     req.flash('error', 'Failed to load form: ' + err.message);
-    res.redirect('/bookings');
+    req.session.save(() => res.redirect('/bookings'));
   }
 });
 
@@ -558,8 +558,8 @@ router.post('/geocode/backfill', requireRole('management', 'admin'), async (req,
 // POST / — Create booking
 router.post('/', (req, res) => {
   const db = getDb(); const b = req.body;
-  if (!b.title || !b.start_date || !b.start_time || !b.end_date || !b.end_time) { req.flash('error', 'Title and schedule are required.'); return res.redirect('/bookings/new'); }
-  if ((b.end_date + 'T' + b.end_time) <= (b.start_date + 'T' + b.start_time)) { req.flash('error', 'Finish must be after the start — check the dates/times.'); return res.redirect('/bookings/new'); }
+  if (!b.title || !b.start_date || !b.start_time || !b.end_date || !b.end_time) { req.flash('error', 'Title and schedule are required.'); return req.session.save(() => res.redirect('/bookings/new')); }
+  if ((b.end_date + 'T' + b.end_time) <= (b.start_date + 'T' + b.start_time)) { req.flash('error', 'Finish must be after the start — check the dates/times.'); return req.session.save(() => res.redirect('/bookings/new')); }
   // Normalise time fields
   b.depot_meeting_time = normaliseTimeStr(b.depot_meeting_time);
   b.straight_to_site_time = normaliseTimeStr(b.straight_to_site_time);
@@ -630,7 +630,7 @@ router.post('/', (req, res) => {
   req.flash('success', `Booking ${bookingNumber} created — now assign your crew and vehicles below.`);
   // Land the planner directly on the detail page so the crew + vehicle
   // picker is right in front of them (was redirecting to the list).
-  res.redirect('/bookings/' + bookingId);
+  req.session.save(() => res.redirect('/bookings/' + bookingId));
 
   // Background geocode after the response goes out — never blocks the
   // user's save. Skips if the user already pinned the marker manually
@@ -1635,7 +1635,7 @@ router.post('/:id/quick-update', (req, res) => {
   const existing = db.prepare('SELECT id FROM bookings WHERE id = ?').get(req.params.id);
   if (!existing) {
     if (isJson) return res.status(404).json({ error: 'Booking not found' });
-    req.flash('error', 'Booking not found.'); return res.redirect('/bookings');
+    req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings'));
   }
   const b = req.body;
   const missing = [];
@@ -1646,7 +1646,7 @@ router.post('/:id/quick-update', (req, res) => {
   if (missing.length) {
     const msg = 'Missing: ' + missing.join(', ');
     if (isJson) return res.status(400).json({ error: msg });
-    req.flash('error', msg); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', msg); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   const startTime = b.start_time;
   const endTime = b.end_time || '14:30';
@@ -1709,7 +1709,7 @@ router.post('/:id/quick-update', (req, res) => {
     console.error('[bookings/quick-update] UPDATE failed:', err.message);
     if (isJson) return res.status(500).json({ error: 'Could not save booking: ' + err.message });
     req.flash('error', 'Could not save booking: ' + err.message);
-    return res.redirect('/bookings/' + req.params.id);
+    return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   // Booking Requirements steppers → rebuild booking_requirements. Only do
   // this when the form actually carried the grid (the steppers always post,
@@ -1753,7 +1753,7 @@ router.post('/:id/quick-update', (req, res) => {
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Quick-edited booking #${req.params.id}`, req });
   if (isJson) return res.json({ ok: true, id: parseInt(req.params.id, 10) });
   req.flash('success', 'Booking saved.');
-  return res.redirect('/bookings/' + req.params.id);
+  return req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // GET /api/places — address autocomplete via Geoapify.
@@ -1842,7 +1842,7 @@ router.post('/quick', (req, res) => {
   if (missing.length) {
     const msg = 'Missing: ' + missing.join(', ');
     if (isJson) return res.status(400).json({ error: msg });
-    req.flash('error', msg); return res.redirect('/bookings');
+    req.flash('error', msg); return req.session.save(() => res.redirect('/bookings'));
   }
   const startTime = b.start_time;
   const endTime = b.end_time || '14:30';
@@ -1912,7 +1912,7 @@ router.post('/quick', (req, res) => {
     console.error('[bookings/quick] INSERT failed:', err.message);
     if (isJson) return res.status(500).json({ error: 'Could not create booking: ' + err.message });
     req.flash('error', 'Could not create booking: ' + err.message);
-    return res.redirect('/bookings');
+    return req.session.save(() => res.redirect('/bookings'));
   }
   const newId = result.lastInsertRowid;
 
@@ -1966,7 +1966,7 @@ router.post('/quick', (req, res) => {
   // Land the planner on the full booking detail page so they can keep
   // working on the booking they just created, instead of back on the
   // day board with the new row buried in the list.
-  res.redirect('/bookings/' + newId);
+  req.session.save(() => res.redirect('/bookings/' + newId));
 });
 
 // GET /resources — Available crew (JSON) with qualification data
@@ -2254,7 +2254,7 @@ router.get('/:id', (req, res) => {
   // instead of crashing a downstream query.
   if (!/^\d+$/.test(String(req.params.id))) {
     if (wantsJson) return res.status(404).json({ error: 'Booking not found' });
-    req.flash('error', 'Booking not found.'); return res.redirect('/bookings');
+    req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings'));
   }
   let db, booking;
   try {
@@ -2265,9 +2265,9 @@ router.get('/:id', (req, res) => {
   } catch (err) {
     console.error('[GET /bookings/:id] loadBookingDetail threw:', err.message, err.stack);
     if (wantsJson) return res.status(500).json({ error: 'Server error: ' + err.message });
-    req.flash('error', 'Failed to load booking: ' + err.message); return res.redirect('/bookings');
+    req.flash('error', 'Failed to load booking: ' + err.message); return req.session.save(() => res.redirect('/bookings'));
   }
-  if (!booking) { if (wantsJson) return res.status(404).json({ error: 'Booking not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  if (!booking) { if (wantsJson) return res.status(404).json({ error: 'Booking not found' }); req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings')); }
   // Resolve requester/planner names (used by both JSON and HTML paths).
   // These now reference client_contacts (the client's people), not crew.
   let requesterName = '', plannerName = '';
@@ -2484,7 +2484,7 @@ router.get('/:id', (req, res) => {
 // GET /:id/edit
 router.get('/:id/edit', (req, res) => {
   const db = getDb(); const booking = db.prepare("SELECT * FROM bookings WHERE id = ?").get(req.params.id);
-  if (!booking) { req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  if (!booking) { req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings')); }
   if (booking.start_datetime) { const p = booking.start_datetime.split('T'); booking.start_date = p[0]; booking.start_time = (p[1] || '').substring(0, 5); }
   if (booking.end_datetime) { const p = booking.end_datetime.split('T'); booking.end_date = p[0]; booking.end_time = (p[1] || '').substring(0, 5); }
   // Parse JSON fields for the form
@@ -2531,10 +2531,10 @@ router.get('/:id/edit', (req, res) => {
 // POST /:id — Update
 router.post('/:id', (req, res) => {
   const db = getDb(); const existing = db.prepare("SELECT id, booking_number, start_datetime, description, location_notes FROM bookings WHERE id = ?").get(req.params.id);
-  if (!existing) { req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  if (!existing) { req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings')); }
   const b = req.body;
-  if (!b.title || !b.start_date || !b.start_time || !b.end_date || !b.end_time) { req.flash('error', 'Title and schedule are required.'); return res.redirect('/bookings/' + req.params.id + '/edit'); }
-  if ((b.end_date + 'T' + b.end_time) <= (b.start_date + 'T' + b.start_time)) { req.flash('error', 'Finish must be after the start — check the dates/times.'); return res.redirect('/bookings/' + req.params.id + '/edit'); }
+  if (!b.title || !b.start_date || !b.start_time || !b.end_date || !b.end_time) { req.flash('error', 'Title and schedule are required.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id + '/edit')); }
+  if ((b.end_date + 'T' + b.end_time) <= (b.start_date + 'T' + b.start_time)) { req.flash('error', 'Finish must be after the start — check the dates/times.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id + '/edit')); }
   b.depot_meeting_time = normaliseTimeStr(b.depot_meeting_time);
   b.straight_to_site_time = normaliseTimeStr(b.straight_to_site_time);
   const siteContacts = Array.isArray(b.site_contacts) ? JSON.stringify(b.site_contacts) : (b.site_contacts ? JSON.stringify([b.site_contacts]) : '[]');
@@ -2639,7 +2639,7 @@ router.post('/:id', (req, res) => {
   }
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Updated booking ${existing.booking_number}`, req });
-  req.flash('success', `Booking ${existing.booking_number} updated.`); res.redirect('/bookings/' + req.params.id);
+  req.flash('success', `Booking ${existing.booking_number} updated.`); req.session.save(() => res.redirect('/bookings/' + req.params.id));
 
   // Background geocode — only re-runs if address text might have
   // changed (lat/lng cleared) or marker_is_accurate is false. The
@@ -2669,9 +2669,9 @@ router.post('/:id/geocode', async (req, res) => {
 router.post('/:id/status', (req, res) => {
   const db = getDb(); const newStatus = req.body.status;
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  if (!VALID_STATUSES.includes(newStatus)) { if (isJson) return res.status(400).json({ error: 'Invalid status' }); req.flash('error', 'Invalid status.'); return res.redirect('back'); }
+  if (!VALID_STATUSES.includes(newStatus)) { if (isJson) return res.status(400).json({ error: 'Invalid status' }); req.flash('error', 'Invalid status.'); return req.session.save(() => res.redirect('back')); }
   const existing = db.prepare("SELECT id, booking_number, status FROM bookings WHERE id = ?").get(req.params.id);
-  if (!existing) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  if (!existing) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings')); }
   db.prepare("UPDATE bookings SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?").run(newStatus, req.params.id);
   // Cancellation cascades to the crew's allocations so the shift drops off
   // worker views; un-cancelling brings them back (confirmed stays confirmed).
@@ -2695,7 +2695,7 @@ router.post('/:id/status', (req, res) => {
   }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Status: ${existing.status} → ${newStatus} on ${existing.booking_number}`, req });
   if (isJson) return res.json({ ok: true, status: newStatus });
-  req.flash('success', `Status updated to ${newStatus.replace(/_/g, ' ')}.`); res.redirect('/bookings/' + req.params.id);
+  req.flash('success', `Status updated to ${newStatus.replace(/_/g, ' ')}.`); req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // POST /:id/delete — Soft delete
@@ -2703,7 +2703,7 @@ router.post('/:id/delete', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const booking = db.prepare("SELECT id, booking_number FROM bookings WHERE id = ?").get(req.params.id);
-  if (!booking) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  if (!booking) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings')); }
   db.prepare("UPDATE bookings SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
   // A deleted booking's shifts must drop off the worker portal too — and
   // the crew should hear about it (a delete is a cancellation to them).
@@ -2716,7 +2716,7 @@ router.post('/:id/delete', (req, res) => {
   if (delBk && bookingNotify.isNotifiable(delStatus)) bookingNotify.notifyCancelled(delCrewIds, delBk);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'booking', entityId: req.params.id, details: `Soft-deleted ${booking.booking_number}`, req });
   if (isJson) return res.json({ ok: true });
-  req.flash('success', `Booking ${booking.booking_number} deleted.`); res.redirect('/bookings');
+  req.flash('success', `Booking ${booking.booking_number} deleted.`); req.session.save(() => res.redirect('/bookings'));
 });
 
 // POST /:id/undelete — Restore soft-deleted booking
@@ -2724,13 +2724,13 @@ router.post('/:id/undelete', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   const booking = db.prepare("SELECT id, booking_number FROM bookings WHERE id = ?").get(req.params.id);
-  if (!booking) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  if (!booking) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings')); }
   db.prepare("UPDATE bookings SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
   // Revive the crew's allocations that the delete cancelled.
   cascadeRestore(db, parseInt(req.params.id, 10));
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Restored ${booking.booking_number}`, req });
   if (isJson) return res.json({ ok: true });
-  req.flash('success', `Booking ${booking.booking_number} restored.`); res.redirect('/bookings');
+  req.flash('success', `Booking ${booking.booking_number} restored.`); req.session.save(() => res.redirect('/bookings'));
 });
 
 // Crew management
@@ -2739,12 +2739,12 @@ router.post('/:id/crew', (req, res) => {
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) {
     if (isJson) return res.status(404).json({ error: 'Booking not found' });
-    req.flash('error', 'Booking not found.'); return res.redirect('/bookings');
+    req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings'));
   }
   const { crew_member_id, role_on_site } = req.body;
   if (!crew_member_id) {
     if (isJson) return res.status(400).json({ error: 'Select a crew member' });
-    req.flash('error', 'Select a crew member.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'Select a crew member.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   // Idempotent: if they're already on THIS booking, treat the add as a
   // harmless no-op rather than an error. The slide-over can re-fire the
@@ -2757,7 +2757,7 @@ router.post('/:id/crew', (req, res) => {
       const cm = db.prepare("SELECT cm.id, cm.full_name, cm.role, COALESCE(e.employment_status,'active') AS employment_status FROM crew_members cm LEFT JOIN employees e ON e.linked_crew_member_id = cm.id WHERE cm.id = ?").get(crew_member_id);
       return res.json({ ok: true, crew: cm, alreadyAssigned: true });
     }
-    req.flash('info', 'Already on this booking.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('info', 'Already on this booking.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
 
   // Conflict detection — warn if crew member has overlapping bookings on same
@@ -2852,7 +2852,7 @@ router.post('/:id/crew', (req, res) => {
     const cm = db.prepare("SELECT cm.id, cm.full_name, cm.role, COALESCE(e.employment_status,'active') AS employment_status FROM crew_members cm LEFT JOIN employees e ON e.linked_crew_member_id = cm.id WHERE cm.id = ?").get(crew_member_id);
     return res.json({ ok: true, crew: cm, warning: conflictWarning });
   }
-  req.flash('success', 'Crew member added — they can now see this shift in their portal.'); res.redirect('/bookings/' + req.params.id);
+  req.flash('success', 'Crew member added — they can now see this shift in their portal.'); req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // Remove crew from booking + delete matching allocation
@@ -2869,17 +2869,17 @@ router.post('/:id/crew/:crewId/flag', (req, res) => {
   const col = FLAG_COLS[flag];
   if (!col) {
     if (isJson) return res.status(400).json({ error: 'Unknown flag' });
-    req.flash('error', 'Unknown flag.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'Unknown flag.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   const row = db.prepare("SELECT id, " + col + " AS val FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, req.params.id);
   if (!row) {
     if (isJson) return res.status(404).json({ error: 'Crew row not found' });
-    req.flash('error', 'Crew row not found.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'Crew row not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   const next = row.val ? 0 : 1;
   db.prepare("UPDATE booking_crew SET " + col + " = ? WHERE id = ?").run(next, req.params.crewId);
   if (isJson) return res.json({ ok: true, flag: flag, value: next });
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // POST /:id/crew/:crewId/assign-vehicle — Set (or clear with empty)
@@ -2892,7 +2892,7 @@ router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
   const row = db.prepare("SELECT id, crew_member_id, assigned_vehicle_id FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, req.params.id);
   if (!row) {
     if (isJson) return res.status(404).json({ error: 'Crew row not found' });
-    req.flash('error', 'Crew row not found.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'Crew row not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   const raw = req.body.vehicle_id;
   let vehicleId = null;
@@ -2903,7 +2903,7 @@ router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
       const ok = db.prepare("SELECT 1 FROM booking_vehicles WHERE id = ? AND booking_id = ?").get(parsed, req.params.id);
       if (!ok) {
         if (isJson) return res.status(400).json({ error: "Vehicle isn't on this booking" });
-        req.flash('error', 'Vehicle is not on this booking.'); return res.redirect('/bookings/' + req.params.id);
+        req.flash('error', 'Vehicle is not on this booking.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
       }
       vehicleId = parsed;
     }
@@ -2944,13 +2944,13 @@ router.post('/:id/crew/:crewId/driver', (req, res) => {
   const crew = db.prepare("SELECT crew_member_id FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, req.params.id);
   if (!crew) {
     if (isJson) return res.status(404).json({ error: 'Crew row not found' });
-    req.flash('error', 'Crew row not found.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'Crew row not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   // Find a vehicle on this booking (the first one) to attach the driver to.
   const veh = db.prepare("SELECT id, crew_member_id FROM booking_vehicles WHERE booking_id = ? ORDER BY id LIMIT 1").get(req.params.id);
   if (!veh) {
     if (isJson) return res.status(400).json({ error: 'No vehicle on this booking to drive.' });
-    req.flash('error', 'Add a vehicle first, then assign the driver.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'Add a vehicle first, then assign the driver.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   const isCurrent = veh.crew_member_id == crew.crew_member_id;
   db.prepare("UPDATE booking_vehicles SET crew_member_id = ? WHERE id = ?").run(isCurrent ? null : crew.crew_member_id, veh.id);
@@ -2960,7 +2960,7 @@ router.post('/:id/crew/:crewId/driver', (req, res) => {
       .forEach(g => syncEquipmentReturnTask(db, parseInt(req.params.id, 10), g.id));
   } catch (e) { console.error('[bookings.crew.driver] return-task sync failed:', e.message); }
   if (isJson) return res.json({ ok: true, value: isCurrent ? 0 : 1 });
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 router.post('/:id/crew/:crewId/remove', (req, res) => {
@@ -3014,7 +3014,7 @@ router.post('/:id/crew/:crewId/remove', (req, res) => {
   }
   if (isJson) return res.json({ ok: true });
   req.flash('success', 'Removed from booking and worker portal.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // Confirm crew assignment
@@ -3027,21 +3027,21 @@ router.post('/:id/crew/:crewId/confirm', (req, res) => {
     details: `Confirmed crew #${req.params.crewId} on booking`, req });
   if (isJson) return res.json({ ok: true });
   req.flash('success', 'Confirmed.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // Notes
 router.post('/:id/notes', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Not found.'); return res.redirect('/bookings'); }
+  if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/bookings')); }
   const { content, is_private } = req.body;
-  if (!content || !content.trim()) { if (isJson) return res.status(400).json({ error: 'Content required' }); req.flash('error', 'Content required.'); return res.redirect('/bookings/' + req.params.id); }
+  if (!content || !content.trim()) { if (isJson) return res.status(400).json({ error: 'Content required' }); req.flash('error', 'Content required.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id)); }
   const result = db.prepare("INSERT INTO booking_notes (booking_id, user_id, content, is_private) VALUES (?, ?, ?, ?)").run(req.params.id, req.session.user.id, content.trim(), is_private ? 1 : 0);
   if (isJson) return res.json({ ok: true, id: result.lastInsertRowid, author_name: req.session.user.full_name, content: content.trim(), created_at: new Date().toISOString() });
-  req.flash('success', 'Note added.'); res.redirect('/bookings/' + req.params.id);
+  req.flash('success', 'Note added.'); req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
-router.post('/:id/notes/:noteId/delete', (req, res) => { getDb().prepare("DELETE FROM booking_notes WHERE id=? AND booking_id=?").run(req.params.noteId, req.params.id); req.flash('success', 'Deleted.'); res.redirect('/bookings/' + req.params.id); });
+router.post('/:id/notes/:noteId/delete', (req, res) => { getDb().prepare("DELETE FROM booking_notes WHERE id=? AND booking_id=?").run(req.params.noteId, req.params.id); req.flash('success', 'Deleted.'); req.session.save(() => res.redirect('/bookings/' + req.params.id)); });
 
 // Vehicles
 // POST /:id/vehicles/:vehicleId/driver — assign or clear the driver
@@ -3055,7 +3055,7 @@ router.post('/:id/vehicles/:vehicleId/driver', (req, res) => {
     if (!ok) {
       if (isJson) return res.status(400).json({ error: "Driver isn't on the booking crew" });
       req.flash('error', "Driver isn't on the booking crew.");
-      return res.redirect('/bookings/' + req.params.id);
+      return req.session.save(() => res.redirect('/bookings/' + req.params.id));
     }
   }
   db.prepare("UPDATE booking_vehicles SET crew_member_id = ? WHERE id = ? AND booking_id = ?")
@@ -3071,7 +3071,7 @@ router.post('/:id/vehicles/:vehicleId/driver', (req, res) => {
     return res.json({ ok: true, driver });
   }
   req.flash('success', cid ? 'Driver assigned.' : 'Driver cleared.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 router.post('/:id/vehicles', (req, res) => {
@@ -3079,7 +3079,7 @@ router.post('/:id/vehicles', (req, res) => {
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) {
     if (isJson) return res.status(404).json({ error: 'Booking not found' });
-    req.flash('error', 'Not found.'); return res.redirect('/bookings');
+    req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/bookings'));
   }
   // Resource Panel drag / picker: either a fleet_vehicle_id (Fleet
   // register, preferred for utes/trucks) or an equipment_id (the legacy
@@ -3108,7 +3108,7 @@ router.post('/:id/vehicles', (req, res) => {
   }
   if (!vehicle_name && !registration) {
     if (isJson) return res.status(400).json({ error: 'Name or rego required' });
-    req.flash('error', 'Name or rego required.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'Name or rego required.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   // Classify what's being added — explicit role from the drag payload wins,
   // else derive from the vehicle's own text. Drives both the placeholder rule
@@ -3191,7 +3191,7 @@ router.post('/:id/vehicles', (req, res) => {
     details: `Added vehicle ${vehicle_name || registration} to booking`, req });
   if (isJson) return res.json({ ok: true, id: newId, upgraded: !!upgraded, warning: vehicleWarning });
   req.flash('success', upgraded ? 'Vehicle assigned.' : 'Vehicle added.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 // POST /:id/vehicles/:vehicleId — edit an existing vehicle row in place.
 // Lets a blank "(unnamed vehicle)" placeholder be upgraded to a real ute
@@ -3203,7 +3203,7 @@ router.post('/:id/vehicles/:vehicleId', (req, res) => {
   const row = db.prepare("SELECT * FROM booking_vehicles WHERE id=? AND booking_id=?").get(req.params.vehicleId, req.params.id);
   if (!row) {
     if (isJson) return res.status(404).json({ error: 'Vehicle not found' });
-    req.flash('error', 'Not found.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   let vehicle_name = req.body.vehicle_name != null ? req.body.vehicle_name : row.vehicle_name;
   let registration = req.body.registration != null ? req.body.registration : row.registration;
@@ -3228,7 +3228,7 @@ router.post('/:id/vehicles/:vehicleId', (req, res) => {
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
     details: `Edited vehicle #${req.params.vehicleId} on booking`, req });
   if (isJson) return res.json({ ok: true, id: row.id, vehicle_name: vehicle_name || '', registration: registration || '', vehicle_role, fleet_vehicle_id });
-  req.flash('success', 'Vehicle updated.'); res.redirect('/bookings/' + req.params.id);
+  req.flash('success', 'Vehicle updated.'); req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 router.post('/:id/vehicles/:vehicleId/remove', (req, res) => {
   const db = getDb();
@@ -3277,7 +3277,7 @@ router.post('/:id/vehicles/:vehicleId/remove', (req, res) => {
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
     details: `Removed vehicle #${req.params.vehicleId} from booking`, req });
   if (isJson) return res.json({ ok: true });
-  req.flash('success', 'Removed.'); res.redirect('/bookings/' + req.params.id);
+  req.flash('success', 'Removed.'); req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // ===========================================================================
@@ -3295,7 +3295,7 @@ function generateDocketNumber(db) {
 router.post('/:id/dockets', (req, res) => {
   const db = getDb();
   const booking = db.prepare("SELECT * FROM bookings WHERE id = ?").get(req.params.id);
-  if (!booking) { req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  if (!booking) { req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings')); }
 
   const docketNumber = generateDocketNumber(db);
   const result = db.prepare(`
@@ -3311,17 +3311,17 @@ router.post('/:id/dockets', (req, res) => {
   });
 
   req.flash('success', `Docket ${docketNumber} created.`);
-  res.redirect('/bookings/' + req.params.id + '/dockets/' + result.lastInsertRowid);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '/dockets/' + result.lastInsertRowid));
 });
 
 // GET /:id/dockets/:docketId — View/edit docket
 router.get('/:id/dockets/:docketId', (req, res) => {
   const db = getDb();
   const booking = db.prepare("SELECT * FROM bookings WHERE id = ?").get(req.params.id);
-  if (!booking) { req.flash('error', 'Booking not found.'); return res.redirect('/bookings'); }
+  if (!booking) { req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings')); }
 
   const docket = db.prepare("SELECT * FROM booking_dockets WHERE id = ? AND booking_id = ?").get(req.params.docketId, req.params.id);
-  if (!docket) { req.flash('error', 'Docket not found.'); return res.redirect('/bookings/' + req.params.id); }
+  if (!docket) { req.flash('error', 'Docket not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id)); }
 
   const timeEntries = db.prepare(`
     SELECT te.*, cm.full_name, cm.role as crew_role, cm.employee_id
@@ -3362,18 +3362,18 @@ router.post('/:id/dockets/:docketId', (req, res) => {
     b.site_address || '', b.notes || '', b.private_notes || '', b.client_feedback || '',
     req.params.docketId, req.params.id);
   req.flash('success', 'Docket updated.');
-  res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId));
 });
 
 // POST /:id/dockets/:docketId/time — Add time entry
 router.post('/:id/dockets/:docketId/time', (req, res) => {
   const db = getDb();
   const b = req.body;
-  if (!b.crew_member_id) { req.flash('error', 'Select a crew member.'); return res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId); }
+  if (!b.crew_member_id) { req.flash('error', 'Select a crew member.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId)); }
   db.prepare("INSERT INTO docket_time_entries (docket_id, crew_member_id, start_on_site, finish_on_site) VALUES (?, ?, ?, ?)")
     .run(req.params.docketId, b.crew_member_id, b.start_on_site || null, b.finish_on_site || null);
   req.flash('success', 'Crew member added to docket.');
-  res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId));
 });
 
 // POST /:id/dockets/:docketId/time/:timeId — Update time entry
@@ -3387,14 +3387,14 @@ router.post('/:id/dockets/:docketId/time/:timeId', (req, res) => {
     b.first_break_at || '', parseFloat(b.travel) || 0, b.lafha ? 1 : 0, b.notes || '',
     req.params.timeId, req.params.docketId);
   req.flash('success', 'Time entry updated.');
-  res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId));
 });
 
 // POST /:id/dockets/:docketId/time/:timeId/remove — Remove time entry
 router.post('/:id/dockets/:docketId/time/:timeId/remove', (req, res) => {
   getDb().prepare("DELETE FROM docket_time_entries WHERE id=? AND docket_id=?").run(req.params.timeId, req.params.docketId);
   req.flash('success', 'Removed.');
-  res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '/dockets/' + req.params.docketId));
 });
 
 // POST /:id/dockets/:docketId/sign — Save signature
@@ -3417,7 +3417,7 @@ router.post('/:id/dockets/:docketId/sign', (req, res) => {
 router.post('/:id/dockets/:docketId/delete', (req, res) => {
   getDb().prepare("DELETE FROM booking_dockets WHERE id=? AND booking_id=?").run(req.params.docketId, req.params.id);
   req.flash('success', 'Docket deleted.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // ===========================================================================
@@ -3479,7 +3479,7 @@ router.post('/:id/documents/:docId/visibility', (req, res) => {
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   if (!doc) {
     if (isJson) return res.status(404).json({ error: 'Document not found' });
-    req.flash('error', 'Document not found.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   const visible = (req.body.visible === '1' || req.body.visible === 1 || req.body.visible === true || req.body.visible === 'on') ? 1 : 0;
   db.prepare("UPDATE booking_documents SET visible_to_crew = ? WHERE id = ?").run(visible, doc.id);
@@ -3487,7 +3487,7 @@ router.post('/:id/documents/:docId/visibility', (req, res) => {
     details: `Document #${doc.id} ${visible ? 'visible to' : 'hidden from'} crew`, req });
   if (isJson) return res.json({ ok: true, visible_to_crew: visible });
   req.flash('success', visible ? 'Document visible to crew.' : 'Document hidden from crew.');
-  res.redirect('/bookings/' + req.params.id + '#documents');
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
 });
 
 // POST /:id/plans/:planId/visibility — toggle whether the crew can see a
@@ -3496,23 +3496,23 @@ router.post('/:id/documents/:docId/visibility', (req, res) => {
 router.post('/:id/plans/:planId/visibility', (req, res) => {
   const db = getDb();
   const booking = db.prepare('SELECT id, job_id FROM bookings WHERE id = ?').get(req.params.id);
-  if (!booking || !booking.job_id) { req.flash('error', 'Booking or linked job not found.'); return res.redirect('/bookings/' + req.params.id); }
+  if (!booking || !booking.job_id) { req.flash('error', 'Booking or linked job not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id)); }
   const plan = db.prepare(`
     SELECT id FROM compliance
     WHERE id = @planId AND item_type IN ('traffic_guidance','road_occupancy','tmp_approval')
       AND (job_id = @jobId OR parent_id IN (SELECT id FROM compliance WHERE job_id = @jobId))
   `).get({ planId: req.params.planId, jobId: booking.job_id });
-  if (!plan) { req.flash('error', 'Plan not found on the linked job.'); return res.redirect('/bookings/' + req.params.id + '#documents'); }
+  if (!plan) { req.flash('error', 'Plan not found on the linked job.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents')); }
   const visible = (req.body.visible === '1' || req.body.visible === 1 || req.body.visible === true || req.body.visible === 'on');
   try { setPlanVisibility(db, booking.id, plan.id, visible); } catch (e) {
     console.error('[bookings.plans.visibility]', e.message);
     req.flash('error', 'Could not update plan visibility.');
-    return res.redirect('/bookings/' + req.params.id + '#documents');
+    return req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
   }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
     details: `Job plan #${plan.id} ${visible ? 'visible to' : 'hidden from'} crew`, req });
   req.flash('success', visible ? 'Plan visible to crew.' : 'Plan hidden from crew.');
-  res.redirect('/bookings/' + req.params.id + '#documents');
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
 });
 
 router.post('/:id/documents', uploadDoc.single('file'), (req, res) => {
@@ -3520,11 +3520,11 @@ router.post('/:id/documents', uploadDoc.single('file'), (req, res) => {
   const wantsJson = req.headers.accept && req.headers.accept.includes('application/json');
   if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) {
     if (wantsJson) return res.status(404).json({ error: 'Booking not found' });
-    req.flash('error', 'Booking not found.'); return res.redirect('/bookings');
+    req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings'));
   }
   if (!req.file) {
     if (wantsJson) return res.status(400).json({ error: 'No file selected' });
-    req.flash('error', 'No file selected.'); return res.redirect('/bookings/' + req.params.id);
+    req.flash('error', 'No file selected.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   const b = req.body;
   const info = db.prepare(`
@@ -3535,7 +3535,7 @@ router.post('/:id/documents', uploadDoc.single('file'), (req, res) => {
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking_document', entityId: req.params.id, details: `Uploaded ${req.file.originalname}`, req });
   if (wantsJson) return res.json({ ok: true, id: info.lastInsertRowid, document_type: b.document_type || 'other', original_name: req.file.originalname });
   req.flash('success', 'Document uploaded.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // GET /:id/documents/:docId/download — Download document
@@ -3544,7 +3544,7 @@ router.get('/:id/documents/:docId/download', (req, res) => {
   const abs = doc && resolveDocPath(doc.file_path);
   if (!doc || !abs) {
     req.flash('error', doc ? 'That file is no longer on the server — please re-attach it.' : 'File not found.');
-    return res.redirect('/bookings/' + req.params.id);
+    return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   res.download(abs, doc.original_name);
 });
@@ -3558,7 +3558,7 @@ router.post('/:id/documents/:docId/delete', (req, res) => {
   db.prepare("DELETE FROM booking_documents WHERE id=? AND booking_id=?").run(req.params.docId, req.params.id);
   if (req.headers.accept && req.headers.accept.includes('application/json')) return res.json({ ok: true });
   req.flash('success', 'Document deleted.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // POST /:id/documents/:docId/type — relabel a document's type in place.
@@ -3569,7 +3569,7 @@ router.post('/:id/documents/:docId/type', (req, res) => {
   db.prepare("UPDATE booking_documents SET document_type=? WHERE id=? AND booking_id=?").run(type, req.params.docId, req.params.id);
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking_document', entityId: req.params.id, details: `Document #${req.params.docId} type → ${type}`, req });
   req.flash('success', 'Document type updated.');
-  res.redirect('/bookings/' + req.params.id + '#documents');
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
 });
 
 // ===========================================================================
@@ -3578,18 +3578,18 @@ router.post('/:id/documents/:docId/type', (req, res) => {
 router.post('/:id/requirements', (req, res) => {
   const db = getDb();
   const { resource_type, quantity_required } = req.body;
-  if (!resource_type) { req.flash('error', 'Select a resource type.'); return res.redirect('/bookings/' + req.params.id); }
+  if (!resource_type) { req.flash('error', 'Select a resource type.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id)); }
   db.prepare("INSERT INTO booking_requirements (booking_id, resource_type, quantity_required) VALUES (?, ?, ?)")
     .run(req.params.id, resource_type, parseInt(quantity_required) || 1);
   syncTCCrewVehicles(db, req.params.id);
   req.flash('success', 'Requirement added.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 router.post('/:id/requirements/:reqId/delete', (req, res) => {
   getDb().prepare("DELETE FROM booking_requirements WHERE id=? AND booking_id=?").run(req.params.reqId, req.params.id);
   req.flash('success', 'Requirement removed.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // ===========================================================================
@@ -3624,7 +3624,7 @@ router.post('/:id/equipment', (req, res) => {
     if (!hu) {
       if (isJson) return res.status(400).json({ ok: false, error: 'That hired unit is no longer on hire.' });
       req.flash('error', 'That hired unit is no longer on hire.');
-      return res.redirect('/bookings/' + req.params.id);
+      return req.session.save(() => res.redirect('/bookings/' + req.params.id));
     }
     reqName = (hu.equipment_type || hu.description || '').trim();
     addedName = (reqName || 'Hired equipment') + (hu.unit_number ? ' · ' + hu.unit_number : '');
@@ -3657,7 +3657,7 @@ router.post('/:id/equipment', (req, res) => {
   }
   if (isJson) return res.json({ ok: true, id: newId });
   req.flash('success', 'Equipment added.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 router.post('/:id/equipment/:eqId/remove', (req, res) => {
@@ -3682,7 +3682,7 @@ router.post('/:id/equipment/:eqId/remove', (req, res) => {
   }
   if (isJson) return res.json({ ok: true });
   req.flash('success', 'Equipment removed.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // POST /:id/equipment/:eqId/return-task — the allocator said Yes to the
@@ -3712,7 +3712,7 @@ router.post('/:id/equipment/:eqId/attach', (req, res) => {
   if (!gear) {
     if (isJson) return res.status(404).json({ ok: false, error: 'Equipment not found on this booking.' });
     req.flash('error', 'Equipment not found on this booking.');
-    return res.redirect('/bookings/' + req.params.id);
+    return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   let vehicleId = parseInt(req.body.vehicle_id, 10) || null;
   if (vehicleId) {
@@ -3723,7 +3723,7 @@ router.post('/:id/equipment/:eqId/attach', (req, res) => {
   try { syncEquipmentReturnTask(db, parseInt(req.params.id, 10), gear.id); } catch (e) { console.error('[bookings.equipment.attach] sync failed:', e.message); }
   if (isJson) return res.json({ ok: true, attached_vehicle_id: vehicleId });
   req.flash('success', vehicleId ? 'Equipment hitched to the vehicle.' : 'Equipment detached.');
-  res.redirect('/bookings/' + req.params.id);
+  req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
 // Move booking to new date (drag-and-drop from calendar)
@@ -3759,7 +3759,7 @@ router.post('/:id/move', (req, res) => {
 router.post('/:id/clone', (req, res) => {
   const db = getDb(); const source = db.prepare("SELECT * FROM bookings WHERE id = ?").get(req.params.id);
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  if (!source) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Not found.'); return res.redirect('/bookings'); }
+  if (!source) { if (isJson) return res.status(404).json({ error: 'Not found' }); req.flash('error', 'Not found.'); return req.session.save(() => res.redirect('/bookings')); }
   const bookingNumber = generateBookingNumber(db);
   // Default to including crew for backward-compat; the UI passes an explicit
   // choice (setup-only avoids double-booking workers on the clone).
@@ -3832,7 +3832,7 @@ router.post('/:id/clone', (req, res) => {
   // Land on the board for the cloned shift's day (not the full edit page).
   const cloneDate = (newStart || '').slice(0, 10);
   if (isJson) return res.json({ ok: true, id: newId, booking_number: bookingNumber, date: cloneDate });
-  req.flash('success', `Cloned as ${bookingNumber}.`); res.redirect('/bookings' + (cloneDate ? '?date=' + cloneDate : ''));
+  req.flash('success', `Cloned as ${bookingNumber}.`); req.session.save(() => res.redirect('/bookings' + (cloneDate ? '?date=' + cloneDate : '')));
 });
 
 // =============================================
@@ -3849,13 +3849,13 @@ router.post('/:id/tasks', (req, res) => {
   if (!db.prepare("SELECT id FROM bookings WHERE id=?").get(req.params.id)) {
     if (isJson) return res.status(404).json({ ok: false, error: 'Booking not found.' });
     req.flash('error', 'Booking not found.');
-    return res.redirect('/bookings');
+    return req.session.save(() => res.redirect('/bookings'));
   }
   const { crew_member_id, title, description, priority, due_at } = req.body;
   if (!crew_member_id || !title || !title.trim()) {
     if (isJson) return res.status(400).json({ ok: false, error: 'Title and assignee are required.' });
     req.flash('error', 'Title and assignee are required.');
-    return res.redirect('/bookings/' + req.params.id);
+    return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   // Whole-team task: fan one row per active crew member, completing as one.
   // Branched BEFORE the booking_crew guard ('team' isn't a crew id).
@@ -3870,7 +3870,7 @@ router.post('/:id/tasks', (req, res) => {
     if (!group) {
       if (isJson) return res.status(400).json({ ok: false, error: 'No crew on this booking yet — add workers first.' });
       req.flash('error', 'No crew on this booking yet — add workers first.');
-      return res.redirect('/bookings/' + req.params.id + '#tasks');
+      return req.session.save(() => res.redirect('/bookings/' + req.params.id + '#tasks'));
     }
     try {
       const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(req.params.id) || {};
@@ -3883,14 +3883,14 @@ router.post('/:id/tasks', (req, res) => {
     } catch (e) { console.error('[bookings] team-task notify failed:', e.message); }
     if (isJson) return res.json({ ok: true, team: true, assignees: group.crewIds.length });
     req.flash('success', 'Team task added — whole crew (' + group.crewIds.length + '), first to finish ticks it off for everyone.');
-    return res.redirect('/bookings/' + req.params.id + '#tasks');
+    return req.session.save(() => res.redirect('/bookings/' + req.params.id + '#tasks'));
   }
   // Assignee must be on this booking — block cross-booking task drops.
   const ok = db.prepare("SELECT 1 FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, crew_member_id);
   if (!ok) {
     if (isJson) return res.status(400).json({ ok: false, error: "Worker isn't on this booking." });
     req.flash('error', "Worker isn't on this booking.");
-    return res.redirect('/bookings/' + req.params.id);
+    return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   // Use the matching crew_allocations row (if one exists) so the task
   // survives if the booking gets unbound from a worker later.
@@ -3920,7 +3920,7 @@ router.post('/:id/tasks', (req, res) => {
   } catch (e) { console.error('[bookings] task-assigned notify failed:', e.message); }
   if (isJson) return res.json({ ok: true });
   req.flash('success', 'Task added.');
-  res.redirect('/bookings/' + req.params.id + '#tasks');
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '#tasks'));
 });
 
 // POST /:id/tasks/:taskId/delete
@@ -3942,7 +3942,7 @@ router.post('/:id/tasks/:taskId/delete', (req, res) => {
   }
   if (req.headers.accept && req.headers.accept.includes('application/json')) return res.json({ ok: true });
   req.flash('success', 'Task removed.');
-  res.redirect('/bookings/' + req.params.id + '#tasks');
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '#tasks'));
 });
 
 // POST /:id/tasks/:taskId/status — toggle status (admin override)

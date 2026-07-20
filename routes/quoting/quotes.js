@@ -293,7 +293,7 @@ router.post('/', (req, res) => {
   const projectName = (b.project_name || '').trim();
   if (!projectName) {
     req.flash('error', 'Project name is required.');
-    return res.redirect('/quotes/new');
+    return req.session.save(() => res.redirect('/quotes/new'));
   }
 
   const settings = db.prepare('SELECT * FROM quoting_settings WHERE id = 1').get();
@@ -367,7 +367,7 @@ router.post('/', (req, res) => {
   });
 
   req.flash('success', `Quote ${result.quoteNumber} created.`);
-  res.redirect(`/quotes/${result.quoteId}`);
+  req.session.save(() => res.redirect(`/quotes/${result.quoteId}`));
 });
 
 // ────────────────────────────────────────────────────────────────────
@@ -390,7 +390,7 @@ router.get('/:id', (req, res, next) => {
   `).get(id);
   if (!quote) {
     req.flash('error', 'Quote not found.');
-    return res.redirect('/quotes');
+    return req.session.save(() => res.redirect('/quotes'));
   }
 
   const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
@@ -501,10 +501,10 @@ router.post('/:id', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const db = getDb();
   const before = db.prepare('SELECT * FROM quotes WHERE id = ?').get(id);
-  if (!before) { req.flash('error', 'Quote not found.'); return res.redirect('/quotes'); }
+  if (!before) { req.flash('error', 'Quote not found.'); return req.session.save(() => res.redirect('/quotes')); }
   if (LOCKED_STATUSES.has(before.status)) {
     req.flash('error', `Quote is ${before.status} — header is locked. Create a revision instead.`);
-    return res.redirect(`/quotes/${id}`);
+    return req.session.save(() => res.redirect(`/quotes/${id}`));
   }
 
   const b = req.body;
@@ -548,7 +548,7 @@ router.post('/:id', (req, res) => {
   });
 
   req.flash('success', 'Quote updated.');
-  res.redirect(`/quotes/${id}`);
+  req.session.save(() => res.redirect(`/quotes/${id}`));
 });
 
 // ────────────────────────────────────────────────────────────────────
@@ -566,13 +566,13 @@ function requireDraftQuote(req, res, db) {
   if (!q) {
     if (req.accepts('json') && !req.accepts('html')) return { error: { status: 404, body: { error: 'Quote not found' } } };
     req.flash('error', 'Quote not found.');
-    res.redirect('/quotes');
+    req.session.save(() => res.redirect('/quotes'));
     return { error: true };
   }
   if (LOCKED_STATUSES.has(q.status)) {
     if (req.accepts('json') && !req.accepts('html')) return { error: { status: 403, body: { error: `Quote is ${q.status}; matrix is read-only.` } } };
     req.flash('error', `Quote is ${q.status}; create a revision to edit.`);
-    res.redirect(`/quotes/${id}`);
+    req.session.save(() => res.redirect(`/quotes/${id}`));
     return { error: true };
   }
   return { quote: q };
@@ -586,7 +586,7 @@ router.post('/:id/groups', (req, res) => {
   if (guard.error) { if (guard.error.status) res.status(guard.error.status).json(guard.error.body); return; }
 
   const name = (req.body.name || '').trim();
-  if (!name) { req.flash('error', 'Group name is required.'); return res.redirect(`/quotes/${guard.quote.id}`); }
+  if (!name) { req.flash('error', 'Group name is required.'); return req.session.save(() => res.redirect(`/quotes/${guard.quote.id}`)); }
   const maxSort = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM quote_groups WHERE quote_id = ?').get(guard.quote.id).m;
   const info = db.prepare('INSERT INTO quote_groups (quote_id, name, sort_order) VALUES (?, ?, ?)').run(guard.quote.id, name, maxSort + 10);
 
@@ -596,7 +596,7 @@ router.post('/:id/groups', (req, res) => {
     details: `Added group "${name}" to quote ${guard.quote.quote_number}`, ip: req.ip,
   });
   req.flash('success', `Added group "${name}".`);
-  res.redirect(`/quotes/${guard.quote.id}`);
+  req.session.save(() => res.redirect(`/quotes/${guard.quote.id}`));
 });
 
 router.post('/:id/groups/:groupId/delete', (req, res) => {
@@ -606,7 +606,7 @@ router.post('/:id/groups/:groupId/delete', (req, res) => {
 
   const groupId = parseInt(req.params.groupId, 10);
   const g = db.prepare('SELECT * FROM quote_groups WHERE id = ? AND quote_id = ?').get(groupId, guard.quote.id);
-  if (!g) { req.flash('error', 'Group not found.'); return res.redirect(`/quotes/${guard.quote.id}`); }
+  if (!g) { req.flash('error', 'Group not found.'); return req.session.save(() => res.redirect(`/quotes/${guard.quote.id}`)); }
 
   // ON DELETE SET NULL on quote_sites.group_id makes the sites become
   // ungrouped automatically, preserving their line items.
@@ -618,7 +618,7 @@ router.post('/:id/groups/:groupId/delete', (req, res) => {
     details: `Deleted group "${g.name}" from quote ${guard.quote.quote_number}`, ip: req.ip,
   });
   req.flash('success', `Deleted group "${g.name}". Its sites are now ungrouped.`);
-  res.redirect(`/quotes/${guard.quote.id}`);
+  req.session.save(() => res.redirect(`/quotes/${guard.quote.id}`));
 });
 
 // ── Sites ──
@@ -630,13 +630,13 @@ router.post('/:id/sites', (req, res) => {
 
   const b = req.body;
   const name = (b.site_name || '').trim();
-  if (!name) { req.flash('error', 'Site name is required.'); return res.redirect(`/quotes/${guard.quote.id}`); }
+  if (!name) { req.flash('error', 'Site name is required.'); return req.session.save(() => res.redirect(`/quotes/${guard.quote.id}`)); }
 
   const groupId = b.group_id ? parseInt(b.group_id, 10) || null : null;
   // Sanity: if a group_id is passed, confirm it belongs to this quote.
   if (groupId) {
     const ok = db.prepare('SELECT id FROM quote_groups WHERE id = ? AND quote_id = ?').get(groupId, guard.quote.id);
-    if (!ok) { req.flash('error', 'Selected group does not belong to this quote.'); return res.redirect(`/quotes/${guard.quote.id}`); }
+    if (!ok) { req.flash('error', 'Selected group does not belong to this quote.'); return req.session.save(() => res.redirect(`/quotes/${guard.quote.id}`)); }
   }
   const roadClass = ROAD_CLASSIFICATIONS.includes(b.road_classification) ? b.road_classification : null;
   const maxSort = db.prepare('SELECT COALESCE(MAX(sort_order), 0) AS m FROM quote_sites WHERE quote_id = ?').get(guard.quote.id).m;
@@ -660,7 +660,7 @@ router.post('/:id/sites', (req, res) => {
     details: `Added site "${name}" to quote ${guard.quote.quote_number}`, ip: req.ip,
   });
   req.flash('success', `Added site "${name}".`);
-  res.redirect(`/quotes/${guard.quote.id}#site-bottom`);
+  req.session.save(() => res.redirect(`/quotes/${guard.quote.id}#site-bottom`));
 });
 
 router.post('/:id/sites/:siteId/delete', (req, res) => {
@@ -670,7 +670,7 @@ router.post('/:id/sites/:siteId/delete', (req, res) => {
 
   const siteId = parseInt(req.params.siteId, 10);
   const s = db.prepare('SELECT * FROM quote_sites WHERE id = ? AND quote_id = ?').get(siteId, guard.quote.id);
-  if (!s) { req.flash('error', 'Site not found.'); return res.redirect(`/quotes/${guard.quote.id}`); }
+  if (!s) { req.flash('error', 'Site not found.'); return req.session.save(() => res.redirect(`/quotes/${guard.quote.id}`)); }
 
   // ON DELETE CASCADE cleans up quote_line_items for this site.
   db.prepare('DELETE FROM quote_sites WHERE id = ?').run(siteId);
@@ -682,7 +682,7 @@ router.post('/:id/sites/:siteId/delete', (req, res) => {
     details: `Deleted site "${s.site_name}" from quote ${guard.quote.quote_number}`, ip: req.ip,
   });
   req.flash('success', `Deleted site "${s.site_name}".`);
-  res.redirect(`/quotes/${guard.quote.id}`);
+  req.session.save(() => res.redirect(`/quotes/${guard.quote.id}`));
 });
 
 // ── Cell save (JSON) ──
@@ -922,10 +922,10 @@ router.post('/:id/delete', (req, res) => {
   const id = parseInt(req.params.id, 10);
   const db = getDb();
   const q = db.prepare('SELECT * FROM quotes WHERE id = ?').get(id);
-  if (!q) { req.flash('error', 'Quote not found.'); return res.redirect('/quotes'); }
+  if (!q) { req.flash('error', 'Quote not found.'); return req.session.save(() => res.redirect('/quotes')); }
   if (LOCKED_STATUSES.has(q.status)) {
     req.flash('error', `Cannot delete a ${q.status} quote. Mark it superseded instead.`);
-    return res.redirect(`/quotes/${id}`);
+    return req.session.save(() => res.redirect(`/quotes/${id}`));
   }
 
   db.prepare('DELETE FROM quotes WHERE id = ?').run(id);
@@ -936,7 +936,7 @@ router.post('/:id/delete', (req, res) => {
     ip: req.ip,
   });
   req.flash('success', `Deleted ${q.quote_number}.`);
-  res.redirect('/quotes');
+  req.session.save(() => res.redirect('/quotes'));
 });
 
 module.exports = router;

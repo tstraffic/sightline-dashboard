@@ -118,7 +118,7 @@ router.post('/', raUpload.single('ra_file'), (req, res) => {
     const title = String(b.title || '').trim();
     if (!title) {
       req.flash('error', 'Title is required.');
-      return res.redirect('/risk-assessments/new');
+      return req.session.save(() => res.redirect('/risk-assessments/new'));
     }
     const kind = KIND_VALUES.includes(b.kind) ? b.kind : 'job';
     const filePath = req.file ? path.relative(path.join(__dirname, '..'), req.file.path).replace(/\\/g, '/') : '';
@@ -142,11 +142,11 @@ router.post('/', raUpload.single('ra_file'), (req, res) => {
     );
     try { logActivity({ user: req.session.user, action: 'create', entityType: 'risk_assessment', entityId: r.lastInsertRowid, entityLabel: title, details: kind, ip: req.ip }); } catch (e) {}
     req.flash('success', kind === 'template' ? 'Risk Assessment template imported.' : 'Risk Assessment created.');
-    return res.redirect('/risk-assessments/' + r.lastInsertRowid);
+    return req.session.save(() => res.redirect('/risk-assessments/' + r.lastInsertRowid));
   } catch (err) {
     console.error('[risk-assessments POST]', err);
     req.flash('error', 'Could not create Risk Assessment: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/risk-assessments/new');
+    return req.session.save(() => res.redirect('/risk-assessments/new'));
   }
 });
 
@@ -162,7 +162,7 @@ router.get('/:id', (req, res) => {
     LEFT JOIN users cu ON cu.id = s.created_by_id
     WHERE s.id = ?
   `).get(req.params.id);
-  if (!ra) { req.flash('error', 'Risk Assessment not found.'); return res.redirect('/risk-assessments'); }
+  if (!ra) { req.flash('error', 'Risk Assessment not found.'); return req.session.save(() => res.redirect('/risk-assessments')); }
   res.render('risk-assessments/show', {
     title: ra.title, currentPage: 'risk-assessments',
     ra,
@@ -174,7 +174,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const ra = db.prepare("SELECT * FROM risk_assessments WHERE id = ?").get(req.params.id);
-  if (!ra) { req.flash('error', 'Risk Assessment not found.'); return res.redirect('/risk-assessments'); }
+  if (!ra) { req.flash('error', 'Risk Assessment not found.'); return req.session.save(() => res.redirect('/risk-assessments')); }
   const choices = loadFormChoices(db);
   res.render('risk-assessments/form', {
     title: 'Edit Risk Assessment', currentPage: 'risk-assessments',
@@ -190,7 +190,7 @@ router.post('/:id', raUpload.single('ra_file'), (req, res) => {
   try {
     const db = getDb();
     const ra = db.prepare("SELECT * FROM risk_assessments WHERE id = ?").get(req.params.id);
-    if (!ra) { req.flash('error', 'Risk Assessment not found.'); return res.redirect('/risk-assessments'); }
+    if (!ra) { req.flash('error', 'Risk Assessment not found.'); return req.session.save(() => res.redirect('/risk-assessments')); }
     const b = req.body;
     const title = String(b.title || '').trim() || ra.title;
     const kind = KIND_VALUES.includes(b.kind) ? b.kind : ra.kind;
@@ -226,11 +226,11 @@ router.post('/:id', raUpload.single('ra_file'), (req, res) => {
     );
     try { logActivity({ user: req.session.user, action: 'update', entityType: 'risk_assessment', entityId: ra.id, entityLabel: title, details: '', ip: req.ip }); } catch (e) {}
     req.flash('success', 'Risk Assessment updated.');
-    return res.redirect('/risk-assessments/' + ra.id);
+    return req.session.save(() => res.redirect('/risk-assessments/' + ra.id));
   } catch (err) {
     console.error('[risk-assessments PUT]', err);
     req.flash('error', 'Update failed: ' + (err && err.message || 'unknown error'));
-    return res.redirect('/risk-assessments/' + req.params.id + '/edit');
+    return req.session.save(() => res.redirect('/risk-assessments/' + req.params.id + '/edit'));
   }
 });
 
@@ -238,9 +238,9 @@ router.post('/:id', raUpload.single('ra_file'), (req, res) => {
 router.get('/:id/file', (req, res) => {
   const db = getDb();
   const ra = db.prepare("SELECT file_path, file_original_name FROM risk_assessments WHERE id = ?").get(req.params.id);
-  if (!ra || !ra.file_path) { req.flash('error', 'No file attached.'); return res.redirect('/risk-assessments/' + req.params.id); }
+  if (!ra || !ra.file_path) { req.flash('error', 'No file attached.'); return req.session.save(() => res.redirect('/risk-assessments/' + req.params.id)); }
   const abs = path.join(__dirname, '..', ra.file_path);
-  if (!fs.existsSync(abs)) { req.flash('error', 'File missing on disk.'); return res.redirect('/risk-assessments/' + req.params.id); }
+  if (!fs.existsSync(abs)) { req.flash('error', 'File missing on disk.'); return req.session.save(() => res.redirect('/risk-assessments/' + req.params.id)); }
   return res.download(abs, ra.file_original_name || path.basename(abs));
 });
 
@@ -249,15 +249,15 @@ router.post('/:id/delete', (req, res) => {
   try {
     const db = getDb();
     const ra = db.prepare("SELECT * FROM risk_assessments WHERE id = ?").get(req.params.id);
-    if (!ra) { req.flash('error', 'Risk Assessment not found.'); return res.redirect('/risk-assessments'); }
+    if (!ra) { req.flash('error', 'Risk Assessment not found.'); return req.session.save(() => res.redirect('/risk-assessments')); }
     db.prepare("DELETE FROM risk_assessments WHERE id = ?").run(ra.id);
     try { logActivity({ user: req.session.user, action: 'delete', entityType: 'risk_assessment', entityId: ra.id, entityLabel: ra.title, details: '', ip: req.ip }); } catch (e) {}
     req.flash('success', 'Risk Assessment deleted.');
-    return res.redirect('/risk-assessments');
+    return req.session.save(() => res.redirect('/risk-assessments'));
   } catch (err) {
     console.error('[risk-assessments DELETE]', err);
     req.flash('error', 'Delete failed.');
-    return res.redirect('/risk-assessments');
+    return req.session.save(() => res.redirect('/risk-assessments'));
   }
 });
 
@@ -284,8 +284,8 @@ function loadTgsContext(db, raId) {
 router.get('/:id/fill', (req, res) => {
   const db = getDb();
   const ctx = loadTgsContext(db, req.params.id);
-  if (!ctx) { req.flash('error', 'Risk Assessment not found.'); return res.redirect('/risk-assessments'); }
-  if (ctx.fallback) return res.redirect('/risk-assessments/' + req.params.id + '/edit');
+  if (!ctx) { req.flash('error', 'Risk Assessment not found.'); return req.session.save(() => res.redirect('/risk-assessments')); }
+  if (ctx.fallback) return req.session.save(() => res.redirect('/risk-assessments/' + req.params.id + '/edit'));
 
   let responses = {};
   if (ctx.ra.responses_json) {
@@ -322,8 +322,8 @@ router.get('/:id/fill', (req, res) => {
 router.post('/:id/fill', (req, res) => {
   const db = getDb();
   const ra = db.prepare("SELECT * FROM risk_assessments WHERE id = ?").get(req.params.id);
-  if (!ra) { req.flash('error', 'Risk Assessment not found.'); return res.redirect('/risk-assessments'); }
-  if (ra.template_type !== 'tgs_risk_options') return res.redirect('/risk-assessments/' + req.params.id + '/edit');
+  if (!ra) { req.flash('error', 'Risk Assessment not found.'); return req.session.save(() => res.redirect('/risk-assessments')); }
+  if (ra.template_type !== 'tgs_risk_options') return req.session.save(() => res.redirect('/risk-assessments/' + req.params.id + '/edit'));
 
   const b = req.body || {};
   // Build answers map for the canonical question list. Each row carries
@@ -400,7 +400,7 @@ router.post('/:id/fill', (req, res) => {
     try { autoLogDiary(db, { jobId: ra.job_id, summary: `[${req.session.user.full_name}] Risk Assessment "${ra.title}" updated.`, userId: req.session.user.id }); } catch (e) {}
   }
   req.flash('success', 'Risk Assessment saved.');
-  res.redirect('/risk-assessments/' + ra.id + '/fill');
+  req.session.save(() => res.redirect('/risk-assessments/' + ra.id + '/fill'));
 });
 
 // POST /risk-assessments/:id/generate-combined — render the filled RA to
@@ -409,19 +409,19 @@ router.post('/:id/fill', (req, res) => {
 router.post('/:id/generate-combined', async (req, res) => {
   const db = getDb();
   const ctx = loadTgsContext(db, req.params.id);
-  if (!ctx || ctx.fallback) { req.flash('error', 'Combined PDF only supported for TGS Risk Assessments.'); return res.redirect('/risk-assessments/' + req.params.id); }
-  if (!ctx.sub) { req.flash('error', 'This Risk Assessment is not linked to a sub-plan.'); return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'); }
-  if (ctx.ra.status !== 'active') { req.flash('error', 'Fill the Risk Assessment before generating the combined PDF.'); return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'); }
+  if (!ctx || ctx.fallback) { req.flash('error', 'Combined PDF only supported for TGS Risk Assessments.'); return req.session.save(() => res.redirect('/risk-assessments/' + req.params.id)); }
+  if (!ctx.sub) { req.flash('error', 'This Risk Assessment is not linked to a sub-plan.'); return req.session.save(() => res.redirect('/risk-assessments/' + ctx.ra.id + '/fill')); }
+  if (ctx.ra.status !== 'active') { req.flash('error', 'Fill the Risk Assessment before generating the combined PDF.'); return req.session.save(() => res.redirect('/risk-assessments/' + ctx.ra.id + '/fill')); }
 
   // Find the most recent TGS doc on the sub-plan.
   const tgsDoc = db.prepare("SELECT * FROM compliance_documents WHERE compliance_id = ? ORDER BY id DESC LIMIT 1").get(ctx.sub.id);
-  if (!tgsDoc) { req.flash('error', 'Upload the TGS PDF on the sub-plan first.'); return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'); }
+  if (!tgsDoc) { req.flash('error', 'Upload the TGS PDF on the sub-plan first.'); return req.session.save(() => res.redirect('/risk-assessments/' + ctx.ra.id + '/fill')); }
 
   const tgsDiskPath = tgsDoc.file_path.startsWith('/') ? path.join(__dirname, '..', tgsDoc.file_path) : path.join(__dirname, '..', tgsDoc.file_path);
-  if (!fs.existsSync(tgsDiskPath)) { req.flash('error', 'TGS file missing on disk.'); return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'); }
+  if (!fs.existsSync(tgsDiskPath)) { req.flash('error', 'TGS file missing on disk.'); return req.session.save(() => res.redirect('/risk-assessments/' + ctx.ra.id + '/fill')); }
   if (!/\.pdf$/i.test(tgsDoc.original_name || tgsDoc.file_path)) {
     req.flash('error', 'Combined generation requires the TGS to be a PDF.');
-    return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill');
+    return req.session.save(() => res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'));
   }
 
   try {
@@ -452,11 +452,11 @@ router.post('/:id/generate-combined', async (req, res) => {
     }
     req.flash('success', 'Combined RA + TGS PDF generated and attached.');
     if (req.headers.accept && req.headers.accept.includes('json')) return res.json({ success: true, file_path: relPath });
-    return res.redirect('/compliance/' + ctx.sub.parent_id + '/edit');
+    return req.session.save(() => res.redirect('/compliance/' + ctx.sub.parent_id + '/edit'));
   } catch (err) {
     console.error('[risk-assessments] generate-combined failed:', err);
     req.flash('error', 'Combined PDF generation failed: ' + err.message);
-    return res.redirect('/risk-assessments/' + ctx.ra.id + '/fill');
+    return req.session.save(() => res.redirect('/risk-assessments/' + ctx.ra.id + '/fill'));
   }
 });
 

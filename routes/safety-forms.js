@@ -127,7 +127,7 @@ router.get('/export.zip', async (req, res) => {
 
   if (!rows.length) {
     req.flash('error', 'No submissions match those filters.');
-    return res.redirect('/safety-forms');
+    return req.session.save(() => res.redirect('/safety-forms'));
   }
 
   const labelStart = since || (rows[0] && new Date(rows[0].submitted_at).toISOString().slice(0,10)) || 'all';
@@ -172,7 +172,7 @@ router.get('/:id', (req, res) => {
   `).get(req.params.id);
   if (!sub) {
     req.flash('error', 'Submission not found.');
-    return res.redirect('/safety-forms');
+    return req.session.save(() => res.redirect('/safety-forms'));
   }
   let parsed = {};
   try { parsed = sub.data ? JSON.parse(sub.data) : {}; } catch (e) { /* keep empty */ }

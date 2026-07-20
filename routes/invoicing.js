@@ -72,18 +72,18 @@ router.get('/import', requirePermission(PERM), (req, res) => {
 router.post('/import', requirePermission(PERM), csvUpload.single('csv_file'), (req, res) => {
   if (!req.file || !req.file.buffer) {
     req.flash('error', 'Choose the CSV file exported from Traffio first.');
-    return res.redirect('/finance/invoicing/import');
+    return req.session.save(() => res.redirect('/finance/invoicing/import'));
   }
   const markSigned = req.body.mark_signed === '1';
 
   let rows;
   try { rows = parseCsv(req.file.buffer.toString('utf8')); }
-  catch (e) { req.flash('error', 'Could not parse that file as CSV: ' + e.message); return res.redirect('/finance/invoicing/import'); }
+  catch (e) { req.flash('error', 'Could not parse that file as CSV: ' + e.message); return req.session.save(() => res.redirect('/finance/invoicing/import')); }
 
   // Sanity check it's the right report
   if (!rows.length || !('booking_id' in rows[0]) || !('person_id' in rows[0]) || !('hours_worked' in rows[0])) {
     req.flash('error', 'That file doesn\'t look like a Traffio "Person Dockets" export (expected booking_id / person_id / hours_worked columns).');
-    return res.redirect('/finance/invoicing/import');
+    return req.session.save(() => res.redirect('/finance/invoicing/import'));
   }
 
   const db = getDb();
@@ -187,7 +187,7 @@ router.post('/import', requirePermission(PERM), csvUpload.single('csv_file'), (r
   });
   try { tx(); } catch (e) {
     req.flash('error', 'Import failed: ' + e.message);
-    return res.redirect('/finance/invoicing/import');
+    return req.session.save(() => res.redirect('/finance/invoicing/import'));
   }
 
   logActivity({
@@ -200,7 +200,7 @@ router.post('/import', requirePermission(PERM), csvUpload.single('csv_file'), (r
     + (stats.skippedRows ? ` ${stats.skippedRows} row(s) skipped (deleted/incomplete).` : '');
   req.flash('success', `Imported ${stats.dockets} dockets (${stats.persons} crew lines) across ${stats.clients.size} clients.${skippedNote}${markSigned ? '' : ' Note: only dockets signed off in the CSV are assemble-able.'}`);
   const qs = (minDate && maxDate) ? `?period_start=${minDate}&period_end=${maxDate}` : '';
-  res.redirect('/finance/invoicing/new' + qs);
+  req.session.save(() => res.redirect('/finance/invoicing/new' + qs));
 });
 
 // GET /finance/invoicing/new — choose period/client, preview unbilled dockets
@@ -249,7 +249,7 @@ router.post('/assemble', requirePermission(PERM), (req, res) => {
   const traffioClientId = (req.body.traffio_client_id || '').trim() || null;
   if (!periodStart || !periodEnd) {
     req.flash('error', 'Pick a period.');
-    return res.redirect('/finance/invoicing/new');
+    return req.session.save(() => res.redirect('/finance/invoicing/new'));
   }
   try {
     const result = assembleDraftInvoices({ periodStart, periodEnd, traffioClientId }, req.session.user.id);
@@ -262,7 +262,7 @@ router.post('/assemble', requirePermission(PERM), (req, res) => {
   } catch (err) {
     req.flash('error', `Assembly failed: ${err.message}`);
   }
-  res.redirect('/finance/invoicing');
+  req.session.save(() => res.redirect('/finance/invoicing'));
 });
 
 function loadInvoice(db, id) {
@@ -276,7 +276,7 @@ function loadInvoice(db, id) {
 router.get('/:id', requirePermission(PERM), (req, res) => {
   const db = getDb();
   const invoice = loadInvoice(db, req.params.id);
-  if (!invoice) { req.flash('error', 'Invoice not found.'); return res.redirect('/finance/invoicing'); }
+  if (!invoice) { req.flash('error', 'Invoice not found.'); return req.session.save(() => res.redirect('/finance/invoicing')); }
   res.render('invoicing/show', { title: invoice.invoice_number || 'Draft invoice', invoice, money });
 });
 
@@ -284,8 +284,8 @@ router.get('/:id', requirePermission(PERM), (req, res) => {
 router.post('/:id/lines', requirePermission(PERM), (req, res) => {
   const db = getDb();
   const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!invoice) { req.flash('error', 'Invoice not found.'); return res.redirect('/finance/invoicing'); }
-  if (invoice.status !== 'draft') { req.flash('error', 'Only draft invoices can be edited.'); return res.redirect('/finance/invoicing/' + invoice.id); }
+  if (!invoice) { req.flash('error', 'Invoice not found.'); return req.session.save(() => res.redirect('/finance/invoicing')); }
+  if (invoice.status !== 'draft') { req.flash('error', 'Only draft invoices can be edited.'); return req.session.save(() => res.redirect('/finance/invoicing/' + invoice.id)); }
 
   const arr = (v) => Array.isArray(v) ? v : (v == null ? [] : [v]);
   const ids = arr(req.body.line_id);
@@ -318,7 +318,7 @@ router.post('/:id/lines', requirePermission(PERM), (req, res) => {
   });
   tx();
   req.flash('success', 'Invoice updated.');
-  res.redirect('/finance/invoicing/' + invoice.id);
+  req.session.save(() => res.redirect('/finance/invoicing/' + invoice.id));
 });
 
 // POST /finance/invoicing/:id/approve — draft → approved (assigns number)
@@ -328,7 +328,7 @@ router.post('/:id/lines', requirePermission(PERM), (req, res) => {
 router.get('/:id/docket-pdf', requirePermission(PERM), async (req, res) => {
   const db = getDb();
   const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!invoice) { req.flash('error', 'Invoice not found.'); return res.redirect('/finance/invoicing'); }
+  if (!invoice) { req.flash('error', 'Invoice not found.'); return req.session.save(() => res.redirect('/finance/invoicing')); }
   try {
     let pdfPath = invoice.docket_pdf_path;
     const fs = require('fs');
@@ -341,7 +341,7 @@ router.get('/:id/docket-pdf', requirePermission(PERM), async (req, res) => {
     fs.createReadStream(pdfPath).pipe(res);
   } catch (err) {
     req.flash('error', 'Could not generate the docket PDF: ' + err.message);
-    res.redirect('/finance/invoicing/' + invoice.id);
+    req.session.save(() => res.redirect('/finance/invoicing/' + invoice.id));
   }
 });
 
@@ -361,21 +361,21 @@ router.post('/:id/apply-rates', requirePermission(PERM), (req, res) => {
   } catch (err) {
     req.flash('error', err.message || 'Could not apply the rate card.');
   }
-  res.redirect('/finance/invoicing/' + req.params.id);
+  req.session.save(() => res.redirect('/finance/invoicing/' + req.params.id));
 });
 
 router.post('/:id/approve', requirePermission(PERM), (req, res) => {
   const db = getDb();
   const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!invoice) { req.flash('error', 'Invoice not found.'); return res.redirect('/finance/invoicing'); }
-  if (invoice.status !== 'draft') { req.flash('error', 'Already processed.'); return res.redirect('/finance/invoicing/' + invoice.id); }
+  if (!invoice) { req.flash('error', 'Invoice not found.'); return req.session.save(() => res.redirect('/finance/invoicing')); }
+  if (invoice.status !== 'draft') { req.flash('error', 'Already processed.'); return req.session.save(() => res.redirect('/finance/invoicing/' + invoice.id)); }
 
   const number = invoice.invoice_number || generateInvoiceNumber(db);
   db.prepare(`UPDATE invoices SET status='approved', invoice_number=?, approved_by_id=?, approved_at=datetime('now'), updated_at=CURRENT_TIMESTAMP WHERE id=?`)
     .run(number, req.session.user.id, invoice.id);
   logActivity({ user: req.session.user, action: 'approve', entityType: 'invoice', entityId: invoice.id, entityLabel: number, details: `Approved invoice ${number}`, ip: req.ip });
   req.flash('success', `Invoice ${number} approved — ready to push to QuickBooks.`);
-  res.redirect('/finance/invoicing/' + invoice.id);
+  req.session.save(() => res.redirect('/finance/invoicing/' + invoice.id));
 });
 
 // POST /finance/invoicing/:id/push — push an approved invoice into QuickBooks
@@ -385,10 +385,10 @@ router.post('/:id/approve', requirePermission(PERM), (req, res) => {
 router.post('/:id/push', requirePermission(PERM), async (req, res) => {
   const db = getDb();
   const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!invoice) { req.flash('error', 'Invoice not found.'); return res.redirect('/finance/invoicing'); }
+  if (!invoice) { req.flash('error', 'Invoice not found.'); return req.session.save(() => res.redirect('/finance/invoicing')); }
   if (invoice.status !== 'approved') {
     req.flash('error', invoice.status === 'pushed' ? 'Already pushed to QuickBooks.' : 'Approve the invoice before pushing.');
-    return res.redirect('/finance/invoicing/' + invoice.id);
+    return req.session.save(() => res.redirect('/finance/invoicing/' + invoice.id));
   }
 
   try {
@@ -431,36 +431,36 @@ router.post('/:id/push', requirePermission(PERM), async (req, res) => {
     db.prepare('UPDATE invoices SET error_message=?, updated_at=CURRENT_TIMESTAMP WHERE id=?').run(String(err.message || err).slice(0, 1000), invoice.id);
     req.flash('error', `QuickBooks push failed: ${err.message}`);
   }
-  res.redirect('/finance/invoicing/' + invoice.id);
+  req.session.save(() => res.redirect('/finance/invoicing/' + invoice.id));
 });
 
 // POST /finance/invoicing/:id/void — release its dockets
 router.post('/:id/void', requirePermission(PERM), (req, res) => {
   const db = getDb();
   const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!invoice) { req.flash('error', 'Invoice not found.'); return res.redirect('/finance/invoicing'); }
+  if (!invoice) { req.flash('error', 'Invoice not found.'); return req.session.save(() => res.redirect('/finance/invoicing')); }
   db.transaction(() => {
     db.prepare('UPDATE traffio_dockets SET invoiced=0, invoice_id=NULL WHERE invoice_id=?').run(invoice.id);
     db.prepare("UPDATE invoices SET status='void', updated_at=CURRENT_TIMESTAMP WHERE id=?").run(invoice.id);
   })();
   logActivity({ user: req.session.user, action: 'update', entityType: 'invoice', entityId: invoice.id, entityLabel: invoice.invoice_number || `#${invoice.id}`, details: 'Voided invoice; dockets released', ip: req.ip });
   req.flash('success', 'Invoice voided — its dockets are available to invoice again.');
-  res.redirect('/finance/invoicing');
+  req.session.save(() => res.redirect('/finance/invoicing'));
 });
 
 // POST /finance/invoicing/:id/delete — draft only
 router.post('/:id/delete', requirePermission(PERM), (req, res) => {
   const db = getDb();
   const invoice = db.prepare('SELECT * FROM invoices WHERE id = ?').get(req.params.id);
-  if (!invoice) { req.flash('error', 'Invoice not found.'); return res.redirect('/finance/invoicing'); }
-  if (invoice.status !== 'draft') { req.flash('error', 'Only draft invoices can be deleted (void instead).'); return res.redirect('/finance/invoicing/' + invoice.id); }
+  if (!invoice) { req.flash('error', 'Invoice not found.'); return req.session.save(() => res.redirect('/finance/invoicing')); }
+  if (invoice.status !== 'draft') { req.flash('error', 'Only draft invoices can be deleted (void instead).'); return req.session.save(() => res.redirect('/finance/invoicing/' + invoice.id)); }
   db.transaction(() => {
     db.prepare('UPDATE traffio_dockets SET invoiced=0, invoice_id=NULL WHERE invoice_id=?').run(invoice.id);
     db.prepare('DELETE FROM invoices WHERE id=?').run(invoice.id); // cascades line items
   })();
   logActivity({ user: req.session.user, action: 'delete', entityType: 'invoice', entityId: invoice.id, details: 'Deleted draft invoice; dockets released', ip: req.ip });
   req.flash('success', 'Draft deleted — its dockets are available again.');
-  res.redirect('/finance/invoicing');
+  req.session.save(() => res.redirect('/finance/invoicing'));
 });
 
 module.exports = router;

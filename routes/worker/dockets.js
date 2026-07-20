@@ -223,7 +223,7 @@ function submitShiftDocket(req, res, shift) {
   // Lock: never allow a second docket for the same shift from the portal.
   if (getCurrentDocket(db, shift)) {
     req.flash('error', 'This shift docket has already been signed.');
-    return res.redirect(backRedirect);
+    return req.session.save(() => res.redirect(backRedirect));
   }
 
   const b = req.body;
@@ -256,7 +256,7 @@ function submitShiftDocket(req, res, shift) {
   if (!noClient && !b.client_signature) missing.push('client signature (or tick "no client on site")');
   if (missing.length) {
     req.flash('error', 'Missing: ' + missing.join('; ') + '.');
-    return res.redirect(backRedirect);
+    return req.session.save(() => res.redirect(backRedirect));
   }
 
   // Job-Pack gating — preserve the existing "required: risk_toolbox +
@@ -271,7 +271,7 @@ function submitShiftDocket(req, res, shift) {
       "Docket not signed — finish these checklists first: " +
       missingForms.map(f => f.label).join(' and ') +
       ". You'll find them in this shift's Forms tab.");
-    return res.redirect(backRedirect);
+    return req.session.save(() => res.redirect(backRedirect));
   }
 
   const finalClientSig = noClient ? null : (b.client_signature || null);
@@ -341,42 +341,42 @@ function submitShiftDocket(req, res, shift) {
   } catch (e) { console.error('[dockets] docket-submitted notify failed:', e.message); }
 
   req.flash('success', 'Docket signed — shift marked complete.');
-  res.redirect(backRedirect);
+  req.session.save(() => res.redirect(backRedirect));
 }
 
 // Legacy per-person links resolve to the shift docket and redirect.
 router.get('/dockets/sign/:allocationId', (req, res) => {
   const shift = resolveShift(getDb(), { allocationId: req.params.allocationId });
-  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
-  res.redirect(shiftUrl(shift));
+  if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
+  req.session.save(() => res.redirect(shiftUrl(shift)));
 });
 router.post('/dockets/sign/:allocationId', (req, res) => {
   const shift = resolveShift(getDb(), { allocationId: req.params.allocationId });
-  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
   submitShiftDocket(req, res, shift);
 });
 
 // Job + date shift (no booking) — registered before the booking route.
 router.get('/dockets/shift/job/:jobId/:date', (req, res) => {
   const shift = resolveShift(getDb(), { jobId: req.params.jobId, date: req.params.date });
-  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
   renderShiftSign(req, res, shift);
 });
 router.post('/dockets/shift/job/:jobId/:date', (req, res) => {
   const shift = resolveShift(getDb(), { jobId: req.params.jobId, date: req.params.date });
-  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
   submitShiftDocket(req, res, shift);
 });
 
 // Booking shift.
 router.get('/dockets/shift/:bookingId', (req, res) => {
   const shift = resolveShift(getDb(), { bookingId: req.params.bookingId });
-  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
   renderShiftSign(req, res, shift);
 });
 router.post('/dockets/shift/:bookingId', (req, res) => {
   const shift = resolveShift(getDb(), { bookingId: req.params.bookingId });
-  if (!shift) { req.flash('error', 'Shift not found.'); return res.redirect('/w/dockets'); }
+  if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
   submitShiftDocket(req, res, shift);
 });
 

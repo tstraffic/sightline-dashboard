@@ -54,7 +54,7 @@ router.get('/new', (req, res) => {
 router.post('/', (req, res) => {
   const db = getDb();
   const { name, description } = req.body;
-  if (!name || !name.trim()) { req.flash('error', 'Template name is required.'); return res.redirect('/checklists/new'); }
+  if (!name || !name.trim()) { req.flash('error', 'Template name is required.'); return req.session.save(() => res.redirect('/checklists/new')); }
 
   const result = db.prepare(`
     INSERT INTO checklist_templates (name, description, status, created_by_id)
@@ -63,14 +63,14 @@ router.post('/', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'checklist_template', entityId: result.lastInsertRowid, entityLabel: name.trim(), ip: req.ip });
   req.flash('success', `Template "${name.trim()}" created. Now add your questions.`);
-  res.redirect(`/checklists/${result.lastInsertRowid}`);
+  req.session.save(() => res.redirect(`/checklists/${result.lastInsertRowid}`));
 });
 
 // GET /:id — View/edit template + items
 router.get('/:id', (req, res) => {
   const db = getDb();
   const template = db.prepare('SELECT * FROM checklist_templates WHERE id = ?').get(req.params.id);
-  if (!template) { req.flash('error', 'Template not found.'); return res.redirect('/checklists'); }
+  if (!template) { req.flash('error', 'Template not found.'); return req.session.save(() => res.redirect('/checklists')); }
 
   const items = db.prepare('SELECT * FROM checklist_template_items WHERE template_id = ? ORDER BY item_order ASC, id ASC').all(template.id);
 
@@ -117,7 +117,7 @@ router.get('/:id', (req, res) => {
 router.post('/:id/visibility', (req, res) => {
   const db = getDb();
   const tpl = db.prepare('SELECT id, name FROM checklist_templates WHERE id = ?').get(req.params.id);
-  if (!tpl) { req.flash('error', 'Template not found.'); return res.redirect('/checklists'); }
+  if (!tpl) { req.flash('error', 'Template not found.'); return req.session.save(() => res.redirect('/checklists')); }
   const visible = req.body.worker_visible === '1' || req.body.worker_visible === 'on' ? 1 : 0;
   const sig = req.body.require_signature === '1' || req.body.require_signature === 'on' ? 1 : 0;
   const photo = req.body.require_photo === '1' || req.body.require_photo === 'on' ? 1 : 0;
@@ -126,7 +126,7 @@ router.post('/:id/visibility', (req, res) => {
     .run(visible, sig, photo, onShift, req.params.id);
   logActivity({ user: req.session.user, action: 'update', entityType: 'checklist_template', entityId: tpl.id, entityLabel: tpl.name, details: `Visibility: worker_visible=${visible}, sig=${sig}, photo=${photo}, show_on_shift=${onShift}`, ip: req.ip });
   req.flash('success', visible ? 'Template will be visible to workers once published.' : 'Template hidden from workers.');
-  res.redirect(`/checklists/${req.params.id}`);
+  req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
 });
 
 // POST /:id/publish — snapshot current draft as a new revision so workers
@@ -134,9 +134,9 @@ router.post('/:id/visibility', (req, res) => {
 router.post('/:id/publish', (req, res) => {
   const db = getDb();
   const tpl = db.prepare('SELECT * FROM checklist_templates WHERE id = ?').get(req.params.id);
-  if (!tpl) { req.flash('error', 'Template not found.'); return res.redirect('/checklists'); }
+  if (!tpl) { req.flash('error', 'Template not found.'); return req.session.save(() => res.redirect('/checklists')); }
   const items = db.prepare('SELECT * FROM checklist_template_items WHERE template_id = ? ORDER BY item_order ASC, id ASC').all(tpl.id);
-  if (items.length === 0) { req.flash('error', 'Add at least one question before publishing.'); return res.redirect(`/checklists/${tpl.id}`); }
+  if (items.length === 0) { req.flash('error', 'Add at least one question before publishing.'); return req.session.save(() => res.redirect(`/checklists/${tpl.id}`)); }
 
   const next = (db.prepare('SELECT MAX(revision_number) AS m FROM checklist_template_revisions WHERE template_id = ?').get(tpl.id).m || 0) + 1;
   db.prepare(`
@@ -150,7 +150,7 @@ router.post('/:id/publish', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'publish', entityType: 'checklist_template', entityId: tpl.id, entityLabel: tpl.name, details: `Published revision ${next} (${items.length} questions)`, ip: req.ip });
   req.flash('success', `Revision ${next} published. Workers can now fill in the latest version.`);
-  res.redirect(`/checklists/${tpl.id}`);
+  req.session.save(() => res.redirect(`/checklists/${tpl.id}`));
 });
 
 // POST /:id — Update template details
@@ -160,7 +160,7 @@ router.post('/:id', (req, res) => {
   db.prepare('UPDATE checklist_templates SET name = ?, description = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
     .run(name || '', description || '', req.params.id);
   req.flash('success', 'Template updated.');
-  res.redirect(`/checklists/${req.params.id}`);
+  req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
 });
 
 // Allow-list of element types. Grouped here for the show view's
@@ -232,7 +232,7 @@ router.post('/:id/items', (req, res) => {
   if (!question || !question.trim()) {
     if (!isDisplay || rType === 'heading' || rType === 'hyperlink') {
       req.flash('error', 'Title / question text is required.');
-      return res.redirect(`/checklists/${req.params.id}`);
+      return req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
     }
   }
 
@@ -249,7 +249,7 @@ router.post('/:id/items', (req, res) => {
 
   db.prepare('UPDATE checklist_templates SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   req.flash('success', `${ELEMENT_TYPES[rType].label} added.`);
-  res.redirect(`/checklists/${req.params.id}`);
+  req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
 });
 
 // POST /:id/items/bulk — Apply a single change (response_type / required /
@@ -268,7 +268,7 @@ router.post('/:id/items/bulk', (req, res) => {
   ids = ids.map(n => parseInt(n, 10)).filter(n => !isNaN(n));
   if (ids.length === 0) {
     req.flash('error', 'Pick at least one question.');
-    return res.redirect(`/checklists/${req.params.id}`);
+    return req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
   }
 
   const newType = req.body.response_type && VALID_TYPES.includes(req.body.response_type) ? req.body.response_type : null;
@@ -278,7 +278,7 @@ router.post('/:id/items/bulk', (req, res) => {
 
   if (!newType && newReq === null && !setSec) {
     req.flash('error', 'Pick at least one field to change.');
-    return res.redirect(`/checklists/${req.params.id}`);
+    return req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
   }
 
   const setParts = [];
@@ -311,7 +311,7 @@ router.post('/:id/items/bulk', (req, res) => {
     logActivity({ user: req.session.user, action: 'update', entityType: 'checklist_template_items', entityId: req.params.id, details: `Bulk update ${n} items: ${bits.join('; ')}`, ip: req.ip });
   }
   req.flash('success', `Updated ${n} question${n === 1 ? '' : 's'}.`);
-  res.redirect(`/checklists/${req.params.id}`);
+  req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
 });
 
 // POST /:id/items/:itemId — Update a single item. Declared after /items/bulk
@@ -327,7 +327,7 @@ router.post('/:id/items/:itemId', (req, res) => {
 
   db.prepare('UPDATE checklist_templates SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   req.flash('success', 'Element updated.');
-  res.redirect(`/checklists/${req.params.id}`);
+  req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
 });
 
 // POST /:id/items/:itemId/delete — Remove item
@@ -336,7 +336,7 @@ router.post('/:id/items/:itemId/delete', (req, res) => {
   db.prepare('DELETE FROM checklist_template_items WHERE id = ? AND template_id = ?').run(req.params.itemId, req.params.id);
   db.prepare('UPDATE checklist_templates SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.id);
   req.flash('success', 'Question removed.');
-  res.redirect(`/checklists/${req.params.id}`);
+  req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
 });
 
 // POST /:id/reorder — Reorder items (AJAX). Accepts either:
@@ -375,16 +375,16 @@ router.post('/:id/reorder', express.json(), (req, res) => {
 router.post('/:id/archive', (req, res) => {
   const db = getDb();
   const template = db.prepare('SELECT status, system_key FROM checklist_templates WHERE id = ?').get(req.params.id);
-  if (!template) { req.flash('error', 'Template not found.'); return res.redirect('/checklists'); }
+  if (!template) { req.flash('error', 'Template not found.'); return req.session.save(() => res.redirect('/checklists')); }
   if (template.system_key) {
     req.flash('error', 'System templates can\'t be archived — they power the worker portal Job-Pack.');
-    return res.redirect('/checklists');
+    return req.session.save(() => res.redirect('/checklists'));
   }
 
   const newStatus = template.status === 'archived' ? 'active' : 'archived';
   db.prepare('UPDATE checklist_templates SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newStatus, req.params.id);
   req.flash('success', `Template ${newStatus === 'archived' ? 'archived' : 'reactivated'}.`);
-  res.redirect('/checklists');
+  req.session.save(() => res.redirect('/checklists'));
 });
 
 // ============================================================
@@ -397,7 +397,7 @@ router.post('/:id/archive', (req, res) => {
 router.get('/:id/responses', (req, res) => {
   const db = getDb();
   const template = db.prepare('SELECT * FROM checklist_templates WHERE id = ?').get(req.params.id);
-  if (!template) { req.flash('error', 'Template not found.'); return res.redirect('/checklists'); }
+  if (!template) { req.flash('error', 'Template not found.'); return req.session.save(() => res.redirect('/checklists')); }
   let responses = [];
   try {
     responses = db.prepare(`
@@ -427,7 +427,7 @@ router.get('/:id/responses', (req, res) => {
 router.get('/:id/responses/:responseId', (req, res) => {
   const db = getDb();
   const template = db.prepare('SELECT * FROM checklist_templates WHERE id = ?').get(req.params.id);
-  if (!template) { req.flash('error', 'Template not found.'); return res.redirect('/checklists'); }
+  if (!template) { req.flash('error', 'Template not found.'); return req.session.save(() => res.redirect('/checklists')); }
   const response = db.prepare(`
     SELECT r.*, cm.full_name AS worker_name, b.booking_number
     FROM custom_checklist_responses r
@@ -435,7 +435,7 @@ router.get('/:id/responses/:responseId', (req, res) => {
     LEFT JOIN bookings b ON b.id = r.booking_id
     WHERE r.id = ? AND r.template_id = ?
   `).get(req.params.responseId, template.id);
-  if (!response) { req.flash('error', 'Response not found.'); return res.redirect(`/checklists/${template.id}/responses`); }
+  if (!response) { req.flash('error', 'Response not found.'); return req.session.save(() => res.redirect(`/checklists/${template.id}/responses`)); }
 
   const rev = db.prepare('SELECT * FROM checklist_template_revisions WHERE template_id = ? AND revision_number = ?')
     .get(template.id, response.revision_number);

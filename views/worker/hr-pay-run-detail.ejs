@@ -105,7 +105,4 @@
   </p>
 </div>
 
-<% if (flash_success && flash_success.length) { %><div class="sf-toast show"><%= flash_success[0] %></div>
-<% } else if (flash_error && flash_error.length) { %><div class="sf-toast show err"><%= flash_error[0] %></div>
-<% } %>
-<script>setTimeout(()=>{ const t=document.querySelector('.sf-toast.show'); if(t) t.classList.remove('show'); }, 3500);</script>
+<%# Flash renders via the layout banner (global locals). %>

@@ -184,15 +184,15 @@ router.get('/abergeldie/new', requirePermission('abergeldie_payments'), (req, re
 // ===========================================================================
 router.post('/abergeldie', requirePermission('abergeldie_payments'), (req, res) => {
   upload.single('csv')(req, res, (err) => {
-    if (err) { req.flash('error', err.message); return res.redirect('/finance/abergeldie/new'); }
-    if (!req.file) { req.flash('error', 'CSV file is required.'); return res.redirect('/finance/abergeldie/new'); }
+    if (err) { req.flash('error', err.message); return req.session.save(() => res.redirect('/finance/abergeldie/new')); }
+    if (!req.file) { req.flash('error', 'CSV file is required.'); return req.session.save(() => res.redirect('/finance/abergeldie/new')); }
 
     const db = getDb();
     const feePerHour = round2(req.body.fee_per_hour);
     if (!feePerHour || feePerHour <= 0) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', 'Fee per hour must be a positive number.');
-      return res.redirect('/finance/abergeldie/new');
+      return req.session.save(() => res.redirect('/finance/abergeldie/new'));
     }
     const targetClient = CLIENT_NAME;
     const labelInput = String(req.body.label || '').trim();
@@ -208,7 +208,7 @@ router.post('/abergeldie', requirePermission('abergeldie_payments'), (req, res) 
     if (hasManualPeriod && periodEndInput < periodStartInput) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', 'Period end must be on or after period start.');
-      return res.redirect('/finance/abergeldie/new');
+      return req.session.save(() => res.redirect('/finance/abergeldie/new'));
     }
     const uteRate = req.body.default_ute_rate_per_shift !== undefined && req.body.default_ute_rate_per_shift !== ''
       ? round2(req.body.default_ute_rate_per_shift)
@@ -216,7 +216,7 @@ router.post('/abergeldie', requirePermission('abergeldie_payments'), (req, res) 
     if (uteRate < 0) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', 'Ute rate must be 0 or more.');
-      return res.redirect('/finance/abergeldie/new');
+      return req.session.save(() => res.redirect('/finance/abergeldie/new'));
     }
     const uteBasis = (req.body.ute_rate_basis === 'hourly') ? 'hourly' : 'shift';
 
@@ -224,14 +224,14 @@ router.post('/abergeldie', requirePermission('abergeldie_payments'), (req, res) 
     try { raw = fs.readFileSync(req.file.path, 'utf8'); }
     catch (e) {
       req.flash('error', 'Could not read uploaded file: ' + e.message);
-      return res.redirect('/finance/abergeldie/new');
+      return req.session.save(() => res.redirect('/finance/abergeldie/new'));
     }
 
     const { rows } = parseCsv(raw);
     if (rows.length === 0) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', 'CSV had no data rows.');
-      return res.redirect('/finance/abergeldie/new');
+      return req.session.save(() => res.redirect('/finance/abergeldie/new'));
     }
 
     const allShifts = rows.map(normaliseAbergeldieRow).filter(Boolean);
@@ -242,7 +242,7 @@ router.post('/abergeldie', requirePermission('abergeldie_payments'), (req, res) 
         ? `Couldn't read any rows from this CSV — check that it's a Traffio export with a Hours column and a Person/Name column.`
         : `No rows mention "${targetClient}". Total rows read: ${allShifts.length}.`;
       req.flash('error', hint);
-      return res.redirect('/finance/abergeldie/new');
+      return req.session.save(() => res.redirect('/finance/abergeldie/new'));
     }
 
     const period = hasManualPeriod
@@ -301,7 +301,7 @@ router.post('/abergeldie', requirePermission('abergeldie_payments'), (req, res) 
     });
 
     req.flash('success', `Imported ${matchingShifts.length} shifts for ${targetClient} across ${new Set(matchingShifts.map(s => s.project_name || '(none)')).size} project(s).`);
-    res.redirect('/finance/abergeldie/' + sheetId);
+    req.session.save(() => res.redirect('/finance/abergeldie/' + sheetId));
   });
 });
 
@@ -311,7 +311,7 @@ router.post('/abergeldie', requirePermission('abergeldie_payments'), (req, res) 
 router.get('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, res) => {
   const db = getDb();
   const sheet = db.prepare('SELECT * FROM abergeldie_payment_sheets WHERE id = ?').get(req.params.id);
-  if (!sheet) { req.flash('error', 'Payment sheet not found.'); return res.redirect('/finance/abergeldie'); }
+  if (!sheet) { req.flash('error', 'Payment sheet not found.'); return req.session.save(() => res.redirect('/finance/abergeldie')); }
 
   const allLines = db.prepare(`
     SELECT * FROM abergeldie_payment_sheet_lines
@@ -392,7 +392,7 @@ router.get('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, re
 router.post('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, res) => {
   const db = getDb();
   const sheet = db.prepare('SELECT * FROM abergeldie_payment_sheets WHERE id = ?').get(req.params.id);
-  if (!sheet) { req.flash('error', 'Payment sheet not found.'); return res.redirect('/finance/abergeldie'); }
+  if (!sheet) { req.flash('error', 'Payment sheet not found.'); return req.session.save(() => res.redirect('/finance/abergeldie')); }
 
   const label = String(req.body.label || '').trim().slice(0, 200);
   const periodStart = String(req.body.period_start || '').trim();
@@ -407,19 +407,19 @@ router.post('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, r
   const dateRe = /^\d{4}-\d{2}-\d{2}$/;
   if (!dateRe.test(periodStart) || !dateRe.test(periodEnd)) {
     req.flash('error', 'Period start + end dates are required (YYYY-MM-DD).');
-    return res.redirect('/finance/abergeldie/' + sheet.id);
+    return req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
   }
   if (periodEnd < periodStart) {
     req.flash('error', 'Period end must be on or after period start.');
-    return res.redirect('/finance/abergeldie/' + sheet.id);
+    return req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
   }
   if (!feePerHour || feePerHour <= 0) {
     req.flash('error', 'Fee per hour must be a positive number.');
-    return res.redirect('/finance/abergeldie/' + sheet.id);
+    return req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
   }
   if (uteRate < 0) {
     req.flash('error', 'Ute rate must be 0 or more.');
-    return res.redirect('/finance/abergeldie/' + sheet.id);
+    return req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
   }
 
   const uteBasis = (req.body.ute_rate_basis === 'hourly') ? 'hourly' : (req.body.ute_rate_basis === 'shift' ? 'shift' : (sheet.ute_rate_basis || 'shift'));
@@ -470,7 +470,7 @@ router.post('/abergeldie/:id', requirePermission('abergeldie_payments'), (req, r
   });
 
   req.flash('success', 'Sheet updated.');
-  res.redirect('/finance/abergeldie/' + sheet.id);
+  req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
 });
 
 // ===========================================================================
@@ -485,7 +485,7 @@ function makeToggle(field) {
     if (!sheet) {
       if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Not found' });
       req.flash('error', 'Payment sheet not found.');
-      return res.redirect('/finance/abergeldie');
+      return req.session.save(() => res.redirect('/finance/abergeldie'));
     }
     const checked = req.body.value === '1' || req.body.value === 'on' || req.body.value === 'true' || req.body.value === 1 || req.body.value === true;
     const atCol = field + '_at';
@@ -524,15 +524,15 @@ router.post('/abergeldie/:id/paid',  requirePermission('abergeldie_payments'), m
 // ===========================================================================
 router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payments'), (req, res) => {
   upload.single('csv')(req, res, (err) => {
-    if (err) { req.flash('error', err.message); return res.redirect('/finance/abergeldie/' + req.params.id); }
-    if (!req.file) { req.flash('error', 'CSV file is required.'); return res.redirect('/finance/abergeldie/' + req.params.id); }
+    if (err) { req.flash('error', err.message); return req.session.save(() => res.redirect('/finance/abergeldie/' + req.params.id)); }
+    if (!req.file) { req.flash('error', 'CSV file is required.'); return req.session.save(() => res.redirect('/finance/abergeldie/' + req.params.id)); }
 
     const db = getDb();
     const sheet = db.prepare('SELECT * FROM abergeldie_payment_sheets WHERE id = ?').get(req.params.id);
     if (!sheet) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', 'Payment sheet not found.');
-      return res.redirect('/finance/abergeldie');
+      return req.session.save(() => res.redirect('/finance/abergeldie'));
     }
     const rateOverride = req.body.default_ute_rate_per_shift;
     const ratePerShift = rateOverride !== undefined && rateOverride !== ''
@@ -545,20 +545,20 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
     if (ratePerShift < 0) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', 'Rate per shift must be 0 or more.');
-      return res.redirect('/finance/abergeldie/' + sheet.id);
+      return req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
     }
 
     let raw;
     try { raw = fs.readFileSync(req.file.path, 'utf8'); }
     catch (e) {
       req.flash('error', 'Could not read uploaded file: ' + e.message);
-      return res.redirect('/finance/abergeldie/' + sheet.id);
+      return req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
     }
     const { rows } = parseCsv(raw);
     if (rows.length === 0) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', 'CSV had no data rows.');
-      return res.redirect('/finance/abergeldie/' + sheet.id);
+      return req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
     }
 
     // Filter to Abergeldie + non-cancelled + has plate, then group.
@@ -591,7 +591,7 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
     if (groups.size === 0) {
       try { fs.unlinkSync(req.file.path); } catch (e) {}
       req.flash('error', `No matching ute rows in the CSV (read ${rows.length}, skipped ${dropped})${onlyRego ? ` for rego ${onlyRego}` : ''}. Check that the file is a Traffio Vehicle Job Report for an Abergeldie project${onlyRego ? `, and that ${onlyRego} appears in it` : ''}.`);
-      return res.redirect('/finance/abergeldie/' + sheet.id);
+      return req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
     }
 
     const tx = db.transaction(() => {
@@ -635,7 +635,7 @@ router.post('/abergeldie/:id/upload-utes', requirePermission('abergeldie_payment
     });
 
     req.flash('success', `Imported ${kept} ute shifts → ${groups.size} line(s) @ $${ratePerShift}/shift${onlyRego ? ` (rego ${onlyRego} only)` : ''}.`);
-    res.redirect('/finance/abergeldie/' + sheet.id);
+    req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
   });
 });
 
@@ -650,12 +650,12 @@ router.post('/abergeldie/:id/lines/:lineId', requirePermission('abergeldie_payme
   if (!line) {
     if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(404).json({ error: 'Line not found' });
     req.flash('error', 'Line not found.');
-    return res.redirect('/finance/abergeldie/' + req.params.id);
+    return req.session.save(() => res.redirect('/finance/abergeldie/' + req.params.id));
   }
   if ((line.line_type || 'person') !== 'ute') {
     if (req.xhr || (req.headers.accept || '').includes('json')) return res.status(400).json({ error: 'Only ute lines are editable here' });
     req.flash('error', 'Only ute lines are editable here.');
-    return res.redirect('/finance/abergeldie/' + req.params.id);
+    return req.session.save(() => res.redirect('/finance/abergeldie/' + req.params.id));
   }
 
   const sheetRow = db.prepare('SELECT ute_rate_basis FROM abergeldie_payment_sheets WHERE id = ?').get(req.params.id);
@@ -683,7 +683,7 @@ router.post('/abergeldie/:id/lines/:lineId', requirePermission('abergeldie_payme
     return res.json({ ok: true, line: fresh });
   }
   req.flash('success', 'Ute line updated.');
-  res.redirect('/finance/abergeldie/' + req.params.id);
+  req.session.save(() => res.redirect('/finance/abergeldie/' + req.params.id));
 });
 
 // ===========================================================================
@@ -694,14 +694,14 @@ router.post('/abergeldie/:id/lines/:lineId', requirePermission('abergeldie_payme
 router.post('/abergeldie/:id/clear-utes', requirePermission('abergeldie_payments'), (req, res) => {
   const db = getDb();
   const sheet = db.prepare('SELECT * FROM abergeldie_payment_sheets WHERE id = ?').get(req.params.id);
-  if (!sheet) { req.flash('error', 'Payment sheet not found.'); return res.redirect('/finance/abergeldie'); }
+  if (!sheet) { req.flash('error', 'Payment sheet not found.'); return req.session.save(() => res.redirect('/finance/abergeldie')); }
   const result = db.prepare("DELETE FROM abergeldie_payment_sheet_lines WHERE sheet_id = ? AND COALESCE(line_type, 'person') = 'ute'").run(sheet.id);
   if (sheet.utes_csv_filename) {
     try { fs.unlinkSync(path.join(UPLOAD_DIR, sheet.utes_csv_filename)); } catch (e) { /* ignore */ }
     db.prepare("UPDATE abergeldie_payment_sheets SET utes_csv_filename = '', utes_uploaded_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(sheet.id);
   }
   req.flash('success', `Removed ${result.changes} ute line(s).`);
-  res.redirect('/finance/abergeldie/' + sheet.id);
+  req.session.save(() => res.redirect('/finance/abergeldie/' + sheet.id));
 });
 
 // ===========================================================================
@@ -710,7 +710,7 @@ router.post('/abergeldie/:id/clear-utes', requirePermission('abergeldie_payments
 router.post('/abergeldie/:id/delete', requirePermission('abergeldie_payments'), (req, res) => {
   const db = getDb();
   const sheet = db.prepare('SELECT * FROM abergeldie_payment_sheets WHERE id = ?').get(req.params.id);
-  if (!sheet) { req.flash('error', 'Payment sheet not found.'); return res.redirect('/finance/abergeldie'); }
+  if (!sheet) { req.flash('error', 'Payment sheet not found.'); return req.session.save(() => res.redirect('/finance/abergeldie')); }
   db.prepare('DELETE FROM abergeldie_payment_sheets WHERE id = ?').run(sheet.id);
   if (sheet.csv_filename) {
     try { fs.unlinkSync(path.join(UPLOAD_DIR, sheet.csv_filename)); } catch (e) { /* ignore */ }
@@ -724,7 +724,7 @@ router.post('/abergeldie/:id/delete', requirePermission('abergeldie_payments'), 
     details: `Deleted Abergeldie payment sheet ${sheet.label}`, ip: req.ip,
   });
   req.flash('success', `Deleted ${sheet.label}.`);
-  res.redirect('/finance/abergeldie');
+  req.session.save(() => res.redirect('/finance/abergeldie'));
 });
 
 // ===========================================================================

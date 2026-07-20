@@ -161,10 +161,10 @@ router.post('/', photoUpload.any(), (req, res) => {
   const b = req.body;
   const vid = parseInt(b.vehicle_id, 10);
   const vehicle = Number.isFinite(vid) ? db.prepare('SELECT id, asset_id, traffic_class FROM vehicles WHERE id = ?').get(vid) : null;
-  if (!vehicle) { req.flash('error', 'Pick a vehicle from the fleet list.'); return res.redirect('/vehicle-audits/new'); }
+  if (!vehicle) { req.flash('error', 'Pick a vehicle from the fleet list.'); return req.session.save(() => res.redirect('/vehicle-audits/new')); }
 
   const templates = templatesFor(db, vehicle.traffic_class);
-  if (!templates.length) { req.flash('error', 'No checklist templates found for this vehicle type.'); return res.redirect('/vehicle-audits/new?vehicle_id=' + vehicle.id); }
+  if (!templates.length) { req.flash('error', 'No checklist templates found for this vehicle type.'); return req.session.save(() => res.redirect('/vehicle-audits/new?vehicle_id=' + vehicle.id)); }
 
   // Photos arrive as photo_<templateId> file fields.
   const photoByTpl = {};
@@ -246,7 +246,7 @@ router.post('/', photoUpload.any(), (req, res) => {
       ? `Audit saved — ${vehicle.asset_id} passed${defects ? ` with ${defects} defect${defects === 1 ? '' : 's'} logged` : ''}.`
       : `Audit saved — ${vehicle.asset_id} FAILED. ${defects} defect${defects === 1 ? '' : 's'} logged${b.set_off_road === '1' ? ' and vehicle set Off-Road' : ''}.`);
   // Smooth landing on the vehicle's existing profile, Audits tab.
-  res.redirect('/fleet/' + vehicle.id + '?tab=audits');
+  req.session.save(() => res.redirect('/fleet/' + vehicle.id + '?tab=audits'));
 });
 
 // ── DEFECTS — open register, filter by vehicle / worker / status ─────
@@ -305,7 +305,7 @@ router.get('/defects', (req, res) => {
 router.post('/defects/:id(\\d+)', (req, res) => {
   const db = getDb();
   const d = db.prepare('SELECT * FROM vehicle_defects WHERE id = ?').get(req.params.id);
-  if (!d) { req.flash('error', 'Defect not found.'); return res.redirect('/vehicle-audits/defects'); }
+  if (!d) { req.flash('error', 'Defect not found.'); return req.session.save(() => res.redirect('/vehicle-audits/defects')); }
   const b = req.body;
   const status = ['open', 'chasing', 'fixed'].includes(b.status) ? b.status : d.status;
   const severity = ['critical', 'major', 'minor'].includes(b.severity) ? b.severity : d.severity;
@@ -318,7 +318,7 @@ router.post('/defects/:id(\\d+)', (req, res) => {
     WHERE id = ?
   `).run(status, severity, assigned, due, cost, resolved, req.params.id);
   req.flash('success', 'Defect updated.');
-  res.redirect(req.get('Referrer') || '/vehicle-audits/defects');
+  req.session.save(() => res.redirect(req.get('Referrer') || '/vehicle-audits/defects'));
 });
 
 // ── ACCOUNTABILITY — defects grouped by responsible worker + cost ────
@@ -364,7 +364,7 @@ router.get('/:id(\\d+)', (req, res) => {
     FROM vehicle_audits a JOIN vehicles v ON v.id = a.vehicle_id
     WHERE a.id = ?
   `).get(req.params.id);
-  if (!audit) { req.flash('error', 'Audit not found.'); return res.redirect('/vehicle-audits'); }
+  if (!audit) { req.flash('error', 'Audit not found.'); return req.session.save(() => res.redirect('/vehicle-audits')); }
   const items = db.prepare('SELECT * FROM vehicle_audit_items WHERE audit_id = ? ORDER BY id').all(audit.id);
   const defects = db.prepare(`
     SELECT d.*, cm.full_name AS worker_name FROM vehicle_defects d
@@ -392,7 +392,7 @@ router.get('/:id(\\d+)', (req, res) => {
 router.post('/:id(\\d+)/delete', (req, res) => {
   const db = getDb();
   const audit = db.prepare('SELECT a.id, a.vehicle_id, v.asset_id, v.status AS vehicle_status FROM vehicle_audits a JOIN vehicles v ON v.id = a.vehicle_id WHERE a.id = ?').get(req.params.id);
-  if (!audit) { req.flash('error', 'Audit not found.'); return res.redirect('/vehicle-audits'); }
+  if (!audit) { req.flash('error', 'Audit not found.'); return req.session.save(() => res.redirect('/vehicle-audits')); }
 
   const tx = db.transaction(() => {
     db.prepare('DELETE FROM vehicle_defects WHERE audit_id = ?').run(audit.id);
@@ -408,8 +408,8 @@ router.post('/:id(\\d+)/delete', (req, res) => {
   req.flash('success', `Audit #${audit.id} deleted.`);
   // If the delete was launched from the vehicle profile, go back there.
   const ref = req.get('Referrer') || '';
-  if (/\/fleet\/\d+/.test(ref)) return res.redirect('/fleet/' + audit.vehicle_id + '?tab=audits');
-  res.redirect('/vehicle-audits');
+  if (/\/fleet\/\d+/.test(ref)) return req.session.save(() => res.redirect('/fleet/' + audit.vehicle_id + '?tab=audits'));
+  req.session.save(() => res.redirect('/vehicle-audits'));
 });
 
 module.exports = router;

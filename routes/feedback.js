@@ -59,7 +59,7 @@ router.get('/', requireLogin, (req, res) => {
   // keep the feedback feed admin-only.
   if (!canAccess(req.session.user, 'admin') && req.session.user.role !== 'admin') {
     req.flash('error', 'Admins only.');
-    return res.redirect('/dashboard');
+    return req.session.save(() => res.redirect('/dashboard'));
   }
   const db = getDb();
   const source = req.query.source === 'worker' ? 'worker' : 'admin';
@@ -112,7 +112,7 @@ router.post('/:id/status', requireLogin, (req, res) => {
   }
   try { logActivity({ user: req.session.user, action: 'update', entityType: 'it_feedback', entityId: req.params.id, details: 'status → ' + next, req }); } catch (e) {}
   req.flash('success', 'Feedback updated.');
-  return res.redirect('/feedback?source=' + (req.body.source || 'admin'));
+  return req.session.save(() => res.redirect('/feedback?source=' + (req.body.source || 'admin')));
 });
 
 // POST /:id/delete — admin only.
@@ -123,7 +123,7 @@ router.post('/:id/delete', requireLogin, (req, res) => {
   const db = getDb();
   db.prepare('DELETE FROM it_feedback WHERE id = ?').run(req.params.id);
   req.flash('success', 'Feedback deleted.');
-  return res.redirect('/feedback?source=' + (req.body.source || 'admin'));
+  return req.session.save(() => res.redirect('/feedback?source=' + (req.body.source || 'admin')));
 });
 
 module.exports = router;

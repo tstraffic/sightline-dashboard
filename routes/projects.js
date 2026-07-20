@@ -120,10 +120,10 @@ router.post('/', (req, res) => {
       });
       const monthsLbl = selectedMonths.map(m => m.name).join(', ');
       req.flash('success', `Created ${created.length} monthly job(s) — ${monthsLbl} ${monthlyYear} (${patternName}).`);
-      return res.redirect('/projects');
+      return req.session.save(() => res.redirect('/projects'));
     } catch (err) {
       req.flash('error', 'Failed to create monthly jobs: ' + err.message);
-      return res.redirect('/projects/new');
+      return req.session.save(() => res.redirect('/projects/new'));
     }
   }
 
@@ -161,14 +161,14 @@ router.post('/', (req, res) => {
       return res.json({ success: true, job: newJob });
     }
 
-    res.redirect('/projects');
+    req.session.save(() => res.redirect('/projects'));
   } catch (err) {
     if (err.message.includes('UNIQUE')) {
       req.flash('error', 'Job number collision — please try again.');
     } else {
       req.flash('error', 'Failed to create project: ' + err.message);
     }
-    res.redirect('/projects/new');
+    req.session.save(() => res.redirect('/projects/new'));
   }
 });
 
@@ -192,7 +192,7 @@ router.get('/:id', (req, res) => {
 
   if (!job) {
     req.flash('error', 'Project not found.');
-    return res.redirect('/projects');
+    return req.session.save(() => res.redirect('/projects'));
   }
 
   // Auto-calculate health from live data
@@ -465,7 +465,7 @@ router.get('/:id', (req, res) => {
 router.get('/:id/edit', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
-  if (!job) { req.flash('error', 'Project not found.'); return res.redirect('/projects'); }
+  if (!job) { req.flash('error', 'Project not found.'); return req.session.save(() => res.redirect('/projects')); }
   const users = db.prepare('SELECT id, full_name, role FROM users WHERE active = 1 ORDER BY full_name').all();
   const clients = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
   res.render('projects/form', { title: 'Edit Project', job, users, clients, preselectedClientId: null, user: req.session.user });
@@ -478,7 +478,7 @@ router.post('/:id', (req, res) => {
 
   // Preserve existing job_number — don't let users change it
   const existing = db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(req.params.id);
-  if (!existing) { req.flash('error', 'Project not found.'); return res.redirect('/projects'); }
+  if (!existing) { req.flash('error', 'Project not found.'); return req.session.save(() => res.redirect('/projects')); }
   const jobNumber = existing.job_number;
 
   // Resolve client name from client_id
@@ -546,10 +546,10 @@ router.post('/:id', (req, res) => {
     } else {
       req.flash('success', 'Project updated successfully.');
     }
-    res.redirect(`/projects/${req.params.id}`);
+    req.session.save(() => res.redirect(`/projects/${req.params.id}`));
   } catch (err) {
     req.flash('error', 'Failed to update project: ' + err.message);
-    res.redirect(`/projects/${req.params.id}/edit`);
+    req.session.save(() => res.redirect(`/projects/${req.params.id}/edit`));
   }
 });
 
@@ -557,7 +557,7 @@ router.post('/:id', (req, res) => {
 router.post('/:id/delete', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
-  if (!job) { req.flash('error', 'Project not found.'); return res.redirect('/projects'); }
+  if (!job) { req.flash('error', 'Project not found.'); return req.session.save(() => res.redirect('/projects')); }
 
   // Cascade delete all linked records (try/catch each in case table doesn't exist)
   const linkedTables = [
@@ -573,7 +573,7 @@ router.post('/:id/delete', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'delete', entityType: 'project', entityId: job.id, entityLabel: `${job.job_number} - ${job.client}`, details: 'Deleted project and all associated data', ip: req.ip });
   req.flash('success', `Project ${job.job_number} deleted.`);
-  res.redirect('/projects');
+  req.session.save(() => res.redirect('/projects'));
 });
 
 module.exports = router;

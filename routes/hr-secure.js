@@ -78,7 +78,7 @@ router.post('/secure-queue/:type/:id/sync', requirePermission('hr_employees'), (
   const db = getDb();
   const { type, id } = req.params;
   const table = type === 'bank' ? 'bank_accounts' : type === 'super' ? 'super_funds' : type === 'tfn' ? 'tfn_declarations' : null;
-  if (!table) { req.flash('error', 'Invalid type.'); return res.redirect('/hr/secure-queue'); }
+  if (!table) { req.flash('error', 'Invalid type.'); return req.session.save(() => res.redirect('/hr/secure-queue')); }
 
   if (type === 'tfn') {
     db.prepare(`UPDATE tfn_declarations SET status = 'synced', processed_at = datetime('now'), processed_by_id = ? WHERE id = ?`).run(req.session.user.id, id);
@@ -93,7 +93,7 @@ router.post('/secure-queue/:type/:id/sync', requirePermission('hr_employees'), (
   });
 
   req.flash('success', `${type.toUpperCase()} marked as synced.`);
-  res.redirect('/hr/secure-queue');
+  req.session.save(() => res.redirect('/hr/secure-queue'));
 });
 
 // POST /hr/secure-queue/:type/:id/reject — reject submission
@@ -101,7 +101,7 @@ router.post('/secure-queue/:type/:id/reject', requirePermission('hr_employees'),
   const db = getDb();
   const { type, id } = req.params;
   const table = type === 'bank' ? 'bank_accounts' : type === 'super' ? 'super_funds' : type === 'tfn' ? 'tfn_declarations' : null;
-  if (!table) { req.flash('error', 'Invalid type.'); return res.redirect('/hr/secure-queue'); }
+  if (!table) { req.flash('error', 'Invalid type.'); return req.session.save(() => res.redirect('/hr/secure-queue')); }
 
   db.prepare(`UPDATE ${table} SET status = 'rejected', updated_at = datetime('now') WHERE id = ?`).run(id);
 
@@ -112,7 +112,7 @@ router.post('/secure-queue/:type/:id/reject', requirePermission('hr_employees'),
   });
 
   req.flash('success', 'Submission rejected.');
-  res.redirect('/hr/secure-queue');
+  req.session.save(() => res.redirect('/hr/secure-queue'));
 });
 
 module.exports = router;

@@ -137,10 +137,10 @@ router.post('/', (req, res) => {
       return res.json({ success: true, client: newClient });
     }
 
-    res.redirect('/clients/' + result.lastInsertRowid);
+    req.session.save(() => res.redirect('/clients/' + result.lastInsertRowid));
   } catch (err) {
     req.flash('error', 'Failed to create company: ' + err.message);
-    res.redirect('/clients/new?type=' + companyType);
+    req.session.save(() => res.redirect('/clients/new?type=' + companyType));
   }
 });
 
@@ -148,10 +148,10 @@ router.post('/', (req, res) => {
 router.post('/delete', (req, res) => {
   const db = getDb();
   let ids = req.body.ids;
-  if (!ids) { req.flash('error', 'No companies selected.'); return res.redirect('/clients'); }
+  if (!ids) { req.flash('error', 'No companies selected.'); return req.session.save(() => res.redirect('/clients')); }
   if (!Array.isArray(ids)) ids = [ids];
   ids = ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
-  if (ids.length === 0) { req.flash('error', 'No valid companies selected.'); return res.redirect('/clients'); }
+  if (ids.length === 0) { req.flash('error', 'No valid companies selected.'); return req.session.save(() => res.redirect('/clients')); }
 
   const placeholders = ids.map(() => '?').join(',');
 
@@ -162,7 +162,7 @@ router.post('/delete', (req, res) => {
 
   if (deletableIds.length === 0) {
     req.flash('error', 'Cannot delete — all selected companies have linked projects. Deactivate instead.');
-    return res.redirect('/clients');
+    return req.session.save(() => res.redirect('/clients'));
   }
 
   const delPlaceholders = deletableIds.map(() => '?').join(',');
@@ -178,7 +178,7 @@ router.post('/delete', (req, res) => {
   } else {
     req.flash('success', `Deleted ${count} company${count !== 1 ? 'ies' : 'y'}.`);
   }
-  res.redirect('/clients');
+  req.session.save(() => res.redirect('/clients'));
 });
 
 // Company detail page
@@ -196,7 +196,7 @@ router.get('/:id', (req, res, next) => {
   `).get(req.params.id);
   if (!client) {
     req.flash('error', 'Company not found.');
-    return res.redirect('/clients');
+    return req.session.save(() => res.redirect('/clients'));
   }
 
   // Projects linked to this company (via client_id)
@@ -346,7 +346,7 @@ router.get('/:id/edit', (req, res) => {
   const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(req.params.id);
   if (!client) {
     req.flash('error', 'Company not found.');
-    return res.redirect('/clients');
+    return req.session.save(() => res.redirect('/clients'));
   }
   const users = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
   res.render('clients/form', {
@@ -403,10 +403,10 @@ router.post('/:id', (req, res) => {
     });
 
     req.flash('success', 'Company updated successfully.');
-    res.redirect('/clients/' + req.params.id);
+    req.session.save(() => res.redirect('/clients/' + req.params.id));
   } catch (err) {
     req.flash('error', 'Failed to update company: ' + err.message);
-    res.redirect('/clients/' + req.params.id + '/edit');
+    req.session.save(() => res.redirect('/clients/' + req.params.id + '/edit'));
   }
 });
 
@@ -418,7 +418,7 @@ router.post('/:id/delete', (req, res) => {
   const jobCount = db.prepare('SELECT COUNT(*) as count FROM jobs WHERE client_id = ?').get(req.params.id).count;
   if (jobCount > 0) {
     req.flash('error', 'Cannot delete company with linked projects/shifts. Deactivate instead.');
-    return res.redirect('/clients/' + req.params.id);
+    return req.session.save(() => res.redirect('/clients/' + req.params.id));
   }
 
   db.prepare('DELETE FROM clients WHERE id = ?').run(req.params.id);
@@ -433,7 +433,7 @@ router.post('/:id/delete', (req, res) => {
   });
 
   req.flash('success', 'Company deleted.');
-  res.redirect('/clients');
+  req.session.save(() => res.redirect('/clients'));
 });
 
 module.exports = router;

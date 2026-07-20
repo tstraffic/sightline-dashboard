@@ -100,7 +100,5 @@
     </div>
   </form>
 
-  <% if (flash_error && flash_error.length) { %>
-    <p class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg p-3"><%= flash_error[0] %></p>
-  <% } %>
+  <%# Flash renders via the layout banner (global locals). %>
 </div>

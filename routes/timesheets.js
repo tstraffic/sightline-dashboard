@@ -122,7 +122,7 @@ router.post('/', (req, res) => {
   logActivity({ user: req.session.user, action: 'create', entityType: 'timesheet', entityLabel: `${count} entries for ${work_date}`, jobId: parseInt(job_id), jobNumber: job ? job.job_number : '', ip: req.ip });
 
   req.flash('success', `${count} timesheet entries logged.`);
-  res.redirect('/timesheets');
+  req.session.save(() => res.redirect('/timesheets'));
 });
 
 // POST /bulk — Bulk actions on timesheets
@@ -143,7 +143,7 @@ router.post('/bulk', (req, res) => {
     logActivity({ user: req.session.user, action: 'delete', entityType: 'timesheet', entityLabel: `Bulk deleted ${ids.length} entries`, ip: req.ip });
     req.flash('success', ids.length + ' timesheet(s) deleted.');
   }
-  res.redirect('/timesheets');
+  req.session.save(() => res.redirect('/timesheets'));
 });
 
 // APPROVE (management/operations only)
@@ -152,20 +152,20 @@ router.post('/:id/approve', requireRole('admin', 'operations'), (req, res) => {
   db.prepare('UPDATE timesheets SET approved = 1, approved_by_id = ?, approved_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.session.user.id, req.params.id);
   logActivity({ user: req.session.user, action: 'approve', entityType: 'timesheet', entityId: parseInt(req.params.id), ip: req.ip });
   req.flash('success', 'Timesheet approved.');
-  res.redirect(req.get('Referer') || '/timesheets');
+  req.session.save(() => res.redirect(req.get('Referer') || '/timesheets'));
 });
 
 // BULK APPROVE
 router.post('/approve-bulk', requireRole('admin', 'operations'), (req, res) => {
   const db = getDb();
   const ids = req.body.timesheet_ids;
-  if (!ids) { req.flash('error', 'No timesheets selected.'); return res.redirect('/timesheets'); }
+  if (!ids) { req.flash('error', 'No timesheets selected.'); return req.session.save(() => res.redirect('/timesheets')); }
   const idArray = Array.isArray(ids) ? ids : [ids];
   const update = db.prepare('UPDATE timesheets SET approved = 1, approved_by_id = ?, approved_at = CURRENT_TIMESTAMP WHERE id = ?');
   idArray.forEach(id => update.run(req.session.user.id, id));
   logActivity({ user: req.session.user, action: 'approve', entityType: 'timesheet', entityLabel: `Bulk approved ${idArray.length} entries`, ip: req.ip });
   req.flash('success', `${idArray.length} timesheets approved.`);
-  res.redirect('/timesheets');
+  req.session.save(() => res.redirect('/timesheets'));
 });
 
 // DELETE
@@ -174,7 +174,7 @@ router.post('/:id/delete', (req, res) => {
   db.prepare('DELETE FROM timesheets WHERE id = ?').run(req.params.id);
   logActivity({ user: req.session.user, action: 'delete', entityType: 'timesheet', entityId: parseInt(req.params.id), ip: req.ip });
   req.flash('success', 'Timesheet entry deleted.');
-  res.redirect('/timesheets');
+  req.session.save(() => res.redirect('/timesheets'));
 });
 
 // CREW MANAGEMENT
@@ -206,13 +206,13 @@ router.post('/crew', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'crew_member', entityLabel: full_name, ip: req.ip });
   req.flash('success', `Crew member ${full_name} added.`);
-  res.redirect('/timesheets/crew');
+  req.session.save(() => res.redirect('/timesheets/crew'));
 });
 
 router.get('/crew/:id/edit', (req, res) => {
   const db = getDb();
   const member = db.prepare('SELECT * FROM crew_members WHERE id = ?').get(req.params.id);
-  if (!member) { req.flash('error', 'Crew member not found.'); return res.redirect('/timesheets/crew'); }
+  if (!member) { req.flash('error', 'Crew member not found.'); return req.session.save(() => res.redirect('/timesheets/crew')); }
   res.render('timesheets/crew-form', {
     title: `Edit ${member.full_name}`,
     currentPage: 'timesheets',
@@ -229,7 +229,7 @@ router.post('/crew/:id', (req, res) => {
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'crew_member', entityId: parseInt(req.params.id), entityLabel: full_name, ip: req.ip });
   req.flash('success', `Crew member updated.`);
-  res.redirect('/timesheets/crew');
+  req.session.save(() => res.redirect('/timesheets/crew'));
 });
 
 // WEEKLY SUMMARY

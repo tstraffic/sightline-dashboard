@@ -156,14 +156,14 @@ router.get('/forms/custom/:id', (req, res) => {
   `).get(req.params.id);
   if (!template || !template.worker_visible || template.status !== 'active' || !template.published_revision) {
     req.flash('error', 'Checklist is not available.');
-    return res.redirect('/w/forms');
+    return req.session.save(() => res.redirect('/w/forms'));
   }
   const rev = db.prepare(`
     SELECT * FROM checklist_template_revisions WHERE template_id = ? AND revision_number = ?
   `).get(template.id, template.published_revision);
   if (!rev) {
     req.flash('error', 'Published revision missing.');
-    return res.redirect('/w/forms');
+    return req.session.save(() => res.redirect('/w/forms'));
   }
   const items = revisionItems(rev);
 
@@ -200,7 +200,7 @@ router.post('/forms/custom/:id', photoUpload.any(), async (req, res) => {
   `).get(req.params.id);
   if (!template || !template.worker_visible || template.status !== 'active' || !template.published_revision) {
     req.flash('error', 'Checklist is not available.');
-    return res.redirect('/w/forms');
+    return req.session.save(() => res.redirect('/w/forms'));
   }
 
   const allocationId = req.body.allocation_id ? Number(req.body.allocation_id) : null;
@@ -209,7 +209,7 @@ router.post('/forms/custom/:id', photoUpload.any(), async (req, res) => {
 
   if (template.require_signature && !signature) {
     req.flash('error', 'Signature is required for this checklist.');
-    return res.redirect(`/w/forms/custom/${template.id}` + (allocationId ? `?allocationId=${allocationId}` : ''));
+    return req.session.save(() => res.redirect(`/w/forms/custom/${template.id}` + (allocationId ? `?allocationId=${allocationId}` : '')));
   }
 
   // Pick out keys named "answer_<itemId>" → build answers JSON.
@@ -263,8 +263,8 @@ router.post('/forms/custom/:id', photoUpload.any(), async (req, res) => {
   } catch (e) { console.error('[custom-forms] incident create failed:', e.message); }
 
   req.flash('success', incidentNumber ? `${template.name} submitted — reference ${incidentNumber}.` : `${template.name} submitted.`);
-  if (allocationId) return res.redirect('/w/jobs/' + allocationId + '?tab=forms');
-  res.redirect('/w/forms');
+  if (allocationId) return req.session.save(() => res.redirect('/w/jobs/' + allocationId + '?tab=forms'));
+  req.session.save(() => res.redirect('/w/forms'));
 });
 
 // GET /w/forms/custom/photos/:photoId — stream a photo from one of the

@@ -85,7 +85,7 @@ router.get('/workers.csv', (req, res) => {
 router.get('/workers/:crewId', (req, res) => {
   const db = getDb();
   const crew = db.prepare('SELECT id, full_name, employee_id, active FROM crew_members WHERE id = ?').get(req.params.crewId);
-  if (!crew) { req.flash('error', 'Worker not found.'); return res.redirect('/safety-reports'); }
+  if (!crew) { req.flash('error', 'Worker not found.'); return req.session.save(() => res.redirect('/safety-reports')); }
   const rangeKey = RANGES[req.query.range] ? req.query.range : '90';
   const since = rangeSinceISO(rangeKey);
 
