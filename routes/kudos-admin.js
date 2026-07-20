@@ -14,21 +14,19 @@ router.get('/values', requirePermission('hr_employees'), (req, res) => {
     title: 'Company values',
     currentPage: 'kudos-values',
     values,
-    flash_success: req.flash('success'),
-    flash_error: req.flash('error'),
   });
 });
 
 router.post('/values', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const { name, colour, icon, description, sort_order, points_value } = req.body;
-  if (!name) { req.flash('error', 'Name required'); return res.redirect('/kudos-admin/values'); }
+  if (!name) { req.flash('error', 'Name required'); return req.session.save(() => res.redirect('/kudos-admin/values')); }
   const slug = String(name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '-' + Date.now().toString(36).slice(-4);
   const pts = Math.max(0, parseInt(points_value, 10) || 0);
   db.prepare('INSERT INTO company_values (name, slug, colour, icon, description, sort_order, points_value) VALUES (?, ?, ?, ?, ?, ?, ?)')
     .run(name, slug, colour || '#2B7FFF', icon || 'star', description || '', parseInt(sort_order, 10) || 0, pts);
   req.flash('success', 'Value added');
-  res.redirect('/kudos-admin/values');
+  req.session.save(() => res.redirect('/kudos-admin/values'));
 });
 
 router.post('/values/:id', requirePermission('hr_employees'), (req, res) => {
@@ -38,7 +36,7 @@ router.post('/values/:id', requirePermission('hr_employees'), (req, res) => {
   db.prepare(`UPDATE company_values SET name = ?, colour = ?, icon = ?, description = ?, sort_order = ?, points_value = ?, active = ? WHERE id = ?`)
     .run(name, colour, icon || 'star', description || '', parseInt(sort_order, 10) || 0, pts, active ? 1 : 0, req.params.id);
   req.flash('success', 'Value updated');
-  res.redirect('/kudos-admin/values');
+  req.session.save(() => res.redirect('/kudos-admin/values'));
 });
 
 router.post('/values/:id/delete', requirePermission('hr_employees'), (req, res) => {
@@ -46,7 +44,7 @@ router.post('/values/:id/delete', requirePermission('hr_employees'), (req, res) 
   // Soft delete (deactivate) to preserve foreign keys on existing kudos
   db.prepare('UPDATE company_values SET active = 0 WHERE id = ?').run(req.params.id);
   req.flash('success', 'Value deactivated');
-  res.redirect('/kudos-admin/values');
+  req.session.save(() => res.redirect('/kudos-admin/values'));
 });
 
 // ========== Live feed (all kudos, newest first) ==========
@@ -100,7 +98,6 @@ router.get('/feed', requirePermission('hr_employees'), (req, res) => {
   res.render('kudos-admin/feed', {
     title: 'Kudos feed', currentPage: 'kudos-feed',
     items, values, valueId, showHidden, nextBefore, totalKudos, last7,
-    flash_success: req.flash('success'),
   });
 });
 
@@ -108,12 +105,12 @@ router.get('/feed', requirePermission('hr_employees'), (req, res) => {
 router.post('/kudos/:id/hide', requirePermission('hr_employees'), (req, res) => {
   hideKudos({ kudosId: parseInt(req.params.id, 10), userId: req.session.user.id, reason: req.body.reason || 'Hidden by admin' });
   req.flash('success', 'Kudos hidden');
-  res.redirect(req.get('Referer') || '/kudos-admin/feed');
+  req.session.save(() => res.redirect(req.get('Referer') || '/kudos-admin/feed'));
 });
 router.post('/kudos/:id/unhide', requirePermission('hr_employees'), (req, res) => {
   getDb().prepare('UPDATE kudos SET hidden_at = NULL, hidden_by_user_id = NULL, hidden_reason = NULL WHERE id = ?').run(req.params.id);
   req.flash('success', 'Kudos restored');
-  res.redirect(req.get('Referer') || '/kudos-admin/feed?hidden=1');
+  req.session.save(() => res.redirect(req.get('Referer') || '/kudos-admin/feed?hidden=1'));
 });
 
 // ========== Moderation queue ==========
@@ -155,7 +152,6 @@ router.get('/queue', requirePermission('hr_employees'), (req, res) => {
     title: 'Kudos moderation',
     currentPage: 'kudos-queue',
     reports, totalKudos, last30, topSenders, topReceivers, valueDist,
-    flash_success: req.flash('success'),
   });
 });
 
@@ -166,14 +162,14 @@ router.post('/queue/:reportId/hide', requirePermission('hr_employees'), (req, re
   if (report && report.comment_id) db.prepare("UPDATE kudos_comments SET hidden_at = datetime('now') WHERE id = ?").run(report.comment_id);
   db.prepare("UPDATE kudos_reports SET status = 'actioned' WHERE id = ?").run(req.params.reportId);
   req.flash('success', 'Hidden and report closed');
-  res.redirect('/kudos-admin/queue');
+  req.session.save(() => res.redirect('/kudos-admin/queue'));
 });
 
 router.post('/queue/:reportId/dismiss', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   db.prepare("UPDATE kudos_reports SET status = 'dismissed' WHERE id = ?").run(req.params.reportId);
   req.flash('success', 'Report dismissed');
-  res.redirect('/kudos-admin/queue');
+  req.session.save(() => res.redirect('/kudos-admin/queue'));
 });
 
 module.exports = router;
