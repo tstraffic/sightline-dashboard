@@ -28,7 +28,18 @@
   const confirmedCount = b.personnel ? b.personnel.filter(p => p.confirmed).length : 0;
 %>
 
-<%- include('_backbar') %>
+<%
+  // Return to the board for THIS booking's day, scrolled to its card — not
+  // today's default board.
+  var _boardBackHref = '/bookings';
+  if (b && b.start_datetime) {
+    try {
+      var _bDate = new Date(String(b.start_datetime).replace(' ', 'T')).toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+      if (/^\d{4}-\d{2}-\d{2}$/.test(_bDate)) _boardBackHref = '/bookings?date=' + _bDate + '#booking-' + b.id;
+    } catch (e) {}
+  }
+%>
+<%- include('_backbar', { backHref: _boardBackHref }) %>
 
 <!-- Breadcrumb + Actions -->
 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">

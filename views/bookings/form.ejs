@@ -52,7 +52,19 @@
   ];
 %>
 
-<%- include('_backbar') %>
+<%
+  // "Back to board" should return to the day the booking sits on (not today's
+  // board) and scroll straight to the card being edited. New bookings have no
+  // date yet, so they fall back to the default board.
+  var _boardBackHref = '/bookings';
+  if (isEdit && booking && booking.start_datetime) {
+    try {
+      var _bDate = new Date(String(booking.start_datetime).replace(' ', 'T')).toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
+      if (/^\d{4}-\d{2}-\d{2}$/.test(_bDate)) _boardBackHref = '/bookings?date=' + _bDate + '#booking-' + booking.id;
+    } catch (e) {}
+  }
+%>
+<%- include('_backbar', { backHref: _boardBackHref }) %>
 
 <!-- Breadcrumb -->
 <div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
@@ -706,10 +718,20 @@
         </div>
       </div>
     </div>
-    <!-- Map placeholder -->
-    <div class="mt-4 bg-gray-100 border border-gray-200 rounded-lg h-40 flex items-center justify-center text-gray-400 text-sm">
-      <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-      Map integration coming soon
+    <!-- Site map — appears once an address is entered (or coords already
+         exist). The pin is draggable; dropping it or clicking the map sets the
+         exact coordinates and marks them confirmed. -->
+    <div class="mt-4" data-bk-map-wrap>
+      <div class="flex items-center justify-between mb-1.5">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest">Pin the worksite</label>
+        <button type="button" id="bk-map-locate" class="hidden text-[11px] font-semibold text-brand-600 hover:text-brand-700">↻ Locate from address</button>
+      </div>
+      <div id="bk-map" class="rounded-lg overflow-hidden border border-gray-200" style="height:16rem;"></div>
+      <div id="bk-map-empty" class="bg-gray-50 border border-dashed border-gray-300 rounded-lg h-32 flex flex-col items-center justify-center text-gray-400 text-sm gap-1 px-4 text-center">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        <span>Enter a site address above to drop a pin.</span>
+      </div>
+      <p id="bk-map-hint" class="hidden text-[11px] text-gray-500 mt-1.5">Drag the pin to the exact worksite, then tick <span class="font-semibold">Marker is accurate</span> to confirm.</p>
     </div>
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
       <div>
@@ -1642,3 +1664,154 @@
     box-shadow: 0 0 0 2px rgba(0,0,0,0.20);
   }
 </style>
+
+<!-- Interactive site map: geocodes the entered address, shows a draggable pin,
+     and writes the confirmed lat/lng into the hidden coordinate fields. -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
+<script>
+(function () {
+  var wrap = document.querySelector('[data-bk-map-wrap]');
+  if (!wrap) return;
+  var mapEl   = document.getElementById('bk-map');
+  var emptyEl = document.getElementById('bk-map-empty');
+  var hintEl  = document.getElementById('bk-map-hint');
+  var locateBtn = document.getElementById('bk-map-locate');
+  var latEl = document.querySelector('input[name="latitude"]');
+  var lngEl = document.querySelector('input[name="longitude"]');
+  var accEl = document.getElementById('marker_is_accurate');
+  var addrEl = document.querySelector('input[name="site_address"]');
+  var subEl  = document.querySelector('input[name="suburb"]');
+  var stEl   = document.querySelector('input[name="state"]');
+  var pcEl   = document.querySelector('input[name="postcode"]');
+  if (!mapEl || !latEl || !lngEl) return;
+
+  var SYD = [-33.8688, 151.2093];
+  var map = null, marker = null, geocodeTimer = null, lastQuery = '', _pin = null;
+
+  // Built lazily — this script parses before the deferred Leaflet loads, so we
+  // must not touch `L` until it's ready.
+  function getPin() {
+    if (!_pin) _pin = L.divIcon({
+      className: 'bk-pin',
+      html: '<svg width="30" height="40" viewBox="0 0 24 32" xmlns="http://www.w3.org/2000/svg"><path d="M12 0C5.4 0 0 5.4 0 12c0 8.4 12 20 12 20s12-11.6 12-20C24 5.4 18.6 0 12 0z" fill="#1D6AE5"/><circle cx="12" cy="12" r="5" fill="#fff"/></svg>',
+      iconSize: [30, 40], iconAnchor: [15, 40],
+    });
+    return _pin;
+  }
+
+  function num(el) { var n = parseFloat(el && el.value); return Number.isFinite(n) ? n : null; }
+
+  function setEmpty(show) {
+    emptyEl.style.display = show ? '' : 'none';
+    mapEl.style.display   = show ? 'none' : '';
+    hintEl.classList.toggle('hidden', show);
+  }
+
+  function ensureMap(lat, lng, zoom) {
+    setEmpty(false);
+    if (!map) {
+      map = L.map(mapEl, { scrollWheelZoom: false, attributionControl: false }).setView([lat, lng], zoom || 16);
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 20 }).addTo(map);
+      // Click anywhere to (re)place the pin exactly where the planner taps.
+      map.on('click', function (e) { setPin(e.latlng.lat, e.latlng.lng, true); });
+      // The form shows one section at a time via display:none, so the map is
+      // built at 0×0 and stays blank until the Location section is opened.
+      // Recompute its size whenever the container actually gets dimensions.
+      if (window.ResizeObserver) {
+        new ResizeObserver(function () {
+          if (map && mapEl.clientWidth > 0) { try { map.invalidateSize(false); } catch (e) {} }
+        }).observe(mapEl);
+      }
+      setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 60);
+    } else {
+      map.setView([lat, lng], zoom || map.getZoom());
+      setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 60);
+    }
+    return map;
+  }
+
+  function setPin(lat, lng, confirmed) {
+    ensureMap(lat, lng);
+    if (!marker) {
+      marker = L.marker([lat, lng], { icon: getPin(), draggable: true }).addTo(map);
+      marker.on('dragend', function () {
+        var p = marker.getLatLng();
+        writeCoords(p.lat, p.lng, true); // a deliberate drag = confirmed
+      });
+    } else {
+      marker.setLatLng([lat, lng]);
+    }
+    map.setView([lat, lng], Math.max(map.getZoom(), 16));
+    writeCoords(lat, lng, confirmed);
+  }
+
+  function writeCoords(lat, lng, confirmed) {
+    latEl.value = Number(lat).toFixed(6);
+    lngEl.value = Number(lng).toFixed(6);
+    if (confirmed && accEl) accEl.checked = true;
+    if (hintEl) hintEl.textContent = accEl && accEl.checked
+      ? 'Location confirmed — drag the pin if you need to adjust it.'
+      : 'Drag the pin to the exact worksite, then tick “Marker is accurate” to confirm.';
+    hintEl.classList.remove('hidden');
+  }
+
+  function buildQuery() {
+    return [addrEl && addrEl.value, subEl && subEl.value, stEl && stEl.value, pcEl && pcEl.value]
+      .map(function (s) { return (s || '').trim(); }).filter(Boolean).join(', ');
+  }
+
+  function geocode(force) {
+    var q = buildQuery();
+    if (q.length < 4) return;
+    if (!force && q === lastQuery) return;
+    lastQuery = q;
+    locateBtn.textContent = '↻ Locating…';
+    fetch('/bookings/api/places?cc=au&q=' + encodeURIComponent(q), { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        locateBtn.textContent = '↻ Locate from address';
+        var hit = (j && j.results && j.results[0]) || null;
+        if (hit && hit.lat != null && hit.lng != null) {
+          // Geocode is a best guess — show it but leave "accurate" for the
+          // planner to confirm (by ticking, dragging, or clicking).
+          setPin(hit.lat, hit.lng, false);
+        } else if (!marker) {
+          // No result (e.g. no geocoder key) — still show the map so the pin
+          // can be dropped by hand.
+          ensureMap(num(latEl) || SYD[0], num(lngEl) || SYD[1], 11);
+          hintEl.textContent = 'Couldn’t auto-locate that address — click the map to drop the pin.';
+          hintEl.classList.remove('hidden');
+        }
+      })
+      .catch(function () { locateBtn.textContent = '↻ Locate from address'; });
+  }
+
+  // Wire the address fields: show the Locate button when there's an address,
+  // and auto-geocode shortly after the planner stops typing the street.
+  function refreshLocateBtn() { locateBtn.classList.toggle('hidden', !(addrEl && addrEl.value.trim())); }
+  if (addrEl) {
+    addrEl.addEventListener('input', function () { refreshLocateBtn(); clearTimeout(geocodeTimer); geocodeTimer = setTimeout(function () { geocode(false); }, 900); });
+    addrEl.addEventListener('change', function () { geocode(false); });
+  }
+  locateBtn.addEventListener('click', function () { geocode(true); });
+
+  // Initial state: existing coords (edit mode) → show the pin straight away;
+  // otherwise wait for an address.
+  var lat0 = num(latEl), lng0 = num(lngEl);
+  refreshLocateBtn();
+  function boot() {
+    if (lat0 != null && lng0 != null) { setPin(lat0, lng0, accEl && accEl.checked); }
+    else { setEmpty(true); if (addrEl && addrEl.value.trim()) geocode(false); }
+  }
+  function whenLeaflet(cb) {
+    if (window.L && window.L.map) return cb();
+    var tries = 0;
+    var t = setInterval(function () {
+      if (window.L && window.L.map) { clearInterval(t); cb(); }
+      else if (++tries > 100) { clearInterval(t); }
+    }, 100);
+  }
+  whenLeaflet(boot);
+})();
+</script>

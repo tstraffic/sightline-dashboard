@@ -187,7 +187,7 @@ function drawPill(doc, label, bg, fg, anchorX, y, align) {
 
 function drawInfoCard(doc, pageW, docket) {
   const y0 = doc.y + 4;
-  const cardH = 96;
+  const cardH = 78;
   // Card background + border (fillAndStroke uses the current lineWidth, so set
   // it first; pdfkit consumes the path on the first paint op so a separate
   // .stroke() after .fill() would no-op).
@@ -215,7 +215,7 @@ function field(doc, x, y, label, value) {
 
 function drawSignOff(doc, pageW, docket) {
   const y0 = doc.y;
-  const cardH = 70;
+  const cardH = 60;
   doc.lineWidth(0.6).roundedRect(ML, y0, pageW, cardH, 8).fillAndStroke(GRAY_BG, GRAY_LINE);
   doc.font('Helvetica-Bold').fontSize(8.5).fillColor(BRAND_DARK).text('SIGN-OFF', ML + 14, y0 + 10, { characterSpacing: 1 });
 
@@ -233,7 +233,7 @@ function drawSignOff(doc, pageW, docket) {
   } else {
     field(doc, colX3, rowY, 'Client rep', docket.client_name || docket.client_signed_name || '—');
   }
-  doc.y = y0 + cardH + 14;
+  doc.y = y0 + cardH + 10;
 }
 
 function drawCrewTable(doc, pageW, crew) {
@@ -242,25 +242,28 @@ function drawCrewTable(doc, pageW, crew) {
   doc.y = startY + 20;
 
   const cols = [
-    { label: 'Crew member', w: 0.32, align: 'left' },
-    { label: 'Role',        w: 0.18, align: 'left' },
-    { label: 'Start',       w: 0.10, align: 'right' },
-    { label: 'Finish',      w: 0.10, align: 'right' },
-    { label: 'Break',       w: 0.08, align: 'right' },
-    { label: 'Travel',      w: 0.10, align: 'right' },
-    { label: 'Total hrs',   w: 0.12, align: 'right' },
+    { label: 'Crew member', w: 0.28,  align: 'left' },
+    { label: 'Role',        w: 0.20,  align: 'left' },
+    { label: 'Start',       w: 0.09,  align: 'right' },
+    { label: 'Finish',      w: 0.09,  align: 'right' },
+    { label: 'Break',       w: 0.085, align: 'right' },
+    { label: 'Travel',      w: 0.095, align: 'right' },
+    { label: 'Total hrs',   w: 0.16,  align: 'right' },
   ];
-  const rowH = 24;
+  const rowH = 20;
   const headerH = 22;
   let y = doc.y;
 
   // Header
   doc.roundedRect(ML, y, pageW, headerH, 4).fill(GRAY_BG_2);
   let x = ML;
-  doc.font('Helvetica-Bold').fontSize(8.5).fillColor(GRAY_DARK);
+  doc.font('Helvetica-Bold').fontSize(7.5).fillColor(GRAY_DARK);
   cols.forEach(c => {
     const w = c.w * pageW;
-    doc.text(c.label.toUpperCase(), x + 8, y + 7, { width: w - 16, align: c.align, lineBreak: false, characterSpacing: 0.6 });
+    // height keeps a header label on ONE line (was splitting "BREAK"/"TRAVEL"/
+    // "TOTAL HRS"); the small font + no letter-spacing keeps them from being
+    // ellipsis-truncated ("BRE…") in the narrow numeric columns.
+    doc.text(c.label.toUpperCase(), x + 6, y + 7, { width: w - 10, height: 12, align: c.align, lineBreak: false, ellipsis: true });
     x += w;
   });
   y += headerH + 2;
@@ -272,7 +275,10 @@ function drawCrewTable(doc, pageW, crew) {
     y += rowH;
   }
   crew.forEach((c, i) => {
-    if (y > doc.page.height - MB - 180) { doc.addPage(); y = MT; }
+    // Only break when the NEXT row plus the totals strip wouldn't fit — the
+    // signatures block decides its own break afterwards. Reserve is small so a
+    // normal-size crew stays on page one; only genuinely large crews spill.
+    if (y > doc.page.height - MB - (rowH + 34)) { doc.addPage(); y = MT; }
     // Zebra
     if (i % 2 === 1) doc.rect(ML, y, pageW, rowH).fill(GRAY_BG);
     const hrs = Number(c.total_hours) || 0;
@@ -292,7 +298,9 @@ function drawCrewTable(doc, pageW, crew) {
       const w = cols[idx].w * pageW;
       doc.font(idx === 0 ? 'Helvetica-Bold' : 'Helvetica');
       doc.fillColor(idx === 6 ? BRAND_DARK : GRAY_DARK);
-      doc.text(String(v), x + 8, y + 8, { width: w - 16, align: cols[idx].align, lineBreak: false, ellipsis: true });
+      // height keeps every cell on a single line (ellipsis if it must) — without
+      // it pdfkit wraps long values like "Traffic Controller" and breaks the row.
+      doc.text(String(v), x + 8, y + 6, { width: w - 16, height: 12, align: cols[idx].align, lineBreak: false, ellipsis: true });
       x += w;
     });
     y += rowH;
@@ -304,12 +312,12 @@ function drawCrewTable(doc, pageW, crew) {
   doc.font('Helvetica-Bold').fontSize(10).fillColor(BRAND_DARK)
     .text('TOTAL MAN-HOURS', ML + 8, y + 13, { lineBreak: false, characterSpacing: 0.5 });
   doc.text(totalHours.toFixed(2), ML, y + 13, { width: pageW - 16, align: 'right', lineBreak: false });
-  doc.y = y + rowH + 14;
+  doc.y = y + rowH + 10;
 }
 
 function drawNotes(doc, pageW, notes) {
-  // Page break if not enough room left for notes + signatures.
-  if (doc.y > doc.page.height - MB - 220) doc.addPage();
+  // Page break only if there's genuinely no room left for the notes block.
+  if (doc.y > doc.page.height - MB - 150) doc.addPage();
   const y0 = doc.y;
   doc.font('Helvetica-Bold').fontSize(10).fillColor(GRAY_DARK).text('Notes', ML, y0);
   doc.y = y0 + 16;
@@ -319,13 +327,13 @@ function drawNotes(doc, pageW, notes) {
 
 function drawSignatures(doc, pageW, docket) {
   // Always keep signatures together on one page.
-  const need = 160;
+  const need = 122;
   if (doc.y > doc.page.height - MB - need) doc.addPage();
   const y0 = doc.y + 4;
 
   const gap = 18;
   const boxW = (pageW - gap) / 2;
-  const boxH = 120;
+  const boxH = 88;
 
   const drawBox = (x, label, dataUrl, captionName) => {
     doc.font('Helvetica-Bold').fontSize(8.5).fillColor(BRAND_DARK).text(label.toUpperCase(), x, y0, { characterSpacing: 1 });
@@ -375,11 +383,19 @@ function drawFooters(doc, pageW, docket) {
   const ref = docket.docket_number || ('#' + docket.id);
   for (let i = range.start; i < range.start + range.count; i++) {
     doc.switchToPage(i);
+    // The footer sits in the bottom-margin band. pdfkit treats a .text() call
+    // whose y is past the bottom margin as an overflow and silently appends a
+    // fresh page — which is exactly why a small docket was spilling onto two
+    // extra near-blank pages. Zero the bottom margin for the footer writes so
+    // no phantom pages are added, then restore it.
+    const savedBottom = doc.page.margins.bottom;
+    doc.page.margins.bottom = 0;
     const y = doc.page.height - MB + 14;
     doc.moveTo(ML, y - 8).lineTo(doc.page.width - MR, y - 8).strokeColor(GRAY_LINE).lineWidth(0.4).stroke();
     doc.font('Helvetica').fontSize(8).fillColor(GRAY)
       .text(ref + '  ·  Generated from Atomis · ' + stamp, ML, y, { width: pageW, align: 'left', lineBreak: false });
     doc.text('Page ' + (i + 1 - range.start) + ' of ' + range.count, ML, y, { width: pageW, align: 'right', lineBreak: false });
+    doc.page.margins.bottom = savedBottom;
   }
 }
 
