@@ -660,7 +660,7 @@
               <%= statusColors[bk.status] || 'bg-gray-200' %> text-white font-medium"
               draggable="true"
               ondragstart="event.dataTransfer.setData('text/plain', '<%= bk.id %>')"
-              onclick="window.location='/bookings/<%= bk.id %>'"
+              onclick="calPillTap(event, '<%= bk.id %>', '<%= (bk.project.name || ('BK-' + bk.id)).replace(/'/g, '') %>')"
               title="<%= bk.project.name %> — <%= bk.supervisor || 'No supervisor' %>">
               <%= timeStr %> <%= bk.project.name ? bk.project.name.substring(0, 20) : 'BK-' + bk.id %>
             </div>
@@ -679,12 +679,7 @@
 </div>
 
 <script>
-function handleCalDrop(event, targetDate) {
-  event.preventDefault();
-  event.currentTarget.classList.remove('bg-brand-50');
-  const bookingId = event.dataTransfer.getData('text/plain');
-  if (!bookingId) return;
-  // Move booking to new date via API
+function moveBookingToDate(bookingId, targetDate) {
   fetch('/bookings/' + bookingId + '/move', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'x-csrf-token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
@@ -692,6 +687,48 @@ function handleCalDrop(event, targetDate) {
   }).then(r => {
     if (r.ok) window.location.reload();
     else alert('Failed to move booking');
+  });
+}
+function handleCalDrop(event, targetDate) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('bg-brand-50');
+  const bookingId = event.dataTransfer.getData('text/plain');
+  if (!bookingId) return;
+  moveBookingToDate(bookingId, targetDate);
+}
+// Calendar pill tap. Desktop (hover-capable) keeps the old behaviour — click
+// opens the booking. Touch devices can't drag pills between days, so a tap
+// opens a small sheet offering Open / Move-to-date (same /move endpoint).
+function calPillTap(event, bookingId, label) {
+  if (!window.matchMedia('(hover: none)').matches) {
+    window.location = '/bookings/' + bookingId;
+    return;
+  }
+  event.preventDefault();
+  event.stopPropagation();
+  var existing = document.getElementById('cal-pill-sheet');
+  if (existing) existing.remove();
+  var wrap = document.createElement('div');
+  wrap.id = 'cal-pill-sheet';
+  wrap.innerHTML =
+    '<div class="fixed inset-0 bg-black/40 z-[120]" data-cal-close></div>' +
+    '<div class="fixed left-0 right-0 bottom-0 z-[121] bg-white rounded-t-2xl shadow-2xl p-4" style="padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));">' +
+      '<div class="w-9 h-1 rounded-full bg-gray-300 mx-auto mb-3"></div>' +
+      '<p class="text-sm font-bold text-gray-900 truncate">' + label + '</p>' +
+      '<a href="/bookings/' + bookingId + '" class="block w-full text-center mt-3 px-4 py-3 rounded-lg bg-brand-600 text-white text-sm font-semibold">Open booking</a>' +
+      '<div class="mt-2 flex gap-2">' +
+        '<input type="date" data-cal-date class="flex-1 px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900">' +
+        '<button type="button" data-cal-move class="px-4 py-2.5 rounded-lg bg-gray-900 text-white text-sm font-semibold">Move</button>' +
+      '</div>' +
+      '<p class="text-[11px] text-gray-400 mt-1.5">Moves the whole booking to the chosen day.</p>' +
+    '</div>';
+  document.body.appendChild(wrap);
+  wrap.querySelector('[data-cal-close]').addEventListener('click', function () { wrap.remove(); });
+  wrap.querySelector('[data-cal-move]').addEventListener('click', function () {
+    var d = wrap.querySelector('[data-cal-date]').value;
+    if (!d) { wrap.querySelector('[data-cal-date]').focus(); return; }
+    wrap.remove();
+    moveBookingToDate(bookingId, d);
   });
 }
 </script>

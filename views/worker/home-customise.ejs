@@ -29,6 +29,16 @@
   .cus-row.drag-over { border-color: #60A5FA; box-shadow: 0 0 0 2px rgba(96,165,250,0.25); }
   .cus-row:active { cursor: grabbing; }
   .cus-grip { display: flex; flex-direction: column; gap: 3px; color: rgba(255,255,255,0.3); cursor: grab; padding: 4px; }
+  .cus-move-group { display: flex; flex-direction: column; gap: 2px; flex-shrink: 0; }
+  .cus-move {
+    display: flex; align-items: center; justify-content: center;
+    width: 30px; height: 26px; min-height: 26px; border-radius: 7px;
+    background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.6);
+  }
+  .cus-move:active { background: rgba(16,185,129,0.2); color: #6EE7B7; }
+  :root[data-theme="light"] .cus-move { background: #F3F4F6; border-color: #E5E7EB; color: #6B7280; }
+  :root[data-theme="light"] .cus-move:active { background: #D1FAE5; color: #047857; }
   .cus-grip div { width: 3px; height: 3px; border-radius: 999px; background: currentColor; }
   .cus-row-body { flex: 1; min-width: 0; }
   .cus-row-title { font-size: 0.9rem; font-weight: 700; color: #fff; }
@@ -54,7 +64,7 @@
   </a>
   <div class="cus-hero">
     <h1>Customise Home</h1>
-    <p>Drag to reorder, toggle to hide. Your choices sync to every device you sign in on.</p>
+    <p>Use the arrows (or drag) to reorder, toggle to hide. Your choices sync to every device you sign in on.</p>
   </div>
 
   <form method="POST" action="/w/home/preferences" id="cus-form">
@@ -70,6 +80,17 @@
             <p class="cus-row-title"><%= s.label %></p>
             <p class="cus-row-desc"><%= s.desc %></p>
           </div>
+          <%# Tap reorder — drag never fires on touch, and this is a phone-first
+              page. Moving the row moves its hidden section_order input with it,
+              so Save persists whatever order the buttons produce. %>
+          <span class="cus-move-group">
+            <button type="button" class="cus-move" data-cus-move="-1" title="Move up" aria-label="Move <%= s.label %> up">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+            </button>
+            <button type="button" class="cus-move" data-cus-move="1" title="Move down" aria-label="Move <%= s.label %> down">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+            </button>
+          </span>
           <label class="cus-toggle <%= visible ? 'on' : '' %>" onclick="event.stopPropagation();">
             <input type="checkbox" data-section="<%= key %>" <%= visible ? 'checked' : '' %>>
           </label>
@@ -110,6 +131,23 @@
 
   // ===== Drag & drop reorder (HTML5) =====
   var list = document.getElementById('cus-list');
+
+  // Tap reorder (the up/down buttons) — drag never fires on touch. The
+  // hidden section_order inputs travel with each row, so Save just works.
+  list.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-cus-move]');
+    if (!btn) return;
+    e.preventDefault();
+    var row = btn.closest('.cus-row');
+    var dir = parseInt(btn.getAttribute('data-cus-move'), 10);
+    var sib = dir < 0 ? row.previousElementSibling : row.nextElementSibling;
+    if (!sib || !sib.classList.contains('cus-row')) return;
+    list.insertBefore(row, dir < 0 ? sib : sib.nextSibling);
+    row.style.transition = 'background 0.4s';
+    row.style.background = 'rgba(16,185,129,0.15)';
+    setTimeout(function () { row.style.background = ''; }, 450);
+  });
+
   var dragged = null;
   list.querySelectorAll('.cus-row').forEach(function (row) {
     row.addEventListener('dragstart', function (e) {

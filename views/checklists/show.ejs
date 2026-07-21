@@ -269,6 +269,15 @@
                     </div>
                   </div>
                   <div class="flex items-center gap-1 flex-shrink-0">
+                    <%# Tap reorder — drag never fires on touch. Crossing a
+                        section boundary hops the row into the next/previous
+                        section, same as dropping under its header. %>
+                    <button type="button" data-cl-move="-1" class="p-1.5 text-gray-400 hover:text-brand-600 transition" title="Move up" aria-label="Move up">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+                    </button>
+                    <button type="button" data-cl-move="1" class="p-1.5 text-gray-400 hover:text-brand-600 transition" title="Move down" aria-label="Move down">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/></svg>
+                    </button>
                     <button type="button" onclick="window._editItemViaPicker(<%= item.id %>)" class="p-1.5 text-gray-400 hover:text-brand-600 transition" title="Edit">
                       <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                     </button>
@@ -564,6 +573,35 @@ window._editItemViaPicker = function (itemId) {
       body: JSON.stringify({ items: items }),
     }).catch(function () {});
   }
+
+  // Tap reorder (the ↑/↓ buttons) — drag never fires on touch devices.
+  // Moving past the first/last row of a section hops into the adjacent
+  // section, mirroring the drag-onto-header behaviour; the same postOrder()
+  // persists whatever the DOM now says.
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('[data-cl-move]');
+    if (!btn) return;
+    var row = btn.closest('.cl-row');
+    if (!row) return;
+    var dir = parseInt(btn.getAttribute('data-cl-move'), 10);
+    var sib = dir < 0 ? row.previousElementSibling : row.nextElementSibling;
+    if (sib && sib.classList.contains('cl-row')) {
+      row.parentNode.insertBefore(row, dir < 0 ? sib : sib.nextSibling);
+    } else {
+      var sec = row.closest('.cl-section');
+      var adj = sec && (dir < 0 ? sec.previousElementSibling : sec.nextElementSibling);
+      if (!adj || !adj.classList.contains('cl-section')) return; // already at the very edge
+      if (dir < 0) {
+        adj.appendChild(row); // end of the section above
+      } else {
+        var header = adj.querySelector('.cl-section-header');
+        adj.insertBefore(row, header ? header.nextSibling : adj.firstChild); // top of the section below
+      }
+    }
+    row.classList.add('bg-brand-50');
+    setTimeout(function () { row.classList.remove('bg-brand-50'); }, 600);
+    postOrder();
+  });
 
   // Edge auto-scroll while a drag is in flight. Have to scroll the
   // nearest *scrollable ancestor* of the items list, not window —

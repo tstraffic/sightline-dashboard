@@ -289,7 +289,7 @@
               </th>
               <th class="hidden md:table-cell px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ref</th>
               <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Title</th>
-              <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Type</th>
+              <th class="hidden sm:table-cell px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Type</th>
               <th class="hidden lg:table-cell px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Project</th>
               <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
               <th class="hidden md:table-cell px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Client Req</th>
@@ -353,6 +353,7 @@
                 </td>
                 <td class="px-2 py-2 font-medium text-gray-900 max-w-[14rem]">
                   <span class="truncate block"><%= item.title %></span>
+                  <span class="sm:hidden inline-flex items-center mt-0.5 px-1.5 py-0.5 text-[10px] font-semibold rounded-full <%= tc.color %>"><%= tc.short %></span>
                   <span class="title-invoice-badge" data-id="<%= item.id %>">
                     <% if (item.ready_for_invoice && !item.invoiced) { %>
                       <span class="inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-100 text-amber-700 mt-0.5">READY FOR INVOICE</span>
@@ -369,7 +370,7 @@
                     <span class="text-xs text-gray-400"><%= item.authority_approver %></span>
                   <% } %>
                 </td>
-                <td class="px-2 py-2">
+                <td class="hidden sm:table-cell px-2 py-2">
                   <div class="flex flex-wrap gap-1">
                     <% if ((item.parent_id == null) && (item.plan_number != null)) { %>
                       <%
