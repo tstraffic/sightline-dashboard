@@ -852,11 +852,25 @@ table {
     min-height: 44px;
     min-width: 44px;
   }
+  /* All buttons (not just submits) get a tappable height on phones.
+     Inline table selects get a gentler 36px so dense rows don't explode —
+     still far better than the 2px-padded 22px originals. */
+  button { min-height: 40px; }
+  td select, th select { min-height: 36px; }
   .overflow-x-auto {
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
   }
   .overflow-x-auto::-webkit-scrollbar { display: none; }
+}
+
+/* ===== Touch devices: reveal hover-gated controls =====
+   Tailwind's `opacity-0 group-hover:opacity-100` hides real actions (subtask
+   delete, photo delete, attachment ×) behind hover — which never happens on a
+   phone. On any hover-incapable device, force them visible. Class-substring
+   match catches every compiled variant without editing each view. */
+@media (hover: none) {
+  [class*="group-hover:opacity-100"] { opacity: 1 !important; }
 }
 
 /* ===== PWA Standalone =====

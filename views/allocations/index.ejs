@@ -113,10 +113,10 @@
 </div>
 
 <!-- TWO-PANEL BOOKING BOARD -->
-<div class="flex gap-4" style="min-height: 600px;">
+<div class="flex flex-col lg:flex-row gap-4 lg:min-h-[600px]">
 
   <!-- CREW PANEL (left sidebar) -->
-  <div class="w-72 flex-shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+  <div class="w-full lg:w-72 lg:flex-shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
     <div class="p-3 border-b border-gray-200">
       <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Crew Panel</p>
       <input type="text" id="crew-search" placeholder="Search crew..."
@@ -127,7 +127,7 @@
         <button onclick="filterCrewPanel('blocked')" class="crew-filter-btn px-2 py-1 text-[10px] font-medium rounded bg-white text-gray-600" data-filter="blocked">Blocked</button>
       </div>
     </div>
-    <div class="flex-1 overflow-y-auto p-2 space-y-1" id="crew-panel">
+    <div class="flex-1 overflow-y-auto p-2 space-y-1 max-h-56 lg:max-h-none" id="crew-panel">
       <%
         // Sort: allocatable first, then blocked
         const sortedCrew = [...crewMembers].sort((a, b) => {
@@ -374,7 +374,7 @@
   </div>
 
   <!-- EQUIPMENT PANEL (right sidebar) -->
-  <div class="w-64 flex-shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
+  <div class="w-full lg:w-64 lg:flex-shrink-0 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden flex flex-col">
     <div class="p-3 border-b border-gray-200">
       <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Equipment</p>
       <input type="text" id="equip-search" placeholder="Search equipment..."
@@ -385,7 +385,7 @@
         <button onclick="filterEquipPanel('assigned')" class="equip-filter-btn px-2 py-1 text-[10px] font-medium rounded bg-white text-gray-600" data-filter="assigned">Assigned</button>
       </div>
     </div>
-    <div class="flex-1 overflow-y-auto p-2 space-y-1" id="equip-panel">
+    <div class="flex-1 overflow-y-auto p-2 space-y-1 max-h-56 lg:max-h-none" id="equip-panel">
       <% (typeof equipmentList !== 'undefined' ? equipmentList : []).forEach(eq => {
         const isAvailable = (eq.assigned_count || 0) === 0;
       %>
@@ -990,4 +990,91 @@ function filterProjectsByClient(clientId) {
 if (window.location.search.includes('action=new-shift')) {
   document.getElementById('create-shift-modal')?.classList.remove('hidden');
 }
+
+// ── Tap-to-assign (arm and tap) ──────────────────────────────────
+// HTML5 drag never fires on touch, which made this page unusable on a
+// phone. Tap a crew/equipment card to ARM it (highlight + banner), then
+// tap a job row to assign — reusing the exact same allocateCrew() /
+// assign-equipment fetch the drop handlers call (block-override modal and
+// reload behaviour included). Tap again / Cancel / Esc disarms.
+(function () {
+  var armed = null; // { kind:'crew'|'equip', id, name }
+  var armedEl = null, banner = null;
+
+  function bannerEl() {
+    if (banner) return banner;
+    banner = document.createElement('div');
+    banner.className = 'fixed left-3 right-3 z-[120] flex items-center gap-3 px-4 py-3 rounded-xl bg-brand-600 text-white text-sm font-semibold shadow-2xl transition-transform';
+    banner.style.bottom = 'calc(14px + env(safe-area-inset-bottom, 0px))';
+    banner.style.transform = 'translateY(140%)';
+    banner.innerHTML = '<span class="flex-1 min-w-0 truncate" data-arm-text></span>' +
+      '<button type="button" class="flex-shrink-0 px-3 py-2 rounded-lg bg-white/20 text-white text-xs font-bold" data-arm-cancel>Cancel</button>';
+    document.body.appendChild(banner);
+    banner.querySelector('[data-arm-cancel]').addEventListener('click', disarm);
+    return banner;
+  }
+  function disarm() {
+    if (armedEl) armedEl.classList.remove('ring-2', 'ring-brand-500', 'bg-brand-50');
+    armed = null; armedEl = null;
+    if (banner) banner.style.transform = 'translateY(140%)';
+  }
+  function arm(kind, el, id, name) {
+    if (armedEl === el) { disarm(); return; }
+    disarm();
+    armed = { kind: kind, id: id, name: name };
+    armedEl = el;
+    el.classList.add('ring-2', 'ring-brand-500', 'bg-brand-50');
+    var b = bannerEl();
+    b.querySelector('[data-arm-text]').textContent = 'Assigning ' + name + ' — tap a job row';
+    b.style.transform = 'translateY(0)';
+  }
+
+  document.addEventListener('click', function (e) {
+    // Arm a crew card (allocatable only) or an equipment card.
+    var crew = e.target.closest && e.target.closest('.crew-card');
+    if (crew && !e.target.closest('button, a, input, select')) {
+      if (crew.dataset.canAllocate !== 'true') return;
+      e.preventDefault();
+      arm('crew', crew, crew.dataset.crewId, crew.dataset.crewName || 'crew');
+      return;
+    }
+    var eq = e.target.closest && e.target.closest('.equip-card');
+    if (eq && !e.target.closest('button, a, input, select')) {
+      e.preventDefault();
+      arm('equip', eq, eq.dataset.equipId, eq.dataset.equipName || 'equipment');
+      return;
+    }
+    // Armed tap on a job row assigns. The row's own controls (Confirm/Del/+)
+    // still win — only taps on non-interactive row chrome assign.
+    if (!armed) return;
+    if (e.target.closest('button, a, input, select, form')) return;
+    var rowTarget = e.target.closest && (e.target.closest('.drop-target') || e.target.closest('.drop-zone'));
+    if (!rowTarget) return;
+    var jobId = rowTarget.dataset.jobId ||
+      (rowTarget.querySelector('.drop-target') && rowTarget.querySelector('.drop-target').dataset.jobId);
+    if (!jobId) return;
+    e.preventDefault();
+    var a = armed;
+    disarm();
+    if (a.kind === 'crew') {
+      allocateCrew(jobId, a.id, a.name);
+    } else {
+      fetch('/allocations/api/assign-equipment.json', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-csrf-token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
+        body: JSON.stringify({ equipment_id: a.id, job_id: jobId, date: ALLOC_DATE })
+      }).then(function (resp) { return resp.json(); })
+        .then(function (result) {
+          if (result.success) {
+            showToast(a.name + ' assigned');
+            setTimeout(function () { location.reload(); }, 500);
+          } else {
+            showToast(result.error || 'Could not assign equipment', 5000);
+          }
+        })
+        .catch(function (err) { showToast('Error: ' + err.message, 5000); });
+    }
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') disarm(); });
+})();
 </script>

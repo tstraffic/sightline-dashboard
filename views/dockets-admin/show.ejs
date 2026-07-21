@@ -93,7 +93,7 @@
   </div>
 
   <!-- Crew & hours -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
     <div class="flex items-baseline justify-between px-5 pt-4">
       <h2 class="text-sm font-semibold text-gray-900">Crew &amp; hours</h2>
       <% var manHours = crewLines.reduce(function(s,c){ return s + (c.total_hours||0); }, 0); %>

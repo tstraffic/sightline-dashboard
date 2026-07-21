@@ -43,7 +43,7 @@
   </div>
 
   <!-- List -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
     <% if (cards.length === 0) { %>
       <div class="px-6 py-16 text-center">
         <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
@@ -58,11 +58,11 @@
         <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
           <tr>
             <th class="px-4 py-3 text-left font-semibold">Name</th>
-            <th class="px-4 py-3 text-left font-semibold">Purpose</th>
-            <th class="px-4 py-3 text-left font-semibold">Client</th>
-            <th class="px-4 py-3 text-left font-semibold">Effective</th>
-            <th class="px-4 py-3 text-right font-semibold">Items</th>
-            <th class="px-4 py-3 text-left font-semibold">Updated</th>
+            <th class="px-4 py-3 text-left font-semibold hidden md:table-cell">Purpose</th>
+            <th class="px-4 py-3 text-left font-semibold hidden sm:table-cell">Client</th>
+            <th class="px-4 py-3 text-left font-semibold hidden lg:table-cell">Effective</th>
+            <th class="px-4 py-3 text-right font-semibold hidden sm:table-cell">Items</th>
+            <th class="px-4 py-3 text-left font-semibold hidden lg:table-cell">Updated</th>
             <th class="px-4 py-3 text-right font-semibold">Actions</th>
           </tr>
         </thead>
@@ -85,16 +85,17 @@
                 <% if (card.description) { %>
                   <p class="text-xs text-gray-500 mt-0.5"><%= card.description.length > 90 ? card.description.slice(0, 90) + '…' : card.description %></p>
                 <% } %>
+                <% if (card.client_name) { %><p class="sm:hidden text-[11px] text-gray-400 mt-0.5"><%= card.client_name %></p><% } %>
               </td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 hidden md:table-cell">
                 <% if (card.purpose === 'quoting') { %>
                   <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-blue-50 text-blue-700 ring-1 ring-blue-200 rounded">Quoting</span>
                 <% } else { %>
                   <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium bg-purple-50 text-purple-700 ring-1 ring-purple-200 rounded">Reference</span>
                 <% } %>
               </td>
-              <td class="px-4 py-3 text-gray-700"><%= card.client_name || '—' %></td>
-              <td class="px-4 py-3 text-gray-700 text-xs">
+              <td class="px-4 py-3 text-gray-700 hidden sm:table-cell"><%= card.client_name || '—' %></td>
+              <td class="px-4 py-3 text-gray-700 text-xs hidden lg:table-cell">
                 <% if (card.effective_from || card.effective_to) { %>
                   <%= card.effective_from ? formatDateShort(card.effective_from) : '—' %>
                   →
@@ -103,8 +104,8 @@
                   <span class="text-gray-400">No dates set</span>
                 <% } %>
               </td>
-              <td class="px-4 py-3 text-right font-mono text-gray-700"><%= card.item_count %></td>
-              <td class="px-4 py-3 text-xs text-gray-500"><%= formatDateShort(card.updated_at) %></td>
+              <td class="px-4 py-3 text-right font-mono text-gray-700 hidden sm:table-cell"><%= card.item_count %></td>
+              <td class="px-4 py-3 text-xs text-gray-500 hidden lg:table-cell"><%= formatDateShort(card.updated_at) %></td>
               <td class="px-4 py-3 text-right">
                 <div class="inline-flex items-center gap-1">
                   <a href="/rate-cards/<%= card.id %>" class="px-2 py-1 text-xs font-medium text-brand-700 hover:bg-brand-50 rounded">Edit</a>

@@ -91,7 +91,7 @@ function listMarginClass(pct, hasRev) {
   </form>
 
   <!-- Quotes table -->
-  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
     <% if (quotes.length === 0) { %>
       <div class="px-6 py-16 text-center">
         <svg class="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 7h6m-6 4h6m-6 4h4M5 5a2 2 0 012-2h10a2 2 0 012 2v14l-4-2-3 2-3-2-4 2V5z"/></svg>
@@ -106,17 +106,17 @@ function listMarginClass(pct, hasRev) {
         <thead class="bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
           <tr>
             <th class="px-4 py-3 text-left font-semibold">Quote #</th>
-            <th class="px-4 py-3 text-left font-semibold">Project</th>
-            <th class="px-4 py-3 text-left font-semibold">Client</th>
+            <th class="px-4 py-3 text-left font-semibold hidden md:table-cell">Project</th>
+            <th class="px-4 py-3 text-left font-semibold hidden sm:table-cell">Client</th>
             <th class="px-4 py-3 text-left font-semibold">Status</th>
-            <th class="px-4 py-3 text-left font-semibold">Quote date</th>
-            <th class="px-4 py-3 text-left font-semibold">Valid until</th>
+            <th class="px-4 py-3 text-left font-semibold hidden lg:table-cell">Quote date</th>
+            <th class="px-4 py-3 text-left font-semibold hidden xl:table-cell">Valid until</th>
             <th class="px-4 py-3 text-right font-semibold">Total (inc GST)</th>
             <% if (canSeeCost) { %>
-              <th class="px-4 py-3 text-right font-semibold border-l border-gray-200">Cost</th>
-              <th class="px-4 py-3 text-right font-semibold">Margin %</th>
+              <th class="px-4 py-3 text-right font-semibold border-l border-gray-200 hidden md:table-cell">Cost</th>
+              <th class="px-4 py-3 text-right font-semibold hidden md:table-cell">Margin %</th>
             <% } %>
-            <th class="px-4 py-3 text-left font-semibold">Prepared by</th>
+            <th class="px-4 py-3 text-left font-semibold hidden lg:table-cell">Prepared by</th>
           </tr>
         </thead>
         <tbody class="divide-y divide-gray-100">
@@ -127,25 +127,26 @@ function listMarginClass(pct, hasRev) {
                 <% if (q.version > 1) { %>
                   <span class="ml-1 text-[10px] text-gray-400">v<%= q.version %></span>
                 <% } %>
+                <p class="sm:hidden font-sans text-[11px] text-gray-500 truncate max-w-[140px] mt-0.5"><%= q.client_name || q.client_name_snapshot || '' %></p>
               </td>
-              <td class="px-4 py-3"><%= q.project_name || '—' %></td>
-              <td class="px-4 py-3 text-gray-700"><%= q.client_name || q.client_name_snapshot || '—' %></td>
+              <td class="px-4 py-3 hidden md:table-cell"><%= q.project_name || '—' %></td>
+              <td class="px-4 py-3 text-gray-700 hidden sm:table-cell"><%= q.client_name || q.client_name_snapshot || '—' %></td>
               <td class="px-4 py-3">
                 <span class="inline-flex items-center px-2 py-0.5 text-xs font-medium ring-1 rounded <%= statusBadgeClass[q.status] || 'bg-gray-100 text-gray-700 ring-gray-200' %>">
                   <%= statusLabels[q.status] || q.status %>
                 </span>
               </td>
-              <td class="px-4 py-3 text-xs text-gray-700"><%= q.quote_date ? formatDateShort(q.quote_date) : '—' %></td>
-              <td class="px-4 py-3 text-xs text-gray-700"><%= q.valid_until_date ? formatDateShort(q.valid_until_date) : '—' %></td>
+              <td class="px-4 py-3 text-xs text-gray-700 hidden lg:table-cell"><%= q.quote_date ? formatDateShort(q.quote_date) : '—' %></td>
+              <td class="px-4 py-3 text-xs text-gray-700 hidden xl:table-cell"><%= q.valid_until_date ? formatDateShort(q.valid_until_date) : '—' %></td>
               <td class="px-4 py-3 text-right font-mono text-gray-900"><%= fmtMoney(q.total_inc_gst) %></td>
               <% if (canSeeCost) { %>
                 <% const hasRev = (q.subtotal_ex_gst || 0) > 0; %>
-                <td class="px-4 py-3 text-right font-mono text-gray-700 border-l border-gray-100"><%= fmtMoney(q.total_cost || 0) %></td>
-                <td class="px-4 py-3 text-right font-mono <%= listMarginClass(q.total_margin_pct || 0, hasRev) %>">
+                <td class="px-4 py-3 text-right font-mono text-gray-700 border-l border-gray-100 hidden md:table-cell"><%= fmtMoney(q.total_cost || 0) %></td>
+                <td class="px-4 py-3 text-right font-mono hidden md:table-cell <%= listMarginClass(q.total_margin_pct || 0, hasRev) %>">
                   <%= hasRev ? fmtPct(q.total_margin_pct || 0) : '—' %>
                 </td>
               <% } %>
-              <td class="px-4 py-3 text-gray-600 text-xs"><%= q.prepared_by_name || '—' %></td>
+              <td class="px-4 py-3 text-gray-600 text-xs hidden lg:table-cell"><%= q.prepared_by_name || '—' %></td>
             </tr>
           <% }) %>
         </tbody>

@@ -3443,6 +3443,89 @@
     window.location.href = '/bookings/' + id + '#' + goto_;
   });
 
+  // ── Tap-to-assign (arm and tap) ─────────────────────────────────
+  // HTML5 drag never fires on touch devices, which made the resource pool
+  // inert on phones. Tapping a pool row now ARMS it (highlight + banner);
+  // tapping any booking card then assigns via the same helpers the drop
+  // handlers use (function declarations hoist, so the later-defined
+  // bk2Add* helpers are callable here). Tap the row again / Cancel / Esc
+  // disarms. Desktop drag is untouched — this listener is registered
+  // before the card-open handler so an armed tap never opens the editor.
+  var armedRow = null, armBanner = null;
+  function armBannerEl() {
+    if (armBanner) return armBanner;
+    armBanner = document.createElement('div');
+    armBanner.className = 'bk2-arm-banner';
+    armBanner.innerHTML = '<span class="bk2-arm-banner-text"></span>' +
+      '<button type="button" class="bk2-arm-banner-cancel">Cancel</button>';
+    document.body.appendChild(armBanner);
+    armBanner.querySelector('.bk2-arm-banner-cancel').addEventListener('click', disarmPoolRow);
+    return armBanner;
+  }
+  function disarmPoolRow() {
+    if (armedRow) armedRow.classList.remove('is-armed');
+    armedRow = null;
+    if (armBanner) armBanner.classList.remove('is-open');
+  }
+  function armPoolRow(row) {
+    if (armedRow === row) { disarmPoolRow(); return; }
+    disarmPoolRow();
+    armedRow = row;
+    row.classList.add('is-armed');
+    var name = row.getAttribute('data-resource-name') || 'resource';
+    var el = armBannerEl();
+    el.querySelector('.bk2-arm-banner-text').textContent = 'Assigning ' + name + ' — tap a booking card';
+    el.classList.add('is-open');
+  }
+  // Arm/disarm on pool-row tap (real controls inside the row keep working).
+  document.addEventListener('click', function (e) {
+    var row = e.target.closest && e.target.closest('.bk2-rp-item');
+    if (!row) return;
+    if (e.target.closest('button, a, input, select')) return;
+    var type = row.getAttribute('data-resource-type');
+    if (type !== 'person' && type !== 'vehicle' && type !== 'equipment') return;
+    if (!row.getAttribute('data-resource-id')) return;
+    e.preventDefault();
+    armPoolRow(row);
+  });
+  // Armed tap on a card = assign (whole card is the target, like a drop).
+  document.addEventListener('click', function (e) {
+    if (!armedRow) return;
+    var card = e.target.closest && e.target.closest('.bk2-card');
+    if (!card) return;
+    var bookingId = card.getAttribute('data-booking-id');
+    if (!bookingId) return;
+    e.preventDefault();
+    // Other card behaviours (slot popover, editor-open) are ALSO delegated on
+    // document — stopPropagation alone wouldn't silence them, so cut the whole
+    // listener chain for this armed tap.
+    e.stopImmediatePropagation();
+    var row = armedRow;
+    disarmPoolRow();
+    var type = row.getAttribute('data-resource-type');
+    var id = row.getAttribute('data-resource-id');
+    var name = row.getAttribute('data-resource-name') || '';
+    if (type === 'person') {
+      bk2AddPersonToBooking(bookingId, id);
+    } else if (type === 'vehicle') {
+      bk2AddVehicleToBooking(bookingId, JSON.stringify({
+        id: id,
+        source: row.getAttribute('data-resource-source') || 'fleet',
+        name: name,
+        rego: row.getAttribute('data-resource-rego') || '',
+        role: row.getAttribute('data-resource-role') || 'ute',
+      }));
+    } else if (type === 'equipment') {
+      bk2AddEquipmentToBooking(bookingId, {
+        id: id, name: name,
+        category: row.getAttribute('data-resource-category') || '',
+        hire_unit_id: row.getAttribute('data-resource-hire-unit') || '',
+        supplier: row.getAttribute('data-resource-supplier') || '',
+      });
+    }
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') disarmPoolRow(); });
+
   document.addEventListener('click', function (e) {
     if (e.defaultPrevented) return;
     if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;

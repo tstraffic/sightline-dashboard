@@ -3030,3 +3030,55 @@ body.bk2-rp-detail .bk2-rp-warns { display: inline-flex; }
 .bk2-pop-btn--yes:hover { background: #1D6AE5; color: #fff; }
 :root[data-theme="dark"] .bk2-pop-btn--yes { background: #2B7FFF; color: #fff; }
 :root[data-theme="dark"] .bk2-pop-btn--yes:hover { background: #1D6AE5; color: #fff; }
+
+/* ══ Mobile / touch: tap-to-assign + small-screen polish ══
+   HTML5 drag is dead on touch, so pool rows arm on tap and cards assign on
+   the next tap (JS in board.ejs). These are the visual states + the fixed
+   banner, plus width tuning for the toolbar and status rows that had no
+   mobile rules. */
+.bk2-rp-item.is-armed {
+  outline: 2px solid #2B7FFF;
+  outline-offset: -2px;
+  background: rgba(43,127,255,0.12) !important;
+  cursor: pointer;
+}
+.bk2-arm-banner {
+  position: fixed; left: 12px; right: 12px;
+  bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+  z-index: 120;
+  display: flex; align-items: center; gap: 12px;
+  padding: 12px 16px; border-radius: 12px;
+  background: #1D6AE5; color: #fff;
+  box-shadow: 0 10px 28px rgba(29,106,229,0.45);
+  font-size: 13px; font-weight: 600;
+  transform: translateY(140%); transition: transform 0.2s cubic-bezier(.2,.8,.2,1);
+  pointer-events: none;
+}
+.bk2-arm-banner.is-open { transform: translateY(0); pointer-events: auto; }
+.bk2-arm-banner-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bk2-arm-banner-cancel {
+  flex-shrink: 0; padding: 8px 14px; min-height: 40px;
+  border: 0; border-radius: 8px;
+  background: rgba(255,255,255,0.18); color: #fff; font-weight: 700; font-size: 12px;
+}
+
+/* Coarse pointers: pool rows and card slots need a real tap height, and the
+   grab cursor is meaningless — show the tap affordance instead. */
+@media (hover: none) and (pointer: coarse) {
+  .bk2-rp-item { min-height: 44px; cursor: pointer; }
+  .bk2-slot, .bk2-veh-slot { min-height: 40px; }
+}
+
+/* Phone width: toolbar wraps tight, status pills scroll in one row instead
+   of stacking into a wall, and the filter grid compresses. */
+@media (max-width: 640px) {
+  .bk2-fs-toolbar { flex-wrap: wrap; gap: 6px; }
+  .bk2-fs-toolbar .bk2-fs-tool { padding: 8px 10px; font-size: 11px; min-height: 40px; }
+  .bk2-fs-grid { grid-template-columns: repeat(auto-fill, minmax(min(100%, 132px), 1fr)); gap: 6px; }
+  .bk2-edit-statusrow {
+    overflow-x: auto; -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap; scrollbar-width: none;
+  }
+  .bk2-edit-statusrow::-webkit-scrollbar { display: none; }
+  .bk2-edit-statusrow .bk2-statuspill { flex-shrink: 0; }
+}

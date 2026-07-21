@@ -351,7 +351,7 @@
   if (recBoard) {
     recBoard.addEventListener('click', function (e) {
       // Leave the action buttons / phone link / copy / selects alone.
-      if (e.target.closest('a, select, input, .rec-card-edit, .rec-card-resend, .rec-card-copy')) return;
+      if (e.target.closest('a, select, input, .rec-card-edit, .rec-card-resend, .rec-card-copy, .rec-card-move')) return;
       var card = e.target.closest('.rec-card');
       if (!card || !card.classList.contains('is-expandable')) return;
       var expanded = card.classList.toggle('is-expanded');
@@ -527,6 +527,65 @@
   document.querySelectorAll('.rec-resend-btn').forEach(function (b) {
     b.addEventListener('click', function () { resendConfirmation(b.dataset.id, b); });
   });
+
+  // ---- Tap-to-move sheet ----
+  // Drag is dead on touch devices, so every card's ⇄ button opens a bottom
+  // sheet of stages; choosing one funnels into the SAME moveCandidate() the
+  // drag/drop and list <select> use — modals, validation and optimistic move
+  // all come along for free.
+  var rmvSheet = null, rmvBackdrop = null;
+  function buildMoveSheet() {
+    if (rmvSheet) return;
+    rmvBackdrop = document.createElement('div');
+    rmvBackdrop.className = 'rmv-backdrop';
+    rmvSheet = document.createElement('div');
+    rmvSheet.className = 'rmv-sheet';
+    rmvSheet.setAttribute('role', 'dialog');
+    rmvSheet.setAttribute('aria-label', 'Move candidate to stage');
+    document.body.appendChild(rmvBackdrop);
+    document.body.appendChild(rmvSheet);
+    rmvBackdrop.addEventListener('click', closeMoveSheet);
+  }
+  function closeMoveSheet() {
+    if (!rmvSheet) return;
+    rmvSheet.classList.remove('is-open');
+    rmvBackdrop.classList.remove('is-open');
+  }
+  function openMoveSheet(card) {
+    buildMoveSheet();
+    var current = (card.dataset.stage || 'NEW').toUpperCase();
+    var html = '<div class="rmv-handle"></div>' +
+      '<p class="rmv-title">' + (card.dataset.name || 'Candidate') + '</p>' +
+      '<p class="rmv-sub">Move to stage</p>' +
+      '<div class="rmv-list">';
+    FORWARD.forEach(function (st) {
+      html += '<button type="button" class="rmv-opt' + (st === current ? ' is-current' : '') + '" data-stage="' + st + '"' + (st === current ? ' disabled' : '') + '>' +
+        (LABELS[st] || st) + (st === current ? ' <span class="rmv-now">current</span>' : '') + '</button>';
+    });
+    html += '</div><p class="rmv-sub rmv-sub--closed">Close out</p><div class="rmv-list">';
+    TERMINAL.forEach(function (st) {
+      html += '<button type="button" class="rmv-opt rmv-opt--terminal' + (st === current ? ' is-current' : '') + '" data-stage="' + st + '"' + (st === current ? ' disabled' : '') + '>' +
+        (LABELS[st] || st) + '</button>';
+    });
+    html += '</div>';
+    rmvSheet.innerHTML = html;
+    rmvSheet.querySelectorAll('.rmv-opt:not([disabled])').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        closeMoveSheet();
+        moveCandidate(card.dataset.id, btn.dataset.stage, card);
+      });
+    });
+    rmvSheet.classList.add('is-open');
+    rmvBackdrop.classList.add('is-open');
+  }
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest && e.target.closest('.rec-card-move');
+    if (!btn) return;
+    e.stopPropagation();
+    var card = btn.closest('.rec-card');
+    if (card) openMoveSheet(card);
+  });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMoveSheet(); });
 
   // ---- Show-closed checkbox (list) ----
   var showClosed = document.getElementById('show-closed-rows');

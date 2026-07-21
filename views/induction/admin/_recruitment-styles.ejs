@@ -262,4 +262,43 @@
   @media (max-width: 640px) {
     .rec-board { grid-auto-columns: minmax(208px, 88%); }
   }
+
+  /* ── Tap-to-move stage sheet (the ⇄ button on each card) ──
+     Bottom sheet on any screen size — it's touch-first but harmless with a
+     mouse. Options pick up the per-stage --st tokens via [data-stage]. */
+  .rec-card-move { color: #9CA3AF; }
+  .rec-card-move:hover { color: var(--st-ink, #1D6AE5); }
+  .rmv-backdrop {
+    position: fixed; inset: 0; background: rgba(15,17,21,0.45); z-index: 90;
+    opacity: 0; pointer-events: none; transition: opacity 0.18s;
+  }
+  .rmv-backdrop.is-open { opacity: 1; pointer-events: auto; }
+  .rmv-sheet {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 91;
+    background: #FFFFFF; border-radius: 16px 16px 0 0;
+    padding: 8px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+    max-height: 75vh; overflow-y: auto;
+    transform: translateY(105%); transition: transform 0.22s cubic-bezier(.2,.8,.2,1);
+    box-shadow: 0 -8px 30px rgba(15,17,21,0.18);
+  }
+  .rmv-sheet.is-open { transform: translateY(0); }
+  .rmv-handle { width: 36px; height: 4px; border-radius: 2px; background: #D1D5DB; margin: 4px auto 10px; }
+  .rmv-title { font-weight: 700; font-size: 1rem; color: #111827; }
+  .rmv-sub { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: #9CA3AF; margin: 10px 0 6px; }
+  .rmv-list { display: grid; gap: 6px; }
+  .rmv-opt {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%; min-height: 44px; padding: 10px 14px;
+    border-radius: 10px; border: 1px solid #E5E7EB; background: var(--st-soft, #F9FAFB);
+    color: var(--st-ink, #374151); font-size: 0.875rem; font-weight: 600; text-align: left;
+  }
+  .rmv-opt:active { transform: scale(0.99); }
+  .rmv-opt.is-current { opacity: 0.55; }
+  .rmv-now { font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #9CA3AF; }
+  .rmv-opt--terminal { background: #FEF2F2; border-color: #FECACA; color: #B91C1C; }
+  :root[data-theme="dark"] .rmv-sheet { background: #1B1E26; box-shadow: 0 -8px 30px rgba(0,0,0,0.5); }
+  :root[data-theme="dark"] .rmv-handle { background: rgba(255,255,255,0.2); }
+  :root[data-theme="dark"] .rmv-title { color: #F5F5F7; }
+  :root[data-theme="dark"] .rmv-opt { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.1); color: var(--st, #E2E8F0); }
+  :root[data-theme="dark"] .rmv-opt--terminal { background: rgba(239,68,68,0.12); border-color: rgba(239,68,68,0.3); color: #FCA5A5; }
 </style>

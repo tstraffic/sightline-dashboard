@@ -90,7 +90,11 @@
     });
   </script>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <!-- Pinch-zoom stays ENABLED on the admin app: dense tables/boards have
+       small controls and zooming is the accessibility escape hatch. iOS
+       input-focus auto-zoom is already prevented by the 16px input rule in
+       custom.css, so user-scalable=no was pure loss. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title><%= typeof title !== 'undefined' ? title + ' | ' : '' %>T&S Traffic Control</title>
 
   <!-- PWA Meta Tags -->
