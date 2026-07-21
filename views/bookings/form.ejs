@@ -1668,6 +1668,16 @@
 <!-- Interactive site map: geocodes the entered address, shows a draggable pin,
      and writes the confirmed lat/lng into the hidden coordinate fields. -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+<style>
+  /* Dark mode: invert + hue-rotate the light Voyager tiles so the map canvas
+     turns dark while keeping colour cues (parks green, water blue). Scoped to
+     the tile pane so the pin, zoom controls and labels stay un-tinted. Matches
+     the shared partials/leaflet-map treatment. */
+  :root[data-theme="dark"] #bk-map { border-color: rgba(255,255,255,0.10); background: #1A1D24; }
+  :root[data-theme="dark"] #bk-map .leaflet-tile-pane {
+    filter: invert(0.92) hue-rotate(180deg) saturate(0.78) brightness(0.95);
+  }
+</style>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="" defer></script>
 <script>
 (function () {

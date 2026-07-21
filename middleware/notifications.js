@@ -2,6 +2,7 @@ const { getDb } = require('../db/database');
 const { sendTeamsNotification } = require('./integrations');
 const { sendEmail } = require('../services/email');
 const { notificationEmail, dailyDigestEmail } = require('../services/emailTemplates');
+const notifPrefs = require('../lib/notificationPrefs');
 const { sendPushForNotifications, sendPushToUser } = require('../services/pushNotification');
 const { todaysBirthdays, localIso: bdayLocalIso } = require('../lib/birthdays');
 
@@ -89,11 +90,19 @@ function generateNotifications() {
 
     // Track newly created notification IDs for email sending
     const newNotificationIds = [];
+    const _prefsCache = {};
+    function _userPrefs(uid) {
+      if (!(uid in _prefsCache)) _prefsCache[uid] = notifPrefs.getUserPrefs(db, uid);
+      return _prefsCache[uid];
+    }
 
     function insertAndTrack(userId, type, title, message, link, jobId) {
+      // Respect the recipient's in-app preference for this category — if they've
+      // switched it off, don't create the notification at all.
+      if (!notifPrefs.wantsInApp(_userPrefs(userId), type)) return { changes: 0 };
       const result = insertIfNew.run(userId, type, title, message, link, jobId, userId, type, title);
       if (result.changes > 0) {
-        newNotificationIds.push({ userId, title, message, link });
+        newNotificationIds.push({ userId, type, title, message, link });
       }
       return result;
     }
@@ -671,7 +680,7 @@ function sendImmediateEmails(db, newNotifications) {
 
   try {
     // Build a lookup of user email preferences
-    const users = db.prepare("SELECT id, full_name, email, email_notifications_enabled, notification_frequency FROM users WHERE active = 1 AND email IS NOT NULL AND email != ''").all();
+    const users = db.prepare("SELECT id, full_name, email, email_notifications_enabled, notification_frequency, notification_prefs FROM users WHERE active = 1 AND email IS NOT NULL AND email != ''").all();
     const userMap = {};
     for (const u of users) userMap[u.id] = u;
 
@@ -680,6 +689,8 @@ function sendImmediateEmails(db, newNotifications) {
       if (!user) continue;
       if (!user.email_notifications_enabled) continue;
       if (user.notification_frequency !== 'immediate') continue;
+      // Per-category email preference (master switch already checked above).
+      if (!notifPrefs.wantsEmail(user.notification_prefs, n.type)) continue;
 
       const html = notificationEmail(user.full_name, n.title, n.message, n.link);
       sendEmail(user.email, n.title, html).catch(() => {});
@@ -701,30 +712,36 @@ function sendDailyDigests() {
   try {
     const db = getDb();
     const users = db.prepare(`
-      SELECT id, full_name, email FROM users
+      SELECT id, full_name, email, notification_prefs FROM users
       WHERE active = 1 AND email IS NOT NULL AND email != ''
       AND email_notifications_enabled = 1 AND notification_frequency = 'daily'
     `).all();
 
     for (const user of users) {
-      const notifications = db.prepare(`
-        SELECT title, message, link FROM notifications
+      const all = db.prepare(`
+        SELECT type, title, message, link FROM notifications
         WHERE user_id = ? AND is_read = 0 AND email_sent_at IS NULL
         AND created_at > datetime('now', '-1 day')
         ORDER BY created_at DESC
       `).all(user.id);
+      // Drop categories the user doesn't want emailed — they still show in-app.
+      const notifications = all.filter(function (n) { return notifPrefs.wantsEmail(user.notification_prefs, n.type); });
 
-      if (notifications.length === 0) continue;
-
-      const html = dailyDigestEmail(user.full_name, notifications);
-      sendEmail(user.email, `Atomis: ${notifications.length} new notification${notifications.length === 1 ? '' : 's'}`, html).catch(() => {});
-
-      // Mark all as email-sent
-      db.prepare(`
+      const markSent = db.prepare(`
         UPDATE notifications SET email_sent_at = CURRENT_TIMESTAMP
         WHERE user_id = ? AND is_read = 0 AND email_sent_at IS NULL
         AND created_at > datetime('now', '-1 day')
-      `).run(user.id);
+      `);
+
+      if (notifications.length === 0) {
+        // Stamp the batch so we don't reconsider these rows every run.
+        markSent.run(user.id);
+        continue;
+      }
+
+      const html = dailyDigestEmail(user.full_name, notifications);
+      sendEmail(user.email, `Atomis: ${notifications.length} new notification${notifications.length === 1 ? '' : 's'}`, html).catch(() => {});
+      markSent.run(user.id);
     }
   } catch (err) {
     console.error('Daily digest error:', err.message);

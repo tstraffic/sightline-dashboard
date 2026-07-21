@@ -101,7 +101,39 @@
           <option value="hourly" <%= profile.notification_frequency === 'hourly' ? 'selected' : '' %>>Hourly digest</option>
           <option value="daily" <%= profile.notification_frequency === 'daily' ? 'selected' : '' %>>Daily digest</option>
         </select>
+        <p class="text-xs text-gray-400 mt-1">The master switch above and this cadence apply to whatever you choose to be emailed below.</p>
       </div>
+
+      <!-- Per-category preferences: which notifications you get in-app, and
+           which are also emailed. -->
+      <% if (typeof notifCategories !== 'undefined' && notifCategories && notifCategories.length) { %>
+        <input type="hidden" name="pref_submitted" value="1">
+        <div>
+          <p class="block text-sm font-medium text-gray-700 mb-1">What you get notified about</p>
+          <div class="border border-gray-200 rounded-lg overflow-hidden">
+            <div class="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-4 py-2 bg-gray-50 border-b border-gray-200 text-[11px] font-bold uppercase tracking-wider text-gray-400">
+              <span>Notification</span>
+              <span class="w-14 text-center" title="Show in the app and as a push">In app</span>
+              <span class="w-14 text-center" title="Also send me an email">Email</span>
+            </div>
+            <% notifCategories.forEach(function (c, i) { %>
+              <div class="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center px-4 py-2.5 <%= i % 2 ? 'bg-gray-50/40' : '' %> <%= i ? 'border-t border-gray-100' : '' %>">
+                <div class="min-w-0">
+                  <p class="text-sm font-medium text-gray-800"><%= c.label %></p>
+                  <p class="text-xs text-gray-400"><%= c.desc %></p>
+                </div>
+                <label class="w-14 flex justify-center cursor-pointer">
+                  <input type="checkbox" name="pref_<%= c.key %>_inapp" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500 w-4 h-4" <%= c.inApp ? 'checked' : '' %>>
+                </label>
+                <label class="w-14 flex justify-center cursor-pointer">
+                  <input type="checkbox" name="pref_<%= c.key %>_email" class="rounded border-gray-300 text-brand-600 focus:ring-brand-500 w-4 h-4" <%= c.email ? 'checked' : '' %>>
+                </label>
+              </div>
+            <% }); %>
+          </div>
+          <p class="text-xs text-gray-400 mt-1">Unticking <span class="font-semibold">In app</span> stops that kind of notification entirely; <span class="font-semibold">Email</span> also sends it to your inbox.</p>
+        </div>
+      <% } %>
 
       <div class="pt-2">
         <button type="submit" class="w-full sm:w-auto px-6 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition-colors">

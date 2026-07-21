@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { sendTaskAssignmentEmail, sendTaskStatusEmail } = require('../middleware/email');
 const { sendPushToUser } = require('../services/pushNotification');
+const notifPrefs = require('../lib/notificationPrefs');
 const { autoLogDiary, logStatusChange } = require('../lib/diary');
 const { isAdminRole, hideAdminTasksSql } = require('../lib/taskVisibility');
 const { closeCasFromTask } = require('../lib/correctiveActions');
@@ -372,13 +373,21 @@ router.post('/', (req, res) => {
       try {
         const ownerUser = db.prepare('SELECT id, full_name, email FROM users WHERE id = ?').get(oid);
         const taskData = { id: newTaskId, title: b.title, description: b.description || '', due_date: b.due_date, priority: b.priority || 'medium', task_type: b.task_type || 'one_off' };
-        sendTaskAssignmentEmail(taskData, ownerUser, jobLabel, assignedByName, baseUrl).catch(e => console.error('[Tasks] Email async error:', e.message));
-        sendPushToUser(oid, {
-          title: 'New Task Assigned',
-          body: `${b.title} — assigned by ${assignedByName}`,
-          url: '/tasks/' + newTaskId + '/edit',
-          type: 'task_assignment'
-        });
+        // "Task assigned" emails are opt-IN (off by default) so the inbox isn't
+        // flooded on every new task — the due-date reminder is the default email.
+        // The in-app/push alert still fires unless the owner turned that off too.
+        const oPrefs = notifPrefs.getUserPrefs(db, oid);
+        if (notifPrefs.wantsEmail(oPrefs, 'task_assigned')) {
+          sendTaskAssignmentEmail(taskData, ownerUser, jobLabel, assignedByName, baseUrl).catch(e => console.error('[Tasks] Email async error:', e.message));
+        }
+        if (notifPrefs.wantsInApp(oPrefs, 'task_assigned')) {
+          sendPushToUser(oid, {
+            title: 'New Task Assigned',
+            body: `${b.title} — assigned by ${assignedByName}`,
+            url: '/tasks/' + newTaskId + '/edit',
+            type: 'task_assignment'
+          });
+        }
       } catch (emailErr) {
         console.error('[Tasks] Email send error on create:', emailErr.message);
       }
@@ -671,13 +680,19 @@ router.post('/:id', (req, res) => {
         try {
           const ownerUser = db.prepare('SELECT id, full_name, email FROM users WHERE id = ?').get(oid);
           const taskData = { id: req.params.id, title: b.title, description: b.description || '', due_date: b.due_date, priority: b.priority || 'medium', task_type: b.task_type || 'one_off' };
-          sendTaskAssignmentEmail(taskData, ownerUser, jobLabel, assignedByName, baseUrl).catch(e => console.error('[Tasks] Email async error:', e.message));
-          sendPushToUser(oid, {
-            title: 'Task Assigned to You',
-            body: `${b.title} — assigned by ${assignedByName}`,
-            url: '/tasks/' + req.params.id + '/edit',
-            type: 'task_assignment'
-          });
+          // Opt-in email (see create handler); push still fires unless disabled.
+          const oPrefs = notifPrefs.getUserPrefs(db, oid);
+          if (notifPrefs.wantsEmail(oPrefs, 'task_assigned')) {
+            sendTaskAssignmentEmail(taskData, ownerUser, jobLabel, assignedByName, baseUrl).catch(e => console.error('[Tasks] Email async error:', e.message));
+          }
+          if (notifPrefs.wantsInApp(oPrefs, 'task_assigned')) {
+            sendPushToUser(oid, {
+              title: 'Task Assigned to You',
+              body: `${b.title} — assigned by ${assignedByName}`,
+              url: '/tasks/' + req.params.id + '/edit',
+              type: 'task_assignment'
+            });
+          }
         } catch (emailErr) {
           console.error('[Tasks] Email send error on reassign:', emailErr.message);
         }
@@ -1138,14 +1153,20 @@ function notifySubtaskAssigned(db, parentTaskId, subtask, assigneeId, req) {
       priority: parent.priority,
       task_type: 'subtask'
     };
-    sendTaskAssignmentEmail(taskData, assignee, jobLabel, assignedByName, baseUrl)
-      .catch(e => console.error('[Subtasks] Email error:', e.message));
-    sendPushToUser(assigneeId, {
-      title: 'Subtask Assigned',
-      body: `${subtask.title} — part of "${parent.title}"${assignedByName ? ' · assigned by ' + assignedByName : ''}`,
-      url: '/tasks/' + parent.id + '/edit',
-      type: 'task_assignment'
-    });
+    // Same opt-in email / default push policy as task assignment.
+    const aPrefs = notifPrefs.getUserPrefs(db, assigneeId);
+    if (notifPrefs.wantsEmail(aPrefs, 'task_assigned')) {
+      sendTaskAssignmentEmail(taskData, assignee, jobLabel, assignedByName, baseUrl)
+        .catch(e => console.error('[Subtasks] Email error:', e.message));
+    }
+    if (notifPrefs.wantsInApp(aPrefs, 'task_assigned')) {
+      sendPushToUser(assigneeId, {
+        title: 'Subtask Assigned',
+        body: `${subtask.title} — part of "${parent.title}"${assignedByName ? ' · assigned by ' + assignedByName : ''}`,
+        url: '/tasks/' + parent.id + '/edit',
+        type: 'task_assignment'
+      });
+    }
   } catch (e) {
     console.error('[Subtasks] Notify error:', e.message);
   }

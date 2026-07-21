@@ -14437,6 +14437,16 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 323 error:', e.message); }
   }
 
+  if (!isMigrationApplied.get(324)) {
+    try {
+      // Per-user, per-category notification preferences (JSON). NULL = use the
+      // category defaults from lib/notificationPrefs.js.
+      db.exec(`ALTER TABLE users ADD COLUMN notification_prefs TEXT`);
+      recordMigration.run(324, 'users.notification_prefs — per-type notification & email preferences (JSON)');
+      console.log('Migration 324 applied');
+    } catch (e) { console.error('Migration 324 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

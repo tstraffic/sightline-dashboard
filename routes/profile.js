@@ -5,11 +5,12 @@ const { getDb } = require('../db/database');
 const { createInvitation, TOKEN_EXPIRY_HOURS } = require('../services/invitations');
 const { sendEmail, isConfigured: emailConfigured } = require('../services/email');
 const { passwordResetEmail } = require('../services/emailTemplates');
+const notifPrefs = require('../lib/notificationPrefs');
 
 // GET /profile — show profile page
 router.get('/', (req, res) => {
   const db = getDb();
-  const user = db.prepare('SELECT id, username, full_name, email, role, email_notifications_enabled, notification_frequency, created_at FROM users WHERE id = ?').get(req.session.user.id);
+  const user = db.prepare('SELECT id, username, full_name, email, role, email_notifications_enabled, notification_frequency, notification_prefs, created_at FROM users WHERE id = ?').get(req.session.user.id);
 
   if (!user) {
     req.flash('error', 'User not found.');
@@ -46,6 +47,7 @@ router.get('/', (req, res) => {
     currentTheme: (prefs && typeof prefs.theme === 'string') ? prefs.theme : '',
     emailEnabled: emailConfigured(),
     workerLink,
+    notifCategories: notifPrefs.effective(user.notification_prefs),
   });
 });
 
@@ -88,14 +90,22 @@ router.post('/', (req, res) => {
     }
   }
 
+  // Per-category notification preferences (which categories show in-app and
+  // which are emailed). Only persisted when the settings grid was submitted.
+  const prefsJson = ('pref_submitted' in req.body)
+    ? JSON.stringify(notifPrefs.prefsFromForm(req.body))
+    : null;
+
   db.prepare(`
-    UPDATE users SET full_name = ?, email = ?, email_notifications_enabled = ?, notification_frequency = ?
+    UPDATE users SET full_name = ?, email = ?, email_notifications_enabled = ?, notification_frequency = ?,
+      notification_prefs = COALESCE(?, notification_prefs)
     WHERE id = ?
   `).run(
     full_name.trim(),
     emailVal || null,
     email_notifications_enabled === 'on' ? 1 : 0,
     notification_frequency || 'immediate',
+    prefsJson,
     req.session.user.id
   );
 
