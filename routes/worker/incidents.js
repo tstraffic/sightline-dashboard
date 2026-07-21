@@ -5,6 +5,7 @@ const path = require('path');
 const fs = require('fs');
 const { getDb } = require('../../db/database');
 const { sydneyToday } = require('../../lib/sydney');
+const { stashForm, takeForm } = require('../../lib/formEcho');
 
 // Multer config for incident photo uploads
 const incidentUploadsDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'incidents');
@@ -86,6 +87,7 @@ router.get('/incidents/new', (req, res) => {
     allocations,
     today,
     now,
+    old: takeForm(req, 'incident'), // repopulate after a validation bounce
     worker: req.session.worker,
   });
 });
@@ -104,18 +106,21 @@ router.post('/incidents', upload.array('photos', 5), (req, res) => {
   // Validation
   if (!job_id || !incident_type || !description) {
     req.flash('error', 'Please fill in all required fields.');
+    stashForm(req, 'incident', req.body);
     return req.session.save(() => res.redirect('/w/incidents/new'));
   }
 
   const validTypes = ['near_miss', 'traffic_incident', 'worker_injury', 'vehicle_damage', 'public_complaint', 'environmental', 'injury', 'hazard', 'property_damage', 'vehicle', 'other'];
   if (!validTypes.includes(incident_type)) {
     req.flash('error', 'Invalid incident type.');
+    stashForm(req, 'incident', req.body);
     return req.session.save(() => res.redirect('/w/incidents/new'));
   }
 
   const validSeverity = ['low', 'medium', 'high', 'critical'];
   if (!validSeverity.includes(severity)) {
     req.flash('error', 'Invalid severity level.');
+    stashForm(req, 'incident', req.body);
     return req.session.save(() => res.redirect('/w/incidents/new'));
   }
 
@@ -169,6 +174,7 @@ router.post('/incidents', upload.array('photos', 5), (req, res) => {
   } catch (err) {
     console.error('Worker incident submission error:', err);
     req.flash('error', 'Failed to submit incident report. Please try again.');
+    stashForm(req, 'incident', req.body);
     req.session.save(() => res.redirect('/w/incidents/new'));
   }
 });

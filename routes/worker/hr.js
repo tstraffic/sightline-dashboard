@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday } = require('../../lib/sydney');
+const { stashForm, takeForm } = require('../../lib/formEcho');
 
 // GET /w/hr — HR hub
 router.get('/hr', (req, res) => {
@@ -491,6 +492,7 @@ router.get('/hr/leave', (req, res) => {
     currentM: `${year}-${pad(month + 1)}`,
     todayIso: sydneyToday(),
     recentLeave,
+    old: takeForm(req, 'leave'), // repopulate after a validation bounce
   });
 });
 
@@ -530,6 +532,7 @@ router.post('/hr/leave', (req, res) => {
     if (req.body.mode === 'recurring') msg = 'Pick a start, an end, and at least one weekday for the recurring leave.';
     else if (req.body.mode === 'multiple') msg = 'Add at least one date to the multiple-date list.';
     req.flash('error', msg);
+    stashForm(req, 'leave', req.body);
     return req.session.save(() => res.redirect('/w/hr/leave'));
   }
 
@@ -554,12 +557,14 @@ router.post('/hr/leave', (req, res) => {
   } catch (e) {
     console.error('[leave] insert failed:', e.message, { worker_id: worker.id, dates: capped });
     req.flash('error', 'Could not save leave: ' + e.message);
+    stashForm(req, 'leave', req.body);
     return req.session.save(() => res.redirect('/w/hr/leave'));
   }
 
   if (inserted === 0) {
     console.warn('[leave] tx ran but inserted 0 rows', { worker_id: worker.id, dates: capped });
     req.flash('error', 'Submission accepted but no rows saved — try again or contact the office.');
+    stashForm(req, 'leave', req.body);
     return req.session.save(() => res.redirect('/w/hr/leave'));
   }
 

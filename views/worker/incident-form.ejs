@@ -1,3 +1,4 @@
+<% var old = (typeof old !== 'undefined' && old) ? old : {}; %>
 <div class="space-y-4">
   <!-- Header -->
   <div class="flex items-center gap-3">
@@ -20,12 +21,12 @@
         <select name="job_id" required class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           <option value="">Select a job...</option>
           <% allocations.forEach(function(a) { %>
-            <option value="<%= a.job_id %>"><%= a.job_number %> &mdash; <%= a.client %> (<%= a.suburb %>)</option>
+            <option value="<%= a.job_id %>" <%= String(old.job_id) === String(a.job_id) ? 'selected' : '' %>><%= a.job_number %> &mdash; <%= a.client %> (<%= a.suburb %>)</option>
           <% }) %>
         </select>
       <% } else { %>
         <p class="text-sm text-gray-500 mb-2">No recent job allocations found.</p>
-        <input type="number" name="job_id" placeholder="Enter Job ID" required class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        <input type="number" name="job_id" placeholder="Enter Job ID" required value="<%= old.job_id || '' %>" class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
       <% } %>
     </div>
 
@@ -33,18 +34,12 @@
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 space-y-4">
       <div>
         <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Incident Type <span class="text-red-500">*</span></label>
+        <% var _typeOpts = [['near_miss','Near Miss'],['worker_injury','Minor Injury'],['injury','Major Injury'],['property_damage','Property Damage'],['vehicle_damage','Vehicle Damage'],['traffic_incident','Traffic Incident'],['environmental','Environmental'],['public_complaint','Public Complaint'],['hazard','Hazard'],['other','Other']]; %>
         <select name="incident_type" required class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
           <option value="">Select type...</option>
-          <option value="near_miss">Near Miss</option>
-          <option value="worker_injury">Minor Injury</option>
-          <option value="injury">Major Injury</option>
-          <option value="property_damage">Property Damage</option>
-          <option value="vehicle_damage">Vehicle Damage</option>
-          <option value="traffic_incident">Traffic Incident</option>
-          <option value="environmental">Environmental</option>
-          <option value="public_complaint">Public Complaint</option>
-          <option value="hazard">Hazard</option>
-          <option value="other">Other</option>
+          <% _typeOpts.forEach(function(o) { %>
+            <option value="<%= o[0] %>" <%= old.incident_type === o[0] ? 'selected' : '' %>><%= o[1] %></option>
+          <% }) %>
         </select>
       </div>
 
@@ -52,28 +47,28 @@
         <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Severity <span class="text-red-500">*</span></label>
         <div class="grid grid-cols-4 gap-2">
           <label class="relative">
-            <input type="radio" name="severity" value="low" required class="peer sr-only" checked>
+            <input type="radio" name="severity" value="low" required class="peer sr-only" <%= (!old.severity || old.severity === 'low') ? 'checked' : '' %>>
             <div class="cursor-pointer text-center px-2 py-2.5 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-blue-500 peer-checked:bg-blue-50 transition">
               <div class="w-3 h-3 rounded-full bg-blue-500 mx-auto mb-1"></div>
               <span class="text-xs font-medium text-gray-700 peer-checked:text-blue-700">Low</span>
             </div>
           </label>
           <label class="relative">
-            <input type="radio" name="severity" value="medium" class="peer sr-only">
+            <input type="radio" name="severity" value="medium" class="peer sr-only" <%= old.severity === 'medium' ? 'checked' : '' %>>
             <div class="cursor-pointer text-center px-2 py-2.5 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-amber-500 peer-checked:bg-amber-50 transition">
               <div class="w-3 h-3 rounded-full bg-amber-500 mx-auto mb-1"></div>
               <span class="text-xs font-medium text-gray-700 peer-checked:text-amber-700">Medium</span>
             </div>
           </label>
           <label class="relative">
-            <input type="radio" name="severity" value="high" class="peer sr-only">
+            <input type="radio" name="severity" value="high" class="peer sr-only" <%= old.severity === 'high' ? 'checked' : '' %>>
             <div class="cursor-pointer text-center px-2 py-2.5 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-orange-500 peer-checked:bg-orange-50 transition">
               <div class="w-3 h-3 rounded-full bg-orange-500 mx-auto mb-1"></div>
               <span class="text-xs font-medium text-gray-700 peer-checked:text-orange-700">High</span>
             </div>
           </label>
           <label class="relative">
-            <input type="radio" name="severity" value="critical" class="peer sr-only">
+            <input type="radio" name="severity" value="critical" class="peer sr-only" <%= old.severity === 'critical' ? 'checked' : '' %>>
             <div class="cursor-pointer text-center px-2 py-2.5 rounded-lg border-2 border-gray-200 bg-white peer-checked:border-red-500 peer-checked:bg-red-50 transition">
               <div class="w-3 h-3 rounded-full bg-red-500 mx-auto mb-1"></div>
               <span class="text-xs font-medium text-gray-700 peer-checked:text-red-700">Critical</span>
@@ -88,11 +83,11 @@
       <div class="grid grid-cols-2 gap-3">
         <div>
           <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Date <span class="text-red-500">*</span></label>
-          <input type="date" name="incident_date" value="<%= today %>" required class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <input type="date" name="incident_date" value="<%= old.incident_date || today %>" required class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
         <div>
           <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Time</label>
-          <input type="time" name="incident_time" value="<%= now %>" class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+          <input type="time" name="incident_time" value="<%= old.incident_time || now %>" class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
       </div>
     </div>
@@ -101,7 +96,7 @@
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
       <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Location</label>
       <div class="flex gap-2">
-        <input type="text" name="location" id="locationInput" placeholder="e.g. Corner of Main St & George St" class="flex-1 px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
+        <input type="text" name="location" id="locationInput" placeholder="e.g. Corner of Main St & George St" value="<%= old.location || '' %>" class="flex-1 px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         <button type="button" id="gpsBtn" class="px-3 py-2.5 bg-brand-50 border border-brand-200 rounded-lg text-brand-600 hover:bg-brand-100 transition" title="Use GPS">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
         </button>
@@ -114,24 +109,18 @@
     <!-- Description -->
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
       <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Description <span class="text-red-500">*</span></label>
-      <textarea name="description" rows="4" required placeholder="Describe what happened, including any immediate actions taken..." class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"></textarea>
+      <textarea name="description" rows="4" required placeholder="Describe what happened, including any immediate actions taken..." class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 resize-none"><%= old.description || '' %></textarea>
     </div>
 
     <!-- Weather Conditions -->
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
       <label class="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Weather Conditions</label>
+      <% var _weatherOpts = ['Clear / Fine','Overcast','Light Rain','Heavy Rain','Windy','Fog / Low Visibility','Extreme Heat','Storm','Night / Dark','Other']; %>
       <select name="weather_conditions" class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         <option value="">Select conditions...</option>
-        <option value="Clear / Fine">Clear / Fine</option>
-        <option value="Overcast">Overcast</option>
-        <option value="Light Rain">Light Rain</option>
-        <option value="Heavy Rain">Heavy Rain</option>
-        <option value="Windy">Windy</option>
-        <option value="Fog / Low Visibility">Fog / Low Visibility</option>
-        <option value="Extreme Heat">Extreme Heat</option>
-        <option value="Storm">Storm</option>
-        <option value="Night / Dark">Night / Dark</option>
-        <option value="Other">Other</option>
+        <% _weatherOpts.forEach(function(w) { %>
+          <option value="<%= w %>" <%= old.weather_conditions === w ? 'selected' : '' %>><%= w %></option>
+        <% }) %>
       </select>
     </div>
 
