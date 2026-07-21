@@ -56,12 +56,14 @@
   // "Back to board" should return to the day the booking sits on (not today's
   // board) and scroll straight to the card being edited. New bookings have no
   // date yet, so they fall back to the default board.
+  // start_datetime is a NAIVE Sydney-local string ('YYYY-MM-DDTHH:MM'), so its
+  // first 10 chars ARE the board date. Never feed it to new Date(): on the UTC
+  // production box that parses as UTC and tips afternoon shifts into the next
+  // Sydney day — the board then opened one day ahead.
   var _boardBackHref = '/bookings';
   if (isEdit && booking && booking.start_datetime) {
-    try {
-      var _bDate = new Date(String(booking.start_datetime).replace(' ', 'T')).toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
-      if (/^\d{4}-\d{2}-\d{2}$/.test(_bDate)) _boardBackHref = '/bookings?date=' + _bDate + '#booking-' + booking.id;
-    } catch (e) {}
+    var _bDate = String(booking.start_datetime).slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(_bDate)) _boardBackHref = '/bookings?date=' + _bDate + '#booking-' + booking.id;
   }
 %>
 <%- include('_backbar', { backHref: _boardBackHref }) %>

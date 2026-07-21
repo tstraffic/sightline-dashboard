@@ -30,13 +30,13 @@
 
 <%
   // Return to the board for THIS booking's day, scrolled to its card — not
-  // today's default board.
+  // today's default board. start_datetime is a NAIVE Sydney-local string, so
+  // slice the date straight off it; new Date() on the UTC production box
+  // parsed it as UTC and sent afternoon shifts to the next day's board.
   var _boardBackHref = '/bookings';
   if (b && b.start_datetime) {
-    try {
-      var _bDate = new Date(String(b.start_datetime).replace(' ', 'T')).toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
-      if (/^\d{4}-\d{2}-\d{2}$/.test(_bDate)) _boardBackHref = '/bookings?date=' + _bDate + '#booking-' + b.id;
-    } catch (e) {}
+    var _bDate = String(b.start_datetime).slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(_bDate)) _boardBackHref = '/bookings?date=' + _bDate + '#booking-' + b.id;
   }
 %>
 <%- include('_backbar', { backHref: _boardBackHref }) %>
@@ -632,7 +632,7 @@
                   <button type="button" class="bv-edit-toggle text-gray-300 hover:text-brand-600 transition" title="<%= isPlaceholder ? 'Set vehicle' : 'Edit vehicle' %>" data-vehicle-id="<%= v.id %>">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                   </button>
-                  <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/remove" class="inline">
+                  <form method="POST" action="/bookings/<%= b.id %>/vehicles/<%= v.id %>/remove" class="inline" onsubmit="return confirm('Remove this vehicle from the booking?')">
                     <%- include('../partials/csrf') %>
                     <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Remove">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -706,7 +706,7 @@
                       <span class="text-xs font-semibold text-gray-800 flex-1 min-w-0 truncate"><%= eq.equipment_name || eq.asset_name || 'Gear' %><% if (eq.quantity > 1) { %> <span class="text-gray-400 font-bold">×<%= eq.quantity %></span><% } %></span>
                       <% if (eq.hire_unit_id) { %><span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20" title="Hired<%= eq.supplier_name ? ' from ' + eq.supplier_name : '' %>">HIRED</span><% } %>
                       <% if (destLabel) { %><span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[9px] font-bold <%= faulty ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20' : 'bg-gray-100 text-gray-600 ring-1 ring-gray-200' %>" title="From the crew's return report"><%= faulty ? '⚠ FAULTY · ' : '' %><%= destLabel.toUpperCase() %></span><% } %>
-                      <form method="POST" action="/bookings/<%= b.id %>/equipment/<%= eq.id %>/remove" class="inline">
+                      <form method="POST" action="/bookings/<%= b.id %>/equipment/<%= eq.id %>/remove" class="inline" onsubmit="return confirm('Remove this equipment from the booking?')">
                         <%- include('../partials/csrf') %>
                         <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Detach &amp; remove"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
                       </form>
@@ -1224,7 +1224,7 @@
                 <div class="flex items-center gap-2">
                   <% if (n.is_private) { %><span class="text-[10px] text-amber-500 font-medium">Private</span><% } %>
                   <span class="text-[10px] text-gray-400"><%= formatDateTime(n.created_at) %></span>
-                  <form method="POST" action="/bookings/<%= b.id %>/notes/<%= n.id %>/delete" class="inline">
+                  <form method="POST" action="/bookings/<%= b.id %>/notes/<%= n.id %>/delete" class="inline" onsubmit="return confirm('Delete this note? This can\'t be undone.')">
                     <%- include('../partials/csrf') %>
                     <button type="submit" class="text-gray-300 hover:text-red-500 transition"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
                   </form>
@@ -1421,7 +1421,7 @@
                   <% } %>
                 </button>
               </form>
-              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/delete" class="inline">
+              <form method="POST" action="/bookings/<%= b.id %>/documents/<%= doc.id %>/delete" class="inline" onsubmit="return confirm('Delete this document? The file is removed permanently and workers stop seeing it immediately.')">
                 <%- include('../partials/csrf') %>
                 <button type="submit" class="text-gray-300 hover:text-red-500 transition" title="Delete"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
               </form>
@@ -1466,7 +1466,7 @@
               </div>
               <div class="flex items-center gap-2">
                 <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium border <%= tagColor %>"><%= tagLabel %></span>
-                <form method="POST" action="/bookings/<%= b.id %>/requirements/<%= r.id %>/delete" class="inline">
+                <form method="POST" action="/bookings/<%= b.id %>/requirements/<%= r.id %>/delete" class="inline" onsubmit="return confirm('Delete this site requirement?')">
                   <%- include('../partials/csrf') %>
                   <button type="submit" class="text-gray-300 hover:text-red-500 transition"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
                 </form>
@@ -1518,7 +1518,7 @@
                   </span>
                 <% } %>
               </div>
-              <form method="POST" action="/bookings/<%= b.id %>/equipment/<%= eq.id %>/remove" class="inline">
+              <form method="POST" action="/bookings/<%= b.id %>/equipment/<%= eq.id %>/remove" class="inline" onsubmit="return confirm('Remove this equipment from the booking?')">
                 <%- include('../partials/csrf') %>
                 <button type="submit" class="text-gray-300 hover:text-red-500 transition"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
               </form>

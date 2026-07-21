@@ -629,7 +629,7 @@
                 <% }) %>
               </select>
             </form>
-            <form method="POST" action="/tasks/<%= task.id %>/subtasks/<%= s.id %>/delete" class="opacity-0 group-hover:opacity-100 transition-opacity">
+            <form method="POST" action="/tasks/<%= task.id %>/subtasks/<%= s.id %>/delete" class="opacity-0 group-hover:opacity-100 transition-opacity" onsubmit="return confirm('Delete this subtask? This can\'t be undone.')">
               <%- include('../partials/csrf') %>
               <button type="submit" class="text-gray-300 hover:text-red-500 transition-colors" title="Delete subtask"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
             </form>
@@ -671,7 +671,7 @@
               <% if (d.due_date) { %>
                 <span class="text-xs text-gray-400"><%= new Date(d.due_date).toLocaleDateString('en-AU', { day: 'numeric', month: 'short' }) %></span>
               <% } %>
-              <form method="POST" action="/tasks/<%= task.id %>/dependencies/<%= d.dep_id %>/delete" class="opacity-0 group-hover:opacity-100 transition-opacity">
+              <form method="POST" action="/tasks/<%= task.id %>/dependencies/<%= d.dep_id %>/delete" class="opacity-0 group-hover:opacity-100 transition-opacity" onsubmit="return confirm('Remove this dependency?')">
                 <%- include('../partials/csrf') %>
                 <button type="submit" class="text-gray-300 hover:text-red-500 transition-colors" title="Remove dependency"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
               </form>
@@ -827,7 +827,7 @@
             </div>
             <% const canRemove = editable || (user && user.id === w.user_id); %>
             <% if (canRemove) { %>
-              <form method="POST" action="/tasks/<%= task.id %>/watchers/<%= w.user_id %>/remove" class="inline">
+              <form method="POST" action="/tasks/<%= task.id %>/watchers/<%= w.user_id %>/remove" class="inline" onsubmit="return confirm('Remove this watcher?')">
                 <%- include('../partials/csrf') %>
                 <button type="submit" class="text-xs text-gray-400 hover:text-red-600">Remove</button>
               </form>

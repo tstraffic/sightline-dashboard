@@ -285,7 +285,7 @@
                       <%- include('../partials/csrf') %>
                       <button class="px-1.5 py-0.5 bg-red-700 hover:bg-red-600 text-white text-[10px] rounded transition-colors">Cancel</button>
                     </form>
-                    <form method="POST" action="/allocations/<%= a.id %>/delete?date=<%= selectedDate %>" class="inline">
+                    <form method="POST" action="/allocations/<%= a.id %>/delete?date=<%= selectedDate %>" class="inline" onsubmit="return confirm('Delete this allocation? The crew member is removed from the shift.')">
                       <%- include('../partials/csrf') %>
                       <button class="px-1.5 py-0.5 bg-gray-100 hover:bg-gray-300 text-gray-700 text-[10px] rounded transition-colors">Del</button>
                     </form>

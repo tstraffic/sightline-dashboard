@@ -1178,7 +1178,10 @@ router.get('/', (req, res) => {
       (SELECT COUNT(*) FROM booking_vehicles bv WHERE bv.booking_id = b.id) AS vehicle_count,
       (SELECT COUNT(*) FROM booking_documents bd WHERE bd.booking_id = b.id) AS doc_count,
       (SELECT COUNT(*) FROM booking_notes bn WHERE bn.booking_id = b.id) AS note_count,
-      (SELECT COUNT(*) FROM booking_dockets bdk WHERE bdk.booking_id = b.id) AS docket_count
+      (SELECT COUNT(*) FROM booking_dockets bdk WHERE bdk.booking_id = b.id)
+        + (SELECT COUNT(*) FROM docket_signatures ds WHERE ds.booking_id = b.id AND ds.status = 'current') AS docket_count,
+      (SELECT COUNT(*) FROM shift_tasks st WHERE st.booking_id = b.id) AS task_count,
+      (SELECT COUNT(*) FROM safety_forms sf WHERE sf.booking_id = b.id) AS form_count
     FROM bookings b
     LEFT JOIN jobs j ON b.job_id = j.id
     LEFT JOIN clients c ON b.client_id = c.id
@@ -1272,7 +1275,7 @@ router.get('/', (req, res) => {
         warnings: conflictIds.has(c.crew_member_id) ? ['tight_schedule'] : [],
       }));
       const crew_blocks = deriveCrewBlocks(crewWithWarn, vehiclesByBooking[r.id], reqsByBooking[r.id], gearByBooking[r.id]);
-      return { ...r, crew_blocks, counts: { docs: r.doc_count, notes: r.note_count, dockets: r.docket_count } };
+      return { ...r, crew_blocks, counts: { docs: r.doc_count, notes: r.note_count, dockets: r.docket_count, tasks: r.task_count, forms: r.form_count } };
     })
     .filter(b => {
       if (!filterSearch) return true;

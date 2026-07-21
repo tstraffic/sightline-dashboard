@@ -40,7 +40,7 @@ function nextIncidentNumber(db) {
 // GET /w/incidents — List worker's reported incidents
 router.get('/incidents', (req, res) => {
   const db = getDb();
-  const crewMemberId = req.session.worker.crew_member_id;
+  const crewMemberId = req.session.worker.id; // session stores the crew id as .id (was .crew_member_id — undefined, which broke the whole module)
 
   const incidents = db.prepare(`
     SELECT i.*, j.job_number, j.client, j.site_address
@@ -63,7 +63,7 @@ router.get('/incidents', (req, res) => {
 // GET /w/incidents/new — New incident report form
 router.get('/incidents/new', (req, res) => {
   const db = getDb();
-  const crewMemberId = req.session.worker.crew_member_id;
+  const crewMemberId = req.session.worker.id;
 
   // Get worker's current/recent allocations for job selector
   const allocations = db.prepare(`
@@ -93,7 +93,7 @@ router.get('/incidents/new', (req, res) => {
 // POST /w/incidents — Submit incident report
 router.post('/incidents', upload.array('photos', 5), (req, res) => {
   const db = getDb();
-  const crewMemberId = req.session.worker.crew_member_id;
+  const crewMemberId = req.session.worker.id;
   const workerName = req.session.worker.full_name;
 
   const {
@@ -176,7 +176,7 @@ router.post('/incidents', upload.array('photos', 5), (req, res) => {
 // GET /w/incidents/:id — View incident detail
 router.get('/incidents/:id', (req, res) => {
   const db = getDb();
-  const crewMemberId = req.session.worker.crew_member_id;
+  const crewMemberId = req.session.worker.id;
 
   // Verify the worker reported this incident
   const incident = db.prepare(`

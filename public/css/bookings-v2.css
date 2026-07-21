@@ -949,6 +949,31 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 :root[data-theme="light"] .bk2-card-footer a:hover { color: #2B7FFF; background: rgba(43,127,255,0.04); }
 :root[data-theme="light"] .bk2-card-footer .bk2-tab-count { background: #E5E7EB; color: #374151; }
 
+/* Footer items deep-link into the booking page's matching tab — give them a
+   real hover/focus affordance so they read as buttons, not decoration. */
+.bk2-card-footer .bk2-card-goto { cursor: pointer; border-radius: 6px; }
+.bk2-card-footer .bk2-card-goto:hover,
+.bk2-card-footer .bk2-card-goto:focus-visible { color: #60A5FA; background: rgba(96,165,250,0.08); outline: none; }
+:root[data-theme="light"] .bk2-card-footer .bk2-card-goto:hover,
+:root[data-theme="light"] .bk2-card-footer .bk2-card-goto:focus-visible { color: #2B7FFF; background: rgba(43,127,255,0.06); }
+
+/* Dockets item lights up once a docket has been submitted for the shift —
+   the count chip goes emerald so "signed docket exists" reads at a glance. */
+.bk2-card-footer .bk2-card-goto.is-submitted { color: #6EE7B7; }
+.bk2-card-footer .bk2-card-goto.is-submitted .bk2-tab-count { background: rgba(16,185,129,0.22); color: #6EE7B7; }
+:root[data-theme="light"] .bk2-card-footer .bk2-card-goto.is-submitted { color: #047857; }
+:root[data-theme="light"] .bk2-card-footer .bk2-card-goto.is-submitted .bk2-tab-count { background: #D1FAE5; color: #047857; }
+
+/* Count badges on the slide-over editor's tab strip (stamped by JS from the
+   card's data-counts when the editor opens). */
+.bk2-edit-tab .bk2-tab-count {
+  font-size: 10px; font-weight: 700; padding: 0 6px; border-radius: 9999px;
+  background: rgba(255,255,255,0.10); color: #E2E8F0; margin-left: 4px;
+}
+:root[data-theme="light"] .bk2-edit-tab .bk2-tab-count { background: #E5E7EB; color: #374151; }
+.bk2-edit-tab .bk2-tab-count.is-submitted { background: rgba(16,185,129,0.25); color: #6EE7B7; }
+:root[data-theme="light"] .bk2-edit-tab .bk2-tab-count.is-submitted { background: #D1FAE5; color: #047857; }
+
 /* Empty state — calm, no-emoji card with a soft brand-accented icon. */
 .bk2-empty {
   background: rgba(255,255,255,0.02);
