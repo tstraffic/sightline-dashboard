@@ -575,6 +575,20 @@
   :root[data-theme="light"] .wh-hero .wd-stat-tile-value { color: #0F1115 !important; }
   :root[data-theme="light"] .wh-hero .wd-stat-tile-unit  { color: #6B7280 !important; }
   :root[data-theme="light"] .wh-hero .wd-stat-tile-sub   { color: #4B5563 !important; }
+
+  /* Compliance alert — the dark ambers (#FDE68A body, #FCD34D list) go
+     near-invisible on the pale amber wash in light mode. */
+  :root[data-theme="light"] .wh-alert    { color: #92400E; }
+  :root[data-theme="light"] .wh-alert h4 { color: #92400E; }
+  :root[data-theme="light"] .wh-alert ul { color: #B45309; }
+
+  /* Birthday modal keeps its dark celebration gradient in BOTH themes, so
+     its white inline text must dodge worker.css's light-mode colour nukes.
+     The id selector outranks the attribute nukes. */
+  :root[data-theme="light"] #my-bday-modal [style*="color: #fff"],
+  :root[data-theme="light"] #my-bday-modal [style*="color:#fff"],
+  :root[data-theme="light"] #my-bday-modal [style*="color: white"] { color: #fff !important; }
+  :root[data-theme="light"] #my-bday-modal [style*="color: rgba(255,255,255,0.75)"] { color: rgba(255,255,255,0.75) !important; }
 </style>
 
 <div class="wh-wrap">
@@ -781,7 +795,7 @@
                   background: linear-gradient(135deg, #2B7FFF, #1D6AE5);
                   display: flex; align-items: center; justify-content: center; flex-shrink: 0;
                   box-shadow: 0 4px 10px rgba(43,127,255,0.35);">
-        <svg style="width: 18px; height: 18px; color: white;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <svg class="keep-white" style="width: 18px; height: 18px;" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
         </svg>
       </div>

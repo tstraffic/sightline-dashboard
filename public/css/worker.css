@@ -201,6 +201,19 @@ input[type="tel"], input[type="number"], select, textarea {
 :root[data-theme="light"] .text-white\/25 { color: #9CA3AF !important; }
 :root[data-theme="light"] .text-white\/20 { color: #D1D5DB !important; }
 
+/* The .text-white remap above assumes the surface flips to white in light
+   mode. Solid saturated -500/-600/-700 button fills DON'T flip — they're
+   Tailwind constants — so their labels must stay white in both themes
+   (Accept/Decline on job detail, form submits, etc.). Higher specificity
+   than the remap, so order alone doesn't matter. */
+:root[data-theme="light"] .bg-emerald-500.text-white, :root[data-theme="light"] .bg-emerald-600.text-white, :root[data-theme="light"] .bg-emerald-700.text-white,
+:root[data-theme="light"] .bg-red-500.text-white, :root[data-theme="light"] .bg-red-600.text-white, :root[data-theme="light"] .bg-red-700.text-white,
+:root[data-theme="light"] .bg-blue-500.text-white, :root[data-theme="light"] .bg-blue-600.text-white, :root[data-theme="light"] .bg-blue-700.text-white,
+:root[data-theme="light"] .bg-amber-500.text-white, :root[data-theme="light"] .bg-amber-600.text-white, :root[data-theme="light"] .bg-amber-700.text-white,
+:root[data-theme="light"] .bg-brand-700.text-white, :root[data-theme="light"] .bg-brand-800.text-white {
+  color: #FFFFFF !important;
+}
+
 /* ── Brand color → Atomis Emerald (same in both modes) ── */
 .text-brand-600, .text-brand-500 { color: #10B981 !important; }
 .text-brand-400 { color: #6EE7B7 !important; }
@@ -242,6 +255,27 @@ input[type="tel"], input[type="number"], select, textarea {
 :root[data-theme="light"] .bg-red-50 { background: #FEF2F2 !important; }
 :root[data-theme="light"] .bg-blue-50 { background: #EFF6FF !important; }
 :root[data-theme="light"] .bg-purple-50 { background: #FAF5FF !important; }
+
+/* Deep -700/-800 badge inks pair with the -50 washes above. In dark mode
+   the wash goes translucent-over-near-black, so the deep ink lands on a
+   dark surface (~2:1). Lift ONLY those pairings to the pale variants —
+   -700 inks on solid bg-*-100 chips are untouched. Light mode restores
+   the Tailwind values. */
+.bg-amber-50 .text-amber-700, .bg-amber-50.text-amber-700,
+.bg-amber-50 .text-amber-800, .bg-amber-50.text-amber-800 { color: #FCD34D !important; }
+.bg-emerald-50 .text-emerald-700, .bg-emerald-50.text-emerald-700 { color: #6EE7B7 !important; }
+.bg-red-50 .text-red-700, .bg-red-50.text-red-700,
+.bg-red-50 .text-red-800, .bg-red-50.text-red-800 { color: #FCA5A5 !important; }
+.bg-blue-50 .text-blue-700, .bg-blue-50.text-blue-700 { color: #93C5FD !important; }
+.bg-purple-50 .text-purple-700, .bg-purple-50.text-purple-700 { color: #C4B5FD !important; }
+
+:root[data-theme="light"] .bg-amber-50 .text-amber-700, :root[data-theme="light"] .bg-amber-50.text-amber-700 { color: #B45309 !important; }
+:root[data-theme="light"] .bg-amber-50 .text-amber-800, :root[data-theme="light"] .bg-amber-50.text-amber-800 { color: #92400E !important; }
+:root[data-theme="light"] .bg-emerald-50 .text-emerald-700, :root[data-theme="light"] .bg-emerald-50.text-emerald-700 { color: #047857 !important; }
+:root[data-theme="light"] .bg-red-50 .text-red-700, :root[data-theme="light"] .bg-red-50.text-red-700 { color: #B91C1C !important; }
+:root[data-theme="light"] .bg-red-50 .text-red-800, :root[data-theme="light"] .bg-red-50.text-red-800 { color: #991B1B !important; }
+:root[data-theme="light"] .bg-blue-50 .text-blue-700, :root[data-theme="light"] .bg-blue-50.text-blue-700 { color: #1D4ED8 !important; }
+:root[data-theme="light"] .bg-purple-50 .text-purple-700, :root[data-theme="light"] .bg-purple-50.text-purple-700 { color: #7E22CE !important; }
 
 /* ── Ring overrides for badges ── */
 .ring-emerald-500\/20 { --tw-ring-color: rgba(16,185,129,0.2) !important; }
@@ -808,5 +842,38 @@ input[type="search"], input[type="text"].bg-white {
    chips (next-shift "Tap to confirm"/"Accepted", forms Signature chip,
    leave icons). Pale mint/amber on white is ~1.6:1 — remap to the
    accessible deep variants, same pattern as the #fff nukes above. */
-:root[data-theme="light"] [style*="color:#6EE7B7"] { color: #047857 !important; }
-:root[data-theme="light"] [style*="color:#FCD34D"] { color: #B45309 !important; }
+:root[data-theme="light"] [style*="color:#6EE7B7"], :root[data-theme="light"] [style*="color: #6EE7B7"] { color: #047857 !important; }
+:root[data-theme="light"] [style*="color:#FCD34D"], :root[data-theme="light"] [style*="color: #FCD34D"] { color: #B45309 !important; }
+/* Remaining pale accent inks used inline across worker views (checklist
+   "Required" amber, "See all" blue links, kudos chips, birthday eyebrows,
+   pay-detail deduction reds, …). Same nuke pattern: each maps to its
+   accessible deep variant on white. Checked for substring collisions —
+   the only inline `border-color:#10B981` usages (booking-detail tabs)
+   also carry emerald text, so forcing the deep emerald there is correct. */
+:root[data-theme="light"] [style*="color:#FBBF24"], :root[data-theme="light"] [style*="color: #FBBF24"] { color: #B45309 !important; }
+:root[data-theme="light"] [style*="color:#F59E0B"], :root[data-theme="light"] [style*="color: #F59E0B"] { color: #B45309 !important; }
+:root[data-theme="light"] [style*="color:#60A5FA"], :root[data-theme="light"] [style*="color: #60A5FA"] { color: #2563EB !important; }
+:root[data-theme="light"] [style*="color:#93C5FD"], :root[data-theme="light"] [style*="color: #93C5FD"] { color: #1D4ED8 !important; }
+:root[data-theme="light"] [style*="color:#34D399"], :root[data-theme="light"] [style*="color: #34D399"] { color: #047857 !important; }
+:root[data-theme="light"] [style*="color:#10B981"], :root[data-theme="light"] [style*="color: #10B981"] { color: #047857 !important; }
+:root[data-theme="light"] [style*="color:#FBCFE8"], :root[data-theme="light"] [style*="color: #FBCFE8"] { color: #9D174D !important; }
+:root[data-theme="light"] [style*="color:#F472B6"], :root[data-theme="light"] [style*="color: #F472B6"] { color: #DB2777 !important; }
+:root[data-theme="light"] [style*="color:#F87171"], :root[data-theme="light"] [style*="color: #F87171"] { color: #DC2626 !important; }
+:root[data-theme="light"] [style*="color:#FB7185"], :root[data-theme="light"] [style*="color: #FB7185"] { color: #E11D48 !important; }
+:root[data-theme="light"] [style*="color:#A78BFA"], :root[data-theme="light"] [style*="color: #A78BFA"] { color: #6D28D9 !important; }
+:root[data-theme="light"] [style*="color:#C4B5FD"], :root[data-theme="light"] [style*="color: #C4B5FD"] { color: #6D28D9 !important; }
+:root[data-theme="light"] [style*="color:#FDA4AF"], :root[data-theme="light"] [style*="color: #FDA4AF"] { color: #BE123C !important; }
+:root[data-theme="light"] [style*="color:#FCA5A5"], :root[data-theme="light"] [style*="color: #FCA5A5"] { color: #DC2626 !important; }
+
+/* Escape hatch from the nukes: text/icons sitting on surfaces that stay
+   coloured in both themes (gradient icon chips, celebration modals).
+   Declared after the nukes at matching specificity so it wins. */
+body.worker-portal .keep-white,
+body.worker-portal .keep-white svg { color: #FFFFFF !important; }
+:root[data-theme="light"] body.worker-portal .keep-white,
+:root[data-theme="light"] body.worker-portal .keep-white svg { color: #FFFFFF !important; }
+
+/* Kudos value chips colour themselves from the DB (inline style with a
+   per-value hex) — no static remap possible. Darken the rendered chip
+   in light mode instead so pale hues still read on white. */
+:root[data-theme="light"] .dyn-pill { filter: brightness(0.72) saturate(1.35); }

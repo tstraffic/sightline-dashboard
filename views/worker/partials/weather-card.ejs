@@ -97,6 +97,9 @@
     border-color: rgba(245,158,11,0.30);
     color: #FCD34D;
   }
+  /* display:flex above outranks the UA's [hidden]{display:none}, so the
+     no-warning placeholder rendered as an empty amber pill. */
+  .wx-warn[hidden] { display: none; }
 
   /* Animated icon mechanics — same primitives as the old card, just
      scaled to the smaller 44px container. */

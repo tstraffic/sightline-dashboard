@@ -151,4 +151,16 @@
     border-color: #A7F3D0;
     color: #047857;
   }
+
+  /* Take-home total card (pay-run detail). Was an inline dark gradient on
+     the .sf-section, which outranked the light .sf-section override above
+     and left a half-dark card with nuked-dark labels on it. */
+  .sf-takehome {
+    background: linear-gradient(160deg, rgba(16,185,129,0.18), rgba(10,22,40,0.5));
+    border-color: rgba(16,185,129,0.3);
+  }
+  :root[data-theme="light"] .sf-takehome {
+    background: linear-gradient(160deg, #D1FAE5, #FFFFFF);
+    border-color: #A7F3D0;
+  }
 </style>

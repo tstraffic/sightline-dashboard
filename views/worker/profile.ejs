@@ -181,6 +181,16 @@
     border-color: #E5E7EB;
   }
   :root[data-theme="light"] .pf-check span { color: #374151; }
+  /* The hero keeps its dark gradient in light mode, but its dimmed white
+     text tokens (55%/50% white) sink into the grey end of the gradient —
+     brighten them so EMP code / role / lock chip stay readable.
+     !important: worker.css's [class$="-meta"] safety net (specificity
+     0,4,1) would otherwise repaint this grey for the light page bg. */
+  :root[data-theme="light"] .pf-hero .pf-meta { color: rgba(255,255,255,0.88) !important; }
+  :root[data-theme="light"] .pf-hero .pf-lock-chip { background: rgba(255,255,255,0.16); color: rgba(255,255,255,0.92); }
+  /* Validation red — #F87171 is too pale on the white cards. */
+  :root[data-theme="light"] .pf-err { color: #DC2626; }
+  :root[data-theme="light"] .pf-btn-danger { color: #DC2626; }
 </style>
 
 <div class="pf-wrap">
@@ -229,7 +239,7 @@
         <div style="min-width: 0;">
           <% if (kudosSummary.topValue) { %>
             <p style="font-size: 0.7rem; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700;">Most recognised for</p>
-            <span style="display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= kudosSummary.topValue.colour %>22; color: <%= kudosSummary.topValue.colour %>;">★ <%= kudosSummary.topValue.name %></span>
+            <span class="dyn-pill" style="display: inline-flex; align-items: center; gap: 5px; margin-top: 5px; padding: 4px 10px; border-radius: 999px; font-size: 0.78rem; font-weight: 700; background: <%= kudosSummary.topValue.colour %>22; color: <%= kudosSummary.topValue.colour %>;">★ <%= kudosSummary.topValue.name %></span>
           <% } else if (kudosSummary.received === 0) { %>
             <p style="font-size: 0.82rem; color: rgba(255,255,255,0.6);">No kudos yet &mdash; send one to a teammate and start the love.</p>
           <% } else { %>
@@ -242,7 +252,7 @@
           <% kudosSummary.recent.forEach(function (r) { %>
             <a href="/w/feed/<%= r.id %>" style="display: block; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.04); text-decoration: none;">
               <div style="display: flex; align-items: start; gap: 8px;">
-                <% if (r.value_name) { %><span style="display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; font-size: 0.62rem; font-weight: 700; background: <%= r.value_colour %>22; color: <%= r.value_colour %>; flex-shrink: 0;"><%= r.value_name %></span><% } %>
+                <% if (r.value_name) { %><span class="dyn-pill" style="display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 999px; font-size: 0.62rem; font-weight: 700; background: <%= r.value_colour %>22; color: <%= r.value_colour %>; flex-shrink: 0;"><%= r.value_name %></span><% } %>
                 <p style="font-size: 0.78rem; color: rgba(255,255,255,0.78); line-height: 1.3; flex: 1;">"<%= r.message.slice(0, 140) %><%= r.message.length > 140 ? '&hellip;' : '' %>" <span style="color: rgba(255,255,255,0.4);">&mdash; <%= r.sender_name %></span></p>
               </div>
             </a>
