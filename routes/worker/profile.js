@@ -13,6 +13,7 @@ const { getWorkerNotificationPrefs, setWorkerNotificationPref } = require('../..
 // when no row exists in worker_notification_prefs.
 const NOTIFICATION_CATEGORIES = [
   { key: 'shift_reminder', label: 'Shift reminders', sub: 'Day before each shift starts' },
+  { key: 'bookings', label: 'Shift updates', sub: 'When a shift is assigned, moved, cancelled, or its notes change' },
   { key: 'announcement', label: 'Announcements', sub: 'Company-wide messages from the office' },
   { key: 'swms_update', label: 'New SWMS', sub: 'SWMS that need your acknowledgement' },
   { key: 'sop_update', label: 'New SOP', sub: 'SOPs that need your acknowledgement' },
@@ -22,6 +23,7 @@ const NOTIFICATION_CATEGORIES = [
   { key: 'kudos', label: 'Kudos', sub: 'When a workmate sends you kudos' },
   { key: 'comment_response', label: 'Office responses', sub: 'Replies to your safety comments' },
   { key: 'cert_expiry', label: 'Certificate expiry', sub: '30 / 14 / 7 days before tickets lapse' },
+  { key: 'birthday', label: 'Birthday wishes', sub: 'A happy-birthday ping on your day' },
 ];
 
 const PHOTO_BASE = path.join(__dirname, '..', '..', 'data', 'uploads', 'hr');
