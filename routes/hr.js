@@ -606,6 +606,21 @@ router.post('/employees', requirePermission('hr_employees'), (req, res) => {
     rateFields.rate_travel || 0, rateFields.rate_meal || 0, rateFields.rate_weekend || 0
   );
 
+  // Meal & travel allowances option (TFN only). Unticked on a TFN worker →
+  // both allowance blocks set so nothing is auto-paid. Cash/ABN never
+  // receive meal/travel regardless, so their blocks stay clear.
+  try {
+    if (b.mt_allowances_present) {
+      const rawPt = Array.isArray(b.payment_type) ? b.payment_type[b.payment_type.length - 1] : b.payment_type;
+      const newPt = String(rawPt || '').toLowerCase();
+      const mtChecked = b.mt_allowances === '1' || b.mt_allowances === 'on'
+        || (Array.isArray(b.mt_allowances) && b.mt_allowances.length > 0);
+      const blocked = (newPt === 'tfn' && !mtChecked) ? 1 : 0;
+      db.prepare('UPDATE employees SET block_travel_allowance = ?, block_meal_allowance = ? WHERE id = ?')
+        .run(blocked, blocked, result.lastInsertRowid);
+    }
+  } catch (e) { console.error('[hr/employees create] M/T flag save failed:', e.message); }
+
   req.flash('success', 'Employee created successfully.');
   res.redirect(`/hr/employees/${result.lastInsertRowid}`);
 });
@@ -1212,6 +1227,17 @@ router.post('/employees/:id', requirePermission('hr_employees'), (req, res) => {
   set('tc_licence_state', b.tc_licence_state || '');
   set('tc_licence_date_of_issue', b.tc_licence_date_of_issue || '');
   set('drivers_licence_number', b.drivers_licence_number || '');
+
+  // Meal & travel allowances option (TFN only, from the worker-file form).
+  // Only applied when the form actually carried the control, so older
+  // clients / other POSTs to this route don't silently flip the blocks.
+  if (b.mt_allowances_present) {
+    const mtPt = String(b.payment_type || '').toLowerCase();
+    const mtChecked = b.mt_allowances === '1' || b.mt_allowances === 'on';
+    const mtBlocked = (mtPt === 'tfn' && !mtChecked) ? 1 : 0;
+    set('block_travel_allowance', mtBlocked);
+    set('block_meal_allowance', mtBlocked);
+  }
 
   if (canViewRates(req.session.user)) {
     set('rate_day', parseFloat(b.rate_day) || 0);

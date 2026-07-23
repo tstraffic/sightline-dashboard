@@ -876,6 +876,14 @@ router.post('/runs/:id/lines/:lineId', requirePermission('payroll'), (req, res) 
 
   if (b.other_allowance !== undefined) updates.other_allowance = toNum(b.other_allowance);
 
+  // Meal + travel are TFN-only. Whatever the form posted, a Cash/ABN/
+  // unclassified line always saves with zeroed travel + meal so the rule
+  // can't be bypassed from the modal.
+  if (!isPaidOnlyUpdate && newPT !== 'tfn') {
+    updates.travel_rate = 0;  updates.travel_count = 0;  updates.travel_allowance = 0;
+    updates.meal_rate   = 0;  updates.meal_count   = 0;  updates.meal_allowance   = 0;
+  }
+
   // Paid
   if (b.paid !== undefined) {
     const paidNow = (b.paid === true || b.paid === '1' || b.paid === 1 || b.paid === 'true' || b.paid === 'on') ? 1 : 0;
@@ -1790,6 +1798,10 @@ router.post('/rates', requirePermission('payroll'), (req, res) => {
       const r = data[id];
       if (!r || typeof r !== 'object') continue;
       try {
+        // Meal + travel are TFN-only — zero them on Cash/ABN rows before both
+        // the UPDATE and the diverges-from-preset probe below.
+        const rowPT = String(r.payment_type || '').toLowerCase();
+        if (rowPT !== 'tfn') { r.rate_meal = 0; r.rate_fares_daily = 0; }
         const values = FIELDS.map(f => {
           if (f.kind === 'pt') {
             const pt = String(r.payment_type || '').toLowerCase();

@@ -12,12 +12,11 @@
   });
 
   // What columns each tab shows. Cash + ABN + TFN have different rate sets.
+  // Meal + travel are TFN-only allowances — Cash/ABN tabs don't carry them.
   const COLS = {
     cash: [
       { key: 'rate_day',           label: 'Day',     step: '0.01' },
       { key: 'rate_night',         label: 'Night',   step: '0.01' },
-      { key: 'rate_meal',          label: 'Meal',    step: '0.01' },
-      { key: 'rate_fares_daily',   label: 'Travel',  step: '0.01' },
     ],
     abn: [
       { key: 'rate_day',           label: 'Day',     step: '0.01' },
@@ -25,8 +24,6 @@
       { key: 'rate_night',         label: 'Night',   step: '0.01' },
       { key: 'rate_night_ot',      label: 'Night OT',step: '0.01' },
       { key: 'rate_weekend',       label: 'Weekend', step: '0.01' },
-      { key: 'rate_meal',          label: 'Meal',    step: '0.01' },
-      { key: 'rate_fares_daily',   label: 'Travel',  step: '0.01' },
     ],
     tfn: [
       { key: 'rate_day',            label: 'Day',      step: '0.01' },
@@ -135,8 +132,8 @@
                     <% cols.forEach(c => { %>
                       <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest"><%= c.label %></th>
                     <% }) %>
-                    <% if (tab.key !== 'unclassified') { %>
-                      <th class="px-2 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest" title="Block an allowance: not paid and hidden from the worker's app">Block</th>
+                    <% if (tab.key === 'tfn') { %>
+                      <th class="px-2 py-2 text-center text-[10px] font-bold text-gray-500 uppercase tracking-widest" title="Block an allowance: not paid and hidden from the worker's app. Meal + travel are TFN-only.">Block</th>
                     <% } %>
                     <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">BSB</th>
                     <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">Account</th>
@@ -209,7 +206,7 @@
                           <% } %>
                         </td>
                       <% }) %>
-                      <% if (tab.key !== 'unclassified') { %>
+                      <% if (tab.key === 'tfn') { %>
                         <td class="px-2 py-1 text-center whitespace-nowrap">
                           <label class="inline-flex items-center gap-1 text-[10px] text-gray-600 mr-1.5" title="Block travel allowance">
                             <input type="checkbox" name="rows[emp_<%= e.id %>][block_travel_allowance]" value="1" <%= e.block_travel_allowance ? 'checked' : '' %> class="rounded border-gray-300"> T

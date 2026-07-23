@@ -364,7 +364,10 @@
             </div>
           </form>
 
-          <% const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_5plus:'Night 5+',rate_weekend_short:'Sat ≤2h',rate_weekend:'Sat / Wknd',rate_public_holiday:'PH',rate_fares_daily:'Travel',rate_meal:'Meal'}; %>
+          <% const isTfnWorker = String(employee.payment_type || '').toLowerCase() === 'tfn'; %>
+          <% // Meal + travel are TFN-only award allowances — Cash/ABN profiles don't show them.
+             const rateLabels = {rate_day:'Day',rate_ot:'OT',rate_dt:'DT',rate_night:'Night',rate_night_5plus:'Night 5+',rate_weekend_short:'Sat ≤2h',rate_weekend:'Sat / Wknd',rate_public_holiday:'PH'};
+             if (isTfnWorker) { rateLabels.rate_fares_daily = 'Travel'; rateLabels.rate_meal = 'Meal'; } %>
           <div class="grid grid-cols-3 sm:grid-cols-5 gap-3">
             <% Object.entries(rateLabels).forEach(([key, label]) => { %>
               <% if (employee[key]) { %>
@@ -404,6 +407,7 @@
                 </label>
               <% }); %>
             </div>
+            <% if (isTfnWorker) { %>
             <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Block allowances <span class="font-normal normal-case text-gray-400">(hidden from worker + not paid)</span></p>
             <div class="flex flex-wrap items-center gap-4 mb-3">
               <label class="inline-flex items-center gap-2 text-xs text-gray-700">
@@ -415,6 +419,9 @@
                 Block meal allowance
               </label>
             </div>
+            <% } else { %>
+            <p class="text-[10px] text-gray-400 mb-3">Meal &amp; travel allowances are TFN-only — this <%= (employee.payment_type || 'unclassified').toUpperCase() %> worker doesn't receive them.</p>
+            <% } %>
             <div class="flex items-center justify-end">
               <button type="submit" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg">Save rates & blocks</button>
             </div>

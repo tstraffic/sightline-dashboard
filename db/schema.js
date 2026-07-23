@@ -13728,6 +13728,119 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 297 error:', e.message); }
   }
 
+  // 298: FY26 rate alignment — TFN from the published FWC pay guide for
+  // MA000020 (Casual — Civil construction, effective 01/07/2026, published
+  // 02/07/2026), Cash/ABN from the Internal Wage Panel v2.3. Where the panel
+  // shows a band ($30/$31), the preset stores the LOWER figure — the top of
+  // the band is applied per worker at dispatcher/GM discretion via a rate
+  // override. Meal + travel become TFN-only: cash/abn presets zeroed and
+  // cash/abn employee rate_meal / rate_fares_daily cleared. Non-overridden
+  // employees with a tier are re-stamped so the new card flows through.
+  if (!isMigrationApplied.get(298)) {
+    try {
+      // [tier] → TFN: day, satShort(=OT M–F ≤2h), satLong(=OT >2h / Sun),
+      // sun, PH, night<5, nightPerm, night5+ — verbatim from the pay guide.
+      const TFN_FY26 = {
+        1: [35.55, 49.77, 63.99, 63.99, 78.21, 49.77, 44.08, 39.82], // CW1(a)
+        2: [36.66, 51.33, 65.99, 65.99, 80.66, 51.33, 45.46, 41.06], // CW1(c)
+        3: [37.99, 53.18, 68.38, 68.38, 83.57, 53.18, 47.10, 42.55], // CW2
+        4: [39.03, 54.64, 70.25, 70.25, 85.86, 54.64, 48.39, 43.71], // CW3
+        5: [40.19, 56.26, 72.34, 72.34, 88.41, 56.26, 49.83, 45.01], // CW4
+        6: [41.35, 57.89, 74.43, 74.43, 90.97, 57.89, 51.27, 46.31], // CW5
+      };
+      // [tier] → ABN v2.3: day, sat, night/sun/PH (+ band note)
+      const ABN_V23 = {
+        1: [30, 33, 40, 'Band: Day $30–31 · Sat $33–34 · Night/Sun/PH $40–41'],
+        2: [32, 35, 42, 'Band: Day $32–33 · Sat $35–36 · Night/Sun/PH $42–43'],
+        3: [34, 37, 44, 'Band: Day $34–35 · Sat $37–38 · Night/Sun/PH $44–45'],
+        4: [37, 40, 47, ''],
+        5: [39, 42, 49, ''],
+        6: [41, 44, 51, ''],
+      };
+      // [tier] → Cash v2.3: day, sat, night/sun/PH (+ band note)
+      const CASH_V23 = {
+        1: [28, 31, 38, ''],
+        2: [30, 33, 40, 'Band: Day $30–31 · Sat $33–34 · Night/Sun/PH $40–41'],
+        3: [32, 35, 42, 'Band: Day $32–33 · Sat $35–36 · Night/Sun/PH $42–43'],
+        4: [35, 38, 45, 'Band: Day $35–36 · Sat $38–39 · Night/Sun/PH $45–46'],
+        5: [37, 40, 47, 'Band: Day $37–38 · Sat $40–41 · Night/Sun/PH $47–48'],
+        6: [40, 43, 50, 'Band: Day $40–41 · Sat $43–44 · Night/Sun/PH $50–51'],
+      };
+
+      const upd = db.prepare(`
+        UPDATE wage_tier_presets SET
+          rate_day = ?, rate_sat_short = ?, rate_sat_long = ?, rate_sun = ?,
+          rate_public_holiday = ?, rate_night = ?, rate_night_perm = ?,
+          rate_night_5plus = ?, travel_allowance = ?, meal_allowance = ?,
+          notes = ?, updated_at = CURRENT_TIMESTAMP
+        WHERE tier = ? AND payment_type = ? AND active = 1
+      `);
+      for (let t = 1; t <= 6; t++) {
+        const [day, satS, satL, sun, ph, n, nPerm, n5] = TFN_FY26[t];
+        // TFN meal/travel come from award_allowances at stamp time, not the preset.
+        upd.run(day, satS, satL, sun, ph, n, nPerm, n5, 0, 0,
+          'FWC pay guide MA000020 — Casual, Civil construction, eff. 01/07/2026', t, 'tfn');
+        const [aDay, aSat, aNsp, aNote] = ABN_V23[t];
+        upd.run(aDay, aSat, aSat, aNsp, aNsp, aNsp, 0, 0, 0, 0,
+          ('Internal Wage Panel v2.3. ' + aNote).trim(), t, 'abn');
+        const [cDay, cSat, cNsp, cNote] = CASH_V23[t];
+        upd.run(cDay, cSat, cSat, cNsp, cNsp, cNsp, 0, 0, 0, 0,
+          ('Internal Wage Panel v2.3. ' + cNote).trim(), t, 'cash');
+      }
+
+      // Allowances — FWC pay guide MA000020, effective 01/07/2026.
+      const ALLOW_FY26 = [
+        ['fares_daily',      22.41, 'All-purpose, paid for each day worked. TFN only.'],
+        ['meal',             19.74, 'TFN only — where the worker travels for the job and/or works a 9.5hr+ shift.'],
+        ['first_aid_basic',   4.03, null],
+        ['first_aid_higher',  6.38, null],
+        ['distant_work_km',   0.60, null],
+        ['site_to_site_km',   1.00, null],
+        ['industry_allowance', 1.77, 'Civil construction $1.77/hr — already included in the TFN casual hourly rates.'],
+      ];
+      for (const [code, amount, note] of ALLOW_FY26) {
+        if (note !== null) {
+          db.prepare("UPDATE award_allowances SET amount = ?, notes = ?, effective_from = '2026-07-01', updated_at = CURRENT_TIMESTAMP WHERE code = ?").run(amount, note, code);
+        } else {
+          db.prepare("UPDATE award_allowances SET amount = ?, effective_from = '2026-07-01', updated_at = CURRENT_TIMESTAMP WHERE code = ?").run(amount, code);
+        }
+      }
+
+      // Meal + travel are TFN-only from here on — clear the stored per-worker
+      // rates on cash/abn so profiles, the Worker Rates grid and pay-run
+      // fallbacks all agree. Historical pay-run lines are untouched.
+      db.exec(`
+        UPDATE employees SET rate_meal = 0, rate_fares_daily = 0
+        WHERE LOWER(COALESCE(payment_type, '')) IN ('cash', 'abn')
+          AND (COALESCE(rate_meal, 0) != 0 OR COALESCE(rate_fares_daily, 0) != 0)
+      `);
+
+      // Re-stamp every non-overridden worker sitting on a tier so the new
+      // card values land on their rate_* columns immediately.
+      try {
+        const { stampEmployeeRates } = require('../lib/wageTiers');
+        const workers = db.prepare(`
+          SELECT id, tier, payment_type FROM employees
+          WHERE tier BETWEEN 1 AND 6
+            AND LOWER(COALESCE(payment_type, '')) IN ('cash', 'abn', 'tfn')
+            AND COALESCE(rates_overridden, 0) = 0
+            AND deleted_at IS NULL
+        `).all();
+        let stamped = 0;
+        for (const w of workers) {
+          const r = stampEmployeeRates(db, w.id, w.tier, w.payment_type);
+          if (r.ok) stamped++;
+        }
+        if (workers.length) console.log(`Migration 298: re-stamped ${stamped}/${workers.length} tiered workers`);
+      } catch (e) {
+        console.error('Migration 298 re-stamp skipped:', e.message);
+      }
+
+      recordMigration.run(298, 'FY26 rate alignment: TFN from FWC pay guide, Cash/ABN from Wage Panel v2.3, allowances updated, M/T → TFN-only');
+      console.log('Migration 298 applied');
+    } catch (e) { console.error('Migration 298 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

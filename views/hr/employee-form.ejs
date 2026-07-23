@@ -222,6 +222,15 @@
             <option value="abn" <%= val('payment_type') === 'abn' ? 'selected' : '' %>>ABN</option>
           </select>
           <p class="text-[10px] text-gray-400 mt-0.5">How this employee is paid (TFN for PAYG, ABN for contractors)</p>
+          <% const mtOn = (typeof isEdit !== 'undefined' && isEdit && employee) ? !(employee.block_travel_allowance || employee.block_meal_allowance) : true; %>
+          <div class="js-mt-wrap mt-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 <%= val('payment_type') === 'tfn' ? '' : 'hidden' %>">
+            <label class="flex items-center gap-2 text-xs text-emerald-900 font-medium">
+              <input type="checkbox" name="mt_allowances" value="1" <%= mtOn ? 'checked' : '' %> class="js-mt-cb rounded border-gray-300">
+              Meal &amp; travel allowances
+            </label>
+            <p class="text-[10px] text-emerald-700 mt-0.5">TFN only — travel per day worked, meal on 9.5h+ shifts (award rates). Untick if this worker doesn't receive them.</p>
+            <input type="hidden" name="mt_allowances_present" value="1">
+          </div>
         </div>
         <div>
           <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Start Date</label>
@@ -441,6 +450,15 @@
           <option value="tfn" <%= val('payment_type') === 'tfn' ? 'selected' : '' %>>TFN</option>
           <option value="abn" <%= val('payment_type') === 'abn' ? 'selected' : '' %>>ABN</option>
         </select>
+        <% const mtOn2 = (typeof isEdit !== 'undefined' && isEdit && employee) ? !(employee.block_travel_allowance || employee.block_meal_allowance) : true; %>
+        <div class="js-mt-wrap mt-2 bg-emerald-50 border border-emerald-200 rounded-lg px-3 py-2 <%= val('payment_type') === 'tfn' ? '' : 'hidden' %>">
+          <label class="flex items-center gap-2 text-xs text-emerald-900 font-medium">
+            <input type="checkbox" name="mt_allowances" value="1" <%= mtOn2 ? 'checked' : '' %> class="js-mt-cb rounded border-gray-300">
+            Meal &amp; travel allowances
+          </label>
+          <p class="text-[10px] text-emerald-700 mt-0.5">TFN only — travel per day worked, meal on 9.5h+ shifts (award rates). Untick if this worker doesn't receive them.</p>
+          <input type="hidden" name="mt_allowances_present" value="1">
+        </div>
       </div>
       <div>
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Start Date</label>
@@ -1021,5 +1039,29 @@
 
   // Initialize
   goToStep(0);
+})();
+
+// Meal & travel allowances toggle is TFN-only — follow the Payment Type
+// select. The form renders duplicate field instances (wizard panels +
+// fallback layout) that all post, so keep every select and every checkbox
+// mirrored: changing one changes them all.
+(function() {
+  var selects = document.querySelectorAll('select[name="payment_type"]');
+  var checkboxes = document.querySelectorAll('.js-mt-cb');
+  function syncMT(changed) {
+    if (changed && changed.tagName === 'SELECT') {
+      selects.forEach(function(s) { if (s !== changed) s.value = changed.value; });
+    }
+    if (changed && changed.tagName === 'INPUT') {
+      checkboxes.forEach(function(c) { if (c !== changed) c.checked = changed.checked; });
+    }
+    var isTfn = selects.length > 0 && selects[0].value === 'tfn';
+    document.querySelectorAll('.js-mt-wrap').forEach(function(w) {
+      w.classList.toggle('hidden', !isTfn);
+    });
+  }
+  selects.forEach(function(s) { s.addEventListener('change', function() { syncMT(s); }); });
+  checkboxes.forEach(function(c) { c.addEventListener('change', function() { syncMT(c); }); });
+  syncMT(null);
 })();
 </script>

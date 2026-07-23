@@ -124,10 +124,6 @@
                         <%= c.label %>
                       </th>
                     <% }) %>
-                    <% if (key !== 'tfn') { %>
-                      <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest" title="Per-shift, flat. Not paid where the worker is supplied a ute.">Travel</th>
-                      <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-500 uppercase tracking-widest" title="Per-shift meal allowance.">Meal</th>
-                    <% } %>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-100">
@@ -152,29 +148,11 @@
                           </div>
                         </td>
                       <% }) %>
-                      <% if (key !== 'tfn') { %>
-                        <td class="px-1 py-2 text-right">
-                          <div class="inline-flex items-center">
-                            <span class="text-gray-400 text-xs mr-0.5">$</span>
-                            <input type="number" step="0.01" min="0"
-                              name="presets[p_<%= p.id %>][travel_allowance]"
-                              value="<%= (parseFloat(p.travel_allowance) || 0).toFixed(2) %>"
-                              class="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm text-right tabular-nums focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
-                          </div>
-                        </td>
-                        <td class="px-1 py-2 text-right">
-                          <div class="inline-flex items-center">
-                            <span class="text-gray-400 text-xs mr-0.5">$</span>
-                            <input type="number" step="0.01" min="0"
-                              name="presets[p_<%= p.id %>][meal_allowance]"
-                              value="<%= (parseFloat(p.meal_allowance) || 0).toFixed(2) %>"
-                              class="w-20 px-2 py-1.5 border border-gray-300 rounded text-sm text-right tabular-nums focus:border-brand-500 focus:ring-1 focus:ring-brand-500">
-                          </div>
-                        </td>
-                      <% } else { %>
-                        <input type="hidden" name="presets[p_<%= p.id %>][travel_allowance]" value="0">
-                        <input type="hidden" name="presets[p_<%= p.id %>][meal_allowance]" value="<%= (parseFloat(p.meal_allowance) || 0).toFixed(2) %>">
-                      <% } %>
+                      <%# Meal + travel are TFN-only (paid via the global fares/meal
+                          allowances). Mirror the stored preset values so a submit
+                          never wipes them, but they're no longer edited per card. %>
+                      <input type="hidden" name="presets[p_<%= p.id %>][travel_allowance]" value="<%= (parseFloat(p.travel_allowance) || 0).toFixed(2) %>">
+                      <input type="hidden" name="presets[p_<%= p.id %>][meal_allowance]" value="<%= (parseFloat(p.meal_allowance) || 0).toFixed(2) %>">
 
                       <%
                         // Mirror any cols not visible on this tab so we never
@@ -200,7 +178,7 @@
               </div>
             <% } else { %>
               <div class="px-5 py-3 bg-gray-50/60 border-t border-gray-100 text-[11px] text-gray-500">
-                <p>Travel allowance is per-shift, flat. Not paid where the worker is supplied a ute for the shift. Meal allowance is per-shift. Either can be blocked per worker on their roster profile.</p>
+                <p>Where the panel shows a band (e.g. $30–31), the preset holds the lower figure — set the higher figure per worker on Worker Rates at dispatcher/GM discretion. Meal &amp; travel allowances are TFN-only and don't apply to this card.</p>
               </div>
             <% } %>
           <% } %>
