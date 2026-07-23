@@ -2521,11 +2521,17 @@ router.get('/:id/edit', (req, res) => {
   } catch (e) {}
   let mobileLegs = [];
   try { mobileLegs = getMobileLegs(db, booking.id); } catch (e) {}
+  // Plans & Approvals inherited from the linked job (TGS / TMP / ROL sub-plans
+  // in Compliance). These count as attached documents too — mirror the booking
+  // detail page so the edit form's "N attached" badge isn't misleadingly 0
+  // when the job already carries plans.
+  let jobPlans = null;
+  try { jobPlans = getJobPlansForBooking(db, booking); } catch (e) {}
   res.render('bookings/form', {
     title: 'Edit Booking ' + booking.booking_number,
     booking, jobs, clients, supervisors, contacts, crewForSelect,
     depots: getDepots(), user: req.session.user,
-    bookingDocuments, mobileLegs,
+    bookingDocuments, mobileLegs, jobPlans,
     hireableItems: HIREABLE_ITEMS, hireCompanies: getHireCompanies(db),
     locationContexts: getLocationContexts(db), hireItems,
   });

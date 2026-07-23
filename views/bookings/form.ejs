@@ -857,9 +857,13 @@
         <h2 class="booking-form-section-header" style="margin-bottom:0;">SITE DOCUMENTS</h2>
         <p class="text-xs text-gray-500 mt-0.5">TGS / TMP / ROL / Stage Plans · visible to crew on the worker portal under DOCS.</p>
       </div>
-      <% if (isEdit) { %>
+      <% if (isEdit) {
+           var _bookingDocCount = (typeof bookingDocuments !== 'undefined' ? bookingDocuments.length : 0);
+           var _jobPlanCount = (typeof jobPlans !== 'undefined' && jobPlans) ? jobPlans.all.length : 0;
+           var _docTotal = _bookingDocCount + _jobPlanCount;
+      %>
         <a href="#sec-docs" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-50 text-brand-700 text-xs font-semibold hover:bg-brand-100">
-          <%= (typeof bookingDocuments !== 'undefined' ? bookingDocuments.length : 0) %> attached · Manage below ↓
+          <%= _docTotal %> attached · Manage below ↓
         </a>
       <% } else { %>
         <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800">
@@ -1022,6 +1026,12 @@
     var DOC_LABEL = { tgs:'TGS', tmp:'TMP', ctmp:'CTMP', rol:'ROL', rol_day:'ROL — Day', rol_night:'ROL — Night', stage_plan:'Stage Plan', swms:'SWMS', permit:'Permit', invoice:'Invoice', photo:'Photo', other:'Other' };
     function fmtSize(n) { if (!n) return ''; if (n < 1024) return n + ' B'; if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB'; return (n/1048576).toFixed(1) + ' MB'; }
   %>
+  <%
+    var _bookingDocCount2 = (typeof bookingDocuments !== 'undefined' ? bookingDocuments.length : 0);
+    var _jobPlans = (typeof jobPlans !== 'undefined' && jobPlans) ? jobPlans : null;
+    var _jobPlanCount2 = _jobPlans ? _jobPlans.all.length : 0;
+    var PLAN_KIND_CHIP = { tgs: ['TGS', 'bg-blue-50 text-blue-700'], tmp: ['TMP', 'bg-indigo-50 text-indigo-700'], rol: ['ROL', 'bg-purple-50 text-purple-700'] };
+  %>
   <div id="sec-docs" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mt-5" data-section="docs">
     <div class="flex items-center justify-between gap-2 mb-3 flex-wrap">
       <div>
@@ -1029,9 +1039,51 @@
         <p class="text-xs text-gray-500 mt-0.5">TGS / TMP / ROL / Stage Plans · visible to crew under each shift's DOCS tab.</p>
       </div>
       <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600">
-        <%= (typeof bookingDocuments !== 'undefined' ? bookingDocuments.length : 0) %> attached
+        <%= _bookingDocCount2 + _jobPlanCount2 %> attached
       </span>
     </div>
+
+    <% if (_jobPlans) { %>
+      <!-- Plans inherited from the linked job (Compliance TGS / TMP / ROL).
+           Read-only here — these live on the job, so they're managed in Plans
+           & Approvals and their per-booking crew visibility on the booking
+           detail page. Shown so the "attached" count above is explained. -->
+      <div class="mb-4 rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
+          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">From the linked job · <%= _jobPlanCount2 %></p>
+          <a href="/compliance?job_id=<%= booking.job_id %>" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">Open in Plans &amp; Approvals →</a>
+        </div>
+        <ul class="divide-y divide-gray-100">
+          <% _jobPlans.all.forEach(function (p) { var kc = PLAN_KIND_CHIP[p.kind] || ['PLAN', 'bg-gray-100 text-gray-600']; %>
+            <li class="flex items-start gap-3 px-3 py-2.5">
+              <span class="shrink-0 mt-0.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold <%= kc[1] %>"><%= kc[0] %></span>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-medium text-gray-900 truncate"><%= (p.kind === 'rol' ? (p.rol_actual_number || p.reference_number) : (p.plan_number || p.reference_number)) || ('#' + p.id) %><% if (p.title) { %> <span class="text-gray-500 font-normal">— <%= p.title %></span><% } %></p>
+                <div class="flex items-center gap-2 flex-wrap mt-0.5">
+                  <span class="text-[11px] text-gray-500"><%= (p.status || 'draft').replace(/_/g,' ') %></span>
+                  <% if (p.openable) { %>
+                    <% (p.docs || []).forEach(function (d) { %>
+                      <a href="<%= d.file_path %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline truncate max-w-[220px]"><%= d.original_name %></a>
+                    <% }) %>
+                    <% if (p.file_link) { %><a href="<%= p.file_link %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline">Open plan</a><% } %>
+                    <% if (p.rol_file_path) { %><a href="<%= p.rol_file_path %>" target="_blank" class="text-[11px] font-medium text-brand-600 hover:underline">Issued ROL</a><% } %>
+                  <% } else { %>
+                    <span class="text-[11px] text-gray-400 italic">No file attached yet</span>
+                  <% } %>
+                </div>
+              </div>
+              <span class="shrink-0 mt-0.5 inline-flex items-center gap-1 text-[11px] <%= p.visible_to_crew ? 'text-gray-500' : 'text-gray-400' %>" title="Crew visibility is managed on the booking page">
+                <% if (p.visible_to_crew) { %>
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>Crew
+                <% } else { %>
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>Hidden
+                <% } %>
+              </span>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
 
     <% if (bookingDocuments && bookingDocuments.length) { %>
       <ul class="divide-y divide-gray-100 mb-4 border border-gray-200 rounded-lg overflow-hidden">
