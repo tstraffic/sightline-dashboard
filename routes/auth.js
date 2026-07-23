@@ -44,6 +44,15 @@ router.post('/login', (req, res) => {
     role: user.role
   };
 
+  // A successful login with the well-known seed password always forces a
+  // change, even when the flag was never set (covers accounts reset to the
+  // default after migration 325 ran). We have the plaintext here, so this
+  // costs nothing.
+  if (password === 'admin123' && !user.must_change_password) {
+    db.prepare('UPDATE users SET must_change_password = 1 WHERE id = ?').run(user.id);
+    user.must_change_password = 1;
+  }
+
   // Force password change for accounts with default/seed credentials
   if (user.must_change_password) {
     // Keep the destination so finishing the password change resumes the

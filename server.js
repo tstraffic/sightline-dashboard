@@ -118,9 +118,18 @@ const isProduction = process.env.NODE_ENV === 'production' || process.env.RAILWA
 // work correctly. MUST be set before session() so cookie.secure can be
 // honoured for proxied HTTPS requests.
 if (isProduction) app.set('trust proxy', 1);
+// SESSION_SECRET is mandatory in production. Falling back to an ephemeral
+// random secret silently invalidates every session on each restart (defeats
+// the 30-day rolling login below) — refuse to boot instead so the missing
+// env var is caught at deploy time, not discovered as "everyone got logged
+// out again".
+if (isProduction && !process.env.SESSION_SECRET) {
+  console.error('FATAL: SESSION_SECRET must be set in production. Set it in the Railway service variables and redeploy.');
+  process.exit(1);
+}
 app.use(session({
   store: new SQLiteStore({ db: 'sessions.db', dir: path.join(__dirname, 'data') }),
-  secret: process.env.SESSION_SECRET || (isProduction ? (() => { console.warn('WARNING: SESSION_SECRET not set in production!'); return require('crypto').randomBytes(32).toString('hex'); })() : 'dev-session-secret'),
+  secret: process.env.SESSION_SECRET || 'dev-session-secret',
   resave: false,
   saveUninitialized: false,
   // rolling: refresh the cookie's expiry on every response so an active

@@ -14447,6 +14447,32 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 324 error:', e.message); }
   }
 
+  if (!isMigrationApplied.get(325)) {
+    try {
+      // Force a password change on any account still using the well-known
+      // seed password. Fresh deploys have been safe since the first-boot
+      // randomisation below, but DBs seeded before it (including the live
+      // T&S prod DB) kept admin/admin123 with no flag set. The existing
+      // must_change_password enforcement (server.js + routes/auth.js)
+      // handles the rest — including already-logged-in sessions, which
+      // re-read the flag per request. Users table is small (office staff),
+      // so the per-row bcrypt compare is a one-time few-hundred-ms cost.
+      const seedFlagged = [];
+      for (const u of db.prepare('SELECT id, username, password_hash FROM users WHERE active = 1 AND must_change_password = 0').all()) {
+        try {
+          if (u.password_hash && bcrypt.compareSync('admin123', u.password_hash)) seedFlagged.push(u);
+        } catch (e) { /* malformed hash — leave untouched */ }
+      }
+      const setFlag = db.prepare('UPDATE users SET must_change_password = 1 WHERE id = ?');
+      for (const u of seedFlagged) {
+        setFlag.run(u.id);
+        console.warn(`Migration 325: '${u.username}' is using the default seed password — flagged must_change_password`);
+      }
+      recordMigration.run(325, 'flag must_change_password on accounts still using the default seed password');
+      console.log('Migration 325 applied' + (seedFlagged.length ? ` (${seedFlagged.length} account(s) flagged)` : ''));
+    } catch (e) { console.error('Migration 325 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
