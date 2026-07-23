@@ -21,12 +21,20 @@ self.addEventListener('install', event => {
 // Activate — clean old caches and refresh all tabs
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys =>
-      Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
-    ).then(() => {
-      // Notify all open tabs to refresh
-      self.clients.matchAll({ type: 'window' }).then(clients => {
-        clients.forEach(client => client.postMessage({ type: 'SW_UPDATED' }));
+    caches.keys().then(keys => {
+      // Old caches present ⇒ this activation REPLACED a previous version.
+      // On a brand-new install (first visit, fresh browser profile) there is
+      // nothing stale — and posting SW_UPDATED then makes the page reload
+      // itself moments after first load, racing whatever the user (or an
+      // e2e test) is doing.
+      const stale = keys.filter(k => k !== CACHE_NAME);
+      const wasUpdate = stale.length > 0;
+      return Promise.all(stale.map(k => caches.delete(k))).then(() => {
+        if (!wasUpdate) return;
+        // Notify all open tabs to refresh
+        return self.clients.matchAll({ type: 'window' }).then(clients => {
+          clients.forEach(client => client.postMessage({ type: 'SW_UPDATED' }));
+        });
       });
     })
   );

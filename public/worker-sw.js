@@ -34,18 +34,23 @@ self.addEventListener('install', function (event) {
 self.addEventListener('activate', function (event) {
   event.waitUntil(
     caches.keys().then(function (names) {
+      // Old caches present ⇒ this activation replaced a previous version.
+      // On a brand-new install there's nothing stale, and posting
+      // SW_UPDATED then makes the page reload itself moments after the
+      // first load — visible as a flash to new users and a race for e2e.
+      var stale = names.filter(function (name) { return name !== CACHE_NAME && name !== VENDOR_CACHE; });
+      var wasUpdate = stale.length > 0;
       return Promise.all(
-        names
-          .filter(function (name) { return name !== CACHE_NAME && name !== VENDOR_CACHE; })
-          .map(function (name) { return caches.delete(name); })
-      );
-    }).then(function () {
-      // Tell every open client to reload so the new HTML / JS bundle is
-      // loaded — otherwise the user keeps running the prior in-memory
-      // bundle until they manually refresh.
-      return self.clients.matchAll({ type: 'window' }).then(function (clients) {
-        clients.forEach(function (c) {
-          try { c.postMessage({ type: 'SW_UPDATED' }); } catch (e) {}
+        stale.map(function (name) { return caches.delete(name); })
+      ).then(function () {
+        if (!wasUpdate) return;
+        // Tell every open client to reload so the new HTML / JS bundle is
+        // loaded — otherwise the user keeps running the prior in-memory
+        // bundle until they manually refresh.
+        return self.clients.matchAll({ type: 'window' }).then(function (clients) {
+          clients.forEach(function (c) {
+            try { c.postMessage({ type: 'SW_UPDATED' }); } catch (e) {}
+          });
         });
       });
     })
