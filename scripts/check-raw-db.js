@@ -154,7 +154,10 @@ function main() {
     }
   }
 
-  process.exit(ok ? 0 : 1);
+  // exitCode (not process.exit): a hard exit can kill the process before
+  // the async stdout pipe flushes, truncating the --json payload at 8KB
+  // for whoever is consuming it (e.g. scripts/lint-tenant-ratchet.js).
+  process.exitCode = ok ? 0 : 1;
 }
 
 main();

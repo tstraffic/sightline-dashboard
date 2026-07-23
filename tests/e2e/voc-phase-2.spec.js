@@ -42,6 +42,12 @@ test('competent submit → cert_id + pdf_path persisted', async ({ page }) => {
   await page.click('button[type="submit"]:has-text("Create Draft")');
   await expect(page).toHaveURL(/\/voc-assessments\/\d+\/edit/);
 
+  // toHaveURL resolves on navigation commit — the document can still be
+  // mid-parse. locator.count() does NOT wait, so an unguarded
+  // `for (i < count)` loop silently checks zero radios. Wait for the rows.
+  await page.locator('[data-theory-row]').first().waitFor();
+  await page.locator('[data-prac-row]').first().waitFor();
+
   // All theory correct, all practical C
   const yes = page.locator('[data-theory-row] [data-theory-correct][value="yes"]');
   for (let i = 0; i < (await yes.count()); i++) await yes.nth(i).check();
@@ -51,9 +57,15 @@ test('competent submit → cert_id + pdf_path persisted', async ({ page }) => {
   await page.fill('input[name="assessor_signed_name"]', 'Admin User');
   const today = new Date().toISOString().slice(0, 10);
   await page.fill('input[name="assessor_signed_date"]', today);
-  await page.click('#submitBtn');
-
-  // Wait for the redirect-back to render
+  // Wait for the POST itself, not just page text: 'text=COMPETENT' matches
+  // the outcome radio label already on the page (case-insensitive), so a
+  // text-only wait passes while the submit is still in flight and the DB
+  // assertions below race the server's cert write.
+  await Promise.all([
+    page.waitForResponse(r => r.request().method() === 'POST' && /\/voc-assessments\/\d+\/submit/.test(r.url())),
+    page.click('#submitBtn'),
+  ]);
+  await page.waitForLoadState();
   await expect(page.locator('text=COMPETENT').first()).toBeVisible();
 
   const db = getDb();

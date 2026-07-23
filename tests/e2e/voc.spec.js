@@ -101,12 +101,25 @@ test('competent path — submit fills outcome + valid_until', async ({ page }) =
   // Start new VOC
   await page.goto('/voc-assessments/new');
   await page.selectOption('select[name="crew_member_id"]', { label: 'VOC Test Worker (VOC-TEST-01)' });
-  await page.selectOption('select[name="template_id"]', { label: /Light Tower Operations/ });
+  // The option label carries live theory/practical counts ("Light Tower
+  // Operations · N theory / M practical · ..."), so resolve the option's
+  // value by text instead of matching the full label (selectOption's
+  // `label` must be an exact string — a RegExp throws).
+  const lightTowerValue = await page.locator('select[name="template_id"] option', { hasText: 'Light Tower Operations' }).getAttribute('value');
+  await page.selectOption('select[name="template_id"]', lightTowerValue);
   await page.click('button[type="submit"]:has-text("Create Draft")');
 
   // Land on edit page with VOC number
   await expect(page).toHaveURL(/\/voc-assessments\/\d+\/edit/);
-  await expect(page.locator('text=/VOC-\\d{4}-\\d{4}/')).toBeVisible();
+  // The number renders in several places (header link, flash toast, body)
+  // and the header copy is display-gated by breakpoint — assert on the
+  // first VISIBLE match so strict mode is satisfied on every viewport.
+  await expect(page.locator('text=/VOC-\\d{4}-\\d{4}/').locator('visible=true').first()).toBeVisible();
+
+  // Wait for the rows to be parsed — locator.count() doesn't wait, so an
+  // unguarded count loop on a still-streaming document checks nothing.
+  await page.locator('[data-theory-row]').first().waitFor();
+  await page.locator('[data-prac-row]').first().waitFor();
 
   // Theory: mark all 3 questions correct
   const theoryYes = page.locator('[data-theory-row] [data-theory-correct][value="yes"]');
@@ -131,7 +144,15 @@ test('competent path — submit fills outcome + valid_until', async ({ page }) =
   const todayIso = new Date().toISOString().slice(0, 10);
   await page.fill('input[name="assessor_signed_date"]', todayIso);
 
-  await page.click('#submitBtn');
+  // Wait for the POST itself — the URL doesn't change (submit redirects
+  // back to /edit) and 'text=COMPETENT' matches the outcome radio label
+  // already on the page, so neither is proof the submit finished. The DB
+  // assertions below need the server's write to have landed.
+  await Promise.all([
+    page.waitForResponse(r => r.request().method() === 'POST' && /\/voc-assessments\/\d+\/submit/.test(r.url())),
+    page.click('#submitBtn'),
+  ]);
+  await page.waitForLoadState();
 
   // Confirm we're back on the edit page with Competent outcome
   await expect(page).toHaveURL(/\/voc-assessments\/\d+\/edit/);
@@ -159,8 +180,17 @@ test('NYC path — manager block enforced server-side', async ({ page }) => {
 
   await page.goto('/voc-assessments/new');
   await page.selectOption('select[name="crew_member_id"]', { label: 'VOC Test Worker (VOC-TEST-01)' });
-  await page.selectOption('select[name="template_id"]', { label: /Light Tower Operations/ });
+  // The option label carries live theory/practical counts ("Light Tower
+  // Operations · N theory / M practical · ..."), so resolve the option's
+  // value by text instead of matching the full label (selectOption's
+  // `label` must be an exact string — a RegExp throws).
+  const lightTowerValue = await page.locator('select[name="template_id"] option', { hasText: 'Light Tower Operations' }).getAttribute('value');
+  await page.selectOption('select[name="template_id"]', lightTowerValue);
   await page.click('button[type="submit"]:has-text("Create Draft")');
+
+  // Rows must be parsed before the count loops (count() doesn't wait).
+  await page.locator('[data-theory-row]').first().waitFor();
+  await page.locator('[data-prac-row]').first().waitFor();
 
   // Mark theory all correct but practical: at least one NYC
   const theoryYes = page.locator('[data-theory-row] [data-theory-correct][value="yes"]');

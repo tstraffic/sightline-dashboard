@@ -15,7 +15,6 @@ const testDbPath = path.join(__dirname, 'data', 'test-e2e.db');
 
 module.exports = {
   testDir: './tests/e2e',
-  globalSetup: require.resolve('./tests/e2e/globalSetup.js'),
   timeout: 30_000,
   expect: { timeout: 5_000 },
   fullyParallel: false,
@@ -33,7 +32,11 @@ module.exports = {
     { name: 'chromium-mobile',  use: { viewport: { width:  375, height: 812 } } },
   ],
   webServer: {
-    command: 'node server.js',
+    // Resets the test DB *inside* this process before the app loads —
+    // Playwright boots the webServer before globalSetup, so a reset done in
+    // globalSetup swaps the DB file out from under the running server (it
+    // keeps serving the deleted inode). See tests/e2e/start-test-server.js.
+    command: 'node tests/e2e/start-test-server.js',
     port: 3101,
     timeout: 60_000,
     reuseExistingServer: false,
