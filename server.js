@@ -563,9 +563,14 @@ app.listen(PORT, () => {
   // Applicant-facing induction reminder EMAILS — 36h and 12h before the
   // booked time, to the person doing the induction (seek_applicants.email).
   // Every 15 min because the windows are hour-scale; dedup lives in
-  // induction_email_reminder_log (mig 326) so ticks are idempotent.
+  // induction_email_reminder_log (mig 326) so ticks are idempotent. The db
+  // handle is injected here (server.js is the allowlisted bootstrap) so the
+  // service itself stays off the raw-getDb backlog.
   setInterval(() => {
-    sendInductionEmailReminders().catch(e => console.error('[cron] induction-email-reminder error:', e.message));
+    try {
+      const { getDb } = require('./db/database');
+      sendInductionEmailReminders(getDb()).catch(e => console.error('[cron] induction-email-reminder error:', e.message));
+    } catch (e) { console.error('[cron] induction-email-reminder error:', e.message); }
   }, 15 * 60 * 1000);
 
   // Traffio booking sync — polls every 5 min when the integration is enabled

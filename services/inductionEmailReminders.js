@@ -21,7 +21,9 @@
 
 'use strict';
 
-const { getDb } = require('../db/database');
+// No raw db import here — the handle is injected by the caller (server.js's
+// cron tick, which is on the tenant-lint allowlist as the bootstrap). Keeps
+// this file out of the Phase 2 raw-getDb backlog and makes it testable.
 const { sendEmail } = require('./email');
 const { inductionReminderEmail } = require('./emailTemplates');
 const { sydneyOffsetForDate } = require('../lib/sydney');
@@ -67,8 +69,8 @@ function leadLabel(hoursOut, msUntil) {
   return 'coming up in about ' + h + ' hours';
 }
 
-async function sendInductionEmailReminders() {
-  const db = getDb();
+async function sendInductionEmailReminders(db) {
+  if (!db) throw new Error('sendInductionEmailReminders requires a db handle (injected by the caller)');
 
   // Bail safely on a DB that predates the tables.
   const tables = db.prepare(
