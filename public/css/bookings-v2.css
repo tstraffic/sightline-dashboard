@@ -765,6 +765,30 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-card:hover { border-color: rgba(255,255,255,0.14); transform: translateY(-1px); }
 :root[data-theme="light"] .bk2-card { background: #fff; border-color: #E5E7EB; border-left: 4px solid var(--bk2-tone, #9CA3AF); border-radius: 12px; }
 
+/* Docketed shift — a worker has signed a docket, the job is done. The card
+   pops off the column (slight scale + emerald ring/glow) so finished shifts
+   read at a glance while scanning the board. Pairs with the ✓ DOCKETED
+   banner tag and the footer Dockets chip's is-submitted state. */
+.bk2-card--docketed {
+  transform: scale(1.012);
+  border-color: rgba(16,185,129,0.55);
+  box-shadow: 0 0 0 1.5px rgba(16,185,129,0.5), 0 8px 24px rgba(16,185,129,0.16);
+}
+.bk2-card--docketed:hover {
+  transform: scale(1.012) translateY(-1px);
+  border-color: rgba(16,185,129,0.8);
+  box-shadow: 0 0 0 1.5px rgba(16,185,129,0.7), 0 10px 28px rgba(16,185,129,0.22);
+}
+:root[data-theme="light"] .bk2-card--docketed {
+  border-color: rgba(5,150,105,0.5);
+  box-shadow: 0 0 0 1.5px rgba(5,150,105,0.4), 0 8px 24px rgba(5,150,105,0.14);
+}
+:root[data-theme="light"] .bk2-card--docketed:hover {
+  border-color: rgba(5,150,105,0.7);
+  box-shadow: 0 0 0 1.5px rgba(5,150,105,0.6), 0 10px 28px rgba(5,150,105,0.2);
+}
+.bk2-card-banner .bk2-tag--docketed { background: #059669; color: #fff; }
+
 /* Status banner — saturated colour strip */
 .bk2-card-banner {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -2282,7 +2306,12 @@ body.bk2-date-loading::before {
 }
 .bk2-density-compact .bk2-crews { display: none; }
 .bk2-density-compact .bk2-card-crewsum { display: flex; }
-.bk2-density-compact .bk2-card-footer { display: none; }
+/* Keep the footer mini-tabs in compact density — planners rely on the
+   Docs/Dockets counts to spot finished/covered shifts at a glance, so
+   compact slims them down instead of hiding them. */
+.bk2-density-compact .bk2-card-footer { padding: 0 4px; }
+.bk2-density-compact .bk2-card-footer .bk2-card-footer-item { font-size: 10px; padding: 5px 6px; gap: 4px; }
+.bk2-density-compact .bk2-card-footer .bk2-tab-count { font-size: 9.5px; min-width: 15px; height: 15px; }
 .bk2-density-compact .bk2-meta-requester { display: none; }
 .bk2-density-compact .bk2-card { border-radius: 10px; }
 .bk2-density-compact .bk2-card-banner { padding: 6px 12px; font-size: 12px; }

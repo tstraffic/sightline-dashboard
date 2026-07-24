@@ -860,7 +860,8 @@
       <% if (isEdit) {
            var _bookingDocCount = (typeof bookingDocuments !== 'undefined' ? bookingDocuments.length : 0);
            var _jobPlanCount = (typeof jobPlans !== 'undefined' && jobPlans) ? jobPlans.all.length : 0;
-           var _docTotal = _bookingDocCount + _jobPlanCount;
+           var _jobDocCount = (typeof jobDocuments !== 'undefined' && jobDocuments) ? jobDocuments.length : 0;
+           var _docTotal = _bookingDocCount + _jobPlanCount + _jobDocCount;
       %>
         <a href="#sec-docs" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-brand-50 text-brand-700 text-xs font-semibold hover:bg-brand-100">
           <%= _docTotal %> attached · Manage below ↓
@@ -1030,6 +1031,7 @@
     var _bookingDocCount2 = (typeof bookingDocuments !== 'undefined' ? bookingDocuments.length : 0);
     var _jobPlans = (typeof jobPlans !== 'undefined' && jobPlans) ? jobPlans : null;
     var _jobPlanCount2 = _jobPlans ? _jobPlans.all.length : 0;
+    var _jobDocs = (typeof jobDocuments !== 'undefined' && jobDocuments) ? jobDocuments : [];
     var PLAN_KIND_CHIP = { tgs: ['TGS', 'bg-blue-50 text-blue-700'], tmp: ['TMP', 'bg-indigo-50 text-indigo-700'], rol: ['ROL', 'bg-purple-50 text-purple-700'] };
   %>
   <div id="sec-docs" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mt-5" data-section="docs">
@@ -1039,7 +1041,7 @@
         <p class="text-xs text-gray-500 mt-0.5">TGS / TMP / ROL / Stage Plans · visible to crew under each shift's DOCS tab.</p>
       </div>
       <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 text-gray-600">
-        <%= _bookingDocCount2 + _jobPlanCount2 %> attached
+        <%= _bookingDocCount2 + _jobPlanCount2 + _jobDocs.length %> attached
       </span>
     </div>
 
@@ -1079,6 +1081,28 @@
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>Hidden
                 <% } %>
               </span>
+            </li>
+          <% }) %>
+        </ul>
+      </div>
+    <% } %>
+
+    <% if (_jobDocs.length) { %>
+      <!-- Job document pack — files uploaded on the linked job itself
+           (/jobs/:id/documents). Read-only here; managed on the job page. -->
+      <div class="mb-4 rounded-lg border border-gray-200 overflow-hidden">
+        <div class="px-3 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between gap-2">
+          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Job documents · <%= _jobDocs.length %></p>
+          <a href="/jobs/<%= booking.job_id %>/documents" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">Manage on the job →</a>
+        </div>
+        <ul class="divide-y divide-gray-100">
+          <% _jobDocs.forEach(function (d) { %>
+            <li class="flex items-center gap-3 px-3 py-2.5">
+              <span class="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold bg-blue-50 text-blue-700"><%= (DOC_LABEL[d.doc_type] || d.doc_type || '').toString().toUpperCase() %></span>
+              <div class="min-w-0 flex-1">
+                <a href="/jobs/<%= booking.job_id %>/documents/<%= d.id %>/download" target="_blank" class="text-sm font-medium text-brand-700 hover:underline truncate block"><%= d.title || d.original_name %></a>
+                <p class="text-[11px] text-gray-500"><% if (d.file_size || d.size_bytes) { %><%= fmtSize(d.file_size || d.size_bytes) %><% } %><% if (d.uploader_name) { %> · <%= d.uploader_name %><% } %></p>
+              </div>
             </li>
           <% }) %>
         </ul>

@@ -10,6 +10,7 @@ const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeResto
 const { getDocketCrew } = require('../lib/shiftDocket');
 const { generateJobNumber } = require('../lib/jobNumbers');
 const { getJobPlansForBooking, setPlanVisibility } = require('../lib/bookingPlans');
+const { getJobDocumentsForJob, countJobLinkedDocs } = require('../lib/bookingDocs');
 
 // Lazily create a project (jobs row) from a typed name on the booking form.
 // The old inline INSERT omitted the jobs table's NOT NULL columns
@@ -248,9 +249,19 @@ function transformBooking(db, row) {
     }),
     vehicles: vehicles.map(v => ({ id: v.id, registration: v.registration || '', name: v.vehicle_name || '' })),
     scheduleWarning,
-    dockets: db.prepare("SELECT COUNT(*) as c FROM booking_dockets WHERE booking_id = ?").get(row.id).c,
-    notes: noteCount, tasks: 0,
-    docs: (() => { try { return db.prepare("SELECT COUNT(*) as c FROM booking_documents WHERE booking_id = ?").get(row.id).c; } catch(e) { return 0; } })(),
+    // Dockets = Traffio-mirrored rows + worker-signed shift dockets, same as
+    // the board query — a signed docket must light the card up here too.
+    dockets: (() => {
+      let n = db.prepare("SELECT COUNT(*) as c FROM booking_dockets WHERE booking_id = ?").get(row.id).c;
+      try { n += db.prepare("SELECT COUNT(*) as c FROM docket_signatures WHERE booking_id = ? AND status = 'current'").get(row.id).c; } catch (e) {}
+      return n;
+    })(),
+    notes: noteCount,
+    tasks: (() => { try { return db.prepare("SELECT COUNT(*) as c FROM shift_tasks WHERE booking_id = ?").get(row.id).c; } catch(e) { return 0; } })(),
+    // Booking-level docs + everything the linked job carries (job_documents
+    // pack + Plans & Approvals sub-plans) — matches the dashboard's
+    // missing-docs rule so a covered booking never reads "0 documents".
+    docs: (() => { try { return db.prepare("SELECT COUNT(*) as c FROM booking_documents WHERE booking_id = ?").get(row.id).c + countJobLinkedDocs(db, row.job_id); } catch(e) { return 0; } })(),
     bookingNumber: row.booking_number || '', suburb: row.suburb || '', deletedAt: row.deleted_at || null,
     latitude: row.latitude || null, longitude: row.longitude || null,
     stillRequired: (() => {
@@ -1176,7 +1187,11 @@ router.get('/', (req, res) => {
       (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id) AS crew_count,
       (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id AND bc.status = 'confirmed') AS crew_confirmed,
       (SELECT COUNT(*) FROM booking_vehicles bv WHERE bv.booking_id = b.id) AS vehicle_count,
-      (SELECT COUNT(*) FROM booking_documents bd WHERE bd.booking_id = b.id) AS doc_count,
+      (SELECT COUNT(*) FROM booking_documents bd WHERE bd.booking_id = b.id)
+        + (SELECT COUNT(*) FROM job_documents jd WHERE jd.job_id = b.job_id AND jd.archived_at IS NULL)
+        + (SELECT COUNT(*) FROM compliance cp
+             WHERE cp.item_type IN ('traffic_guidance','road_occupancy','tmp_approval')
+               AND (cp.job_id = b.job_id OR cp.parent_id IN (SELECT id FROM compliance WHERE job_id = b.job_id))) AS doc_count,
       (SELECT COUNT(*) FROM booking_notes bn WHERE bn.booking_id = b.id) AS note_count,
       (SELECT COUNT(*) FROM booking_dockets bdk WHERE bdk.booking_id = b.id)
         + (SELECT COUNT(*) FROM docket_signatures ds WHERE ds.booking_id = b.id AND ds.status = 'current') AS docket_count,
@@ -2425,9 +2440,12 @@ router.get('/:id', (req, res) => {
   // Now sourced from lib/bookingPlans (shared with the worker portal): adds
   // TMP/CTMP sub-plans and each plan's per-booking crew-visibility flag.
   const jobPlans = getJobPlansForBooking(db, booking);
+  // Job-level document pack (job_documents) — the OTHER job-side source,
+  // uploaded on the job itself rather than through Plans & Approvals.
+  const jobDocuments = getJobDocumentsForJob(db, booking.job_id);
 
   res.render('bookings/show', {
-    jobPlans,
+    jobPlans, jobDocuments,
     title: 'Booking ' + booking.booking_number,
     hireSuppliers, mobileLegs,
     booking: { ...booking, supervisor: booking.supervisor_name, requester_name: requesterName, planner_name: plannerName, site_contact_names: siteContactNames, site_contact_details: siteContactDetails, tags_list: tagsList,
@@ -2527,11 +2545,13 @@ router.get('/:id/edit', (req, res) => {
   // when the job already carries plans.
   let jobPlans = null;
   try { jobPlans = getJobPlansForBooking(db, booking); } catch (e) {}
+  let jobDocuments = [];
+  try { jobDocuments = getJobDocumentsForJob(db, booking.job_id); } catch (e) {}
   res.render('bookings/form', {
     title: 'Edit Booking ' + booking.booking_number,
     booking, jobs, clients, supervisors, contacts, crewForSelect,
     depots: getDepots(), user: req.session.user,
-    bookingDocuments, mobileLegs, jobPlans,
+    bookingDocuments, mobileLegs, jobPlans, jobDocuments,
     hireableItems: HIREABLE_ITEMS, hireCompanies: getHireCompanies(db),
     locationContexts: getLocationContexts(db), hireItems,
   });
@@ -3459,20 +3479,25 @@ router.get('/:id/documents.json', (req, res) => {
   const requiredPlans = [];
   try {
     const jp = getJobPlansForBooking(db, bkRow);
+    // Job-level document pack counts as attached too (same rule as the
+    // dashboard's missing-docs nudge) — jobDocTypes maps each plan slot to
+    // the job_documents doc_type values that satisfy it.
+    const jobDocs = getJobDocumentsForJob(db, bkRow.job_id);
     const REQ_LABEL_TO_PLAN = [
-      { match: /traffic guidance|^tgs$/i, type: 'tgs',  label: 'TGS',        jobPlans: (jp && jp.tgs) || [] },
-      { match: /^tmp\b|^ctmp$|traffic management plan/i, type: 'tmp', label: 'TMP / CTMP', jobPlans: (jp && jp.tmp) || [] },
+      { match: /traffic guidance|^tgs$/i, type: 'tgs',  label: 'TGS',        jobPlans: (jp && jp.tgs) || [], jobDocTypes: ['tgs'] },
+      { match: /^tmp\b|^ctmp$|traffic management plan/i, type: 'tmp', label: 'TMP / CTMP', jobPlans: (jp && jp.tmp) || [], jobDocTypes: ['tmp'] },
     ];
     const reqRows = db.prepare("SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id = ?").all(req.params.id);
     for (const m of REQ_LABEL_TO_PLAN) {
       const required = reqRows
         .filter(r => m.match.test(String(r.resource_type || '').trim()))
         .reduce((s, r) => s + Math.max(0, parseInt(r.quantity_required, 10) || 0), 0);
-      if (!required && !m.jobPlans.length) continue;
+      const jobDocCount = jobDocs.filter(d => m.jobDocTypes.indexOf(d.doc_type) !== -1).length;
+      if (!required && !m.jobPlans.length && !jobDocCount) continue;
       // CTMP uploads satisfy a TMP requirement — count both types.
       const typesForAttach = m.type === 'tmp' ? ['tmp', 'ctmp'] : [m.type];
       const attachedDocs = docs.filter(d => typesForAttach.indexOf(d.document_type) !== -1).length;
-      const fromJob = m.jobPlans.length;
+      const fromJob = m.jobPlans.length + jobDocCount;
       requiredPlans.push({ type: m.type, label: m.label, required, attached: attachedDocs + fromJob, fromJob });
     }
   } catch (e) {}

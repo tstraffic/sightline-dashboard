@@ -265,7 +265,7 @@
              var _sh = parseInt(String(b.start_datetime || '').slice(11, 13), 10);
              var _isNight = !(Number.isFinite(_sh) && _sh >= 5 && _sh < 18);
         %>
-          <a class="bk2-card bk2-status-tone-<%= b.status %> <%= _isNight ? 'bk2-card--night' : 'bk2-card--day' %>" href="/bookings/<%= b.id %>"
+          <a class="bk2-card bk2-status-tone-<%= b.status %> <%= _isNight ? 'bk2-card--night' : 'bk2-card--day' %><%= ((b.counts || {}).dockets > 0) ? ' bk2-card--docketed' : '' %>" href="/bookings/<%= b.id %>"
              draggable="false"
              data-booking-id="<%= b.id %>"
              data-counts="<%= JSON.stringify(b.counts || {}) %>"
@@ -286,6 +286,7 @@
                 <span><%= statusLabel(b.status) %></span>
                 <% if (b.is_emergency) { %><span class="bk2-tag">EMERGENCY</span><% } %>
                 <% if (b.is_callout) { %><span class="bk2-tag">CALLOUT</span><% } %>
+                <% if ((b.counts || {}).dockets > 0) { %><span class="bk2-tag bk2-tag--docketed" title="A docket has been submitted for this shift — the job's done">✓ DOCKETED</span><% } %>
               </span>
               <span class="bk2-banner-meta">
                 #<%= b.booking_number || b.id %>
