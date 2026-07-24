@@ -20,6 +20,7 @@ const { advanceShiftStatuses, sendInShiftFormsReminders } = require('./services/
 const { sendCertExpiryReminders } = require('./services/certExpiryReminders');
 const { sendSwmsExpiryReminders } = require('./services/swmsExpiryReminders');
 const { sendInductionReminders } = require('./services/inductionReminders');
+const { sendInductionEmailReminders } = require('./services/inductionEmailReminders');
 const { csrfProtection } = require('./middleware/csrf');
 const { tenantMiddleware } = require('./middleware/tenant');
 
@@ -557,6 +558,14 @@ app.listen(PORT, () => {
     if (now.getHours() === 8 && now.getMinutes() >= 0 && now.getMinutes() < 15) {
       sendInductionReminders().catch(e => console.error('[cron] induction-reminder error:', e.message));
     }
+  }, 15 * 60 * 1000);
+
+  // Applicant-facing induction reminder EMAILS — 36h and 12h before the
+  // booked time, to the person doing the induction (seek_applicants.email).
+  // Every 15 min because the windows are hour-scale; dedup lives in
+  // induction_email_reminder_log (mig 326) so ticks are idempotent.
+  setInterval(() => {
+    sendInductionEmailReminders().catch(e => console.error('[cron] induction-email-reminder error:', e.message));
   }, 15 * 60 * 1000);
 
   // Traffio booking sync — polls every 5 min when the integration is enabled

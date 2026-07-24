@@ -173,11 +173,28 @@ function inductionConfirmationEmail(whenText, inductionUrl) {
   `);
 }
 
+// Applicant-facing induction reminder — fired 36h and 12h before the booked
+// time (services/inductionEmailReminders.js). Same voice and details as the
+// confirmation email above so the applicant reads it as part of one thread.
+function inductionReminderEmail(whenText, inductionUrl, leadLabel) {
+  return baseTemplate('Induction Reminder', `
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Hi,</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">A friendly reminder from T&amp;S Traffic Control — your induction is <strong>${escapeHtml(leadLabel)}</strong>.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">It takes place <strong>${escapeHtml(whenText)}</strong> at our depot, located at <strong>9 Epic Place, Villawood</strong>, and runs for approximately an hour.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Please bring hard copies of your licenses, and keep your superannuation details ready if applicable.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 4px;">If you haven't yet, please fill out our induction form before you arrive:</p>
+    ${buttonHtml('Open Induction Form', inductionUrl)}
+    <p style="color:#6B7280;font-size:13px;line-height:1.6;margin:0 0 16px;word-break:break-all;">Or paste this link into your browser: <a href="${inductionUrl}" style="color:#059669;">${inductionUrl}</a></p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0;">See you there — T&amp;S Traffic Control</p>
+  `);
+}
+
 module.exports = {
   adminInviteEmail,
   workerInviteEmail,
   passwordResetEmail,
   inductionConfirmationEmail,
+  inductionReminderEmail,
   pinResetEmail,
   notificationEmail,
   dailyDigestEmail,

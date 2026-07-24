@@ -14473,6 +14473,31 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 325 error:', e.message); }
   }
 
+  if (!isMigrationApplied.get(326)) {
+    try {
+      // Dedup log for the APPLICANT-facing induction reminder emails
+      // (services/inductionEmailReminders.js — 36h / 12h before the booked
+      // time). Separate from induction_reminder_log, which dedups the
+      // staff-facing 7/3/1/0-day push reminders. induction_time is part of
+      // the key so re-scheduling to a new time (even same-day) re-arms
+      // both windows.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS induction_email_reminder_log (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          applicant_id INTEGER NOT NULL REFERENCES seek_applicants(id) ON DELETE CASCADE,
+          hours_out INTEGER NOT NULL,
+          induction_date DATE NOT NULL,
+          induction_time TEXT NOT NULL DEFAULT '',
+          sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(applicant_id, hours_out, induction_date, induction_time)
+        );
+        CREATE INDEX IF NOT EXISTS idx_induction_email_rem_applicant ON induction_email_reminder_log(applicant_id);
+      `);
+      recordMigration.run(326, 'induction_email_reminder_log — applicant-facing 36h/12h reminder dedup');
+      console.log('Migration 326 applied');
+    } catch (e) { console.error('Migration 326 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

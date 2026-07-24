@@ -3421,11 +3421,11 @@
     '.bk2-addon, [role="button"], [draggable="true"], [data-card-goto]';
 
   // Footer items (Docs / Notes / Dockets / Tasks / Forms) — registered BEFORE
-  // the card-open handler below so footer clicks never open the editor.
-  // Normal card: deep-link to /bookings/:id#<tab> (the overview page's tab
-  // switcher reads the hash). Floating card (this booking is open in the
-  // editor): switch the editor to that tab instead — navigating away would
-  // dump unsaved drawer state.
+  // the card-open handler below so footer clicks fall through to it.
+  // Opens the quick-edit slide-over ON that tab so the planner never
+  // leaves the board (the full page stays reachable via the card itself
+  // or the editor's "Full edit" link). Floating card (this booking is
+  // already open in the editor): just switch the editor's tab.
   document.addEventListener('click', function (e) {
     var item = e.target.closest && e.target.closest('[data-card-goto]');
     if (!item) return;
@@ -3441,7 +3441,8 @@
       setEditorTab(goto_);
       return;
     }
-    window.location.href = '/bookings/' + id + '#' + goto_;
+    openEditorForBooking(id, card.getAttribute('data-booking-number'), card.getAttribute('data-booking-title'));
+    setEditorTab(goto_);
   });
 
   // ── Tap-to-assign (arm and tap) ─────────────────────────────────
