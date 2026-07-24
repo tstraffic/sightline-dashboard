@@ -1,0 +1,56 @@
+# CI — every PR and every push to main.
+#
+# Three gates:
+#   1. lint:tenant:ratchet — blocks NEW raw getDb() imports (Phase 2 ratchet;
+#      the 140-file legacy baseline lives in scripts/lint-tenant-ratchet.js)
+#   2. test:cross-tenant  — tenant-isolation unit tests (node:test, ~50ms)
+#   3. test:e2e           — full Playwright suite against an isolated SQLite
+#      DB on port 3101 (the webServer resets data/test-e2e.db itself, see
+#      tests/e2e/start-test-server.js)
+#
+# Railway deploys main on push regardless of CI — this workflow is the
+# signal, not the gate, until branch protection is enabled. Once it's been
+# green for a while, require it in GitHub branch-protection settings.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Tenant lint ratchet (no new raw getDb imports)
+        run: npm run lint:tenant:ratchet
+
+      - name: Cross-tenant isolation tests
+        run: npm run test:cross-tenant
+
+      - name: Install Playwright chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright e2e suite
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7
