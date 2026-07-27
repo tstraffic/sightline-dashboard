@@ -33,6 +33,19 @@ function ymd(d) {
   return d.toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
 }
 
+const { sydneyOffsetForDate } = require('../lib/sydney');
+
+// safety_forms.submitted_at is stored as UTC ('YYYY-MM-DD HH:MM:SS' via
+// datetime('now')), but every window here is bounded by Sydney-local dates.
+// Comparing date(submitted_at) — the UTC day — against those bounds shoved
+// any form submitted 00:00–~10:00 Sydney into the previous day's window.
+// Convert the Sydney-midnight bound to its UTC instant instead (DST-safe via
+// sydneyOffsetForDate).
+function utcBound(sydneyYmd) {
+  return new Date(sydneyYmd + 'T00:00:00' + sydneyOffsetForDate(sydneyYmd))
+    .toISOString().replace('T', ' ').slice(0, 19);
+}
+
 // Monday-anchored ISO-ish week: returns { start, end } as Date objects
 // covering the Monday→Sunday containing `d`.
 function weekRangeFor(d) {
@@ -72,14 +85,14 @@ function countWindow(db, from, to) {
 }
 
 // Counts safety_forms submitted inside [from, to) per form_type.
+// Bounds are UTC instants of Sydney midnight (see utcBound); datetime()
+// normalises stored values so 'YYYY-MM-DD HH:MM:SS' and ISO-T both compare.
 function countCompletions(db, from, to) {
-  const fromS = ymd(from);
-  const toS = ymd(to);
   const rows = db.prepare(`
     SELECT form_type, COUNT(*) AS c FROM safety_forms
-    WHERE date(submitted_at) >= date(?) AND date(submitted_at) < date(?)
+    WHERE datetime(submitted_at) >= datetime(?) AND datetime(submitted_at) < datetime(?)
     GROUP BY form_type
-  `).all(fromS, toS);
+  `).all(utcBound(ymd(from)), utcBound(ymd(to)));
   const out = {};
   for (const r of rows) out[r.form_type] = r.c;
   return out;
@@ -202,13 +215,14 @@ function workerBreakdown(db, from, to) {
     GROUP BY ca.crew_member_id, cm.full_name
   `).all(fromS, toS);
 
-  // 2. Worker → form_type → submitted count
+  // 2. Worker → form_type → submitted count. Same UTC-instant bounds as
+  // countCompletions — submitted_at is UTC, the window is Sydney-local.
   const subRows = db.prepare(`
     SELECT crew_member_id, form_type, COUNT(*) AS c
     FROM safety_forms
-    WHERE date(submitted_at) >= date(?) AND date(submitted_at) < date(?)
+    WHERE datetime(submitted_at) >= datetime(?) AND datetime(submitted_at) < datetime(?)
     GROUP BY crew_member_id, form_type
-  `).all(fromS, toS);
+  `).all(utcBound(fromS), utcBound(toS));
   const subBy = {};
   for (const r of subRows) {
     (subBy[r.crew_member_id] = subBy[r.crew_member_id] || {})[r.form_type] = r.c;

@@ -2,9 +2,37 @@
 const { HEALTH_CALC_SQL } = require('../../middleware/jobHealth');
 const { isAdminRole } = require('../../lib/taskVisibility');
 
+// Date arithmetic on a Sydney YYYY-MM-DD string. The server runs UTC, so any
+// `new Date(Date.now() ± n days).toISOString()` here would flip to the wrong
+// calendar day for up to 11 hours around Sydney midnight — every window must
+// derive from the caller's sydneyToday() string instead.
+function addDays(ymd, n) {
+  const d = new Date(ymd + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().split('T')[0];
+}
+
+// Crew with a shift today according to the tables the app actually writes.
+// The live scheduling flow (bookings + booking_crew) superseded
+// crew_allocations, which only the legacy create path still populates — a
+// count on crew_allocations alone reads 0 forever (the "CREW TODAY 0/233"
+// bug). Count both, deduped, so legacy rows still show.
+const CREW_TODAY_SQL = `
+  SELECT COUNT(*) AS c FROM (
+    SELECT bc.crew_member_id AS id
+    FROM booking_crew bc
+    JOIN bookings b ON b.id = bc.booking_id
+    WHERE date(b.start_datetime) = date(?)
+      AND b.deleted_at IS NULL
+      AND b.status NOT IN ('cancelled','late_cancellation')
+      AND bc.status != 'declined'
+    UNION
+    SELECT crew_member_id AS id FROM crew_allocations WHERE allocation_date = ?
+  )`;
+
 function getUrgencyKpis(db, today, user) {
-  const next30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
-  const last7 = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+  const next30 = addDays(today, 30);
+  const last7 = addDays(today, -7);
   const userRole = user ? (user.role || '').toLowerCase() : '';
   const userId = user ? user.id : 0;
   const isPlanningRole = userRole === 'planning';
@@ -21,7 +49,11 @@ function getUrgencyKpis(db, today, user) {
     overdueTasks: db.prepare(`SELECT COUNT(*) as c FROM tasks WHERE due_date < ? AND status != 'complete' AND deleted_at IS NULL ${taskFilter}${adminGuard}`).get(today).c,
     openIncidents: db.prepare("SELECT COUNT(*) as c FROM incidents WHERE investigation_status NOT IN ('closed', 'resolved')").get().c,
     unconfirmedAllocations: db.prepare("SELECT COUNT(*) as c FROM crew_allocations WHERE allocation_date = ? AND status = 'allocated'").get(today).c,
-    overdueCompliance: db.prepare("SELECT COUNT(*) as c FROM compliance WHERE due_date < ? AND status NOT IN ('approved','expired','submitted')").get(today).c,
+    // Canonical overdue definition — submitted-inclusive, matching the
+    // /compliance page summary. A submitted-but-unapproved plan past its due
+    // date still needs chasing; excluding 'submitted' here made this tile
+    // read 2 while the table below it showed 10.
+    overdueCompliance: db.prepare("SELECT COUNT(*) as c FROM compliance WHERE due_date < ? AND status NOT IN ('approved','expired')").get(today).c,
     ticketsExpiring: db.prepare(`
       SELECT COUNT(*) as c FROM crew_members WHERE active = 1 AND (
         (tc_ticket_expiry IS NOT NULL AND tc_ticket_expiry BETWEEN ? AND ?)
@@ -45,14 +77,14 @@ function getUrgencyKpis(db, today, user) {
 }
 
 function getOpsData(db, today) {
-  const next14 = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+  const next14 = addDays(today, 14);
 
   const activeJobs = db.prepare("SELECT COUNT(*) as c FROM jobs WHERE status = 'active'").get().c;
   const startingSoon = db.prepare("SELECT COUNT(*) as c FROM jobs WHERE start_date BETWEEN ? AND ? AND status IN ('won','active')").get(today, next14).c;
-  const crewHoursThisWeek = db.prepare("SELECT COALESCE(SUM(total_hours), 0) as t FROM timesheets WHERE work_date >= date('now', '-7 days')").get().t;
+  const crewHoursThisWeek = db.prepare("SELECT COALESCE(SUM(total_hours), 0) as t FROM timesheets WHERE work_date >= date(?, '-7 days')").get(today).t;
   const equipmentDeployed = db.prepare("SELECT COUNT(*) as c FROM equipment_assignments WHERE actual_return_date IS NULL").get().c;
   const totalActiveCrew = db.prepare("SELECT COUNT(*) as c FROM crew_members WHERE active = 1").get().c;
-  const allocatedToday = db.prepare("SELECT COUNT(DISTINCT crew_member_id) as c FROM crew_allocations WHERE allocation_date = ?").get(today).c;
+  const allocatedToday = db.prepare(CREW_TODAY_SQL).get(today, today).c;
   const rolPending = db.prepare("SELECT COUNT(*) as c FROM traffic_plans WHERE rol_required = 1 AND (rol_approved IS NULL OR rol_approved = 0) AND status NOT IN ('rejected','expired')").get().c;
   const tmpPending = db.prepare("SELECT COUNT(*) as c FROM traffic_plans WHERE plan_type = 'TMP' AND status NOT IN ('approved','rejected','expired')").get().c;
 
@@ -95,7 +127,7 @@ function getChartData(db) {
 
 function getMyWork(db, user, today) {
   const userId = user && user.id ? user.id : user; // tolerate legacy callers that pass just an id
-  const last7 = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+  const last7 = addDays(today, -7);
   const adminGuard = isAdminRole(user) ? '' : " AND t.division != 'admin'";
 
   const myJobs = db.prepare(`
@@ -165,8 +197,8 @@ function getTasksIAssigned(db, user, today) {
 }
 
 function getComplianceUrgent(db, today) {
-  const next14 = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
-  const next30 = new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0];
+  const next14 = addDays(today, 14);
+  const next30 = addDays(today, 30);
 
   return db.prepare(`
     SELECT c.id, c.title, c.item_type, c.status, c.due_date, c.expiry_date,
@@ -228,6 +260,7 @@ function getRecentActivity(db) {
 }
 
 module.exports = {
+  addDays,
   getUrgencyKpis,
   getOpsData,
   getFinanceData,

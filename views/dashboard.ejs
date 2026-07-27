@@ -356,7 +356,7 @@
       <% } else { %>
       <div class="divide-y divide-gray-100">
         <% myTasks.slice(0, 8).forEach(t => {
-          const isOverdue = t.due_date < new Date().toISOString().split('T')[0];
+          const isOverdue = t.due_date < today; // Sydney today from the route
           const priorityTag = t.priority === 'high' ? 'task-tag-high' : t.priority === 'medium' ? 'task-tag-medium' : 'task-tag-low';
           const statusTag = t.status === 'in_progress' ? 'task-tag-progress' : t.status === 'blocked' ? 'task-tag-blocked' : 'task-tag-default';
         %>
@@ -392,9 +392,9 @@
       </div>
       <div class="divide-y divide-gray-100">
         <% myPlans.forEach(p => {
-          const todayStr = new Date().toISOString().split('T')[0];
+          const todayStr = today; // Sydney today from the route
           const isOverdue = p.due_date && p.due_date < todayStr;
-          const isDueSoon = !isOverdue && p.due_date && p.due_date <= new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+          const isDueSoon = !isOverdue && p.due_date && p.due_date <= new Date(new Date(today + 'T00:00:00Z').getTime() + 14 * 86400000).toISOString().split('T')[0];
           const statusColors = { not_started: 'bg-gray-100 text-gray-600', started: 'bg-purple-50 text-purple-700', submitted: 'bg-blue-50 text-blue-700', rejected: 'bg-red-50 text-red-700' };
           const sc = statusColors[p.status] || 'bg-gray-100 text-gray-600';
         %>
@@ -440,7 +440,7 @@
       <% } else { %>
       <div class="divide-y divide-gray-100">
         <% tasksIAssigned.forEach(t => {
-          const isOverdue = t.due_date < new Date().toISOString().split('T')[0];
+          const isOverdue = t.due_date < today; // Sydney today from the route
           const statusTag = t.status === 'in_progress' ? 'task-tag-progress' : t.status === 'blocked' ? 'task-tag-blocked' : 'task-tag-default';
         %>
         <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
@@ -826,9 +826,12 @@
           </thead>
           <tbody class="divide-y divide-gray-100">
             <%
-              const todayDash = new Date().toISOString().split('T')[0];
-              const soon14 = new Date(Date.now() + 14*24*60*60*1000).toISOString().split('T')[0];
-              const soon30 = new Date(Date.now() + 30*24*60*60*1000).toISOString().split('T')[0];
+              // Sydney today from the route — UTC here made this table and
+              // the tile above disagree about which rows were overdue.
+              const todayDash = today;
+              const _dashMs = new Date(today + 'T00:00:00Z').getTime();
+              const soon14 = new Date(_dashMs + 14*24*60*60*1000).toISOString().split('T')[0];
+              const soon30 = new Date(_dashMs + 30*24*60*60*1000).toISOString().split('T')[0];
               const typeLabels = { traffic_guidance: 'TGS', tmp_approval: 'CTMP', spa: 'SPA', rol: 'ROL', council_permit: 'Council' };
               const typeColors = { traffic_guidance: 'bg-blue-50 text-blue-700', tmp_approval: 'bg-purple-50 text-purple-700', spa: 'bg-orange-50 text-orange-700', rol: 'bg-teal-50 text-teal-700', council_permit: 'bg-amber-50 text-amber-700' };
               const statusLabels = { not_started: 'Not Started', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', expired: 'Expired' };

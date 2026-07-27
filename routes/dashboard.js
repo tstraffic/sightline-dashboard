@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { canViewAccounts } = require('../middleware/auth');
 const {
+  addDays,
   getUrgencyKpis,
   getOpsData,
   getFinanceData,
@@ -15,11 +16,15 @@ const {
   getRecentActivity,
 } = require('./helpers/dashboard-queries');
 const { todaysBirthdays } = require('../lib/birthdays');
+const { sydneyToday } = require('../lib/sydney');
 
 router.get('/', (req, res) => {
   const db = getDb();
   const user = req.session.user;
-  const today = new Date().toISOString().split('T')[0];
+  // Sydney calendar day, NOT UTC — the server runs UTC, so toISOString()
+  // reads yesterday from ~10am AEST/AEDT onward and every "today" number on
+  // the dashboard was wrong for most of the Sydney working day.
+  const today = sydneyToday();
 
   // Always-needed data
   const urgency = getUrgencyKpis(db, today, req.session.user);
@@ -37,7 +42,7 @@ router.get('/', (req, res) => {
   // so a query issue can never take down the dashboard.
   let plansAttention = { upcoming: [], ctmps: [], rolAlerts: [] };
   try {
-    const next14 = new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0];
+    const next14 = addDays(today, 14);
     plansAttention.upcoming = db.prepare(`
       SELECT tp.id, tp.plan_number, tp.plan_types, tp.status, tp.job_date, tp.submitted_date,
              tp.client_required_date, tp.rol_summary_from, j.job_number,
@@ -68,7 +73,7 @@ router.get('/', (req, res) => {
   const finance = canViewAccounts(user) ? getFinanceData(db) : { totalContractValue: 0, totalSpend: 0, accountsOverdue: 0, accountsDisputed: 0 };
 
   // Jobs needing attention
-  const last7 = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+  const last7 = addDays(today, -7);
   const needsAttention = db.prepare(`
     SELECT j.*, u.full_name as pm_name FROM jobs j
     LEFT JOIN users u ON j.project_manager_id = u.id
@@ -107,12 +112,12 @@ router.get('/', (req, res) => {
       LEFT JOIN jobs j ON b.job_id = j.id
       WHERE b.status IN ('confirmed','green_to_go','unconfirmed')
         AND b.deleted_at IS NULL
-        AND date(b.start_datetime) BETWEEN date('now') AND date('now','+1 day')
+        AND date(b.start_datetime) BETWEEN date(?) AND date(?,'+1 day')
         AND NOT EXISTS (SELECT 1 FROM booking_documents bd WHERE bd.booking_id = b.id)
         AND NOT EXISTS (SELECT 1 FROM job_documents jd WHERE jd.job_id = b.job_id AND jd.archived_at IS NULL)
       ORDER BY b.start_datetime ASC
       LIMIT 25
-    `).all();
+    `).all(today, today);
     bookingsMissingDocs = missingDocsList.length;
   } catch (e) { /* booking_documents or job_documents table may be missing on legacy DBs */ }
   if (bookingsMissingDocs > 0) {
@@ -194,6 +199,7 @@ router.get('/', (req, res) => {
   res.render('dashboard', {
     title: 'Today',
     user,
+    today,
     onboarding,
     kpi: {
       activeJobs: ops.activeJobs,
