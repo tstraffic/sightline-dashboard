@@ -80,9 +80,13 @@ async function sendSwmsExpiryReminders() {
 
       // Notification row per admin so it surfaces in the bell — and fire
       // a push for whoever has a subscription registered.
+      // 'swms_expiring' (not 'swms_expiry'): that is the type the notification
+      // CHECK vocabulary allows and the name lib/notificationPrefs.js maps to
+      // the "Safety documents & tickets" category, so recipients' preferences
+      // actually gate it instead of it falling through to the catch-all.
       const insertNotif = db.prepare(`
         INSERT INTO notifications (user_id, type, title, message, link)
-        VALUES (?, 'swms_expiry', ?, ?, '/swms/' || ?)
+        VALUES (?, 'swms_expiring', ?, ?, '/swms/' || ?)
       `);
 
       for (const u of recipients) {
@@ -92,7 +96,7 @@ async function sendSwmsExpiryReminders() {
             title,
             body,
             url: '/swms/' + swms.id,
-            type: 'swms_expiry',
+            type: 'swms_expiring',
           });
         } catch (e) {
           console.error('[swms-expiry] notify error for user', u.id, ':', e.message);
