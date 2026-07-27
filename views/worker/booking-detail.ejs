@@ -353,6 +353,13 @@
   <!-- TASKS TAB -->
   <% if (tab === 'tasks') { %>
     <%
+      // Is there anything to return? Exactly the condition the per-task
+      // trigger button uses below (kind === 'equipment_return' && !done).
+      // The sheet is gated on this so the two can never drift apart — it
+      // used to be emitted for EVERY booking, gear or not.
+      var hasGearReturn = (myTasks || []).some(function (t) {
+        return t.kind === 'equipment_return' && t.status !== 'done';
+      });
       function priorityBadge(p) {
         if (p === 'high')   return { color:'#FCA5A5', bg:'rgba(239,68,68,0.18)', label:'HIGH' };
         if (p === 'low')    return { color:'rgba(255,255,255,0.55)', bg:'rgba(255,255,255,0.06)', label:'LOW' };
@@ -488,14 +495,23 @@
       </div>
     <% } %>
 
+    <%# Equipment-return sheet — only rendered when this shift actually has
+        gear to hand back. Previously it shipped with every Tasks tab and
+        was held off-screen by a CSS transform alone, so any hiccup (paint
+        order, bfcache restore, a dropped stylesheet) surfaced a "Gear
+        returned" dialog on bookings with no gear at all. %>
+    <% if (hasGearReturn) { %>
     <!-- Equipment-return sheet — condition + destination, required to
          complete a return task. Cloned from the hr-leave .lv-sheet
          pattern; rt- prefixed so the two never collide. -->
     <style>
       .rt-sheet-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); z-index: 60; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
       .rt-sheet-bg.open { opacity: 1; pointer-events: auto; }
-      .rt-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: #171A21; border-radius: 18px 18px 0 0; padding: 10px 16px calc(20px + env(safe-area-inset-bottom)); transform: translateY(105%); transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1); max-height: 86vh; overflow-y: auto; }
-      .rt-sheet.open { transform: translateY(0); }
+      /* visibility (not just transform) so the sheet cannot appear if the
+         transform is ever lost — a bare translate is what let this dialog
+         flash up unprompted. .open restores both together. */
+      .rt-sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 61; background: #171A21; border-radius: 18px 18px 0 0; padding: 10px 16px calc(20px + env(safe-area-inset-bottom)); transform: translateY(105%); visibility: hidden; pointer-events: none; transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0.25s; max-height: 86vh; overflow-y: auto; }
+      .rt-sheet.open { transform: translateY(0); visibility: visible; pointer-events: auto; }
       .rt-handle { width: 36px; height: 4px; border-radius: 2px; background: rgba(255,255,255,0.25); margin: 0 auto 12px; }
       body.rt-sheet-active nav.fixed, body.rt-sheet-active nav[class*="fixed"], body.rt-sheet-active .wh-tab-bar { visibility: hidden; }
       .rt-title { font-family: 'Bricolage Grotesque', Geist, sans-serif; font-size: 1.1rem; font-weight: 620; letter-spacing: -0.02em; color: #fff; }
@@ -611,6 +627,7 @@
       });
     })();
     </script>
+    <% } %>
   <% } %>
 
   <!-- FORMS TAB &mdash; shared partial keeps this 1:1 with views/worker/job-detail.ejs -->
