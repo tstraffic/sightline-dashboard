@@ -4384,3 +4384,17 @@ textarea.modal-input { resize: vertical; min-height: 48px; }
   }
   html { scroll-behavior: auto !important; }
 }
+
+/* ---------------------------------------------------------------
+   Booking Requester / Planner opt-in selects
+   Disabled until the matching "has a designated …" checkbox is ticked.
+   These list a client's contacts, which is usually fewer than the 8
+   options smart-select needs to kick in — so there's often no
+   .ss-disabled trigger to grey, and the bare <select> has to show the
+   state itself. Tailwind's disabled: colours lose to the dark theme's
+   select styling, so use opacity: it reads the same in both themes.
+   --------------------------------------------------------------- */
+select[data-party-select]:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

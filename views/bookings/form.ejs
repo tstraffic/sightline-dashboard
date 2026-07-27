@@ -223,20 +223,34 @@
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
           placeholder="Contact name or phone">
       </div>
+      <%
+        // Requester and Planner draw from the SAME pool as Site Contacts below
+        // — the selected client's people — and are rebuilt by syncReqPlan()
+        // whenever that pool changes (client re-picked, or a contact added
+        // inline via "+ Add contact").
+        // Each is opt-in: the select stays disabled (and a disabled control
+        // submits nothing, so the id clears) until its checkbox is ticked.
+        var _bkParties = [
+          { key: 'requester', label: 'Requester', cur: isEdit && booking.requester_id ? booking.requester_id : '' },
+          { key: 'planner',   label: 'Planner',   cur: isEdit && booking.planner_id   ? booking.planner_id   : '' }
+        ];
+      %>
+      <% _bkParties.forEach(function (p) { %>
       <div>
-        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Requester</label>
-        <!-- Options are the selected client's contacts, rebuilt by JS from
-             ALL_CONTACTS whenever the client changes (see syncReqPlan). -->
-        <select name="requester_id" id="requesterSelect" data-selected="<%= isEdit && booking.requester_id ? booking.requester_id : '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        <label class="flex items-center gap-1.5 mb-1 cursor-pointer select-none group">
+          <input type="checkbox" data-party-gate="<%= p.key %>Select" <%= p.cur ? 'checked' : '' %>
+            class="w-3.5 h-3.5 rounded border-gray-300 text-brand-600 focus:ring-brand-500 cursor-pointer">
+          <span class="text-[10px] font-bold uppercase tracking-widest <%= p.cur ? 'text-gray-500' : 'text-gray-400' %> group-hover:text-gray-600">
+            This booking has a designated <%= p.label.toLowerCase() %>
+          </span>
+        </label>
+        <select name="<%= p.key %>_id" id="<%= p.key %>Select" data-party-select
+          data-selected="<%= p.cur %>" <%= p.cur ? '' : 'disabled' %>
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-400 disabled:border-gray-200 disabled:cursor-not-allowed">
           <option value="">-- Select a client first --</option>
         </select>
       </div>
-      <div>
-        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Planner</label>
-        <select name="planner_id" id="plannerSelect" data-selected="<%= isEdit && booking.planner_id ? booking.planner_id : '' %>" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-          <option value="">-- Select a client first --</option>
-        </select>
-      </div>
+      <% }); %>
     </div>
     <!-- Site Contacts — scoped to the selected client, with inline add -->
     <div class="mt-4" id="siteContactsBlock">
@@ -435,19 +449,22 @@
         }).join('');
       }
 
-      function renderList() { renderChips(); renderResults(); }
+      // Called after the contact pool changes (notably an inline "+ Add
+      // contact"), so the Requester/Planner dropdowns pick the new person up
+      // straight away instead of only on the next client re-pick.
+      function renderList() { renderChips(); renderResults(); syncReqPlan(); }
 
-      // Requester + Planner are chosen from the SELECTED CLIENT's contacts.
-      // Rebuild both selects from ALL_CONTACTS on every client change,
-      // preserving a saved pick (data-selected) whenever it's still valid.
+      // Requester + Planner offer the same people as the Site Contacts picker
+      // — clientRows() — so anything you can pick as a site contact, including
+      // one you just added inline, can also be the requester or planner.
       var reqSel = document.getElementById('requesterSelect');
       var planSel = document.getElementById('plannerSelect');
       function syncReqPlan() {
         var clientId = clientSelect.value;
+        var rows = clientRows();
         [reqSel, planSel].forEach(function (sel) {
           if (!sel) return;
           var keep = sel.value || sel.getAttribute('data-selected') || '';
-          var rows = ALL_CONTACTS.filter(function (c) { return String(c.company_id) === String(clientId); });
           sel.innerHTML = clientId
             ? '<option value="">-- None --</option>'
             : '<option value="">-- Select a client first --</option>';
@@ -459,9 +476,34 @@
             sel.appendChild(o);
           });
           sel.setAttribute('data-selected', '');
+          // smart-select repaints its widget off `change`, not off DOM edits.
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
         });
       }
       clientSelect.addEventListener('change', syncReqPlan);
+
+      // Each select is gated by its own checkbox. smart-select.js mirrors
+      // `disabled` onto its widget (greying it) via a MutationObserver, but
+      // only repaints the trigger's LABEL on `change` — so clearing the value
+      // programmatically has to dispatch one.
+      Array.prototype.forEach.call(document.querySelectorAll('[data-party-gate]'), function (box) {
+        var sel = document.getElementById(box.getAttribute('data-party-gate'));
+        if (!sel) return;
+        var caption = box.parentNode.querySelector('span');
+        function apply(clearOnUntick) {
+          sel.disabled = !box.checked;
+          if (clearOnUntick && !box.checked && sel.value) {
+            sel.value = '';
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+          if (caption) {
+            caption.classList.toggle('text-gray-500', box.checked);
+            caption.classList.toggle('text-gray-400', !box.checked);
+          }
+        }
+        box.addEventListener('change', function () { apply(true); });
+        apply(false);
+      });
       syncReqPlan();
 
       listEl.addEventListener('click', function (e) {
@@ -1700,6 +1742,11 @@
   }
   @media (min-width: 640px) { .bk-savebar { margin-left: -1.5rem; margin-right: -1.5rem; padding-left: 1.5rem; padding-right: 1.5rem; } }
   @media (min-width: 1024px) { .bk-savebar { margin-left: -2rem; margin-right: -2rem; padding-left: 2rem; padding-right: 2rem; } }
+  /* The floating quick-actions (#globalFab) and feedback (#fb-fab) buttons sit
+     bottom-right at z-40 — above this bar — so without clearance they cover
+     Create/Update Booking and swallow the click. Must come after the two rules
+     above, which set padding-right themselves. */
+  @media (min-width: 640px) { .bk-savebar { padding-right: 9.5rem; } }
   .bk-savebar-inner { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
   .bk-step-btn {
     padding: 7px 12px; border-radius: 8px; border: 1px solid #E5E7EB;

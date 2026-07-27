@@ -556,6 +556,21 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
 .bk2-create-field--required .bk2-create-lbl::after { content: ' *'; color: #EA580C; }
 .bk2-create-field--required .bk2-create-lbl { color: #C2410C; font-weight: 700; }
 
+/* Requester / Planner opt-in gate: a checkbox sitting inline with its label.
+   The checkbox has to opt out of the full-width sizing this panel gives text
+   inputs, or it stretches as a flex item and shunts the caption to the far
+   edge of the field. */
+.bk2-create-gate {
+  display: flex; align-items: center; gap: 6px;
+  cursor: pointer; user-select: none;
+}
+.bk2-create-gate input[type="checkbox"] {
+  width: auto; flex: 0 0 auto;
+  margin: 0; padding: 0;
+  background: none; border: 0; border-radius: 0;
+  accent-color: #2B7FFF; cursor: pointer;
+}
+
 .bk2-create-toggle {
   display: inline-flex; align-items: center; gap: 10px;
   padding: 8px 12px; background: #F9FAFB;

@@ -2287,7 +2287,8 @@ router.get('/:id', (req, res) => {
   }
   if (!booking) { if (wantsJson) return res.status(404).json({ error: 'Booking not found' }); req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings')); }
   // Resolve requester/planner names (used by both JSON and HTML paths).
-  // These now reference client_contacts (the client's people), not crew.
+  // These reference client_contacts (the client's people), not crew — the same
+  // pool the Site Contacts picker draws from.
   let requesterName = '', plannerName = '';
   if (booking.requester_id) { const r = db.prepare("SELECT full_name FROM client_contacts WHERE id = ?").get(booking.requester_id); if (r) requesterName = r.full_name; }
   if (booking.planner_id) { const p = db.prepare("SELECT full_name FROM client_contacts WHERE id = ?").get(booking.planner_id); if (p) plannerName = p.full_name; }

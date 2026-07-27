@@ -1074,14 +1074,20 @@
               <span class="bk2-create-lbl">Client Billing Code</span>
               <input type="text" name="client_billing_code">
             </label>
+            <!-- Requester/Planner draw from the same contact pool as Site
+                 Contacts below, and each is opt-in via its own checkbox. A
+                 disabled select submits nothing, so unticking clears the id. -->
+            <% ['requester', 'planner'].forEach(function (party) { %>
             <label class="bk2-create-field">
-              <span class="bk2-create-lbl">Requester</span>
-              <select name="requester_id" id="bk2c-requester"><option value="">Pick a client first</option></select>
+              <span class="bk2-create-lbl bk2-create-gate">
+                <input type="checkbox" data-party-gate="bk2c-<%= party %>">
+                Has a designated <%= party %>
+              </span>
+              <select name="<%= party %>_id" id="bk2c-<%= party %>" data-party-select disabled>
+                <option value="">Pick a client first</option>
+              </select>
             </label>
-            <label class="bk2-create-field">
-              <span class="bk2-create-lbl">Planner</span>
-              <select name="planner_id" id="bk2c-planner"><option value="">Pick a client first</option></select>
-            </label>
+            <% }); %>
             <div class="bk2-create-field bk2-create-field--full">
               <span class="bk2-create-lbl" style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
                 <span>Site contacts <span style="font-weight:400;opacity:0.55;text-transform:none;letter-spacing:0;">(optional)</span> <span id="bk2c-contact-count" class="bk2c-contact-count"></span></span>
@@ -1758,9 +1764,9 @@
       allContacts.sort(function (a, b) { return (a.full_name || '').localeCompare(b.full_name || ''); });
     }
 
-    // Requester + Planner draw from the same client-scoped contact pool.
-    // Rebuild both selects whenever contacts (re)load, keeping a prior pick
-    // if that contact is still in the list (edit prefill / client re-pick).
+    // Requester + Planner draw from the same client-scoped contact pool as the
+    // Site Contacts picker. Rebuild both whenever contacts (re)load or a new
+    // one is added inline, keeping a prior pick if it's still in the list.
     var reqSel = document.getElementById('bk2c-requester');
     var planSel = document.getElementById('bk2c-planner');
     function syncReqPlan() {
@@ -1776,8 +1782,25 @@
           sel.appendChild(o);
         });
         sel.setAttribute('data-selected', '');
+        // smart-select repaints its widget off `change`, not off DOM edits.
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
       });
     }
+
+    // Each select is gated by its own checkbox; a disabled control submits
+    // nothing, so unticking clears the stored id.
+    document.querySelectorAll('[data-party-gate]').forEach(function (box) {
+      var sel = document.getElementById(box.getAttribute('data-party-gate'));
+      if (!sel) return;
+      sel.disabled = !box.checked;
+      box.addEventListener('change', function () {
+        sel.disabled = !box.checked;
+        if (!box.checked && sel.value) {
+          sel.value = '';
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
+    });
 
     function loadContacts(clientId, cb) {
       searchInput.disabled = true;

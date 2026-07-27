@@ -1365,20 +1365,21 @@ setInterval(function() {
             </div>
           </div>
           <div class="modal-field-grid">
+            <!-- Requester/Planner draw from the same contact pool as Site
+                 Contacts below, and each is opt-in via its own checkbox. A
+                 disabled select submits nothing, so unticking clears the id. -->
+            <% ['requester', 'planner'].forEach(function (party) { %>
             <div class="modal-field">
-              <label>Requester</label>
-              <select name="requester_id" class="modal-input">
-                <option value="">-- Select --</option>
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+                <input type="checkbox" data-party-gate="modal-<%= party %>" style="width:auto;flex:none;margin:0;cursor:pointer">
+                This booking has a designated <%= party %>
+              </label>
+              <select name="<%= party %>_id" id="modal-<%= party %>" class="modal-input" data-party-select disabled>
+                <option value="">-- Select <%= party %> --</option>
                 <% formContacts.forEach(c => { %><option value="<%= c.id %>"><%= c.full_name %><%= c.position ? ' · ' + c.position : '' %></option><% }); %>
               </select>
             </div>
-            <div class="modal-field">
-              <label>Planner</label>
-              <select name="planner_id" class="modal-input">
-                <option value="">-- Select --</option>
-                <% formContacts.forEach(c => { %><option value="<%= c.id %>"><%= c.full_name %><%= c.position ? ' · ' + c.position : '' %></option><% }); %>
-              </select>
-            </div>
+            <% }); %>
           </div>
           <% if (formContacts.length > 0) { %>
           <div class="modal-field" style="margin-top:12px">
@@ -2611,8 +2612,18 @@ function openBookingFormEdit(id) {
       setVal('billing_code', b.billing_code || '');
       setVal('client_contact', b.client_contact || '');
       setVal('location_context', b.location_context || '');
-      setVal('requester_id', b.requester_id || '');
-      setVal('planner_id', b.planner_id || '');
+      // Tick + enable each party gate before setting, or the value won't stick.
+      ['requester', 'planner'].forEach(function (party) {
+        var sel = document.getElementById('modal-' + party);
+        var box = document.querySelector('[data-party-gate="modal-' + party + '"]');
+        var id = b[party + '_id'] || '';
+        if (box) box.checked = !!id;
+        if (sel) {
+          sel.disabled = !id;
+          sel.value = id ? String(id) : '';
+          sel.dispatchEvent(new Event('change', { bubbles: true }));
+        }
+      });
 
       // Booking Information
       setVal('start_date', sd[0]);
@@ -3018,4 +3029,20 @@ __bkApplyTimeMasks();
 document.addEventListener('DOMContentLoaded', __bkApplyTimeMasks);
 var __bkMaskObserver = new MutationObserver(__bkApplyTimeMasks);
 __bkMaskObserver.observe(document.body, { childList: true, subtree: true });
+
+// Requester/Planner opt-in gates — greyed out until ticked. Bound once;
+// the edit prefill (setVal block) sets checked/disabled directly.
+// smart-select.js greys its widget off the native `disabled` attribute, but
+// only repaints the trigger label on `change` — so clearing needs the event.
+document.querySelectorAll('[data-party-gate]').forEach(function (box) {
+  var sel = document.getElementById(box.getAttribute('data-party-gate'));
+  if (!sel) return;
+  box.addEventListener('change', function () {
+    sel.disabled = !box.checked;
+    if (!box.checked && sel.value) {
+      sel.value = '';
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+  });
+});
 </script>
