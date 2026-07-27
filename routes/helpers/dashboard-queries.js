@@ -217,8 +217,10 @@ const NEEDS_ROWS = [
 // Band 1. Returns { top, overflow, allClear } — top is capped at 5 rows,
 // sorted most-urgent first; overflow feeds the "+N more" disclosure; rows
 // with count 0 are never built, so "zero tiles" cannot render by design.
-function getNeedsYouNow(db, user, today) {
-  const rows = [];
+// extraRows lets the route inject pre-built rows that need data the
+// registry can't reach (e.g. the weather-driven wet-window row).
+function getNeedsYouNow(db, user, today, extraRows) {
+  const rows = (extraRows || []).filter(r => r && r.count > 0);
   for (const spec of NEEDS_ROWS) {
     if (!canAccess(user, spec.gate)) continue;
     try {
@@ -256,17 +258,37 @@ function getTodayOps(db, today) {
     WHERE date(b.start_datetime) BETWEEN date(?) AND date(?,'+1 day')
       AND b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')
   `).get(today, today).c;
+  // Uncapped: the day-bar lanes and jobs-in-flight table need the whole day
+  // (the view caps lanes at 6 with a "+N more" link). start/end_datetime are
+  // Sydney wall-clock strings, so slice(11,16) is the lane position.
   const todaysBookings = db.prepare(`
-    SELECT b.id, b.booking_number, b.title, b.start_datetime, b.suburb, b.status,
-      j.job_number,
-      (SELECT COUNT(*) FROM booking_crew bc
-        WHERE bc.booking_id = b.id AND bc.status != 'declined') AS crew_count
+    SELECT b.id, b.booking_number, b.title, b.start_datetime, b.end_datetime,
+      b.suburb, b.site_address, b.status,
+      j.job_number, c.company_name AS client_name
     FROM bookings b
     LEFT JOIN jobs j ON j.id = b.job_id
+    LEFT JOIN clients c ON c.id = b.client_id
     WHERE date(b.start_datetime) = date(?)
       AND b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')
-    ORDER BY b.start_datetime ASC LIMIT 10
+    ORDER BY b.start_datetime ASC
   `).all(today);
+
+  // One grouped crew query for all of today's bookings (no N+1). Leaders
+  // sort first so the face row shows them leftmost.
+  if (todaysBookings.length) {
+    const ids = todaysBookings.map(b => b.id);
+    const rows = db.prepare(`
+      SELECT bc.booking_id, bc.is_team_leader, cm.full_name
+      FROM booking_crew bc
+      JOIN crew_members cm ON cm.id = bc.crew_member_id
+      WHERE bc.booking_id IN (${ids.map(() => '?').join(',')})
+        AND bc.status != 'declined'
+      ORDER BY bc.is_team_leader DESC, cm.full_name ASC
+    `).all(...ids);
+    const byBooking = {};
+    for (const r of rows) (byBooking[r.booking_id] = byBooking[r.booking_id] || []).push(r);
+    for (const b of todaysBookings) b.crew = byBooking[b.id] || [];
+  }
 
   return {
     totalActiveCrew,
@@ -276,6 +298,68 @@ function getTodayOps(db, today) {
     bookingsNext24h,
     todaysBookings,
   };
+}
+
+// Day-bar "Due" lane. Only entities with a REAL clock time get a timed
+// marker (meetings, ROL shift windows); date-only deadlines (compliance due,
+// quotes expiring, tasks due) cluster at an end-of-day pin — no fake times.
+function getDayMarkers(db, user, today) {
+  const timed = [];
+  const eod = [];
+
+  try {
+    const meetings = db.prepare(`
+      SELECT id, dept_key, title, meeting_time FROM dept_meetings
+      WHERE meeting_date = ? AND status = 'scheduled' AND meeting_time != ''
+      ORDER BY meeting_time ASC
+    `).all(today);
+    for (const m of meetings) {
+      timed.push({
+        hm: m.meeting_time,
+        label: `${m.meeting_time} ${m.title}`,
+        tone: 'info',
+        href: `/departments/${m.dept_key}/meetings/${m.id}`,
+      });
+    }
+  } catch (e) { /* dept_meetings absent on legacy DBs */ }
+
+  try {
+    const rolStarts = db.prepare(`
+      SELECT rs.start_time, c.title FROM compliance_rol_shifts rs
+      JOIN compliance c ON c.id = rs.compliance_id
+      WHERE rs.start_date = ? AND rs.start_time IS NOT NULL AND rs.start_time != ''
+      ORDER BY rs.start_time ASC
+    `).all(today);
+    for (const r of rolStarts) {
+      timed.push({ hm: r.start_time, label: `${r.start_time} ROL window opens — ${r.title}`, tone: 'warn', href: '/compliance' });
+    }
+    const rolEnds = db.prepare(`
+      SELECT rs.end_time, c.title FROM compliance_rol_shifts rs
+      JOIN compliance c ON c.id = rs.compliance_id
+      WHERE rs.end_date = ? AND rs.end_time IS NOT NULL AND rs.end_time != ''
+      ORDER BY rs.end_time ASC
+    `).all(today);
+    for (const r of rolEnds) {
+      timed.push({ hm: r.end_time, label: `${r.end_time} ROL expires — ${r.title}`, tone: 'critical', href: '/compliance' });
+    }
+  } catch (e) { /* rol shifts absent on legacy DBs */ }
+
+  try {
+    const c = db.prepare("SELECT COUNT(*) AS c FROM compliance WHERE due_date = ? AND status NOT IN ('approved','expired')").get(today).c;
+    if (c) eod.push({ count: c, label: c === 1 ? 'plan due today' : 'plans due today', href: '/compliance' });
+  } catch (e) { /* ignore */ }
+  try {
+    const c = db.prepare("SELECT COUNT(*) AS c FROM quotes WHERE valid_until_date = ? AND status IN ('draft','sent')").get(today).c;
+    if (c) eod.push({ count: c, label: c === 1 ? 'quote expires today' : 'quotes expire today', href: '/quotes' });
+  } catch (e) { /* quotes table/columns may differ on legacy DBs */ }
+  try {
+    const scope = taskScopeSql(user);
+    const c = db.prepare(`SELECT COUNT(*) AS c FROM tasks WHERE due_date = ? AND status != 'complete' AND deleted_at IS NULL ${scope}`).get(today).c;
+    if (c) eod.push({ count: c, label: c === 1 ? 'task due today' : 'tasks due today', href: '/tasks' });
+  } catch (e) { /* ignore */ }
+
+  timed.sort((a, b) => a.hm.localeCompare(b.hm));
+  return { timed, eod };
 }
 
 // Band 3 — the one trend chart (job pipeline). Job health and crew hours were
@@ -331,6 +415,7 @@ module.exports = {
   CHECKLIST_TARGET_PCT,
   getNeedsYouNow,
   getTodayOps,
+  getDayMarkers,
   getChartData,
   getMyTasks,
   getMyPlans,

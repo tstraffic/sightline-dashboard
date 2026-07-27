@@ -47,9 +47,14 @@ test('no tabs, three bands, and no zero-value rows anywhere', async ({ page }) =
   await expect(page.locator('[data-tab-panel]')).toHaveCount(0);
 
   // Bands present (today-ops is admin-visible; your-work only when populated).
+  await expect(page.locator('#console')).toBeVisible();
   await expect(page.locator('#needs-you-now')).toBeVisible();
   await expect(page.locator('#today-ops')).toBeVisible();
   await expect(page.locator('#trend')).toBeVisible();
+
+  // Hermetic runs set DISABLE_WEATHER — every weather element must hide.
+  await expect(page.locator('#wx-card')).toHaveCount(0);
+  await expect(page.locator('.db-wxband')).toHaveCount(0);
 
   // At most one chart on the whole page (zero when the test DB has no jobs).
   expect(await page.locator('canvas').count()).toBeLessThanOrEqual(1);
@@ -155,7 +160,12 @@ test('six-plus triggers cap at five rows with a working overflow', async ({ page
   await details.locator('summary').click();
   expect(await details.locator('[data-attn]').count()).toBeGreaterThanOrEqual(1);
 
-  // Band 2 reflects the seeded booking via booking_crew-era queries.
+  // The seeded booking gives the console a day-bar lane + the NOW line.
+  await expect(page.locator('#day-bar')).toBeVisible();
+  expect(await page.locator('#day-bar .db-blk').count()).toBeGreaterThanOrEqual(1);
+  await expect(page.locator('#now-line')).toBeAttached();
+
+  // Jobs in flight lists the seeded booking with its window.
   const opsText = await page.locator('#today-ops').innerText();
-  expect(opsText).toMatch(/Bookings next 24h/i);
+  expect(opsText).toMatch(/07:00/);
 });

@@ -584,3 +584,263 @@ body.dark-glass .panel-header .panel-header-link:focus-visible {
   outline-offset: -2px;
   border-radius: 6px;
 }
+
+/* ───────────────────────────────────────────────────────────
+   18. CONSOLE — the control-room instrument panel
+   The Today page's dark operational band. Deliberately the
+   SAME fixed dark surface in both themes (like the sidebar):
+   it's an instrument panel, not a content card. Everything
+   below it obeys the active theme as usual.
+   ─────────────────────────────────────────────────────────── */
+body.dark-glass .console-band {
+  background: #161A21;
+  border: 1px solid #313A47;
+  color: #E6EAE8;
+}
+body.dark-glass .console-rail {
+  display: flex; align-items: center; gap: 14px;
+  padding: 10px 18px;
+  border-bottom: 1px solid #313A47;
+  flex-wrap: wrap;
+}
+body.dark-glass .console-clock { font-size: 12px; letter-spacing: 0.05em; color: #fff; }
+body.dark-glass .console-clock .cr-dim { color: #69726D; }
+body.dark-glass .console-rail-sep { width: 1px; height: 16px; background: #313A47; }
+body.dark-glass .console-live {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 10.5px; letter-spacing: 0.08em; text-transform: uppercase;
+  color: #7C857F;
+}
+body.dark-glass .console-live-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: #10B981; box-shadow: 0 0 8px rgba(16,185,129,0.6);
+  animation: console-pulse 2.4s ease-in-out infinite;
+}
+@keyframes console-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+@media (prefers-reduced-motion: reduce) { body.dark-glass .console-live-dot { animation: none; } }
+body.dark-glass .console-greet { font-size: 12.5px; color: #8B938E; }
+
+body.dark-glass .console-brief {
+  display: grid; grid-template-columns: 1fr auto; gap: 28px;
+  align-items: end; padding: 20px 18px 16px;
+}
+body.dark-glass .console-eyebrow {
+  font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase;
+  color: #6E766F; margin-bottom: 8px;
+}
+body.dark-glass .console-thesis {
+  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-size: 27px; font-weight: 520;
+  font-variation-settings: 'opsz' 60;
+  letter-spacing: -0.022em; line-height: 1.16;
+  color: #fff; max-width: 26ch; text-wrap: balance;
+}
+body.dark-glass .console-thesis em { font-style: normal; color: #E9AE60; }
+/* The console is a fixed dark surface in BOTH themes — the light theme's
+   global h1 ink override must not wash the headline out. */
+:root[data-theme="light"] body.dark-glass .console-thesis { color: #fff !important; }
+:root[data-theme="light"] body.dark-glass .console-thesis em { color: #E9AE60 !important; }
+body.dark-glass .console-sub { margin-top: 8px; font-size: 12.5px; color: #8B938E; max-width: 62ch; }
+
+body.dark-glass .console-inst {
+  display: flex; border: 1px solid #313A47; border-radius: 12px;
+  overflow: hidden; background: #1E242D;
+}
+body.dark-glass .console-inst .i-cell {
+  display: block; padding: 10px 16px; min-width: 100px;
+  border-right: 1px solid #313A47; transition: background var(--transition-fast, 150ms);
+}
+body.dark-glass .console-inst .i-cell:last-child { border-right: none; }
+body.dark-glass .console-inst a.i-cell:hover { background: #232A34; }
+body.dark-glass .i-k {
+  display: block; font-size: 9px; letter-spacing: 0.13em;
+  text-transform: uppercase; color: #6E766F;
+}
+body.dark-glass .i-v {
+  display: block; font-size: 21px; color: #fff;
+  line-height: 1.25; margin-top: 2px; letter-spacing: -0.02em;
+}
+body.dark-glass .i-v.is-warn { color: #E9AE60; }
+body.dark-glass .i-v.is-bad { color: #F08079; }
+body.dark-glass .i-note { display: block; font-size: 10.5px; color: #7C857F; margin-top: 1px; }
+body.dark-glass .i-wx { display: flex; gap: 10px; align-items: center; background: linear-gradient(180deg, #232A34, #1E242D); }
+body.dark-glass .i-wx-emoji { font-size: 24px; line-height: 1; }
+body.dark-glass .i-wx-rain { display: block; font-size: 9.5px; color: #E9AE60; letter-spacing: 0.06em; margin-top: 2px; }
+
+/* ── Day bar ── */
+body.dark-glass .daybar { margin: 2px 18px 16px; border: 1px solid #313A47; border-radius: 12px; background: #1E242D; overflow: hidden; }
+body.dark-glass .db-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; padding: 8px 14px; border-bottom: 1px solid #313A47; flex-wrap: wrap;
+}
+body.dark-glass .db-title { font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #8B938E; }
+body.dark-glass .db-legend { display: flex; gap: 12px; font-size: 9.5px; letter-spacing: 0.06em; color: #69726D; }
+body.dark-glass .db-legend .lg { display: inline-flex; align-items: center; gap: 5px; }
+body.dark-glass .db-legend .sw { width: 9px; height: 9px; border-radius: 3px; }
+body.dark-glass .sw-live { background: #10B981; }
+body.dark-glass .sw-wet { background: #E1922B; }
+body.dark-glass .sw-night { background: #6E9BE0; }
+body.dark-glass .sw-due { background: #D63B33; }
+body.dark-glass .db-scroll { overflow-x: auto; }
+body.dark-glass .db-body { position: relative; padding: 0 14px 12px; min-width: 640px; }
+body.dark-glass .db-hours { position: relative; height: 20px; }
+body.dark-glass .db-hr {
+  position: absolute; top: 5px; font-size: 9.5px; color: #5F6862;
+  transform: translateX(-50%);
+}
+body.dark-glass .db-overlay { position: absolute; left: 14px; right: 14px; top: 22px; bottom: 10px; pointer-events: none; z-index: 1; }
+body.dark-glass .db-wxband {
+  position: absolute; top: 0; bottom: 0; border-radius: 3px;
+  background: repeating-linear-gradient(115deg, rgba(110,155,224,0.17) 0 5px, rgba(110,155,224,0.05) 5px 10px);
+  border-left: 1px dashed rgba(140,180,240,0.5);
+  border-right: 1px dashed rgba(140,180,240,0.5);
+}
+body.dark-glass .db-wxband-l {
+  position: absolute; top: 3px; left: 7px; font-size: 9px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #93B4E4; white-space: nowrap;
+}
+body.dark-glass .db-now {
+  position: absolute; top: -6px; bottom: 0; width: 1.5px;
+  background: #10B981; z-index: 4;
+  box-shadow: 0 0 9px rgba(16,185,129,0.55);
+}
+body.dark-glass .db-now-tag {
+  position: absolute; top: -14px; left: 50%; transform: translateX(-50%);
+  font-size: 8.5px; letter-spacing: 0.1em; color: #04231A;
+  background: #10B981; padding: 1.5px 4px; border-radius: 3px;
+}
+body.dark-glass .db-lane { position: relative; height: 30px; margin-top: 5px; z-index: 2; }
+body.dark-glass .db-lane-due { height: 42px; }
+/* Alternate marker labels between the top and bottom row so near-in-time
+   deadlines (a 09:30 meeting next to a 10:00 ROL expiry) can't overlap. */
+body.dark-glass .db-lane-due .db-mk:nth-child(odd)::after { top: 1px; }
+body.dark-glass .db-lane-due .db-mk:nth-child(even)::after { top: auto; bottom: 1px; }
+body.dark-glass .db-blk {
+  position: absolute; top: 3px; bottom: 3px; border-radius: 6px;
+  display: flex; align-items: center; gap: 7px; padding: 0 9px;
+  font-size: 11.5px; color: #fff; overflow: hidden; white-space: nowrap;
+  transition: filter var(--transition-fast, 150ms), transform var(--transition-fast, 150ms);
+}
+body.dark-glass .db-blk:hover { filter: brightness(1.16); transform: translateY(-1px); }
+body.dark-glass .db-blk b { font-weight: 500; overflow: hidden; text-overflow: ellipsis; }
+body.dark-glass .db-blk small { font-size: 9.5px; opacity: 0.62; }
+body.dark-glass .db-blk.is-live { background: #2F6B57; border-left: 2.5px solid #10B981; }
+body.dark-glass .db-blk.is-wet { background: #5A4A2A; border-left: 2.5px solid #E1922B; }
+body.dark-glass .db-blk.is-night { background: #2E3B57; border-left: 2.5px solid #6E9BE0; }
+body.dark-glass .db-mk {
+  position: absolute; top: 2px; bottom: 2px; width: 3px; border-radius: 2px;
+  background: #E1922B; pointer-events: auto;
+}
+body.dark-glass .db-mk::after {
+  content: attr(data-l);
+  position: absolute; top: 0; left: 7px;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 9.5px; color: #E9AE60; white-space: nowrap;
+}
+body.dark-glass .db-mk.is-crit { background: #D63B33; }
+body.dark-glass .db-mk.is-crit::after { color: #F08079; }
+body.dark-glass .db-mk.is-info { background: #6E9BE0; }
+body.dark-glass .db-mk.is-info::after { color: #93B4E4; }
+body.dark-glass .db-mk-eod { background: #D63B33; }
+body.dark-glass .db-mk-eod::after { color: #F08079; }
+body.dark-glass .db-more {
+  display: inline-block; margin-top: 6px; font-size: 10px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: #7C857F;
+}
+body.dark-glass .db-more:hover { color: #fff; }
+
+@media (max-width: 900px) {
+  body.dark-glass .console-brief { grid-template-columns: 1fr; align-items: start; gap: 14px; }
+  body.dark-glass .console-inst { overflow-x: auto; }
+  body.dark-glass .console-thesis { font-size: 21px; }
+}
+
+/* ── Jobs-in-flight table ── */
+body.dark-glass .flight-table th {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 9.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  font-weight: 400; text-align: left; padding: 8px 14px;
+  color: var(--dark-text-tertiary, #8B8E95);
+  border-bottom: 1px solid var(--dark-border, rgba(255,255,255,0.08));
+}
+body.dark-glass .flight-table td { padding: 10px 14px; vertical-align: middle; }
+body.dark-glass .flight-table tbody tr:hover { background: rgba(255,255,255,0.03); }
+:root[data-theme="light"] body.dark-glass .flight-table th { color: #9CA3AF; border-bottom-color: #F3F4F6; }
+:root[data-theme="light"] body.dark-glass .flight-table tbody tr:hover { background: #FBFCFB; }
+body.dark-glass .flight-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 11px; padding: 2px 8px; border-radius: 20px;
+  border: 1px solid var(--dark-border-strong, rgba(255,255,255,0.15));
+  color: var(--dark-text-secondary, #C9CBD1); white-space: nowrap;
+}
+body.dark-glass .flight-tag::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
+body.dark-glass .flight-tag.is-live { color: #34D399; border-color: rgba(52,211,153,0.4); background: rgba(16,185,129,0.1); }
+body.dark-glass .flight-tag.is-hold { color: #E9AE60; border-color: rgba(233,174,96,0.4); background: rgba(225,146,43,0.1); }
+body.dark-glass .flight-tag.is-done { color: #8B8E95; }
+body.dark-glass .flight-tag.is-plan { color: #93B4E4; border-color: rgba(147,180,228,0.35); background: rgba(110,155,224,0.08); }
+:root[data-theme="light"] body.dark-glass .flight-tag { border-color: #E5E7EB; color: #6B7280; }
+:root[data-theme="light"] body.dark-glass .flight-tag.is-live { color: #059669; border-color: #BFE9D6; background: #ECFDF5; }
+:root[data-theme="light"] body.dark-glass .flight-tag.is-hold { color: #B5720F; border-color: #F2DDBB; background: #FEF7EC; }
+:root[data-theme="light"] body.dark-glass .flight-tag.is-plan { color: #2563EB; border-color: #BFDBFE; background: #EFF6FF; }
+:root[data-theme="light"] body.dark-glass .flight-tag.is-done { color: #9CA3AF; }
+body.dark-glass .crew-faces { display: inline-flex; }
+body.dark-glass .crew-face {
+  width: 22px; height: 22px; border-radius: 50%;
+  background: #2A323E; border: 2px solid #1A1D24;
+  margin-left: -6px; display: inline-flex; align-items: center; justify-content: center;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 8.5px; color: #C9CBD1;
+}
+body.dark-glass .crew-face:first-child { margin-left: 0; }
+body.dark-glass .crew-face.is-lead { box-shadow: 0 0 0 1.5px #10B981; }
+:root[data-theme="light"] body.dark-glass .crew-face { background: #E5E9E6; border-color: #fff; color: #4E554F; }
+
+/* ── Attention-row hover affordance ── */
+body.dark-glass .attn-open {
+  font-size: 11px; font-weight: 600; color: var(--brand-500, #10B981);
+  border: 1px solid rgba(16,185,129,0.35); border-radius: 7px;
+  padding: 3px 9px; opacity: 0; flex-shrink: 0;
+  transition: opacity var(--transition-fast, 150ms);
+}
+body.dark-glass .attn-row:hover .attn-open,
+body.dark-glass .attn-row:focus-visible .attn-open { opacity: 1; }
+:root[data-theme="light"] body.dark-glass .attn-open { color: #059669; border-color: #BFE9D6; background: #ECFDF5; }
+
+/* ── Weather card (right rail — console-dark like the band) ── */
+body.dark-glass .wx-card { background: linear-gradient(165deg, #1E2733, #151B23); border: 1px solid #28323E; color: #E6EAE8; }
+body.dark-glass .wx-head { display: flex; align-items: flex-start; gap: 12px; padding: 14px 15px 10px; }
+body.dark-glass .wx-emoji { font-size: 32px; line-height: 1; }
+body.dark-glass .wx-meta { flex: 1; display: block; padding-top: 2px; }
+body.dark-glass .wx-place { display: block; font-size: 13px; font-weight: 500; color: #fff; }
+body.dark-glass .wx-desc { display: block; font-size: 12px; color: #8B938E; margin-top: 1px; }
+body.dark-glass .wx-hilo { display: block; font-size: 10.5px; color: #69726D; margin-top: 4px; }
+body.dark-glass .wx-big { font-size: 32px; line-height: 1; letter-spacing: -0.03em; color: #fff; }
+body.dark-glass .wx-hourly { display: grid; grid-template-columns: repeat(6, 1fr); border-top: 1px solid #28323E; }
+body.dark-glass .wx-hcell { padding: 9px 3px; text-align: center; border-right: 1px solid #28323E; }
+body.dark-glass .wx-hcell:last-child { border-right: none; }
+body.dark-glass .wx-hcell.is-wet { background: rgba(110,155,224,0.09); }
+body.dark-glass .wx-ht { display: block; font-size: 9px; color: #69726D; }
+body.dark-glass .wx-hd { display: block; font-size: 12px; color: #fff; margin-top: 3px; }
+body.dark-glass .wx-hp { display: block; font-size: 9px; color: #6E9BE0; margin-top: 1px; }
+body.dark-glass .wx-call {
+  display: flex; gap: 9px; align-items: flex-start;
+  padding: 11px 15px; border-top: 1px solid #28323E;
+  background: rgba(225,146,43,0.08); color: #E9AE60;
+}
+body.dark-glass .wx-call p { font-size: 12px; color: #C6CDC9; line-height: 1.45; }
+body.dark-glass .wx-call b { color: #fff; font-weight: 500; }
+body.dark-glass .wx-call:hover { background: rgba(225,146,43,0.14); }
+
+/* ── Right-rail mini affordances ── */
+body.dark-glass .mini-chk {
+  width: 15px; height: 15px; border: 1.6px solid var(--dark-border-strong, rgba(255,255,255,0.2));
+  border-radius: 4.5px; flex-shrink: 0; margin-top: 2px;
+}
+:root[data-theme="light"] body.dark-glass .mini-chk { border-color: #C4CBC6; }
+body.dark-glass .waiting-review {
+  font-size: 11.5px; font-weight: 600; padding: 4px 11px; border-radius: 7px;
+  background: var(--brand-600, #059669); color: #fff; flex-shrink: 0;
+  transition: background var(--transition-fast, 150ms);
+}
+body.dark-glass .waiting-review:hover { background: var(--brand-500, #10B981); }

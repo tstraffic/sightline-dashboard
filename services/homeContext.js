@@ -645,6 +645,87 @@ function safeParse(s, fallback) {
   try { return JSON.parse(s); } catch (e) { return fallback; }
 }
 
+// =========================================================
+// Sydney day outlook — hourly forecast powering the admin
+// dashboard's control-room console (day-bar rain band, wet
+// windows, hourly strip). Same Open-Meteo + cache machinery
+// as getWeather above; separate call because it needs the
+// HOURLY series, not just current conditions.
+// =========================================================
+const SYDNEY_LAT = -33.8688;
+const SYDNEY_LNG = 151.2093;
+// An hour with precipitation probability at or above this is "wet" —
+// contiguous wet hours merge into wetWindows for the day-bar overlay
+// and the crews-in-the-wet-window warning.
+const WET_PROB = 60;
+
+async function getSydneyOutlook() {
+  if (process.env.DISABLE_WEATHER) return null; // hermetic e2e runs
+  const cacheKey = 'wx-outlook:sydney';
+  const cached = weatherCache.get(cacheKey);
+  if (cached && cached.expires > Date.now()) return cached.data;
+
+  const url = `https://api.open-meteo.com/v1/forecast?latitude=${SYDNEY_LAT}&longitude=${SYDNEY_LNG}` +
+    `&current=temperature_2m,weather_code,wind_speed_10m,is_day` +
+    `&hourly=precipitation_probability,temperature_2m,weather_code` +
+    `&daily=temperature_2m_max,temperature_2m_min` +
+    `&timezone=Australia%2FSydney&forecast_days=2`;
+  const j = await fetchJson(url);
+  if (!j || !j.current || !j.hourly || !Array.isArray(j.hourly.time)) return null;
+
+  // Today's hours only (Open-Meteo returns local ISO strings because we
+  // pass timezone=Australia/Sydney). Keep the full day; consumers slice.
+  const todayIso = j.hourly.time.length ? j.hourly.time[0].slice(0, 10) : '';
+  const hours = [];
+  for (let i = 0; i < j.hourly.time.length; i++) {
+    const t = j.hourly.time[i];
+    if (t.slice(0, 10) !== todayIso) break;
+    const [, , hkind] = describeWmo(j.hourly.weather_code[i]);
+    hours.push({
+      hm: t.slice(11, 16),
+      hour: parseInt(t.slice(11, 13), 10),
+      temp: Math.round(j.hourly.temperature_2m[i]),
+      precipProb: j.hourly.precipitation_probability[i] == null ? 0 : j.hourly.precipitation_probability[i],
+      kind: hkind,
+    });
+  }
+
+  // Merge contiguous wet hours into windows. A window's `to` is the END of
+  // its last wet hour (hh+1:00) — rain at 14:00–16:00 prob spans to 17:00.
+  const wetWindows = [];
+  let cur = null;
+  for (const h of hours) {
+    if (h.precipProb >= WET_PROB) {
+      if (!cur) cur = { fromHour: h.hour, toHour: h.hour + 1, maxProb: h.precipProb };
+      else { cur.toHour = h.hour + 1; cur.maxProb = Math.max(cur.maxProb, h.precipProb); }
+    } else if (cur) { wetWindows.push(cur); cur = null; }
+  }
+  if (cur) wetWindows.push(cur);
+  for (const w of wetWindows) {
+    w.from = String(w.fromHour).padStart(2, '0') + ':00';
+    w.to = String(Math.min(w.toHour, 24)).padStart(2, '0') + ':00';
+  }
+
+  const [desc, emoji, kind] = describeWmo(j.current.weather_code);
+  const out = {
+    current: {
+      temp: Math.round(j.current.temperature_2m),
+      desc,
+      emoji,
+      kind,
+      windKmh: Math.round(j.current.wind_speed_10m || 0),
+      isDay: j.current.is_day !== 0,
+    },
+    hours,
+    hi: j.daily && j.daily.temperature_2m_max ? Math.round(j.daily.temperature_2m_max[0]) : null,
+    lo: j.daily && j.daily.temperature_2m_min ? Math.round(j.daily.temperature_2m_min[0]) : null,
+    wetWindows,
+    wetProb: WET_PROB,
+  };
+  weatherCache.set(cacheKey, { expires: Date.now() + 15 * 60 * 1000, data: out });
+  return out;
+}
+
 module.exports = {
   buildGreetingSubtext,
   buildSmartCards,
@@ -652,6 +733,7 @@ module.exports = {
   buildTodayTimeline,
   loadPreferences,
   getWeather,
+  getSydneyOutlook,
   geocodeAddress,
   formatTime,
   localIso,

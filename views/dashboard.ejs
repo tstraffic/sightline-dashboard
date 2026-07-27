@@ -1,27 +1,4 @@
 <% locals.currentPage = 'dashboard' %>
-<!-- Greeting — the shift board. Big display cut of Bricolage, then a live
-     status line in the depot radio-log voice (Geist Mono, · separated),
-     composed server-side from the same data the bands below render.
-     No vt-page-title: the personal title shouldn't morph between pages. -->
-<div class="hero-banner hero-board mb-7 px-1">
-  <div class="hero-greeting">
-    <h1 class="hero-greeting-title"><span id="greeting">Hello</span>, <%= user.full_name.split(' ')[0] %>.</h1>
-    <p class="hero-status-line">
-      <% statusLine.forEach((seg, i) => { %>
-        <% if (i > 0) { %><span class="hs-sep" aria-hidden="true">·</span><% } %>
-        <span<%- seg.alert ? ' class="hs-alert"' : '' %>><%= seg.text %></span>
-      <% }) %>
-    </p>
-  </div>
-</div>
-<script>
-  (function() {
-    var h = new Date().getHours();
-    var g = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-    document.getElementById('greeting').textContent = g;
-  })();
-</script>
-
 <% if (typeof birthdaysToday !== 'undefined' && birthdaysToday && birthdaysToday.length > 0) { %>
 <!-- Birthday banner — pops when at least one active crew member's DOB is today.
      The pink/amber gradient stays the same in both light + dark mode (it's the
@@ -114,205 +91,393 @@
   <p class="text-[10px] text-gray-400 mt-1"><%= onboarding.filter(i => i.done).length %>/<%= onboarding.length %> complete</p>
 </div>
 <% } %>
-<!-- ============================================================
-     Band 1 — Needs you now.
-     Row registry lives in routes/helpers/dashboard-queries.js
-     (getNeedsYouNow): permission-gated, zero-hidden, capped at 5
-     with a native <details> overflow. If nothing is wrong the band
-     collapses to a single all-clear line — that's the reward.
-     ============================================================ -->
 <%
-  // The hazard rail is state, not decoration: red stripes only when a
-  // critical row exists, amber when the worst is a warning, absent when
-  // the board is clear or merely informational.
+  // ── Day-bar geometry ─────────────────────────────────────────────
+  // Visible window 05:00–21:00 (960 min). Booking datetimes are Sydney
+  // wall-clock strings, so slice(11,16) IS the wall time — no TZ math.
+  const DAY_FROM = 5 * 60, DAY_TO = 21 * 60, DAY_SPAN = DAY_TO - DAY_FROM;
+  const hmToMin = hm => parseInt(hm.slice(0, 2), 10) * 60 + parseInt(hm.slice(3, 5), 10);
+  const pct = min => Math.max(0, Math.min(100, ((min - DAY_FROM) / DAY_SPAN) * 100));
+  const initials = name => (name || '').split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+
+  const laneBookings = todayOps ? todayOps.todaysBookings.slice(0, 6) : [];
+  const laneOverflow = todayOps ? Math.max(0, todayOps.todaysBookings.length - 6) : 0;
+  const wetSet = new Set(wetBookings);
+
+  const laneData = laneBookings.map(b => {
+    const startMin = hmToMin(b.start_datetime.slice(11, 16));
+    const endsToday = (b.end_datetime || '').slice(0, 10) === today;
+    const endMin = endsToday ? hmToMin(b.end_datetime.slice(11, 16)) : 24 * 60;
+    const crossesOut = endMin > DAY_TO || !endsToday;
+    const isNight = startMin >= 18 * 60 || !endsToday;
+    const left = pct(startMin);
+    const width = Math.max(3, pct(Math.min(endMin, DAY_TO)) - left);
+    const tone = wetSet.has(b.id) ? 'is-wet' : (isNight ? 'is-night' : 'is-live');
+    const crew = (b.crew || []);
+    return { b, left, width, tone, crossesOut,
+      window: b.start_datetime.slice(11, 16) + '–' + (endsToday ? b.end_datetime.slice(11, 16) : b.end_datetime.slice(11, 16) + ' +1'),
+      crewInitials: crew.slice(0, 3).map(c => initials(c.full_name)) };
+  });
+
+  const timedMarkers = (markers.timed || []).filter(m => /^\d{2}:\d{2}$/.test(m.hm));
+  const eodTotal = (markers.eod || []).reduce((a, m) => a + m.count, 0);
+  const eodTitle = (markers.eod || []).map(m => `${m.count} ${m.label}`).join(' · ');
+
+  // Attention totals for the instrument cluster.
   const _attnAll = needs.top.concat(needs.overflow);
   const _hasCritical = _attnAll.some(r => r.tone === 'critical');
-  const _hasWarn = _attnAll.some(r => r.tone === 'warn');
-  const _railClass = _hasCritical ? 'chevron-rail-left' : (_hasWarn ? 'chevron-rail-left is-warn' : '');
+
+  // Hourly strip: 6 cells, every 2 hours from just before now (day view).
+  let wxCells = [];
+  if (outlook) {
+    const nowHour = parseInt(nowHm.slice(0, 2), 10);
+    let from = Math.max(6, Math.min(nowHour - (nowHour % 2), 12));
+    wxCells = outlook.hours.filter(h => h.hour >= from && h.hour % 2 === 0).slice(0, 6);
+  }
 %>
-<div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5 <%= _railClass %>" id="needs-you-now">
-  <div class="panel-header">
-    <svg class="w-4 h-4 <%= needs.allClear ? 'text-emerald-500' : (_hasCritical ? 'text-red-500' : 'text-amber-500') %>" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-    <h2 class="panel-header-title">Needs you now</h2>
-    <% if (!needs.allClear) { %>
-      <span class="panel-header-count <%= _hasCritical ? 'is-critical' : '' %>"><%= _attnAll.length %></span>
-    <% } %>
-  </div>
-  <% if (needs.allClear) { %>
-    <div class="attn-clear" data-attn="all-clear">
-      <span class="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
-        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-      </span>
-      <div>
-        <p class="attn-clear-title">Board&rsquo;s clear.</p>
-        <p class="attn-clear-sub">Nothing needs your attention right now.</p>
-      </div>
-    </div>
-  <% } else { %>
-    <%
-      const attnRow = (r) => { %>
-        <a href="<%= r.href %>" data-attn="<%= r.key %>" class="attn-row is-<%= r.tone %> group">
-          <span class="attn-count"><%= r.count %></span>
-          <span class="flex-1 min-w-0 truncate">
-            <span class="attn-label"><%= r.label %></span>
-            <% if (r.detail) { %><span class="attn-detail ml-1.5"><%= r.detail %></span><% } %>
-          </span>
-          <svg class="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-        </a>
-      <% };
-    %>
-    <div class="divide-y divide-gray-100 stagger-children">
-      <% needs.top.forEach(r => { attnRow(r); }) %>
-    </div>
-    <% if (needs.overflow.length > 0) { %>
-      <details class="border-t border-gray-100">
-        <summary class="px-4 py-2.5 text-xs font-medium text-gray-500 hover:text-gray-700 cursor-pointer select-none font-mono uppercase tracking-widest" style="font-size:10.5px">
-          +<%= needs.overflow.length %> more
-        </summary>
-        <div class="divide-y divide-gray-100 border-t border-gray-100">
-          <% needs.overflow.forEach(r => { attnRow(r); }) %>
-        </div>
-      </details>
-    <% } %>
-  <% } %>
-</div>
 
-<!-- ============================================================
-     Your work — personal queues (kept as lists, not folded into
-     Band 1: triage says "go there", a work queue needs per-item
-     links). Hidden entirely when both lists are empty.
-     ============================================================ -->
-<% if ((myTasks && myTasks.length > 0) || (myPlans && myPlans.length > 0)) { %>
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5" id="your-work">
-  <% if (myTasks && myTasks.length > 0) { %>
-  <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-    <div class="panel-header">
-      <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-      <h2 class="panel-header-title">My Tasks</h2>
-      <span class="panel-header-count"><%= myTasks.length %></span>
-      <a href="/tasks" class="panel-header-link">View all &rarr;</a>
+<!-- ══ CONSOLE — the instrument panel. Always dark, both themes. ══ -->
+<section id="console" class="console-band rounded-2xl overflow-hidden mb-5">
+  <div class="console-rail">
+    <span class="console-clock font-mono"><span class="cr-dim"><%= new Date(today + 'T00:00:00Z').toLocaleDateString('en-AU', { weekday: 'short', timeZone: 'UTC' }).toUpperCase() %></span> <%= new Date(today + 'T00:00:00Z').toLocaleDateString('en-AU', { day: 'numeric', month: 'short', timeZone: 'UTC' }).toUpperCase() %> <span class="cr-dim">·</span> <b id="console-clk"><%= nowHm %></b></span>
+    <span class="console-rail-sep"></span>
+    <span class="console-live"><span class="console-live-dot" aria-hidden="true"></span>Board live</span>
+    <span class="flex-1"></span>
+    <span class="console-greet">Good <span id="console-daypart">day</span>, <%= user.full_name.split(' ')[0] %></span>
+  </div>
+
+  <div class="console-brief">
+    <div class="console-thesis-wrap">
+      <p class="console-eyebrow font-mono">Shape of the day</p>
+      <h1 class="console-thesis"><% thesis.headline.forEach(seg => { %><% if (seg.em) { %><em><%= seg.text %></em><% } else { %><%= seg.text %><% } %><% }) %></h1>
+      <p class="console-sub"><%= thesis.sub %></p>
     </div>
-    <div class="divide-y divide-gray-100">
-      <% myTasks.slice(0, 5).forEach(t => {
-        const isOverdue = t.due_date < today; // Sydney today from the route
-        const priorityTag = t.priority === 'high' ? 'task-tag-high' : t.priority === 'medium' ? 'task-tag-medium' : 'task-tag-low';
-        const statusTag = t.status === 'in_progress' ? 'task-tag-progress' : t.status === 'blocked' ? 'task-tag-blocked' : 'task-tag-default';
-      %>
-      <a href="/tasks/<%= t.id %>/edit" class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
-        <div class="min-w-0 flex-1">
-          <p class="text-sm font-medium text-gray-900 truncate"><%= t.title %></p>
-          <div class="flex items-center gap-2 mt-1.5">
-            <% if (t.job_number) { %><span class="job-id-chip" style="font-size:10px;padding:1px 6px"><%= t.job_number %></span><% } %>
-            <span class="task-tag <%= priorityTag %>"><%= t.priority %></span>
-            <span class="task-tag <%= statusTag %>"><%= t.status.replace(/_/g, ' ') %></span>
-          </div>
-        </div>
-        <div class="ml-3 text-right flex-shrink-0">
-          <span class="text-xs font-semibold <%= isOverdue ? 'text-red-600' : 'text-gray-500' %>"><%= new Date(t.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) %></span>
-          <% if (isOverdue) { %><p class="text-[10px] text-red-500 font-medium">OVERDUE</p><% } %>
-        </div>
+
+    <div class="console-inst" role="group" aria-label="Today at a glance">
+      <% if (todayOps) { %>
+      <a class="i-cell" href="/bookings">
+        <span class="i-k font-mono">Crews out</span>
+        <span class="i-v font-mono"><%= todayOps.crewAssignedToday %></span>
+        <span class="i-note"><%= wetSet.size > 0 ? wetSet.size + ' in wet window' : 'of ' + todayOps.totalActiveCrew + ' active' %></span>
       </a>
-      <% }) %>
+      <a class="i-cell" href="/bookings">
+        <span class="i-k font-mono">Bookings today</span>
+        <span class="i-v font-mono"><%= todayOps.todaysBookings.length %></span>
+        <span class="i-note"><%= todayOps.jobsRunningToday %> job<%= todayOps.jobsRunningToday === 1 ? '' : 's' %> running</span>
+      </a>
+      <% } %>
+      <a class="i-cell" href="#needs-you-now">
+        <span class="i-k font-mono">Needs you</span>
+        <span class="i-v font-mono <%= _hasCritical ? 'is-bad' : (_attnAll.length ? 'is-warn' : '') %>"><%= _attnAll.length %></span>
+        <span class="i-note"><%= _attnAll.length ? (_hasCritical ? 'has critical items' : 'none critical') : 'board’s clear' %></span>
+      </a>
+      <% if (outlook) { %>
+      <div class="i-cell i-wx">
+        <span class="i-wx-emoji" aria-hidden="true"><%= outlook.current.emoji %></span>
+        <span>
+          <span class="i-v font-mono"><%= outlook.current.temp %>°</span>
+          <span class="i-note"><%= outlook.current.desc %></span>
+          <% if (outlook.wetWindows.length) { %>
+            <span class="i-wx-rain font-mono">RAIN <%= outlook.wetWindows[0].from %> · <%= outlook.wetWindows[0].maxProb %>%</span>
+          <% } %>
+        </span>
+      </div>
+      <% } %>
     </div>
   </div>
-  <% } %>
 
-  <% if (myPlans && myPlans.length > 0) { %>
-  <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-    <div class="panel-header">
-      <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-      <h2 class="panel-header-title">My Plans & Approvals</h2>
-      <span class="panel-header-count"><%= myPlans.length %></span>
-      <a href="/compliance" class="panel-header-link">View all &rarr;</a>
+  <% if (laneData.length || timedMarkers.length || eodTotal) { %>
+  <!-- ── DAY BAR — today on the ground ── -->
+  <div id="day-bar" class="daybar">
+    <div class="db-head">
+      <span class="db-title font-mono">Today on the ground</span>
+      <span class="db-legend font-mono">
+        <span class="lg"><span class="sw sw-live"></span>On site</span>
+        <% if (outlook && outlook.wetWindows.length) { %><span class="lg"><span class="sw sw-wet"></span>Wet risk</span><% } %>
+        <span class="lg"><span class="sw sw-night"></span>Night</span>
+        <span class="lg"><span class="sw sw-due"></span>Due</span>
+      </span>
     </div>
-    <div class="divide-y divide-gray-100">
-      <% myPlans.slice(0, 5).forEach(p => {
-        const isOverdue = p.due_date && p.due_date < today;
-        const isDueSoon = !isOverdue && p.due_date && p.due_date <= new Date(new Date(today + 'T00:00:00Z').getTime() + 14 * 86400000).toISOString().split('T')[0];
-        const statusColors = { not_started: 'bg-gray-100 text-gray-600', started: 'bg-purple-50 text-purple-700', submitted: 'bg-blue-50 text-blue-700', rejected: 'bg-red-50 text-red-700' };
-        const sc = statusColors[p.status] || 'bg-gray-100 text-gray-600';
-      %>
-      <a href="/compliance/<%= p.id %>/edit" class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
-        <div class="min-w-0 flex-1">
-          <p class="text-sm font-medium text-gray-900 truncate"><%= p.title %></p>
-          <div class="flex items-center gap-2 mt-1.5">
-            <% if (p.job_number) { %><span class="job-id-chip" style="font-size:10px;padding:1px 6px"><%= p.job_number %></span><% } %>
-            <% if (p.client_name && !p.job_number) { %><span class="text-[10px] text-gray-400"><%= p.client_name %></span><% } %>
-            <span class="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded-full <%= sc %>"><%= p.status.replace(/_/g, ' ') %></span>
-          </div>
-        </div>
-        <div class="ml-3 text-right flex-shrink-0">
-          <% if (p.due_date) { %>
-            <span class="text-xs font-semibold <%= isOverdue ? 'text-red-600' : isDueSoon ? 'text-amber-600' : 'text-gray-500' %>"><%= new Date(p.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) %></span>
-            <% if (isOverdue) { %><p class="text-[10px] text-red-500 font-medium">OVERDUE</p><% } %>
-            <% if (isDueSoon) { %><p class="text-[10px] text-amber-500 font-medium">DUE SOON</p><% } %>
-          <% } else { %>
-            <span class="text-xs text-gray-400">No date</span>
+    <div class="db-scroll">
+      <div class="db-body">
+        <div class="db-hours font-mono" aria-hidden="true">
+          <% for (let h = 5; h <= 21; h += 2) { %>
+            <span class="db-hr" style="left:<%= pct(h * 60) %>%"><%= String(h).padStart(2, '0') %></span>
           <% } %>
         </div>
+        <div class="db-overlay" aria-hidden="true">
+          <% if (outlook) { outlook.wetWindows.forEach(w => { %>
+            <div class="db-wxband" style="left:<%= pct(w.fromHour * 60) %>%;width:<%= Math.max(2, pct(Math.min(w.toHour, 21) * 60) - pct(w.fromHour * 60)) %>%">
+              <span class="db-wxband-l font-mono">Rain <%= w.from %>–<%= w.to %></span>
+            </div>
+          <% }) } %>
+          <div id="now-line" class="db-now" data-from="300" data-to="1260" hidden><span class="db-now-tag font-mono">NOW</span></div>
+        </div>
+
+        <% laneData.forEach(l => { %>
+        <div class="db-lane">
+          <a href="/bookings/<%= l.b.id %>" class="db-blk <%= l.tone %>" style="left:<%= l.left %>%;width:<%= l.width %>%"
+             title="<%= (l.b.title || l.b.booking_number) %> · <%= l.window %><%= l.b.client_name ? ' · ' + l.b.client_name : '' %>">
+            <b><%= l.b.suburb || l.b.title || l.b.booking_number %></b>
+            <small class="font-mono"><%= l.window %><%= l.crossesOut ? ' →' : '' %><%= l.crewInitials.length ? ' · ' + l.crewInitials.join(' ') : '' %></small>
+          </a>
+        </div>
+        <% }) %>
+        <% if (laneOverflow > 0) { %>
+          <a href="/bookings" class="db-more font-mono">+<%= laneOverflow %> more booking<%= laneOverflow === 1 ? '' : 's' %> today →</a>
+        <% } %>
+
+        <% if (timedMarkers.length || eodTotal) { %>
+        <div class="db-lane db-lane-due">
+          <% timedMarkers.forEach(m => {
+               const mm = Math.max(DAY_FROM, Math.min(hmToMin(m.hm), DAY_TO)); %>
+            <a href="<%= m.href %>" class="db-mk <%= m.tone === 'critical' ? 'is-crit' : (m.tone === 'info' ? 'is-info' : '') %>"
+               style="left:<%= pct(mm) %>%" data-l="<%= m.label %>" title="<%= m.label %>"></a>
+          <% }) %>
+          <% if (eodTotal > 0) { %>
+            <a href="<%= markers.eod[0].href %>" class="db-mk db-mk-eod" style="left:<%= pct(17 * 60) %>%"
+               data-l="<%= eodTotal %> due EOD" title="<%= eodTitle %>"></a>
+          <% } %>
+        </div>
+        <% } %>
+      </div>
+    </div>
+  </div>
+  <% } %>
+</section>
+
+<!-- ══ WORK AREA ══ -->
+<div class="grid grid-cols-1 xl:grid-cols-[1fr_330px] gap-5 items-start mb-5">
+
+  <!-- LEFT column -->
+  <div class="min-w-0 space-y-5">
+
+    <%
+      const _railClass = _hasCritical ? 'chevron-rail-left' : (_attnAll.some(r => r.tone === 'warn') ? 'chevron-rail-left is-warn' : '');
+    %>
+    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden <%= _railClass %>" id="needs-you-now">
+      <div class="panel-header">
+        <svg class="w-4 h-4 <%= needs.allClear ? 'text-emerald-500' : (_hasCritical ? 'text-red-500' : 'text-amber-500') %>" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        <h2 class="panel-header-title">Needs you now</h2>
+        <% if (!needs.allClear) { %>
+          <span class="panel-header-count <%= _hasCritical ? 'is-critical' : '' %>"><%= _attnAll.length %></span>
+        <% } %>
+      </div>
+      <% if (needs.allClear) { %>
+        <div class="attn-clear" data-attn="all-clear">
+          <span class="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
+            <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+          </span>
+          <div>
+            <p class="attn-clear-title">Board&rsquo;s clear.</p>
+            <p class="attn-clear-sub">Nothing needs your attention right now.</p>
+          </div>
+        </div>
+      <% } else { %>
+        <%
+          const attnRow = (r) => { %>
+            <a href="<%= r.href %>" data-attn="<%= r.key %>" class="attn-row is-<%= r.tone %> group">
+              <span class="attn-count"><%= r.count %></span>
+              <span class="flex-1 min-w-0 truncate">
+                <span class="attn-label"><%= r.label %></span>
+                <% if (r.detail) { %><span class="attn-detail ml-1.5"><%= r.detail %></span><% } %>
+              </span>
+              <span class="attn-open">Open</span>
+              <svg class="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+            </a>
+          <% };
+        %>
+        <div class="divide-y divide-gray-100 stagger-children">
+          <% needs.top.forEach(r => { attnRow(r); }) %>
+        </div>
+        <% if (needs.overflow.length > 0) { %>
+          <details class="border-t border-gray-100">
+            <summary class="px-4 py-2.5 text-xs font-medium text-gray-500 hover:text-gray-700 cursor-pointer select-none font-mono uppercase tracking-widest" style="font-size:10.5px">
+              +<%= needs.overflow.length %> more
+            </summary>
+            <div class="divide-y divide-gray-100 border-t border-gray-100">
+              <% needs.overflow.forEach(r => { attnRow(r); }) %>
+            </div>
+          </details>
+        <% } %>
+      <% } %>
+    </div>
+
+    <!-- Jobs in flight -->
+    <% if (todayOps) { %>
+    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden" id="today-ops">
+      <div class="panel-header">
+        <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+        <h2 class="panel-header-title">Jobs in flight</h2>
+        <span class="panel-header-count"><%= todayOps.todaysBookings.length %></span>
+        <a href="/bookings" class="panel-header-link">Bookings &rarr;</a>
+      </div>
+      <% if (todayOps.todaysBookings.length === 0) { %>
+        <p class="px-4 py-5 text-sm text-gray-400">No bookings scheduled today. <span class="text-gray-300">·</span> <%= todayOps.availableCrew %> of <%= todayOps.totalActiveCrew %> crew available.</p>
+      <% } else { %>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm flight-table">
+          <thead>
+            <tr>
+              <th>Job</th>
+              <th class="hidden md:table-cell">Client</th>
+              <th class="hidden sm:table-cell">Crew</th>
+              <th>Window</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <%
+              const statusTag = (b) => {
+                if (wetSet.has(b.id)) return { cls: 'is-hold', label: 'Wet window' };
+                const map = {
+                  in_progress: { cls: 'is-live', label: 'On site' },
+                  green_to_go: { cls: 'is-live', label: 'Green to go' },
+                  complete: { cls: 'is-done', label: 'Complete' },
+                  finalised: { cls: 'is-done', label: 'Finalised' },
+                  conflict: { cls: 'is-hold', label: 'Conflict' },
+                  on_hold: { cls: 'is-hold', label: 'On hold' },
+                  unconfirmed: { cls: 'is-plan', label: 'Unconfirmed' },
+                  client_booking: { cls: 'is-plan', label: 'Client booking' },
+                  confirmed: { cls: 'is-plan', label: 'Confirmed' },
+                  locked: { cls: 'is-plan', label: 'Locked' },
+                };
+                return map[b.status] || { cls: 'is-plan', label: (b.status || '').replace(/_/g, ' ') };
+              };
+            %>
+            <% todayOps.todaysBookings.forEach(b => { const t = statusTag(b); const endsToday = (b.end_datetime || '').slice(0, 10) === today; %>
+            <tr>
+              <td>
+                <a href="/bookings/<%= b.id %>" class="font-medium text-gray-900 hover:text-brand-600"><%= b.title || b.suburb || b.booking_number %></a>
+                <div class="font-mono text-[11px] text-gray-400"><%= b.booking_number %><%= b.job_number ? ' · ' + b.job_number : '' %></div>
+              </td>
+              <td class="hidden md:table-cell text-gray-600 text-xs"><%= b.client_name || '—' %></td>
+              <td class="hidden sm:table-cell">
+                <% if ((b.crew || []).length) { %>
+                <span class="crew-faces">
+                  <% b.crew.slice(0, 3).forEach(c => { %><span class="crew-face <%= c.is_team_leader ? 'is-lead' : '' %>" title="<%= c.full_name %><%= c.is_team_leader ? ' (team leader)' : '' %>"><%= initials(c.full_name) %></span><% }) %>
+                  <% if (b.crew.length > 3) { %><span class="crew-face">+<%= b.crew.length - 3 %></span><% } %>
+                </span>
+                <% } else { %><span class="text-xs text-gray-300">—</span><% } %>
+              </td>
+              <td class="font-mono text-[11.5px] text-gray-500 whitespace-nowrap"><%= b.start_datetime.slice(11, 16) %>–<%= b.end_datetime ? b.end_datetime.slice(11, 16) : '' %><%= endsToday ? '' : ' +1' %></td>
+              <td><span class="flight-tag <%= t.cls %>"><%= t.label %></span></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+    <% } %>
+  </div>
+
+  <!-- RIGHT rail -->
+  <div class="space-y-5 min-w-0">
+
+    <% if (outlook) { %>
+    <div class="wx-card rounded-2xl overflow-hidden" id="wx-card">
+      <div class="wx-head">
+        <span class="wx-emoji" aria-hidden="true"><%= outlook.current.emoji %></span>
+        <span class="wx-meta">
+          <span class="wx-place">Sydney</span>
+          <span class="wx-desc"><%= outlook.current.desc %></span>
+          <span class="wx-hilo font-mono"><% if (outlook.hi != null) { %>H <%= outlook.hi %>° · L <%= outlook.lo %>°<% } %><%= outlook.current.windKmh ? ' · ' + outlook.current.windKmh + ' km/h' : '' %></span>
+        </span>
+        <span class="wx-big font-mono"><%= outlook.current.temp %>°</span>
+      </div>
+      <% if (wxCells.length) { %>
+      <div class="wx-hourly">
+        <% wxCells.forEach(h => { %>
+        <div class="wx-hcell <%= h.precipProb >= outlook.wetProb ? 'is-wet' : '' %>">
+          <span class="wx-ht font-mono"><%= h.hm %></span>
+          <span class="wx-hd font-mono"><%= h.temp %>°</span>
+          <span class="wx-hp font-mono"><%= h.precipProb > 0 ? h.precipProb + '%' : '—' %></span>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+      <% if (wetSet.size > 0) { %>
+      <a href="/bookings" class="wx-call">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" class="w-4 h-4 flex-shrink-0 mt-0.5"><path d="M12 4 2.5 20h19z"/><path d="M12 10v4M12 17h.01"/></svg>
+        <p><b><%= wetSet.size %> booking<%= wetSet.size === 1 ? '' : 's' %> in the wet window.</b> Check the crews and log a stand-down decision before the rain arrives.</p>
       </a>
-      <% }) %>
+      <% } %>
     </div>
-  </div>
-  <% } %>
-</div>
-<% } %>
+    <% } %>
 
-<!-- ============================================================
-     Band 2 — Today's operations. The one live-state view: crew
-     coverage + today's booking list. Server-side gated (todayOps
-     is null for roles without bookings/allocations access).
-     ============================================================ -->
-<% if (todayOps) { %>
-<div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5" id="today-ops">
-  <div class="panel-header">
-    <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-    <h2 class="panel-header-title">Today's operations</h2>
-    <a href="/bookings" class="panel-header-link">Bookings &rarr;</a>
-  </div>
-  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
-    <div class="stat-card is-info">
-      <p class="stat-card-label">Crew on today</p>
-      <p class="stat-card-value"><%= todayOps.crewAssignedToday %></p>
-      <p class="stat-card-sub">of <%= todayOps.totalActiveCrew %> active</p>
+    <!-- My tasks -->
+    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <div class="panel-header">
+        <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        <h2 class="panel-header-title">My tasks</h2>
+        <% if (myTasks.length) { %><span class="panel-header-count"><%= myTasks.length %></span><% } %>
+        <a href="/tasks" class="panel-header-link">All &rarr;</a>
+      </div>
+      <% if (myTasks.length === 0) { %>
+        <div class="px-4 py-5 text-center">
+          <p class="text-sm text-gray-400">No open tasks assigned to you.</p>
+          <% if (unassignedTasks > 0) { %>
+            <a href="/tasks" class="inline-block mt-2 text-xs font-medium text-brand-600 hover:text-brand-700 border border-gray-200 rounded-lg px-3 py-1.5 hover:bg-gray-50 transition">Pick up an unassigned one (<%= unassignedTasks %>)</a>
+          <% } %>
+        </div>
+      <% } else { %>
+      <div class="divide-y divide-gray-100">
+        <% myTasks.slice(0, 5).forEach(t => {
+          const isOverdue = t.due_date < today;
+          const priorityTag = t.priority === 'high' ? 'task-tag-high' : t.priority === 'medium' ? 'task-tag-medium' : 'task-tag-low';
+        %>
+        <a href="/tasks/<%= t.id %>/edit" class="flex items-start gap-2.5 px-4 py-3 hover:bg-gray-50 transition">
+          <span class="mini-chk" aria-hidden="true"></span>
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-medium text-gray-900 truncate"><%= t.title %></span>
+            <span class="flex items-center gap-1.5 mt-1 flex-wrap">
+              <span class="task-tag <%= priorityTag %>"><%= t.priority %></span>
+              <% if (isOverdue) { %><span class="font-mono text-[10px] text-red-600 font-semibold"><%= Math.round((new Date(today) - new Date(t.due_date)) / 86400000) %> days overdue</span>
+              <% } else if (t.due_date) { %><span class="font-mono text-[10px] text-gray-400"><%= new Date(t.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) %></span><% } %>
+            </span>
+          </span>
+        </a>
+        <% }) %>
+        <% if (unassignedTasks > 0) { %>
+          <a href="/tasks" class="block px-4 py-2.5 text-xs font-medium text-gray-500 hover:text-gray-700 hover:bg-gray-50 font-mono uppercase tracking-widest" style="font-size:10px">+ pick up an unassigned task (<%= unassignedTasks %>)</a>
+        <% } %>
+      </div>
+      <% } %>
     </div>
-    <div class="stat-card is-good accent-emerald">
-      <p class="stat-card-label">Available</p>
-      <p class="stat-card-value"><%= todayOps.availableCrew %></p>
-    </div>
-    <div class="stat-card is-info">
-      <p class="stat-card-label">Jobs running today</p>
-      <p class="stat-card-value"><%= todayOps.jobsRunningToday %></p>
-    </div>
-    <div class="stat-card is-muted">
-      <p class="stat-card-label">Bookings next 24h</p>
-      <p class="stat-card-value"><%= todayOps.bookingsNext24h %></p>
-    </div>
-  </div>
-  <% if (todayOps.todaysBookings.length > 0) { %>
-  <div class="divide-y divide-gray-100 border-t border-gray-100">
-    <% todayOps.todaysBookings.forEach(b => { %>
-    <a href="/bookings/<%= b.id %>" class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition">
-      <span class="font-mono text-[11px] font-medium text-gray-500 w-12 flex-shrink-0 tracking-tight"><%= formatTime(b.start_datetime) %></span>
-      <span class="text-sm font-medium text-gray-900 truncate flex-1 min-w-0">
-        <%= b.booking_number || ('#' + b.id) %><% if (b.title) { %> — <%= b.title %><% } %>
-      </span>
-      <% if (b.job_number) { %><span class="job-id-chip flex-shrink-0" style="font-size:10px;padding:1px 6px"><%= b.job_number %></span><% } %>
-      <% if (b.suburb) { %><span class="text-xs text-gray-400 flex-shrink-0 hidden sm:inline"><%= b.suburb %></span><% } %>
-      <span class="text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0"><%= b.crew_count %> crew</span>
-    </a>
-    <% }) %>
-  </div>
-  <% } else { %>
-  <p class="px-4 pb-4 text-sm text-gray-400">No bookings scheduled today.</p>
-  <% } %>
-</div>
-<% } %>
 
-<!-- ============================================================
-     Band 3 — one trend: the job pipeline. Deeper analysis lives
-     in /reports; this page keeps exactly one chart.
-     ============================================================ -->
+    <!-- Waiting on me -->
+    <% if (myPlans && myPlans.length > 0) { %>
+    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+      <div class="panel-header">
+        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <h2 class="panel-header-title">Waiting on me</h2>
+        <span class="panel-header-count"><%= myPlans.length %></span>
+        <a href="/compliance" class="panel-header-link">All &rarr;</a>
+      </div>
+      <div class="divide-y divide-gray-100">
+        <% myPlans.slice(0, 5).forEach(p => {
+          const isOverdue = p.due_date && p.due_date < today;
+        %>
+        <div class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition group">
+          <span class="min-w-0 flex-1">
+            <span class="block text-sm font-medium text-gray-900 truncate"><%= p.title %></span>
+            <span class="flex items-center gap-1.5 mt-1">
+              <% if (p.job_number) { %><span class="font-mono text-[10px] text-gray-400 bg-gray-50 border border-gray-100 rounded px-1"><%= p.job_number %></span><% } %>
+              <span class="text-[10px] text-gray-400"><%= (p.status || '').replace(/_/g, ' ') %></span>
+              <% if (isOverdue) { %><span class="font-mono text-[10px] text-red-600 font-semibold">overdue</span><% } %>
+            </span>
+          </span>
+          <a href="/compliance/<%= p.id %>/edit" class="waiting-review">Review</a>
+        </div>
+        <% }) %>
+      </div>
+    </div>
+    <% } %>
+  </div>
+</div>
+
+<!-- ══ TREND ══ -->
 <div class="bg-white border border-gray-200 rounded-2xl p-4" id="trend">
   <div class="panel-header" style="padding-left:0;padding-right:0;padding-top:0">
     <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
@@ -328,22 +493,42 @@
   <% } %>
 </div>
 
-<!-- Quick Actions live in the global FAB (bottom-right, on every page). -->
+<script>
+  // Console clock + daypart greeting + NOW line — the console should feel
+  // like it's running. Admin staff are Sydney-local, so client time is the
+  // operational time.
+  (function () {
+    var clk = document.getElementById('console-clk');
+    var daypart = document.getElementById('console-daypart');
+    var now = document.getElementById('now-line');
+    function tick() {
+      var d = new Date();
+      var mins = d.getHours() * 60 + d.getMinutes();
+      if (clk) clk.textContent = String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+      if (daypart) daypart.textContent = d.getHours() < 12 ? 'morning' : d.getHours() < 17 ? 'afternoon' : 'evening';
+      if (now) {
+        var from = +now.dataset.from, to = +now.dataset.to;
+        if (mins >= from && mins <= to) {
+          now.hidden = false;
+          now.style.left = ((mins - from) / (to - from) * 100) + '%';
+        } else {
+          now.hidden = true;
+        }
+      }
+    }
+    tick();
+    setInterval(tick, 20000);
+  })();
+</script>
 
 <% if (jobStatusDist.length > 0) { %>
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
-  // Theme-aware chart: fonts from the app stack, bar palette from the signal
-  // semantics (emerald = live/won, amber = held, red = lost, slate = not yet
-  // real), tick colour read from the theme at render time. Pattern is
-  // reusable by /reports' charts.
   Chart.defaults.font.family = "'Geist', system-ui, -apple-system, sans-serif";
   Chart.defaults.font.size = 11;
-
   var isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
   var tickColor = isLightTheme ? '#6B7280' : '#8B8E95';
-
   var statusData = <%- JSON.stringify(jobStatusDist) %>;
   var sLabels = { lead: 'Lead', won: 'Won', active: 'Active', on_hold: 'On Hold', completed: 'Completed', lost: 'Lost', tender: 'Tender', prestart: 'Prestart', closed: 'Closed' };
   var sColors = {

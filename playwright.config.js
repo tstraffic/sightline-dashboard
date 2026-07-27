@@ -51,6 +51,9 @@ module.exports = {
       SESSION_SECRET: 'test-suite-session-secret',
       // Keep the seed script quiet; it's already side-effect-free for tests.
       NODE_ENV: 'test',
+      // Hermetic runs: the dashboard's Open-Meteo outlook returns null and
+      // every weather element hides — no external HTTP from the suite.
+      DISABLE_WEATHER: '1',
     },
     // Blow away the test DB before each run so state is deterministic.
     // Playwright runs the command as-is; do the cleanup via a wrapper script.
