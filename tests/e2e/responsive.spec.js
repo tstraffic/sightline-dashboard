@@ -19,7 +19,12 @@ test('compliance + hire-dockets — columns hide correctly on mobile', async ({ 
   const desktopHeaders = await page.$$eval('table thead th', ths =>
     ths.filter(t => t.offsetWidth > 0).map(t => (t.textContent || '').trim())
   );
-  for (const col of ['Ref', 'Project', 'Due Date', 'Expiry', 'Assigned', 'Fee']) {
+  // Column set per views/compliance/index.ejs <thead>: Title/Status/Invoice
+  // always show; Type + Due Date are sm:, Ref + Client Req are md:, Project +
+  // Assigned are lg:. (The old Expiry/Fee columns are long gone — this
+  // assertion went stale unnoticed because the test skipped for years
+  // whenever /compliance had no rows to render a table.)
+  for (const col of ['Ref', 'Title', 'Type', 'Project', 'Status', 'Client Req', 'Due Date', 'Assigned', 'Invoice']) {
     expect(desktopHeaders).toContain(col);
   }
 
@@ -27,10 +32,10 @@ test('compliance + hire-dockets — columns hide correctly on mobile', async ({ 
   const mobileHeaders = await page.$$eval('table thead th', ths =>
     ths.filter(t => t.offsetWidth > 0).map(t => (t.textContent || '').trim())
   );
-  for (const col of ['Ref', 'Project', 'Expiry', 'Fee']) {
+  for (const col of ['Ref', 'Type', 'Project', 'Client Req', 'Due Date', 'Assigned']) {
     expect(mobileHeaders).not.toContain(col);
   }
-  for (const col of ['Title', 'Type', 'Status']) {
+  for (const col of ['Title', 'Status', 'Invoice']) {
     expect(mobileHeaders).toContain(col);
   }
 

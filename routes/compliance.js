@@ -217,13 +217,28 @@ function weekStart(date) {
   d.setHours(0, 0, 0, 0);
   return d;
 }
-function toDateStr(d) { return d.toISOString().split('T')[0]; }
+// Local components, NOT toISOString(): the week/month boundaries above are
+// built with local getters, so routing them through UTC shifted every range
+// by a day (Sydney is +10/+11, Railway runs UTC).
+function toDateStr(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+// The date the Weekly / Monthly / From–To filters work on.
+//
+// These used to filter on due_date alone, which made them look broken: plans
+// created through the current flow never get a due_date (it's written only by
+// the legacy single-item form at POST /:id), so every modern plan was filtered
+// out and the list came back empty. client_request_date comes first because
+// it's the date this page already groups plans by; due_date keeps legacy flat
+// rows working; created_at is a last resort so nothing silently vanishes.
+const PLAN_DATE_SQL = "COALESCE(NULLIF(c.client_request_date, ''), NULLIF(c.due_date, ''), DATE(c.created_at))";
 
 router.get('/', (req, res) => {
   const db = getDb();
   const { status, job_id, client_id, item_type, view = 'all', ref, date_from, date_to, invoice_state } = req.query;
 
-  let query = `SELECT c.*, j.job_number, j.client as job_client,
+  let query = `SELECT c.*, ${PLAN_DATE_SQL} AS plan_date, j.job_number, j.client as job_client,
     cl.company_name as client_name,
     u.full_name as approver_name, a.full_name as assigned_name,
     rfi.full_name as ready_for_invoice_by_name,
@@ -255,19 +270,21 @@ router.get('/', (req, res) => {
     query += ` AND (c.item_type IN (${inList}) OR c.item_types LIKE ? OR EXISTS (SELECT 1 FROM compliance sc WHERE sc.parent_id = c.id AND sc.item_type IN (${inList})))`;
     params.push(...typeAliases, `%${item_type}%`, ...typeAliases);
   }
-  if (date_from) { query += ` AND c.due_date >= ?`; params.push(date_from); }
-  if (date_to)   { query += ` AND c.due_date <= ?`; params.push(date_to); }
+  if (date_from) { query += ` AND ${PLAN_DATE_SQL} >= ?`; params.push(date_from); }
+  if (date_to)   { query += ` AND ${PLAN_DATE_SQL} <= ?`; params.push(date_to); }
 
   // Invoice workflow filter — pending / ready / invoiced
   if (invoice_state === 'pending')  query += ` AND COALESCE(c.ready_for_invoice, 0) = 0 AND COALESCE(c.invoiced, 0) = 0`;
   if (invoice_state === 'ready')    query += ` AND COALESCE(c.ready_for_invoice, 0) = 1 AND COALESCE(c.invoiced, 0) = 0`;
   if (invoice_state === 'invoiced') query += ` AND COALESCE(c.invoiced, 0) = 1`;
 
-  const today = new Date();
+  // Anchor "this week"/"this month" to the Sydney calendar day, not the
+  // server's (Railway runs UTC — before ~10am Sydney that's still yesterday).
+  const today = new Date(sydneyToday() + 'T00:00:00');
   let prevRef = null, nextRef = null, periodLabel = null;
 
   if (view === 'week') {
-    const base = ref ? new Date(ref) : today;
+    const base = ref ? new Date(ref + 'T00:00:00') : today;
     const ws = weekStart(base);
     const we = new Date(ws); we.setDate(ws.getDate() + 6);
     const rangeStart = toDateStr(ws), rangeEnd = toDateStr(we);
@@ -276,10 +293,10 @@ router.get('/', (req, res) => {
     prevRef = toDateStr(prevWs);
     nextRef = toDateStr(nextWs);
     periodLabel = `${ws.toLocaleDateString('en-AU', { day: '2-digit', month: 'short' })} – ${we.toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' })}`;
-    query += ` AND c.due_date BETWEEN ? AND ?`;
+    query += ` AND ${PLAN_DATE_SQL} BETWEEN ? AND ?`;
     params.push(rangeStart, rangeEnd);
   } else if (view === 'month') {
-    const base = ref ? new Date(ref + '-01') : today;
+    const base = ref ? new Date(ref + '-01T00:00:00') : today;
     const ms = new Date(base.getFullYear(), base.getMonth(), 1);
     const me = new Date(base.getFullYear(), base.getMonth() + 1, 0);
     const rangeStart = toDateStr(ms), rangeEnd = toDateStr(me);
@@ -288,7 +305,7 @@ router.get('/', (req, res) => {
     prevRef = `${prevMs.getFullYear()}-${String(prevMs.getMonth() + 1).padStart(2, '0')}`;
     nextRef = `${nextMs.getFullYear()}-${String(nextMs.getMonth() + 1).padStart(2, '0')}`;
     periodLabel = ms.toLocaleDateString('en-AU', { month: 'long', year: 'numeric' });
-    query += ` AND c.due_date BETWEEN ? AND ?`;
+    query += ` AND ${PLAN_DATE_SQL} BETWEEN ? AND ?`;
     params.push(rangeStart, rangeEnd);
   }
 
@@ -320,16 +337,29 @@ router.get('/', (req, res) => {
   // single "Undated" group rendered first. Newest month first
   // otherwise — request dates flow naturally newest-on-top so admins
   // see fresh work without scrolling.
+  // Grouped by the SAME plan date the filters use (PLAN_DATE_SQL) — grouping
+  // on client_request_date alone put every plan without one in "Undated",
+  // including plans a month filter had just matched on another date.
   const monthBuckets = new Map();
   items.forEach(it => {
-    const reqDate = it.client_request_date && /^\d{4}-\d{2}/.test(it.client_request_date)
-      ? it.client_request_date.slice(0, 7) : null;
-    const key = reqDate || '0000-00';
+    const planDate = it.plan_date && /^\d{4}-\d{2}/.test(it.plan_date)
+      ? it.plan_date.slice(0, 7) : null;
+    const key = planDate || '0000-00';
     if (!monthBuckets.has(key)) monthBuckets.set(key, []);
     monthBuckets.get(key).push(it);
   });
   const sortedKeys = Array.from(monthBuckets.keys()).sort((a, b) => b.localeCompare(a));
   const currentMonthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+  // Any narrowing filter — not just the date ones. If someone filtered to
+  // "Approved" and every match happens to sit in an old month, a collapsed
+  // group reads as "no results".
+  const filterActive = view !== 'all' || !!date_from || !!date_to
+    || (!!status && status !== 'all') || !!job_id || !!client_id
+    || (!!item_type && item_type !== 'all') || !!invoice_state;
+  // Newest group, used when neither the current month nor Undated is present
+  // (e.g. every plan predates this month) so something is always expanded.
+  const defaultOpenKey = sortedKeys.includes(currentMonthKey) || sortedKeys.includes('0000-00')
+    ? null : sortedKeys[0];
   const monthGroups = sortedKeys.map(key => {
     let label;
     if (key === '0000-00') {
@@ -344,8 +374,13 @@ router.get('/', (req, res) => {
       label,
       items: monthBuckets.get(key),
       // Open the current month and the Undated bucket by default; older
-      // months stay collapsed so the page isn't a wall of rows.
-      open: key === currentMonthKey || key === '0000-00',
+      // months stay collapsed so the page isn't a wall of rows. Two
+      // exceptions, both so the page is never a list of collapsed headers
+      // with nothing under them:
+      //   · a period/date filter is active — the user just asked for exactly
+      //     these rows, so show them rather than making them expand groups;
+      //   · nothing else would be open — fall back to the newest group.
+      open: filterActive || key === currentMonthKey || key === '0000-00' || key === defaultOpenKey,
     };
   });
 
