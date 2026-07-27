@@ -1,0 +1,20 @@
+<%
+/* Directory | CRM view switcher for /clients — two views over the one
+   clients table (the CRM view absorbed the old /crm/accounts page).
+   Rendered only for CRM-permitted users; pass crmActive: true from the
+   CRM view. NOTE: never turn the CRM href into a sidebar link — the
+   sidebar customiser keys saved layouts by pathname and would collide
+   it with /clients. */
+%>
+<% if (canAccess(user, 'crm')) { %>
+<nav class="inline-flex items-center bg-gray-100 border border-gray-200 rounded-xl p-1 gap-0.5 mb-4" aria-label="Client views">
+  <a href="/clients"
+     class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors <%= !(typeof crmActive !== 'undefined' && crmActive) ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-white/60' %>">
+    Directory
+  </a>
+  <a href="/clients?view=crm"
+     class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors <%= (typeof crmActive !== 'undefined' && crmActive) ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-white/60' %>">
+    CRM view
+  </a>
+</nav>
+<% } %>

@@ -1,6 +1,7 @@
 <% locals.currentPage = 'clients' %>
 
 <div class="space-y-5">
+  <%- include('../partials/clients-view-toggle', { crmActive: false }) %>
   <%- include('../partials/page-header', { rail: true, wrapperClass: '',
     eyebrow: 'Clients',
     title: 'Company Directory',

@@ -2,6 +2,9 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
+const { canAccess } = require('../middleware/auth');
+const { addDays } = require('./helpers/dashboard-queries');
+const { sydneyToday } = require('../lib/sydney');
 
 // JSON API - search companies (for autocomplete/dropdowns) — MUST be before /:id
 router.get('/api/search.json', (req, res) => {
@@ -22,9 +25,19 @@ router.get('/api/search.json', (req, res) => {
   res.json(clients);
 });
 
-// List all companies
+// List all companies. Two views over the one clients table:
+//   default        — the company directory (below)
+//   ?view=crm      — the account/pipeline view ported from the old
+//                    /crm/accounts page (owner, last contact, next action,
+//                    open opps, pipeline $). CRM-permitted users only;
+//                    everyone else silently gets the directory.
 router.get('/', (req, res) => {
   const db = getDb();
+
+  if (req.query.view === 'crm' && canAccess(req.session.user, 'crm')) {
+    return renderCrmView(db, req, res);
+  }
+
   const { search, status, type } = req.query;
   let query = `
     SELECT c.*,
@@ -72,6 +85,85 @@ router.get('/', (req, res) => {
     filters: { search, status, type },
   });
 });
+
+// The CRM account view — ported from the retired GET /crm/accounts
+// (routes/crm.js) when the two lists over the clients table were merged.
+// Same filters and rollups; dates are Sydney-anchored (the old copy used
+// UTC and misjudged the 30-day dormant window for most of the working day).
+function renderCrmView(db, req, res) {
+  const { search, owner, type, status, priority, dormant, no_action } = req.query;
+  const today = sydneyToday();
+  const thirtyDaysAgo = addDays(today, -30);
+
+  let query = `
+    SELECT c.*,
+      u_owner.full_name as owner_name,
+      u_bdm.full_name as bdm_name,
+      (SELECT COUNT(*) FROM opportunities o WHERE o.client_id = c.id AND o.status = 'open') as open_opps,
+      (SELECT SUM(estimated_value) FROM opportunities o WHERE o.client_id = c.id AND o.status = 'open') as pipeline_value,
+      (SELECT COUNT(*) FROM crm_activities ca WHERE ca.client_id = c.id) as activity_count
+    FROM clients c
+    LEFT JOIN users u_owner ON c.account_owner_id = u_owner.id
+    LEFT JOIN users u_bdm ON c.bdm_owner_id = u_bdm.id
+    WHERE 1=1
+  `;
+  const params = [];
+
+  if (search) {
+    query += ` AND (c.company_name LIKE ? OR c.primary_contact_name LIKE ? OR c.primary_contact_email LIKE ? OR c.abn LIKE ?)`;
+    const s = `%${search}%`;
+    params.push(s, s, s, s);
+  }
+  if (owner) {
+    query += ` AND c.account_owner_id = ?`;
+    params.push(owner);
+  }
+  if (type && ['lead', 'prospect', 'client', 'active_client', 'inactive_client', 'partner', 'contractor', 'subcontractor', 'supplier'].includes(type)) {
+    query += ` AND c.company_type = ?`;
+    params.push(type);
+  }
+  if (status === 'active') {
+    query += ` AND c.active = 1`;
+  } else if (status === 'inactive') {
+    query += ` AND c.active = 0`;
+  }
+  if (priority) {
+    query += ` AND c.priority = ?`;
+    params.push(priority);
+  }
+  if (dormant === 'on' || dormant === '1') {
+    query += ` AND (c.last_contacted_date < ? OR c.last_contacted_date IS NULL)`;
+    params.push(thirtyDaysAgo);
+  }
+  if (no_action === 'on' || no_action === '1') {
+    query += ` AND c.next_action_date IS NULL`;
+  }
+
+  query += ` ORDER BY c.company_name ASC`;
+  const accounts = db.prepare(query).all(...params);
+
+  const stats = db.prepare(`
+    SELECT
+      COUNT(*) as total,
+      SUM(CASE WHEN company_type IN ('lead') THEN 1 ELSE 0 END) as leads,
+      SUM(CASE WHEN company_type IN ('prospect') THEN 1 ELSE 0 END) as prospects,
+      SUM(CASE WHEN company_type IN ('client', 'active_client') THEN 1 ELSE 0 END) as active_clients,
+      SUM(CASE WHEN active = 1 AND (last_contacted_date < ? OR last_contacted_date IS NULL) THEN 1 ELSE 0 END) as dormant
+    FROM clients
+  `).get(thirtyDaysAgo);
+
+  const users = db.prepare(`SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name ASC`).all();
+
+  res.render('clients/accounts', {
+    title: 'Clients — CRM view',
+    currentPage: 'clients',
+    accounts,
+    stats,
+    users,
+    thirtyDaysAgo,
+    filters: { search, owner, type, status, priority, dormant, no_action },
+  });
+}
 
 // New company form
 router.get('/new', (req, res) => {

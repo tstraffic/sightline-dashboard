@@ -49,6 +49,9 @@
   <!-- Quick Actions Bar -->
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3">
     <div class="flex items-center gap-2 overflow-x-auto pb-1 -mb-1 scrollbar-thin">
+      <%# /crm and /opportunities mounts are permission-gated ('crm') —
+          rendering these for everyone bounced non-CRM users to a 403. %>
+      <% if (canAccess(user, 'crm')) { %>
       <a href="/crm/activities/new?client_id=<%= company.id %>&type=call" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 text-xs font-medium rounded-lg transition whitespace-nowrap">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
         Log Call
@@ -66,6 +69,7 @@
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
         Create Opportunity
       </a>
+      <% } %>
       <a href="/contacts/new?company_id=<%= company.id %>" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-sky-50 hover:bg-sky-100 text-sky-700 text-xs font-medium rounded-lg transition whitespace-nowrap">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 9v3m0 0v3m0-3h3m-3 0h-3m-2-5a4 4 0 11-8 0 4 4 0 018 0zM3 20a6 6 0 0112 0v1H3v-1z"/></svg>
         Add Contact
@@ -284,7 +288,8 @@
           </div>
           <% } %>
         </dl>
-        <!-- Quick CRM Actions -->
+        <!-- Quick CRM Actions — links live under permission-gated mounts -->
+        <% if (canAccess(user, 'crm')) { %>
         <div class="flex flex-wrap gap-2 mt-4 pt-3 border-t border-gray-100">
           <a href="/crm/activities/new?client_id=<%= company.id %>&type=call" class="inline-flex items-center gap-1 px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-medium rounded-lg transition">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/></svg>
@@ -299,6 +304,7 @@
             New Opportunity
           </a>
         </div>
+        <% } %>
       </div>
 
       <!-- Notes -->

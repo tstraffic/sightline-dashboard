@@ -405,6 +405,16 @@ app.use('/kudos-admin', requireLogin, require('./routes/kudos-admin'));
 app.use('/payroll', requireLogin, require('./routes/payslips-admin'));
 app.use('/payroll', requireLogin, require('./routes/payroll-runs'));
 app.use('/finance', requireLogin, require('./routes/abergeldie-payments'));
+// /crm/accounts merged into /clients?view=crm (two lists over one table).
+// Query preserved so saved filter links keep working; requireLogin only —
+// the destination self-gates (non-CRM users get the plain directory).
+app.get('/crm/accounts', requireLogin, (req, res) => {
+  const qs = new URLSearchParams({ view: 'crm' });
+  for (const k of ['search', 'owner', 'type', 'status', 'priority', 'dormant', 'no_action']) {
+    if (req.query[k] != null && req.query[k] !== '') qs.set(k, req.query[k]);
+  }
+  res.redirect('/clients?' + qs.toString());
+});
 app.use('/crm', requireLogin, requirePermission('crm'), require('./routes/crm'));
 app.use('/opportunities', requireLogin, requirePermission('crm'), require('./routes/opportunities'));
 app.use('/chat', requireLogin, require('./routes/chat'));

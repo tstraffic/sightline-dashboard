@@ -1,5 +1,14 @@
-<% locals.currentPage = 'crm-accounts' %>
+<% locals.currentPage = 'clients' %>
 <%
+  // CRM account view over the clients table — ported from the retired
+  // views/crm/accounts.ejs when /crm/accounts merged into /clients.
+  // Four bugs fixed in the port (all pre-existing):
+  //   acct.account_type       → company_type (no such column; Type always '-')
+  //   acct.last_contact_date  → last_contacted_date (Last Contact always 'Never')
+  //   checkbox no_next_action → no_action (the route reads no_action; the
+  //                             filter never applied and never re-checked)
+  //   acct.status             → active flag (no status column; Status always '-')
+  // thirtyDaysAgo now arrives Sydney-anchored from the route.
   function formatCurrency(v) {
     return '$' + (v || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   }
@@ -8,8 +17,6 @@
     const dt = new Date(d);
     return dt.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: 'short', year: 'numeric' });
   }
-  const today = new Date().toISOString().split('T')[0];
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
 
   const typeColors = {
     lead: 'bg-sky-50 text-sky-700 ring-1 ring-sky-600/20',
@@ -41,11 +48,13 @@
   };
 %>
 
+<%- include('../partials/clients-view-toggle', { crmActive: true }) %>
+
 <%- include('../partials/page-header', { rail: true,
-  eyebrow: 'Sales & CRM',
-  title: 'Accounts',
-  subtitle: 'Manage clients, prospects, and business relationships',
-  actions: [{ label: 'Add Account', href: '/clients/new', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }]
+  eyebrow: 'Clients',
+  title: 'CRM view',
+  subtitle: 'Owners, pipeline, and relationship health across every account',
+  actions: [{ label: 'Add Client', href: '/clients/new', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }]
 }) %>
 
 <!-- Stat Cards -->
@@ -74,8 +83,8 @@
 
 <!-- Filter Bar -->
 <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 mb-5">
-  <form method="GET" action="/crm/accounts" class="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2 sm:gap-3">
-    <%- include('../partials/csrf') %>
+  <form method="GET" action="/clients" class="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2 sm:gap-3">
+    <input type="hidden" name="view" value="crm">
     <div class="flex-1 min-w-0 sm:min-w-[200px]">
       <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Search</label>
       <input type="text" name="search" value="<%= filters.search || '' %>" placeholder="Account name, contact..."
@@ -124,14 +133,14 @@
           <span class="text-xs">Dormant</span>
         </label>
         <label class="inline-flex items-center gap-1.5 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-600 cursor-pointer hover:bg-gray-50">
-          <input type="checkbox" name="no_next_action" value="1" <%= filters.no_next_action ? 'checked' : '' %> class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+          <input type="checkbox" name="no_action" value="1" <%= filters.no_action ? 'checked' : '' %> class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
           <span class="text-xs whitespace-nowrap">No Next Action</span>
         </label>
       </div>
     </div>
     <div class="flex gap-2">
       <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Filter</button>
-      <a href="/crm/accounts" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Clear</a>
+      <a href="/clients?view=crm" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Clear</a>
     </div>
   </form>
 </div>
@@ -144,10 +153,10 @@
     </div>
     <h3 class="text-gray-900 font-semibold text-base mb-1">No accounts found</h3>
     <p class="text-gray-500 text-sm mb-1">Accounts represent your clients, prospects, and partners.</p>
-    <p class="text-gray-400 text-xs mb-4">Try adjusting your filters or add a new account to get started.</p>
+    <p class="text-gray-400 text-xs mb-4">Try adjusting your filters or add a new client to get started.</p>
     <a href="/clients/new" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
-      Add Account
+      Add Client
     </a>
   </div>
 <% } else { %>
@@ -168,17 +177,17 @@
     </thead>
     <tbody class="divide-y divide-gray-100">
       <% accounts.forEach(function(acct) {
-        const lastContactDate = acct.last_contact_date ? acct.last_contact_date.split('T')[0] : null;
+        const lastContactDate = acct.last_contacted_date ? String(acct.last_contacted_date).split('T')[0] : null;
         const isStale = lastContactDate && lastContactDate < thirtyDaysAgo;
       %>
       <tr class="hover:bg-gray-50">
         <td class="px-3 py-2.5">
-          <a href="/clients/<%= acct.id %>" class="text-brand-600 hover:text-brand-700 font-semibold text-sm hover:underline"><%= acct.company_name || acct.name || '-' %></a>
-          <p class="text-gray-400 text-xs truncate max-w-[180px] sm:hidden"><%= typeLabels[acct.account_type] || acct.account_type || '-' %></p>
+          <a href="/clients/<%= acct.id %>" class="text-brand-600 hover:text-brand-700 font-semibold text-sm hover:underline"><%= acct.company_name || '-' %></a>
+          <p class="text-gray-400 text-xs truncate max-w-[180px] sm:hidden"><%= typeLabels[acct.company_type] || acct.company_type || '-' %></p>
         </td>
         <td class="px-3 py-2.5">
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= typeColors[acct.account_type] || 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20' %>">
-            <%= typeLabels[acct.account_type] || (acct.account_type || '-').replace(/_/g, ' ') %>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= typeColors[acct.company_type] || 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20' %>">
+            <%= typeLabels[acct.company_type] || (acct.company_type || '-').replace(/_/g, ' ') %>
           </span>
         </td>
         <td class="px-3 py-2.5 text-gray-600 text-xs hidden md:table-cell truncate max-w-[120px]"><%= acct.owner_name || '-' %></td>
@@ -218,12 +227,10 @@
           <% } %>
         </td>
         <td class="px-3 py-2.5 text-center hidden xl:table-cell">
-          <% if (acct.status === 'active') { %>
+          <% if (acct.active === 1) { %>
             <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20">Active</span>
-          <% } else if (acct.status === 'inactive') { %>
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-50 text-gray-600 ring-1 ring-gray-600/20">Inactive</span>
           <% } else { %>
-            <span class="text-xs text-gray-400"><%= acct.status || '-' %></span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-50 text-gray-600 ring-1 ring-gray-600/20">Inactive</span>
           <% } %>
         </td>
       </tr>
