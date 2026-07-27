@@ -805,9 +805,12 @@ table {
   width: 3px;
   height: 60%;
   border-radius: 0 3px 3px 0;
-  background: #ffffff;
+  /* Brand rail, not white: white disappears on the light sidebar and the
+     active item should read as Atomis in both themes. */
+  background: #34D399;
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
+:root[data-theme="light"] .sidebar-link::before { background: #059669; }
 .sidebar-link.bg-white\/15::before,
 .sidebar-link[class*="bg-white/15"]::before {
   transform: translateY(-50%) scaleY(1);
