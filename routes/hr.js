@@ -676,6 +676,28 @@ function dedupeBody(body) {
   return out;
 }
 
+// crew_members.role is CHECK-constrained to this exact vocabulary, but the
+// employee fields we derive it from (role_title, traffic_role_level) are free
+// text — "Traffic Controller", "TC", "Site Supervisor". Even the old literal
+// fallback, 'Traffic Controller', was not a legal value, so enabling portal
+// access failed for every employee. Map whatever we have onto a legal slug.
+const CREW_ROLES = ['traffic_controller', 'leading_hand', 'supervisor', 'pilot_vehicle', 'spotter', 'labourer', 'other'];
+function toCrewRole(...candidates) {
+  for (const raw of candidates) {
+    const v = String(raw == null ? '' : raw).trim().toLowerCase();
+    if (!v) continue;
+    if (CREW_ROLES.includes(v.replace(/[\s-]+/g, '_'))) return v.replace(/[\s-]+/g, '_');
+    // Order matters: "Traffic Control Supervisor" is a supervisor, not a TC.
+    if (/supervis/.test(v)) return 'supervisor';
+    if (/lead|team\s*lead/.test(v)) return 'leading_hand';
+    if (/pilot/.test(v)) return 'pilot_vehicle';
+    if (/spott/.test(v)) return 'spotter';
+    if (/labou?r/.test(v)) return 'labourer';
+    if (/traffic|controller|\btc\b/.test(v)) return 'traffic_controller';
+  }
+  return 'traffic_controller'; // the default this business hires for
+}
+
 // ============================================
 // CREATE EMPLOYEE
 // ============================================
@@ -1516,7 +1538,7 @@ function loadEmployeeWithCrew(req, res, opts = {}) {
         const result = db.prepare(`
           INSERT INTO crew_members (full_name, employee_id, role, phone, email, company, employment_type, active, status)
           VALUES (?, ?, ?, ?, ?, ?, ?, 1, 'available')
-        `).run(employee.full_name, crewEmpId, employee.traffic_role_level || employee.role_title || 'Traffic Controller',
+        `).run(employee.full_name, crewEmpId, toCrewRole(employee.traffic_role_level, employee.role_title),
           employee.phone || '', employee.email, employee.company || 'T&S Traffic Control',
           employee.employment_type || 'casual');
 

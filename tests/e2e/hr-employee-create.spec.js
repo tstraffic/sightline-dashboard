@@ -41,3 +41,25 @@ test('creating an employee from the form saves and lands on their page', async (
   await expect(page.locator('body')).toContainText(`Filter ${last}`);
   await expect(page.locator('body')).not.toContainText('Server error');
 });
+
+test('enabling portal access creates a linked crew profile', async ({ page }, testInfo) => {
+  await loginAs(page);
+  const last = `Probe${testInfo.project.name.includes('mobile') ? 'M' : 'D'}`;
+
+  // Open the employee created above and turn on portal access. The crew row
+  // this creates has a CHECK-constrained `role`, while the employee carries
+  // free text ("Traffic Controller") — the old code passed that straight
+  // through and every attempt died on the constraint.
+  await page.goto('/hr/employees');
+  await page.locator(`a:has-text("Filter ${last}")`).first().click();
+  await expect(page).toHaveURL(/\/hr\/employees\/\d+/);
+
+  const enable = page.locator('form[action*="enable-portal"] button');
+  if (await enable.count()) {
+    await enable.first().click();
+    await expect(page.locator('body')).toContainText('Portal access enabled');
+    await expect(page.locator('body')).not.toContainText('Server error');
+    // A crew profile is now linked to the employee.
+    await expect(page.locator('body')).toContainText('CREW PROFILE');
+  }
+});
