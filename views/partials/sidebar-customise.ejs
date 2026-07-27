@@ -299,6 +299,16 @@
       sortables.push(new window.Sortable(el, {
         group: 'sbnav', draggable: 'a.sidebar-link, .sb-folder', handle: '.sb-handle',
         ghostClass: 'sb-ghost', chosenClass: 'sb-chosen', animation: 140, fallbackOnBody: true,
+        // Auto-scroll the sidebar while dragging near its top/bottom edge.
+        // `scroll` must name the nav explicitly: with fallbackOnBody the
+        // dragged clone lives on <body>, so Sortable's automatic scrollable-
+        // ancestor detection misses the nav's overflow-y-auto. The forced
+        // fallback engages Sortable's own scroller (reliable on touch too).
+        scroll: nav,
+        forceAutoScrollFallback: true,
+        scrollSensitivity: 80,
+        scrollSpeed: 14,
+        bubbleScroll: true,
         onMove: function (evt) {
           if (evt.dragged.classList.contains('sb-folder')) {
             if (evt.dragged.contains(evt.to)) return false;           // not into itself
