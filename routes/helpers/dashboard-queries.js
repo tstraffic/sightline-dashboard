@@ -1,6 +1,16 @@
-// Dashboard query helpers — extracted for clarity and role-based filtering
-const { HEALTH_CALC_SQL } = require('../../middleware/jobHealth');
+// Dashboard query helpers — extracted for clarity and role-based filtering.
+//
+// The dashboard is three bands (see views/dashboard.ejs):
+//   1. "Needs you now"      — getNeedsYouNow(): registry of urgency rows
+//   2. "Today's operations" — getTodayOps(): live crew/booking state
+//   3. One trend            — getChartData(): job pipeline
+// plus the personal "Your work" lists (getMyTasks / getMyPlans).
+//
+// lib/departments.js copies several of these predicates by hand for the hub
+// stat strips — keep them in sync when a definition changes.
 const { isAdminRole } = require('../../lib/taskVisibility');
+const { canAccess } = require('../../middleware/auth');
+const { formatDateShortAU } = require('../../lib/sydney');
 
 // Date arithmetic on a Sydney YYYY-MM-DD string. The server runs UTC, so any
 // `new Date(Date.now() ± n days).toISOString()` here would flip to the wrong
@@ -30,134 +40,251 @@ const CREW_TODAY_SQL = `
     SELECT crew_member_id AS id FROM crew_allocations WHERE allocation_date = ?
   )`;
 
-function getUrgencyKpis(db, today, user) {
-  const next30 = addDays(today, 30);
-  const last7 = addDays(today, -7);
+// Task visibility scoping shared by the overdue-tasks row: planning only sees
+// planning-division + own + compliance-linked tasks; everyone but admin has
+// admin-division tasks hidden.
+function taskScopeSql(user) {
   const userRole = user ? (user.role || '').toLowerCase() : '';
   const userId = user ? user.id : 0;
-  const isPlanningRole = userRole === 'planning';
-  const hideAdmin = !isAdminRole(user);
-
-  // Planning only sees planning division + own + compliance-linked tasks
-  const taskFilter = isPlanningRole
+  const taskFilter = userRole === 'planning'
     ? `AND (division = 'planning' OR owner_id = ${userId} OR compliance_id IS NOT NULL)`
     : '';
-  // Everyone but admin/management has admin-division tasks hidden
-  const adminGuard = hideAdmin ? " AND division != 'admin'" : '';
-
-  return {
-    overdueTasks: db.prepare(`SELECT COUNT(*) as c FROM tasks WHERE due_date < ? AND status != 'complete' AND deleted_at IS NULL ${taskFilter}${adminGuard}`).get(today).c,
-    openIncidents: db.prepare("SELECT COUNT(*) as c FROM incidents WHERE investigation_status NOT IN ('closed', 'resolved')").get().c,
-    unconfirmedAllocations: db.prepare("SELECT COUNT(*) as c FROM crew_allocations WHERE allocation_date = ? AND status = 'allocated'").get(today).c,
-    // Canonical overdue definition — submitted-inclusive, matching the
-    // /compliance page summary. A submitted-but-unapproved plan past its due
-    // date still needs chasing; excluding 'submitted' here made this tile
-    // read 2 while the table below it showed 10.
-    overdueCompliance: db.prepare("SELECT COUNT(*) as c FROM compliance WHERE due_date < ? AND status NOT IN ('approved','expired')").get(today).c,
-    ticketsExpiring: db.prepare(`
-      SELECT COUNT(*) as c FROM crew_members WHERE active = 1 AND (
-        (tc_ticket_expiry IS NOT NULL AND tc_ticket_expiry BETWEEN ? AND ?)
-        OR (ti_ticket_expiry IS NOT NULL AND ti_ticket_expiry BETWEEN ? AND ?)
-        OR (white_card_expiry IS NOT NULL AND white_card_expiry BETWEEN ? AND ?)
-        OR (first_aid_expiry IS NOT NULL AND first_aid_expiry BETWEEN ? AND ?)
-        OR (medical_expiry IS NOT NULL AND medical_expiry BETWEEN ? AND ?)
-      )
-    `).get(today, next30, today, next30, today, next30, today, next30, today, next30).c,
-    missingUpdates: db.prepare("SELECT COUNT(*) as c FROM jobs WHERE status = 'active' AND (last_update_date IS NULL OR last_update_date < ?)").get(last7).c,
-    overdueCorrectiveActions: db.prepare("SELECT COUNT(*) as c FROM corrective_actions WHERE due_date < ? AND status != 'completed'").get(today).c,
-    notifiableIncidents: db.prepare("SELECT COUNT(*) as c FROM incidents WHERE notifiable_incident = 1 AND investigation_status NOT IN ('closed', 'resolved')").get().c,
-    pendingTimesheets: db.prepare("SELECT COUNT(*) as c FROM timesheets WHERE approved = 0").get().c,
-    crewGaps: db.prepare(`
-      SELECT COUNT(*) as c FROM crew_allocations ca
-      JOIN jobs j ON ca.job_id = j.id
-      WHERE ca.allocation_date = ? AND ca.status = 'allocated' AND j.status = 'active'
-      AND ca.crew_member_id NOT IN (SELECT id FROM crew_members WHERE active = 1)
-    `).get(today).c,
-  };
+  const adminGuard = isAdminRole(user) ? '' : " AND division != 'admin'";
+  return taskFilter + adminGuard;
 }
 
-function getOpsData(db, today) {
-  const next14 = addDays(today, 14);
+// A checklist type at or above this month-to-date completion % is considered
+// on track; below it the register surfaces in "Needs you now". Matches the
+// red band the old dashboard widget used.
+const CHECKLIST_TARGET_PCT = 75;
 
-  const activeJobs = db.prepare("SELECT COUNT(*) as c FROM jobs WHERE status = 'active'").get().c;
-  const startingSoon = db.prepare("SELECT COUNT(*) as c FROM jobs WHERE start_date BETWEEN ? AND ? AND status IN ('won','active')").get(today, next14).c;
-  const crewHoursThisWeek = db.prepare("SELECT COALESCE(SUM(total_hours), 0) as t FROM timesheets WHERE work_date >= date(?, '-7 days')").get(today).t;
-  const equipmentDeployed = db.prepare("SELECT COUNT(*) as c FROM equipment_assignments WHERE actual_return_date IS NULL").get().c;
-  const totalActiveCrew = db.prepare("SELECT COUNT(*) as c FROM crew_members WHERE active = 1").get().c;
-  const allocatedToday = db.prepare(CREW_TODAY_SQL).get(today, today).c;
-  const rolPending = db.prepare("SELECT COUNT(*) as c FROM traffic_plans WHERE rol_required = 1 AND (rol_approved IS NULL OR rol_approved = 0) AND status NOT IN ('rejected','expired')").get().c;
-  const tmpPending = db.prepare("SELECT COUNT(*) as c FROM traffic_plans WHERE plan_type = 'TMP' AND status NOT IN ('approved','rejected','expired')").get().c;
+// "Needs you now" registry. Each builder returns { count, label, detail?,
+// tone?, priority? } — label is the noun phrase WITHOUT the count (the view
+// renders the number separately). Rows with count 0 never render; a builder
+// that throws is skipped (one bad table must never 500 the dashboard); a
+// builder whose gate fails is never run.
+const NEEDS_ROWS = [
+  {
+    key: 'overdue_plans', gate: 'compliance', priority: 10, tone: 'critical', href: '/compliance',
+    build(db, user, today) {
+      // Canonical overdue definition — submitted-inclusive, same as the
+      // /compliance page summary and the Planning hub.
+      const r = db.prepare("SELECT COUNT(*) AS c, MIN(due_date) AS oldest FROM compliance WHERE due_date < ? AND status NOT IN ('approved','expired')").get(today);
+      return {
+        count: r.c,
+        label: r.c === 1 ? 'overdue plan' : 'overdue plans',
+        detail: r.oldest ? 'oldest ' + formatDateShortAU(r.oldest) : '',
+      };
+    },
+  },
+  {
+    key: 'open_incidents', gate: 'incidents', priority: 15, tone: 'critical', href: '/incidents',
+    build(db) {
+      const open = db.prepare("SELECT COUNT(*) AS c FROM incidents WHERE investigation_status NOT IN ('closed','resolved')").get().c;
+      const notifiable = db.prepare("SELECT COUNT(*) AS c FROM incidents WHERE notifiable_incident = 1 AND investigation_status NOT IN ('closed','resolved')").get().c;
+      return {
+        count: open,
+        label: open === 1 ? 'open incident' : 'open incidents',
+        detail: notifiable > 0 ? `${notifiable} notifiable` : '',
+        // A notifiable incident outranks everything on the page.
+        priority: notifiable > 0 ? 5 : undefined,
+      };
+    },
+  },
+  {
+    key: 'overdue_tasks', gate: 'tasks', priority: 20, tone: 'warn', href: '/tasks',
+    build(db, user, today) {
+      const scope = taskScopeSql(user);
+      const total = db.prepare(`SELECT COUNT(*) AS c FROM tasks WHERE due_date < ? AND status != 'complete' AND deleted_at IS NULL ${scope}`).get(today).c;
+      const mine = db.prepare(`SELECT COUNT(*) AS c FROM tasks WHERE due_date < ? AND status != 'complete' AND deleted_at IS NULL AND owner_id = ? ${scope}`).get(today, user.id).c;
+      return {
+        count: total,
+        label: total === 1 ? 'overdue task' : 'overdue tasks',
+        detail: mine > 0 ? `${mine} yours` : '',
+      };
+    },
+  },
+  {
+    key: 'fleet_flagged', gate: 'fleet', priority: 25, tone: 'warn', href: '/fleet/compliance',
+    build(db, user, today) {
+      // vehicle_summary may not exist on a legacy DB — the try/catch in
+      // getNeedsYouNow absorbs it, same as the old inline card did.
+      const { badgesFor } = require('../../lib/fleetStatus');
+      const rows = db.prepare("SELECT * FROM vehicle_summary WHERE status != 'Retired'").all();
+      const flagged = rows.filter(v => {
+        const b = badgesFor(v, today);
+        return ['registration', 'service', 'inspection', 'fireExt'].some(k => b[k].tone === 'bad' || b[k].tone === 'warn');
+      });
+      return {
+        count: flagged.length,
+        label: flagged.length === 1 ? 'vehicle needs compliance attention' : 'vehicles need compliance attention',
+      };
+    },
+  },
+  {
+    key: 'missing_site_docs', gate: 'bookings', priority: 30, tone: 'warn', href: '/bookings?missing_docs=1',
+    build(db, user, today) {
+      // Bookings starting today/tomorrow with no site documents attached —
+      // either a booking_documents row or a job_documents row on the same
+      // job counts as covered (re-using a job-level pack is fine).
+      const c = db.prepare(`
+        SELECT COUNT(*) AS c
+        FROM bookings b
+        WHERE b.status IN ('confirmed','green_to_go','unconfirmed')
+          AND b.deleted_at IS NULL
+          AND date(b.start_datetime) BETWEEN date(?) AND date(?,'+1 day')
+          AND NOT EXISTS (SELECT 1 FROM booking_documents bd WHERE bd.booking_id = b.id)
+          AND NOT EXISTS (SELECT 1 FROM job_documents jd WHERE jd.job_id = b.job_id AND jd.archived_at IS NULL)
+      `).get(today, today).c;
+      return {
+        count: c,
+        label: c === 1 ? 'booking starting soon without site docs' : 'bookings starting soon without site docs',
+      };
+    },
+  },
+  {
+    key: 'rol_alerts', gate: 'compliance', priority: 35, tone: 'warn', href: '/compliance',
+    build(db) {
+      // Alert-flagged ROL conditions live in the Compliance module
+      // (compliance_rol_conditions); a legacy register also exists on
+      // traffic_plans (rol_conditions). Sum both — either may hold the data.
+      let n = 0;
+      try {
+        n += db.prepare(`
+          SELECT COUNT(*) AS c FROM compliance_rol_conditions rc
+          JOIN compliance c ON c.id = rc.compliance_id
+          WHERE rc.is_alert = 1 AND c.status NOT IN ('expired','rejected')
+        `).get().c;
+      } catch (e) { /* table absent on legacy DBs */ }
+      try {
+        n += db.prepare(`
+          SELECT COUNT(*) AS c FROM rol_conditions rc
+          JOIN traffic_plans tp ON tp.id = rc.plan_id
+          WHERE rc.is_alert = 1 AND tp.status NOT IN ('rejected','expired')
+        `).get().c;
+      } catch (e) { /* table absent on legacy DBs */ }
+      return {
+        count: n,
+        label: n === 1 ? 'ROL condition alert' : 'ROL condition alerts',
+      };
+    },
+  },
+  {
+    key: 'checklist_below_target', gate: 'audits', priority: 40, tone: 'warn', href: '/checklist-register',
+    build(db) {
+      const summary = require('../../services/checklistRegister').dashboardSummary(db);
+      const low = summary.month
+        .filter(r => r.required > 0 && r.completion_pct < CHECKLIST_TARGET_PCT)
+        .sort((a, b) => a.completion_pct - b.completion_pct);
+      return {
+        count: low.length,
+        label: low.length === 1 ? 'checklist type below target this month' : 'checklist types below target this month',
+        detail: low.length ? `worst: ${low[0].label} ${low[0].completion_pct}%` : '',
+      };
+    },
+  },
+  {
+    key: 'pending_leave', gate: 'leave_approvals', priority: 45, tone: 'info', href: '/leave-approvals',
+    build(db) {
+      const c = db.prepare("SELECT COUNT(*) AS c FROM employee_leave WHERE status = 'pending'").get().c;
+      return {
+        count: c,
+        label: c === 1 ? 'leave request awaiting approval' : 'leave requests awaiting approval',
+      };
+    },
+  },
+  {
+    key: 'expiring_tickets', gate: 'hr_compliance_view', priority: 50, tone: 'info', href: '/hr/roster',
+    build(db, user, today) {
+      const next30 = addDays(today, 30);
+      const c = db.prepare(`
+        SELECT COUNT(*) AS c FROM crew_members WHERE active = 1 AND (
+          (tc_ticket_expiry IS NOT NULL AND tc_ticket_expiry BETWEEN ? AND ?)
+          OR (ti_ticket_expiry IS NOT NULL AND ti_ticket_expiry BETWEEN ? AND ?)
+          OR (white_card_expiry IS NOT NULL AND white_card_expiry BETWEEN ? AND ?)
+          OR (first_aid_expiry IS NOT NULL AND first_aid_expiry BETWEEN ? AND ?)
+          OR (medical_expiry IS NOT NULL AND medical_expiry BETWEEN ? AND ?)
+        )
+      `).get(today, next30, today, next30, today, next30, today, next30, today, next30).c;
+      return {
+        count: c,
+        label: c === 1 ? 'crew ticket expiring within 30 days' : 'crew tickets expiring within 30 days',
+      };
+    },
+  },
+];
 
-  const todaysAllocations = db.prepare(`
-    SELECT ca.*, cm.full_name as crew_name, cm.role as crew_role, j.job_number, j.client, j.site_address
-    FROM crew_allocations ca
-    JOIN crew_members cm ON ca.crew_member_id = cm.id
-    JOIN jobs j ON ca.job_id = j.id
-    WHERE ca.allocation_date = ?
-    ORDER BY ca.start_time ASC
+// Band 1. Returns { top, overflow, allClear } — top is capped at 5 rows,
+// sorted most-urgent first; overflow feeds the "+N more" disclosure; rows
+// with count 0 are never built, so "zero tiles" cannot render by design.
+function getNeedsYouNow(db, user, today) {
+  const rows = [];
+  for (const spec of NEEDS_ROWS) {
+    if (!canAccess(user, spec.gate)) continue;
+    try {
+      const r = spec.build(db, user, today);
+      if (!r || !r.count) continue;
+      rows.push({
+        key: spec.key,
+        href: spec.href,
+        tone: r.tone || spec.tone,
+        priority: r.priority != null ? r.priority : spec.priority,
+        count: r.count,
+        label: r.label,
+        detail: r.detail || '',
+      });
+    } catch (e) {
+      console.error(`[dashboard] needs-you-now '${spec.key}' failed:`, e.message);
+    }
+  }
+  rows.sort((a, b) => a.priority - b.priority || b.count - a.count);
+  return { top: rows.slice(0, 5), overflow: rows.slice(5), allClear: rows.length === 0 };
+}
+
+// Band 2 — today's live operations state, built from bookings + booking_crew
+// (see CREW_TODAY_SQL note above for why not crew_allocations).
+function getTodayOps(db, today) {
+  const totalActiveCrew = db.prepare("SELECT COUNT(*) AS c FROM crew_members WHERE active = 1").get().c;
+  const crewAssignedToday = db.prepare(CREW_TODAY_SQL).get(today, today).c;
+  const jobsRunningToday = db.prepare(`
+    SELECT COUNT(DISTINCT b.job_id) AS c FROM bookings b
+    WHERE date(b.start_datetime) = date(?) AND b.job_id IS NOT NULL
+      AND b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')
+  `).get(today).c;
+  const bookingsNext24h = db.prepare(`
+    SELECT COUNT(*) AS c FROM bookings b
+    WHERE date(b.start_datetime) BETWEEN date(?) AND date(?,'+1 day')
+      AND b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')
+  `).get(today, today).c;
+  const todaysBookings = db.prepare(`
+    SELECT b.id, b.booking_number, b.title, b.start_datetime, b.suburb, b.status,
+      j.job_number,
+      (SELECT COUNT(*) FROM booking_crew bc
+        WHERE bc.booking_id = b.id AND bc.status != 'declined') AS crew_count
+    FROM bookings b
+    LEFT JOIN jobs j ON j.id = b.job_id
+    WHERE date(b.start_datetime) = date(?)
+      AND b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')
+    ORDER BY b.start_datetime ASC LIMIT 10
   `).all(today);
 
   return {
-    activeJobs, startingSoon, crewHoursThisWeek, equipmentDeployed,
-    totalActiveCrew, allocatedToday, availableCrew: totalActiveCrew - allocatedToday,
-    todaysAllocations, rolPending, tmpPending,
+    totalActiveCrew,
+    crewAssignedToday,
+    availableCrew: Math.max(0, totalActiveCrew - crewAssignedToday),
+    jobsRunningToday,
+    bookingsNext24h,
+    todaysBookings,
   };
 }
 
-function getFinanceData(db) {
-  return {
-    totalContractValue: db.prepare("SELECT COALESCE(SUM(contract_value), 0) as t FROM job_budgets").get().t,
-    totalSpend: db.prepare("SELECT COALESCE(SUM(amount), 0) as t FROM cost_entries").get().t,
-    accountsOverdue: db.prepare("SELECT COUNT(*) as c FROM jobs WHERE accounts_status = 'overdue'").get().c,
-    accountsDisputed: db.prepare("SELECT COUNT(*) as c FROM jobs WHERE accounts_status = 'disputed'").get().c,
-  };
-}
-
+// Band 3 — the one trend chart (job pipeline). Job health and crew hours were
+// dropped deliberately: health only covers active jobs (tiny n) and the
+// timesheets table is empty until Sprint 4 ships.
 function getChartData(db) {
   return {
     jobStatusDist: db.prepare("SELECT status, COUNT(*) as count FROM jobs GROUP BY status").all(),
-    jobHealthDist: db.prepare(`SELECT ${HEALTH_CALC_SQL} as health, COUNT(*) as count FROM jobs j WHERE status = 'active' GROUP BY 1`).all(),
-    crewHoursByDay: db.prepare(`
-      SELECT work_date, COALESCE(SUM(total_hours), 0) as hours
-      FROM timesheets WHERE work_date >= date('now', '-7 days')
-      GROUP BY work_date ORDER BY work_date ASC
-    `).all(),
   };
-}
-
-function getMyWork(db, user, today) {
-  const userId = user && user.id ? user.id : user; // tolerate legacy callers that pass just an id
-  const last7 = addDays(today, -7);
-  const adminGuard = isAdminRole(user) ? '' : " AND t.division != 'admin'";
-
-  const myJobs = db.prepare(`
-    SELECT j.*, u.full_name as pm_name FROM jobs j
-    LEFT JOIN users u ON j.project_manager_id = u.id
-    WHERE j.status IN ('active','on_hold','won')
-    AND (j.project_manager_id = ? OR j.ops_supervisor_id = ? OR j.planning_owner_id = ? OR j.marketing_owner_id = ? OR j.accounts_owner_id = ?)
-    ORDER BY CASE j.health WHEN 'red' THEN 1 WHEN 'amber' THEN 2 ELSE 3 END, j.start_date DESC
-    LIMIT 20
-  `).all(userId, userId, userId, userId, userId);
-
-  const overdueTasksList = db.prepare(`
-    SELECT t.*, j.job_number, j.client, u.full_name as owner_name
-    FROM tasks t
-    LEFT JOIN jobs j ON t.job_id = j.id
-    LEFT JOIN users u ON t.owner_id = u.id
-    WHERE t.owner_id = ? AND t.due_date < ? AND t.status != 'complete' AND t.deleted_at IS NULL${adminGuard}
-    ORDER BY t.due_date ASC LIMIT 10
-  `).all(userId, today);
-
-  const recentUpdates = db.prepare(`
-    SELECT pu.*, j.job_number, j.client, u.full_name as submitted_by_name
-    FROM project_updates pu
-    JOIN jobs j ON pu.job_id = j.id
-    JOIN users u ON pu.submitted_by_id = u.id
-    WHERE pu.week_ending >= ?
-    ORDER BY pu.created_at DESC LIMIT 10
-  `).all(last7);
-
-  return { myJobs, overdueTasksList, recentUpdates };
 }
 
 function getMyTasks(db, user, today) {
@@ -177,57 +304,6 @@ function getMyTasks(db, user, today) {
       CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END
     LIMIT 15
   `).all(userId, today);
-}
-
-function getTasksIAssigned(db, user, today) {
-  const userId = user && user.id ? user.id : user;
-  const adminGuard = isAdminRole(user) ? '' : " AND t.division != 'admin'";
-  return db.prepare(`
-    SELECT t.*, j.job_number, j.client, u.full_name as owner_name
-    FROM tasks t
-    LEFT JOIN jobs j ON t.job_id = j.id
-    LEFT JOIN users u ON t.owner_id = u.id
-    WHERE t.created_by = ? AND t.owner_id != ? AND t.status != 'complete' AND t.deleted_at IS NULL${adminGuard}
-    ORDER BY
-      CASE WHEN t.due_date < ? THEN 0 ELSE 1 END,
-      t.due_date ASC,
-      CASE t.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END
-    LIMIT 20
-  `).all(userId, userId, today);
-}
-
-function getComplianceUrgent(db, today) {
-  const next14 = addDays(today, 14);
-  const next30 = addDays(today, 30);
-
-  return db.prepare(`
-    SELECT c.id, c.title, c.item_type, c.status, c.due_date, c.expiry_date,
-      j.job_number, j.client as job_client,
-      cl.company_name as client_name,
-      a.full_name as assigned_name
-    FROM compliance c
-    LEFT JOIN jobs j ON c.job_id = j.id
-    LEFT JOIN clients cl ON c.client_id = cl.id
-    LEFT JOIN users a ON c.assigned_to_id = a.id
-    WHERE (
-      (c.due_date IS NOT NULL AND c.due_date <= ? AND c.status NOT IN ('approved','expired','submitted'))
-      OR (c.due_date IS NOT NULL AND c.due_date > ? AND c.due_date <= ? AND c.status NOT IN ('approved','expired','submitted'))
-      OR (c.due_date IS NOT NULL AND c.due_date <= ? AND c.status = 'submitted')
-      OR (c.expiry_date IS NOT NULL AND c.expiry_date >= ? AND c.expiry_date <= ? AND c.status = 'approved')
-      OR (c.expiry_date IS NOT NULL AND c.expiry_date < ? AND c.status = 'approved')
-      OR (c.status IN ('not_started','submitted') AND c.due_date IS NOT NULL)
-    )
-    ORDER BY
-      CASE
-        WHEN c.due_date IS NOT NULL AND c.due_date < ? AND c.status NOT IN ('approved','expired','submitted') THEN 1
-        WHEN c.expiry_date IS NOT NULL AND c.expiry_date < ? THEN 2
-        WHEN c.due_date IS NOT NULL AND c.due_date <= ? AND c.status NOT IN ('approved','expired','submitted') THEN 3
-        WHEN c.expiry_date IS NOT NULL AND c.expiry_date <= ? THEN 4
-        ELSE 5
-      END,
-      COALESCE(c.due_date, c.expiry_date) ASC
-    LIMIT 10
-  `).all(today, today, next14, today, today, next30, today, today, today, next14, next30);
 }
 
 function getMyPlans(db, userId, today) {
@@ -250,25 +326,12 @@ function getMyPlans(db, userId, today) {
   `).all(userId, today, today);
 }
 
-function getRecentActivity(db) {
-  return db.prepare(`
-    SELECT al.*, u.full_name as user_name
-    FROM activity_log al
-    LEFT JOIN users u ON al.user_id = u.id
-    ORDER BY al.created_at DESC LIMIT 10
-  `).all();
-}
-
 module.exports = {
   addDays,
-  getUrgencyKpis,
-  getOpsData,
-  getFinanceData,
+  CHECKLIST_TARGET_PCT,
+  getNeedsYouNow,
+  getTodayOps,
   getChartData,
-  getMyWork,
   getMyTasks,
-  getTasksIAssigned,
-  getComplianceUrgent,
   getMyPlans,
-  getRecentActivity,
 };

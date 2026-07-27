@@ -1,12 +1,4 @@
 <% locals.currentPage = 'dashboard' %>
-<%
-  const role = userRole || 'admin';
-  const normalRole = { management: 'admin', accounts: 'finance' }[role] || role;
-  const isOps = ['admin', 'operations'].includes(normalRole);
-  const isPlanning = ['admin', 'planning'].includes(normalRole);
-  const isFinance = ['admin', 'finance'].includes(normalRole);
-%>
-
 <!-- Greeting -->
 <div class="hero-banner flex items-baseline justify-between gap-4 mb-6 px-1">
   <div class="hero-greeting">
@@ -118,832 +110,225 @@
   <p class="text-[10px] text-gray-400 mt-1"><%= onboarding.filter(i => i.done).length %>/<%= onboarding.length %> complete</p>
 </div>
 <% } %>
-
-<!-- KPI / Urgency Tiles — single unified grid.
-     Tile pattern: charcoal surface, thin 2px left border that carries the
-     status colour (red/amber/blue/neutral). Numbers fade to grey when 0
-     so the eye is drawn only to non-zero values. -->
-<%
-  function tileClasses(value, level) {
-    // level: 'critical' (red), 'warn' (amber), 'info' (blue), 'kpi' (neutral)
-    if (!value) {
-      return { border: 'border-l-gray-200 dark-glass-border-mute', num: 'text-gray-400' };
-    }
-    if (level === 'critical') return { border: 'border-l-red-500',   num: 'text-red-600' };
-    if (level === 'warn')     return { border: 'border-l-amber-500', num: 'text-amber-600' };
-    if (level === 'info')     return { border: 'border-l-brand-500', num: 'text-gray-900' };
-    return                            { border: 'border-l-gray-300', num: 'text-gray-900' };
-  }
-  // Build the list once so the grid is single-source-of-truth and we don't
-  // duplicate the same metric in two cards.
-  const tiles = [];
-  if (isOps) {
-    tiles.push({ link: '/projects',                     value: kpi.activeJobs,            label: 'Active Jobs',       level: 'kpi' });
-    tiles.push({ link: '/allocations',                  value: allocatedToday,            label: 'Crew Today',        level: 'kpi',  suffix: '/' + totalActiveCrew });
-    tiles.push({ link: '/timesheets',                   value: Math.round(kpi.crewHoursThisWeek), label: 'Hours (7d)', level: 'kpi' });
-  } else if (normalRole === 'planning') {
-    tiles.push({ link: '/compliance',                   value: kpi.rolPending + kpi.tmpPending, label: 'Pending',     level: 'kpi' });
-  } else if (normalRole === 'finance') {
-    tiles.push({ link: '/budgets',                      value: Math.round(kpi.totalContractValue / 1000), prefix: '$', suffix: 'k', label: 'Contract', level: 'kpi' });
-    tiles.push({ link: '/budgets',                      value: Math.round(kpi.totalSpend / 1000), prefix: '$', suffix: 'k', label: 'Spend',         level: 'kpi' });
-  }
-  tiles.push({ link: '/tasks',                          value: kpi.overdueTasks,          label: 'Overdue Tasks',     level: 'critical' });
-  tiles.push({ link: '/incidents',                      value: kpi.openIncidents,         label: 'Open Incidents',    level: 'critical' });
-  tiles.push({ link: '/compliance',                     value: kpi.overdueCompliance,     label: 'Overdue Plans',     level: 'critical' });
-  tiles.push({ link: '/allocations',                    value: kpi.crewGaps,              label: 'Crew Gaps',         level: 'critical' });
-  tiles.push({ link: '/timesheets?approved=0',          value: kpi.pendingTimesheets,     label: 'Pending Timesheets',level: 'warn' });
-  tiles.push({ link: '/hr/roster',                      value: kpi.ticketsExpiring,       label: 'Expiring Tickets',  level: 'warn' });
-  tiles.push({ link: '/allocations',                    value: kpi.unconfirmedAllocations, label: 'Unconfirmed',      level: 'info' });
-  // Balance the tile rows at desktop: 10 tiles → 5+5, 8 → 4+4, 7 → 4+3.
-  // A fixed xl:grid-cols-7 left a lopsided 7+3 orphan row for ops users.
-  const kpiCols = tiles.length <= 5 ? Math.max(tiles.length, 3) : Math.ceil(tiles.length / Math.ceil(tiles.length / 5));
-%>
-<div class="kpi-grid gap-2 mb-6 stagger-children" style="--kpi-cols: <%= kpiCols %>">
-  <% tiles.forEach(function(t) {
-    const c = tileClasses(t.value, t.level);
-  %>
-  <a href="<%= t.link %>" class="urgency-tile group block p-3 bg-white border border-gray-200 border-l-[3px] <%= c.border %> hover:border-gray-300 transition-colors" style="border-radius:8px">
-    <p class="font-display font-medium leading-none <%= c.num %>" style="font-size:26px;letter-spacing:-0.03em">
-      <% if (t.prefix) { %><span class="text-base font-medium opacity-60"><%= t.prefix %></span><% } %><span class="kpi-number" data-count="<%= t.value %>">0</span><% if (t.suffix) { %><span class="text-base font-medium opacity-60"><%= t.suffix %></span><% } %>
-    </p>
-    <p class="text-[10px] font-mono text-gray-500 uppercase mt-2" style="letter-spacing:0.1em"><%= t.label %></p>
-  </a>
-  <% }) %>
-</div>
-
-<!-- Missing site docs — the bookings that need a TGS / TMP / ROL upload before the crew rolls up -->
-<% if (typeof missingDocsList !== 'undefined' && missingDocsList && missingDocsList.length) { %>
-<div class="chevron-rail-left is-warn bg-amber-50/60 border border-amber-200 rounded-2xl p-4 mb-5">
-  <div class="flex items-center justify-between gap-2 mb-3">
-    <div class="flex items-center gap-2">
-      <svg class="w-4 h-4 text-amber-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
-      <h2 class="text-sm font-bold text-amber-900">Bookings starting soon with no site docs</h2>
-      <span class="text-[10px] font-medium text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full"><%= missingDocsList.length %></span>
-    </div>
-    <a href="/bookings?missing_docs=1" class="text-xs font-semibold text-amber-800 hover:underline">See all →</a>
-  </div>
-  <ul class="divide-y divide-amber-200/70">
-    <% missingDocsList.slice(0, 5).forEach(function (b) { %>
-      <li class="py-2 flex items-center justify-between gap-3 text-sm">
-        <div class="min-w-0 flex-1">
-          <a href="/bookings/<%= b.id %>" class="font-medium text-gray-900 hover:underline truncate block">
-            <%= b.booking_number || '#' + b.id %>
-            <% if (b.job_number) { %>· <span class="text-gray-600 font-normal"><%= b.job_number %></span><% } %>
-            <% if (b.title) { %>— <span class="text-gray-700 font-normal"><%= b.title %></span><% } %>
-          </a>
-          <p class="text-[11px] text-gray-500">
-            <%= formatDateTime(b.start_datetime) %>
-            <% if (b.suburb) { %> · <%= b.suburb %><% } %>
-            <% if (b.job_client) { %> · <%= b.job_client %><% } %>
-          </p>
-        </div>
-        <a href="/bookings/<%= b.id %>" class="shrink-0 text-xs font-semibold text-amber-700 hover:underline">Upload →</a>
-      </li>
-    <% }) %>
-  </ul>
-  <% if (missingDocsList.length > 5) { %>
-    <p class="text-[11px] text-amber-800 mt-2 text-right"><%= missingDocsList.length - 5 %> more — <a href="/bookings?missing_docs=1" class="font-semibold hover:underline">show full list</a></p>
-  <% } %>
-</div>
-<% } %>
-
-<!-- Fleet compliance — vehicles with registration / servicing / inspection /
-     fire-extinguisher items overdue or due in the next 30 days. Compact
-     by design; full breakdown lives on /fleet/compliance. -->
-<% if (typeof fleetCompliance !== 'undefined' && fleetCompliance && fleetCompliance.count > 0) { %>
-<div class="chevron-rail-left bg-red-50/60 border border-red-200 rounded-2xl p-4 mb-5">
-  <div class="flex items-center justify-between gap-2 mb-3">
-    <div class="flex items-center gap-2">
-      <svg class="w-4 h-4 text-red-700" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13l1.5-5A2 2 0 016.43 6.5h11.14a2 2 0 011.93 1.5L21 13m-18 0v5a1 1 0 001 1h1a1 1 0 001-1v-1h12v1a1 1 0 001 1h1a1 1 0 001-1v-5M3 13h18"/></svg>
-      <h2 class="text-sm font-bold text-red-900">Fleet compliance — needs attention</h2>
-      <span class="text-[10px] font-medium text-red-700 bg-red-100 px-2 py-0.5 rounded-full"><%= fleetCompliance.count %></span>
-    </div>
-    <a href="/fleet/compliance" class="text-xs font-semibold text-red-800 hover:underline">View all →</a>
-  </div>
-  <ul class="divide-y divide-red-200/70">
-    <% fleetCompliance.sample.forEach(function (v) {
-      const flags = [];
-      if (v.badges.registration.tone === 'bad' || v.badges.registration.tone === 'warn') flags.push({ label: 'Rego',        s: v.badges.registration });
-      if (v.badges.service.tone      === 'bad' || v.badges.service.tone      === 'warn') flags.push({ label: 'Service',     s: v.badges.service });
-      if (v.badges.inspection.tone   === 'bad' || v.badges.inspection.tone   === 'warn') flags.push({ label: 'Inspection',  s: v.badges.inspection });
-      if (v.badges.fireExt.tone      === 'bad' || v.badges.fireExt.tone      === 'warn') flags.push({ label: 'Fire ext.',   s: v.badges.fireExt });
-    %>
-      <li class="py-2 flex items-center justify-between gap-3 text-sm">
-        <div class="min-w-0 flex-1">
-          <a href="/fleet/<%= v.id %>" class="font-medium text-gray-900 hover:underline">
-            <%= v.asset_id %><% if (v.rego) { %> · <span class="text-gray-500 font-normal font-mono"><%= v.rego %></span><% } %>
-          </a>
-          <p class="text-[11px] mt-0.5 flex flex-wrap gap-1">
-            <% flags.forEach(function (f) { %>
-              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold <%= f.s.tone === 'bad' ? 'bg-red-100 text-red-800' : 'bg-amber-100 text-amber-800' %>">
-                <%= f.label %>: <%= f.s.label %>
-              </span>
-            <% }) %>
-          </p>
-        </div>
-        <a href="/fleet/<%= v.id %>/edit" class="shrink-0 text-xs font-semibold text-red-700 hover:underline">Update →</a>
-      </li>
-    <% }) %>
-  </ul>
-  <% if (fleetCompliance.count > 5) { %>
-    <p class="text-[11px] text-red-800 mt-2 text-right"><%= fleetCompliance.count - 5 %> more — <a href="/fleet/compliance" class="font-semibold hover:underline">full list</a></p>
-  <% } %>
-</div>
-<% } %>
-
-<!-- Checklist Register — single column, sorted by completion % (lowest first).
-     Failing rows rise to the top where attention is actually needed.
-     A small delta arrow indicates the change vs last week. -->
-<%
-  function checkBar(p, required) {
-    if (!required) return 'bg-gray-200';
-    if (p >= 95) return 'bg-brand-500';
-    if (p >= 75) return 'bg-amber-400';
-    return 'bg-red-500';
-  }
-%>
-<% if (checklistSummary) {
-  // Build a single ranked list keyed by row label so we can attach the
-  // last-week pct as a delta. Required-zero rows sink to the bottom.
-  const lastByLabel = {};
-  (checklistSummary.lastWeek || []).forEach(function (r) { lastByLabel[r.label] = r; });
-  const ranked = (checklistSummary.month || []).map(function (r) {
-    const last = lastByLabel[r.label];
-    const delta = (r.required && last && last.required) ? (r.completion_pct - last.completion_pct) : null;
-    return Object.assign({}, r, { delta: delta });
-  }).sort(function (a, b) {
-    // Required-zero rows go last; otherwise lowest completion first.
-    if (!a.required && b.required) return 1;
-    if (a.required && !b.required) return -1;
-    return (a.completion_pct || 0) - (b.completion_pct || 0);
-  });
-%>
-<div class="bg-white border border-gray-200 p-4 mb-6" style="border-radius:12px">
-  <div class="flex items-baseline justify-between gap-2 mb-4">
-    <div>
-      <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Checklist Register</h2>
-      <p class="text-[11px] font-mono text-gray-500 mt-0.5" style="letter-spacing:0.08em"><%= checklistSummary.monthLabel.toUpperCase() %></p>
-    </div>
-    <a href="/checklist-register" class="text-xs font-medium text-gray-500 hover:text-gray-900">Full breakdown &rarr;</a>
-  </div>
-
-  <div class="space-y-2">
-    <% ranked.forEach(function (row) { %>
-      <div class="flex items-center gap-3 text-xs">
-        <span class="w-40 truncate text-gray-700 font-medium"><%= row.label %></span>
-        <span class="w-16 text-right tabular-nums font-mono text-[11px] text-gray-400"><%= row.completed %>/<%= row.required %></span>
-        <div class="flex-1 h-1 bg-gray-100 overflow-hidden" style="border-radius:6px">
-          <div class="h-full <%= checkBar(row.completion_pct, row.required) %>" style="width: <%= row.required ? row.completion_pct : 0 %>%; border-radius:6px"></div>
-        </div>
-        <span class="w-10 text-right tabular-nums font-mono text-[11px] font-medium <%= !row.required ? 'text-gray-300' : row.completion_pct >= 95 ? 'text-gray-900' : row.completion_pct >= 75 ? 'text-amber-600' : 'text-red-600' %>">
-          <%= row.required ? row.completion_pct + '%' : '—' %>
-        </span>
-        <span class="w-14 text-right tabular-nums font-mono text-[10px]">
-          <% if (row.delta === null) { %>
-            <span class="text-gray-300">—</span>
-          <% } else if (row.delta > 0) { %>
-            <span class="text-brand-600">&uarr; <%= row.delta %>%</span>
-          <% } else if (row.delta < 0) { %>
-            <span class="text-red-500">&darr; <%= Math.abs(row.delta) %>%</span>
-          <% } else { %>
-            <span class="text-gray-400">— 0%</span>
-          <% } %>
-        </span>
-      </div>
-    <% }) %>
-  </div>
-</div>
-<% } %>
-
-<!-- Dashboard Tabs -->
-<%
-  const tabs = [];
-  tabs.push({ id: 'my-work', label: 'My Work' });
-  if (isOps) tabs.push({ id: 'operations', label: 'Operations' });
-  tabs.push({ id: 'insights', label: 'Insights' });
-  if (isPlanning || isOps) tabs.push({ id: 'plans-safety', label: 'Plans & Safety' });
-  if (isFinance) tabs.push({ id: 'finance', label: 'Finance' });
-%>
-
-<div class="mb-5">
-  <!-- Tab Nav -->
-  <div class="flex gap-1 border-b border-gray-200 mb-4 overflow-x-auto scrollbar-hide">
-    <% tabs.forEach((tab, i) => { %>
-    <button data-tab="<%= tab.id %>" class="px-4 py-2.5 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px <%= i === 0 ? 'text-brand-600 border-brand-600' : 'text-gray-500 border-transparent hover:text-gray-700 hover:border-gray-300' %>"><%= tab.label %></button>
-    <% }) %>
-  </div>
-
-  <!-- Tab: My Work -->
-  <div data-tab-panel="my-work" class="space-y-4">
-    <!-- My Tasks -->
-    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-          <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">My Tasks</h2>
-          <span class="text-[10px] font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded-full"><%= myTasks.length %></span>
-        </div>
-        <a href="/tasks" class="text-xs text-brand-600 hover:text-brand-700 font-medium">View all &rarr;</a>
-      </div>
-      <% if (myTasks.length === 0) { %>
-        <div class="p-6 text-center">
-          <div class="w-10 h-10 bg-brand-50 rounded-xl flex items-center justify-center mx-auto mb-2">
-            <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-          </div>
-          <p class="text-sm font-medium text-gray-700">No open tasks assigned to you</p>
-          <p class="text-xs text-gray-400 mt-1">Tasks assigned to you will appear here.</p>
-        </div>
-      <% } else { %>
-      <div class="divide-y divide-gray-100">
-        <% myTasks.slice(0, 8).forEach(t => {
-          const isOverdue = t.due_date < today; // Sydney today from the route
-          const priorityTag = t.priority === 'high' ? 'task-tag-high' : t.priority === 'medium' ? 'task-tag-medium' : 'task-tag-low';
-          const statusTag = t.status === 'in_progress' ? 'task-tag-progress' : t.status === 'blocked' ? 'task-tag-blocked' : 'task-tag-default';
-        %>
-        <a href="/tasks/<%= t.id %>/edit" class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
-          <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium text-gray-900 truncate"><%= t.title %></p>
-            <div class="flex items-center gap-2 mt-1.5">
-              <% if (t.job_number) { %><span class="job-id-chip" style="font-size:10px;padding:1px 6px"><%= t.job_number %></span><% } %>
-              <span class="task-tag <%= priorityTag %>"><%= t.priority %></span>
-              <span class="task-tag <%= statusTag %>"><%= t.status.replace(/_/g, ' ') %></span>
-            </div>
-          </div>
-          <div class="ml-3 text-right flex-shrink-0">
-            <span class="text-xs font-semibold <%= isOverdue ? 'text-red-600' : 'text-gray-500' %>"><%= new Date(t.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) %></span>
-            <% if (isOverdue) { %><p class="text-[10px] text-red-500 font-medium">OVERDUE</p><% } %>
-          </div>
-        </a>
-        <% }) %>
-      </div>
-      <% } %>
-    </div>
-
-    <!-- My Plans -->
-    <% if (myPlans && myPlans.length > 0) { %>
-    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">My Plans & Approvals</h2>
-          <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full"><%= myPlans.length %></span>
-        </div>
-        <a href="/compliance" class="text-xs text-emerald-600 hover:text-emerald-700 font-medium">View all &rarr;</a>
-      </div>
-      <div class="divide-y divide-gray-100">
-        <% myPlans.forEach(p => {
-          const todayStr = today; // Sydney today from the route
-          const isOverdue = p.due_date && p.due_date < todayStr;
-          const isDueSoon = !isOverdue && p.due_date && p.due_date <= new Date(new Date(today + 'T00:00:00Z').getTime() + 14 * 86400000).toISOString().split('T')[0];
-          const statusColors = { not_started: 'bg-gray-100 text-gray-600', started: 'bg-purple-50 text-purple-700', submitted: 'bg-blue-50 text-blue-700', rejected: 'bg-red-50 text-red-700' };
-          const sc = statusColors[p.status] || 'bg-gray-100 text-gray-600';
-        %>
-        <a href="/compliance/<%= p.id %>/edit" class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
-          <div class="min-w-0 flex-1">
-            <p class="text-sm font-medium text-gray-900 truncate"><%= p.title %></p>
-            <div class="flex items-center gap-2 mt-1.5">
-              <% if (p.job_number) { %><span class="job-id-chip" style="font-size:10px;padding:1px 6px"><%= p.job_number %></span><% } %>
-              <% if (p.client_name && !p.job_number) { %><span class="text-[10px] text-gray-400"><%= p.client_name %></span><% } %>
-              <span class="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded-full <%= sc %>"><%= p.status.replace(/_/g, ' ') %></span>
-            </div>
-          </div>
-          <div class="ml-3 text-right flex-shrink-0">
-            <% if (p.due_date) { %>
-              <span class="text-xs font-semibold <%= isOverdue ? 'text-red-600' : isDueSoon ? 'text-amber-600' : 'text-gray-500' %>"><%= new Date(p.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) %></span>
-              <% if (isOverdue) { %><p class="text-[10px] text-red-500 font-medium">OVERDUE</p><% } %>
-              <% if (isDueSoon) { %><p class="text-[10px] text-amber-500 font-medium">DUE SOON</p><% } %>
-            <% } else { %>
-              <span class="text-xs text-gray-400">No date</span>
-            <% } %>
-          </div>
-        </a>
-        <% }) %>
-      </div>
-    </div>
-    <% } %>
-
-    <!-- Tasks I Assigned -->
-    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <svg class="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
-          <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Tasks I Assigned</h2>
-          <% if (tasksIAssigned.length > 0) { %><span class="text-[10px] font-semibold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded-full"><%= tasksIAssigned.length %></span><% } %>
-        </div>
-        <a href="/tasks" class="text-xs text-purple-600 hover:text-purple-700 font-medium">View all &rarr;</a>
-      </div>
-      <% if (tasksIAssigned.length === 0) { %>
-        <div class="p-6 text-center">
-          <p class="text-sm text-gray-500">No tasks assigned to others yet</p>
-          <p class="text-xs text-gray-400 mt-1">When you create a task and assign it to someone else, it will appear here.</p>
-        </div>
-      <% } else { %>
-      <div class="divide-y divide-gray-100">
-        <% tasksIAssigned.forEach(t => {
-          const isOverdue = t.due_date < today; // Sydney today from the route
-          const statusTag = t.status === 'in_progress' ? 'task-tag-progress' : t.status === 'blocked' ? 'task-tag-blocked' : 'task-tag-default';
-        %>
-        <div class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
-          <div class="min-w-0 flex-1">
-            <a href="/tasks/<%= t.id %>/edit" class="text-sm font-medium text-gray-900 hover:text-brand-600 truncate block"><%= t.title %></a>
-            <div class="flex items-center gap-2 mt-1.5">
-              <span class="text-[10px] text-gray-500">Assigned to <strong><%= t.owner_name %></strong></span>
-              <span class="task-tag <%= statusTag %>"><%= t.status.replace(/_/g, ' ') %></span>
-              <% if (isOverdue) { %><span class="task-tag task-tag-blocked">OVERDUE</span><% } %>
-            </div>
-          </div>
-          <div class="ml-3 flex items-center gap-2 flex-shrink-0">
-            <span class="text-xs text-gray-400"><%= new Date(t.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) %></span>
-            <form action="/tasks/<%= t.id %>/renotify" method="POST" class="inline">
-              <%- include('partials/csrf') %>
-              <button type="submit" title="Send reminder to <%= t.owner_name %>" class="p-1.5 rounded-lg hover:bg-purple-50 text-gray-400 hover:text-purple-600 transition" onclick="return confirm('Send a reminder to <%= t.owner_name %>?')">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-              </button>
-            </form>
-          </div>
-        </div>
-        <% }) %>
-      </div>
-      <% } %>
-    </div>
-
-    <!-- My Jobs -->
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="dash-section-title">My Jobs</h2>
-        <a href="/jobs/new" class="btn-new-job">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/></svg>
-          New Job
-        </a>
-      </div>
-      <% if (myJobs.length === 0) { %>
-        <div class="bg-white border border-gray-200 rounded-2xl p-8 text-center">
-          <div class="w-12 h-12 bg-brand-50 rounded-xl flex items-center justify-center mx-auto mb-3">
-            <svg class="w-6 h-6 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
-          </div>
-          <p class="text-sm font-medium text-gray-700">No jobs assigned yet</p>
-          <p class="text-xs text-gray-400 mt-1">Create a new job or ask an admin to assign one to you.</p>
-        </div>
-      <% } else { %>
-      <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden overflow-x-auto">
-        <table class="w-full text-sm min-w-[400px]">
-          <thead>
-            <tr class="bg-gray-50 border-b border-gray-200">
-              <th class="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Job</th>
-              <th class="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Client</th>
-              <th class="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Health</th>
-              <th class="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Progress</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <% myJobs.slice(0, 8).forEach(job => {
-              const healthClass = job.health === 'green' ? 'health-pill-green' : job.health === 'amber' ? 'health-pill-amber' : 'health-pill-red';
-              const barClass = job.percent_complete >= 75 ? 'health-green' : job.percent_complete >= 40 ? 'health-blue' : 'health-amber';
-            %>
-            <tr class="cursor-pointer transition" onclick="window.location='/projects/<%= job.id %>'">
-              <td class="px-3 sm:px-4 py-2.5"><span class="job-id-chip"><%= job.job_number %></span></td>
-              <td class="px-3 sm:px-4 py-2.5 text-gray-600 text-sm"><%= job.client %></td>
-              <td class="px-3 sm:px-4 py-2.5">
-                <span class="health-pill <%= healthClass %>"><%= job.health %></span>
-              </td>
-              <td class="px-3 sm:px-4 py-2.5">
-                <div class="flex items-center gap-2">
-                  <div class="progress-track flex-1">
-                    <div class="progress-bar-fill <%= barClass %>" style="width: <%= job.percent_complete %>%"></div>
-                  </div>
-                  <span class="text-xs text-gray-400 w-7 text-right tabular-nums"><%= job.percent_complete %>%</span>
-                </div>
-              </td>
-            </tr>
-            <% }) %>
-          </tbody>
-        </table>
-        <% if (myJobs.length > 8) { %>
-          <div class="px-4 py-2 border-t border-gray-100 text-center">
-            <a href="/jobs" class="text-xs text-brand-600 hover:text-brand-500 font-medium">View all <%= myJobs.length %> jobs &rarr;</a>
-          </div>
-        <% } %>
-      </div>
-      <% } %>
-    </div>
-
-    <!-- Recent Updates -->
-    <% if (recentUpdates.length > 0) { %>
-    <div>
-      <div class="flex items-center justify-between mb-3">
-        <h2 class="dash-section-title">Recent Updates</h2>
-        <a href="/updates" class="text-xs text-brand-600 hover:text-brand-500 font-medium">All &rarr;</a>
-      </div>
-      <div class="bg-white border border-gray-200 rounded-2xl p-4">
-        <div class="space-y-2.5">
-          <% recentUpdates.slice(0, 5).forEach(u => { %>
-          <a href="/projects/<%= u.job_id %>" class="block group">
-            <p class="text-xs font-medium text-brand-600 group-hover:text-brand-500"><%= u.job_number %> &mdash; <%= u.client %></p>
-            <p class="text-[11px] text-gray-500 mt-0.5 line-clamp-2"><%= u.summary.length > 100 ? u.summary.substring(0, 100) + '...' : u.summary %></p>
-            <p class="text-[10px] text-gray-300 mt-0.5"><%= u.submitted_by_name %> &middot; <%= u.week_ending ? new Date(u.week_ending).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : '' %></p>
-          </a>
-          <% }) %>
-        </div>
-      </div>
-    </div>
+<!-- ============================================================
+     Band 1 — Needs you now.
+     Row registry lives in routes/helpers/dashboard-queries.js
+     (getNeedsYouNow): permission-gated, zero-hidden, capped at 5
+     with a native <details> overflow. If nothing is wrong the band
+     collapses to a single all-clear line — that's the reward.
+     ============================================================ -->
+<div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5" id="needs-you-now">
+  <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
+    <svg class="w-4 h-4 <%= needs.allClear ? 'text-emerald-500' : 'text-red-500' %>" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+    <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Needs you now</h2>
+    <% if (!needs.allClear) { %>
+      <span class="text-[10px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full"><%= needs.top.length + needs.overflow.length %></span>
     <% } %>
   </div>
-
-  <!-- Tab: Operations (ops/admin only) -->
-  <% if (isOps) { %>
-  <div data-tab-panel="operations" class="hidden space-y-4">
-    <!-- Today's Allocations -->
-    <% if (todaysAllocations.length > 0) { %>
-    <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-      <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <svg class="w-4 h-4 text-brand-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-          <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Today's Allocations</h2>
-          <span class="text-[10px] font-medium text-brand-600 bg-brand-50 px-2 py-0.5 rounded-full"><%= todaysAllocations.length %> crew</span>
-        </div>
-        <div class="flex items-center gap-3">
-          <span class="text-xs text-gray-500"><span class="font-semibold text-emerald-600"><%= availableCrew %></span> available</span>
-          <a href="/allocations" class="text-xs text-brand-600 hover:text-brand-500 font-medium">View all &rarr;</a>
-        </div>
-      </div>
-      <div class="overflow-x-auto">
-        <table class="w-full text-sm">
-          <thead>
-            <tr class="bg-gray-50 border-b border-gray-200">
-              <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Crew</th>
-              <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:table-cell">Role</th>
-              <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Job</th>
-              <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Location</th>
-              <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Time</th>
-              <th class="px-3 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-50">
-            <% todaysAllocations.slice(0, 15).forEach(a => { %>
-            <tr class="hover:bg-gray-50">
-              <td class="px-3 py-2 text-gray-900 font-medium text-xs"><%= a.crew_name %></td>
-              <td class="px-3 py-2 text-gray-500 text-xs hidden sm:table-cell"><%= a.crew_role ? a.crew_role.replace(/_/g, ' ') : '-' %></td>
-              <td class="px-3 py-2">
-                <a href="/projects/<%= a.job_id %>" class="text-brand-600 hover:text-brand-700 text-xs font-medium"><%= a.job_number %></a>
-                <p class="text-gray-400 text-[10px] truncate max-w-[120px] sm:hidden"><%= a.client %></p>
-              </td>
-              <td class="px-3 py-2 text-gray-500 text-xs truncate max-w-[160px] hidden md:table-cell"><%= a.site_address || '-' %></td>
-              <td class="px-3 py-2 text-gray-500 text-xs tabular-nums hidden md:table-cell"><%= a.start_time || '-' %> - <%= a.end_time || '-' %></td>
-              <td class="px-3 py-2">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-medium
-                  <%= a.status === 'confirmed' ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20' : a.status === 'declined' ? 'bg-red-50 text-red-700 ring-1 ring-red-600/20' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20' %>">
-                  <%= a.status %>
-                </span>
-              </td>
-            </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
-      <% if (todaysAllocations.length > 15) { %>
-      <div class="px-4 py-2 border-t border-gray-100 text-center">
-        <a href="/allocations" class="text-xs text-brand-600 hover:text-brand-500 font-medium">View all <%= todaysAllocations.length %> allocations &rarr;</a>
-      </div>
-      <% } %>
+  <% if (needs.allClear) { %>
+    <div class="flex items-center gap-2.5 px-4 py-4" data-attn="all-clear">
+      <span class="w-6 h-6 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
+        <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+      </span>
+      <p class="text-sm text-gray-600">All clear — nothing needs your attention right now.</p>
     </div>
-    <% } else { %>
-    <div class="bg-white border border-gray-200 rounded-2xl p-8 text-center">
-      <div class="w-12 h-12 bg-brand-50 rounded-xl flex items-center justify-center mx-auto mb-3">
-        <svg class="w-6 h-6 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-      </div>
-      <p class="text-sm font-medium text-gray-700">No allocations today</p>
-      <p class="text-xs text-gray-400 mt-1">Schedule crew from the <a href="/allocations" class="text-brand-600 hover:text-brand-500">Allocations</a> page.</p>
-    </div>
-    <% } %>
-
-    <!-- Crew & Equipment Row -->
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <!-- Crew Availability -->
-      <div class="bg-white border border-gray-200 rounded-2xl p-4">
-        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-3">Crew Availability</h3>
-        <div class="flex items-center justify-center gap-2 mb-3">
-          <div class="relative w-20 h-20">
-            <svg viewBox="0 0 36 36" class="w-20 h-20 -rotate-90">
-              <circle cx="18" cy="18" r="15.91549431" fill="none" stroke="#f3f4f6" stroke-width="3"></circle>
-              <circle cx="18" cy="18" r="15.91549431" fill="none" stroke="#2B7FFF" stroke-width="3"
-                stroke-dasharray="<%= totalActiveCrew > 0 ? (allocatedToday / totalActiveCrew * 100) : 0 %> <%= totalActiveCrew > 0 ? 100 - (allocatedToday / totalActiveCrew * 100) : 100 %>"
-                stroke-linecap="round"></circle>
-            </svg>
-            <div class="absolute inset-0 flex items-center justify-center">
-              <span class="text-lg font-extrabold text-gray-900"><%= allocatedToday %></span>
-            </div>
-          </div>
-        </div>
-        <div class="space-y-1.5 text-center">
-          <div class="flex items-center justify-between px-2">
-            <span class="text-xs text-gray-500">Allocated today</span>
-            <span class="text-sm font-bold text-brand-600"><%= allocatedToday %></span>
-          </div>
-          <div class="flex items-center justify-between px-2">
-            <span class="text-xs text-gray-500">Available</span>
-            <span class="text-sm font-bold text-emerald-600"><%= availableCrew %></span>
-          </div>
-          <div class="flex items-center justify-between px-2">
-            <span class="text-xs text-gray-500">Total active</span>
-            <span class="text-sm font-bold text-gray-900"><%= totalActiveCrew %></span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Operations Summary -->
-      <div class="bg-white border border-gray-200 rounded-2xl p-4">
-        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-3">Operations Summary</h3>
-        <div class="space-y-2.5">
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-500">Equipment deployed</span>
-            <span class="text-sm font-bold text-gray-900"><%= kpi.equipmentDeployed %></span>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-500">Jobs starting soon</span>
-            <span class="text-sm font-bold <%= kpi.startingSoon > 0 ? 'text-brand-600' : 'text-gray-900' %>"><%= kpi.startingSoon %></span>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-500">Missing weekly updates</span>
-            <span class="text-sm font-bold <%= kpi.missingUpdates > 0 ? 'text-amber-600' : 'text-emerald-600' %>"><%= kpi.missingUpdates %></span>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-500">Corrective actions due</span>
-            <span class="text-sm font-bold <%= kpi.overdueCorrectiveActions > 0 ? 'text-red-600' : 'text-emerald-600' %>"><%= kpi.overdueCorrectiveActions %></span>
-          </div>
-          <% if (kpi.notifiableIncidents > 0) { %>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-red-600 font-medium">Notifiable incidents</span>
-            <span class="text-sm font-bold text-red-600"><%= kpi.notifiableIncidents %></span>
-          </div>
-          <% } %>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-500">ROL pending</span>
-            <span class="text-sm font-bold <%= kpi.rolPending > 0 ? 'text-amber-600' : 'text-gray-400' %>"><%= kpi.rolPending %></span>
-          </div>
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-gray-500">TMP pending</span>
-            <span class="text-sm font-bold <%= kpi.tmpPending > 0 ? 'text-amber-600' : 'text-gray-400' %>"><%= kpi.tmpPending %></span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-  <% } %>
-
-  <!-- Tab: Insights -->
-  <div data-tab-panel="insights" class="hidden space-y-4">
-    <!-- Charts Row -->
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-      <div class="bg-white border border-gray-200 rounded-2xl p-4">
-        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2">Job Pipeline</h3>
-        <div class="relative" style="height: 180px;">
-          <canvas id="jobStatusChart"></canvas>
-        </div>
-      </div>
-      <div class="bg-white border border-gray-200 rounded-2xl p-4">
-        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2">Crew Hours (7 Days)</h3>
-        <div class="relative" style="height: 180px;">
-          <canvas id="crewHoursChart"></canvas>
-        </div>
-      </div>
-      <div class="bg-white border border-gray-200 rounded-2xl p-4">
-        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-3">Job Health</h3>
-        <% if (jobHealthDist.length > 0) { %>
-        <div class="relative mx-auto" style="height: 120px; width: 120px;">
-          <canvas id="jobHealthChart"></canvas>
-        </div>
-        <div class="flex justify-center gap-3 mt-2">
-          <% jobHealthDist.forEach(h => { %>
-          <div class="flex items-center gap-1 text-xs text-gray-500">
-            <span class="w-2 h-2 rounded-full <%= h.health === 'green' ? 'bg-emerald-500' : h.health === 'amber' ? 'bg-amber-400' : 'bg-red-500' %>"></span>
-            <span class="capitalize"><%= h.health %> (<%= h.count %>)</span>
-          </div>
-          <% }) %>
-        </div>
-        <% } else { %>
-        <p class="text-sm text-gray-400 text-center py-8">No active jobs</p>
-        <% } %>
-      </div>
-    </div>
-
-    <!-- Recent Activity -->
-    <% if (recentActivity.length > 0) { %>
-    <div class="bg-white border border-gray-200 rounded-2xl p-4">
-      <div class="flex items-center justify-between mb-3">
-        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider">Recent Activity</h3>
-        <a href="/activity" class="text-xs text-brand-600 hover:text-brand-500 font-medium">All &rarr;</a>
-      </div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-        <% recentActivity.slice(0, 9).forEach(a => {
-          const actionColors = { create: 'bg-emerald-500', update: 'bg-blue-500', delete: 'bg-red-500', login: 'bg-purple-500', approve: 'bg-teal-500' };
-          const dotColor = actionColors[a.action] || 'bg-gray-400';
-        %>
-        <div class="flex items-start gap-2.5 p-2 rounded-lg hover:bg-gray-50 transition">
-          <div class="w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 <%= dotColor %>"></div>
-          <div class="min-w-0">
-            <p class="text-xs text-gray-700 truncate"><span class="font-medium"><%= a.user_name || 'System' %></span> <%= a.action %> <%= a.entity_type ? a.entity_type.replace(/_/g, ' ') : '' %></p>
-            <% if (a.entity_label) { %><p class="text-[10px] text-gray-400 truncate"><%= a.entity_label %></p><% } %>
-            <p class="text-[10px] text-gray-300"><%= formatDateTime(a.created_at) %></p>
-          </div>
-        </div>
-        <% }) %>
-      </div>
-    </div>
-    <% } %>
-  </div>
-
-  <!-- Tab: Plans & Safety -->
-  <% if (isPlanning || isOps) { %>
-  <div data-tab-panel="plans-safety" class="hidden space-y-4">
+  <% } else { %>
     <%
-      const pa = (typeof plansAttention !== 'undefined' && plansAttention) ? plansAttention : { upcoming: [], ctmps: [], rolAlerts: [] };
-      const qaChip = { pending: 'bg-gray-100 text-gray-600', in_qa: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700' };
+      // tone → dot colour. critical outranks warn outranks info.
+      const attnDot = { critical: 'bg-red-500', warn: 'bg-amber-500', info: 'bg-brand-500' };
+      const attnRow = (r) => { %>
+        <a href="<%= r.href %>" data-attn="<%= r.key %>" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition group">
+          <span class="w-2 h-2 rounded-full flex-shrink-0 <%= attnDot[r.tone] || 'bg-gray-400' %>"></span>
+          <span class="font-display font-semibold <%= r.tone === 'critical' ? 'text-red-600' : 'text-gray-900' %>" style="font-size:19px;letter-spacing:-0.02em;min-width:1.5rem"><%= r.count %></span>
+          <span class="text-sm text-gray-700 flex-1 min-w-0 truncate">
+            <%= r.label %>
+            <% if (r.detail) { %><span class="text-gray-400 ml-1">· <%= r.detail %></span><% } %>
+          </span>
+          <svg class="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </a>
+      <% };
     %>
-
-    <!-- ROL special-condition alerts -->
-    <% if (pa.rolAlerts.length > 0) { %>
-    <div class="bg-red-50 border border-red-200 rounded-2xl p-4">
-      <h2 class="text-xs font-bold text-red-700 uppercase tracking-wider mb-2">ROL Condition Alerts</h2>
-      <ul class="space-y-1.5">
-        <% pa.rolAlerts.forEach(function(a){ %>
-          <li class="text-sm text-red-800 flex gap-2"><span class="font-semibold">!</span><span><a href="/plans/<%= a.plan_id %>" class="font-medium hover:underline"><%= a.plan_number %></a><%= a.job_number ? ' (' + a.job_number + ')' : '' %> — <%= a.text %></span></li>
-        <% }) %>
-      </ul>
+    <div class="divide-y divide-gray-100">
+      <% needs.top.forEach(r => { attnRow(r); }) %>
     </div>
-    <% } %>
-
-    <!-- Upcoming plan submissions / job dates + CTMP QA -->
-    <% if (pa.upcoming.length > 0 || pa.ctmps.length > 0) { %>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      <div class="bg-white border border-gray-200 rounded-2xl p-4">
-        <div class="flex items-center justify-between mb-2">
-          <h2 class="text-xs font-bold text-gray-800 uppercase tracking-wider">Plans — Upcoming (14 days)</h2>
-          <a href="/plans" class="text-xs text-brand-600 hover:text-brand-500 font-medium">View all &rarr;</a>
+    <% if (needs.overflow.length > 0) { %>
+      <details class="border-t border-gray-100">
+        <summary class="px-4 py-2.5 text-xs font-medium text-gray-500 hover:text-gray-700 cursor-pointer select-none">
+          +<%= needs.overflow.length %> more
+        </summary>
+        <div class="divide-y divide-gray-100 border-t border-gray-100">
+          <% needs.overflow.forEach(r => { attnRow(r); }) %>
         </div>
-        <% if (pa.upcoming.length > 0) { %>
-          <ul class="divide-y divide-gray-100">
-            <% pa.upcoming.forEach(function(p){ %>
-              <li class="py-2 flex items-center justify-between text-sm">
-                <span><a href="/plans/<%= p.id %>" class="text-brand-600 hover:underline font-medium"><%= p.plan_number %></a> <span class="text-gray-400 text-xs"><%= (p.plan_types || '').split(',').join(', ') %></span></span>
-                <span class="text-gray-500 text-xs"><%= p.key_date ? formatDate(p.key_date) : '' %></span>
-              </li>
-            <% }) %>
-          </ul>
-        <% } else { %><p class="text-sm text-gray-400">Nothing due in the next 14 days.</p><% } %>
-      </div>
-      <div class="bg-white border border-gray-200 rounded-2xl p-4">
-        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-2">CTMP — QA Status</h2>
-        <% if (pa.ctmps.length > 0) { %>
-          <ul class="divide-y divide-gray-100">
-            <% pa.ctmps.forEach(function(c){ %>
-              <li class="py-2 flex items-center justify-between text-sm">
-                <a href="/ctmps/<%= c.id %>" class="text-brand-600 hover:underline font-medium truncate mr-2"><%= c.title || c.ctmp_number %></a>
-                <span class="px-2 py-0.5 rounded-full text-[10px] font-semibold whitespace-nowrap <%= qaChip[c.qa_status] || 'bg-gray-100 text-gray-600' %>"><%= c.current_revision_label || 'Draft' %> · <%= (c.qa_status || 'pending').replace('_',' ') %></span>
-              </li>
-            <% }) %>
-          </ul>
-        <% } else { %><p class="text-sm text-gray-400">No CTMPs awaiting QA.</p><% } %>
-      </div>
-    </div>
+      </details>
     <% } %>
+  <% } %>
+</div>
 
-    <% if (complianceUrgent.length > 0) { %>
-    <div>
-      <div class="flex items-center justify-between mb-2">
-        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-wider">Compliance & Approvals</h2>
-        <a href="/compliance" class="text-xs text-brand-600 hover:text-brand-500 font-medium">View all &rarr;</a>
+<!-- ============================================================
+     Your work — personal queues (kept as lists, not folded into
+     Band 1: triage says "go there", a work queue needs per-item
+     links). Hidden entirely when both lists are empty.
+     ============================================================ -->
+<% if ((myTasks && myTasks.length > 0) || (myPlans && myPlans.length > 0)) { %>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5" id="your-work">
+  <% if (myTasks && myTasks.length > 0) { %>
+  <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+        <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">My Tasks</h2>
+        <span class="text-[10px] font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded-full"><%= myTasks.length %></span>
       </div>
-      <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden overflow-x-auto">
-        <table class="w-full text-sm min-w-[500px]">
-          <thead>
-            <tr class="bg-gray-50 border-b border-gray-200">
-              <th class="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Item</th>
-              <th class="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Type</th>
-              <th class="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:table-cell">Status</th>
-              <th class="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Deadline</th>
-              <th class="px-3 sm:px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Urgency</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <%
-              // Sydney today from the route — UTC here made this table and
-              // the tile above disagree about which rows were overdue.
-              const todayDash = today;
-              const _dashMs = new Date(today + 'T00:00:00Z').getTime();
-              const soon14 = new Date(_dashMs + 14*24*60*60*1000).toISOString().split('T')[0];
-              const soon30 = new Date(_dashMs + 30*24*60*60*1000).toISOString().split('T')[0];
-              const typeLabels = { traffic_guidance: 'TGS', tmp_approval: 'CTMP', spa: 'SPA', rol: 'ROL', council_permit: 'Council' };
-              const typeColors = { traffic_guidance: 'bg-blue-50 text-blue-700', tmp_approval: 'bg-purple-50 text-purple-700', spa: 'bg-orange-50 text-orange-700', rol: 'bg-teal-50 text-teal-700', council_permit: 'bg-amber-50 text-amber-700' };
-              const statusLabels = { not_started: 'Not Started', submitted: 'Submitted', approved: 'Approved', rejected: 'Rejected', expired: 'Expired' };
-            %>
-            <% complianceUrgent.forEach(function(item) {
-              const isOverdue = item.due_date && item.due_date < todayDash && item.status !== 'approved' && item.status !== 'expired';
-              const isDueSoon = !isOverdue && item.due_date && item.due_date <= soon14 && item.status !== 'approved';
-              const isExpired = item.expiry_date && item.expiry_date < todayDash;
-              const isExpiringSoon = !isExpired && item.expiry_date && item.expiry_date <= soon30 && item.status === 'approved';
-              let urgencyLabel = 'On Track'; let urgencyClass = 'bg-gray-100 text-gray-600';
-              if (isOverdue) { urgencyLabel = 'OVERDUE'; urgencyClass = 'bg-red-100 text-red-700 font-semibold'; }
-              else if (isExpired) { urgencyLabel = 'EXPIRED'; urgencyClass = 'bg-red-100 text-red-700 font-semibold'; }
-              else if (isDueSoon) { urgencyLabel = 'Due Soon'; urgencyClass = 'bg-amber-100 text-amber-700 font-medium'; }
-              else if (isExpiringSoon) { urgencyLabel = 'Expiring'; urgencyClass = 'bg-amber-100 text-amber-700 font-medium'; }
-              const deadline = item.due_date || item.expiry_date;
-              const tc = typeColors[item.item_type] || 'bg-gray-100 text-gray-600';
-            %>
-            <tr class="hover:bg-gray-50 transition-colors cursor-pointer" onclick="window.location='/compliance/<%= item.id %>/edit'">
-              <td class="px-3 sm:px-4 py-2">
-                <p class="text-gray-900 font-medium text-sm truncate max-w-[200px]"><%= item.title %></p>
-                <p class="text-[11px] text-gray-400"><%= item.job_number ? item.job_number : (item.client_name || '') %></p>
-              </td>
-              <td class="px-3 sm:px-4 py-2">
-                <span class="inline-flex items-center px-2 py-0.5 text-[10px] font-semibold rounded-full <%= tc %>"><%= typeLabels[item.item_type] || item.item_type %></span>
-              </td>
-              <td class="px-3 sm:px-4 py-2 hidden sm:table-cell">
-                <span class="text-xs text-gray-600"><%= statusLabels[item.status] || item.status %></span>
-              </td>
-              <td class="px-3 sm:px-4 py-2 whitespace-nowrap">
-                <% if (deadline) { %>
-                  <span class="text-xs <%= isOverdue || isExpired ? 'text-red-600 font-semibold' : isDueSoon || isExpiringSoon ? 'text-amber-600 font-medium' : 'text-gray-600' %>">
-                    <%= new Date(deadline).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) %>
-                  </span>
-                <% } else { %><span class="text-gray-300 text-xs">-</span><% } %>
-              </td>
-              <td class="px-3 sm:px-4 py-2">
-                <span class="inline-flex px-2 py-0.5 text-[10px] rounded-full <%= urgencyClass %>"><%= urgencyLabel %></span>
-              </td>
-            </tr>
-            <% }) %>
-          </tbody>
-        </table>
-      </div>
+      <a href="/tasks" class="text-xs text-brand-600 hover:text-brand-700 font-medium">View all &rarr;</a>
     </div>
-    <% } else { %>
-    <div class="bg-white border border-gray-200 rounded-2xl p-8 text-center">
-      <div class="w-12 h-12 bg-emerald-50 rounded-xl flex items-center justify-center mx-auto mb-3">
-        <svg class="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-      </div>
-      <p class="text-sm font-medium text-gray-700">All clear</p>
-      <p class="text-xs text-gray-400 mt-1">No urgent compliance or approval items right now.</p>
+    <div class="divide-y divide-gray-100">
+      <% myTasks.slice(0, 5).forEach(t => {
+        const isOverdue = t.due_date < today; // Sydney today from the route
+        const priorityTag = t.priority === 'high' ? 'task-tag-high' : t.priority === 'medium' ? 'task-tag-medium' : 'task-tag-low';
+        const statusTag = t.status === 'in_progress' ? 'task-tag-progress' : t.status === 'blocked' ? 'task-tag-blocked' : 'task-tag-default';
+      %>
+      <a href="/tasks/<%= t.id %>/edit" class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-gray-900 truncate"><%= t.title %></p>
+          <div class="flex items-center gap-2 mt-1.5">
+            <% if (t.job_number) { %><span class="job-id-chip" style="font-size:10px;padding:1px 6px"><%= t.job_number %></span><% } %>
+            <span class="task-tag <%= priorityTag %>"><%= t.priority %></span>
+            <span class="task-tag <%= statusTag %>"><%= t.status.replace(/_/g, ' ') %></span>
+          </div>
+        </div>
+        <div class="ml-3 text-right flex-shrink-0">
+          <span class="text-xs font-semibold <%= isOverdue ? 'text-red-600' : 'text-gray-500' %>"><%= new Date(t.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) %></span>
+          <% if (isOverdue) { %><p class="text-[10px] text-red-500 font-medium">OVERDUE</p><% } %>
+        </div>
+      </a>
+      <% }) %>
     </div>
-    <% } %>
   </div>
   <% } %>
 
-  <!-- Tab: Finance -->
-  <% if (isFinance) { %>
-  <div data-tab-panel="finance" class="hidden space-y-4">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-      <!-- Financial Summary -->
-      <div class="bg-white border border-gray-200 rounded-2xl p-5">
-        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-4">Financial Overview</h3>
-        <div class="space-y-3">
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-gray-500">Total Contract Value</span>
-            <span class="text-lg font-bold text-gray-900">$<%= kpi.totalContractValue.toLocaleString() %></span>
+  <% if (myPlans && myPlans.length > 0) { %>
+  <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
+    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+        <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">My Plans & Approvals</h2>
+        <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full"><%= myPlans.length %></span>
+      </div>
+      <a href="/compliance" class="text-xs text-emerald-600 hover:text-emerald-700 font-medium">View all &rarr;</a>
+    </div>
+    <div class="divide-y divide-gray-100">
+      <% myPlans.slice(0, 5).forEach(p => {
+        const isOverdue = p.due_date && p.due_date < today;
+        const isDueSoon = !isOverdue && p.due_date && p.due_date <= new Date(new Date(today + 'T00:00:00Z').getTime() + 14 * 86400000).toISOString().split('T')[0];
+        const statusColors = { not_started: 'bg-gray-100 text-gray-600', started: 'bg-purple-50 text-purple-700', submitted: 'bg-blue-50 text-blue-700', rejected: 'bg-red-50 text-red-700' };
+        const sc = statusColors[p.status] || 'bg-gray-100 text-gray-600';
+      %>
+      <a href="/compliance/<%= p.id %>/edit" class="flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition">
+        <div class="min-w-0 flex-1">
+          <p class="text-sm font-medium text-gray-900 truncate"><%= p.title %></p>
+          <div class="flex items-center gap-2 mt-1.5">
+            <% if (p.job_number) { %><span class="job-id-chip" style="font-size:10px;padding:1px 6px"><%= p.job_number %></span><% } %>
+            <% if (p.client_name && !p.job_number) { %><span class="text-[10px] text-gray-400"><%= p.client_name %></span><% } %>
+            <span class="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded-full <%= sc %>"><%= p.status.replace(/_/g, ' ') %></span>
           </div>
-          <div class="flex items-center justify-between">
-            <span class="text-sm text-gray-500">Total Spend</span>
-            <span class="text-lg font-bold text-brand-600">$<%= kpi.totalSpend.toLocaleString() %></span>
-          </div>
-          <% if (kpi.totalContractValue > 0) { %>
-          <div>
-            <div class="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-              <div class="h-full bg-brand-500 rounded-full" style="width: <%= Math.min(100, Math.round(kpi.totalSpend / kpi.totalContractValue * 100)) %>%"></div>
-            </div>
-            <p class="text-xs text-gray-400 text-center mt-1"><%= Math.round(kpi.totalSpend / kpi.totalContractValue * 100) %>% of budget used</p>
-          </div>
+        </div>
+        <div class="ml-3 text-right flex-shrink-0">
+          <% if (p.due_date) { %>
+            <span class="text-xs font-semibold <%= isOverdue ? 'text-red-600' : isDueSoon ? 'text-amber-600' : 'text-gray-500' %>"><%= new Date(p.due_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short' }) %></span>
+            <% if (isOverdue) { %><p class="text-[10px] text-red-500 font-medium">OVERDUE</p><% } %>
+            <% if (isDueSoon) { %><p class="text-[10px] text-amber-500 font-medium">DUE SOON</p><% } %>
+          <% } else { %>
+            <span class="text-xs text-gray-400">No date</span>
           <% } %>
         </div>
-      </div>
-
-      <!-- Accounts Status -->
-      <div class="bg-white border border-gray-200 rounded-2xl p-5">
-        <h3 class="text-xs font-bold text-gray-800 uppercase tracking-wider mb-4">Accounts Status</h3>
-        <div class="grid grid-cols-2 gap-4">
-          <div class="text-center p-4 rounded-xl <%= kpi.accountsOverdue > 0 ? 'bg-red-50' : 'bg-gray-50' %>">
-            <p class="text-3xl font-extrabold <%= kpi.accountsOverdue > 0 ? 'text-red-600' : 'text-emerald-600' %>"><%= kpi.accountsOverdue %></p>
-            <p class="text-[10px] font-medium text-gray-500 uppercase tracking-wider mt-1">Overdue</p>
-          </div>
-          <div class="text-center p-4 rounded-xl <%= kpi.accountsDisputed > 0 ? 'bg-amber-50' : 'bg-gray-50' %>">
-            <p class="text-3xl font-extrabold <%= kpi.accountsDisputed > 0 ? 'text-amber-600' : 'text-emerald-600' %>"><%= kpi.accountsDisputed %></p>
-            <p class="text-[10px] font-medium text-gray-500 uppercase tracking-wider mt-1">Disputed</p>
-          </div>
-        </div>
-      </div>
+      </a>
+      <% }) %>
     </div>
   </div>
   <% } %>
 </div>
+<% } %>
 
-<!-- Quick Actions live in the global FAB (bottom-right, on every page).
-     Defects feature retired — the Report Defect button is gone. -->
+<!-- ============================================================
+     Band 2 — Today's operations. The one live-state view: crew
+     coverage + today's booking list. Server-side gated (todayOps
+     is null for roles without bookings/allocations access).
+     ============================================================ -->
+<% if (todayOps) { %>
+<div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5" id="today-ops">
+  <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+    <div class="flex items-center gap-2">
+      <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Today's operations</h2>
+    </div>
+    <a href="/bookings" class="text-xs text-brand-600 hover:text-brand-700 font-medium">Bookings &rarr;</a>
+  </div>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
+    <div class="stat-card is-info">
+      <p class="stat-card-label">Crew on today</p>
+      <p class="stat-card-value"><%= todayOps.crewAssignedToday %></p>
+      <p class="stat-card-sub">of <%= todayOps.totalActiveCrew %> active</p>
+    </div>
+    <div class="stat-card is-good">
+      <p class="stat-card-label">Available</p>
+      <p class="stat-card-value"><%= todayOps.availableCrew %></p>
+    </div>
+    <div class="stat-card is-info">
+      <p class="stat-card-label">Jobs running today</p>
+      <p class="stat-card-value"><%= todayOps.jobsRunningToday %></p>
+    </div>
+    <div class="stat-card is-muted">
+      <p class="stat-card-label">Bookings next 24h</p>
+      <p class="stat-card-value"><%= todayOps.bookingsNext24h %></p>
+    </div>
+  </div>
+  <% if (todayOps.todaysBookings.length > 0) { %>
+  <div class="divide-y divide-gray-100 border-t border-gray-100">
+    <% todayOps.todaysBookings.forEach(b => { %>
+    <a href="/bookings/<%= b.id %>" class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition">
+      <span class="text-xs font-semibold text-gray-500 w-12 flex-shrink-0"><%= formatTime(b.start_datetime) %></span>
+      <span class="text-sm font-medium text-gray-900 truncate flex-1 min-w-0">
+        <%= b.booking_number || ('#' + b.id) %><% if (b.title) { %> — <%= b.title %><% } %>
+      </span>
+      <% if (b.job_number) { %><span class="job-id-chip flex-shrink-0" style="font-size:10px;padding:1px 6px"><%= b.job_number %></span><% } %>
+      <% if (b.suburb) { %><span class="text-xs text-gray-400 flex-shrink-0 hidden sm:inline"><%= b.suburb %></span><% } %>
+      <span class="text-[10px] font-semibold text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded-full flex-shrink-0"><%= b.crew_count %> crew</span>
+    </a>
+    <% }) %>
+  </div>
+  <% } else { %>
+  <p class="px-4 pb-4 text-sm text-gray-400">No bookings scheduled today.</p>
+  <% } %>
+</div>
+<% } %>
 
+<!-- ============================================================
+     Band 3 — one trend: the job pipeline. Deeper analysis lives
+     in /reports; this page keeps exactly one chart.
+     ============================================================ -->
+<div class="bg-white border border-gray-200 rounded-2xl p-4" id="trend">
+  <div class="flex items-center justify-between mb-2">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-wider">Job Pipeline</h2>
+    <a href="/reports" class="text-xs text-brand-600 hover:text-brand-700 font-medium">More in Reports &rarr;</a>
+  </div>
+  <% if (jobStatusDist.length > 0) { %>
+  <div class="relative" style="height: 200px;">
+    <canvas id="jobStatusChart"></canvas>
+  </div>
+  <% } else { %>
+  <p class="text-sm text-gray-400 text-center py-8">No jobs yet.</p>
+  <% } %>
+</div>
+
+<!-- Quick Actions live in the global FAB (bottom-right, on every page). -->
+
+<% if (jobStatusDist.length > 0) { %>
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
   Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
   Chart.defaults.font.size = 11;
 
-  <% if (jobStatusDist.length > 0) { %>
   var statusData = <%- JSON.stringify(jobStatusDist) %>;
   var sLabels = { lead: 'Lead', won: 'Won', active: 'Active', on_hold: 'On Hold', completed: 'Completed', lost: 'Lost', tender: 'Tender', prestart: 'Prestart', closed: 'Closed' };
   var sColors = { lead: '#94a3b8', tender: '#94a3b8', won: '#34d399', prestart: '#a78bfa', active: '#2B7FFF', on_hold: '#fb923c', completed: '#6ee7b7', lost: '#fca5a5', closed: '#d1d5db' };
@@ -955,45 +340,5 @@
     },
     options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { stepSize: 1 } }, y: { grid: { display: false } } } }
   });
-  <% } %>
-
-  <% if (crewHoursByDay.length > 0) { %>
-  var crewData = <%- JSON.stringify(crewHoursByDay) %>;
-  new Chart(document.getElementById('crewHoursChart'), {
-    type: 'line',
-    data: {
-      labels: crewData.map(function(d) { return new Date(d.work_date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'short' }); }),
-      datasets: [{ data: crewData.map(function(d) { return d.hours; }), borderColor: '#2B7FFF', backgroundColor: 'rgba(43,127,255,0.08)', fill: true, tension: 0.4, pointRadius: 3, pointBackgroundColor: '#2B7FFF', borderWidth: 2 }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { grid: { color: '#f3f4f6' }, beginAtZero: true, ticks: { stepSize: 1 } } } }
-  });
-  <% } %>
-
-  <% if (jobHealthDist.length > 0) { %>
-  var healthData = <%- JSON.stringify(jobHealthDist) %>;
-  var hColors = { green: '#34d399', amber: '#fb923c', red: '#f87171' };
-  new Chart(document.getElementById('jobHealthChart'), {
-    type: 'doughnut',
-    data: {
-      labels: healthData.map(function(d) { return d.health.charAt(0).toUpperCase() + d.health.slice(1); }),
-      datasets: [{ data: healthData.map(function(d) { return d.count; }), backgroundColor: healthData.map(function(d) { return hColors[d.health] || '#94a3b8'; }), borderWidth: 0, cutout: '70%' }]
-    },
-    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, tooltip: { enabled: true } } }
-  });
-  <% } %>
-
-  // Lazy-init charts when Insights tab becomes visible
-  (function() {
-    var chartsInitialized = false;
-    document.querySelectorAll('[data-tab]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        if (this.getAttribute('data-tab') === 'insights' && !chartsInitialized) {
-          chartsInitialized = true;
-          setTimeout(function() {
-            window.dispatchEvent(new Event('resize'));
-          }, 50);
-        }
-      });
-    });
-  })();
 </script>
+<% } %>
