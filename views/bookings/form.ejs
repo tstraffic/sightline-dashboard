@@ -1550,6 +1550,14 @@
     var projNewBtn = document.querySelector('[data-bk-project-new]');
     var projNewInput = document.querySelector('[data-bk-project-newinput]');
     var initialJob = <%- (isEdit && booking.job_id) ? JSON.stringify(String(booking.job_id)) : 'null' %>;
+    <%
+      var _lj = '';
+      if (isEdit && booking.job_id && typeof jobs !== 'undefined' && Array.isArray(jobs)) {
+        var _m = jobs.find(function (j) { return String(j.id) === String(booking.job_id); });
+        if (_m) _lj = (_m.job_number ? _m.job_number + ' — ' : '') + (_m.job_name || ('Project ' + _m.id));
+      }
+    %>
+    var LINKED_JOB_LABEL = <%- JSON.stringify(_lj) %>;
 
     function setProjects(list, selId) {
       if (!projSel) return;
@@ -1562,7 +1570,20 @@
       });
       projSel.disabled = false;
       if (projNewBtn) projNewBtn.hidden = false;
-      if (selId) projSel.value = String(selId);
+      if (selId) {
+        projSel.value = String(selId);
+        // The list is scoped to the booking's client and excludes closed
+        // jobs. If the currently-linked job isn't in it, the assignment
+        // above silently falls back to "— none —" and saving would unlink
+        // it. Keep it selectable instead (same trick as location_context).
+        if (projSel.value !== String(selId)) {
+          var keep = document.createElement('option');
+          keep.value = String(selId);
+          keep.textContent = LINKED_JOB_LABEL || ('Currently linked project #' + selId);
+          keep.selected = true;
+          projSel.appendChild(keep);
+        }
+      }
     }
     function clearProjects() {
       if (!projSel) return;
@@ -1582,11 +1603,31 @@
       clientSel.addEventListener('change', function () { loadProjects(this.value, null); });
       if (clientSel.value) loadProjects(clientSel.value, initialJob); else clearProjects();
     }
+    // "+ New project" and the existing-project select are MUTUALLY
+    // EXCLUSIVE — the select is disabled (so it posts nothing) while a new
+    // name is being typed, and typing is cleared the moment an existing
+    // project is picked. Without the disable, the form posted job_id=''
+    // next to the name, which on the edit page silently unlinked the job.
     if (projNewBtn) projNewBtn.addEventListener('click', function () {
       if (!projNewInput) return;
       var showing = !projNewInput.hidden;
       projNewInput.hidden = showing;
-      if (!showing) { if (projSel) projSel.value = ''; projNewInput.focus(); } else projNewInput.value = '';
+      if (!showing) {
+        if (projSel) { projSel.value = ''; projSel.disabled = true; }
+        projNewInput.focus();
+        projNewBtn.textContent = '× Cancel';
+      } else {
+        projNewInput.value = '';
+        if (projSel) projSel.disabled = false;
+        projNewBtn.textContent = '+ New project';
+      }
+    });
+    if (projSel) projSel.addEventListener('change', function () {
+      if (projSel.value && projNewInput && !projNewInput.hidden) {
+        projNewInput.hidden = true;
+        projNewInput.value = '';
+        if (projNewBtn) projNewBtn.textContent = '+ New project';
+      }
     });
 
     // Location context inline add.

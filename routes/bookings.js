@@ -37,6 +37,23 @@ function lazyCreateProject(db, name, clientId, b) {
     return null;
   }
 }
+// Resolve the job a booking should link to from a submitted form body.
+// The full booking form's "+ New project" control posts a typed name as
+// `site_label` alongside an empty `job_id`; the quick-create surfaces have
+// always resolved that, the main create/update handlers never did — so the
+// name was dropped and the booking saved unlinked. Order: an explicit
+// job_id wins, else match an existing job by name, else create one.
+function resolveJobId(db, b) {
+  if (b.job_id) return parseInt(b.job_id, 10) || null;
+  const label = (b.site_label || '').trim();
+  if (!label) return null;
+  const existing = db.prepare("SELECT id FROM jobs WHERE LOWER(job_name) = LOWER(?) LIMIT 1").get(label);
+  if (existing) return existing.id;
+  const clientId = b.client_id ? parseInt(b.client_id, 10) : null;
+  if (!clientId) return null; // lazyCreateProject needs a client to hang it off
+  return lazyCreateProject(db, label, clientId, b);
+}
+
 const { getConfig } = require('../middleware/settings');
 const bookingNotify = require('../services/bookingNotify');
 const { syncEquipmentReturnTask, syncBookingReturnTasks, syncBookingTaskGroups, createTeamTask } = require('../services/returnTasks');
@@ -481,6 +498,7 @@ router.get('/classic', (req, res) => {
       AND b.status IN ('confirmed','green_to_go','unconfirmed')
       AND NOT EXISTS (SELECT 1 FROM booking_documents bd WHERE bd.booking_id = b.id)
       AND NOT EXISTS (SELECT 1 FROM job_documents jd WHERE jd.job_id = b.job_id AND jd.archived_at IS NULL)
+      AND NOT EXISTS (SELECT 1 FROM traffic_plans tp WHERE tp.job_id = b.job_id AND tp.is_final = 1)
     `;
   }
 
@@ -577,12 +595,17 @@ router.post('/', (req, res) => {
   const bookingNumber = generateBookingNumber(db);
   const siteContacts = Array.isArray(b.site_contacts) ? JSON.stringify(b.site_contacts) : (b.site_contacts ? JSON.stringify([b.site_contacts]) : '[]');
   const bookingTags = b.booking_tags ? JSON.stringify(b.booking_tags.split(',').map(t => t.trim()).filter(Boolean)) : '[]';
+  // "+ New project" on the form posts a typed name as site_label. Resolve it
+  // to a real job the same way /quick does — without this the name was
+  // silently dropped and the booking saved with job_id NULL, so nothing
+  // added on the job side (plans, docs) ever surfaced on the booking.
+  const jobId = resolveJobId(db, b);
   const result = db.prepare(`
     INSERT INTO bookings (booking_number, job_id, client_id, title, description, status, depot, start_datetime, end_datetime, site_address, suburb, state, postcode, order_number, billing_code, client_contact, supervisor_id, requirements_text, is_emergency, is_callout, billable, invoiced, notes, created_by_id,
       site_contacts, depot_meeting_time, straight_to_site_time, booking_tags, latitude, longitude, marker_is_accurate, location_notes, worksite_location, works_direction, chainage_from, chainage_to, has_mobile_works, booking_type, is_booking_pool, requester_id, planner_id, location_context)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?,
       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(bookingNumber, b.job_id || null, b.client_id || null, b.title, b.description || '', b.status || 'unconfirmed', b.depot || '',
+  `).run(bookingNumber, jobId, b.client_id || null, b.title, b.description || '', b.status || 'unconfirmed', b.depot || '',
     b.start_date + 'T' + b.start_time + ':00', b.end_date + 'T' + b.end_time + ':00',
     b.site_address || '', b.suburb || '', b.state || '', b.postcode || '', b.order_number || '', b.billing_code || '', b.client_contact || '',
     b.supervisor_id || null, b.requirements_text || '', b.is_emergency ? 1 : 0, b.is_callout ? 1 : 0, b.billable ? 1 : 0, b.notes || '', req.session.user.id,
@@ -633,7 +656,7 @@ router.post('/', (req, res) => {
       // job_id is nullable — ad-hoc (job-less) bookings still need the
       // allocation row or the worker portal only sees them via fallbacks
       // (matches the crew-add endpoint, which already passes null).
-      try { insertAlloc.run(b.job_id || null, cid, allocDate, allocStart, allocEnd, siteRole, bookingId, req.session.user.id); } catch (e) {}
+      try { insertAlloc.run(jobId, cid, allocDate, allocStart, allocEnd, siteRole, bookingId, req.session.user.id); } catch (e) {}
     }
   });
 
@@ -1201,6 +1224,7 @@ router.get('/', (req, res) => {
       (SELECT COUNT(*) FROM booking_vehicles bv WHERE bv.booking_id = b.id) AS vehicle_count,
       (SELECT COUNT(*) FROM booking_documents bd WHERE bd.booking_id = b.id)
         + (SELECT COUNT(*) FROM job_documents jd WHERE jd.job_id = b.job_id AND jd.archived_at IS NULL)
+        + (SELECT COUNT(*) FROM traffic_plans tp WHERE tp.job_id = b.job_id AND tp.is_final = 1)
         + (SELECT COUNT(*) FROM compliance cp
              WHERE cp.item_type IN ('traffic_guidance','road_occupancy','tmp_approval')
                AND (cp.job_id = b.job_id OR cp.parent_id IN (SELECT id FROM compliance WHERE job_id = b.job_id))) AS doc_count,
@@ -2584,7 +2608,7 @@ router.post('/:id', (req, res) => {
   db.prepare(`UPDATE bookings SET job_id=?, client_id=?, title=?, description=?, status=?, depot=?, start_datetime=?, end_datetime=?, site_address=?, suburb=?, state=?, postcode=?, order_number=?, billing_code=?, client_contact=?, supervisor_id=?, requirements_text=?, is_emergency=?, is_callout=?, billable=?, notes=?,
     site_contacts=?, depot_meeting_time=?, straight_to_site_time=?, booking_tags=?, latitude=?, longitude=?, marker_is_accurate=?, location_notes=?, worksite_location=?, works_direction=?, chainage_from=?, chainage_to=?, has_mobile_works=?, booking_type=?, is_booking_pool=?, requester_id=?, planner_id=?, location_context=?,
     updated_at=CURRENT_TIMESTAMP WHERE id=?`)
-    .run(b.job_id || null, b.client_id || null, b.title, b.description || '', b.status || 'unconfirmed', b.depot || '', b.start_date + 'T' + b.start_time + ':00', b.end_date + 'T' + b.end_time + ':00', b.site_address || '', b.suburb || '', b.state || '', b.postcode || '', b.order_number || '', b.billing_code || '', b.client_contact || '', b.supervisor_id || null, b.requirements_text || '', b.is_emergency ? 1 : 0, b.is_callout ? 1 : 0, b.billable ? 1 : 0, b.notes || '',
+    .run(resolveJobId(db, b), b.client_id || null, b.title, b.description || '', b.status || 'unconfirmed', b.depot || '', b.start_date + 'T' + b.start_time + ':00', b.end_date + 'T' + b.end_time + ':00', b.site_address || '', b.suburb || '', b.state || '', b.postcode || '', b.order_number || '', b.billing_code || '', b.client_contact || '', b.supervisor_id || null, b.requirements_text || '', b.is_emergency ? 1 : 0, b.is_callout ? 1 : 0, b.billable ? 1 : 0, b.notes || '',
       siteContacts, b.depot_meeting_time || '', b.straight_to_site_time || '', bookingTags,
       b.latitude ? parseFloat(b.latitude) : null, b.longitude ? parseFloat(b.longitude) : null,
       b.marker_is_accurate ? 1 : 0, b.location_notes || '', b.worksite_location || '', b.works_direction || '',

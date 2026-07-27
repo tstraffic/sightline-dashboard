@@ -124,9 +124,9 @@ const NEEDS_ROWS = [
   {
     key: 'missing_site_docs', gate: 'bookings', priority: 30, tone: 'warn', href: '/bookings?missing_docs=1',
     build(db, user, today) {
-      // Bookings starting today/tomorrow with no site documents attached —
-      // either a booking_documents row or a job_documents row on the same
-      // job counts as covered (re-using a job-level pack is fine).
+      // Bookings starting today/tomorrow with no site documents attached.
+      // Coverage = a booking_documents row, a job_documents row, or a final
+      // traffic plan on the same job (re-using a job-level pack is fine).
       const c = db.prepare(`
         SELECT COUNT(*) AS c
         FROM bookings b
@@ -135,6 +135,7 @@ const NEEDS_ROWS = [
           AND date(b.start_datetime) BETWEEN date(?) AND date(?,'+1 day')
           AND NOT EXISTS (SELECT 1 FROM booking_documents bd WHERE bd.booking_id = b.id)
           AND NOT EXISTS (SELECT 1 FROM job_documents jd WHERE jd.job_id = b.job_id AND jd.archived_at IS NULL)
+          AND NOT EXISTS (SELECT 1 FROM traffic_plans tp WHERE tp.job_id = b.job_id AND tp.is_final = 1)
       `).get(today, today).c;
       return {
         count: c,
