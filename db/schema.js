@@ -14549,6 +14549,57 @@ function runMigrations(db) {
     recordMigration.run(327, 'Expand notifications type CHECK for induction_reminder');
   }
 
+  if (!isMigrationApplied.get(328)) {
+    try {
+      // Department hub meetings + notebook to-dos (lib/departments.js hubs at
+      // /departments/:key). dept_key deliberately has NO CHECK — departments
+      // live in the lib/departments.js registry and adding an 8th must not
+      // require a table rebuild (see migration 327 above for what that dance
+      // costs). The single write path validates dept_key against the registry.
+      // recap_source / todos.source are pre-provisioned so later AI generation
+      // (auto-summary of last meeting, todo extraction) needs no schema change.
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS dept_meetings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          dept_key TEXT NOT NULL,
+          title TEXT NOT NULL,
+          meeting_date DATE NOT NULL,
+          meeting_time TEXT NOT NULL DEFAULT '',
+          attendees TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled','cancelled')),
+          recap TEXT NOT NULL DEFAULT '',
+          discussion TEXT NOT NULL DEFAULT '',
+          job_updates TEXT NOT NULL DEFAULT '',
+          plans_proposals TEXT NOT NULL DEFAULT '',
+          recap_source TEXT NOT NULL DEFAULT 'manual' CHECK(recap_source IN ('manual','ai')),
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_dept_meetings_dept_date ON dept_meetings(dept_key, meeting_date);
+
+        CREATE TABLE IF NOT EXISTS dept_meeting_todos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          meeting_id INTEGER NOT NULL REFERENCES dept_meetings(id) ON DELETE CASCADE,
+          dept_key TEXT NOT NULL,
+          text TEXT NOT NULL,
+          priority TEXT NOT NULL DEFAULT 'low' CHECK(priority IN ('high','low')),
+          done INTEGER NOT NULL DEFAULT 0,
+          position INTEGER NOT NULL DEFAULT 0,
+          source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','ai')),
+          created_by_id INTEGER REFERENCES users(id),
+          done_at DATETIME,
+          done_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_dept_meeting_todos_meeting ON dept_meeting_todos(meeting_id);
+        CREATE INDEX IF NOT EXISTS idx_dept_meeting_todos_open ON dept_meeting_todos(dept_key, done);
+      `);
+      recordMigration.run(328, 'dept_meetings + dept_meeting_todos — department hub meetings & notebook');
+      console.log('Migration 328 applied');
+    } catch (e) { console.error('Migration 328 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

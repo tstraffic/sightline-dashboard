@@ -1,0 +1,202 @@
+<%
+// Department home — stats strip, module quick links, meetings, open to-dos.
+// Data comes from routes/departments.js; departments defined in
+// lib/departments.js. Reports renders links-focused (no stats strip).
+function fmtTime(hhmm) {
+  const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return '';
+  let h = parseInt(m[1], 10);
+  const ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return h + ':' + m[2] + ' ' + ap;
+}
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'Departments',
+  title: dept.label + ' Home',
+  subtitle: dept.blurb,
+  rail: true,
+  actions: [{ label: 'Add meeting', href: '#add-meeting', style: 'primary' }]
+}) %>
+
+<% if (dept.heroLink && canAccess(user, dept.heroLink.permKey)) { %>
+  <!-- Safety: the command centre stays its own page; the hub points at it. -->
+  <a href="<%= dept.heroLink.href %>" class="flex items-center gap-4 bg-brand-50 border border-brand-200 rounded-xl shadow-sm p-4 mb-6 hover:bg-brand-100 transition-colors">
+    <div class="w-10 h-10 rounded-lg bg-brand-600 flex items-center justify-center shrink-0">
+      <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+    </div>
+    <div class="flex-1 min-w-0">
+      <p class="text-sm font-semibold text-brand-800"><%= dept.heroLink.label %></p>
+      <p class="text-xs text-brand-600/80"><%= dept.heroLink.sub %></p>
+    </div>
+    <svg class="w-5 h-5 text-brand-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+  </a>
+<% } %>
+
+<% if (!dept.linksFocus && stats.length) { %>
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    <% stats.forEach(function (s) { %>
+      <a href="<%= s.href %>" class="stat-card">
+        <p class="stat-card-label"><%= s.label %></p>
+        <p class="stat-card-value <%= s.tone %>"><%= s.value %></p>
+        <% if (s.sub) { %><p class="stat-card-sub"><%= s.sub %></p><% } %>
+      </a>
+    <% }); %>
+  </div>
+<% } %>
+
+<% if (dept.linksFocus) { %>
+  <!-- Reports: the link grid IS the page. -->
+  <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
+    <% quickLinks.forEach(function (l) { %>
+      <a href="<%= l.href %>" class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 hover:border-brand-300 hover:shadow transition-all">
+        <p class="text-sm font-semibold text-gray-800"><%= l.label %></p>
+        <% if (l.sub) { %><p class="text-xs text-gray-500 mt-0.5"><%= l.sub %></p><% } %>
+      </a>
+    <% }); %>
+  </div>
+<% } else if (quickLinks.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 mb-6">
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Modules</p>
+    <div class="flex flex-wrap gap-2">
+      <% quickLinks.forEach(function (l) { %>
+        <a href="<%= l.href %>" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 bg-gray-50 hover:bg-brand-50 hover:border-brand-200 text-sm font-medium text-gray-700 hover:text-brand-700 transition-colors">
+          <%= l.label %>
+          <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </a>
+      <% }); %>
+    </div>
+  </div>
+<% } %>
+
+<div class="grid lg:grid-cols-3 gap-6">
+  <!-- ── Meetings ─────────────────────────────────────────────── -->
+  <div class="lg:col-span-2 bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div class="flex items-center justify-between gap-2 mb-4">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Meetings</p>
+      <a href="#add-meeting" class="text-xs font-semibold text-brand-600 hover:text-brand-700">+ Add meeting</a>
+    </div>
+
+    <details id="add-meeting" class="mb-5 rounded-lg border border-dashed border-gray-300">
+      <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 select-none">New <%= dept.label.toLowerCase() %> meeting…</summary>
+      <form method="POST" action="/departments/<%= dept.key %>/meetings" class="px-4 pb-4 pt-1 grid sm:grid-cols-2 gap-3">
+        <%- include('../partials/csrf') %>
+        <div class="sm:col-span-2">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Title</label>
+          <input type="text" name="title" required placeholder="e.g. Weekly <%= dept.label.toLowerCase() %> meeting"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+          <input type="date" name="meeting_date" required value="<%= today %>"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Time <span class="normal-case font-normal">(optional)</span></label>
+          <input type="time" name="meeting_time"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Attendees <span class="normal-case font-normal">(optional)</span></label>
+          <input type="text" name="attendees" placeholder="Names, free text"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div class="sm:col-span-2">
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition-colors">Create meeting</button>
+        </div>
+      </form>
+    </details>
+
+    <%
+      // Group upcoming meetings by date for the calendar-style list.
+      const groups = [];
+      let cur = null;
+      upcoming.forEach(function (m) {
+        if (!cur || cur.date !== m.meeting_date) { cur = { date: m.meeting_date, items: [] }; groups.push(cur); }
+        cur.items.push(m);
+      });
+
+      function meetingRow(m) { %>
+        <a href="/departments/<%= dept.key %>/meetings/<%= m.id %>"
+           class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors <%= m.status === 'cancelled' ? 'opacity-60' : '' %>">
+          <span class="shrink-0 w-16 text-[11px] font-mono <%= m.meeting_time ? 'text-gray-600' : 'text-gray-300' %>"><%= m.meeting_time ? fmtTime(m.meeting_time) : '—' %></span>
+          <span class="flex-1 min-w-0">
+            <span class="block text-sm font-medium text-gray-900 truncate <%= m.status === 'cancelled' ? 'line-through' : '' %>"><%= m.title %></span>
+            <% if (m.attendees) { %><span class="block text-xs text-gray-400 truncate"><%= m.attendees %></span><% } %>
+          </span>
+          <% if (m.status === 'cancelled') { %>
+            <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">CANCELLED</span>
+          <% } else if (m.open_todos > 0) { %>
+            <span class="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700" title="Open to-dos"><%= m.open_todos %> to-do<%= m.open_todos !== 1 ? 's' : '' %></span>
+          <% } %>
+          <svg class="w-4 h-4 text-gray-300 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </a>
+    <% }
+    %>
+
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Upcoming</p>
+    <% if (!groups.length) { %>
+      <p class="text-sm text-gray-400 italic px-3 py-4">No upcoming meetings — add the first one above.</p>
+    <% } else { %>
+      <div class="divide-y divide-gray-50">
+        <% groups.forEach(function (g) { %>
+          <div class="py-2">
+            <p class="px-3 text-xs font-semibold text-brand-700 mb-1"><%= dayLabel(g.date) %></p>
+            <% g.items.forEach(function (m) { meetingRow(m); }); %>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <% if (past.length) { %>
+      <details class="mt-4" <%= pastExpanded ? 'open' : '' %>>
+        <summary class="cursor-pointer text-[10px] font-bold text-gray-400 uppercase tracking-widest select-none">Past meetings (<%= past.length %><%= !pastExpanded && past.length >= 15 ? '+' : '' %>)</summary>
+        <div class="mt-2 divide-y divide-gray-50">
+          <% past.forEach(function (m) { %>
+            <div class="py-1">
+              <p class="px-3 text-[11px] text-gray-400 mb-0.5"><%= formatDateShort(m.meeting_date) %></p>
+              <% meetingRow(m); %>
+            </div>
+          <% }); %>
+        </div>
+        <% if (!pastExpanded && past.length >= 15) { %>
+          <a href="/departments/<%= dept.key %>?past=all" class="inline-block mt-2 text-xs font-semibold text-brand-600 hover:text-brand-700">Show all past meetings</a>
+        <% } %>
+      </details>
+    <% } %>
+  </div>
+
+  <!-- ── Open to-dos across meetings ──────────────────────────── -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 h-fit">
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Open to-dos</p>
+    <p class="text-xs text-gray-400 mb-3">Across all <%= dept.label %> meetings</p>
+    <% if (!openTodos.length) { %>
+      <p class="text-sm text-gray-400 italic">Nothing open. Nice.</p>
+    <% } else {
+         const high = openTodos.filter(t => t.priority === 'high');
+         const low = openTodos.filter(t => t.priority !== 'high');
+         function todoRow(t) { %>
+          <div class="flex items-start gap-2 py-1.5">
+            <form method="POST" action="/departments/<%= dept.key %>/todos/<%= t.id %>/toggle" class="shrink-0 pt-0.5">
+              <%- include('../partials/csrf') %>
+              <button type="submit" class="w-4 h-4 rounded border border-gray-300 hover:border-brand-500 hover:bg-brand-50 transition-colors" title="Mark done"></button>
+            </form>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-gray-800 leading-snug"><%= t.text %></p>
+              <a href="/departments/<%= dept.key %>/meetings/<%= t.meeting_id %>#section-todos" class="text-[11px] text-gray-400 hover:text-brand-600 truncate block"><%= t.meeting_title %> · <%= formatDateShort(t.meeting_date) %></a>
+            </div>
+          </div>
+    <%   }
+    %>
+      <% if (high.length) { %>
+        <p class="flex items-center gap-1.5 text-[10px] font-bold text-red-500 uppercase tracking-widest mt-2 mb-1"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>High priority</p>
+        <% high.forEach(function (t) { todoRow(t); }); %>
+      <% } %>
+      <% if (low.length) { %>
+        <p class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-3 mb-1"><span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>Low priority</p>
+        <% low.forEach(function (t) { todoRow(t); }); %>
+      <% } %>
+    <% } %>
+  </div>
+</div>

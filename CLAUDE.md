@@ -32,6 +32,7 @@ Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney tr
 - **Layout override**: Admin uses `views/layout.ejs` (default). Worker uses `views/worker/layout.ejs` via `res.locals.layout`
 - **`blockWorkerFromAdmin`** middleware prevents worker-only sessions from accessing admin routes
 - **Permissions**: `middleware/auth.js` has `PERMISSIONS` object mapping modules to allowed roles
+- **Department hubs**: `/departments/:key` (planning, safety, operations, finance, people, assets, reports) — registry in `lib/departments.js`. Access = user can open ANY of the dept's `accessKeys` (kept in lockstep with the matching sidebar section gate in `views/partials/sidebar.ejs`). Meetings + notebook to-dos live in `dept_meetings`/`dept_meeting_todos` (migration 328; `dept_key` validated in app, not a CHECK). `recap_source`/`todos.source` columns are pre-provisioned so AI generation (last-meeting summary, todo extraction) can be added without schema changes — AI writes POST the existing `/sections` endpoint with `source='ai'`.
 
 ## Database
 - SQLite via better-sqlite3, file at `./data/tstraffic.db` (env `DB_PATH`)

@@ -23,6 +23,15 @@ const PAGES = [
   '/crew',
   '/clients',
   '/profile',
+  // Department hubs — probing all seven executes every registry statsFn
+  // (lib/departments.js) against a fresh schema.
+  '/departments/planning',
+  '/departments/safety',
+  '/departments/operations',
+  '/departments/finance',
+  '/departments/people',
+  '/departments/assets',
+  '/departments/reports',
 ];
 
 test.describe.configure({ mode: 'serial' });

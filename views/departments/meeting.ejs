@@ -1,0 +1,191 @@
+<%
+// Meeting notebook page — five separated sections mirroring the paper
+// notebook: Refresher, Discussion, To-dos (High/Low), Job updates,
+// Plans & proposals. Each text section is its own form so saving one never
+// clobbers a colleague's edit in another (and future autosave/AI target the
+// same per-section endpoint).
+function fmtTime(hhmm) {
+  const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return '';
+  let h = parseInt(m[1], 10);
+  const ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return h + ':' + m[2] + ' ' + ap;
+}
+const subtitleBits = [formatDate(meeting.meeting_date)];
+if (meeting.meeting_time) subtitleBits.push(fmtTime(meeting.meeting_time));
+if (meeting.attendees) subtitleBits.push(meeting.attendees);
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: dept.label,
+  title: meeting.title,
+  subtitle: subtitleBits.join(' · '),
+  rail: true,
+  actions: [
+    { label: dept.label + ' Home', href: '/departments/' + dept.key, style: 'secondary' },
+    { label: 'Edit details', href: '#edit', style: 'secondary' }
+  ]
+}) %>
+
+<% if (meeting.status === 'cancelled') { %>
+  <div class="max-w-4xl flex items-center justify-between gap-3 bg-amber-50 border border-amber-200 rounded-xl p-4 mb-5">
+    <p class="text-sm text-amber-800 font-medium">This meeting was cancelled.</p>
+    <form method="POST" action="/departments/<%= dept.key %>/meetings/<%= meeting.id %>/cancel">
+      <%- include('../partials/csrf') %>
+      <button type="submit" class="px-3 py-1.5 bg-white border border-amber-300 hover:bg-amber-100 text-amber-800 text-xs font-semibold rounded-lg transition-colors">Restore meeting</button>
+    </form>
+  </div>
+<% } %>
+
+<%
+// One notebook section card: numbered badge + title + optional right-side
+// content, body rendered by the caller.
+function sectionCard(num, id, heading, right, bodyFn) { %>
+  <div id="<%= id %>" class="bg-white border border-gray-200 rounded-xl shadow-sm scroll-mt-20">
+    <div class="flex items-center justify-between gap-2 px-5 pt-4 pb-3 border-b border-gray-100">
+      <div class="flex items-center gap-2.5">
+        <span class="w-6 h-6 rounded-full bg-brand-600 text-white text-[11px] font-bold flex items-center justify-center shrink-0"><%= num %></span>
+        <p class="text-[11px] font-bold text-gray-700 uppercase tracking-widest"><%= heading %></p>
+      </div>
+      <% if (right) { %><div class="flex items-center gap-2 min-w-0"><%- right %></div><% } %>
+    </div>
+    <div class="p-5 pt-4"><% bodyFn(); %></div>
+  </div>
+<% }
+
+function textSection(num, sectionKey, heading, value, placeholder, rows, right) {
+  sectionCard(num, 'section-' + sectionKey, heading, right, function () { %>
+    <form method="POST" action="/departments/<%= dept.key %>/meetings/<%= meeting.id %>/sections">
+      <%- include('../partials/csrf') %>
+      <input type="hidden" name="section" value="<%= sectionKey %>">
+      <textarea name="content" rows="<%= rows %>" placeholder="<%= placeholder %>"
+        class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-500"><%= value %></textarea>
+      <div class="flex items-center justify-end mt-2">
+        <button type="submit" class="px-4 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg transition-colors">Save</button>
+      </div>
+    </form>
+<% });
+}
+%>
+
+<div class="max-w-4xl space-y-5">
+
+  <%
+    // ① Refresher — prev-meeting chip + provenance badge (flips to "AI draft"
+    // when a later AI writer fills this section).
+    let recapRight = '';
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    if (prevMeeting) {
+      recapRight = '<a href="/departments/' + dept.key + '/meetings/' + prevMeeting.id + '" class="text-[11px] font-medium text-brand-600 hover:text-brand-700 truncate">Previous: ' +
+        esc(prevMeeting.title) + ' · ' + formatDateShort(prevMeeting.meeting_date) + ' →</a>';
+    } else {
+      recapRight = '<span class="text-[11px] text-gray-400">First meeting for ' + dept.label + '</span>';
+    }
+    recapRight += '<span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ' +
+      (meeting.recap_source === 'ai' ? 'bg-violet-100 text-violet-700">AI draft' : 'bg-gray-100 text-gray-500">Manual') + '</span>';
+
+    textSection(1, 'recap', 'Refresher — last meeting', meeting.recap,
+      'What was covered last time, carried-over items…', 5, recapRight);
+
+    // ② Discussion notes
+    textSection(2, 'discussion', 'Discussion notes', meeting.discussion,
+      'What was discussed in this meeting…', 8, '');
+  %>
+
+  <!-- ③ To-dos -->
+  <% sectionCard(3, 'section-todos', 'To-dos', '', function () {
+       const high = todos.filter(t => t.priority === 'high');
+       const low = todos.filter(t => t.priority !== 'high');
+       function todoCol(list, priority, headingHtml) { %>
+        <div>
+          <%- headingHtml %>
+          <div class="space-y-1 mb-3">
+            <% if (!list.length) { %>
+              <p class="text-xs text-gray-300 italic py-1">None yet.</p>
+            <% } %>
+            <% list.forEach(function (t) { %>
+              <div class="flex items-start gap-2 group">
+                <form method="POST" action="/departments/<%= dept.key %>/meetings/<%= meeting.id %>/todos/<%= t.id %>/toggle" class="shrink-0 pt-0.5">
+                  <%- include('../partials/csrf') %>
+                  <button type="submit" title="<%= t.done ? 'Reopen' : 'Mark done' %>"
+                    class="w-4 h-4 rounded border flex items-center justify-center transition-colors <%= t.done ? 'bg-emerald-500 border-emerald-500' : 'border-gray-300 hover:border-brand-500 hover:bg-brand-50' %>">
+                    <% if (t.done) { %><svg class="w-3 h-3 text-white" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg><% } %>
+                  </button>
+                </form>
+                <p class="flex-1 min-w-0 text-sm leading-snug <%= t.done ? 'line-through text-gray-400' : 'text-gray-800' %>"><%= t.text %></p>
+                <form method="POST" action="/departments/<%= dept.key %>/meetings/<%= meeting.id %>/todos/<%= t.id %>/delete" class="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <%- include('../partials/csrf') %>
+                  <button type="submit" class="text-gray-300 hover:text-red-500 text-sm leading-none px-1" title="Delete">×</button>
+                </form>
+              </div>
+            <% }); %>
+          </div>
+          <form method="POST" action="/departments/<%= dept.key %>/meetings/<%= meeting.id %>/todos" class="flex gap-1.5">
+            <%- include('../partials/csrf') %>
+            <input type="hidden" name="priority" value="<%= priority %>">
+            <input type="text" name="text" required placeholder="Add a to-do…"
+              class="flex-1 min-w-0 px-2.5 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <button type="submit" class="px-2.5 py-1.5 bg-gray-100 hover:bg-brand-50 border border-gray-200 hover:border-brand-200 text-gray-600 hover:text-brand-700 text-xs font-bold rounded-lg transition-colors">+ Add</button>
+          </form>
+        </div>
+  <%   } %>
+      <div class="grid sm:grid-cols-2 gap-5">
+        <% todoCol(high, 'high', '<p class="flex items-center gap-1.5 text-[10px] font-bold text-red-500 uppercase tracking-widest mb-2"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>High priority</p>'); %>
+        <% todoCol(low, 'low', '<p class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2"><span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>Low priority</p>'); %>
+      </div>
+  <% }); %>
+
+  <%
+    // ④ Job updates + ⑤ Plans & proposals
+    textSection(4, 'job_updates', 'Job updates', meeting.job_updates,
+      'Site and job progress worth noting…', 6, '');
+    textSection(5, 'plans_proposals', 'Plans & proposals', meeting.plans_proposals,
+      'Ideas, proposals, next steps…', 6, '');
+  %>
+
+  <!-- Footer actions -->
+  <div class="flex items-center justify-end gap-4 pb-6">
+    <form method="POST" action="/departments/<%= dept.key %>/meetings/<%= meeting.id %>/cancel">
+      <%- include('../partials/csrf') %>
+      <button type="submit" class="text-xs font-medium text-gray-400 hover:text-gray-600"><%= meeting.status === 'cancelled' ? 'Restore meeting' : 'Cancel meeting' %></button>
+    </form>
+    <% if (canDelete) { %>
+      <form method="POST" action="/departments/<%= dept.key %>/meetings/<%= meeting.id %>/delete" onsubmit="return confirm('Delete this meeting and all its notes and to-dos?');">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="text-xs font-medium text-red-400 hover:text-red-600">Delete meeting</button>
+      </form>
+    <% } %>
+  </div>
+
+  <!-- Edit details -->
+  <details id="edit" class="bg-white border border-gray-200 rounded-xl shadow-sm scroll-mt-20">
+    <summary class="cursor-pointer px-5 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 select-none">Edit meeting details</summary>
+    <form method="POST" action="/departments/<%= dept.key %>/meetings/<%= meeting.id %>" class="px-5 pb-5 pt-1 grid sm:grid-cols-2 gap-3">
+      <%- include('../partials/csrf') %>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Title</label>
+        <input type="text" name="title" required value="<%= meeting.title %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+        <input type="date" name="meeting_date" required value="<%= meeting.meeting_date %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Time</label>
+        <input type="time" name="meeting_time" value="<%= meeting.meeting_time %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Attendees</label>
+        <input type="text" name="attendees" value="<%= meeting.attendees %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="sm:col-span-2">
+        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition-colors">Save details</button>
+      </div>
+    </form>
+  </details>
+</div>

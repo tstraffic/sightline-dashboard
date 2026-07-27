@@ -321,6 +321,9 @@ app.use('/profile', requireLogin, require('./routes/profile'));
 app.use('/feedback', require('./routes/feedback'));
 app.use('/dashboard', requireLogin, requirePermission('dashboard'), require('./routes/dashboard'));
 app.use('/notes', requireLogin, requirePermission('notes'), require('./routes/notes'));
+// Department home pages — no requirePermission here: access depends on :key,
+// enforced per-department inside the router (lib/departments.js accessKeys).
+app.use('/departments', requireLogin, require('./routes/departments'));
 app.use('/projects', requireLogin, requirePermission('projects'), require('./routes/projects'));
 app.use('/clients', requireLogin, requirePermission('clients'), require('./routes/clients'));
 app.use('/jobs', requireLogin, requirePermission('jobs'), require('./routes/jobs'));

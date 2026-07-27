@@ -98,6 +98,11 @@
     <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Planning</p>
     </div>
+    <%/* Department hub — gate inherited from the section if above; keep lib/departments.js accessKeys in sync */%>
+    <a href="/departments/planning" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'dept-planning' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <span class="flex-1">Planning Home</span>
+    </a>
     <% if (canAccess(user, 'tenders')) { %>
     <a href="/tenders" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'tenders' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z"/></svg>
@@ -144,6 +149,11 @@
     <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Safety</p>
     </div>
+    <%/* Department hub — gate inherited from the section if above; keep lib/departments.js accessKeys in sync */%>
+    <a href="/departments/safety" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'dept-safety' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <span class="flex-1">Safety Home</span>
+    </a>
     <% if (canAccess(user, 'safety_today')) { %>
     <a href="/safety-today" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'safety-today' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
@@ -256,6 +266,11 @@
     <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Operations</p>
     </div>
+    <%/* Department hub — gate inherited from the section if above; keep lib/departments.js accessKeys in sync */%>
+    <a href="/departments/operations" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'dept-operations' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <span class="flex-1">Operations Home</span>
+    </a>
     <% if (canAccess(user, 'projects')) { %>
     <a href="/projects" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'projects' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
@@ -363,6 +378,11 @@
     <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Finance</p>
     </div>
+    <%/* Department hub — gate inherited from the section if above; keep lib/departments.js accessKeys in sync */%>
+    <a href="/departments/finance" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'dept-finance' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <span class="flex-1">Finance Home</span>
+    </a>
     <% if (canAccess(user, 'payroll')) { %>
     <a href="/payroll/runs" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'pay-runs' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
       <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"/></svg>
@@ -413,6 +433,11 @@
     <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">People / HR</p>
     </div>
+    <%/* Department hub — gate inherited from the section if above; keep lib/departments.js accessKeys in sync */%>
+    <a href="/departments/people" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'dept-people' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <span class="flex-1">People Home</span>
+    </a>
     <% } %>
     <% if (canAccess(user, 'induction')) { %>
     <a href="/induction/admin/submissions" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'induction' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
@@ -462,6 +487,19 @@
     <div class="pt-3 mt-2 border-t border-white/10 sidebar-section">
       <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">Assets & Reports</p>
     </div>
+    <%/* Department hubs — two hubs share this section; keep lib/departments.js accessKeys in sync */%>
+    <% if (canAccess(user, 'equipment') || canAccess(user, 'fleet')) { %>
+    <a href="/departments/assets" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'dept-assets' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <span class="flex-1">Assets Home</span>
+    </a>
+    <% } %>
+    <% if (canAccess(user, 'reports')) { %>
+    <a href="/departments/reports" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'dept-reports' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
+      <svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l9-9 9 9M5 10v10a1 1 0 001 1h3m10-11v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      <span class="flex-1">Reports Home</span>
+    </a>
+    <% } %>
     <% } %>
     <% if (canAccess(user, 'equipment')) { %>
     <a href="/equipment" class="sidebar-link flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= typeof currentPage !== 'undefined' && currentPage === 'equipment' ? 'bg-white/15 text-white shadow-sm ring-1 ring-white/10' : 'text-brand-200 hover:bg-white/10 hover:text-white active:bg-white/15' %> transition-all">
