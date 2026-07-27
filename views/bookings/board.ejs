@@ -561,7 +561,7 @@
                              data-flag-fa="<%= slot.is_first_aid ? '1' : '0' %>"
                              data-flag-sts="<%= slot.straight_to_site ? '1' : '0' %>"
                              data-flag-nb="<%= slot.non_billable ? '1' : '0' %>"
-                             data-flag-driver="0">
+                             data-flag-driver="<%= slot.is_driver ? '1' : '0' %>">
                           <span class="bk2-slot-avatar"><%= initials(slot.name) %></span>
                           <span class="bk2-slot-role-tag"><%= roleAbbr(slot.role) %></span>
                           <span class="bk2-slot-name"><%= slot.name %></span>
@@ -569,6 +569,7 @@
                           <% if (slot.is_first_aid)     { %><span class="bk2-flag bk2-flag--fa"  title="First Aid">FA</span><% } %>
                           <% if (slot.straight_to_site) { %><span class="bk2-flag bk2-flag--sts" title="Straight to Site">STS</span><% } %>
                           <% if (slot.non_billable)     { %><span class="bk2-flag bk2-flag--nb"  title="Non-Billable">NB</span><% } %>
+                          <% if (slot.is_driver)        { %><span class="bk2-flag bk2-flag--drv" title="Driver">DRV</span><% } %>
                         </div>
                       <% }); %>
                     </div>
@@ -6258,6 +6259,10 @@
     var url = '/bookings/' + encodeURIComponent(bookingId) + '/crew/' + encodeURIComponent(bookingCrewId) + (isDriver ? '/driver' : '/flag');
     var body = new URLSearchParams();
     if (!isDriver) body.append('flag', action);
+    // Tell the server WHICH vehicle — the slot knows. Without this the
+    // route can only guess, and on a multi-vehicle booking a guess moves
+    // someone else's DRV pill.
+    if (isDriver && slot && slot.dataset.assignedVehicleId) body.append('vehicle_id', slot.dataset.assignedVehicleId);
     if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
     btn.disabled = true;
     fetch(url, {

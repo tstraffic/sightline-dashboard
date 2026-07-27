@@ -1056,6 +1056,12 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
     if (workerIdx >= blocks.length) unassigned.push(c);
   }
 
+  // Everyone holding a driving seat anywhere on this booking. Used below so
+  // the DRV state is truthful wherever the person happens to render.
+  const driverIds = new Set(
+    (vehicleRows || []).filter(v => v.crew_member_id != null).map(v => v.crew_member_id)
+  );
+
   // Mark whichever crew slot belongs to the driver of each vehicle.
   for (const blk of blocks) {
     const v = blk.vehicle_slot;
@@ -1077,6 +1083,12 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
   visible.unassigned = unassigned.map(c => {
     const slot = { filled: true };
     fillSlot(slot, c);
+    // A pool worker can still hold a driving seat (they're a driver of some
+    // vehicle without being slotted into its crew block). Marking it here
+    // means the DRV pill renders and the toggle reads the true current
+    // state — a hardcoded "not driver" made the next click CLEAR the seat
+    // instead of setting one.
+    if (driverIds.has(slot.crew_member_id)) slot.is_driver = true;
     return slot;
   });
   // Every vehicle NOT slotted into a crew block (stragglers beyond the block
@@ -2964,33 +2976,65 @@ router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
   res.redirect('/bookings/' + req.params.id);
 });
 
-// POST /:id/crew/:crewId/driver — Mark this crew member as the driver
-// of the booking's first vehicle (the planner can refine vehicle choice
-// later from the booking detail). If they're already the driver, the
-// flag clears. Driver lives on booking_vehicles.crew_member_id.
+// POST /:id/crew/:crewId/driver — Toggle this crew member as the driver of
+// THE VEHICLE THEY'RE SEATED IN. Driver lives on
+// booking_vehicles.crew_member_id (one pointer per vehicle).
+//
+// This used to grab `booking_vehicles ... ORDER BY id LIMIT 1` — the
+// booking's first vehicle — no matter which ute the clicked worker was in.
+// On any multi-vehicle booking that evicted vehicle #1's real driver and
+// left the clicked worker with no DRV pill (their own vehicle was never
+// touched), which read as "assigning a driver takes someone else off".
+// Resolution order: explicit vehicle_id from the caller → the crew row's
+// assigned_vehicle_id → the only vehicle, if the booking has exactly one.
 router.post('/:id/crew/:crewId/driver', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  const crew = db.prepare("SELECT crew_member_id FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, req.params.id);
+  const bookingId = req.params.id;
+  const crew = db.prepare("SELECT crew_member_id, assigned_vehicle_id FROM booking_crew WHERE id = ? AND booking_id = ?").get(req.params.crewId, bookingId);
   if (!crew) {
     if (isJson) return res.status(404).json({ error: 'Crew row not found' });
-    req.flash('error', 'Crew row not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
+    req.flash('error', 'Crew row not found.'); return req.session.save(() => res.redirect('/bookings/' + bookingId));
   }
-  // Find a vehicle on this booking (the first one) to attach the driver to.
-  const veh = db.prepare("SELECT id, crew_member_id FROM booking_vehicles WHERE booking_id = ? ORDER BY id LIMIT 1").get(req.params.id);
-  if (!veh) {
+
+  const vehicles = db.prepare("SELECT id, crew_member_id FROM booking_vehicles WHERE booking_id = ? ORDER BY id").all(bookingId);
+  if (!vehicles.length) {
     if (isJson) return res.status(400).json({ error: 'No vehicle on this booking to drive.' });
-    req.flash('error', 'Add a vehicle first, then assign the driver.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
+    req.flash('error', 'Add a vehicle first, then assign the driver.'); return req.session.save(() => res.redirect('/bookings/' + bookingId));
   }
+
+  const wantId = req.body.vehicle_id || crew.assigned_vehicle_id || (vehicles.length === 1 ? vehicles[0].id : null);
+  const veh = wantId ? vehicles.find(v => String(v.id) === String(wantId)) : null;
+  if (!veh) {
+    // Ambiguous by construction: several vehicles, and we don't know which
+    // one they'd be driving. Say so instead of guessing at someone else's.
+    const msg = 'Put them in a vehicle first, then set the driver.';
+    if (isJson) return res.status(400).json({ error: msg });
+    req.flash('error', msg); return req.session.save(() => res.redirect('/bookings/' + bookingId));
+  }
+
   const isCurrent = veh.crew_member_id == crew.crew_member_id;
-  db.prepare("UPDATE booking_vehicles SET crew_member_id = ? WHERE id = ?").run(isCurrent ? null : crew.crew_member_id, veh.id);
+  const touched = [veh.id];
+  if (isCurrent) {
+    db.prepare("UPDATE booking_vehicles SET crew_member_id = NULL WHERE id = ? AND booking_id = ?").run(veh.id, bookingId);
+  } else {
+    // One driving seat per person per booking: clear them off any other
+    // vehicle first, so a person can never be driver of two utes at once.
+    db.prepare("UPDATE booking_vehicles SET crew_member_id = NULL WHERE booking_id = ? AND crew_member_id = ? AND id != ?")
+      .run(bookingId, crew.crew_member_id, veh.id);
+    db.prepare("UPDATE booking_vehicles SET crew_member_id = ? WHERE id = ? AND booking_id = ?").run(crew.crew_member_id, veh.id, bookingId);
+    for (const v of vehicles) if (v.crew_member_id == crew.crew_member_id && v.id !== veh.id) touched.push(v.id);
+  }
+
   try {
-    db.prepare("SELECT id FROM booking_equipment WHERE booking_id=? AND attached_vehicle_id=? AND return_task=1")
-      .all(req.params.id, veh.id)
-      .forEach(g => syncEquipmentReturnTask(db, parseInt(req.params.id, 10), g.id));
+    for (const vid of touched) {
+      db.prepare("SELECT id FROM booking_equipment WHERE booking_id=? AND attached_vehicle_id=? AND return_task=1")
+        .all(bookingId, vid)
+        .forEach(g => syncEquipmentReturnTask(db, parseInt(bookingId, 10), g.id));
+    }
   } catch (e) { console.error('[bookings.crew.driver] return-task sync failed:', e.message); }
   if (isJson) return res.json({ ok: true, value: isCurrent ? 0 : 1 });
-  req.session.save(() => res.redirect('/bookings/' + req.params.id));
+  req.session.save(() => res.redirect('/bookings/' + bookingId));
 });
 
 router.post('/:id/crew/:crewId/remove', (req, res) => {
