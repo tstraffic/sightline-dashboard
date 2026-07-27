@@ -1,0 +1,24 @@
+<%
+/* Reports domain switcher — one strip across the four report surfaces so a
+   single sidebar "Reports" entry reaches them all. Pill style on purpose:
+   /reports has its own internal underline tab bar (#reportTabs) and the two
+   must not read as one control. Tabs are permission-gated per domain;
+   canAccess comes through res.locals. Active state from currentPage. */
+  var __repTabs = [
+    { key: 'reports',        href: '/reports',        label: 'Overview',       permKey: 'reports' },
+    { key: 'safety-reports', href: '/safety-reports', label: 'Safety Reports', permKey: 'safety_reports' },
+    { key: 'hr-reports',     href: '/hr/reports',     label: 'HR Reports',     permKey: 'hr_reports' },
+    { key: 'crm-reports',    href: '/crm/reports',    label: 'CRM Reports',    permKey: 'crm' },
+  ].filter(function (t) { return canAccess(user, t.permKey); });
+  var __repActive = (typeof currentPage !== 'undefined') ? currentPage : '';
+%>
+<% if (__repTabs.length > 1) { %>
+<nav class="inline-flex items-center bg-gray-100 border border-gray-200 rounded-xl p-1 gap-0.5 mb-4 overflow-x-auto max-w-full" aria-label="Report domains">
+  <% __repTabs.forEach(function (t) { var on = __repActive === t.key; %>
+    <a href="<%= t.href %>"
+       class="inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors <%= on ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-900 hover:bg-white/60' %>">
+      <%= t.label %>
+    </a>
+  <% }); %>
+</nav>
+<% } %>

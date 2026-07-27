@@ -1,15 +1,20 @@
 <%
-  // Shared Job-Pack header. Three tools (Forms / Register / Dockets) live
-  // under one "Job Pack" sidebar entry; this strip lets the office bounce
-  // between them without losing context. The active tab is decided by the
-  // caller's currentPage local — set by each landing page (e.g.
-  // 'safety-forms', 'checklist-register', 'dockets-admin').
+  // Shared checklists/Job-Pack header. Four tools live behind two sidebar
+  // entries (Safety "Forms & Checklists" → Templates, Ops "Job Pack" →
+  // Forms) and this strip lets the office bounce between them without
+  // losing context. The active tab is decided by the caller's currentPage
+  // local — set by each landing page.
+  //
+  // Per-tab permission gating matters here: `management` has `audits` but
+  // not `checklists`, so a dead Templates tab must never render. canAccess
+  // comes through res.locals (set app-wide in middleware/auth).
   var active = (typeof currentPage !== 'undefined') ? currentPage : '';
   var jpTabs = [
-    { key: 'safety-forms',       href: '/safety-forms',       label: 'Forms',              hint: 'Submitted Job-Pack checklists' },
-    { key: 'checklist-register', href: '/checklist-register', label: 'Checklist Register', hint: 'Required vs completed by week' },
-    { key: 'dockets-admin',      href: '/dockets',            label: 'Signed Dockets',     hint: 'Worker-signed dockets' },
-  ];
+    { key: 'checklists',         href: '/checklists',         label: 'Templates',          hint: 'Form builder — what workers fill in', permKey: 'checklists' },
+    { key: 'safety-forms',       href: '/safety-forms',       label: 'Forms',              hint: 'Submitted Job-Pack checklists',       permKey: 'audits' },
+    { key: 'checklist-register', href: '/checklist-register', label: 'Checklist Register', hint: 'Required vs completed by week',       permKey: 'audits' },
+    { key: 'dockets-admin',      href: '/dockets',            label: 'Signed Dockets',     hint: 'Worker-signed dockets',               permKey: 'audits' },
+  ].filter(function (t) { return canAccess(user, t.permKey); });
 %>
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-6">
   <div class="flex items-center justify-between gap-3 flex-wrap mb-3">
@@ -17,6 +22,9 @@
       <p class="text-[11px] font-semibold uppercase tracking-widest text-brand-600">Job Pack</p>
       <h1 class="text-lg font-bold text-gray-900 mt-0.5"><%= (jpTabs.find(function (t) { return t.key === active; }) || {}).label || 'Job Pack' %></h1>
     </div>
+    <% if (typeof jpActions !== 'undefined' && jpActions) { %>
+      <div class="flex items-center gap-2"><%- jpActions %></div>
+    <% } %>
   </div>
   <nav class="flex flex-wrap gap-1.5 border-b border-gray-200 -mb-px">
     <% jpTabs.forEach(function (t) { %>

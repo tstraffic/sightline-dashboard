@@ -4,6 +4,7 @@
   const fmtD = s => { if (!s) return '—'; const d = new Date(s + 'T00:00:00'); return isNaN(d) ? s : d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short', year: 'numeric' }); };
 %>
 
+<%- include('../partials/audit-tabs') %>
 <%- include('_subnav', {
   vaTab: 'overview',
   vaTitle: 'Vehicle Audits',
