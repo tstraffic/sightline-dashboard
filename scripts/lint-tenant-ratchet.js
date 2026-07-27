@@ -14,7 +14,13 @@
 const { spawnSync } = require('child_process');
 const path = require('path');
 
-const BASELINE = 140; // raw-DB violation count as of 2026-07-23
+// Raw-DB violation count. History:
+//   140  2026-07-23  initial baseline
+//   141  2026-07-27  +routes/departments.js — dept hubs join the Phase 2
+//        backlog consciously: its stat queries span legacy tables without
+//        tenant_id columns, so req.db's assertScoped would reject them
+//        until Phase 2 backfills tenant_id. Migrate it with the rest.
+const BASELINE = 141;
 
 // spawnSync (not execFileSync): check-raw-db exits 1 while violations exist,
 // and the JSON must still be read off stdout without an exception path.
