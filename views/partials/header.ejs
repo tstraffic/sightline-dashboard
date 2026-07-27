@@ -56,6 +56,15 @@
             </div>
           </div>
 
+          <!-- Messages — moved out of the sidebar (Phase 4). The badge
+               carries .chat-unread-badge so public/js/chat.js's app-wide
+               poller live-updates it (hidden toggle + 99+ cap) for free. -->
+          <a href="/chat" id="header-chat" title="Messages" aria-label="Messages"
+             class="relative p-2.5 text-gray-400 hover:text-brand-600 transition-all focus:outline-none rounded-xl hover:bg-brand-50 active:scale-95">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.4-4 8-9 8a9.9 9.9 0 01-4-.8L3 21l1.5-4.5C3.5 15.3 3 13.7 3 12c0-4.4 4-8 9-8s9 3.6 9 8z"/></svg>
+            <span class="chat-unread-badge absolute top-1.5 right-1.5 min-w-4 h-4 px-0.5 bg-brand-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center <%= (typeof unreadChatMessages !== 'undefined' && unreadChatMessages > 0) ? '' : 'hidden' %>"><%= (typeof unreadChatMessages !== 'undefined' && unreadChatMessages > 99) ? '99+' : (unreadChatMessages || 0) %></span>
+          </a>
+
           <!-- Quick Add Menu -->
           <div class="relative" id="quickadd-container">
             <button onclick="toggleQuickAdd()" class="p-2.5 text-gray-400 hover:text-brand-600 transition-all focus:outline-none rounded-xl hover:bg-brand-50 active:scale-95" title="Quick Create" id="quickadd-btn">

@@ -405,6 +405,9 @@ app.use('/kudos-admin', requireLogin, require('./routes/kudos-admin'));
 app.use('/payroll', requireLogin, require('./routes/payslips-admin'));
 app.use('/payroll', requireLogin, require('./routes/payroll-runs'));
 app.use('/finance', requireLogin, require('./routes/abergeldie-payments'));
+// Sidebar nav registry — one require at boot, visible to every render.
+app.locals.sidebarNav = require('./lib/sidebarNav');
+
 // /crm/accounts merged into /clients?view=crm (two lists over one table).
 // Query preserved so saved filter links keep working; requireLogin only —
 // the destination self-gates (non-CRM users get the plain directory).

@@ -220,12 +220,25 @@
     }
 
     // ---- seed editor from default DOM (sections → folders) ----
+    // Registry-era sections: the header row may itself be a hub LINK
+    // (a.sidebar-link inside the .sidebar-section div) instead of a <p>
+    // label — name the folder from data-sb-name and seed the hub link as
+    // its first child. Sub-labels (data-sb-sub) are decoration, not
+    // folder starts.
     function seedFromDom() {
       var tree = [], folder = null;
       Array.prototype.slice.call(nav.children).forEach(function (node) {
         if (node.matches && node.matches('.sidebar-section')) {
+          if (node.hasAttribute('data-sb-sub')) return;
           var p = node.querySelector('p');
-          folder = { t: 'folder', name: (p ? p.textContent.trim() : 'Folder'), collapsed: false, children: [] };
+          folder = {
+            t: 'folder',
+            name: node.getAttribute('data-sb-name') || (p ? p.textContent.trim() : 'Folder'),
+            collapsed: false,
+            children: [],
+          };
+          var hub = node.querySelector('a.sidebar-link');
+          if (hub) folder.children.push({ t: 'item', key: linkKey(hub) });
           tree.push(folder);
         } else if (node.matches && node.matches('a.sidebar-link')) {
           var item = { t: 'item', key: linkKey(node) };

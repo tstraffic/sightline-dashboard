@@ -811,6 +811,28 @@ table {
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 :root[data-theme="light"] .sidebar-link::before { background: #059669; }
+
+/* Section headers ARE the dept-hub links (Phase 4). They keep the
+   .sidebar-link class so the customiser can pool them by pathname; this
+   block re-voices them as small-caps headers in the default render. The
+   hover-revealed arrow signals "this heading goes somewhere". */
+#sidebar .sidebar-section .sb-section-head {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(52, 211, 153, 0.45);
+  padding-top: 0.35rem;
+  padding-bottom: 0.35rem;
+  min-height: 36px;
+}
+#sidebar .sidebar-section .sb-section-head:hover { color: #fff; }
+#sidebar .sb-hub-arrow { opacity: 0; transition: opacity 0.15s; }
+#sidebar .sb-section-head:hover .sb-hub-arrow,
+#sidebar .sb-section-head:focus-visible .sb-hub-arrow { opacity: 0.8; }
+#sidebar .sidebar-section .sb-section-head[class~="bg-white/15"] { color: #fff; }
+:root[data-theme="light"] #sidebar .sidebar-section .sb-section-head { color: rgba(15, 17, 21, 0.45) !important; }
+:root[data-theme="light"] #sidebar .sidebar-section .sb-section-head:hover { color: #0F1115 !important; }
 .sidebar-link.bg-white\/15::before,
 .sidebar-link[class*="bg-white/15"]::before {
   transform: translateY(-50%) scaleY(1);
