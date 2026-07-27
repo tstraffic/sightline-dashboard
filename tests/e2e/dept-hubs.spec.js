@@ -84,6 +84,54 @@ test('edit details renames the meeting; cancel shows the banner', async ({ page 
   await expect(page.locator('body')).not.toContainText('This meeting was cancelled.');
 });
 
+test("last meeting's notes are readable from the new meeting", async ({ page }, testInfo) => {
+  await loginAs(page);
+  // Both browser projects run this file serially against the same DB, so the
+  // meeting chain must be unique per project or one project's follow-up
+  // chains onto the other's empty meeting.
+  const tag = testInfo.project.name;
+  const month = tag.includes('mobile') ? '2027-04' : '2027-03';
+
+  // The department's earliest meeting has nothing before it.
+  await page.goto('/departments/operations');
+  await page.locator('a:has-text("Weekly ops meeting")').first().click();
+  await expect(page.locator('#section-recap')).toContainText('No previous Operations meeting to look back on');
+  await expect(page.locator('[data-last-meeting]')).toHaveCount(0);
+
+  // A meeting with real notes + an open to-do…
+  await page.goto('/departments/operations');
+  await page.locator('#add-meeting summary').click();
+  await page.fill('#add-meeting input[name="title"]', `Notes source ${tag}`);
+  await page.fill('#add-meeting input[name="meeting_date"]', `${month}-01`);
+  await page.click('#add-meeting button[type="submit"]');
+  await page.fill('#section-discussion textarea[name="content"]', 'Agreed the Villawood detour needs a briefing.');
+  await page.click('#section-discussion button[type="submit"]');
+  const highForm = page.locator('#section-todos form:has(input[name="priority"][value="high"])');
+  await highForm.locator('input[name="text"]').fill('Write the detour briefing');
+  await highForm.locator('button[type="submit"]').click();
+
+  // …then the next meeting, which should surface those notes inline.
+  await page.goto('/departments/operations');
+  await page.locator('#add-meeting summary').click();
+  await page.fill('#add-meeting input[name="title"]', `Follow-up ${tag}`);
+  await page.fill('#add-meeting input[name="meeting_date"]', `${month}-02`);
+  await page.click('#add-meeting button[type="submit"]');
+  await expect(page.locator('h1')).toContainText(`Follow-up ${tag}`);
+
+  const panel = page.locator('[data-last-meeting]');
+  await expect(panel).toContainText(`Notes source ${tag}`);
+  await expect(panel).toContainText('Agreed the Villawood detour needs a briefing.');
+  await expect(panel).toContainText('Write the detour briefing');
+  await expect(panel).toContainText('still open');
+
+  // Collapsible, and reachable from further down the page.
+  await panel.locator('summary').click();
+  await expect(panel).not.toHaveAttribute('open', /.*/);
+  await panel.locator('summary').click();
+  await expect(panel).toHaveAttribute('open', /.*/);
+  await expect(page.locator('#lastMtgPeek')).toHaveCount(1);
+});
+
 test('unknown department 404s', async ({ page }) => {
   await loginAs(page);
   const res = await page.goto('/departments/nope');

@@ -137,18 +137,23 @@ router.get('/:key/meetings/:id', (req, res) => {
 
   const todos = db.prepare('SELECT * FROM dept_meeting_todos WHERE meeting_id = ? ORDER BY done ASC, position ASC, id ASC').all(meeting.id);
   // Previous meeting for the Refresher section — computed, never stored, so
-  // back-dating a meeting between two others keeps the chain correct.
+  // back-dating a meeting between two others keeps the chain correct. Its
+  // full notes come along so the Refresher card can show what was said last
+  // time inline, without leaving the page you're taking notes on.
   const prevMeeting = db.prepare(`
-    SELECT id, title, meeting_date FROM dept_meetings
+    SELECT * FROM dept_meetings
     WHERE dept_key = ? AND status = 'scheduled' AND id != ?
       AND (meeting_date < ? OR (meeting_date = ? AND id < ?))
     ORDER BY meeting_date DESC, meeting_time DESC, id DESC LIMIT 1
   `).get(req.dept.key, meeting.id, meeting.meeting_date, meeting.meeting_date, meeting.id);
+  const prevTodos = prevMeeting
+    ? db.prepare('SELECT * FROM dept_meeting_todos WHERE meeting_id = ? ORDER BY done ASC, position ASC, id ASC').all(prevMeeting.id)
+    : [];
 
   res.render('departments/meeting', {
     title: meeting.title,
     user: req.session.user,
-    dept: req.dept, meeting, todos, prevMeeting,
+    dept: req.dept, meeting, todos, prevMeeting, prevTodos,
     canDelete: meeting.created_by_id === req.session.user.id || isAdmin(req.session.user),
     currentPage: 'dept-' + req.dept.key,
   });

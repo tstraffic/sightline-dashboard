@@ -17,6 +17,14 @@ if (meeting.meeting_time) subtitleBits.push(fmtTime(meeting.meeting_time));
 if (meeting.attendees) subtitleBits.push(meeting.attendees);
 %>
 
+<style>
+  /* Last-meeting disclosure: swap the native marker for the rotating caret. */
+  [data-last-meeting] > summary { list-style: none; }
+  [data-last-meeting] > summary::-webkit-details-marker { display: none; }
+  [data-last-meeting] > summary .lm-caret { transition: transform .15s ease; }
+  [data-last-meeting][open] > summary .lm-caret { transform: rotate(90deg); }
+</style>
+
 <%- include('../partials/page-header', {
   eyebrow: dept.label,
   title: meeting.title,
@@ -85,8 +93,80 @@ function textSection(num, sectionKey, heading, value, placeholder, rows, right) 
     recapRight += '<span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold ' +
       (meeting.recap_source === 'ai' ? 'bg-violet-100 text-violet-700">AI draft' : 'bg-gray-100 text-gray-500">Manual') + '</span>';
 
-    textSection(1, 'recap', 'Refresher — last meeting', meeting.recap,
-      'What was covered last time, carried-over items…', 5, recapRight);
+    // Last meeting's own notes, shown inline so you can look back at any
+    // point while writing today's — no need to leave the page.
+    const prevText = (v) => String(v || '').trim();
+    const prevOpenTodos = prevTodos.filter(t => !t.done);
+    const prevHasNotes = !!(prevMeeting && (prevText(prevMeeting.recap) || prevText(prevMeeting.discussion)
+      || prevText(prevMeeting.job_updates) || prevText(prevMeeting.plans_proposals) || prevTodos.length));
+
+    function prevBlock(label, text) {
+      if (!prevText(text)) return;
+  %>
+        <div>
+          <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1"><%= label %></p>
+          <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"><%= text %></p>
+        </div>
+  <%
+    }
+
+    sectionCard(1, 'section-recap', 'Refresher — last meeting', recapRight, function () {
+  %>
+      <% if (!prevMeeting) { %>
+        <div class="rounded-lg border border-dashed border-gray-200 bg-gray-50/60 px-4 py-5 text-center mb-4">
+          <p class="text-sm text-gray-500">No previous <%= dept.label %> meeting to look back on — this is the first one.</p>
+        </div>
+      <% } else { %>
+        <%/* Open by default until you've written your own refresher; after
+             that it stays where you last left it (remembered per browser). */%>
+        <details data-last-meeting class="mb-4 rounded-lg border border-gray-200 overflow-hidden" <%= prevText(meeting.recap) ? '' : 'open' %>>
+          <summary class="cursor-pointer select-none px-4 py-2.5 bg-gray-50 hover:bg-gray-100 flex items-center gap-2 transition-colors">
+            <svg class="lm-caret w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+            <span class="text-sm font-medium text-gray-700 shrink-0">Last meeting's notes</span>
+            <span class="text-xs text-gray-400 truncate"><%= prevMeeting.title %> · <%= formatDateShort(prevMeeting.meeting_date) %></span>
+          </summary>
+          <div class="px-4 py-4 space-y-4 border-t border-gray-100">
+            <% if (!prevHasNotes) { %>
+              <p class="text-sm text-gray-400 italic">Nothing was written up in that meeting.</p>
+            <% } %>
+            <% prevBlock('Refresher noted then', prevMeeting.recap); %>
+            <% prevBlock('Discussion notes', prevMeeting.discussion); %>
+            <% if (prevTodos.length) { %>
+              <div>
+                <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">
+                  To-dos from last meeting<% if (prevOpenTodos.length) { %><span class="ml-1.5 px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-bold normal-case tracking-normal"><%= prevOpenTodos.length %> still open</span><% } %>
+                </p>
+                <ul class="space-y-1">
+                  <% prevTodos.forEach(function (t) { %>
+                    <li class="flex items-start gap-2">
+                      <span class="mt-[7px] w-1.5 h-1.5 rounded-full shrink-0 <%= t.done ? 'bg-emerald-400' : (t.priority === 'high' ? 'bg-red-500' : 'bg-gray-300') %>"></span>
+                      <span class="text-sm leading-snug <%= t.done ? 'line-through text-gray-400' : 'text-gray-700' %>"><%= t.text %></span>
+                    </li>
+                  <% }); %>
+                </ul>
+              </div>
+            <% } %>
+            <% prevBlock('Job updates', prevMeeting.job_updates); %>
+            <% prevBlock('Plans & proposals', prevMeeting.plans_proposals); %>
+            <div class="pt-1">
+              <a href="/departments/<%= dept.key %>/meetings/<%= prevMeeting.id %>" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">Open that meeting in full →</a>
+            </div>
+          </div>
+        </details>
+      <% } %>
+
+      <form method="POST" action="/departments/<%= dept.key %>/meetings/<%= meeting.id %>/sections">
+        <%- include('../partials/csrf') %>
+        <input type="hidden" name="section" value="recap">
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Your refresher note</p>
+        <textarea name="content" rows="5" placeholder="Where we left off, carried-over items…"
+          class="w-full px-3 py-2.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm leading-relaxed focus:outline-none focus:ring-2 focus:ring-brand-500"><%= meeting.recap %></textarea>
+        <div class="flex items-center justify-end mt-2">
+          <button type="submit" class="px-4 py-1.5 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-xs font-semibold rounded-lg transition-colors">Save</button>
+        </div>
+      </form>
+  <%
+    });
 
     // ② Discussion notes
     textSection(2, 'discussion', 'Discussion notes', meeting.discussion,
@@ -189,3 +269,70 @@ function textSection(num, sectionKey, heading, value, placeholder, rows, right) 
     </form>
   </details>
 </div>
+
+<% if (prevMeeting) { %>
+  <%/* Jump back to last meeting's notes from anywhere on the page — appears
+       once the Refresher card scrolls out of view. Bottom-LEFT so it clears
+       the global Quick Actions FAB and feedback pill on the right; offset
+       past the 240px desktop sidebar. */%>
+  <button type="button" id="lastMtgPeek" aria-label="Show last meeting's notes"
+    class="hidden fixed bottom-5 left-5 lg:left-[260px] z-30 items-center gap-1.5 px-3 py-2 rounded-full bg-gray-900/90 hover:bg-gray-900 text-white text-xs font-semibold shadow-lg backdrop-blur transition-colors print:hidden">
+    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"/></svg>
+    Last meeting
+  </button>
+  <script>
+    (function () {
+      var card = document.getElementById('section-recap');
+      var btn = document.getElementById('lastMtgPeek');
+      var det = document.querySelector('[data-last-meeting]');
+      if (!card || !btn) return;
+
+      // Remember whether the panel is open, so someone who likes it open
+      // keeps it open across meetings without re-clicking every time.
+      var KEY = 'deptLastMeetingOpen';
+      if (det) {
+        try {
+          var saved = localStorage.getItem(KEY);
+          if (saved === '1') det.open = true;
+          else if (saved === '0') det.open = false;
+        } catch (e) { /* storage blocked — just use the server default */ }
+        det.addEventListener('toggle', function () {
+          try { localStorage.setItem(KEY, det.open ? '1' : '0'); } catch (e) {}
+        });
+      }
+
+      // The admin layout scrolls inside <main class="overflow-auto">, not the
+      // window — both the observer root and the scroll-back need that element
+      // (scrollIntoView doesn't reliably drive this nested scroller).
+      function scrollParent(el) {
+        var n = el.parentElement;
+        while (n && n !== document.documentElement) {
+          var cs = getComputedStyle(n);
+          if (/(auto|scroll)/.test(cs.overflowY) && n.scrollHeight > n.clientHeight + 4) return n;
+          n = n.parentElement;
+        }
+        return null; // fall back to the viewport
+      }
+
+      btn.addEventListener('click', function () {
+        if (det) det.open = true;
+        var sp = scrollParent(card);
+        if (!sp) { card.scrollIntoView({ block: 'start' }); return; }
+        var target = Math.max(0, card.getBoundingClientRect().top - sp.getBoundingClientRect().top + sp.scrollTop - 12);
+        try { sp.scrollTo({ top: target, behavior: 'smooth' }); } catch (e) { /* older browsers */ }
+        // Smooth scrolling on a nested scroller is silently ignored in some
+        // engines (and by reduce-motion settings) — land the jump regardless.
+        setTimeout(function () {
+          if (Math.abs(sp.scrollTop - target) > 4) sp.scrollTop = target;
+        }, 350);
+      });
+
+      if (!('IntersectionObserver' in window)) return; // pill stays hidden; panel still works
+      new IntersectionObserver(function (entries) {
+        var visible = entries[0].isIntersecting;
+        btn.classList.toggle('hidden', visible);
+        btn.classList.toggle('flex', !visible);
+      }, { root: scrollParent(card), threshold: 0 }).observe(card);
+    })();
+  </script>
+<% } %>
