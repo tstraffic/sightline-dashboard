@@ -659,12 +659,29 @@ router.get('/employees/new', requirePermission('hr_employees'), (req, res) => {
   });
 });
 
+// The employee form (views/hr/employee-form.ejs, shared by create + edit)
+// renders ~28 of its fields twice — the wizard panels plus a no-JS fallback
+// block — so Express hands us arrays for those keys. Passing an array on to
+// better-sqlite3 is not a no-op: it expands into MULTIPLE bind values and
+// blows up the statement with "Too many parameter values were provided".
+// Collapse to the last value the user actually filled, preferring a non-empty
+// one so an empty duplicate can never wipe a real entry.
+function dedupeBody(body) {
+  const out = {};
+  for (const [key, val] of Object.entries(body)) {
+    if (!Array.isArray(val)) { out[key] = val; continue; }
+    const filled = val.filter(v => String(v == null ? '' : v).trim() !== '');
+    out[key] = filled.length ? filled[filled.length - 1] : val[val.length - 1];
+  }
+  return out;
+}
+
 // ============================================
 // CREATE EMPLOYEE
 // ============================================
 router.post('/employees', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
-  const b = req.body;
+  const b = dedupeBody(req.body);
 
   const fullName = [(b.first_name || '').trim(), (b.middle_name || '').trim(), (b.last_name || '').trim()].filter(Boolean).join(' ');
 
@@ -687,7 +704,7 @@ router.post('/employees', requirePermission('hr_employees'), (req, res) => {
       date_of_birth, payroll_reference, internal_notes, active,
       linked_crew_member_id, linked_user_id,
       rate_day, rate_ot, rate_dt, rate_night, rate_night_ot, rate_night_dt, rate_travel, rate_meal, rate_weekend)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     b.employee_code || null, b.first_name, b.middle_name || '', b.last_name, fullName, b.preferred_name || '',
     b.company || '', b.division || '', b.role_title || '',
@@ -1253,12 +1270,8 @@ router.get('/employees/:id/edit', requirePermission('hr_employees'), (req, res) 
 // ============================================
 router.post('/employees/:id', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
-  // Deduplicate: form has some fields appearing twice (noscript fallback + wizard panels).
-  // Express parses duplicates as arrays — take the last value (most recent panel's input).
-  const b = {};
-  for (const [key, val] of Object.entries(req.body)) {
-    b[key] = Array.isArray(val) ? val[val.length - 1] : val;
-  }
+  // Same duplicate-field handling as create — see dedupeBody above.
+  const b = dedupeBody(req.body);
   const fullName = [(b.first_name || '').trim(), (b.middle_name || '').trim(), (b.last_name || '').trim()].filter(Boolean).join(' ');
 
   // Build SET pairs and params array dynamically

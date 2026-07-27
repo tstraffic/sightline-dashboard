@@ -880,7 +880,11 @@
   </div>
 
   <!-- Wizard Navigation Buttons (sticky at bottom) -->
-  <div class="sticky bottom-0 z-20 bg-white/90 backdrop-blur-sm border-t border-gray-200 rounded-b-xl px-5 py-3 -mx-0 flex items-center justify-between" id="wizard-nav-buttons">
+  <%/* pr-32 on sm+: this footer is sticky at the bottom-right, exactly where
+       the global IT-feedback FAB floats (fixed, bottom-right, ~106px wide).
+       Without the clearance the FAB sits on top of Next / Add Employee and
+       swallows the click — the button looks fine and simply does nothing. */%>
+  <div class="sticky bottom-0 z-20 bg-white/90 backdrop-blur-sm border-t border-gray-200 rounded-b-xl px-5 sm:pr-32 py-3 -mx-0 flex items-center justify-between" id="wizard-nav-buttons">
     <button type="button" id="wizard-prev" class="hidden px-4 py-2 text-sm font-medium text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition inline-flex items-center gap-2">
       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
       Previous
