@@ -1,12 +1,17 @@
 <% locals.currentPage = 'dashboard' %>
-<!-- Greeting -->
-<div class="hero-banner flex items-baseline justify-between gap-4 mb-6 px-1">
+<!-- Greeting — the shift board. Big display cut of Bricolage, then a live
+     status line in the depot radio-log voice (Geist Mono, · separated),
+     composed server-side from the same data the bands below render.
+     No vt-page-title: the personal title shouldn't morph between pages. -->
+<div class="hero-banner hero-board mb-7 px-1">
   <div class="hero-greeting">
-    <!-- page-title only — no vt-page-title here: the dashboard title is
-         personal, not a register name, so it shouldn't morph between pages
-         (and the class must stay unique per page). -->
-    <h1 class="page-title"><span id="greeting">Hello</span>, <%= user.full_name.split(' ')[0] %>.</h1>
-    <p class="page-eyebrow mt-1.5" id="today-date"></p>
+    <h1 class="hero-greeting-title"><span id="greeting">Hello</span>, <%= user.full_name.split(' ')[0] %>.</h1>
+    <p class="hero-status-line">
+      <% statusLine.forEach((seg, i) => { %>
+        <% if (i > 0) { %><span class="hs-sep" aria-hidden="true">·</span><% } %>
+        <span<%- seg.alert ? ' class="hs-alert"' : '' %>><%= seg.text %></span>
+      <% }) %>
+    </p>
   </div>
 </div>
 <script>
@@ -14,7 +19,6 @@
     var h = new Date().getHours();
     var g = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
     document.getElementById('greeting').textContent = g;
-    document.getElementById('today-date').textContent = new Date().toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   })();
 </script>
 
@@ -117,43 +121,52 @@
      with a native <details> overflow. If nothing is wrong the band
      collapses to a single all-clear line — that's the reward.
      ============================================================ -->
-<div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5" id="needs-you-now">
-  <div class="px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-    <svg class="w-4 h-4 <%= needs.allClear ? 'text-emerald-500' : 'text-red-500' %>" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-    <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Needs you now</h2>
+<%
+  // The hazard rail is state, not decoration: red stripes only when a
+  // critical row exists, amber when the worst is a warning, absent when
+  // the board is clear or merely informational.
+  const _attnAll = needs.top.concat(needs.overflow);
+  const _hasCritical = _attnAll.some(r => r.tone === 'critical');
+  const _hasWarn = _attnAll.some(r => r.tone === 'warn');
+  const _railClass = _hasCritical ? 'chevron-rail-left' : (_hasWarn ? 'chevron-rail-left is-warn' : '');
+%>
+<div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5 <%= _railClass %>" id="needs-you-now">
+  <div class="panel-header">
+    <svg class="w-4 h-4 <%= needs.allClear ? 'text-emerald-500' : (_hasCritical ? 'text-red-500' : 'text-amber-500') %>" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+    <h2 class="panel-header-title">Needs you now</h2>
     <% if (!needs.allClear) { %>
-      <span class="text-[10px] font-semibold text-red-600 bg-red-50 px-1.5 py-0.5 rounded-full"><%= needs.top.length + needs.overflow.length %></span>
+      <span class="panel-header-count <%= _hasCritical ? 'is-critical' : '' %>"><%= _attnAll.length %></span>
     <% } %>
   </div>
   <% if (needs.allClear) { %>
-    <div class="flex items-center gap-2.5 px-4 py-4" data-attn="all-clear">
-      <span class="w-6 h-6 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
-        <svg class="w-3.5 h-3.5 text-emerald-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+    <div class="attn-clear" data-attn="all-clear">
+      <span class="w-7 h-7 rounded-full bg-emerald-50 flex items-center justify-center flex-shrink-0">
+        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" stroke-width="3" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
       </span>
-      <p class="text-sm text-gray-600">All clear — nothing needs your attention right now.</p>
+      <div>
+        <p class="attn-clear-title">Board&rsquo;s clear.</p>
+        <p class="attn-clear-sub">Nothing needs your attention right now.</p>
+      </div>
     </div>
   <% } else { %>
     <%
-      // tone → dot colour. critical outranks warn outranks info.
-      const attnDot = { critical: 'bg-red-500', warn: 'bg-amber-500', info: 'bg-brand-500' };
       const attnRow = (r) => { %>
-        <a href="<%= r.href %>" data-attn="<%= r.key %>" class="flex items-center gap-3 px-4 py-3 hover:bg-gray-50 transition group">
-          <span class="w-2 h-2 rounded-full flex-shrink-0 <%= attnDot[r.tone] || 'bg-gray-400' %>"></span>
-          <span class="font-display font-semibold <%= r.tone === 'critical' ? 'text-red-600' : 'text-gray-900' %>" style="font-size:19px;letter-spacing:-0.02em;min-width:1.5rem"><%= r.count %></span>
-          <span class="text-sm text-gray-700 flex-1 min-w-0 truncate">
-            <%= r.label %>
-            <% if (r.detail) { %><span class="text-gray-400 ml-1">· <%= r.detail %></span><% } %>
+        <a href="<%= r.href %>" data-attn="<%= r.key %>" class="attn-row is-<%= r.tone %> group">
+          <span class="attn-count"><%= r.count %></span>
+          <span class="flex-1 min-w-0 truncate">
+            <span class="attn-label"><%= r.label %></span>
+            <% if (r.detail) { %><span class="attn-detail ml-1.5"><%= r.detail %></span><% } %>
           </span>
           <svg class="w-4 h-4 text-gray-300 group-hover:text-gray-500 flex-shrink-0 transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
         </a>
       <% };
     %>
-    <div class="divide-y divide-gray-100">
+    <div class="divide-y divide-gray-100 stagger-children">
       <% needs.top.forEach(r => { attnRow(r); }) %>
     </div>
     <% if (needs.overflow.length > 0) { %>
       <details class="border-t border-gray-100">
-        <summary class="px-4 py-2.5 text-xs font-medium text-gray-500 hover:text-gray-700 cursor-pointer select-none">
+        <summary class="px-4 py-2.5 text-xs font-medium text-gray-500 hover:text-gray-700 cursor-pointer select-none font-mono uppercase tracking-widest" style="font-size:10.5px">
           +<%= needs.overflow.length %> more
         </summary>
         <div class="divide-y divide-gray-100 border-t border-gray-100">
@@ -173,13 +186,11 @@
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5" id="your-work">
   <% if (myTasks && myTasks.length > 0) { %>
   <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
-        <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">My Tasks</h2>
-        <span class="text-[10px] font-semibold text-brand-600 bg-brand-50 px-1.5 py-0.5 rounded-full"><%= myTasks.length %></span>
-      </div>
-      <a href="/tasks" class="text-xs text-brand-600 hover:text-brand-700 font-medium">View all &rarr;</a>
+    <div class="panel-header">
+      <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg>
+      <h2 class="panel-header-title">My Tasks</h2>
+      <span class="panel-header-count"><%= myTasks.length %></span>
+      <a href="/tasks" class="panel-header-link">View all &rarr;</a>
     </div>
     <div class="divide-y divide-gray-100">
       <% myTasks.slice(0, 5).forEach(t => {
@@ -208,13 +219,11 @@
 
   <% if (myPlans && myPlans.length > 0) { %>
   <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden">
-    <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-        <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">My Plans & Approvals</h2>
-        <span class="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full"><%= myPlans.length %></span>
-      </div>
-      <a href="/compliance" class="text-xs text-emerald-600 hover:text-emerald-700 font-medium">View all &rarr;</a>
+    <div class="panel-header">
+      <svg class="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      <h2 class="panel-header-title">My Plans & Approvals</h2>
+      <span class="panel-header-count"><%= myPlans.length %></span>
+      <a href="/compliance" class="panel-header-link">View all &rarr;</a>
     </div>
     <div class="divide-y divide-gray-100">
       <% myPlans.slice(0, 5).forEach(p => {
@@ -256,12 +265,10 @@
      ============================================================ -->
 <% if (todayOps) { %>
 <div class="bg-white border border-gray-200 rounded-2xl overflow-hidden mb-5" id="today-ops">
-  <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
-    <div class="flex items-center gap-2">
-      <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      <h2 class="font-display font-medium text-gray-900" style="font-size:15px;letter-spacing:-0.02em">Today's operations</h2>
-    </div>
-    <a href="/bookings" class="text-xs text-brand-600 hover:text-brand-700 font-medium">Bookings &rarr;</a>
+  <div class="panel-header">
+    <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+    <h2 class="panel-header-title">Today's operations</h2>
+    <a href="/bookings" class="panel-header-link">Bookings &rarr;</a>
   </div>
   <div class="grid grid-cols-2 lg:grid-cols-4 gap-3 p-4">
     <div class="stat-card is-info">
@@ -269,7 +276,7 @@
       <p class="stat-card-value"><%= todayOps.crewAssignedToday %></p>
       <p class="stat-card-sub">of <%= todayOps.totalActiveCrew %> active</p>
     </div>
-    <div class="stat-card is-good">
+    <div class="stat-card is-good accent-emerald">
       <p class="stat-card-label">Available</p>
       <p class="stat-card-value"><%= todayOps.availableCrew %></p>
     </div>
@@ -286,7 +293,7 @@
   <div class="divide-y divide-gray-100 border-t border-gray-100">
     <% todayOps.todaysBookings.forEach(b => { %>
     <a href="/bookings/<%= b.id %>" class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 transition">
-      <span class="text-xs font-semibold text-gray-500 w-12 flex-shrink-0"><%= formatTime(b.start_datetime) %></span>
+      <span class="font-mono text-[11px] font-medium text-gray-500 w-12 flex-shrink-0 tracking-tight"><%= formatTime(b.start_datetime) %></span>
       <span class="text-sm font-medium text-gray-900 truncate flex-1 min-w-0">
         <%= b.booking_number || ('#' + b.id) %><% if (b.title) { %> — <%= b.title %><% } %>
       </span>
@@ -307,9 +314,10 @@
      in /reports; this page keeps exactly one chart.
      ============================================================ -->
 <div class="bg-white border border-gray-200 rounded-2xl p-4" id="trend">
-  <div class="flex items-center justify-between mb-2">
-    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-wider">Job Pipeline</h2>
-    <a href="/reports" class="text-xs text-brand-600 hover:text-brand-700 font-medium">More in Reports &rarr;</a>
+  <div class="panel-header" style="padding-left:0;padding-right:0;padding-top:0">
+    <svg class="w-4 h-4 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+    <h2 class="panel-header-title">Job pipeline</h2>
+    <a href="/reports" class="panel-header-link">More in Reports &rarr;</a>
   </div>
   <% if (jobStatusDist.length > 0) { %>
   <div class="relative" style="height: 200px;">
@@ -326,19 +334,37 @@
 <!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
-  Chart.defaults.font.family = 'system-ui, -apple-system, sans-serif';
+  // Theme-aware chart: fonts from the app stack, bar palette from the signal
+  // semantics (emerald = live/won, amber = held, red = lost, slate = not yet
+  // real), tick colour read from the theme at render time. Pattern is
+  // reusable by /reports' charts.
+  Chart.defaults.font.family = "'Geist', system-ui, -apple-system, sans-serif";
   Chart.defaults.font.size = 11;
+
+  var isLightTheme = document.documentElement.getAttribute('data-theme') === 'light';
+  var tickColor = isLightTheme ? '#6B7280' : '#8B8E95';
 
   var statusData = <%- JSON.stringify(jobStatusDist) %>;
   var sLabels = { lead: 'Lead', won: 'Won', active: 'Active', on_hold: 'On Hold', completed: 'Completed', lost: 'Lost', tender: 'Tender', prestart: 'Prestart', closed: 'Closed' };
-  var sColors = { lead: '#94a3b8', tender: '#94a3b8', won: '#34d399', prestart: '#a78bfa', active: '#2B7FFF', on_hold: '#fb923c', completed: '#6ee7b7', lost: '#fca5a5', closed: '#d1d5db' };
+  var sColors = {
+    lead: '#94A3B8', tender: '#94A3B8', prestart: '#94A3B8',
+    won: '#6EE7B7', active: '#10B981', completed: '#A7F3D0',
+    on_hold: '#FBBF24', lost: '#FCA5A5', closed: '#D1D5DB'
+  };
   new Chart(document.getElementById('jobStatusChart'), {
     type: 'bar',
     data: {
       labels: statusData.map(function(d) { return sLabels[d.status] || d.status; }),
-      datasets: [{ data: statusData.map(function(d) { return d.count; }), backgroundColor: statusData.map(function(d) { return sColors[d.status] || '#94a3b8'; }), borderRadius: 6, barThickness: 18 }]
+      datasets: [{ data: statusData.map(function(d) { return d.count; }), backgroundColor: statusData.map(function(d) { return sColors[d.status] || '#94A3B8'; }), borderRadius: 6, barThickness: 18 }]
     },
-    options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false }, ticks: { stepSize: 1 } }, y: { grid: { display: false } } } }
+    options: {
+      indexAxis: 'y', responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { display: false }, ticks: { stepSize: 1, color: tickColor } },
+        y: { grid: { display: false }, ticks: { color: tickColor } }
+      }
+    }
   });
 </script>
 <% } %>

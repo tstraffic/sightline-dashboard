@@ -36,6 +36,21 @@ router.get('/', (req, res) => {
   const myTasks = getMyTasks(db, user, today);
   const myPlans = getMyPlans(db, user.id, today);
 
+  // Hero status line — the shift-board readout under the greeting. Data as
+  // copy: every segment comes from values already computed above, in the
+  // depot radio-log voice (mono, uppercase, · separated).
+  const attnCount = needs.top.length + needs.overflow.length;
+  const dateLabel = new Date(today + 'T00:00:00Z')
+    .toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const statusLine = [{ text: dateLabel }];
+  if (todayOps) {
+    statusLine.push({ text: `${todayOps.crewAssignedToday} crew${todayOps.crewAssignedToday === 1 ? '' : 's'} out` });
+    statusLine.push({ text: `${todayOps.bookingsNext24h} booking${todayOps.bookingsNext24h === 1 ? '' : 's'} next 24h` });
+  }
+  statusLine.push(attnCount > 0
+    ? { text: `${attnCount} need${attnCount === 1 ? 's' : ''} you`, alert: true }
+    : { text: 'board’s clear' });
+
   // Today's birthdays — banner above everything when at least one active
   // crew member's DOB is today (Sydney). Non-fatal on legacy DBs.
   let birthdaysToday = [];
@@ -69,6 +84,7 @@ router.get('/', (req, res) => {
     title: 'Today',
     user,
     today,
+    statusLine,
     onboarding,
     birthdaysToday,
     needs,

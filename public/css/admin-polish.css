@@ -432,3 +432,155 @@ body.dark-glass .kpi-grid {
 @media (min-width: 1280px) {
   body.dark-glass .kpi-grid { grid-template-columns: repeat(var(--kpi-cols, 5), minmax(0, 1fr)); }
 }
+
+/* ───────────────────────────────────────────────────────────
+   17. CONTROL-ROOM DASHBOARD DEVICES
+   The Today page's treatment layer, built to be reusable:
+   .hero-board / .hero-status-line — the shift-board hero
+   .panel-header                  — the one in-card header device
+   .attn-row                      — "Needs you now" rows
+   Signal semantics: red = act, amber = watch, emerald = go,
+   blue = informational. Tone is never carried by colour alone
+   (each row pairs its edge with the count + label).
+   ─────────────────────────────────────────────────────────── */
+
+/* Hero: a bigger optical cut of Bricolage than .page-title, and a
+   Geist Mono status line that reads like the depot radio log. */
+body.dark-glass .hero-board .hero-greeting-title {
+  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-size: 2.5rem;
+  font-weight: 650;
+  font-variation-settings: 'opsz' 80;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+  text-wrap: balance;
+}
+body.dark-glass .hero-status-line {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #8B8E95;
+  margin-top: 0.65rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.7rem;
+  row-gap: 0.15rem;
+}
+body.dark-glass .hero-status-line .hs-sep { color: #5A5D64; user-select: none; }
+body.dark-glass .hero-status-line .hs-alert { color: #FBBF24; }
+:root[data-theme="light"] body.dark-glass .hero-status-line { color: #6B7280; }
+:root[data-theme="light"] body.dark-glass .hero-status-line .hs-sep { color: #C6C9CE; }
+:root[data-theme="light"] body.dark-glass .hero-status-line .hs-alert { color: #B45309; }
+@media (max-width: 640px) {
+  body.dark-glass .hero-board .hero-greeting-title { font-size: 1.75rem; }
+}
+
+/* The in-card header device: icon tile · Bricolage title · mono
+   count · right-aligned go-link. Dashboard first; hubs and
+   registers can adopt it without new CSS. */
+body.dark-glass .panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--dark-border, rgba(255, 255, 255, 0.08));
+}
+body.dark-glass .panel-header-title {
+  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--dark-text-primary, #F5F5F7);
+}
+body.dark-glass .panel-header-count {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 10.5px;
+  font-weight: 500;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: #8B8E95;
+}
+body.dark-glass .panel-header-count.is-critical { background: rgba(239, 68, 68, 0.16); color: #F87171; }
+body.dark-glass .panel-header .panel-header-link {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--brand-500, #10B981);
+}
+body.dark-glass .panel-header .panel-header-link:hover { color: #34D399; }
+:root[data-theme="light"] body.dark-glass .panel-header { border-bottom-color: #F3F4F6; }
+:root[data-theme="light"] body.dark-glass .panel-header-title { color: #111827; }
+:root[data-theme="light"] body.dark-glass .panel-header-count { background: #F3F4F6; color: #6B7280; }
+:root[data-theme="light"] body.dark-glass .panel-header-count.is-critical { background: #FEE2E2; color: #DC2626; }
+:root[data-theme="light"] body.dark-glass .panel-header .panel-header-link { color: #059669; }
+:root[data-theme="light"] body.dark-glass .panel-header .panel-header-link:hover { color: #047857; }
+
+/* Attention rows. Tone lives in the count numeral (signal colours,
+   darkened for light-theme text contrast) — the panel's chevron
+   rail already carries panel-level state, so rows add no second
+   left edge. Tone is never colour-alone: count + label + href all
+   say the same thing. */
+body.dark-glass .attn-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.8rem 1rem;
+  transition: background var(--transition-fast, 150ms);
+}
+body.dark-glass .attn-row:hover { background: rgba(255, 255, 255, 0.04); }
+body.dark-glass .attn-row .attn-count {
+  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-size: 22px;
+  font-weight: 640;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.1rem;
+  text-align: right;
+}
+body.dark-glass .attn-row.is-critical .attn-count { color: #F87171; }
+body.dark-glass .attn-row.is-warn     .attn-count { color: #FBBF24; }
+body.dark-glass .attn-row.is-info     .attn-count { color: #60A5FA; }
+body.dark-glass .attn-row .attn-label { font-size: 13.5px; color: var(--dark-text-secondary, #C9CBD1); }
+body.dark-glass .attn-row .attn-detail {
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  color: #8B8E95;
+}
+:root[data-theme="light"] body.dark-glass .attn-row:hover { background: #F9FAFB; }
+:root[data-theme="light"] body.dark-glass .attn-row.is-critical .attn-count { color: #DC2626; }
+:root[data-theme="light"] body.dark-glass .attn-row.is-warn     .attn-count { color: #B45309; }
+:root[data-theme="light"] body.dark-glass .attn-row.is-info     .attn-count { color: #2563EB; }
+:root[data-theme="light"] body.dark-glass .attn-row .attn-label { color: #374151; }
+:root[data-theme="light"] body.dark-glass .attn-row .attn-detail { color: #9CA3AF; }
+
+/* All-clear: the reward for a clean board. */
+body.dark-glass .attn-clear {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.1rem 1rem;
+}
+body.dark-glass .attn-clear .attn-clear-title {
+  font-family: 'Bricolage Grotesque', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: #34D399;
+}
+body.dark-glass .attn-clear .attn-clear-sub { font-size: 12.5px; color: #8B8E95; }
+:root[data-theme="light"] body.dark-glass .attn-clear .attn-clear-title { color: #059669; }
+:root[data-theme="light"] body.dark-glass .attn-clear .attn-clear-sub { color: #6B7280; }
+
+/* Keyboard focus on row links — visible in both themes, never
+   clipped by the row's overflow. */
+body.dark-glass .attn-row:focus-visible,
+body.dark-glass .panel-header .panel-header-link:focus-visible {
+  outline: 2px solid var(--brand-500, #10B981);
+  outline-offset: -2px;
+  border-radius: 6px;
+}

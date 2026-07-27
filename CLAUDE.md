@@ -20,10 +20,11 @@ Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney tr
 - **GitHub repo**: `tstraffic/ts-dashboard` (origin)
 - **Live URL**: `https://tstc.up.railway.app`
 
-## Brand Colors
-- Primary: `#2B7FFF` (brand-600: `#1D6AE5`)
-- Full scale: brand-50 through brand-950 defined in Tailwind config
-- Light enterprise theme (white/gray backgrounds, colored accents)
+## Brand & Design System (Atomis)
+- **Brand = emerald**: brand-500 `#10B981`, brand-600 `#059669` (full 50–950 ramp in the inline Tailwind config, views/layout.ejs). Signal tones: amber `#FBBF24` warn, red `#EF4444` danger, blue `#60A5FA` info. (The old blue `#2B7FFF` era is gone — don't reintroduce it.)
+- **Type**: Bricolage Grotesque (display, `font-display`), Geist (body, `font-sans`), Geist Mono (technical voice — eyebrows, labels, timestamps; `font-mono`). Loaded via Google Fonts in layout.ejs.
+- **Theming is dark-first**: `body.dark-glass` is always on; light mode is the `:root[data-theme="light"]` override layer. 13 user-selectable themes (`window.ATOMIS_THEMES` in layout.ejs; skins re-tint surfaces via themes.css). `bg-white` cards auto-remap to frosted dark surfaces — new markup using `bg-white border border-gray-200 rounded-xl/2xl` gets both themes for free.
+- **Key CSS layers**: custom.css (tokens + dark-glass remaps) → themes.css (skins) → admin-fluid.css (view-transition motion) → admin-polish.css (§9 `.stat-card`, §11 page title/eyebrow, §12 `.chevron-rail`/`.chevron-rail-left` hazard striping, §13 `.lane-divider`, §17 dashboard devices: `.panel-header`, `.attn-row`, `.hero-board`). Reuse these before inventing new ones.
 
 ## Architecture
 - **Admin routes**: `/dashboard`, `/jobs`, `/crew`, `/allocations`, `/profile`, etc. Protected by `req.session.user`

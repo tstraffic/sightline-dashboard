@@ -32,11 +32,11 @@ function seed(fn) {
   try { return fn(db); } finally { db.close(); }
 }
 
-// Band 1 rows render their count as the second span (dot, count, label).
+// Band 1 rows render their count in the .attn-count numeral.
 // textContent, not innerText: rows inside the closed <details> overflow are
 // hidden, and innerText of a hidden element is '' (→ NaN).
 async function rowCount(locator) {
-  return parseInt((await locator.locator('span').nth(1).textContent()).trim(), 10);
+  return parseInt((await locator.locator('.attn-count').textContent()).trim(), 10);
 }
 
 test('no tabs, three bands, and no zero-value rows anywhere', async ({ page }) => {
