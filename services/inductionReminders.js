@@ -15,6 +15,7 @@
 
 const { getDb } = require('../db/database');
 const { sendPushToUser } = require('./pushNotification');
+const notifPrefs = require('../lib/notificationPrefs');
 
 const WINDOWS = [7, 3, 1, 0];
 const NOTIFY_ROLES = ['admin', 'operations', 'hr'];
@@ -51,17 +52,24 @@ async function sendInductionReminders() {
   });
 
   const recipients = db.prepare(
-    `SELECT id, full_name, email FROM users WHERE LOWER(role) IN (${NOTIFY_ROLES.map(() => '?').join(',')}) AND active = 1`
+    `SELECT id, full_name, email, notification_prefs FROM users WHERE LOWER(role) IN (${NOTIFY_ROLES.map(() => '?').join(',')}) AND active = 1`
   ).all(...NOTIFY_ROLES);
   if (!recipients.length) return { sent: 0, scanned: 0, recipients: 0 };
 
-  // notifications.type is CHECK-constrained across migrations to a fixed
-  // vocab. 'general' is the only value safe in every historical schema, so
-  // we use that for the bell entry and put the context in title + message.
+  // Type is 'induction_reminder' (allowed by the CHECK vocab from mig 327).
+  // It matters beyond labelling: the notification's type is what maps it to
+  // the "Upcoming inductions" preference category, so a row written as
+  // 'general' — which is what this did before 327 — would ignore the user's
+  // choice and get emailed under the catch-all instead.
   const insertNotif = db.prepare(`
     INSERT INTO notifications (user_id, type, title, message, link)
-    VALUES (?, 'general', ?, ?, '/induction/admin/recruitment')
+    VALUES (?, 'induction_reminder', ?, ?, '/induction/admin/recruitment')
   `);
+  // Recipients who've switched "Upcoming inductions → In app" off get nothing
+  // (no bell row, no push). Email is handled downstream by the digest, which
+  // applies the same category's Email toggle.
+  const wanted = recipients.filter(u => notifPrefs.wantsInApp(u.notification_prefs, 'induction_reminder'));
+  if (!wanted.length) return { sent: 0, scanned: 0, recipients: 0 };
   const insertLog = db.prepare(`
     INSERT OR IGNORE INTO induction_reminder_log
       (applicant_id, days_out, induction_date)
@@ -96,7 +104,7 @@ async function sendInductionReminders() {
       const body = `${a.applicant_name}'s induction is ${when} (${fmtFriendlyDate(a.induction_date)}${timeSuffix}).`
         + (a.phone ? ` Phone: ${a.phone}.` : '');
 
-      for (const u of recipients) {
+      for (const u of wanted) {
         try { insertNotif.run(u.id, title, body); } catch (e) { /* CHECK or FK — log but keep going */ console.error('[induction-reminder] notif insert error for user', u.id, ':', e.message); }
         try {
           await sendPushToUser(u.id, {
@@ -117,9 +125,9 @@ async function sendInductionReminders() {
   }
 
   if (sent > 0 || scanned > 0) {
-    console.log(`[induction-reminder] scanned ${scanned} candidates, notified ${sent} applicants x ${recipients.length} recipients`);
+    console.log(`[induction-reminder] scanned ${scanned} candidates, notified ${sent} applicants x ${wanted.length} recipients`);
   }
-  return { sent, scanned, recipients: recipients.length };
+  return { sent, scanned, recipients: wanted.length };
 }
 
 module.exports = { sendInductionReminders };
