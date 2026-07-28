@@ -2,9 +2,15 @@
   // Shared Job-Pack panel &mdash; used by both booking-detail.ejs (booking-only
   // shifts) and job-detail.ejs (job-bound shifts) so the worker sees the
   // same UI regardless of how they got to the shift detail page.
-  // Required vs Recommended split. Company policy is that all five are
-  // mandatory; only the Required pair is gated at docket sign so a stuck
-  // worker (no vehicle, etc.) can't be permanently blocked.
+  //
+  // Two render modes:
+  //  - shiftForms present (booking shifts): CREW-AWARE. Team Leader and
+  //    Risk & Toolbox are one-per-shift (any crew member's copy completes
+  //    them for everyone — shown with who filed it and a View link; anyone
+  //    can still file their own). The TC Declaration is per person with a
+  //    crew tally. Vehicle Pre-Start / Post-Shift are PER VEHICLE — each
+  //    ute has its own pair, owed by its driver.
+  //  - shiftForms null (pure job shifts): the legacy per-person list.
   var JOB_PACK_REQUIRED = [
     { key: 'risk_toolbox', path: 'risk-assessment', label: '2. Risk Assessment & Toolbox', hint: 'Run with the crew on site' },
     { key: 'team_leader',  path: 'team-leader',     label: '4. Team Leader Checklist',     hint: 'Crew lead / acting TL' },
@@ -21,6 +27,10 @@
   function jpChip(done, tone) {
     return done ? 'is-done' : (tone === 'required' ? 'is-req' : 'is-rec');
   }
+  function jpTime(ts) {
+    return new Date(ts).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+  }
+  var _sf = (typeof shiftForms !== 'undefined' && shiftForms) ? shiftForms : null;
 %>
 
 <div class="space-y-3">
@@ -28,6 +38,188 @@
     <div class="py-3 px-3 rounded-lg" style="background:rgba(239,68,68,0.10);border:1px solid rgba(239,68,68,0.20);">
       <p class="text-xs" style="color:#FCA5A5;">Couldn't load checklists for this shift &mdash; try refreshing or let the office know.</p>
     </div>
+  <% } else if (_sf) { %>
+    <p class="text-[11px] italic" style="color:rgba(255,255,255,0.5);">Company policy: all five checklists are covered every shift &mdash; shared ones by whoever runs them, vehicle ones per ute.</p>
+
+    <!-- ── Shift checklists — one copy covers the whole crew ─────────── -->
+    <div class="rounded-xl overflow-hidden" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
+      <div class="px-3.5 pt-3 pb-1">
+        <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Shift checklists</h3>
+        <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">One per crew &mdash; whoever ran it files it. Needed before docket sign.</p>
+      </div>
+      <% JOB_PACK_REQUIRED.forEach(function (jp) {
+           var st = _sf.shiftOnce[jp.key] || { copies: [], draft: null };
+           var top = st.copies[0] || null;
+           var c = jpChip(top, 'required');
+      %>
+        <div data-jp="<%= jp.key %>" data-jp-state="<%= top ? 'done' : (st.draft ? 'draft' : 'pending') %>" style="border-top:1px solid rgba(255,255,255,0.05);">
+          <a href="<%= top ? ('/w/forms/history/' + top.id + '/pdf') : ('/w/forms/' + jp.path + '?allocationId=' + allocation.id) %>"
+             class="flex items-center justify-between py-2.5 px-3.5">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 jp-chip <%= c %>">
+                <% if (top) { %>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <% } else { %>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/></svg>
+                <% } %>
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-white truncate"><%= jp.label %></p>
+                <% if (top) { %>
+                  <p class="text-[11px]" style="color:#34D399;">
+                    Filed by <%= top.mine ? 'you' : top.by_name %> &middot; <%= jpTime(top.submitted_at) %>
+                    <% if (st.copies.length > 1) { %><span style="color:rgba(255,255,255,0.45);">&middot; +<%= st.copies.length - 1 %> more</span><% } %>
+                  </p>
+                <% } else if (st.draft) { %>
+                  <p class="text-[11px]" style="color:#FBBF24;font-weight:600;">Draft in progress &mdash; started by <%= st.draft.started_by_name %></p>
+                <% } else { %>
+                  <p class="text-[11px]" style="color:#FBBF24;font-weight:600;">Needed <span style="color:rgba(255,255,255,0.45);font-weight:400;">&middot; <%= jp.hint %></span></p>
+                <% } %>
+              </div>
+            </div>
+            <% if (top) { %>
+              <span class="text-[11px] font-semibold shrink-0" style="color:#60A5FA;">View</span>
+            <% } else { %>
+              <svg class="w-4 h-4 shrink-0" style="color:rgba(255,255,255,0.4);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+            <% } %>
+          </a>
+          <% if (top || st.draft) { %>
+            <a href="/w/forms/<%= jp.path %>?allocationId=<%= allocation.id %>" data-jp-own="<%= jp.key %>"
+               class="block pb-2.5 px-3.5 -mt-1 text-[11px]" style="color:rgba(255,255,255,0.45);">
+              <%= st.draft && !top ? 'Open the draft →' : 'File your own copy →' %>
+            </a>
+          <% } %>
+        </div>
+      <% }) %>
+    </div>
+
+    <!-- ── Your declaration — everyone signs their own ────────────────── -->
+    <div class="rounded-xl overflow-hidden" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
+      <div class="px-3.5 pt-3 pb-1">
+        <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Your declaration</h3>
+        <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Every crew member signs their own</p>
+      </div>
+      <% var tcMine = _sf.tc.mine; var tcC = jpChip(tcMine, 'recommended'); %>
+      <a href="<%= tcMine ? ('/w/forms/history/' + tcMine.id + '/pdf') : ('/w/forms/tc-prestart?allocationId=' + allocation.id) %>"
+         data-jp="tc_prestart" data-jp-state="<%= tcMine ? 'done' : 'pending' %>"
+         class="flex items-center justify-between py-2.5 px-3.5" style="border-top:1px solid rgba(255,255,255,0.05);">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 jp-chip <%= tcC %>">
+            <% if (tcMine) { %>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+            <% } else { %>
+              <span class="text-xs font-bold">3</span>
+            <% } %>
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-semibold text-white truncate">3. TC Prestart Declaration</p>
+            <% if (tcMine) { %>
+              <p class="text-[11px]" style="color:#34D399;">You signed &middot; <%= jpTime(tcMine.submitted_at) %> <span data-jp-tally style="color:rgba(255,255,255,0.45);">&middot; <%= _sf.tc.done %>/<%= _sf.tc.total %> crew signed</span></p>
+            <% } else { %>
+              <p class="text-[11px]" style="color:#FBBF24;font-weight:600;">You haven't signed yet <span data-jp-tally style="color:rgba(255,255,255,0.45);font-weight:400;">&middot; <%= _sf.tc.done %>/<%= _sf.tc.total %> crew signed</span></p>
+            <% } %>
+          </div>
+        </div>
+        <% if (tcMine) { %>
+          <span class="text-[11px] font-semibold shrink-0" style="color:#60A5FA;">View</span>
+        <% } else { %>
+          <svg class="w-4 h-4 shrink-0" style="color:rgba(255,255,255,0.4);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        <% } %>
+      </a>
+    </div>
+
+    <!-- ── Vehicles — each ute has its own pre-start + post-shift ─────── -->
+    <% if (_sf.vehicles && _sf.vehicles.length) { %>
+      <div class="rounded-xl overflow-hidden" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
+        <div class="px-3.5 pt-3 pb-1">
+          <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Vehicle checklists</h3>
+          <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Per ute &mdash; done by whoever drives it</p>
+        </div>
+        <% _sf.vehicles.forEach(function (v) { %>
+          <div data-jp-vehicle="<%= v.vehicle_id %>" style="border-top:1px solid rgba(255,255,255,0.05);">
+            <div class="flex items-center gap-2 pt-2.5 px-3.5">
+              <span class="text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded" style="background:rgba(245,158,11,0.18);color:#FCD34D;">UTE</span>
+              <p class="text-sm font-semibold text-white truncate"><%= v.name %><% if (v.rego) { %> <span class="font-normal" style="color:rgba(255,255,255,0.45);font-family:ui-monospace,monospace;font-size:11px;"><%= v.rego %></span><% } %></p>
+              <% if (v.driver) { %>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full shrink-0" style="background:rgba(16,185,129,0.14);color:#6EE7B7;"><%= v.driver.is_you ? 'You drive this' : (v.driver.name + ' drives') %></span>
+              <% } else { %>
+                <span class="text-[10px] px-1.5 py-0.5 rounded-full shrink-0" style="background:rgba(255,255,255,0.06);color:rgba(255,255,255,0.5);">No driver assigned</span>
+              <% } %>
+            </div>
+            <% [
+                 { key: 'vehicle_prestart', path: 'vehicle-prestart', label: '1. Vehicle Pre-Start', sub: v.prestart, hint: 'Before starting the vehicle' },
+                 { key: 'post_shift_vehicle', path: 'post-shift-vehicle', label: '5. Post-Shift Vehicle Checklist', sub: v.postshift, hint: 'At end of shift' },
+               ].forEach(function (row) {
+                 var done = row.sub; var c = jpChip(done, 'recommended');
+                 var owes = !done && v.driver && v.driver.is_you;
+            %>
+              <a href="<%= done ? ('/w/forms/history/' + done.id + '/pdf') : ('/w/forms/' + row.path + '?allocationId=' + allocation.id + '&vehicleId=' + v.vehicle_id) %>"
+                 data-jp-veh-form="<%= row.key %>:<%= v.vehicle_id %>" data-jp-state="<%= done ? 'done' : 'pending' %>"
+                 class="flex items-center justify-between py-2 px-3.5 pl-5">
+                <div class="flex items-center gap-3 min-w-0">
+                  <div class="w-7 h-7 rounded-full flex items-center justify-center shrink-0 jp-chip <%= owes ? 'is-req' : c %>">
+                    <% if (done) { %>
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    <% } else { %>
+                      <span class="text-[11px] font-bold"><%= row.label.charAt(0) %></span>
+                    <% } %>
+                  </div>
+                  <div class="min-w-0">
+                    <p class="text-[13px] font-medium text-white truncate"><%= row.label %></p>
+                    <% if (done) { %>
+                      <p class="text-[11px]" style="color:#34D399;">Filed by <%= done.mine ? 'you' : done.by_name %> &middot; <%= jpTime(done.submitted_at) %></p>
+                    <% } else if (owes) { %>
+                      <p class="text-[11px]" data-jp-owes style="color:#FBBF24;font-weight:600;">You drive this ute &mdash; you owe this one</p>
+                    <% } else { %>
+                      <p class="text-[11px]" style="color:rgba(255,255,255,0.5);"><%= row.hint %></p>
+                    <% } %>
+                  </div>
+                </div>
+                <% if (done) { %>
+                  <span class="text-[11px] font-semibold shrink-0" style="color:#60A5FA;">View</span>
+                <% } else { %>
+                  <svg class="w-4 h-4 shrink-0" style="color:rgba(255,255,255,0.4);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+                <% } %>
+              </a>
+            <% }) %>
+          </div>
+        <% }) %>
+      </div>
+    <% } else { %>
+      <!-- No booking vehicles — the two vehicle forms fall back to plain
+           per-person rows so they're still reachable. -->
+      <div class="rounded-xl overflow-hidden" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
+        <div class="px-3.5 pt-3 pb-1">
+          <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Vehicle checklists</h3>
+          <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">No vehicles listed on this shift</p>
+        </div>
+        <% [JOB_PACK_RECOMMENDED[0], JOB_PACK_RECOMMENDED[2]].forEach(function (jp) { var done = formStatus[jp.key]; var c = jpChip(done, 'recommended'); %>
+          <a href="/w/forms/<%= jp.path %>?allocationId=<%= allocation.id %>"
+             class="flex items-center justify-between py-2.5 px-3.5" style="border-top:1px solid rgba(255,255,255,0.05);">
+            <div class="flex items-center gap-3 min-w-0">
+              <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 jp-chip <%= c %>">
+                <% if (done) { %>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                <% } else { %>
+                  <span class="text-xs font-bold"><%= jp.label.charAt(0) %></span>
+                <% } %>
+              </div>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold text-white truncate"><%= jp.label %></p>
+                <% if (done) { %>
+                  <p class="text-[11px]" style="color:#34D399;">Submitted <%= jpTime(done.submitted_at || done.created_at) %></p>
+                <% } else { %>
+                  <p class="text-[11px]" style="color:rgba(255,255,255,0.5);"><%= jp.hint %></p>
+                <% } %>
+              </div>
+            </div>
+            <svg class="w-4 h-4 shrink-0" style="color:rgba(255,255,255,0.4);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+          </a>
+        <% }) %>
+      </div>
+    <% } %>
+
+    <%- include('_shift_forms_extras', { allocation: allocation, shiftTemplates: typeof shiftTemplates !== 'undefined' ? shiftTemplates : null, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null, jpChip: jpChip }) %>
   <% } else { %>
     <p class="text-[11px] italic" style="color:rgba(255,255,255,0.5);">Company policy: all five checklists are mandatory every shift.</p>
 
@@ -51,7 +243,7 @@
             <div class="min-w-0">
               <p class="text-sm font-semibold text-white truncate"><%= jp.label %></p>
               <% if (done) { %>
-                <p class="text-[11px]" style="color:#34D399;">Submitted <%= new Date(done.submitted_at || done.created_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></p>
+                <p class="text-[11px]" style="color:#34D399;">Submitted <%= jpTime(done.submitted_at || done.created_at) %></p>
               <% } else { %>
                 <p class="text-[11px]" style="color:#FBBF24;font-weight:600;">Required <span style="color:rgba(255,255,255,0.45);font-weight:400;">&middot; <%= jp.hint %></span></p>
               <% } %>
@@ -82,7 +274,7 @@
             <div class="min-w-0">
               <p class="text-sm font-semibold text-white truncate"><%= jp.label %></p>
               <% if (done) { %>
-                <p class="text-[11px]" style="color:#34D399;">Submitted <%= new Date(done.submitted_at || done.created_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></p>
+                <p class="text-[11px]" style="color:#34D399;">Submitted <%= jpTime(done.submitted_at || done.created_at) %></p>
               <% } else { %>
                 <p class="text-[11px]" style="color:rgba(255,255,255,0.5);"><%= jp.hint %></p>
               <% } %>
@@ -93,64 +285,6 @@
       <% }) %>
     </div>
 
-    <!-- Other shift forms — admin-built templates flagged "show on shift"
-         (created/edited on /checklists). Rendered from the latest published
-         revision via the custom-form engine. -->
-    <% if (typeof shiftTemplates !== 'undefined' && shiftTemplates && shiftTemplates.length) { %>
-    <div class="rounded-xl overflow-hidden" style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);">
-      <div class="px-3.5 pt-3 pb-1">
-        <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Other shift forms</h3>
-        <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Added by the office for every shift</p>
-      </div>
-      <% shiftTemplates.forEach(function (t) { var done = t.done_count > 0; var c = jpChip(done, 'recommended'); %>
-        <a href="/w/forms/custom/<%= t.id %>?allocationId=<%= allocation.id %>"
-           class="flex items-center justify-between py-2.5 px-3.5" style="border-top:1px solid rgba(255,255,255,0.05);">
-          <div class="flex items-center gap-3 min-w-0">
-            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 jp-chip <%= c %>">
-              <% if (done) { %>
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-              <% } else { %>
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-              <% } %>
-            </div>
-            <div class="min-w-0">
-              <p class="text-sm font-semibold text-white truncate"><%= t.name %></p>
-              <% if (done) { %>
-                <p class="text-[11px]" style="color:#34D399;">Submitted<%= t.done_count > 1 ? ' ×' + t.done_count : '' %></p>
-              <% } else if (t.description) { %>
-                <p class="text-[11px] truncate" style="color:rgba(255,255,255,0.45);"><%= t.description %></p>
-              <% } %>
-            </div>
-          </div>
-          <svg class="w-4 h-4 shrink-0" style="color:rgba(255,255,255,0.4);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-        </a>
-      <% }) %>
-    </div>
-    <% } %>
-
-    <!-- Docket — from=forms so the docket's Back link returns to this
-         Job-Pack tab (where the worker tapped it), not the Dockets list. -->
-    <% var _docketBase = (typeof docketSignUrl !== 'undefined' && docketSignUrl) ? docketSignUrl : ('/w/dockets/sign/' + allocation.id); %>
-    <a href="<%= _docketBase %><%= _docketBase.indexOf('?') === -1 ? '?' : '&' %>from=forms"
-       class="flex items-center justify-between py-2.5 px-3 rounded-lg mt-2" style="background:linear-gradient(135deg, rgba(16,185,129,0.18), rgba(16,185,129,0.06));border:1px solid rgba(16,185,129,0.35);">
-      <div class="flex items-center gap-3 min-w-0">
-        <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0" style="background:rgba(16,185,129,0.22);color:#60A5FA;">
-          <% if (typeof docket !== 'undefined' && docket) { %>
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-          <% } else { %>
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><path d="M9 5a2 2 0 002 2h2a2 2 0 002-2"/><path d="M9 13h6M9 17h4"/></svg>
-          <% } %>
-        </div>
-        <div class="min-w-0">
-          <p class="text-sm font-semibold text-white">Docket</p>
-          <% if (typeof docket !== 'undefined' && docket) { %>
-            <p class="text-[11px]" style="color:#60A5FA;">Signed &middot; <%= docket.total_hours || 0 %> h &middot; <%= new Date(docket.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></p>
-          <% } else { %>
-            <p class="text-[11px]" style="color:rgba(255,255,255,0.5);">Sign at end of shift &mdash; proof of hours.</p>
-          <% } %>
-        </div>
-      </div>
-      <svg class="w-4 h-4 shrink-0" style="color:rgba(255,255,255,0.4);" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
-    </a>
+    <%- include('_shift_forms_extras', { allocation: allocation, shiftTemplates: typeof shiftTemplates !== 'undefined' ? shiftTemplates : null, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null, jpChip: jpChip }) %>
   <% } %>
 </div>

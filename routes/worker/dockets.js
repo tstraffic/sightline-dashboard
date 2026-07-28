@@ -139,14 +139,39 @@ const REQUIRED_FORMS = [
   { key: 'team_leader',  label: 'Team Leader Checklist',     url: '/w/forms/team-leader' },
 ];
 
-function computeMissingRequiredForms(db, workerId, signerAlloc) {
+function computeMissingRequiredForms(db, workerId, signerAlloc, shift) {
   if (!signerAlloc) return [];
-  const submitted = new Set(
-    db.prepare(`
-      SELECT DISTINCT form_type FROM safety_forms
-      WHERE crew_member_id = ? AND allocation_id = ? AND form_type IN ('risk_toolbox','team_leader')
-    `).all(workerId, signerAlloc.id).map(r => r.form_type)
-  );
+  let submitted;
+  if (shift && shift.type === 'booking' && shift.bookingId) {
+    // Risk & Toolbox and the Team Leader checklist are ONE PER SHIFT — any
+    // crew member's SUBMITTED copy satisfies the whole crew (they ran it
+    // with the crew), so signing must not demand the signer's own copy.
+    // Resolution mirrors the Forms tab: via the booking's allocations
+    // (legacy rows carry no booking_id) or sf.booking_id. status filter is
+    // deliberate — a team-shared DRAFT used to count, which let a docket be
+    // signed against an unfinished checklist.
+    submitted = new Set(
+      db.prepare(`
+        SELECT DISTINCT sf.form_type FROM safety_forms sf
+        WHERE sf.form_type IN ('risk_toolbox','team_leader')
+          AND sf.status = 'submitted'
+          AND (
+            sf.booking_id = @bk OR
+            sf.allocation_id IN (SELECT id FROM crew_allocations WHERE booking_id = @bk AND status != 'cancelled')
+          )
+      `).all({ bk: shift.bookingId }).map(r => r.form_type)
+    );
+  } else {
+    // Pure job shifts keep the per-signer rule (no crew context to widen to),
+    // tightened to submitted-only for the same draft reason.
+    submitted = new Set(
+      db.prepare(`
+        SELECT DISTINCT form_type FROM safety_forms
+        WHERE crew_member_id = ? AND allocation_id = ? AND form_type IN ('risk_toolbox','team_leader')
+          AND status = 'submitted'
+      `).all(workerId, signerAlloc.id).map(r => r.form_type)
+    );
+  }
   return REQUIRED_FORMS
     .filter(f => !submitted.has(f.key))
     .map(f => ({ ...f, href: f.url + '?allocationId=' + signerAlloc.id }));
@@ -196,7 +221,7 @@ function renderShiftSign(req, res, shift) {
 
   const worker = req.session.worker;
   const signerAlloc = getSignerAllocation(db, worker.id, shift);
-  const missingRequiredForms = computeMissingRequiredForms(db, worker.id, signerAlloc);
+  const missingRequiredForms = computeMissingRequiredForms(db, worker.id, signerAlloc, shift);
 
   res.render('worker/docket-sign', {
     title: 'Sign Docket', currentPage: 'forms', shift, backUrl, backLabel,
@@ -265,7 +290,7 @@ function submitShiftDocket(req, res, shift) {
   // is used by renderShiftSign to surface the requirement BEFORE the worker
   // tries to sign, so this branch should only fire if they bypassed the UI.
   const signerAlloc = getSignerAllocation(db, worker.id, shift);
-  const missingForms = computeMissingRequiredForms(db, worker.id, signerAlloc);
+  const missingForms = computeMissingRequiredForms(db, worker.id, signerAlloc, shift);
   if (missingForms.length) {
     req.flash('error',
       "Docket not signed — finish these checklists first: " +
