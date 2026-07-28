@@ -3164,6 +3164,173 @@ router.post('/:id/crew/:crewId/remove', (req, res) => {
   req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });
 
+// POST /:id/crew/:crewId/move-to — move a crew member to ANOTHER booking in
+// one operation (the board's cross-booking drag). :crewId is a
+// booking_crew.id, matching /assign-vehicle and /driver.
+//
+// Before this, a cross-booking move was remove-from-A + re-add-on-B by hand:
+// two slide-overs, and each endpoint's side effects (requirement
+// shrink/bump, crew_allocations mirror, gear-task re-sync, notifications)
+// applied independently — including a "removed" and an "assigned" push
+// hitting the same worker in the same second.
+//
+// Semantics:
+//   - the booking_crew ROW moves (UPDATE, not delete+insert): its id, flags
+//     (TL/FA/STS/NB), role and notes survive; the caller can keep pointing
+//     at the same id afterwards — the Undo toast depends on that;
+//   - acceptance resets to 'assigned': the worker accepted shift A, nobody
+//     has asked them about shift B (restore_status exists for Undo to put a
+//     prior 'confirmed' back);
+//   - vehicle_id (optional) must belong to the DESTINATION —
+//     assigned_vehicle_id FKs booking_vehicles, which are per-booking, so a
+//     source seat id is meaningless on B. No vehicle → parked in B's pool
+//     (off_vehicle = 1), never auto-fanned into a seat;
+//   - colleagues left on A hold their rendered seats (holdOthersStill);
+//   - requirement rows shrink on A and bump on B, exactly as remove/add do;
+//   - the crew_allocations mirror moves with them;
+//   - gear-return / team task groups re-sync on BOTH bookings;
+//   - ONE notification via notifyMoved, honouring each side's gate.
+router.post('/:id/crew/:crewId/move-to', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const fail = (status, error) => {
+    if (isJson) return res.status(status).json({ ok: false, error });
+    req.flash('error', error);
+    return req.session.save(() => res.redirect('/bookings/' + req.params.id));
+  };
+
+  const row = db.prepare(`
+    SELECT id, crew_member_id, role_on_site, status, confirmed_at, assigned_vehicle_id
+    FROM booking_crew WHERE id = ? AND booking_id = ?
+  `).get(req.params.crewId, req.params.id);
+  if (!row) return fail(404, 'Crew row not found');
+
+  const fromId = parseInt(req.params.id, 10);
+  const toId = parseInt(req.body.to_booking_id, 10);
+  if (!Number.isFinite(toId) || toId <= 0) return fail(400, 'Pick a shift to move them to');
+  if (toId === fromId) return fail(400, 'They are already on this shift');
+
+  const fromBk = db.prepare('SELECT id, booking_number, title, start_datetime, end_datetime, status FROM bookings WHERE id = ? AND deleted_at IS NULL').get(fromId);
+  const toBk = db.prepare('SELECT id, booking_number, title, start_datetime, end_datetime, status, job_id FROM bookings WHERE id = ? AND deleted_at IS NULL').get(toId);
+  if (!fromBk || !toBk) return fail(404, 'Booking not found');
+  if (TERMINAL_STATUSES.includes(toBk.status)) {
+    return fail(400, `#${toBk.booking_number || toId} is ${toBk.status.replace(/_/g, ' ')} — can't move crew onto it.`);
+  }
+  if (db.prepare('SELECT 1 FROM booking_crew WHERE booking_id = ? AND crew_member_id = ?').get(toId, row.crew_member_id)) {
+    return fail(400, `They're already on #${toBk.booking_number || toId}.`);
+  }
+
+  // Optional destination seat — must be one of B's vehicles.
+  let vehicleId = null;
+  const rawVeh = req.body.vehicle_id;
+  if (rawVeh !== undefined && rawVeh !== '' && rawVeh !== null && rawVeh !== '0') {
+    const parsed = parseInt(rawVeh, 10);
+    if (Number.isFinite(parsed) && parsed > 0) {
+      if (!db.prepare('SELECT 1 FROM booking_vehicles WHERE id = ? AND booking_id = ?').get(parsed, toId)) {
+        return fail(400, "That vehicle isn't on the destination shift");
+      }
+      vehicleId = parsed;
+    }
+  }
+
+  // Undo path: restore a prior acceptance instead of resetting it. Only the
+  // statuses a worker can actually hold; anything else falls back to the
+  // reset. A restored 'confirmed' regains a confirmed_at timestamp.
+  const restore = String(req.body.restore_status || '');
+  const newStatus = ['assigned', 'confirmed', 'declined'].includes(restore) ? restore : 'assigned';
+
+  const prior = { status: row.status, assigned_vehicle_id: row.assigned_vehicle_id };
+
+  // ── Source side ──
+  // The row leaving A can shuffle A's seat-derived colleagues; hold them.
+  holdOthersStill(db, fromId, () => {
+    db.prepare(`
+      UPDATE booking_crew
+      SET booking_id = ?, assigned_vehicle_id = ?, off_vehicle = ?,
+          status = ?, confirmed_at = CASE WHEN ? = 'confirmed' THEN CURRENT_TIMESTAMP ELSE NULL END
+      WHERE id = ?
+    `).run(toId, vehicleId, vehicleId ? 0 : 1, newStatus, newStatus, row.id);
+  });
+
+  // Mirror of the remove route's shrink: if A now requires more crew than it
+  // carries, shrink the mover's role add-on by the deficit, spilling into
+  // the generic Traffic Controller row.
+  try {
+    const totalCrew = db.prepare('SELECT COUNT(*) AS n FROM booking_crew WHERE booking_id = ?').get(fromId).n;
+    let deficit = requiredCrewCapacity(db, fromId) - totalCrew;
+    if (deficit > 0) {
+      const label = ROLE_ON_SITE_TO_REQ_LABEL[String(row.role_on_site || '').toLowerCase()] || 'Traffic Controller';
+      deficit -= shrinkRequirement(db, fromId, label, deficit);
+      if (deficit > 0 && label !== 'Traffic Controller') shrinkRequirement(db, fromId, 'Traffic Controller', deficit);
+    }
+  } catch (e) { console.error('[bookings.crew.move] source shrink failed:', e.message); }
+
+  // If they drove one of A's utes, that pointer must not follow them out.
+  db.prepare('UPDATE booking_vehicles SET crew_member_id = NULL WHERE booking_id = ? AND crew_member_id = ?').run(fromId, row.crew_member_id);
+
+  // Worker-portal allocation mirror: off A (delete, or cancel when
+  // safety_forms/dockets hold an FK to the allocation), onto B.
+  try {
+    db.prepare('DELETE FROM crew_allocations WHERE booking_id = ? AND crew_member_id = ?').run(fromId, row.crew_member_id);
+  } catch (e) {
+    db.prepare("UPDATE crew_allocations SET status = 'cancelled' WHERE booking_id = ? AND crew_member_id = ?").run(fromId, row.crew_member_id);
+  }
+  try {
+    db.prepare(`
+      INSERT OR IGNORE INTO crew_allocations (job_id, crew_member_id, allocation_date, start_time, end_time, role_on_site, status, booking_id, allocated_by_id)
+      VALUES (?, ?, ?, ?, ?, ?, 'allocated', ?, ?)
+    `).run(
+      toBk.job_id || null, row.crew_member_id,
+      String(toBk.start_datetime || '').substring(0, 10),
+      String(toBk.start_datetime || '').substring(11, 16) || '06:00',
+      toBk.end_datetime ? String(toBk.end_datetime).substring(11, 16) : '15:00',
+      row.role_on_site || '', toId, req.session.user.id
+    );
+  } catch (e) { console.error('[bookings.crew.move] allocation mirror failed:', e.message); }
+
+  // ── Destination side ──
+  // Mirror of the add route's bump: a mover over B's required capacity grows
+  // their role's add-on row so the requirement chips stay honest.
+  try {
+    const totalCrew = db.prepare('SELECT COUNT(*) AS n FROM booking_crew WHERE booking_id = ?').get(toId).n;
+    const surplus = totalCrew - requiredCrewCapacity(db, toId);
+    if (surplus > 0) {
+      const label = ROLE_ON_SITE_TO_REQ_LABEL[String(row.role_on_site || '').toLowerCase()] || 'Traffic Controller';
+      bumpRequirement(db, toId, label, surplus);
+    }
+  } catch (e) { console.error('[bookings.crew.move] destination bump failed:', e.message); }
+
+  // Crew changes can change who owes gear-return and team tasks — on both.
+  syncBookingTaskGroups(db, fromId);
+  syncBookingTaskGroups(db, toId);
+
+  // Real time-overlap clash against the worker's OTHER shifts (not A — they
+  // just left it). Warn-only, same policy as the add route.
+  let warning = null;
+  try {
+    if (toBk.start_datetime && toBk.end_datetime) {
+      const clash = db.prepare(`
+        SELECT b.booking_number FROM booking_crew bc2
+        JOIN bookings b ON b.id = bc2.booking_id
+        WHERE bc2.crew_member_id = ? AND bc2.booking_id NOT IN (?, ?)
+          AND b.deleted_at IS NULL
+          AND b.status NOT IN (${TERMINAL_STATUSES.map(() => '?').join(',')})
+          AND b.start_datetime < ? AND b.end_datetime > ?
+        LIMIT 1
+      `).get(row.crew_member_id, fromId, toId, ...TERMINAL_STATUSES, toBk.end_datetime, toBk.start_datetime);
+      if (clash) warning = `Also on ${clash.booking_number} at the same time.`;
+    }
+  } catch (e) { /* warn-only */ }
+
+  bookingNotify.notifyMoved([row.crew_member_id], fromBk, toBk);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: fromId,
+    details: `Moved crew #${row.crew_member_id} from ${fromBk.booking_number} to ${toBk.booking_number}`, req });
+
+  if (isJson) return res.json({ ok: true, prior, warning, from_booking_id: fromId, to_booking_id: toId });
+  req.flash('success', `Moved to ${toBk.booking_number}.`);
+  req.session.save(() => res.redirect('/bookings/' + fromId));
+});
+
 // Confirm crew assignment
 router.post('/:id/crew/:crewId/confirm', (req, res) => {
   const db = getDb();

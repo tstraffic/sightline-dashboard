@@ -68,6 +68,31 @@ function notifyRemoved(crewIds, booking) {
   });
 }
 
+// A worker moved from one shift to another in a single operation (the
+// board's cross-booking drag). ONE push, not a removed+assigned pair —
+// two pushes in the same second read like an accident. Each side of the
+// move honours its own booking's notifiable gate:
+//   both notifiable  → "Shift changed" with the new details
+//   only destination → reads like a plain new assignment
+//   only source      → they were told about A, so tell them it's gone
+//   neither          → silence (they never knew about either)
+function notifyMoved(crewIds, fromBooking, toBooking) {
+  const fromOk = isNotifiable(fromBooking && fromBooking.status);
+  const toOk = isNotifiable(toBooking && toBooking.status);
+  if (toOk && fromOk) {
+    fanOut(crewIds, {
+      title: 'Shift changed',
+      body: 'You’ve been moved to ' + shiftLabel(toBooking) + '. Open the app to accept.',
+      url: '/w/jobs',
+      category: 'bookings', type: 'booking_moved',
+    });
+  } else if (toOk) {
+    notifyAssigned(crewIds, toBooking);
+  } else if (fromOk) {
+    notifyRemoved(crewIds, fromBooking);
+  }
+}
+
 // All crew accepted — the shift is locked in (booking auto-advanced to
 // green_to_go). A reassuring "you're all set" ping to the whole crew.
 function notifyGreenToGo(crewIds, booking) {
@@ -147,4 +172,4 @@ function activeCrewIds(db, bookingId) {
   } catch (e) { return []; }
 }
 
-module.exports = { notifyAssigned, notifyRemoved, notifyCancelled, notifyRescheduled, notifyGreenToGo, notifyDocketSubmitted, notifyTaskAssigned, notifyShiftNotesUpdated, activeCrewIds, isNotifiable };
+module.exports = { notifyAssigned, notifyRemoved, notifyMoved, notifyCancelled, notifyRescheduled, notifyGreenToGo, notifyDocketSubmitted, notifyTaskAssigned, notifyShiftNotesUpdated, activeCrewIds, isNotifiable };

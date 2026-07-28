@@ -376,6 +376,7 @@
                 </div>
                 <% function _csumPerson(w, vehId) { var _cs = acceptState(w.bc_status); %>
                   <div class="bk2-csum-person bk2-slot--click bk2-slot--st-<%= _cs.key %>"
+                       data-bk-crew-drag="1"
                        data-booking-id="<%= b.id %>"
                        data-booking-crew-id="<%= w.booking_crew_id || '' %>"
                        data-crew-member-id="<%= w.crew_member_id || '' %>"
@@ -5279,7 +5280,7 @@
   // Lightweight toast — used to surface server-side warnings (e.g. crew or
   // vehicle double-booked) that a flash message can't deliver to AJAX flows.
   var bk2ToastActive = {}; // message → { el, count, hide() } for de-duping
-  function bk2Toast(msg, kind) {
+  function bk2Toast(msg, kind, opts) {
     // De-dupe: an identical message already on screen just bumps a ×N
     // counter and resets its timer instead of stacking another toast.
     // (Re-fired POSTs / rapid clicks used to throw up ~5 identical toasts.)
@@ -5297,6 +5298,19 @@
     var txt = document.createElement('span'); txt.textContent = glyph + msg;
     var cnt = document.createElement('span'); cnt.setAttribute('data-bk2-count', '1'); cnt.style.opacity = '0.8';
     el.appendChild(txt); el.appendChild(cnt);
+    if (opts && opts.action && typeof opts.action.fn === 'function') {
+      var act = document.createElement('button');
+      act.type = 'button';
+      act.setAttribute('data-bk2-toast-action', '1');
+      act.textContent = opts.action.label || 'Undo';
+      act.style.cssText = 'margin-left:12px;padding:3px 12px;border-radius:7px;border:1px solid currentColor;' +
+        'background:transparent;color:inherit;font:inherit;font-weight:700;cursor:pointer;';
+      act.addEventListener('click', function () {
+        try { opts.action.fn(); } catch (e) {}
+        dismiss();
+      });
+      el.appendChild(act);
+    }
     var palette = kind === 'success' ? { bg: '#065F46', fg: '#D1FAE5' }
                 : kind === 'error'   ? { bg: '#7F1D1D', fg: '#FEE2E2' }
                                      : { bg: '#92400E', fg: '#FEF3C7' };
@@ -5308,7 +5322,7 @@
       'box-shadow:0 8px 28px rgba(0,0,0,0.45);max-width:92vw;opacity:0;transition:opacity .18s ease, transform .18s ease;';
     document.body.appendChild(el);
     requestAnimationFrame(function () { el.style.opacity = '1'; el.style.transform = 'translateX(-50%) translateY(0)'; });
-    var ttl = kind === 'success' ? 2500 : 5000;
+    var ttl = (opts && opts.action) ? 8000 : kind === 'success' ? 2500 : 5000;
     var entry = { el: el, count: 1 };
     function dismiss() {
       el.style.opacity = '0'; el.style.transform = 'translateX(-50%) translateY(8px)';
@@ -6512,9 +6526,18 @@
 
     // Same rules the HTML5 dispatcher uses, against an arbitrary element:
     // drop anywhere in a crew block that has a ute = "into that ute".
-    function resolveTarget(el, card) {
-      if (!el || !el.closest) return null;
-      if (card && !card.contains(el)) return null;
+    // Within one card these resolve to a seat change; landing on a DIFFERENT
+    // card resolves to a cross-booking move (crossBookingId set) — a specific
+    // ute if the pointer is on one, else "onto that shift" (their pool).
+    function zoneWithin(el) {
+      // Compact density renders its own, much flatter markup — no crew
+      // blocks, no pool container — so it needs its own zone lookup.
+      var csumGrp = el.closest('.bk2-csum-grp');
+      if (csumGrp) {
+        var head = csumGrp.querySelector('.bk2-csum-veh[data-vehicle-id]');
+        var vid = head ? (head.getAttribute('data-vehicle-id') || '') : '';
+        return { vehicleId: vid, hi: csumGrp };
+      }
       var unassign = el.closest('.bk2-slot--drop-unassign') || el.closest('.bk2-unassigned');
       if (unassign) return { vehicleId: '', hi: unassign };
       var spare = el.closest('.bk2-veh-slot--spare.bk2-slot--drop-veh-assign[data-vehicle-id]');
@@ -6529,9 +6552,25 @@
       if (chip) return { vehicleId: chip.getAttribute('data-vehicle-id'), hi: chip };
       return null;
     }
+    function resolveTarget(el, card) {
+      if (!el || !el.closest) return null;
+      var host = el.closest('.bk2-card[data-booking-id]');
+      if (!host) return null;
+      if (host === card || host.getAttribute('data-booking-id') === card.getAttribute('data-booking-id')) {
+        // Same booking (incl. its floating twin in the slide-over glow).
+        return zoneWithin(el);
+      }
+      var z = zoneWithin(el);
+      var t = z || { vehicleId: '', hi: host };
+      t.crossBookingId = host.getAttribute('data-booking-id');
+      t.crossBookingNumber = host.getAttribute('data-booking-number') || t.crossBookingId;
+      t.hostCard = host;
+      return t;
+    }
 
     function clearHighlights() {
       document.querySelectorAll('.bk2-drop-live').forEach(function (el) { el.classList.remove('bk2-drop-live'); });
+      document.querySelectorAll('.bk2-drop-live-card').forEach(function (el) { el.classList.remove('bk2-drop-live-card'); });
     }
 
     function lift(x, y) {
@@ -6549,6 +6588,12 @@
       ghost.removeAttribute('data-crew-member-id');
       ghost.setAttribute('aria-hidden', 'true');
       ghost.style.width = r.width + 'px';
+      ghost.style.transition = 'none';
+      // Position BEFORE the first paint. paint() defers to rAF, so appending
+      // an untransformed clone let it render one frame at the top-left of
+      // the viewport and then jump — it read as the name flying in from
+      // off-screen instead of lifting off where the pointer already was.
+      ghost.style.transform = 'translate3d(' + (x - st.offX) + 'px,' + (y - st.offY) + 'px,0)';
       document.body.appendChild(ghost);
       st.slot.classList.add('is-dragging');
       document.body.classList.add('bk2-dragging-crew');
@@ -6568,9 +6613,16 @@
         // through it — no need to hide it first.
         var t = resolveTarget(document.elementFromPoint(st.x, st.y), st.card);
         clearHighlights();
-        // Landing back where they already are isn't a move — don't promise one.
-        st.target = (t && String(t.vehicleId) !== String(st.fromVehicleId)) ? t : null;
-        if (st.target) st.target.hi.classList.add('bk2-drop-live');
+        // Landing back where they already are isn't a move — don't promise
+        // one. A different card is always a real move.
+        st.target = (t && (t.crossBookingId || String(t.vehicleId) !== String(st.fromVehicleId))) ? t : null;
+        if (st.target) {
+          st.target.hi.classList.add('bk2-drop-live');
+          if (st.target.hostCard) st.target.hostCard.classList.add('bk2-drop-live-card');
+        }
+        // Tell the planner what release will do, on the chip itself.
+        if (ghost) ghost.setAttribute('data-move-hint',
+          st.target && st.target.crossBookingId ? ('\u2192 #' + st.target.crossBookingNumber) : '');
       });
     }
 
@@ -6617,9 +6669,11 @@
     }
 
     document.addEventListener('pointerdown', function (e) {
-      // A leaked gesture (a pointerup we never saw) must not wedge the board.
-      if (st && !st.active) teardown();
-      if (st) return;
+      // A new press always supersedes the old gesture. A pointerup that never
+      // arrived (released outside the window, tab switched mid-drag) used to
+      // leave st set, and the guard here then killed every later drag until
+      // the page was reloaded — the board simply stopped accepting drags.
+      if (st) teardown();
       if (e.button != null && e.button > 0) return;
       var slot = e.target && e.target.closest && e.target.closest('[data-bk-crew-drag="1"]');
       if (!slot) return;
@@ -6675,7 +6729,9 @@
       if (!was) return;               // a tap — let the popover handler have it
       suppressClick = true;           // a drag — the click that follows is noise
       setTimeout(function () { suppressClick = false; }, 350);
-      if (target) assignCrewToVehicle(payload, target.vehicleId);
+      if (!target) return;
+      if (target.crossBookingId) moveCrewToBooking(payload, target);
+      else assignCrewToVehicle(payload, target.vehicleId);
     }
 
     document.addEventListener('pointerup', function (e) {
@@ -6704,18 +6760,28 @@
       if (st && e.pointerId === st.pointerId) teardown();
     }, true);
 
+    // A drag's trailing click fires on the common ancestor of press and
+    // release — on this board that's the card <a>, which would navigate away.
+    // Swallow exactly ONE click and disarm: the old timer-based version left
+    // every click on the page dead for 350ms, which ate the Undo button on
+    // the toast the drag had just raised.
     document.addEventListener('click', function (e) {
       if (!suppressClick) return;
+      if (e.target.closest && e.target.closest('[data-bk2-toast-action]')) return;
+      suppressClick = false;
       e.preventDefault(); e.stopPropagation();
     }, true);
 
     // The slots still carry draggable="true" for browsers without Pointer
     // Events; where we handle the gesture, stop the native drag doubling up.
     document.addEventListener('dragstart', function (e) {
-      if (!st) return;
-      var src = e.target && e.target.closest && e.target.closest('[data-bk-crew-drag="1"]');
-      if (src) e.preventDefault();
+      if (st) e.preventDefault();
     }, true);
+
+    // Losing the window mid-drag ends the gesture; otherwise it stays armed
+    // and the next press is spent cleaning it up.
+    window.addEventListener('blur', function () { if (st) teardown(); });
+    document.addEventListener('visibilitychange', function () { if (document.hidden && st) teardown(); });
   })();
 
   // Dragover/drop for crew-move drags are handled by the consolidated
@@ -6762,6 +6828,70 @@
         console.warn('[bk2 assignCrewToVehicle] fetch failed', err);
         alert('Could not move that worker — network error.');
       });
+  }
+
+  // Cross-booking move: lift the worker off this shift and put them on
+  // another one, as one server-side operation. The endpoint owns the
+  // semantics (acceptance reset, driver pointer, gear-task re-sync); the
+  // client just refreshes both cards and offers a one-tap Undo that
+  // restores the original seat AND the original acceptance status.
+  function moveCrewToBooking(payload, target) {
+    var body = new URLSearchParams();
+    body.append('to_booking_id', target.crossBookingId);
+    if (target.vehicleId) body.append('vehicle_id', target.vehicleId);
+    if (CSRF_TOKEN) body.append('_csrf', CSRF_TOKEN);
+    fetch('/bookings/' + encodeURIComponent(payload.booking_id) + '/crew/' +
+          encodeURIComponent(payload.booking_crew_id) + '/move-to', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'X-CSRF-Token': CSRF_TOKEN || '',
+      },
+      body: body,
+      credentials: 'same-origin',
+    }).then(function (r) { return r.json().catch(function () { return null; }).then(function (j) { return { ok: r.ok, json: j }; }); })
+      .then(function (res) {
+        if (!res.ok || !res.json || res.json.ok === false) {
+          bk2Toast((res.json && res.json.error) || 'Could not move them to that shift.', 'error');
+          return;
+        }
+        bk2RefreshCard(String(payload.booking_id));
+        bk2RefreshCard(String(target.crossBookingId));
+        try { document.dispatchEvent(new CustomEvent('bk2:alloc-changed')); } catch (e) {}
+        if (res.json.warning) bk2Toast(res.json.warning, 'warning');
+        var prior = res.json.prior || {};
+        bk2Toast((payload.crew_name || 'Worker') + ' moved to #' + (target.crossBookingNumber || target.crossBookingId) + '.', 'success', {
+          action: {
+            label: 'Undo',
+            fn: function () {
+              var back = new URLSearchParams();
+              back.append('to_booking_id', payload.booking_id);
+              if (prior.assigned_vehicle_id) back.append('vehicle_id', prior.assigned_vehicle_id);
+              if (prior.status) back.append('restore_status', prior.status);
+              if (CSRF_TOKEN) back.append('_csrf', CSRF_TOKEN);
+              fetch('/bookings/' + encodeURIComponent(target.crossBookingId) + '/crew/' +
+                    encodeURIComponent(payload.booking_crew_id) + '/move-to', {
+                method: 'POST',
+                headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': CSRF_TOKEN || '' },
+                body: back, credentials: 'same-origin',
+              }).then(function (r) { return r.json().catch(function () { return null; }).then(function (j) { return { ok: r.ok, json: j }; }); })
+                .then(function (res2) {
+                  if (!res2.ok || !res2.json || res2.json.ok === false) {
+                    bk2Toast((res2.json && res2.json.error) || 'Could not undo the move.', 'error');
+                    return;
+                  }
+                  bk2RefreshCard(String(payload.booking_id));
+                  bk2RefreshCard(String(target.crossBookingId));
+                  try { document.dispatchEvent(new CustomEvent('bk2:alloc-changed')); } catch (e) {}
+                  bk2Toast((payload.crew_name || 'Worker') + ' moved back.', 'success');
+                })
+                .catch(function () { bk2Toast('Could not undo the move — network error.', 'error'); });
+            },
+          },
+        });
+      })
+      .catch(function () { bk2Toast('Could not move them — network error.', 'error'); });
   }
 
   // Move a filled crew slot DOM node between containers (crew block ↔

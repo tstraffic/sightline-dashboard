@@ -3369,3 +3369,36 @@ body.bk2-dragging-crew [data-bk-crew-drag="1"] { touch-action: none; }
 @media (prefers-reduced-motion: reduce) {
   .bk2-drag-ghost { rotate: none; }
 }
+
+/* ── Cross-booking drag ─────────────────────────────────────────────────
+   Carrying a worker over a DIFFERENT shift card: the whole card lifts as
+   the destination, and the chip itself says what release will do. */
+.bk2-card.bk2-drop-live-card {
+  outline: 2px solid #34D399; outline-offset: 3px;
+  box-shadow: 0 0 0 6px rgba(52,211,153,0.12);
+}
+:root[data-theme="light"] .bk2-card.bk2-drop-live-card {
+  outline-color: #059669;
+  box-shadow: 0 0 0 6px rgba(5,150,105,0.14);
+}
+.bk2-drag-ghost[data-move-hint]:not([data-move-hint=""])::after {
+  content: attr(data-move-hint);
+  position: absolute; top: 100%; left: 10px; margin-top: 4px;
+  padding: 2px 9px; border-radius: 9999px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.03em;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  background: #065F46; color: #A7F3D0;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+  white-space: nowrap;
+}
+:root[data-theme="light"] .bk2-drag-ghost[data-move-hint]:not([data-move-hint=""])::after {
+  background: #047857; color: #ECFDF5;
+}
+
+/* Compact density is a flatter layout with no crew-block containers, so its
+   drag zones are the summary groups themselves. */
+.bk2-csum-grp.bk2-drop-live { border-radius: 8px; }
+.bk2-card--droptarget .bk2-csum-grp { outline: 1px dashed rgba(148,163,184,0.42); outline-offset: 2px; border-radius: 8px; }
+:root[data-theme="light"] .bk2-card--droptarget .bk2-csum-grp { outline-color: rgba(107,114,128,0.5); }
+body.bk2-dragging-crew .bk2-csum-person { touch-action: none; }
+.bk2-csum-person.is-dragging { opacity: 0.34; }

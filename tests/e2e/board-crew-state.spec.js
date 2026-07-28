@@ -357,6 +357,72 @@ test('a drag released over nothing moves nobody, and taps still open the panel',
   await expect(page.locator('.bk2-pop')).toBeVisible();
 });
 
+test('the lifted chip appears under the pointer, not at the corner', async ({ page }) => {
+  seedBoard();
+  await openBoard(page);
+  const card = cardFor(page);
+  const src = card.locator('.bk2-slot--filled.bk2-slot--click', { hasText: 'Accept Yes One' }).first();
+  await src.scrollIntoViewIfNeeded();
+  const a = await src.boundingBox();
+
+  await page.mouse.move(a.x + 40, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + 50, a.y + a.height / 2 + 8, { steps: 3 });
+
+  // paint() defers to rAF, so an untransformed clone rendered one frame at
+  // the viewport's top-left before jumping — "their name flies in from
+  // behind". The chip must already be on the pointer.
+  const box = await page.locator('.bk2-drag-ghost').boundingBox();
+  expect(box).not.toBeNull();
+  expect(Math.abs(box.y - (a.y + a.height / 2 - a.height / 2))).toBeLessThan(60);
+  expect(box.x).toBeGreaterThan(a.x - 60);
+  await page.mouse.up();
+});
+
+test('a gesture whose release was never seen does not wedge the board', async ({ page }) => {
+  const seed = seedBoard();
+  await openBoard(page);
+  const card = cardFor(page);
+  const src = card.locator('.bk2-slot--filled.bk2-slot--click', { hasText: 'Accept Yes One' }).first();
+  await src.scrollIntoViewIfNeeded();
+  const a = await src.boundingBox();
+
+  // Press and move, then lose the pointer without a pointerup — what
+  // happens when the button is released outside the window. The old guard
+  // kept the stale gesture and refused every later drag until reload.
+  await page.mouse.move(a.x + 40, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + 50, a.y + a.height / 2 + 8, { steps: 3 });
+  await expect(page.locator('.bk2-drag-ghost')).toHaveCount(1);
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  await expect(page.locator('.bk2-drag-ghost')).toHaveCount(0);
+
+  // The board still accepts a drag afterwards.
+  const dst = card.locator('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id="' + seed.v2 + '"]').first();
+  await pointerDrag(page, src, dst);
+  await expect.poll(
+    () => withDb(db => db.prepare('SELECT assigned_vehicle_id AS v FROM booking_crew WHERE id = ?')
+      .get(seed.rows['Accept Yes One']).v),
+    { timeout: 5000 }
+  ).toBe(seed.v2);
+});
+
+test('compact density can drag, not just tap', async ({ page }) => {
+  const seed = seedBoard();
+  await openBoard(page, 'compact');
+  const card = cardFor(page);
+
+  const row = card.locator('.bk2-csum-person', { hasText: 'Accept Yes One' }).first();
+  // Compact rows were clickable but carried no drag marker at all.
+  await expect(row).toHaveAttribute('data-bk-crew-drag', '1');
+
+  // Its group headers advertise the ute, which is what the drop resolver
+  // uses in this density (there are no crew blocks here).
+  const groups = card.locator('.bk2-csum-grp');
+  await expect(groups.first()).toBeVisible();
+  expect(await groups.count()).toBeGreaterThan(0);
+});
+
 test('compact density keeps acceptance and the move menu', async ({ page }) => {
   seedBoard();
   await openBoard(page, 'compact');
