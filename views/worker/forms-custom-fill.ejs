@@ -48,11 +48,24 @@
   /* Light-mode overrides — the page was previously dark-only and rendered
      white text on a white body so titles, labels and field copy were
      invisible. Mirrors the docket-sign.ejs pattern. */
-  :root[data-theme="light"] .cf-h1            { color: #0F172A; }
+  /* worker.css's unthemed-class safety net matches on class SUFFIX at
+     (0,4,1) — [class$="-h1"], [class$="-card"], [class$="-title"],
+     [class$="-row"]. A plain :root[data-theme="light"] .cf-card is only
+     (0,3,0), so these three rules were dead: the card lost its shadow and
+     the section title rendered near-black instead of brand emerald. Match
+     the net's shape to tie, and win on document order (this <style> is in
+     the body; worker.css is in the head). */
+  :root[data-theme="light"] body.worker-portal .cf-h1            { color: #0F172A; }
   :root[data-theme="light"] .cf-rev           { color: #6B7280; }
-  :root[data-theme="light"] .cf-card          { background: #FFFFFF; border-color: #E5E7EB; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
-  :root[data-theme="light"] .cf-section-title { color: #047857; }
+  :root[data-theme="light"] body.worker-portal .cf-card          { background: #FFFFFF; border-color: #E5E7EB; box-shadow: 0 1px 2px rgba(15,23,42,0.04); }
+  :root[data-theme="light"] body.worker-portal .cf-section-title { color: #047857; }
   :root[data-theme="light"] .cf-q             { border-top-color: #F3F4F6; }
+  /* .cf-q-row ends in "-row", so the net paints a bordered white card
+     around every answer row. It is a layout row — strip the card. */
+  :root[data-theme="light"] body.worker-portal .cf-q-row {
+    background-color: transparent; box-shadow: none; border-color: transparent;
+  }
+  :root[data-theme="light"] .cf-back          { color: #047857; }
   :root[data-theme="light"] .cf-q-text        { color: #111827; }
   :root[data-theme="light"] .cf-q-required    { color: #DC2626; }
   :root[data-theme="light"] .cf-radio span    { background: #F3F4F6; border-color: #D1D5DB; color: #4B5563; }

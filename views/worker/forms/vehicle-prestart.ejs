@@ -1,5 +1,3 @@
-<meta name="color-scheme" content="light only">
-
 <%
   // Vehicle Pre-Start now renders fully from the published revision of
   // the system_key='vehicle_prestart' template &mdash; every element comes
@@ -78,6 +76,78 @@
                 display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 56px; }
 
   .vps-unit { font-size: 0.85rem; font-weight: 600; color: rgba(255,255,255,0.8); padding: 0 10px; }
+  /* ── Light mode ───────────────────────────────────────────────────────
+     This view shipped with no light-mode block at all, so every .vps-*
+     rule above applied in both themes: white question text on a white
+     card, a white input with a white border, and white pill labels. On a
+     phone in daylight the form was blank apart from the pre-filled
+     vehicle id — the reported bug.
+
+     Specificity note: worker.css's safety net (§ "unthemed class
+     fallback") matches on class SUFFIX at (0,4,1) — `[class$="-title"]`,
+     `[class$="-row"]`, `[class$="-card"]` and friends. A plain
+     `:root[data-theme="light"] .vps-q-text` is only (0,3,0) and loses to
+     it. These rules deliberately mirror the net's own shape so they tie
+     on specificity and win on document order (this <style> is in the
+     body, worker.css is in the head). Do not "simplify" them by dropping
+     `body.worker-portal` — that silently re-breaks the page. */
+  :root[data-theme="light"] body.worker-portal .vps-back { color: #047857; }
+  :root[data-theme="light"] body.worker-portal .vps-h1 { color: #0F172A; }
+  :root[data-theme="light"] body.worker-portal .vps-sub { color: #6B7280; }
+
+  :root[data-theme="light"] body.worker-portal .vps-summary {
+    background: linear-gradient(155deg, #ECFDF5, #F0FDF4 60%, #F8FAFC);
+    border-color: #A7F3D0;
+  }
+  :root[data-theme="light"] body.worker-portal .vps-summary-client { color: #0F172A; }
+  :root[data-theme="light"] body.worker-portal .vps-summary-meta { color: #4B5563; }
+
+  :root[data-theme="light"] body.worker-portal .vps-card {
+    background: #FFFFFF; border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.05);
+  }
+  /* The net forces every -title to near-black; keep the brand emerald. */
+  :root[data-theme="light"] body.worker-portal .vps-section-title { color: #047857; }
+
+  :root[data-theme="light"] body.worker-portal .vps-q { border-top-color: #E5E7EB; }
+  :root[data-theme="light"] body.worker-portal .vps-q-text { color: #111827; }
+  :root[data-theme="light"] body.worker-portal .vps-q-required { color: #DC2626; }
+
+  /* .vps-q-row and .vps-inline-row end in "-row", so the net paints them
+     as white CARDS — a bordered, shadowed box around every answer, and
+     22 of them down the inspection list. They are layout rows; strip it. */
+  :root[data-theme="light"] body.worker-portal .vps-q-row,
+  :root[data-theme="light"] body.worker-portal .vps-inline-row {
+    background-color: transparent;
+    box-shadow: none;
+    border-color: transparent;
+  }
+  :root[data-theme="light"] body.worker-portal .vps-inline-row { border-top-color: #E5E7EB; }
+  :root[data-theme="light"] body.worker-portal .vps-inline-row-q { color: #1F2937; }
+
+  :root[data-theme="light"] body.worker-portal .vps-radio span {
+    background: #F3F4F6; border-color: #D1D5DB; color: #374151;
+  }
+  /* Checked pills are opaque emerald/red/grey — already legible. */
+
+  :root[data-theme="light"] body.worker-portal .vps-input,
+  :root[data-theme="light"] body.worker-portal .vps-textarea {
+    border-color: #D1D5DB; color: #0F172A;
+  }
+
+  :root[data-theme="light"] body.worker-portal .vps-sig-pad { border-color: #CBD5E1; }
+  :root[data-theme="light"] body.worker-portal .vps-sig-clear {
+    color: #374151; background: #F3F4F6; border-color: #D1D5DB;
+  }
+
+  :root[data-theme="light"] body.worker-portal .vps-display-info {
+    background: #EEF2FF; color: #312E81;
+  }
+
+  :root[data-theme="light"] body.worker-portal .vps-submit-bar {
+    background: linear-gradient(180deg, rgba(247,248,250,0), #F7F8FA 35%);
+  }
+  :root[data-theme="light"] body.worker-portal .vps-unit { color: #374151; }
 </style>
 
 <div class="vps-wrap">

@@ -243,6 +243,42 @@ input[type="tel"], input[type="number"], select, textarea {
 :root[data-theme="light"] [class*="has-[:checked]:bg-brand-50"] { background-color: #ECFDF5 !important; }
 :root[data-theme="light"] [class*="has-[:checked]:bg-brand-100"] { background-color: #D1FAE5 !important; }
 
+/* ── Selected answer chips must keep their white label ──────────────────
+   The checklists write Tailwind pairs like
+     `border-gray-300 text-gray-600 peer-checked:bg-emerald-600
+      peer-checked:text-white`
+   but `.text-gray-600` above is declared !important (to survive the dark
+   remap), and Tailwind's `peer-checked:text-white` is not. So the CHECKED
+   chip kept grey text while its background went emerald: measured 2.01:1
+   in light mode on the Team Leader checklist — a selected answer you can
+   barely read. Restore the white label with enough specificity + !important
+   to beat the utility remaps in both themes.
+
+   These mirror Tailwind's generated shape (`.peer:checked ~ .<variant>`),
+   matched by substring so they hold for text-white and any brand tint. */
+.peer:checked ~ [class*="peer-checked:text-white"],
+:root[data-theme="light"] .peer:checked ~ [class*="peer-checked:text-white"] {
+  color: #FFFFFF !important;
+}
+[class*="has-[:checked]:text-white"]:has(:checked),
+:root[data-theme="light"] [class*="has-[:checked]:text-white"]:has(:checked) {
+  color: #FFFFFF !important;
+}
+
+/* The signature "Clear" affordance is text-gray-400 on a grey panel —
+   2.31:1 in light mode, on a control the worker needs when they mis-sign.
+   Only lift it where it sits ON a surface, i.e. inside a form card. */
+:root[data-theme="light"] body.worker-portal form .text-gray-400,
+:root[data-theme="light"] body.worker-portal .cf-card .text-gray-400,
+:root[data-theme="light"] body.worker-portal .vps-card .text-gray-400 {
+  color: #6B7280 !important;
+}
+
+/* Bottom-tab active label: brand emerald #10B981 on white is 2.54:1 at
+   10px, the smallest persistent text in the app. Darken it in light mode
+   only — on the dark tab bar the bright emerald is correct. */
+:root[data-theme="light"] body.worker-portal .wh-tabnav .is-active { color: #047857 !important; }
+
 /* ── Status badge backgrounds (keep legible on dark) ── */
 .bg-emerald-50 { background: rgba(16,185,129,0.12) !important; }
 .bg-amber-50 { background: rgba(245,158,11,0.12) !important; }
@@ -710,12 +746,19 @@ input[type="search"], input[type="text"].bg-white {
   border-color: #E5E7EB !important;
 }
 
-/* Inline white borders → light-grey hairline. */
+/* Inline white borders → light-grey hairline. The `dashed` variants matter
+   as much as `solid`: empty-state panels (e.g. the custom-checklist list's
+   "no checklists yet" box) are drawn with a dashed white border, which
+   vanished entirely on the light page. */
 :root[data-theme="light"] body.worker-portal [style*="border-bottom:1px solid rgba(255"],
 :root[data-theme="light"] body.worker-portal [style*="border-bottom: 1px solid rgba(255"],
 :root[data-theme="light"] body.worker-portal [style*="border:1px solid rgba(255"],
-:root[data-theme="light"] body.worker-portal [style*="border: 1px solid rgba(255"] {
-  border-color: #E5E7EB !important;
+:root[data-theme="light"] body.worker-portal [style*="border: 1px solid rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border:1px dashed rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border: 1px dashed rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border:2px dashed rgba(255"],
+:root[data-theme="light"] body.worker-portal [style*="border: 2px dashed rgba(255"] {
+  border-color: #D1D5DB !important;
 }
 
 /* The Home empty-state calendar icon (.wh-empty-ic) — bump contrast so
@@ -738,10 +781,18 @@ input[type="search"], input[type="text"].bg-white {
    "looks fine on empty" reviews keep letting it ship.
    This block catches the common naming conventions used across worker
    views and gives unthemed classes a readable fallback so the next
-   forgotten override doesn't render white-on-white. Specific
-   :root[data-theme="light"] .my-class rules (specificity 0,2,1)
-   still win over these (0,1,1) — the safety net only kicks in when a
-   class has no explicit light-mode override.
+   forgotten override doesn't render white-on-white.
+
+   IMPORTANT — these selectors are (0,4,1), NOT (0,1,1): :root +
+   [data-theme] + .worker-portal + [class$=...] are four class-level
+   components plus the `body` element. A per-view
+   `:root[data-theme="light"] .my-title` is only (0,3,0) and LOSES to
+   them. To override, mirror this shape
+   (`:root[data-theme="light"] body.worker-portal .my-title`) so it ties
+   and wins on document order — per-view <style> blocks live in the body,
+   this file is in the head. Getting this wrong fails silently: the rule
+   is simply ignored. Three overrides in forms-custom-fill.ejs were dead
+   this way until Jul 2026.
    ═════════════════════════════════════════════════════════════════════ */
 
 /* Page wrappers — any class ending in -wrap inherits white from the
