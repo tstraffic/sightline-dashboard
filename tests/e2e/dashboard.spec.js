@@ -39,6 +39,38 @@ async function rowCount(locator) {
   return parseInt((await locator.locator('.attn-count').textContent()).trim(), 10);
 }
 
+test('the console instrument panel themes light in light mode', async ({ page }) => {
+  // The console band + day bar + weather card were fixed dark hex in BOTH
+  // themes ("the 2 overlays stay dark even on light mode"). Force the light
+  // theme the same way the worker spec does — a stored id beats
+  // prefers-color-scheme, and 'daylight' maps to mode 'light'.
+  await page.addInitScript(() => {
+    try { localStorage.setItem('atomis-theme', 'daylight'); } catch (e) {}
+  });
+  await loginAs(page);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
+
+  const band = page.locator('#console');
+  await expect(band).toBeVisible();
+  const bandBg = await band.evaluate(el => getComputedStyle(el).backgroundColor);
+  expect(bandBg, 'console band must not keep the dark surface').not.toBe('rgb(22, 26, 33)');
+
+  // The thesis had a light-mode `color:#fff !important` guard from the
+  // fixed-dark era — on a light band that is white-on-white.
+  const thesis = page.locator('.console-thesis').first();
+  if (await thesis.count()) {
+    const ink = await thesis.evaluate(el => getComputedStyle(el).color);
+    expect(ink, 'thesis ink must not be white on the light band').not.toBe('rgb(255, 255, 255)');
+  }
+
+  // Day bar inherits the re-skin when present (needs a booking today).
+  const daybar = page.locator('#day-bar');
+  if (await daybar.count()) {
+    const dbBg = await daybar.evaluate(el => getComputedStyle(el).backgroundColor);
+    expect(dbBg, 'day bar must not keep the dark surface').not.toBe('rgb(30, 36, 45)');
+  }
+});
+
 test('no tabs, three bands, and no zero-value rows anywhere', async ({ page }) => {
   await loginAs(page);
 

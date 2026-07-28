@@ -587,10 +587,13 @@ body.dark-glass .panel-header .panel-header-link:focus-visible {
 
 /* ───────────────────────────────────────────────────────────
    18. CONSOLE — the control-room instrument panel
-   The Today page's dark operational band. Deliberately the
-   SAME fixed dark surface in both themes (like the sidebar):
-   it's an instrument panel, not a content card. Everything
-   below it obeys the active theme as usual.
+   The Today page's operational band. Dark values here are the
+   dark-theme defaults; the light theme re-skins the whole
+   family (console band, day bar, weather card) via the
+   overrides at the END of this file. It originally stayed
+   fixed-dark in both themes "like the sidebar" — but the
+   sidebar themes light (custom.css), so the console was the
+   odd one out and read as a bug in light mode.
    ─────────────────────────────────────────────────────────── */
 body.dark-glass .console-band {
   background: #161A21;
@@ -637,10 +640,13 @@ body.dark-glass .console-thesis {
   color: #fff; max-width: 26ch; text-wrap: balance;
 }
 body.dark-glass .console-thesis em { font-style: normal; color: #E9AE60; }
-/* The console is a fixed dark surface in BOTH themes — the light theme's
-   global h1 ink override must not wash the headline out. */
-:root[data-theme="light"] body.dark-glass .console-thesis { color: #fff !important; }
-:root[data-theme="light"] body.dark-glass .console-thesis em { color: #E9AE60 !important; }
+/* The console band themes light like everything else (light overrides at
+   the end of this file). The !important pair here exists to beat the light
+   theme's global h1 ink override — it must carry the LIGHT ink, not white:
+   when this band was fixed-dark these said #fff, and the day the band went
+   light that would have been white-on-white. */
+:root[data-theme="light"] body.dark-glass .console-thesis { color: #0F172A !important; }
+:root[data-theme="light"] body.dark-glass .console-thesis em { color: #B45309 !important; }
 body.dark-glass .console-sub { margin-top: 8px; font-size: 12.5px; color: #8B938E; max-width: 62ch; }
 
 body.dark-glass .console-inst {
@@ -844,3 +850,101 @@ body.dark-glass .waiting-review {
   transition: background var(--transition-fast, 150ms);
 }
 body.dark-glass .waiting-review:hover { background: var(--brand-500, #10B981); }
+
+/* ───────────────────────────────────────────────────────────
+   19. CONSOLE — LIGHT THEME
+   The §18 instrument panel, re-skinned for light mode. Same
+   structure and signal semantics — emerald = live/now, amber =
+   wet/warn, blue = night/info, red = critical — with deepened
+   inks on white surfaces. This file loads last in the admin
+   chain, so these appended rules win their specificity ties.
+   ─────────────────────────────────────────────────────────── */
+
+/* Band */
+:root[data-theme="light"] body.dark-glass .console-band {
+  background: linear-gradient(180deg, #FAFCFE 0%, #F3F6FA 100%);
+  border-color: #E2E8F0;
+  color: #334155;
+}
+:root[data-theme="light"] body.dark-glass .console-rail { border-bottom-color: #E2E8F0; }
+:root[data-theme="light"] body.dark-glass .console-clock { color: #0F172A; }
+:root[data-theme="light"] body.dark-glass .cr-dim { color: #94A3B8; }
+:root[data-theme="light"] body.dark-glass .console-rail-sep { background: #E2E8F0; }
+:root[data-theme="light"] body.dark-glass .console-live { color: #64748B; }
+:root[data-theme="light"] body.dark-glass .console-live-dot { box-shadow: 0 0 8px rgba(16,185,129,0.35); }
+:root[data-theme="light"] body.dark-glass .console-greet { color: #64748B; }
+:root[data-theme="light"] body.dark-glass .console-eyebrow { color: #94A3B8; }
+:root[data-theme="light"] body.dark-glass .console-sub { color: #64748B; }
+
+/* Instrument strip */
+:root[data-theme="light"] body.dark-glass .console-inst { background: #FFFFFF; border-color: #E2E8F0; }
+:root[data-theme="light"] body.dark-glass .i-cell { border-right-color: #EEF2F6; }
+:root[data-theme="light"] body.dark-glass a.i-cell:hover { background: #F8FAFC; }
+:root[data-theme="light"] body.dark-glass .i-k { color: #94A3B8; }
+:root[data-theme="light"] body.dark-glass .i-v { color: #0F172A; }
+:root[data-theme="light"] body.dark-glass .i-v.is-warn { color: #B45309; }
+:root[data-theme="light"] body.dark-glass .i-v.is-bad { color: #DC2626; }
+:root[data-theme="light"] body.dark-glass .i-note { color: #6B7280; }
+:root[data-theme="light"] body.dark-glass .i-wx { background: linear-gradient(180deg, #F0F7FF, #FFFFFF); }
+:root[data-theme="light"] body.dark-glass .i-wx-rain { color: #B45309; }
+
+/* Day bar */
+:root[data-theme="light"] body.dark-glass .daybar { background: #FFFFFF; border-color: #E2E8F0; }
+:root[data-theme="light"] body.dark-glass .db-head { border-bottom-color: #EEF2F6; }
+:root[data-theme="light"] body.dark-glass .db-title { color: #64748B; }
+:root[data-theme="light"] body.dark-glass .db-legend { color: #94A3B8; }
+:root[data-theme="light"] body.dark-glass .sw-live  { background: #059669; }
+:root[data-theme="light"] body.dark-glass .sw-wet   { background: #D97706; }
+:root[data-theme="light"] body.dark-glass .sw-night { background: #3B82F6; }
+:root[data-theme="light"] body.dark-glass .sw-due   { background: #DC2626; }
+:root[data-theme="light"] body.dark-glass .db-hr { color: #94A3B8; }
+:root[data-theme="light"] body.dark-glass .db-wxband {
+  background: repeating-linear-gradient(115deg,
+    rgba(59,130,246,0.14) 0 5px, rgba(59,130,246,0.05) 5px 10px);
+  border-left: 1px dashed rgba(37,99,235,0.4);
+  border-right: 1px dashed rgba(37,99,235,0.4);
+}
+:root[data-theme="light"] body.dark-glass .db-wxband-l { color: #1D4ED8; }
+:root[data-theme="light"] body.dark-glass .db-now { background: #059669; box-shadow: 0 0 9px rgba(5,150,105,0.35); }
+/* .db-now-tag keeps #04231A-on-#10B981 — already legible on light. */
+
+/* Lane blocks flip from white-text-on-deep-tint to dark-text-on-pale-tint.
+   Hover: dark's brightness(1.16) would bleach these; darken instead. */
+:root[data-theme="light"] body.dark-glass .db-blk { color: #0F172A; }
+:root[data-theme="light"] body.dark-glass .db-blk:hover { filter: brightness(0.96); }
+:root[data-theme="light"] body.dark-glass .db-blk.is-live  { background: #D1FAE5; border-color: #059669; color: #065F46; }
+:root[data-theme="light"] body.dark-glass .db-blk.is-wet   { background: #FEF3C7; border-color: #D97706; color: #92400E; }
+:root[data-theme="light"] body.dark-glass .db-blk.is-night { background: #DBEAFE; border-color: #3B82F6; color: #1E3A8A; }
+
+/* Markers */
+:root[data-theme="light"] body.dark-glass .db-mk { background: #D97706; }
+:root[data-theme="light"] body.dark-glass .db-mk::after { color: #B45309; }
+:root[data-theme="light"] body.dark-glass .db-mk.is-crit { background: #DC2626; }
+:root[data-theme="light"] body.dark-glass .db-mk.is-crit::after { color: #B91C1C; }
+:root[data-theme="light"] body.dark-glass .db-mk.is-info { background: #2563EB; }
+:root[data-theme="light"] body.dark-glass .db-mk.is-info::after { color: #1D4ED8; }
+:root[data-theme="light"] body.dark-glass .db-mk-eod { background: #DC2626; }
+:root[data-theme="light"] body.dark-glass .db-mk-eod::after { color: #B91C1C; }
+:root[data-theme="light"] body.dark-glass .db-more { color: #6B7280; }
+:root[data-theme="light"] body.dark-glass .db-more:hover { color: #0F172A; }
+
+/* Weather card */
+:root[data-theme="light"] body.dark-glass .wx-card {
+  background: linear-gradient(165deg, #FFFFFF, #F4F8FC);
+  border-color: #E2E8F0;
+  color: #334155;
+}
+:root[data-theme="light"] body.dark-glass .wx-place { color: #0F172A; }
+:root[data-theme="light"] body.dark-glass .wx-desc { color: #64748B; }
+:root[data-theme="light"] body.dark-glass .wx-hilo { color: #94A3B8; }
+:root[data-theme="light"] body.dark-glass .wx-big { color: #0F172A; }
+:root[data-theme="light"] body.dark-glass .wx-hourly { border-top-color: #EEF2F6; }
+:root[data-theme="light"] body.dark-glass .wx-hcell { border-right-color: #EEF2F6; }
+:root[data-theme="light"] body.dark-glass .wx-hcell.is-wet { background: #EFF6FF; }
+:root[data-theme="light"] body.dark-glass .wx-ht { color: #94A3B8; }
+:root[data-theme="light"] body.dark-glass .wx-hd { color: #0F172A; }
+:root[data-theme="light"] body.dark-glass .wx-hp { color: #2563EB; }
+:root[data-theme="light"] body.dark-glass .wx-call { background: rgba(217,119,6,0.08); color: #B45309; }
+:root[data-theme="light"] body.dark-glass .wx-call:hover { background: rgba(217,119,6,0.14); }
+:root[data-theme="light"] body.dark-glass .wx-call p { color: #4B5563; }
+:root[data-theme="light"] body.dark-glass .wx-call b { color: #111827; }
