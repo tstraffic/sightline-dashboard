@@ -3316,3 +3316,56 @@ body.bk2-rp-detail .bk2-rp-warns { display: inline-flex; }
 :root[data-theme="light"] .bk2-pop-move.is-spare .bk2-pop-move-tag { background: #4B5563; color: #F9FAFB; }
 :root[data-theme="light"] .bk2-pop-move--pool .bk2-pop-move-tag { background: #E5E7EB; color: #4B5563; }
 :root[data-theme="light"] .bk2-pop-move-here { background: #D1FAE5; color: #047857; }
+
+/* ── Pointer-based crew drag ────────────────────────────────────────────
+   The HTML5 drag this replaces was mouse-only and gave no feedback beyond
+   the browser's own translucent snapshot. Here the chip tracks the pointer
+   1:1, the destination lights up, and the row you lifted stays in place as
+   a dimmed outline so the board never reflows mid-gesture. */
+.bk2-drag-ghost {
+  position: fixed; top: 0; left: 0; z-index: 9999;
+  margin: 0; pointer-events: none; will-change: transform;
+  box-shadow: 0 12px 28px rgba(0,0,0,0.42);
+  opacity: 0.96;
+  transform-origin: top left;
+  rotate: -1.5deg;
+}
+.bk2-slot--filled.is-dragging {
+  opacity: 0.34;
+  outline: 2px dashed rgba(148,163,184,0.55); outline-offset: -2px;
+}
+/* While a crew drag is live: kill text selection and the iOS callout, and
+   stop touch from scrolling the page out from under the gesture. */
+body.bk2-dragging-crew { user-select: none; -webkit-user-select: none; cursor: grabbing; }
+body.bk2-dragging-crew * { cursor: grabbing !important; }
+body.bk2-dragging-crew [data-bk-crew-drag="1"] { touch-action: none; }
+[data-bk-crew-drag="1"] { -webkit-touch-callout: none; }
+
+/* The destination under the pointer. Loud on purpose — the old drag's
+   thin outline was the thing planners kept missing. */
+.bk2-drop-live {
+  outline: 2px solid #34D399 !important;
+  outline-offset: 1px;
+  background: rgba(52,211,153,0.16) !important;
+  box-shadow: 0 0 0 4px rgba(52,211,153,0.14);
+}
+:root[data-theme="light"] .bk2-drop-live {
+  outline-color: #059669 !important;
+  background: #D1FAE5 !important;
+  box-shadow: 0 0 0 4px rgba(5,150,105,0.16);
+}
+/* Every possible destination on the card you're dragging within gets a
+   quiet hint, so you can see where the drop zones actually are. */
+.bk2-card--droptarget .bk2-crew,
+.bk2-card--droptarget .bk2-unassigned,
+.bk2-card--droptarget .bk2-veh-slot--spare {
+  outline: 1px dashed rgba(148,163,184,0.42); outline-offset: 2px;
+}
+:root[data-theme="light"] .bk2-card--droptarget .bk2-crew,
+:root[data-theme="light"] .bk2-card--droptarget .bk2-unassigned,
+:root[data-theme="light"] .bk2-card--droptarget .bk2-veh-slot--spare {
+  outline-color: rgba(107,114,128,0.5);
+}
+@media (prefers-reduced-motion: reduce) {
+  .bk2-drag-ghost { rotate: none; }
+}

@@ -194,6 +194,56 @@ test('a worker can be moved onto another ute by clicking, with no drag', async (
   expect(others.every(r => r.v === seed.v1)).toBe(true);
 });
 
+test('moving one worker leaves unpinned colleagues\' records alone', async ({ page }) => {
+  const seed = seedBoard();
+  // Two extra crew with NO stored vehicle — they render into ute seats by
+  // derivation. The old pin wrote assigned_vehicle_id onto every one of
+  // them before any move, so clicking "move Accept Yes One" silently
+  // hard-assigned two colleagues the planner never touched.
+  const looseRows = withDb(db => {
+    const bookingId = seed.bookingId;
+    const ids = [];
+    for (const name of ['Loose Crew One', 'Loose Crew Two']) {
+      let cm = db.prepare('SELECT id FROM crew_members WHERE full_name = ?').get(name);
+      if (!cm) {
+        db.prepare('INSERT INTO crew_members (full_name, active) VALUES (?, 1)').run(name);
+        cm = { id: db.prepare('SELECT last_insert_rowid() AS id').get().id };
+      }
+      const ex = db.prepare('SELECT id FROM booking_crew WHERE booking_id = ? AND crew_member_id = ?').get(bookingId, cm.id);
+      if (ex) {
+        db.prepare('UPDATE booking_crew SET assigned_vehicle_id = NULL, off_vehicle = 0 WHERE id = ?').run(ex.id);
+        ids.push(ex.id);
+      } else {
+        db.prepare("INSERT INTO booking_crew (booking_id, crew_member_id, status, assigned_vehicle_id) VALUES (?, ?, 'confirmed', NULL)")
+          .run(bookingId, cm.id);
+        ids.push(db.prepare('SELECT last_insert_rowid() AS id').get().id);
+      }
+    }
+    return ids;
+  });
+
+  await openBoard(page);
+  await cardFor(page).locator('.bk2-slot--filled.bk2-slot--click', { hasText: 'Accept Yes One' }).first().click();
+  await page.locator('.bk2-pop-move', { hasText: 'ACC-UTE-2' }).first().click();
+
+  await expect.poll(
+    () => withDb(db => db.prepare('SELECT assigned_vehicle_id AS v FROM booking_crew WHERE id = ?')
+      .get(seed.rows['Accept Yes One']).v),
+    { timeout: 5000 }
+  ).toBe(seed.v2);
+
+  // The booking has spare seats, so nobody was displaced and nobody else's
+  // row should have been rewritten.
+  const loose = withDb(db => db.prepare(
+    `SELECT assigned_vehicle_id AS v FROM booking_crew WHERE id IN (${looseRows.map(() => '?').join(',')})`
+  ).all(...looseRows));
+  expect(loose.map(r => r.v)).toEqual([null, null]);
+
+  withDb(db => db.prepare(
+    `DELETE FROM booking_crew WHERE id IN (${looseRows.map(() => '?').join(',')})`
+  ).run(...looseRows));
+});
+
 test('a worker can be dropped back to the pool from the same menu', async ({ page }) => {
   const seed = seedBoard();
   await openBoard(page);
@@ -208,6 +258,103 @@ test('a worker can be dropped back to the pool from the same menu', async ({ pag
       .get(seed.rows['Accept Pending One']).v),
     { timeout: 5000 }
   ).toBe(null);
+});
+
+// Dragging a crew slot with the pointer (mouse path). The HTML5 drag this
+// replaced fired nothing on touch, so a planner on a tablet could not move
+// anyone; and it gave no feedback beyond the browser's own drag snapshot.
+// Both ends must be on screen before the gesture: page.mouse.move never
+// scrolls, and the drag's own edge auto-scroll (within 72px of an edge)
+// would slide the target out from under the cursor mid-assertion.
+const EDGE_MARGIN = 100;
+async function bringBothIntoView(page, from, to) {
+  await from.scrollIntoViewIfNeeded();
+  const vh = page.viewportSize().height;
+  for (let i = 0; i < 4; i++) {
+    const a = await from.boundingBox();
+    const b = await to.boundingBox();
+    const lo = Math.min(a.y, b.y);
+    const hi = Math.max(a.y + a.height, b.y + b.height);
+    if (lo >= EDGE_MARGIN && hi <= vh - EDGE_MARGIN) return [a, b];
+    const delta = hi > vh - EDGE_MARGIN ? hi - (vh - EDGE_MARGIN) : lo - EDGE_MARGIN;
+    await page.mouse.wheel(0, delta);
+    await page.waitForTimeout(150);
+  }
+  return [await from.boundingBox(), await to.boundingBox()];
+}
+
+async function pointerDrag(page, from, to, { release = true } = {}) {
+  const [a, b] = await bringBothIntoView(page, from, to);
+  await page.mouse.move(a.x + 40, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + 50, a.y + a.height / 2 + 8, { steps: 3 });
+  await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2, { steps: 12 });
+  if (release) await page.mouse.up();
+}
+
+test('dragging a worker onto a ute moves them, and shows where they will land', async ({ page }) => {
+  const seed = seedBoard();
+  await openBoard(page);
+  const card = cardFor(page);
+
+  const src = card.locator('.bk2-slot--filled.bk2-slot--click', { hasText: 'Accept Yes One' }).first();
+  const dst = card.locator('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id="' + seed.v2 + '"]').first();
+
+  await pointerDrag(page, src, dst, { release: false });
+  // Mid-drag: a chip tracks the cursor and the destination is lit.
+  await expect(page.locator('.bk2-drag-ghost')).toHaveCount(1);
+  await expect(page.locator('.bk2-drop-live')).toHaveCount(1);
+  await expect(page.locator('.bk2-drop-live').first()).toHaveAttribute('data-vehicle-id', String(seed.v2));
+  await page.mouse.up();
+
+  await expect(page.locator('.bk2-drag-ghost')).toHaveCount(0);
+  await expect.poll(
+    () => withDb(db => db.prepare('SELECT assigned_vehicle_id AS v FROM booking_crew WHERE id = ?')
+      .get(seed.rows['Accept Yes One']).v),
+    { timeout: 5000 }
+  ).toBe(seed.v2);
+});
+
+test('a worker can be dragged out of a ute into the no-vehicle pool', async ({ page }) => {
+  const seed = seedBoard();
+  await openBoard(page);
+  const card = cardFor(page);
+
+  const src = card.locator('.bk2-slot--filled.bk2-slot--click', { hasText: 'Accept Pending One' }).first();
+  const pool = card.locator('.bk2-unassigned').first();
+  await expect(pool).toHaveCount(1);
+
+  await pointerDrag(page, src, pool);
+  await expect.poll(
+    () => withDb(db => db.prepare('SELECT assigned_vehicle_id AS v FROM booking_crew WHERE id = ?')
+      .get(seed.rows['Accept Pending One']).v),
+    { timeout: 5000 }
+  ).toBe(null);
+});
+
+test('a drag released over nothing moves nobody, and taps still open the panel', async ({ page }) => {
+  const seed = seedBoard();
+  await openBoard(page);
+  const card = cardFor(page);
+  const src = card.locator('.bk2-slot--filled.bk2-slot--click', { hasText: 'Accept No One' }).first();
+
+  await src.scrollIntoViewIfNeeded();
+  const a = await src.boundingBox();
+  await page.mouse.move(a.x + 40, a.y + a.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(a.x + 50, a.y + a.height / 2 + 8, { steps: 3 });
+  // Sideways off the card, staying clear of the edge auto-scroll zones.
+  await page.mouse.move(8, a.y + a.height / 2, { steps: 10 });
+  await expect(page.locator('.bk2-drag-ghost')).toHaveCount(1);
+  await expect(page.locator('.bk2-drop-live')).toHaveCount(0);
+  await page.mouse.up();
+
+  await page.waitForTimeout(400);
+  expect(withDb(db => db.prepare('SELECT assigned_vehicle_id AS v FROM booking_crew WHERE id = ?')
+    .get(seed.rows['Accept No One']).v)).toBe(seed.v1);
+  // The drag must not have eaten the click handler.
+  await src.click();
+  await expect(page.locator('.bk2-pop')).toBeVisible();
 });
 
 test('compact density keeps acceptance and the move menu', async ({ page }) => {

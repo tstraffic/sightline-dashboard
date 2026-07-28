@@ -6495,32 +6495,228 @@
   //  from the resource-panel drag so the two drop handlers
   //  don't get confused.
   // ==========================================================
-  document.addEventListener('dragstart', function (e) {
-    var src = e.target && e.target.closest && e.target.closest('[data-bk-crew-drag="1"]');
-    if (!src) return;
-    var bookingCrewId = src.getAttribute('data-booking-crew-id');
-    var bookingId     = src.getAttribute('data-booking-id');
-    var crewName      = src.getAttribute('data-crew-name') || '';
-    console.debug('[bk2 dragstart] crew', { bookingId: bookingId, bookingCrewId: bookingCrewId, name: crewName, src: src });
-    if (!bookingCrewId || !bookingId) {
-      console.warn('[bk2 dragstart] missing data-booking-crew-id or data-booking-id — aborting drag');
-      return;
+  // ── Crew drag: pointer-based, not HTML5 ──────────────────────────────
+  //
+  // The native drag this replaces was mouse-only. Pointer Events give the
+  // same gesture on touch (planners work off tablets, where HTML5 drag fires
+  // nothing at all), and let us drive the feedback ourselves: a chip that
+  // tracks the finger 1:1, the live drop target lit up, and edge auto-scroll
+  // so you can carry someone to a ute further down the board.
+  //
+  // Mouse lifts after 5px of travel. Touch lifts after a 260ms hold — moving
+  // before that is a scroll, and the board must stay scrollable.
+  (function bk2CrewPointerDrag() {
+    var LIFT_PX = 5, HOLD_MS = 260, SCROLL_ABORT_PX = 10;
+    var EDGE = 72, EDGE_SPEED = 14;
+    var st = null, ghost = null, raf = 0, edgeRaf = 0, suppressClick = false;
+
+    // Same rules the HTML5 dispatcher uses, against an arbitrary element:
+    // drop anywhere in a crew block that has a ute = "into that ute".
+    function resolveTarget(el, card) {
+      if (!el || !el.closest) return null;
+      if (card && !card.contains(el)) return null;
+      var unassign = el.closest('.bk2-slot--drop-unassign') || el.closest('.bk2-unassigned');
+      if (unassign) return { vehicleId: '', hi: unassign };
+      var spare = el.closest('.bk2-veh-slot--spare.bk2-slot--drop-veh-assign[data-vehicle-id]');
+      if (spare) return { vehicleId: spare.getAttribute('data-vehicle-id'), hi: spare };
+      var blk = el.closest('.bk2-crew');
+      if (blk) {
+        if (blk.hasAttribute('data-bk-novehicle')) return { vehicleId: '', hi: blk };
+        var veh = blk.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
+        if (veh) return { vehicleId: veh.getAttribute('data-vehicle-id'), hi: veh };
+      }
+      var chip = el.closest('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
+      if (chip) return { vehicleId: chip.getAttribute('data-vehicle-id'), hi: chip };
+      return null;
     }
-    try {
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('application/x-bk2-crew-move', JSON.stringify({
-        booking_id: bookingId,
-        booking_crew_id: bookingCrewId,
-        crew_name: crewName,
-      }));
-      e.dataTransfer.setData('text/plain', crewName);
-    } catch (err) { console.warn('[bk2 dragstart] setData failed', err); }
-    src.classList.add('is-dragging');
-  });
-  document.addEventListener('dragend', function (e) {
-    var src = e.target && e.target.closest && e.target.closest('[data-bk-crew-drag="1"]');
-    if (src) src.classList.remove('is-dragging');
-  });
+
+    function clearHighlights() {
+      document.querySelectorAll('.bk2-drop-live').forEach(function (el) { el.classList.remove('bk2-drop-live'); });
+    }
+
+    function lift(x, y) {
+      st.active = true;
+      var r = st.slot.getBoundingClientRect();
+      st.offX = x - r.left; st.offY = y - r.top;
+      ghost = st.slot.cloneNode(true);
+      ghost.classList.add('bk2-drag-ghost');
+      // Strip the identity off the clone: relocateCrewSlot and friends look
+      // workers up with querySelector('[data-booking-crew-id="…"]') and must
+      // never find the decoration instead of the real row.
+      ghost.removeAttribute('id');
+      ghost.removeAttribute('data-bk-crew-drag');
+      ghost.removeAttribute('data-booking-crew-id');
+      ghost.removeAttribute('data-crew-member-id');
+      ghost.setAttribute('aria-hidden', 'true');
+      ghost.style.width = r.width + 'px';
+      document.body.appendChild(ghost);
+      st.slot.classList.add('is-dragging');
+      document.body.classList.add('bk2-dragging-crew');
+      st.card.classList.add('bk2-card--droptarget');
+      try { if (navigator.vibrate && st.touch) navigator.vibrate(12); } catch (e) {}
+      paint(x, y);
+    }
+
+    function paint(x, y) {
+      st.x = x; st.y = y;
+      if (raf) return;
+      raf = requestAnimationFrame(function () {
+        raf = 0;
+        if (!st || !ghost) return;
+        ghost.style.transform = 'translate3d(' + (st.x - st.offX) + 'px,' + (st.y - st.offY) + 'px,0)';
+        // The ghost is pointer-events:none, so hit-testing sees straight
+        // through it — no need to hide it first.
+        var t = resolveTarget(document.elementFromPoint(st.x, st.y), st.card);
+        clearHighlights();
+        // Landing back where they already are isn't a move — don't promise one.
+        st.target = (t && String(t.vehicleId) !== String(st.fromVehicleId)) ? t : null;
+        if (st.target) st.target.hi.classList.add('bk2-drop-live');
+      });
+    }
+
+    // Carry someone past the edge of the viewport without letting go.
+    function edgeScroll() {
+      edgeRaf = 0;
+      if (!st || !st.active) return;
+      var dy = 0;
+      if (st.y < EDGE) dy = -EDGE_SPEED * (1 - st.y / EDGE);
+      else if (st.y > innerHeight - EDGE) dy = EDGE_SPEED * (1 - (innerHeight - st.y) / EDGE);
+      if (dy) { window.scrollBy(0, dy); paint(st.x, st.y); }
+      edgeRaf = requestAnimationFrame(edgeScroll);
+    }
+
+    function teardown() {
+      if (raf) { cancelAnimationFrame(raf); raf = 0; }
+      if (edgeRaf) { cancelAnimationFrame(edgeRaf); edgeRaf = 0; }
+      if (ghost && ghost.parentNode) ghost.parentNode.removeChild(ghost);
+      ghost = null;
+      clearHighlights();
+      if (st) {
+        st.slot.classList.remove('is-dragging');
+        st.card.classList.remove('bk2-card--droptarget');
+        if (st.holdTimer) clearTimeout(st.holdTimer);
+      }
+      document.body.classList.remove('bk2-dragging-crew');
+      st = null;
+    }
+
+    // Which ute is this worker in RIGHT NOW? Slots inside a crew block don't
+    // always carry the id themselves — the block's ute chip is the authority.
+    // Without this fallback, dragging someone out of a ute into the pool read
+    // as ''->'' and got suppressed as a no-op.
+    function currentVehicleOf(slot) {
+      var v = slot.getAttribute('data-assigned-vehicle-id') || '';
+      if (v) return v;
+      if (slot.closest('.bk2-unassigned')) return '';
+      var blk = slot.closest('.bk2-crew');
+      if (blk && !blk.hasAttribute('data-bk-novehicle')) {
+        var chip = blk.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
+        if (chip) return chip.getAttribute('data-vehicle-id') || '';
+      }
+      return '';
+    }
+
+    document.addEventListener('pointerdown', function (e) {
+      // A leaked gesture (a pointerup we never saw) must not wedge the board.
+      if (st && !st.active) teardown();
+      if (st) return;
+      if (e.button != null && e.button > 0) return;
+      var slot = e.target && e.target.closest && e.target.closest('[data-bk-crew-drag="1"]');
+      if (!slot) return;
+      // Let real controls behave like controls — but the whole card is
+      // itself an <a>, so only bail for a control INSIDE the slot.
+      var ctrl = e.target.closest('button, a[href], input, select, textarea');
+      if (ctrl && slot.contains(ctrl)) return;
+      var card = slot.closest('.bk2-card');
+      if (!card) return;
+      if (!slot.getAttribute('data-booking-crew-id') || !slot.getAttribute('data-booking-id')) return;
+      st = {
+        slot: slot, card: card, pointerId: e.pointerId,
+        x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY,
+        touch: e.pointerType !== 'mouse', active: false, target: null,
+        fromVehicleId: currentVehicleOf(slot),
+      };
+      if (st.touch) {
+        st.holdTimer = setTimeout(function () {
+          if (st && !st.active) { lift(st.x, st.y); edgeScroll(); }
+        }, HOLD_MS);
+      }
+    }, true);
+
+    document.addEventListener('pointermove', function (e) {
+      if (!st || e.pointerId !== st.pointerId) return;
+      var dx = e.clientX - st.x0, dy = e.clientY - st.y0;
+      if (!st.active) {
+        if (st.touch) {
+          // Moved before the hold elapsed — they're scrolling, not dragging.
+          if (Math.abs(dx) + Math.abs(dy) > SCROLL_ABORT_PX) teardown();
+          else { st.x = e.clientX; st.y = e.clientY; }
+          return;
+        }
+        if (Math.abs(dx) + Math.abs(dy) < LIFT_PX) return;
+        lift(e.clientX, e.clientY);
+        edgeScroll();
+        try { st.slot.setPointerCapture(e.pointerId); } catch (err) {}
+      }
+      e.preventDefault();
+      paint(e.clientX, e.clientY);
+    }, { passive: false, capture: true });
+
+    function finish() {
+      if (!st) return;
+      st.settled = true;
+      var was = st.active, target = st.target, slot = st.slot;
+      var payload = {
+        booking_id: slot.getAttribute('data-booking-id'),
+        booking_crew_id: slot.getAttribute('data-booking-crew-id'),
+        crew_name: slot.getAttribute('data-crew-name') || '',
+      };
+      teardown();
+      if (!was) return;               // a tap — let the popover handler have it
+      suppressClick = true;           // a drag — the click that follows is noise
+      setTimeout(function () { suppressClick = false; }, 350);
+      if (target) assignCrewToVehicle(payload, target.vehicleId);
+    }
+
+    document.addEventListener('pointerup', function (e) {
+      if (!st || e.pointerId !== st.pointerId) return;
+      finish();
+    }, true);
+
+    // Touch: the hold means no scroll has begun yet, so preventing the very
+    // first touchmove stops one from ever starting. Without this Chrome
+    // begins scrolling and fires pointercancel, killing the drag on its
+    // first pixel. touch-action can't do the job — it's latched at
+    // touchstart, before we know whether this is a drag or a scroll.
+    document.addEventListener('touchmove', function (e) {
+      if (!st || !st.active) return;
+      if (e.cancelable) e.preventDefault();
+      var t = e.touches && e.touches[0];
+      if (t) paint(t.clientX, t.clientY);
+    }, { passive: false, capture: true });
+
+    document.addEventListener('touchend', function () {
+      // Some Android builds fire touchend without a matching pointerup.
+      if (st && st.active && !st.settled) finish();
+    }, true);
+
+    document.addEventListener('pointercancel', function (e) {
+      if (st && e.pointerId === st.pointerId) teardown();
+    }, true);
+
+    document.addEventListener('click', function (e) {
+      if (!suppressClick) return;
+      e.preventDefault(); e.stopPropagation();
+    }, true);
+
+    // The slots still carry draggable="true" for browsers without Pointer
+    // Events; where we handle the gesture, stop the native drag doubling up.
+    document.addEventListener('dragstart', function (e) {
+      if (!st) return;
+      var src = e.target && e.target.closest && e.target.closest('[data-bk-crew-drag="1"]');
+      if (src) e.preventDefault();
+    }, true);
+  })();
 
   // Dragover/drop for crew-move drags are handled by the consolidated
   // dispatcher above — every drop target shares the .bk2-slot--drop

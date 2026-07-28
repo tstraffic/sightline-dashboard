@@ -1142,51 +1142,98 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
 // swap" into the freed seat. Calling this before a deliberate crew
 // change freezes everyone where the planner currently sees them, so
 // only the person being moved actually moves.
-function pinDerivedVehicleAssignments(db, bookingId) {
-  try {
-    const vehicleRows = db.prepare(`
-      SELECT id, booking_id, vehicle_name, registration, vehicle_role, crew_member_id AS driver_id
-      FROM booking_vehicles WHERE booking_id = ? ORDER BY created_at
-    `).all(bookingId);
-    if (vehicleRows.length < 2) return; // one vehicle can't shuffle
-    const crewRows = db.prepare(`
-      SELECT bc.id AS booking_crew_id, bc.booking_id, bc.crew_member_id, bc.status AS bc_status, bc.role_on_site,
-        bc.is_team_leader, bc.is_first_aid, bc.straight_to_site, bc.non_billable, bc.assigned_vehicle_id,
-        COALESCE(bc.off_vehicle, 0) AS off_vehicle,
-        cm.full_name, cm.role, cm.portal_role
-      FROM booking_crew bc
-      JOIN crew_members cm ON cm.id = bc.crew_member_id
-      WHERE bc.booking_id = ? ORDER BY bc.created_at
-    `).all(bookingId);
-    if (!crewRows.some(c => !c.assigned_vehicle_id && !c.off_vehicle)) return; // nothing unpinned
-    const reqRows = db.prepare(
-      'SELECT booking_id, resource_type, quantity_required FROM booking_requirements WHERE booking_id = ? ORDER BY id'
-    ).all(bookingId);
-    let gearRows = [];
-    try {
-      gearRows = db.prepare(`
-        SELECT id, booking_id, equipment_name, equipment_type, attached_vehicle_id,
-               hire_unit_id, supplier_name FROM booking_equipment WHERE booking_id = ? ORDER BY id
-      `).all(bookingId);
-    } catch (e) { /* pre-migration-320 DB */ }
+// Where does each crew member CURRENTLY RENDER? booking_crew rows with no
+// assigned_vehicle_id are placed into vehicle seats by deriveCrewBlocks at
+// render time, so "displayed vehicle" and "stored vehicle" are not the same
+// thing. Returns Map<booking_crew_id, vehicleId|null>.
+function snapshotDisplayedVehicles(db, bookingId) {
+  const placed = new Map();
+  const vehicleRows = db.prepare(`
+    SELECT id, booking_id, vehicle_name, registration, vehicle_role, crew_member_id AS driver_id
+    FROM booking_vehicles WHERE booking_id = ? ORDER BY created_at
+  `).all(bookingId);
+  const crewRows = db.prepare(`
+    SELECT bc.id AS booking_crew_id, bc.booking_id, bc.crew_member_id, bc.status AS bc_status, bc.role_on_site,
+      bc.is_team_leader, bc.is_first_aid, bc.straight_to_site, bc.non_billable, bc.assigned_vehicle_id,
+      COALESCE(bc.off_vehicle, 0) AS off_vehicle,
+      cm.full_name, cm.role, cm.portal_role
+    FROM booking_crew bc
+    JOIN crew_members cm ON cm.id = bc.crew_member_id
+    WHERE bc.booking_id = ? ORDER BY bc.created_at
+  `).all(bookingId);
+  for (const c of crewRows) placed.set(c.booking_crew_id, null);
+  if (!vehicleRows.length || !crewRows.length) return placed;
 
-    const blocks = deriveCrewBlocks(crewRows, vehicleRows, reqRows, gearRows);
-    const pin = db.prepare('UPDATE booking_crew SET assigned_vehicle_id = ? WHERE id = ? AND assigned_vehicle_id IS NULL');
-    for (const blk of blocks) {
-      const vid = blk.vehicle_slot && blk.vehicle_slot.vehicle_id;
-      if (!vid) continue;
-      for (const s of blk.worker_slots) {
-        if (s.filled && s.booking_crew_id && !s.assigned_vehicle_id) pin.run(vid, s.booking_crew_id);
-      }
+  const reqRows = db.prepare(
+    'SELECT booking_id, resource_type, quantity_required FROM booking_requirements WHERE booking_id = ? ORDER BY id'
+  ).all(bookingId);
+  let gearRows = [];
+  try {
+    gearRows = db.prepare(`
+      SELECT id, booking_id, equipment_name, equipment_type, attached_vehicle_id,
+             hire_unit_id, supplier_name FROM booking_equipment WHERE booking_id = ? ORDER BY id
+    `).all(bookingId);
+  } catch (e) { /* pre-migration-320 DB */ }
+
+  const blocks = deriveCrewBlocks(crewRows, vehicleRows, reqRows, gearRows);
+  for (const blk of blocks) {
+    const vid = blk.vehicle_slot && blk.vehicle_slot.vehicle_id;
+    if (!vid) continue;
+    for (const sl of blk.worker_slots) {
+      if (sl.filled && sl.booking_crew_id) placed.set(sl.booking_crew_id, vid);
     }
-    for (const g of (blocks.spare_vehicles || [])) {
-      for (const s of (g.workers || [])) {
-        if (s.filled && s.booking_crew_id && !s.assigned_vehicle_id) pin.run(g.vehicle_id, s.booking_crew_id);
+  }
+  for (const g of (blocks.spare_vehicles || [])) {
+    for (const sl of (g.workers || [])) {
+      if (sl.filled && sl.booking_crew_id) placed.set(sl.booking_crew_id, g.vehicle_id);
+    }
+  }
+  return placed;
+}
+
+// Run `mutate` (a seat move, or a removal) and hold EVERYONE ELSE still.
+//
+// This replaces a blunter predecessor that pinned every unpinned crew member
+// on the booking before the mutation. That kept the board from shuffling, but
+// it meant clicking "move Aroha to TS-04" also wrote assigned_vehicle_id onto
+// two colleagues who happened to be seat-derived — rows the planner never
+// touched silently flipped from "flexible" to "hard-assigned".
+//
+// Instead: photograph where everyone renders, mutate, photograph again, and
+// pin ONLY those whose displayed seat moved as a side effect — back to where
+// they were. On a booking with spare seats (the common case) that set is
+// empty and no collateral row is written at all.
+function holdOthersStill(db, bookingId, mutate, opts) {
+  const exemptCrewRowId = (opts && opts.exemptCrewRowId) || null;
+  let before;
+  try { before = snapshotDisplayedVehicles(db, bookingId); } catch (e) { before = null; }
+
+  const result = mutate();
+  if (!before) return result;
+
+  try {
+    const pinVeh = db.prepare('UPDATE booking_crew SET assigned_vehicle_id = ?, off_vehicle = 0 WHERE id = ? AND assigned_vehicle_id IS NULL');
+    const pinPool = db.prepare('UPDATE booking_crew SET off_vehicle = 1 WHERE id = ? AND assigned_vehicle_id IS NULL');
+    // Pinning frees/fills seats, which can displace someone else in turn.
+    // Converges in one pass in practice; cap it so a pathological booking
+    // can't spin.
+    for (let pass = 0; pass < 3; pass++) {
+      const after = snapshotDisplayedVehicles(db, bookingId);
+      let changed = 0;
+      for (const [crewRowId, wasVeh] of before) {
+        if (crewRowId === exemptCrewRowId) continue;
+        if (!after.has(crewRowId)) continue;           // removed by the mutation
+        if (after.get(crewRowId) === wasVeh) continue; // still where it was
+        // Both statements are no-ops on an already-pinned row.
+        const r = wasVeh ? pinVeh.run(wasVeh, crewRowId) : pinPool.run(crewRowId);
+        if (r.changes) changed++;
       }
+      if (!changed) break;
     }
   } catch (e) {
-    console.error('[bookings] pinDerivedVehicleAssignments error:', e.message);
+    console.error('[bookings] holdOthersStill error:', e.message);
   }
+  return result;
 }
 
 // GET / — Day-focused Board view + universal slide-over.
@@ -2980,11 +3027,12 @@ router.post('/:id/crew/:crewId/assign-vehicle', (req, res) => {
   // vehicle" pool instead of auto-slotting straight back into the ute's
   // freed seat. Assigning to a real vehicle clears it.
   const offVehicle = vehicleId == null ? 1 : 0;
-  // Freeze everyone ELSE where they currently render before this move —
-  // otherwise order-derived (unpinned) workers re-fan into the freed seat
-  // and the board looks like it auto-swapped people between vehicles.
-  pinDerivedVehicleAssignments(db, parseInt(req.params.id, 10));
-  db.prepare("UPDATE booking_crew SET assigned_vehicle_id = ?, off_vehicle = ? WHERE id = ?").run(vehicleId, offVehicle, req.params.crewId);
+  // Move the clicked worker and nobody else. Order-derived (unpinned)
+  // colleagues would otherwise re-fan into the freed seat, so holdOthersStill
+  // pins back only those the move actually displaces.
+  holdOthersStill(db, parseInt(req.params.id, 10), () => {
+    db.prepare("UPDATE booking_crew SET assigned_vehicle_id = ?, off_vehicle = ? WHERE id = ?").run(vehicleId, offVehicle, req.params.crewId);
+  }, { exemptCrewRowId: row.id });
 
   // If the worker just left a vehicle they were driving, clear the
   // driver pointer on that vehicle so the data doesn't drift —
@@ -3068,10 +3116,10 @@ router.post('/:id/crew/:crewId/remove', (req, res) => {
   // Grab the seat's role BEFORE deleting — it decides which requirement row
   // shrinks back down.
   const seat = db.prepare("SELECT role_on_site FROM booking_crew WHERE booking_id=? AND crew_member_id=?").get(req.params.id, req.params.crewId);
-  // Freeze current placements first: removing a worker frees a seat, and
-  // unpinned workers would otherwise re-fan into it (phantom auto-swap).
-  pinDerivedVehicleAssignments(db, parseInt(req.params.id, 10));
-  const removed = db.prepare("DELETE FROM booking_crew WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  // Removing a worker frees a seat; unpinned colleagues would otherwise
+  // re-fan into it (phantom auto-swap). Hold only those the removal moves.
+  const removed = holdOthersStill(db, parseInt(req.params.id, 10), () =>
+    db.prepare("DELETE FROM booking_crew WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId));
   // Mirror of the add-surplus bump: if the shift now REQUIRES more crew than
   // it carries, shrink the removed worker's role add-on by the deficit (then
   // spill into the generic Traffic Controller row). "Nx TC Crew" packages are
