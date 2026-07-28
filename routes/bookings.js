@@ -703,6 +703,23 @@ const PEOPLE_ADDON_ROLES = {
   'Security': 'Security',
 };
 
+// The board and pool chips historically POSTed DISPLAY labels ('TC',
+// 'Spotter', crew_members.role free text) straight into
+// booking_crew.role_on_site, while all the requirement maths below keys on
+// canonical snake_case. Normalise on ingest; unknown free text survives.
+const ROLE_ON_SITE_ALIASES = {
+  'tc': 'traffic_controller', 'traffic controller': 'traffic_controller', 'traffic_controller': 'traffic_controller',
+  'spotter': 'spotter',
+  'hoist': 'hoist_operator', 'hoist operator': 'hoist_operator', 'hoist_operator': 'hoist_operator',
+  'labour': 'labourer', 'labourer': 'labourer',
+  'trainee': 'trainee', 'security': 'security',
+  'team leader': 'team_leader', 'team_leader': 'team_leader', 'supervisor': 'supervisor',
+};
+function normaliseRoleOnSite(raw) {
+  const t = String(raw || '').trim();
+  return ROLE_ON_SITE_ALIASES[t.toLowerCase()] || t;
+}
+
 // role_on_site → the people-addon requirement label it counts against. Shared
 // by the add-surplus bump and the remove-deficit shrink so both directions
 // agree on which row a worker's seat lives in.
@@ -965,11 +982,13 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
   // hops onto a ute, their empty "1 open slot" must not linger in the TC group.
   function stealAddonSlot(role) {
     // A blank role_on_site means a default Traffic Controller (mirrors
-    // fillSlot's fallback), so it should satisfy a 'Traffic Controller'
-    // requirement — otherwise a role-less worker seated in a ute leaves a
-    // phantom empty TC slot behind.
-    const want = ROLE_TO_ADDON[role || 'traffic_controller'];
-    if (!want) return false;
+    // fillSlot's fallback). Display shorts ('TC') and free-text roles must
+    // ALSO resolve — 'TC' written by the board's empty-slot drop used to
+    // miss this map entirely, so a seated worker never absorbed their
+    // requirement slot and the card grew a phantom empty "TC ×N" block.
+    // Unknown roles count against TC, mirroring the bump/shrink paths'
+    // || 'Traffic Controller' fallback so both directions agree.
+    const want = ROLE_TO_ADDON[normaliseRoleOnSite(role) || 'traffic_controller'] || 'TC';
     for (const b of blocks) {
       if (!b.no_vehicle || b.role !== want) continue;
       const idx = b.worker_slots.findIndex(s => !s.filled);
@@ -1050,10 +1069,8 @@ function deriveCrewBlocks(crewRows, vehicleRows, requirementRows, gearRows) {
       // "Not in any vehicle" — leaving a phantom "TC slot · drop a worker
       // here" box that already had its person sitting right beside it, and
       // that couldn't be filled by dragging (the drag just re-parked them).
-      const want = ROLE_TO_ADDON[c.role_on_site || 'traffic_controller'];
-      const home = want
-        ? blocks.find(b => b.no_vehicle && b.role === want && b.worker_slots.some(s => !s.filled))
-        : null;
+      const want = ROLE_TO_ADDON[normaliseRoleOnSite(c.role_on_site) || 'traffic_controller'] || 'TC';
+      const home = blocks.find(b => b.no_vehicle && b.role === want && b.worker_slots.some(s => !s.filled)) || null;
       if (home) { fillSlot(home.worker_slots.find(s => !s.filled), c); continue; }
       unassigned.push(c);
       continue;
@@ -2855,7 +2872,11 @@ router.post('/:id/crew', (req, res) => {
     if (isJson) return res.status(404).json({ error: 'Booking not found' });
     req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings'));
   }
-  const { crew_member_id, role_on_site } = req.body;
+  const { crew_member_id } = req.body;
+  // Board slot drops send display shorts ('TC'); pool chips send
+  // crew_members.role free text. Canonicalise once — every consumer below
+  // (insert, allocation mirror, requirement bump) keys on snake_case.
+  const role_on_site = normaliseRoleOnSite(req.body.role_on_site);
   if (!crew_member_id) {
     if (isJson) return res.status(400).json({ error: 'Select a crew member' });
     req.flash('error', 'Select a crew member.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));

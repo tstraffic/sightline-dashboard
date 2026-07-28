@@ -14654,6 +14654,38 @@ function runMigrations(db) {
     recordMigration.run(329, 'Expand notifications type CHECK: swms/sop/risk expiring, task_assigned, cert_expiry, birthday_today');
   }
 
+  // 331 — canonicalise role_on_site. The board's empty-slot drop and the
+  // pool chips historically wrote DISPLAY labels ('TC', 'Spotter', …) into
+  // booking_crew.role_on_site / crew_allocations.role_on_site, while the
+  // requirement maths (ROLE_TO_ADDON / ROLE_ON_SITE_TO_REQ_LABEL in
+  // routes/bookings.js) keys on canonical snake_case — a seated worker with
+  // role 'TC' never absorbed their requirement slot, leaving phantom empty
+  // "TC ×N" blocks on the board. Ingest now normalises; this repairs what
+  // was already written. Case-insensitive exact matches only — genuine
+  // free-text roles are left untouched.
+  if (!isMigrationApplied.get(331)) {
+    try {
+      const MAP = [
+        ['tc', 'traffic_controller'], ['traffic controller', 'traffic_controller'],
+        ['spotter', 'spotter'],
+        ['hoist', 'hoist_operator'], ['hoist operator', 'hoist_operator'],
+        ['labour', 'labourer'], ['labourer', 'labourer'],
+        ['trainee', 'trainee'], ['security', 'security'],
+        ['team leader', 'team_leader'],
+      ];
+      let n = 0;
+      for (const table of ['booking_crew', 'crew_allocations']) {
+        for (const [from, to] of MAP) {
+          n += db.prepare(
+            `UPDATE ${table} SET role_on_site = ? WHERE LOWER(TRIM(role_on_site)) = ? AND role_on_site != ?`
+          ).run(to, from, to).changes;
+        }
+      }
+      recordMigration.run(331, `role_on_site canonicalisation — booking_crew + crew_allocations (${n} rows)`);
+      console.log('Migration 331 applied');
+    } catch (e) { console.error('Migration 331 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
