@@ -167,6 +167,9 @@
   <% } %>
 
   <form method="POST" action="/w/forms/vehicle-prestart" enctype="multipart/form-data" id="vps-form">
+    <% if (typeof bookingVehicleId !== 'undefined' && bookingVehicleId) { %>
+      <input type="hidden" name="booking_vehicle_id" value="<%= bookingVehicleId %>">
+    <% } %>
     <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
     <% if (allocation) { %><input type="hidden" name="allocation_id" value="<%= allocation.id %>"><% } %>
 
@@ -271,11 +274,16 @@
                   <textarea name="answer_<%= it.item_key %>" class="vps-textarea" rows="3" <%= it.required ? 'required' : '' %>></textarea>
                 <% } else { %>
                   <% if (it.item_key === 'vehicle' && Array.isArray(recentVehicles) && recentVehicles.length > 0) { %>
+                    <%# prefillVehicle (from ?vehicleId=, i.e. "do THIS ute's
+                        pre-start") beats the generic last-used suggestion. %>
                     <input type="text" name="answer_<%= it.item_key %>" list="vps-vehicle-options" class="vps-input"
-                           placeholder="e.g. TSTC004" value="<%= recentVehicles[0] || '' %>" <%= it.required ? 'required' : '' %>>
+                           placeholder="e.g. TSTC004" value="<%= (typeof prefillVehicle !== 'undefined' && prefillVehicle) ? prefillVehicle : (recentVehicles[0] || '') %>" <%= it.required ? 'required' : '' %>>
                     <datalist id="vps-vehicle-options">
                       <% recentVehicles.forEach(function (v) { %><option value="<%= v %>"><% }) %>
                     </datalist>
+                  <% } else if (it.item_key === 'vehicle') { %>
+                    <input type="text" name="answer_<%= it.item_key %>" class="vps-input" placeholder="e.g. TSTC004"
+                           value="<%= (typeof prefillVehicle !== 'undefined' && prefillVehicle) ? prefillVehicle : '' %>" <%= it.required ? 'required' : '' %>>
                   <% } else { %>
                     <input type="text" name="answer_<%= it.item_key %>" class="vps-input" <%= it.required ? 'required' : '' %>>
                   <% } %>

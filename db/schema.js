@@ -14654,6 +14654,23 @@ function runMigrations(db) {
     recordMigration.run(329, 'Expand notifications type CHECK: swms/sop/risk expiring, task_assigned, cert_expiry, birthday_today');
   }
 
+  // 330 — which booking vehicle a vehicle_prestart / post_shift_vehicle
+  // form covers. Vehicle checklists are PER VEHICLE (each ute has its own
+  // pre-start and post-shift, owed by its driver), so completion must be
+  // attributable to a booking_vehicles row — the typed data.vehicle text
+  // was the only link before. NULL for the other three job-pack types and
+  // for legacy rows (those fall back to a name/rego match at read time).
+  if (!isMigrationApplied.get(330)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(safety_forms)").all();
+      if (!cols.some(c => c.name === 'vehicle_id')) {
+        db.exec("ALTER TABLE safety_forms ADD COLUMN vehicle_id INTEGER");
+      }
+      recordMigration.run(330, 'safety_forms.vehicle_id — per-vehicle checklist attribution (booking_vehicles.id)');
+      console.log('Migration 330 applied');
+    } catch (e) { console.error('Migration 330 error:', e.message); }
+  }
+
   // 331 — canonicalise role_on_site. The board's empty-slot drop and the
   // pool chips historically wrote DISPLAY labels ('TC', 'Spotter', …) into
   // booking_crew.role_on_site / crew_allocations.role_on_site, while the

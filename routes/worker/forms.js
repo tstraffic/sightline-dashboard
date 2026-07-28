@@ -670,12 +670,27 @@ router.get('/forms/vehicle-prestart', (req, res) => {
     byKey[k].items.push(it);
   });
 
+  // Per-vehicle entry from the shift Forms tab: ?vehicleId=<booking_vehicles.id>
+  // pre-fills the vehicle field with THAT ute and threads the id through a
+  // hidden input so the submission is attributed to the right vehicle.
+  let prefillVehicle = null, bookingVehicleId = null;
+  if (req.query.vehicleId && allocation && allocation.booking_id) {
+    const bv = db.prepare('SELECT id, vehicle_name, registration FROM booking_vehicles WHERE id = ? AND booking_id = ?')
+      .get(Number(req.query.vehicleId) || 0, allocation.booking_id);
+    if (bv) {
+      bookingVehicleId = bv.id;
+      prefillVehicle = bv.vehicle_name || bv.registration || '';
+    }
+  }
+
   res.render('worker/forms/vehicle-prestart', {
     title: 'Vehicle Pre-Start',
     currentPage: 'forms',
     items, sections,
     allocation,
     recentVehicles,
+    prefillVehicle,
+    bookingVehicleId,
   });
 });
 
@@ -689,7 +704,7 @@ router.post('/forms/vehicle-prestart', photoUpload.array('answer_arrow_board_pho
   // Validate allocation is owned by worker if supplied
   let allocation = null;
   if (allocationId) {
-    allocation = db.prepare('SELECT id, job_id FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
+    allocation = db.prepare('SELECT id, job_id, booking_id, allocation_date FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
     if (!allocation) {
       req.flash('error', 'Allocation not found or not yours.');
       return req.session.save(() => res.redirect('/w/forms/vehicle-prestart'));
@@ -768,13 +783,29 @@ router.post('/forms/vehicle-prestart', photoUpload.array('answer_arrow_board_pho
   const sigBlob = driverSignature || body.signature_data || null;
   const printedName = signedName || (body.signed_name || '').trim() || null;
 
+  // Which booking ute this pre-start covers. Vehicle checklists are per
+  // vehicle (each ute has its own, owed by its driver) — the Forms tab
+  // passes booking_vehicle_id through a hidden input. Re-validate against
+  // the allocation's booking; a stale id degrades to NULL rather than
+  // blocking the submission (legacy rows fall back to a name match).
+  let vehicleId = null;
+  if (allocation && allocation.booking_id && body.booking_vehicle_id) {
+    const bv = db.prepare('SELECT id FROM booking_vehicles WHERE id = ? AND booking_id = ?')
+      .get(Number(body.booking_vehicle_id) || 0, allocation.booking_id);
+    if (bv) vehicleId = bv.id;
+  }
+
   const result = db.prepare(`
-    INSERT INTO safety_forms (crew_member_id, form_type, job_id, allocation_id, data, signature_data, signed_name, status, submitted_at)
-    VALUES (?, 'vehicle_prestart', ?, ?, ?, ?, ?, 'submitted', datetime('now'))
+    INSERT INTO safety_forms (crew_member_id, form_type, job_id, allocation_id, booking_id, allocation_date, shift_key, vehicle_id, data, signature_data, signed_name, status, submitted_at)
+    VALUES (?, 'vehicle_prestart', ?, ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', datetime('now'))
   `).run(
     worker.id,
     allocation ? allocation.job_id : null,
     allocation ? allocation.id : null,
+    allocation ? allocation.booking_id : null,
+    allocation ? allocation.allocation_date : null,
+    computeShiftKey(db, allocation),
+    vehicleId,
     JSON.stringify(data),
     sigBlob,
     printedName,
@@ -908,7 +939,7 @@ router.post('/forms/risk-assessment', (req, res) => {
 
   let allocation = null;
   if (allocationId) {
-    allocation = db.prepare('SELECT id, job_id FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
+    allocation = db.prepare('SELECT id, job_id, booking_id, allocation_date FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
     if (!allocation) {
       req.flash('error', 'Allocation not found or not yours.');
       return req.session.save(() => res.redirect('/w/forms/risk-assessment'));
@@ -953,12 +984,15 @@ router.post('/forms/risk-assessment', (req, res) => {
   };
 
   const raResult = db.prepare(`
-    INSERT INTO safety_forms (crew_member_id, form_type, job_id, allocation_id, data, signature_data, signed_name, status, submitted_at)
-    VALUES (?, 'risk_toolbox', ?, ?, ?, ?, ?, 'submitted', datetime('now'))
+    INSERT INTO safety_forms (crew_member_id, form_type, job_id, allocation_id, booking_id, allocation_date, shift_key, data, signature_data, signed_name, status, submitted_at)
+    VALUES (?, 'risk_toolbox', ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', datetime('now'))
   `).run(
     worker.id,
     allocation ? allocation.job_id : null,
     allocation ? allocation.id : null,
+    allocation ? allocation.booking_id : null,
+    allocation ? allocation.allocation_date : null,
+    computeShiftKey(db, allocation),
     JSON.stringify(data),
     body.signature_data || null,
     answers.employee_name || worker.full_name || null,
@@ -996,7 +1030,7 @@ router.post('/forms/tc-prestart', (req, res) => {
 
   let allocation = null;
   if (allocationId) {
-    allocation = db.prepare('SELECT id, job_id FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
+    allocation = db.prepare('SELECT id, job_id, booking_id, allocation_date FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
     if (!allocation) {
       req.flash('error', 'Allocation not found or not yours.');
       return req.session.save(() => res.redirect('/w/forms/tc-prestart'));
@@ -1015,12 +1049,15 @@ router.post('/forms/tc-prestart', (req, res) => {
   };
 
   const tcResult = db.prepare(`
-    INSERT INTO safety_forms (crew_member_id, form_type, job_id, allocation_id, data, signature_data, signed_name, status, submitted_at)
-    VALUES (?, 'tc_prestart', ?, ?, ?, ?, ?, 'submitted', datetime('now'))
+    INSERT INTO safety_forms (crew_member_id, form_type, job_id, allocation_id, booking_id, allocation_date, shift_key, data, signature_data, signed_name, status, submitted_at)
+    VALUES (?, 'tc_prestart', ?, ?, ?, ?, ?, ?, ?, ?, 'submitted', datetime('now'))
   `).run(
     worker.id,
     allocation ? allocation.job_id : null,
     allocation ? allocation.id : null,
+    allocation ? allocation.booking_id : null,
+    allocation ? allocation.allocation_date : null,
+    computeShiftKey(db, allocation),
     JSON.stringify(data),
     body.signature_data || null,
     (body.signed_name || worker.full_name || '').trim() || null,
@@ -1055,11 +1092,25 @@ router.get('/forms/post-shift-vehicle', (req, res) => {
     if (recent && recent.data) suggestedVehicle = (JSON.parse(recent.data) || {}).vehicle || '';
   } catch (_) { /* best effort */ }
 
+  // Per-vehicle entry (same contract as the pre-start): ?vehicleId= wins
+  // over the last-prestart suggestion and carries through a hidden input.
+  let prefillVehicle = null, bookingVehicleId = null;
+  if (req.query.vehicleId && allocation && allocation.booking_id) {
+    const bv = db.prepare('SELECT id, vehicle_name, registration FROM booking_vehicles WHERE id = ? AND booking_id = ?')
+      .get(Number(req.query.vehicleId) || 0, allocation.booking_id);
+    if (bv) {
+      bookingVehicleId = bv.id;
+      prefillVehicle = bv.vehicle_name || bv.registration || '';
+    }
+  }
+
   res.render('worker/forms/post-shift-vehicle', {
     title: 'Post-Shift Vehicle Checklist',
     currentPage: 'forms',
     allocation,
     suggestedVehicle,
+    prefillVehicle,
+    bookingVehicleId,
   });
 });
 
@@ -1076,7 +1127,7 @@ router.post('/forms/post-shift-vehicle', photoUpload.fields([
 
   let allocation = null;
   if (allocationId) {
-    allocation = db.prepare('SELECT id, job_id FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
+    allocation = db.prepare('SELECT id, job_id, booking_id, allocation_date FROM crew_allocations WHERE id = ? AND crew_member_id = ?').get(allocationId, worker.id);
     if (!allocation) {
       req.flash('error', 'Allocation not found or not yours.');
       return req.session.save(() => res.redirect('/w/forms/post-shift-vehicle'));
@@ -1095,13 +1146,26 @@ router.post('/forms/post-shift-vehicle', photoUpload.fields([
     vehicle_issues: (body.vehicle_issues || '').trim(),
   };
 
+  // Per-vehicle attribution, same contract as the pre-start: hidden
+  // booking_vehicle_id from the Forms tab, re-validated, NULL on staleness.
+  let vehicleId = null;
+  if (allocation && allocation.booking_id && body.booking_vehicle_id) {
+    const bv = db.prepare('SELECT id FROM booking_vehicles WHERE id = ? AND booking_id = ?')
+      .get(Number(body.booking_vehicle_id) || 0, allocation.booking_id);
+    if (bv) vehicleId = bv.id;
+  }
+
   const result = db.prepare(`
-    INSERT INTO safety_forms (crew_member_id, form_type, job_id, allocation_id, data, status, submitted_at)
-    VALUES (?, 'post_shift_vehicle', ?, ?, ?, 'submitted', datetime('now'))
+    INSERT INTO safety_forms (crew_member_id, form_type, job_id, allocation_id, booking_id, allocation_date, shift_key, vehicle_id, data, status, submitted_at)
+    VALUES (?, 'post_shift_vehicle', ?, ?, ?, ?, ?, ?, ?, 'submitted', datetime('now'))
   `).run(
     worker.id,
     allocation ? allocation.job_id : null,
     allocation ? allocation.id : null,
+    allocation ? allocation.booking_id : null,
+    allocation ? allocation.allocation_date : null,
+    computeShiftKey(db, allocation),
+    vehicleId,
     JSON.stringify(data),
   );
   const safetyFormId = result.lastInsertRowid;
@@ -1357,13 +1421,35 @@ function upsertDraft(db, opts) {
   return { id: result.lastInsertRowid };
 }
 
-// GET /w/forms/history/:id/pdf — Worker re-downloads their own submission as
-// the same branded PDF the office gets. Auth: must be the submitter.
+// GET /w/forms/history/:id/pdf — the branded PDF of a submission.
+// Auth: the submitter (any status), OR a crew member of the SAME BOOKING
+// (submitted forms only). The second leg exists because shift-level
+// checklists (Team Leader, Risk & Toolbox) complete the shift for the
+// whole crew — the Forms tab shows "Filed by <name> · View", and that
+// View must work for teammates. Booking resolution: sf.booking_id when
+// the handler wrote it, else via the submission's allocation. Everything
+// else stays a 404 (no job-wide or org-wide leak; drafts stay private
+// to their author; photo streaming stays owner-only — the PDF embeds
+// photos server-side).
 router.get('/forms/history/:id/pdf', async (req, res) => {
   const db = getDb();
   const worker = req.session.worker;
-  const owns = db.prepare('SELECT 1 FROM safety_forms WHERE id = ? AND crew_member_id = ?').get(req.params.id, worker.id);
-  if (!owns) return res.status(404).send('Not found');
+  const sf = db.prepare('SELECT id, crew_member_id, status, booking_id, allocation_id FROM safety_forms WHERE id = ?').get(req.params.id);
+  if (!sf) return res.status(404).send('Not found');
+  let allowed = sf.crew_member_id === worker.id;
+  if (!allowed && sf.status === 'submitted') {
+    let bookingId = sf.booking_id;
+    if (!bookingId && sf.allocation_id) {
+      const alloc = db.prepare('SELECT booking_id FROM crew_allocations WHERE id = ?').get(sf.allocation_id);
+      bookingId = alloc ? alloc.booking_id : null;
+    }
+    if (bookingId) {
+      allowed = !!db.prepare(
+        "SELECT 1 FROM booking_crew WHERE booking_id = ? AND crew_member_id = ? AND status != 'declined'"
+      ).get(bookingId, worker.id);
+    }
+  }
+  if (!allowed) return res.status(404).send('Not found');
   try {
     const { renderSubmissionPdf } = require('../../services/jobPackPdf');
     const buf = await renderSubmissionPdf(db, req.params.id);
