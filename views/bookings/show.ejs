@@ -1373,6 +1373,7 @@
           <div>
             <p class="page-eyebrow" style="margin-bottom:0.25rem">From the linked job</p>
             <h3 class="font-display font-medium text-gray-900" style="font-size:14px;letter-spacing:-0.01em">Job documents <span class="text-gray-400 font-normal">(<%= jobDocList.length %>)</span></h3>
+            <p class="text-[11px] text-gray-400 mt-0.5">Always visible to the crew on this shift — manage them on the job.</p>
           </div>
           <a href="/jobs/<%= b.job_id %>/documents" class="text-xs font-medium text-brand-600 hover:text-brand-700">Manage on the job →</a>
         </div>
@@ -1383,7 +1384,7 @@
                 <svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><path d="M14 2v6h6M9 14h6M9 18h6M9 10h2"/></svg>
               </div>
               <div class="flex-1 min-w-0">
-                <a href="/jobs/<%= b.job_id %>/documents/<%= d.id %>/download" target="_blank" class="text-sm font-semibold text-brand-700 hover:underline truncate block">
+                <a href="<%= d.href || ('/jobs/' + b.job_id + '/documents/' + d.id + '/download') %>" target="_blank" class="text-sm font-semibold text-brand-700 hover:underline truncate block">
                   <%= d.title || d.original_name %>
                 </a>
                 <p class="text-[11px] text-gray-500">

@@ -561,6 +561,21 @@ router.get('/jobs/:id', (req, res) => {
     download_url: `/w/job-documents/${d.id}`,
   }));
 
+      // Final traffic plans on the job — what the office pushed via the job
+      // page's "Push to Final Plans". These live in traffic_plans, not
+      // job_documents, so the crew could never open them even though the
+      // booking counted them as part of the site pack.
+      const finalPlans = allocation.job_id ? db.prepare(`
+        SELECT id, plan_number, plan_type, file_original_name, file_path, marked_final_at
+        FROM traffic_plans WHERE job_id = ? AND is_final = 1 AND COALESCE(file_path, '') != ''
+      `).all(allocation.job_id).map(d => ({
+        id: d.id, source: 'final', doc_type: (d.plan_type || 'plan').toLowerCase(),
+        title: d.plan_number || 'Final plan',
+        original_name: d.file_original_name, mime_type: null,
+        size_bytes: null, uploaded_at: d.marked_final_at,
+        download_url: `/w/final-plans/${d.id}`,
+      })) : [];
+
   let bookingLevel = [];
   if (allocation.booking_id) {
     bookingLevel = db.prepare(`
@@ -577,7 +592,7 @@ router.get('/jobs/:id', (req, res) => {
   // Sort by doc_type priority then most-recent first. Booking docs sit
   // alongside job docs — same priority weights, same chip in the view.
   const DOC_PRIORITY = { tgs:1, tmp:2, ctmp:2, rol_day:3, rol_night:4, rol:3, stage_plan:5, swms:6, permit:7, other:8, photo:9, invoice:10 };
-  const jobDocuments = [...jobLevel, ...bookingLevel].sort((a, b) => {
+  const jobDocuments = [...jobLevel, ...finalPlans, ...bookingLevel].sort((a, b) => {
     const pa = DOC_PRIORITY[a.doc_type] || 99;
     const pb = DOC_PRIORITY[b.doc_type] || 99;
     if (pa !== pb) return pa - pb;
@@ -729,14 +744,61 @@ router.get('/job-documents/:id', (req, res) => {
 
   const linked = db.prepare(`
     SELECT 1 FROM crew_allocations
-    WHERE crew_member_id = ? AND job_id = ? AND status != 'cancelled' LIMIT 1
-  `).get(worker.id, doc.jid);
+    WHERE crew_member_id = @cm AND job_id = @job AND status != 'cancelled'
+    UNION
+    SELECT 1 FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id
+    WHERE bc.crew_member_id = @cm AND b.job_id = @job AND bc.status != 'declined'
+    LIMIT 1
+  `).get({ cm: worker.id, job: doc.jid });
   if (!linked) return res.status(403).send('Forbidden');
 
   const abs = path.isAbsolute(doc.file_path) ? doc.file_path : path.join(__dirname, '..', '..', doc.file_path);
   if (!fs.existsSync(abs)) return res.status(404).send('File missing');
   res.setHeader('Content-Type', doc.mime_type || 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${(doc.original_name || doc.title || 'document.pdf').replace(/[^\w. -]/g, '_')}"`);
+  fs.createReadStream(abs).pipe(res);
+});
+
+// GET /w/final-plans/:id — Stream a job's FINAL traffic plan to the worker.
+// These live in traffic_plans (not job_documents), which is why the crew
+// previously had no way to open a plan the office had pushed to Final Plans
+// even though the booking counted it in the site pack.
+router.get('/final-plans/:id', (req, res) => {
+  const db = getDb();
+  const worker = req.session.worker;
+  const path = require('path');
+  const fs = require('fs');
+
+  const plan = db.prepare(`
+    SELECT id, job_id, plan_number, file_path, file_original_name
+    FROM traffic_plans WHERE id = ? AND is_final = 1
+  `).get(req.params.id);
+  if (!plan || !plan.file_path) return res.status(404).send('Not found');
+
+  const linked = db.prepare(`
+    SELECT 1 FROM crew_allocations
+    WHERE crew_member_id = @cm AND job_id = @job AND status != 'cancelled'
+    UNION
+    SELECT 1 FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id
+    WHERE bc.crew_member_id = @cm AND b.job_id = @job AND bc.status != 'declined'
+    LIMIT 1
+  `).get({ cm: worker.id, job: plan.job_id });
+  if (!linked) return res.status(403).send('Forbidden');
+
+  // Plan files are stored relative to the app root (public/ served
+  // statically); resolve both shapes defensively.
+  const rel = plan.file_path.replace(/^\/+/, '');
+  const candidates = [
+    path.isAbsolute(plan.file_path) ? plan.file_path : null,
+    path.join(__dirname, '..', '..', rel),
+    path.join(__dirname, '..', '..', 'public', rel),
+  ].filter(Boolean);
+  const abs = candidates.find(p2 => { try { return fs.existsSync(p2); } catch (e) { return false; } });
+  if (!abs) return res.status(404).send('File missing');
+
+  const name = plan.file_original_name || (plan.plan_number || 'plan') + '.pdf';
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `inline; filename="${name.replace(/[^\w. -]/g, '_')}"`);
   fs.createReadStream(abs).pipe(res);
 });
 
@@ -910,6 +972,21 @@ router.get('/booking-shift/:bookingId', (req, res) => {
         size_bytes: d.size_bytes, uploaded_at: d.uploaded_at,
         download_url: `/w/job-documents/${d.id}`,
       })) : [];
+      // Final traffic plans on the job — what the office pushed via the job
+      // page's "Push to Final Plans". These live in traffic_plans, not
+      // job_documents, so the crew could never open them even though the
+      // booking counted them as part of the site pack.
+      const finalPlans = booking.job_id ? db.prepare(`
+        SELECT id, plan_number, plan_type, file_original_name, file_path, marked_final_at
+        FROM traffic_plans WHERE job_id = ? AND is_final = 1 AND COALESCE(file_path, '') != ''
+      `).all(booking.job_id).map(d => ({
+        id: d.id, source: 'final', doc_type: (d.plan_type || 'plan').toLowerCase(),
+        title: d.plan_number || 'Final plan',
+        original_name: d.file_original_name, mime_type: null,
+        size_bytes: null, uploaded_at: d.marked_final_at,
+        download_url: `/w/final-plans/${d.id}`,
+      })) : [];
+
       const bookingLevel = db.prepare(`
         SELECT id, document_type, title, original_name, file_size, created_at
         FROM booking_documents WHERE booking_id = ? AND COALESCE(visible_to_crew, 1) = 1
@@ -948,7 +1025,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
         });
       } catch (e) { console.error('[booking-shift] plan fetch:', e.message); }
       const DOC_PRIORITY = { tgs:1, tmp:2, ctmp:2, rol_day:3, rol_night:4, rol:3, stage_plan:5, swms:6, permit:7, other:8, photo:9, invoice:10 };
-      jobDocuments = [...planLevel, ...jobLevel, ...bookingLevel].sort((a, b) => {
+      jobDocuments = [...planLevel, ...jobLevel, ...finalPlans, ...bookingLevel].sort((a, b) => {
         const pa = DOC_PRIORITY[a.doc_type] || 99;
         const pb = DOC_PRIORITY[b.doc_type] || 99;
         if (pa !== pb) return pa - pb;

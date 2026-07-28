@@ -2620,7 +2620,11 @@
       var form = e.target && e.target.closest && e.target.closest('form');
       if (!form) return;
       var action = form.getAttribute('action') || '';
-      if (!/\/bookings\/\d+\/documents/.test(action)) return;
+      // Also intercept the inherited-plan visibility toggle
+      // (/bookings/:id/plans/:planId/visibility) — it posts from the same
+      // lifted documents pane, and without this it did a full-page POST
+      // that threw the planner off the board.
+      if (!/\/bookings\/\d+\/(documents|plans)\b/.test(action)) return;
       e.preventDefault();
       e.stopPropagation();
       // In-flight guard: while a request for THIS form is running, ignore
