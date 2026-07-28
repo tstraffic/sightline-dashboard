@@ -3126,3 +3126,193 @@ body.bk2-rp-detail .bk2-rp-warns { display: inline-flex; }
   .bk2-edit-statusrow::-webkit-scrollbar { display: none; }
   .bk2-edit-statusrow .bk2-statuspill { flex-shrink: 0; }
 }
+
+/* ==========================================================================
+   Bookings v42 — crew acceptance state + light-mode legibility on the board.
+
+   Two complaints this answers:
+   1. The board never showed who had ACCEPTED a shift. booking_crew.status was
+      rendered as a single hard-coded green tick in one of four slot branches,
+      so a DECLINED crew member looked identical to a confirmed one — the
+      allocator had no way to see a hole in tomorrow's crew.
+   2. In light mode the card collapsed to flat grey: utes, traffic controllers,
+      equipment and warnings all read as the same weight.
+
+   Acceptance is carried by a left stripe (peripheral vision, survives at
+   compact density) plus an explicit glyph badge (unambiguous, has a tooltip).
+   Colour alone is never the only signal — ✓ / ○ / ✕ differ in shape.
+   ========================================================================== */
+
+/* ── Acceptance: the stripe ─────────────────────────────────────────── */
+.bk2-slot--filled {
+  border-left: 3px solid transparent;
+  padding-left: 9px;              /* 12px - 3px border, so text stays aligned */
+}
+.bk2-slot--st-yes     { border-left-color: #34D399; }
+.bk2-slot--st-pending { border-left-color: #FBBF24; }
+.bk2-slot--st-no      { border-left-color: #EF4444; }
+.bk2-slot--filled.bk2-slot--st-no { background: rgba(239,68,68,0.12); }
+
+/* ── Acceptance: the badge ──────────────────────────────────────────── */
+/* Pinned to the corner rather than placed in the row: a slot already carries
+   avatar + role tag + name + up to five flags, and in a board column an
+   in-flow badge stole enough width to truncate "Marcus Kelly" to "Mar…".
+   Flags may wrap under the name; the badge stays put. */
+.bk2-slot--filled { position: relative; padding-right: 26px; flex-wrap: wrap; row-gap: 4px; }
+.bk2-slot-accept {
+  position: absolute; top: 50%; right: 6px; transform: translateY(-50%);
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 9999px;
+  font-size: 11px; font-weight: 800; line-height: 1;
+  border: 1px solid transparent;
+}
+.bk2-slot--filled .bk2-slot-name { min-width: 4rem; }
+.bk2-accept--yes     { background: rgba(52,211,153,0.16);  color: #6EE7B7; border-color: rgba(52,211,153,0.40); }
+.bk2-accept--pending { background: rgba(251,191,36,0.14);  color: #FCD34D; border-color: rgba(251,191,36,0.38); }
+.bk2-accept--no      { background: rgba(239,68,68,0.20);   color: #FCA5A5; border-color: rgba(239,68,68,0.50); }
+
+/* A declined name should read as a hole to fill, not as a faded footnote. */
+.bk2-slot--st-no .bk2-slot-name { text-decoration: line-through; text-decoration-color: rgba(239,68,68,0.6); }
+
+:root[data-theme="light"] .bk2-slot--filled.bk2-slot--st-no { background: #FEF2F2; border-color: #FCA5A5; }
+:root[data-theme="light"] .bk2-accept--yes     { background: #D1FAE5; color: #047857; border-color: #6EE7B7; }
+:root[data-theme="light"] .bk2-accept--pending { background: #FEF3C7; color: #B45309; border-color: #FCD34D; }
+:root[data-theme="light"] .bk2-accept--no      { background: #FEE2E2; color: #B91C1C; border-color: #FCA5A5; }
+
+/* Compact density: same three states, smaller. */
+.bk2-csum-person { border-left: 3px solid transparent; padding-left: 5px; position: relative; padding-right: 20px; }
+.bk2-csum-person .bk2-slot-accept { width: 15px; height: 15px; font-size: 9px; right: 2px; }
+.bk2-csum-nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Card-header acceptance roll-up ─────────────────────────────────── */
+.bk2-acccount {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 1px 7px; border-radius: 9999px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.bk2-acccount--all  { background: rgba(52,211,153,0.16); color: #6EE7B7; border-color: rgba(52,211,153,0.35); }
+.bk2-acccount--part { background: rgba(251,191,36,0.14); color: #FCD34D; border-color: rgba(251,191,36,0.35); }
+.bk2-acccount--bad  { background: rgba(239,68,68,0.20);  color: #FCA5A5; border-color: rgba(239,68,68,0.45); }
+:root[data-theme="light"] .bk2-acccount--all  { background: #D1FAE5; color: #047857; border-color: #6EE7B7; }
+:root[data-theme="light"] .bk2-acccount--part { background: #FEF3C7; color: #B45309; border-color: #FCD34D; }
+:root[data-theme="light"] .bk2-acccount--bad  { background: #FEE2E2; color: #B91C1C; border-color: #FCA5A5; }
+
+/* ── Role tags: one colour per role, not seven identical grey pills ──── */
+.bk2-slot-role-tag, .bk2-csum-rl { border: 1px solid transparent; }
+.bk2-role--tc  { background: rgba(56,189,248,0.16);  color: #7DD3FC; border-color: rgba(56,189,248,0.32); }
+.bk2-role--tl  { background: rgba(167,139,250,0.18); color: #C4B5FD; border-color: rgba(167,139,250,0.34); }
+.bk2-role--sup { background: rgba(251,191,36,0.16);  color: #FCD34D; border-color: rgba(251,191,36,0.34); }
+.bk2-role--sp  { background: rgba(45,212,191,0.16);  color: #5EEAD4; border-color: rgba(45,212,191,0.32); }
+.bk2-role--ho  { background: rgba(251,146,60,0.16);  color: #FDBA74; border-color: rgba(251,146,60,0.34); }
+.bk2-role--lab { background: rgba(163,163,163,0.20); color: #D4D4D4; border-color: rgba(163,163,163,0.34); }
+.bk2-role--trn { background: rgba(244,114,182,0.16); color: #F9A8D4; border-color: rgba(244,114,182,0.32); }
+.bk2-role--sec { background: rgba(129,140,248,0.18); color: #A5B4FC; border-color: rgba(129,140,248,0.34); }
+
+:root[data-theme="light"] .bk2-role--tc  { background: #E0F2FE; color: #0369A1; border-color: #7DD3FC; }
+:root[data-theme="light"] .bk2-role--tl  { background: #EDE9FE; color: #6D28D9; border-color: #C4B5FD; }
+:root[data-theme="light"] .bk2-role--sup { background: #FEF3C7; color: #B45309; border-color: #FCD34D; }
+:root[data-theme="light"] .bk2-role--sp  { background: #CCFBF1; color: #0F766E; border-color: #5EEAD4; }
+:root[data-theme="light"] .bk2-role--ho  { background: #FFEDD5; color: #C2410C; border-color: #FDBA74; }
+:root[data-theme="light"] .bk2-role--lab { background: #F3F4F6; color: #374151; border-color: #D1D5DB; }
+:root[data-theme="light"] .bk2-role--trn { background: #FCE7F3; color: #BE185D; border-color: #F9A8D4; }
+:root[data-theme="light"] .bk2-role--sec { background: #E0E7FF; color: #4338CA; border-color: #A5B4FC; }
+
+/* ── Light mode: give the flat-grey card its hierarchy back ─────────── */
+
+/* Avatars were a single saturated navy in both themes; tint by acceptance so
+   the crew reads as people-with-a-state, not identical blue coins. */
+:root[data-theme="light"] .bk2-slot-avatar { background: #1D4ED8; color: #EFF6FF; }
+:root[data-theme="light"] .bk2-slot--st-yes     .bk2-slot-avatar { background: #047857; color: #ECFDF5; }
+:root[data-theme="light"] .bk2-slot--st-pending .bk2-slot-avatar { background: #B45309; color: #FFFBEB; }
+:root[data-theme="light"] .bk2-slot--st-no      .bk2-slot-avatar { background: #B91C1C; color: #FEF2F2; }
+.bk2-slot--st-yes     .bk2-slot-avatar { background: #065F46; color: #A7F3D0; }
+.bk2-slot--st-pending .bk2-slot-avatar { background: #78350F; color: #FDE68A; }
+.bk2-slot--st-no      .bk2-slot-avatar { background: #7F1D1D; color: #FECACA; }
+
+/* People sit on white, so the ute band reads as a container above them. */
+:root[data-theme="light"] .bk2-slot--filled { background: #FFFFFF; border: 1px solid #E5E7EB; border-left-width: 3px; }
+:root[data-theme="light"] .bk2-veh-slot {
+  background: linear-gradient(#FEF3C7, #FDE68A);
+  border-color: #F59E0B; color: #78350F; font-weight: 600;
+}
+:root[data-theme="light"] .bk2-veh-tag { background: #B45309; color: #FFFBEB; }
+:root[data-theme="light"] .bk2-addon-tag { background: #6D28D9; color: #F5F3FF; }
+:root[data-theme="light"] .bk2-veh-gear { background: #EFF6FF; border: 1px solid #BFDBFE; color: #1E3A8A; }
+:root[data-theme="light"] .bk2-veh-gear svg { color: #2563EB; }
+
+/* Warnings were dark-tuned pastels — near-invisible on a white card. */
+:root[data-theme="light"] .bk2-warn        { background: #FEE2E2; color: #991B1B; border-color: #FCA5A5; }
+:root[data-theme="light"] .bk2-warn--match { background: #D1FAE5; color: #065F46; border-color: #6EE7B7; }
+:root[data-theme="light"] .bk2-warn--amber { background: #FEF3C7; color: #92400E; border-color: #FCD34D; }
+:root[data-theme="light"] .bk2-warn--red   { background: #FEE2E2; color: #991B1B; border-color: #F87171; }
+:root[data-theme="light"] .bk2-warn--info  { background: #DBEAFE; color: #1E40AF; border-color: #93C5FD; }
+
+/* Flags rendered as five near-identical washes on white. */
+:root[data-theme="light"] .bk2-flag--tl  { background: #EDE9FE; color: #5B21B6; border-color: #C4B5FD; }
+:root[data-theme="light"] .bk2-flag--fa  { background: #FEE2E2; color: #991B1B; border-color: #FCA5A5; }
+:root[data-theme="light"] .bk2-flag--drv { background: #FEF3C7; color: #92400E; border-color: #FCD34D; }
+:root[data-theme="light"] .bk2-flag--sts { background: #E0F2FE; color: #075985; border-color: #7DD3FC; }
+:root[data-theme="light"] .bk2-flag--nb  { background: #F1F5F9; color: #334155; border-color: #CBD5E1; }
+
+/* A spare ute (nobody rostered to it) must not look like a crewed one. */
+.bk2-veh-slot--spare { background: rgba(148,163,184,0.10); border-style: dashed; border-color: rgba(148,163,184,0.35); color: #CBD5E1; }
+.bk2-veh-slot--spare .bk2-veh-tag { background: #475569; color: #E2E8F0; }
+:root[data-theme="light"] .bk2-veh-slot--spare { background: repeating-linear-gradient(135deg, #F9FAFB, #F9FAFB 6px, #F3F4F6 6px, #F3F4F6 12px); border-color: #9CA3AF; color: #374151; }
+:root[data-theme="light"] .bk2-veh-slot--spare .bk2-veh-tag { background: #4B5563; color: #F9FAFB; }
+
+/* Crew groups: a coloured spine so "which ute is this lot in" is pre-attentive. */
+:root[data-theme="light"] .bk2-crew { background: #FFFFFF; border-color: #D1D5DB; border-left: 4px solid #F59E0B; box-shadow: 0 1px 2px rgba(16,24,40,0.05); }
+.bk2-crew { border-left: 4px solid rgba(245,158,11,0.55); }
+.bk2-unassigned, :root[data-theme="light"] .bk2-unassigned { border-left: 4px dashed #9CA3AF; }
+
+/* Compact summary: ute headers were the same grey as the names under them. */
+:root[data-theme="light"] .bk2-csum-veh { color: #92400E; font-weight: 700; }
+:root[data-theme="light"] .bk2-csum-veh--none, :root[data-theme="light"] .bk2-csum-veh--empty { color: #6B7280; }
+:root[data-theme="light"] .bk2-csum-person { color: #111827; }
+
+/* The Resources pane's chips had confirmed/unconfirmed only — a declined
+   crew member was shown in the same amber "not yet" state as someone who
+   simply hadn't replied. */
+.crew-chip.assigned.declined { background: #FEF2F2; border-color: #FCA5A5; color: #991B1B; }
+.crew-chip.assigned.declined .crew-chip-name { text-decoration: line-through; text-decoration-color: rgba(185,28,28,0.6); }
+.crew-chip.assigned.declined .crew-chip-avatar { background: rgba(185,28,28,0.18); }
+
+/* ── Popover: "Move to" destinations ────────────────────────────────────
+   Assigning a worker to a ute used to be drag-only. HTML5 drag-and-drop
+   emits no touch events, so on the tablets planners actually use on site
+   there was NO way to do it — and compact density drops drag entirely.
+   These are plain buttons hitting the same assign-vehicle endpoint. */
+.bk2-pop-moves { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.bk2-pop-move {
+  display: flex; align-items: center; gap: 8px; width: 100%;
+  padding: 8px 10px; min-height: 40px;
+  border-radius: 9px; border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.04); color: #E2E8F0;
+  font-size: 12.5px; text-align: left; cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+.bk2-pop-move:hover:not(:disabled) { background: rgba(245,158,11,0.14); border-color: rgba(245,158,11,0.45); }
+.bk2-pop-move:focus-visible { outline: 2px solid #FBBF24; outline-offset: 2px; }
+.bk2-pop-move.is-here { opacity: 0.55; cursor: default; }
+.bk2-pop-move-tag {
+  flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; height: 22px; border-radius: 5px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  background: #F59E0B; color: #422006;
+}
+.bk2-pop-move.is-spare .bk2-pop-move-tag { background: #475569; color: #E2E8F0; }
+.bk2-pop-move--pool .bk2-pop-move-tag { background: rgba(148,163,184,0.25); color: #CBD5E1; }
+.bk2-pop-move-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.bk2-pop-move-here {
+  flex: 0 0 auto; font-size: 9px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.06em; padding: 2px 6px; border-radius: 9999px;
+  background: rgba(52,211,153,0.18); color: #6EE7B7;
+}
+:root[data-theme="light"] .bk2-pop-move { background: #FFFFFF; border-color: #D1D5DB; color: #111827; }
+:root[data-theme="light"] .bk2-pop-move:hover:not(:disabled) { background: #FEF3C7; border-color: #F59E0B; }
+:root[data-theme="light"] .bk2-pop-move-tag { background: #B45309; color: #FFFBEB; }
+:root[data-theme="light"] .bk2-pop-move.is-spare .bk2-pop-move-tag { background: #4B5563; color: #F9FAFB; }
+:root[data-theme="light"] .bk2-pop-move--pool .bk2-pop-move-tag { background: #E5E7EB; color: #4B5563; }
+:root[data-theme="light"] .bk2-pop-move-here { background: #D1FAE5; color: #047857; }

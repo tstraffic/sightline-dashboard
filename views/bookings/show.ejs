@@ -554,13 +554,19 @@
         <% if (!b.personnel || !b.personnel.length) { %>
           <span class="text-xs text-gray-400 self-center px-2" data-empty>No crew yet — click someone from the pool below.</span>
         <% } %>
-        <% (b.personnel || []).forEach(function (p) { %>
-          <span class="crew-chip assigned <%= p.confirmed ? 'confirmed' : 'unconfirmed' %>"
+        <% (b.personnel || []).forEach(function (p) {
+             var _st  = String(p.bcStatus || (p.confirmed ? 'confirmed' : 'assigned')).toLowerCase();
+             var _cls = _st === 'confirmed' ? 'confirmed' : (_st === 'declined' ? 'declined' : 'unconfirmed');
+             var _tick = _st === 'confirmed' ? '\u2713' : (_st === 'declined' ? '\u2715' : '\u25CB');
+             var _tip = _st === 'confirmed' ? 'Accepted'
+                      : (_st === 'declined' ? 'DECLINED \u2014 needs replacing' : 'Awaiting reply');
+        %>
+          <span class="crew-chip assigned <%= _cls %>"
                 data-crew-id="<%= p.id %>" data-name="<%= p.name %>" data-role="<%= p.role || '' %>"
-                draggable="true" title="<%= p.confirmed ? 'Confirmed · drag onto vehicle to assign as driver' : 'Click to confirm · drag onto vehicle to assign as driver' %>">
+                draggable="true" title="<%= _tip %> · drag onto vehicle to assign as driver">
             <span class="crew-chip-avatar"><%= p.name ? p.name.split(' ').map(function (n) { return n[0]; }).join('').substring(0,2) : '?' %></span>
             <span class="crew-chip-name"><%= p.name %></span>
-            <% if (p.confirmed) { %><span class="crew-chip-tick" aria-hidden="true">✓</span><% } %>
+            <span class="crew-chip-tick" aria-hidden="true"><%= _tick %></span>
             <button type="button" class="crew-chip-x" data-action="remove" title="Remove from booking" aria-label="Remove">×</button>
           </span>
         <% }); %>

@@ -262,7 +262,7 @@ function transformBooking(db, row) {
       if (c.white_card_expiry && c.white_card_expiry < today) warnings.push('White card expired');
       if (c.licence_expiry && c.licence_expiry < today) warnings.push('Licence expired');
       if ((c.role_on_site === 'traffic_controller' || c.role_on_site === 'TC') && !c.tc_ticket_expiry) warnings.push('No TC ticket');
-      return { id: c.crew_member_id, name: c.full_name || 'Unknown', role: c.role_on_site || '', confirmed: c.status === 'confirmed', tcpLevel: c.tcp_level || '', warnings };
+      return { id: c.crew_member_id, name: c.full_name || 'Unknown', role: c.role_on_site || '', confirmed: c.status === 'confirmed', bcStatus: c.status, tcpLevel: c.tcp_level || '', warnings };
     }),
     vehicles: vehicles.map(v => ({ id: v.id, registration: v.registration || '', name: v.vehicle_name || '' })),
     scheduleWarning,
@@ -1221,6 +1221,7 @@ router.get('/', (req, res) => {
       cm_req.full_name AS requester_name, cm_plan.full_name AS planner_name,
       (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id) AS crew_count,
       (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id AND bc.status = 'confirmed') AS crew_confirmed,
+      (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id AND bc.status = 'declined') AS crew_declined,
       (SELECT COUNT(*) FROM booking_vehicles bv WHERE bv.booking_id = b.id) AS vehicle_count,
       (SELECT COUNT(*) FROM booking_documents bd WHERE bd.booking_id = b.id)
         + (SELECT COUNT(*) FROM job_documents jd WHERE jd.job_id = b.job_id AND jd.archived_at IS NULL)

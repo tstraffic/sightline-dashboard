@@ -22,12 +22,22 @@
     return name.split(/\s+/).map(function (n) { return n[0]; }).join('').substring(0, 2).toUpperCase();
   }
   function statusLabel(s) { return s === 'in_progress' ? 'ongoing' : (s || 'unconfirmed').replace(/_/g, ' '); }
+  // booking_crew.status -> { key, mark, label } for the slot badge.
+  function acceptState(st) {
+    var v = String(st || 'assigned').toLowerCase();
+    if (v === 'confirmed') return { key: 'yes',     mark: '\u2713', label: 'Accepted' };
+    if (v === 'declined')  return { key: 'no',      mark: '\u2715', label: 'Declined' };
+    return                        { key: 'pending', mark: '\u25CB', label: 'Awaiting reply' };
+  }
   function roleAbbr(r) {
     if (!r) return 'TC';
     if (/team[_ ]?lead/i.test(r)) return 'TL';
     if (/super/i.test(r)) return 'SUP';
     if (/spotter/i.test(r)) return 'SP';
     if (/hoist/i.test(r)) return 'HO';
+    if (/labour/i.test(r)) return 'LAB';
+    if (/trainee/i.test(r)) return 'TRN';
+    if (/security/i.test(r)) return 'SEC';
     return 'TC';
   }
 %>
@@ -291,6 +301,17 @@
               <span class="bk2-banner-meta">
                 #<%= b.booking_number || b.id %>
               </span>
+              <% if (b.crew_count > 0) { %>
+                <%
+                  var _acc = b.crew_confirmed || 0, _dec = b.crew_declined || 0;
+                  var _accCls = _dec > 0 ? 'bk2-acccount--bad'
+                              : (_acc >= b.crew_count ? 'bk2-acccount--all' : 'bk2-acccount--part');
+                %>
+                <span class="bk2-acccount <%= _accCls %>"
+                      title="<%= _acc %> of <%= b.crew_count %> accepted<%= _dec ? ', ' + _dec + ' declined' : '' %>">
+                  <%= _acc %>/<%= b.crew_count %> in<% if (_dec) { %> · <%= _dec %> out<% } %>
+                </span>
+              <% } %>
             </header>
 
             <!-- Dedicated time band, Traffio-style. Same yellow tint
@@ -353,12 +374,23 @@
                   <% if (_equipTotal) { %><span>· <%= _equipTotal %> equip</span><% } %>
                   <% if (_needed > 0) { %><span class="bk2-need-badge bk2-need-badge--short" title="Requirements not yet fully staffed — you can still confirm &amp; send">Needs <%= _needed %> more</span><% } %>
                 </div>
-                <% function _csumPerson(w) { %>
-                  <div class="bk2-csum-person">
+                <% function _csumPerson(w, vehId) { var _cs = acceptState(w.bc_status); %>
+                  <div class="bk2-csum-person bk2-slot--click bk2-slot--st-<%= _cs.key %>"
+                       data-booking-id="<%= b.id %>"
+                       data-booking-crew-id="<%= w.booking_crew_id || '' %>"
+                       data-crew-member-id="<%= w.crew_member_id || '' %>"
+                       data-crew-name="<%= w.name %>"
+                       data-assigned-vehicle-id="<%= vehId || w.assigned_vehicle_id || '' %>"
+                       data-flag-tl="<%= w.is_team_leader ? '1' : '0' %>"
+                       data-flag-fa="<%= w.is_first_aid ? '1' : '0' %>"
+                       data-flag-sts="<%= w.straight_to_site ? '1' : '0' %>"
+                       data-flag-nb="<%= w.non_billable ? '1' : '0' %>"
+                       data-flag-driver="<%= w.is_driver ? '1' : '0' %>">
                     <span class="bk2-crewsum-av"><%= initials(w.name) %></span>
                     <span class="bk2-csum-nm"><%= w.name %></span>
-                    <% if (w.role) { %><span class="bk2-csum-rl"><%= roleAbbr(w.role) %></span><% } %>
+                    <% if (w.role) { %><span class="bk2-csum-rl bk2-role--<%= roleAbbr(w.role).toLowerCase() %>"><%= roleAbbr(w.role) %></span><% } %>
                     <% if (w.is_team_leader) { %><span class="bk2-csum-rl bk2-csum-rl--tl">TL</span><% } %>
+                    <span class="bk2-slot-accept bk2-accept--<%= _cs.key %>" title="<%= _cs.label %>" aria-label="<%= _cs.label %>"><%= _cs.mark %></span>
                   </div>
                 <% } %>
                 <% _blocks.forEach(function (blk) {
@@ -367,9 +399,10 @@
                      var veh = (blk.vehicle_slot && blk.vehicle_slot.filled) ? (blk.vehicle_slot.name || blk.vehicle_slot.registration || 'UTE') : null;
                      if (!ws.length && !veh && !openN) return;
                 %>
+                  <% var _blkVehId = (blk.vehicle_slot && blk.vehicle_slot.filled) ? (blk.vehicle_slot.vehicle_id || '') : ''; %>
                   <div class="bk2-csum-grp">
-                    <div class="bk2-csum-veh <%= veh ? '' : 'bk2-csum-veh--empty' %>"><%= veh || (blk.no_vehicle ? ((blk.role || 'Crew') + ' ×' + (blk.size || 1)) : ((blk.role || 'TC') + ' ' + (blk.size || '') + '-man crew')) %></div>
-                    <% ws.forEach(function (w) { _csumPerson(w); }); %>
+                    <div class="bk2-csum-veh <%= veh ? '' : 'bk2-csum-veh--empty' %>" data-vehicle-id="<%= _blkVehId %>" data-veh-tag="UTE"><%= veh || (blk.no_vehicle ? ((blk.role || 'Crew') + ' ×' + (blk.size || 1)) : ((blk.role || 'TC') + ' ' + (blk.size || '') + '-man crew')) %></div>
+                    <% ws.forEach(function (w) { _csumPerson(w, _blkVehId); }); %>
                     <% if (openN) { %><div class="bk2-csum-openrow"><%= openN %> open <%= (blk.role || 'TC') %> slot<%= openN > 1 ? 's' : '' %></div><% } %>
                   </div>
                 <% }); %>
@@ -381,8 +414,8 @@
                 <% } %>
                 <% _spareVeh.forEach(function (v) { %>
                   <div class="bk2-csum-grp">
-                    <div class="bk2-csum-veh"><%= (v.role || 'ute').toUpperCase().slice(0,3) %> · <%= v.name || v.registration || 'Vehicle' %></div>
-                    <% (v.workers || []).forEach(function (w) { _csumPerson(w); }); %>
+                    <div class="bk2-csum-veh" data-vehicle-id="<%= v.vehicle_id %>" data-veh-tag="<%= (v.role || 'ute').toUpperCase().slice(0,3) %>"><%= (v.role || 'ute').toUpperCase().slice(0,3) %> · <%= v.name || v.registration || 'Vehicle' %></div>
+                    <% (v.workers || []).forEach(function (w) { _csumPerson(w, v.vehicle_id); }); %>
                   </div>
                 <% }); %>
                 <% if (!_workers && !_utes) { %><div class="bk2-csum-none">No crew assigned yet</div><% } %>
@@ -459,7 +492,7 @@
 
                       <% blk.worker_slots.forEach(function (slot) { %>
                         <% if (slot.filled) { %>
-                          <div class="bk2-slot bk2-slot--filled bk2-slot--click<%= slot.is_driver ? ' is-driver' : '' %>"
+                          <div class="bk2-slot bk2-slot--filled bk2-slot--click bk2-slot--st-<%= acceptState(slot.bc_status).key %><%= slot.is_driver ? ' is-driver' : '' %>"
                                draggable="true"
                                data-bk-crew-drag="1"
                                data-booking-id="<%= b.id %>"
@@ -473,7 +506,7 @@
                                data-flag-nb="<%= slot.non_billable ? '1' : '0' %>"
                                data-flag-driver="<%= slot.is_driver ? '1' : '0' %>">
                             <span class="bk2-slot-avatar"><%= initials(slot.name) %></span>
-                            <span class="bk2-slot-role-tag"><%= roleAbbr(slot.role) %></span>
+                            <span class="bk2-slot-role-tag bk2-role--<%= roleAbbr(slot.role).toLowerCase() %>"><%= roleAbbr(slot.role) %></span>
                             <span class="bk2-slot-name"><%= slot.name %></span>
                             <% if (slot.is_team_leader)   { %><span class="bk2-flag bk2-flag--tl"  title="Team Leader">TL</span><% } %>
                             <% if (slot.is_first_aid)     { %><span class="bk2-flag bk2-flag--fa"  title="First Aid">FA</span><% } %>
@@ -499,7 +532,7 @@
                                 <%= label %>
                               </span>
                             <% }); %>
-                            <% if (slot.bc_status === 'confirmed') { %><span style="color:#86EFAC;font-weight:700" title="Confirmed">✓</span><% } %>
+                            <% var _as = acceptState(slot.bc_status); %><span class="bk2-slot-accept bk2-accept--<%= _as.key %>" title="<%= _as.label %>" aria-label="<%= _as.label %>"><%= _as.mark %></span>
                           </div>
                         <% } %>
                       <% }); %>
@@ -549,7 +582,7 @@
                         <span><%= unassigned.length ? 'Not in any vehicle' : 'Drop here to take off the ute' %></span>
                       </div>
                       <% unassigned.forEach(function (slot) { %>
-                        <div class="bk2-slot bk2-slot--filled bk2-slot--click bk2-slot--unassigned"
+                        <div class="bk2-slot bk2-slot--filled bk2-slot--click bk2-slot--unassigned bk2-slot--st-<%= acceptState(slot.bc_status).key %>"
                              draggable="true"
                              data-bk-crew-drag="1"
                              data-booking-id="<%= b.id %>"
@@ -563,13 +596,14 @@
                              data-flag-nb="<%= slot.non_billable ? '1' : '0' %>"
                              data-flag-driver="<%= slot.is_driver ? '1' : '0' %>">
                           <span class="bk2-slot-avatar"><%= initials(slot.name) %></span>
-                          <span class="bk2-slot-role-tag"><%= roleAbbr(slot.role) %></span>
+                          <span class="bk2-slot-role-tag bk2-role--<%= roleAbbr(slot.role).toLowerCase() %>"><%= roleAbbr(slot.role) %></span>
                           <span class="bk2-slot-name"><%= slot.name %></span>
                           <% if (slot.is_team_leader)   { %><span class="bk2-flag bk2-flag--tl"  title="Team Leader">TL</span><% } %>
                           <% if (slot.is_first_aid)     { %><span class="bk2-flag bk2-flag--fa"  title="First Aid">FA</span><% } %>
                           <% if (slot.straight_to_site) { %><span class="bk2-flag bk2-flag--sts" title="Straight to Site">STS</span><% } %>
                           <% if (slot.non_billable)     { %><span class="bk2-flag bk2-flag--nb"  title="Non-Billable">NB</span><% } %>
                           <% if (slot.is_driver)        { %><span class="bk2-flag bk2-flag--drv" title="Driver">DRV</span><% } %>
+                        <% var _as = acceptState(slot.bc_status); %><span class="bk2-slot-accept bk2-accept--<%= _as.key %>" title="<%= _as.label %>" aria-label="<%= _as.label %>"><%= _as.mark %></span>
                         </div>
                       <% }); %>
                     </div>
@@ -622,7 +656,7 @@
                         <% }); %>
                         </div>
                         <% (v.workers || []).forEach(function (slot) { %>
-                          <div class="bk2-slot bk2-slot--filled bk2-slot--click<%= slot.is_driver ? ' is-driver' : '' %>"
+                          <div class="bk2-slot bk2-slot--filled bk2-slot--click bk2-slot--st-<%= acceptState(slot.bc_status).key %><%= slot.is_driver ? ' is-driver' : '' %>"
                                draggable="true" data-bk-crew-drag="1"
                                data-booking-id="<%= b.id %>"
                                data-booking-crew-id="<%= slot.booking_crew_id || '' %>"
@@ -635,13 +669,14 @@
                                data-flag-nb="<%= slot.non_billable ? '1' : '0' %>"
                                data-flag-driver="<%= slot.is_driver ? '1' : '0' %>">
                             <span class="bk2-slot-avatar"><%= initials(slot.name) %></span>
-                            <span class="bk2-slot-role-tag"><%= roleAbbr(slot.role) %></span>
+                            <span class="bk2-slot-role-tag bk2-role--<%= roleAbbr(slot.role).toLowerCase() %>"><%= roleAbbr(slot.role) %></span>
                             <span class="bk2-slot-name"><%= slot.name %></span>
                             <% if (slot.is_team_leader)   { %><span class="bk2-flag bk2-flag--tl"  title="Team Leader">TL</span><% } %>
                             <% if (slot.is_first_aid)     { %><span class="bk2-flag bk2-flag--fa"  title="First Aid">FA</span><% } %>
                             <% if (slot.is_driver)        { %><span class="bk2-flag bk2-flag--drv" title="Driver">DRV</span><% } %>
                             <% if (slot.straight_to_site) { %><span class="bk2-flag bk2-flag--sts" title="Straight to Site">STS</span><% } %>
                             <% if (slot.non_billable)     { %><span class="bk2-flag bk2-flag--nb"  title="Non-Billable">NB</span><% } %>
+                          <% var _as = acceptState(slot.bc_status); %><span class="bk2-slot-accept bk2-accept--<%= _as.key %>" title="<%= _as.label %>" aria-label="<%= _as.label %>"><%= _as.mark %></span>
                           </div>
                         <% }); %>
                       <% }); %>
@@ -3446,6 +3481,7 @@
   // tab via the anchor's href.
   var CARD_INTERACTIVE = 'button, a[href]:not(.bk2-card), input, select, textarea, label,' +
     '[data-bk-crew-drag], .bk2-slot, .bk2-slot--drop, .bk2-veh-slot, .bk2-unassigned,' +
+    '.bk2-csum-person,' +
     '.bk2-addon, [role="button"], [draggable="true"], [data-card-goto]';
 
   // Footer items (Docs / Notes / Dockets / Tasks / Forms) — registered BEFORE
@@ -5847,6 +5883,9 @@
       if (/super/i.test(r))         return 'SUP';
       if (/spotter/i.test(r))       return 'SP';
       if (/hoist/i.test(r))         return 'HO';
+      if (/labour/i.test(r))        return 'LAB';
+      if (/trainee/i.test(r))       return 'TRN';
+      if (/security/i.test(r))      return 'SEC';
       return 'TC';
     }
     var slotRole = emptySlot.getAttribute('data-role-on-site') || crew.role || 'TC';
@@ -5854,7 +5893,7 @@
     filled.className = 'bk2-slot bk2-slot--filled bk2-slot--just-added';
     filled.innerHTML =
       '<span class="bk2-slot-avatar">' + initials(crew.full_name || '') + '</span>' +
-      '<span class="bk2-slot-role-tag">' + roleAbbr(slotRole) + '</span>' +
+      '<span class="bk2-slot-role-tag bk2-role--' + roleAbbr(slotRole).toLowerCase() + '">' + roleAbbr(slotRole) + '</span>' +
       '<span class="bk2-slot-name">' + (crew.full_name || ('#' + crew.id)) + '</span>' +
       ((crew.employment_status === 'reserved')
         ? '<span class="bk2-warn bk2-warn--info">RES</span>'
@@ -6125,11 +6164,52 @@
     // NOT when it's already in the "Not in any vehicle" pool. Drives the
     // "Take off ute" action: a reliable click alternative to the fiddly
     // drag-onto-the-unassign-strip gesture (some planners can't land it).
-    var inPool = !!(slot.closest && slot.closest('.bk2-unassigned'));
+    var currentVehId = slot.getAttribute('data-assigned-vehicle-id') || '';
+    if (!currentVehId) {
+      // Workers rendered inside a crew block don't always carry the id on the
+      // slot itself; the block's vehicle chip is the authority.
+      var _blk = slot.closest && slot.closest('.bk2-crew');
+      var _blkVeh = _blk && _blk.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
+      if (_blkVeh && !slot.closest('.bk2-unassigned')) currentVehId = _blkVeh.getAttribute('data-vehicle-id') || '';
+    }
+    var isCompactRow = slot.classList.contains('bk2-csum-person');
+    var inPool = isCompactRow
+      ? !currentVehId
+      : !!(slot.closest && slot.closest('.bk2-unassigned'));
     var crewBlk = slot.closest && slot.closest('.bk2-crew');
     var blkHasVehicle = crewBlk && crewBlk.querySelector('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id]');
     var inSpareVeh = !!(slot.closest && slot.closest('.bk2-spareveh'));
-    var onVehicle = !inPool && (blkHasVehicle || inSpareVeh);
+    var onVehicle = isCompactRow ? !!currentVehId : (!inPool && (blkHasVehicle || inSpareVeh));
+
+    // Every ute on THIS booking, as a click destination. Until now the only
+    // way to put someone in a vehicle was to drag them onto it — which never
+    // worked on a touch screen (HTML5 dnd fires no touch events) and isn't
+    // available at compact density at all. The popover could take a worker
+    // OFF a ute but never ON to one, so a planner on a tablet was stuck.
+    var moveTargets = [];
+    var _card = slot.closest('.bk2-card');
+    if (_card) {
+      var seenVeh = {};
+      Array.prototype.forEach.call(
+        _card.querySelectorAll('.bk2-veh-slot.bk2-slot--drop-veh-assign[data-vehicle-id], .bk2-csum-veh[data-vehicle-id]:not([data-vehicle-id=""])'),
+        function (vs) {
+          var vid = (vs.getAttribute('data-vehicle-id') || '').trim();
+          if (!vid || seenVeh[vid]) return;
+          seenVeh[vid] = 1;
+          var compact = vs.classList.contains('bk2-csum-veh');
+          var nameEl = vs.querySelector('.bk2-veh-slot-name');
+          var tagEl  = vs.querySelector('.bk2-veh-tag');
+          moveTargets.push({
+            id: vid,
+            tag: compact ? (vs.getAttribute('data-veh-tag') || 'UTE')
+                         : (tagEl ? (tagEl.textContent || 'UTE').trim() : 'UTE'),
+            name: compact ? (vs.textContent || 'Vehicle').replace(/^[A-Z]{2,4}\s*\u00B7\s*/, '').trim()
+                          : (nameEl ? (nameEl.textContent || '').trim() : 'Vehicle'),
+            spare: vs.classList.contains('bk2-veh-slot--spare'),
+          });
+        }
+      );
+    }
 
     // Pick up which booking card we're on so we can show context.
     var cardEl = slot.closest('.bk2-card');
@@ -6163,8 +6243,33 @@
         popBtn('nb',  'Non Bill', '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="M4 4l16 16M12 8c-1.7 0-3 .9-3 2s1.3 2 3 2 3 .9 3 2-1.3 2-3 2"/></svg>', on.nb,  'nb') +
         popBtn('profile', 'Profile', '<svg fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>', false) +
       '</div>' +
+      (moveTargets.length ?
+        '<div class="bk2-pop-section-label">Move to</div>' +
+        '<div class="bk2-pop-moves">' +
+          moveTargets.map(function (t) {
+            var here = (String(t.id) === String(currentVehId));
+            return '<button type="button" class="bk2-pop-move' + (here ? ' is-here' : '') +
+              (t.spare ? ' is-spare' : '') + '"' +
+              (here ? ' disabled aria-current="true"' : '') +
+              ' data-pop-action="move" data-vehicle-id="' + escapeHtml(String(t.id)) + '">' +
+              '<span class="bk2-pop-move-tag">' + escapeHtml(t.tag) + '</span>' +
+              '<span class="bk2-pop-move-name">' + escapeHtml(t.name) + '</span>' +
+              (here ? '<span class="bk2-pop-move-here">here</span>' : '') +
+            '</button>';
+          }).join('') +
+          (onVehicle ?
+            '<button type="button" class="bk2-pop-move bk2-pop-move--pool" data-pop-action="move" data-vehicle-id="">' +
+              '<span class="bk2-pop-move-tag">—</span>' +
+              '<span class="bk2-pop-move-name">No vehicle (pool)</span>' +
+            '</button>' :
+            '<button type="button" class="bk2-pop-move bk2-pop-move--pool is-here" disabled aria-current="true">' +
+              '<span class="bk2-pop-move-tag">—</span>' +
+              '<span class="bk2-pop-move-name">No vehicle (pool)</span>' +
+              '<span class="bk2-pop-move-here">here</span>' +
+            '</button>') +
+        '</div>' : '') +
       '<div class="bk2-pop-foot">' +
-        (onVehicle ?
+        (onVehicle && !moveTargets.length ?
           '<button type="button" class="bk2-pop-takeoff" data-pop-action="takeoff">' +
             '<svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 17h8m-8 0a2 2 0 11-4 0 2 2 0 014 0zm8 0a2 2 0 104 0 2 2 0 00-4 0zm-9-5h10l-1-4H4v4zm10 0h3l3 3v2h-2M3 3l18 18"/></svg>' +
             'Take off ute' +
@@ -6207,6 +6312,13 @@
           window.open(profUrl, '_blank', 'noopener');
         }
         closePopover();
+        return;
+      }
+      if (action === 'move') {
+        var toVeh = btn.getAttribute('data-vehicle-id') || '';
+        if (String(toVeh) === String(currentVehId)) { closePopover(); return; }
+        closePopover();
+        assignCrewToVehicle({ booking_id: bookingId, booking_crew_id: bookingCrewId, crew_name: crewName }, toVeh);
         return;
       }
       if (action === 'takeoff') {
