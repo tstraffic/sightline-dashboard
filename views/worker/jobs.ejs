@@ -236,7 +236,8 @@
   :root[data-theme="light"] .ws-day-meta  { color: #6B7280; }
 
   :root[data-theme="light"] .ws-shift {
-    background: #FFFFFF;
+    background-color: #FFFFFF;
+    background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
     border-color: #E5E7EB;
     box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
@@ -249,6 +250,24 @@
   :root[data-theme="light"] .ws-shift-client { color: #0F1115; }
   :root[data-theme="light"] .ws-shift.is-past .ws-shift-client { color: #4B5563; }
   :root[data-theme="light"] .ws-shift-loc { color: #6B7280; }
+
+  /* Status pills: dark's rgba washes + bright inks had no light
+     counterparts except .now — allocated/completed/declined rendered as
+     pale washes with mint/amber ink on white. 100-tint + 700-ink. */
+  :root[data-theme="light"] .ws-pill.allocated { background: #FEF3C7; color: #B45309; border-color: #FDE68A; }
+  :root[data-theme="light"] .ws-pill.confirmed { background: #D1FAE5; color: #047857; border-color: #6EE7B7; }
+  :root[data-theme="light"] .ws-pill.completed { background: #DBEAFE; color: #1D4ED8; border-color: #BFDBFE; }
+  :root[data-theme="light"] .ws-pill.declined  { background: #FEE2E2; color: #B91C1C; border-color: #FECACA; }
+  :root[data-theme="light"] .ws-pill.past      { background: #F3F4F6; color: #6B7280; border-color: #E5E7EB; }
+  :root[data-theme="light"] .ws-pill.role      { background: #F9FAFB; color: #4B5563; border-color: #E5E7EB; }
+  /* An allocated (not yet accepted) shift's time chip is amber in dark;
+     keep that signal rather than falling back to the grey base chip. */
+  :root[data-theme="light"] .ws-shift.is-allocated .ws-shift-time { background: #FFFBEB; color: #92400E; }
+  :root[data-theme="light"] .ws-shift.is-allocated .ws-shift-time svg { color: #B45309; }
+  /* Today's calendar cell: amber ink was #FCD34D — bright on white. */
+  :root[data-theme="light"] .ws-day.today { background: #FFFBEB; color: #B45309; }
+  :root[data-theme="light"] .ws-day.today .ws-day-letter,
+  :root[data-theme="light"] .ws-day.today .ws-day-num { color: #92400E; }
 
   :root[data-theme="light"] .ws-empty { color: #6B7280; }
   :root[data-theme="light"] .ws-empty-ic { color: #D1D5DB; }

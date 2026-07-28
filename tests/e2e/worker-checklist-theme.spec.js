@@ -163,6 +163,31 @@ test('the custom-checklist filler is legible in light mode', async ({ page }) =>
   expect(rowBg).toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
 });
 
+test('light mode home keeps the brand: tinted hero and coloured chips', async ({ page }) => {
+  const seed = seedAllocation();
+  test.skip(!seed, 'EMP-TEST worker not seeded in this DB');
+  await openLight(page, '/w/home');
+
+  // The hero used to be flat #FFFFFF in light mode; the light polish gives
+  // it the emerald-mist gradient. background-image carries the gradient.
+  const hero = page.locator('.wh-hero').first();
+  await expect(hero).toBeVisible();
+  const heroBgImage = await hero.evaluate(el => getComputedStyle(el).backgroundImage);
+  expect(heroBgImage, 'hero should carry a gradient, not flat white').toContain('gradient');
+
+  // Quick-action icon chips had NO light rules — dark washes on white.
+  const chip = page.locator('.wh-qa-ic').first();
+  if (await chip.count()) {
+    const r = await page.evaluate(({ fnSrc }) => {
+      const contrast = eval(fnSrc);
+      const el = document.querySelector('.wh-qa-ic');
+      const cs = getComputedStyle(el);
+      return contrast(cs.color, cs.backgroundColor);
+    }, { fnSrc: CONTRAST });
+    expect(r, 'quick-action icon vs its own chip').toBeGreaterThan(3);
+  }
+});
+
 test('a selected answer keeps its white label', async ({ page }) => {
   const seed = seedAllocation();
   test.skip(!seed, 'EMP-TEST worker not seeded in this DB');

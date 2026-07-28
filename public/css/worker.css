@@ -928,3 +928,76 @@ body.worker-portal .keep-white svg { color: #FFFFFF !important; }
    per-value hex) — no static remap possible. Darken the rendered chip
    in light mode instead so pale hues still read on white. */
 :root[data-theme="light"] .dyn-pill { filter: brightness(0.72) saturate(1.35); }
+
+/* ═════════════════════════════════════════════════════════════════════
+   LIGHT POLISH + THEME-AGNOSTIC CHIPS (Jul 2026)
+   Dark mode's polish comes from translucent brand washes and coloured
+   icon chips; light mode used to strip both and go flat white. The
+   classes here replace inline styles in _shift_forms.ejs (jp-chip),
+   forms/index.ejs (fi-chip) and forms-custom.ejs (fc-item/fc-badge) so
+   each element can carry a REAL surface in both themes instead of
+   relying on the inline-style nukes above. Dark values are byte-for-byte
+   the colours the old inline styles produced — verified against a
+   computed-style baseline before the refactor.
+   Light selectors mirror the (0,4,1) suffix safety-net shape
+   (body.worker-portal) so they cannot lose the specificity fight.
+   ═════════════════════════════════════════════════════════════════════ */
+
+/* Job-pack checklist status chips (shift Forms tab). The old inline
+   neutral chip was rgba(255,255,255,0.06) — white — which the light-mode
+   background nuke force-whitened into a white chip on a white card. */
+.jp-chip.is-done { background: rgba(16,185,129,0.18); color: #34D399; }
+.jp-chip.is-req  { background: rgba(245,158,11,0.16); color: #FBBF24; }
+.jp-chip.is-rec  { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.45); }
+:root[data-theme="light"] body.worker-portal .jp-chip.is-done { background: #D1FAE5; color: #047857; }
+:root[data-theme="light"] body.worker-portal .jp-chip.is-req  { background: #FEF3C7; color: #B45309; }
+:root[data-theme="light"] body.worker-portal .jp-chip.is-rec  { background: #F3F4F6; color: #6B7280; }
+
+/* Forms-hub row icon chips. The old inline rgba(255,255,255,0.06) chip
+   was force-whitened in light mode — a white chip with a grey icon on a
+   white row, i.e. invisible. Give each form family its own tint. */
+.fi-chip { background: rgba(255,255,255,0.06); }
+.fi-chip svg { color: rgba(255,255,255,0.35); }
+:root[data-theme="light"] body.worker-portal .fi-chip { background: #F3F4F6; }
+:root[data-theme="light"] body.worker-portal .fi-chip svg { color: #6B7280; }
+:root[data-theme="light"] body.worker-portal .fi-chip--form  { background: #D1FAE5; }
+:root[data-theme="light"] body.worker-portal .fi-chip--form  svg { color: #047857; }
+:root[data-theme="light"] body.worker-portal .fi-chip--leave { background: #FEF3C7; }
+:root[data-theme="light"] body.worker-portal .fi-chip--leave svg { color: #B45309; }
+
+/* Custom-checklist list cards + badges. */
+.fc-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); }
+.fc-badge--rev { background: rgba(16,185,129,0.15); color: #10B981; }
+.fc-badge--sig { background: rgba(245,158,11,0.15); color: #FCD34D; }
+:root[data-theme="light"] body.worker-portal .fc-item {
+  background-color: #FFFFFF;
+  background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
+  border-color: #E5E7EB;
+  box-shadow: 0 1px 2px rgba(15,17,21,0.04);
+}
+:root[data-theme="light"] body.worker-portal .fc-badge--rev { background: #D1FAE5; color: #047857; }
+:root[data-theme="light"] body.worker-portal .fc-badge--sig { background: #FEF3C7; color: #B45309; }
+
+/* Tailwind opacity-suffix utilities (crew status pills on booking/job
+   detail, PIN-error banners, training badges). These class names are NOT
+   inline styles, so none of the nukes above reach them: in light mode a
+   bright 400-level ink sat on a 20% wash — unreadable on white. Exact
+   escaped selectors only: substring matching would also catch
+   peer-checked:bg-emerald-500/20, which must keep its own behaviour
+   (worker-checklist-theme.spec.js pins it). */
+:root[data-theme="light"] body.worker-portal .text-emerald-400 { color: #047857 !important; }
+:root[data-theme="light"] body.worker-portal .text-amber-400   { color: #B45309 !important; }
+:root[data-theme="light"] body.worker-portal .text-red-400     { color: #B91C1C !important; }
+:root[data-theme="light"] body.worker-portal .text-brand-400   { color: #047857 !important; }
+:root[data-theme="light"] body.worker-portal .bg-emerald-500\/20 { background-color: #D1FAE5 !important; }
+:root[data-theme="light"] body.worker-portal .bg-amber-500\/20   { background-color: #FEF3C7 !important; }
+:root[data-theme="light"] body.worker-portal .bg-red-500\/20     { background-color: #FEE2E2 !important; }
+:root[data-theme="light"] body.worker-portal .bg-blue-500\/20    { background-color: #DBEAFE !important; }
+
+/* Escape hatch re-anchor: .keep-white must stay the LAST word over every
+   remap in this file (its original declaration is above the new remaps,
+   which tie on specificity — order decides). */
+body.worker-portal .keep-white,
+body.worker-portal .keep-white svg { color: #FFFFFF !important; }
+:root[data-theme="light"] body.worker-portal .keep-white,
+:root[data-theme="light"] body.worker-portal .keep-white svg { color: #FFFFFF !important; }

@@ -430,7 +430,7 @@
      theme rules above all use rgba(255,255,255,X) and #fff which become
      invisible against a light bg, so every one gets a counterpart here.
      ──────────────────────────────────────────────────────────────────── */
-  :root[data-theme="light"] .wh-shift { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-shift { background-color: #FFFFFF; background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); border-color: #E5E7EB; box-shadow: 0 1px 2px rgba(15,17,21,0.04); }
   :root[data-theme="light"] .wh-shift-header { background: #F9FAFB; border-bottom-color: #E5E7EB; }
   :root[data-theme="light"] .wh-shift-actions { background: #F9FAFB; border-top-color: #E5E7EB; }
   :root[data-theme="light"] .wh-shift-body { color: #111827; }
@@ -449,21 +449,46 @@
   :root[data-theme="light"] .wh-empty-ic { background: #F3F4F6; color: #4B5563; }
   :root[data-theme="light"] .wh-empty-title { color: #111827; }
   :root[data-theme="light"] .wh-empty-sub   { color: #6B7280; }
-  :root[data-theme="light"] .wh-up-item { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-up-item { background-color: #FFFFFF; background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); border-color: #E5E7EB; box-shadow: 0 1px 2px rgba(15,17,21,0.04); }
   :root[data-theme="light"] .wh-up-title { color: #0F1115; }
   :root[data-theme="light"] .wh-up-sub { color: #6B7280; }
   :root[data-theme="light"] .wh-qa-btn { background: #FFFFFF; border-color: #E5E7EB; color: #374151; }
-  :root[data-theme="light"] .wh-act-item { background: #FFFFFF; border-color: #E5E7EB; }
+  /* Quick-action icon chips had NO light rules at all — the dark
+     rgba(colour,0.15) washes + bright mint/amber inks sat on white,
+     nearly invisible. Same tint recipe as the stat-tile chips. */
+  :root[data-theme="light"] .wh-qa-ic.g { background: #D1FAE5; color: #047857; }
+  :root[data-theme="light"] .wh-qa-ic.r { background: #FEE2E2; color: #DC2626; }
+  :root[data-theme="light"] .wh-qa-ic.b { background: #DBEAFE; color: #1D4ED8; }
+  :root[data-theme="light"] .wh-qa-ic.y { background: #FEF3C7; color: #B45309; }
+  :root[data-theme="light"] .wh-qa-ic.p { background: #EDE9FE; color: #6D28D9; }
+  :root[data-theme="light"] .wh-qa-ic.t { background: #D1FAE5; color: #047857; }
+  :root[data-theme="light"] body.worker-portal .wh-up-date { background: rgba(4,120,87,0.10); color: #065F46; }
+  :root[data-theme="light"] .wh-act-ic.in  { background: #D1FAE5; color: #047857; }
+  :root[data-theme="light"] .wh-act-ic.out { background: #FEE2E2; color: #DC2626; }
+  :root[data-theme="light"] .wh-meta-row a.wh-meta-link { background: #F3F4F6; border-color: #E5E7EB; color: #374151; }
+  :root[data-theme="light"] .wh-meta-row a.wh-meta-link:active { background: #E5E7EB; }
+  :root[data-theme="light"] .wh-meta-row a.wh-meta-link.dm { background: #D1FAE5; border-color: #6EE7B7; color: #047857; }
+  :root[data-theme="light"] .wh-meta-row a.wh-meta-link.dm:active { background: #A7F3D0; }
+  :root[data-theme="light"] .wh-countdown.before { background: #D1FAE5; color: #047857; border-color: #6EE7B7; }
+  :root[data-theme="light"] .wh-countdown.on     { background: #FEF3C7; color: #92400E; border-color: #FCD34D; }
+  :root[data-theme="light"] .wh-countdown.after  { background: #F3F4F6; color: #6B7280; border-color: #E5E7EB; }
+  /* Today's weekday tile: dark amber #F59E0B ink stays, but the wash and
+     the number need deepening on white. */
+  :root[data-theme="light"] .wh-wday.today { color: #B45309; background: #FFFBEB; }
+  :root[data-theme="light"] .wh-wday.today .wh-wday-num { color: #92400E; }
+  :root[data-theme="light"] body.worker-portal .wh-timeline-hint { color: #92400E; background: #FEF3C7; border-color: #FDE68A; }
+  :root[data-theme="light"] .wh-weather-warn { background: #FEF3C7; border-color: #FCD34D; color: #92400E; }
+  :root[data-theme="light"] .wh-act-item { background-color: #FFFFFF; background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); border-color: #E5E7EB; box-shadow: 0 1px 2px rgba(15,17,21,0.04); }
   :root[data-theme="light"] .wh-act-txt { color: #374151; }
   :root[data-theme="light"] .wh-act-when { color: #9CA3AF; }
   :root[data-theme="light"] .wh-wday { background: #FFFFFF; border-color: #E5E7EB; color: #6B7280; }
   :root[data-theme="light"] .wh-wday-num { color: #0F1115; }
   :root[data-theme="light"] .wh-wday-pill { background: #E5E7EB; }
-  :root[data-theme="light"] .wh-weather { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-weather { background-color: #FFFFFF; background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); border-color: #E5E7EB; box-shadow: 0 1px 2px rgba(15,17,21,0.04); }
   :root[data-theme="light"] .wh-weather-temp { color: #0F1115; }
   :root[data-theme="light"] .wh-weather-desc { color: #0F1115; }
   :root[data-theme="light"] .wh-weather-sub { color: #6B7280; }
-  :root[data-theme="light"] .wh-timeline { background: #FFFFFF; border-color: #E5E7EB; }
+  :root[data-theme="light"] .wh-timeline { background-color: #FFFFFF; background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%); border-color: #E5E7EB; box-shadow: 0 1px 2px rgba(15,17,21,0.04); }
   :root[data-theme="light"] .wh-timeline-head { color: #0F1115; }
   :root[data-theme="light"] .wh-timeline-sub { color: #6B7280; }
   :root[data-theme="light"] .wh-timeline-legend-row { color: #374151; }
@@ -472,12 +497,22 @@
   :root[data-theme="light"] .wh-timeline-track { background: #F3F4F6; }
   :root[data-theme="light"] .wh-streak {
     background-color: #FFFFFF;
-    background-image: none;
+    background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%);
     border-color: #E5E7EB;
     box-shadow: 0 1px 2px rgba(0,0,0,0.04);
   }
   :root[data-theme="light"] .wh-streak-label { color: #6B7280; }
-  :root[data-theme="light"] .wh-streak-ic.blue { background: #EFF6FF; color: #2563EB; }
+  :root[data-theme="light"] .wh-streak-ic.blue    { background: #DBEAFE; color: #1D4ED8; }
+  :root[data-theme="light"] .wh-streak-ic.emerald { background: #D1FAE5; color: #047857; }
+  :root[data-theme="light"] .wh-streak-ic.purple  { background: #EDE9FE; color: #6D28D9; }
+  :root[data-theme="light"] .wh-streak-ic.amber   { background: #FEF3C7; color: #B45309; }
+  /* Flame-tier ladder, light equivalents: same escalation, deeper inks so
+     each tier still reads hotter than the last on white. Glows stay. */
+  :root[data-theme="light"] .wh-streak-ic[data-tier="cold"]      { background: #F1F5F9; color: #64748B; }
+  :root[data-theme="light"] .wh-streak-ic[data-tier="warm"]      { background: #FEF3C7; color: #B45309; }
+  :root[data-theme="light"] .wh-streak-ic[data-tier="hot"]       { background: #FDE68A; color: #92400E; box-shadow: 0 0 8px rgba(245,158,11,0.25); }
+  :root[data-theme="light"] .wh-streak-ic[data-tier="blazing"]   { background: #FED7AA; color: #C2410C; box-shadow: 0 0 12px rgba(249,115,22,0.30); }
+  :root[data-theme="light"] .wh-streak-ic[data-tier="legendary"] { background: #FECACA; color: #B91C1C; box-shadow: 0 0 16px rgba(239,68,68,0.30); }
   :root[data-theme="light"] .wh-streak-value { color: #0F1115; }
   :root[data-theme="light"] .wh-streak-unit { color: #9CA3AF; }
   :root[data-theme="light"] .wh-streak-bar { background: #F3F4F6; }
@@ -511,14 +546,19 @@
      rgba(255,255,255,0.6); both wash out on the light page bg. */
   :root[data-theme="light"] .wh-card {
     background-color: #FFFFFF !important;
-    background-image: none !important;
+    background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
     border-color: #E5E7EB;
+    box-shadow: 0 1px 2px rgba(15,17,21,0.04);
   }
   :root[data-theme="light"] .wh-card-title { color: #0F1115; }
   :root[data-theme="light"] .wh-card-body  { color: #4B5563; }
   :root[data-theme="light"] .wh-card-dismiss { color: #9CA3AF; background: #F3F4F6; }
   :root[data-theme="light"] .wh-card-dismiss:hover { color: #111827; background: #E5E7EB; }
-  :root[data-theme="light"] .wh-card-ic.blue { background: #EFF6FF; color: #2563EB; }
+  :root[data-theme="light"] .wh-card-ic.blue    { background: #DBEAFE; color: #1D4ED8; }
+  :root[data-theme="light"] .wh-card-ic.red     { background: #FEE2E2; color: #DC2626; }
+  :root[data-theme="light"] .wh-card-ic.amber   { background: #FEF3C7; color: #B45309; }
+  :root[data-theme="light"] .wh-card-ic.emerald { background: #D1FAE5; color: #047857; }
+  :root[data-theme="light"] .wh-card-ic.indigo  { background: #EDE9FE; color: #6D28D9; }
 
   /* Hero pane + stat tiles — the dark charcoal #1A1D24 was being painted
      over the light page surface, which made the whole top of the home
@@ -528,9 +568,12 @@
      coloured icon chips (clock / check / calendar / leave) keep their
      hues but get desaturated backgrounds that read on white. */
   :root[data-theme="light"] .wh-hero {
-    background: #FFFFFF !important;
-    border-color: #E5E7EB !important;
-    box-shadow: 0 1px 2px rgba(15,17,21,0.04);
+    /* Not flat white: the hero is the one card that sets the tone of the
+       whole screen, so it carries the brand — same emerald-mist gradient
+       the Vehicle Pre-Start summary uses. */
+    background: linear-gradient(155deg, #ECFDF5, #F0FDF4 60%, #F8FAFC) !important;
+    border-color: #A7F3D0 !important;
+    box-shadow: 0 1px 3px rgba(4,120,87,0.08);
   }
   :root[data-theme="light"] .wh-hero-sub   { color: #6B7280 !important; }
   :root[data-theme="light"] .wh-hero-greet { color: #0F1115 !important; }
@@ -545,8 +588,8 @@
   :root[data-theme="light"] .wh-hero-ctx.anniversary  { color: #9D174D; }
 
   :root[data-theme="light"] .wh-stat {
-    background-color: #F9FAFB !important;
-    background-image: none !important;
+    background-color: #FFFFFF !important;
+    background-image: linear-gradient(180deg, #FFFFFF 0%, #F8FAFC 100%) !important;
     border-color: #E5E7EB !important;
     box-shadow: 0 1px 2px rgba(15,17,21,0.04) !important;
   }
@@ -567,9 +610,9 @@
      against the hero. !important matches the override they're
      overriding. */
   :root[data-theme="light"] .wh-hero .wd-stat-tile {
-    background-color: #F3F4F6 !important;
-    border-color: #E5E7EB !important;
-    box-shadow: 0 1px 1px rgba(15,17,21,0.03) !important;
+    background-color: #FFFFFF !important;
+    border-color: rgba(4,120,87,0.14) !important;
+    box-shadow: 0 1px 1px rgba(4,120,87,0.05) !important;
   }
   :root[data-theme="light"] .wh-hero .wd-stat-tile-label { color: #4B5563 !important; }
   :root[data-theme="light"] .wh-hero .wd-stat-tile-value { color: #0F1115 !important; }

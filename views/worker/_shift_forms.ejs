@@ -14,12 +14,12 @@
     { key: 'tc_prestart',        path: 'tc-prestart',        label: '3. TC Prestart Declaration',     hint: 'Per Traffic Controller' },
     { key: 'post_shift_vehicle', path: 'post-shift-vehicle', label: '5. Post-Shift Vehicle Checklist',hint: 'At end of shift' },
   ];
-  function jpRow(done, tone) {
-    var bg = done ? 'rgba(16,185,129,0.18)'
-                  : (tone === 'required' ? 'rgba(245,158,11,0.16)' : 'rgba(255,255,255,0.06)');
-    var fg = done ? '#34D399'
-                  : (tone === 'required' ? '#FBBF24' : 'rgba(255,255,255,0.45)');
-    return { bg: bg, fg: fg };
+  // Status chip class per state — colours live in worker.css (.jp-chip)
+  // so BOTH themes can style them. This used to emit inline styles, and
+  // the neutral chip's rgba(255,255,255,0.06) got force-whitened by the
+  // light-mode nuke: a white chip on a white card.
+  function jpChip(done, tone) {
+    return done ? 'is-done' : (tone === 'required' ? 'is-req' : 'is-rec');
   }
 %>
 
@@ -37,12 +37,11 @@
         <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Required checklists</h3>
         <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Must be filed before docket sign</p>
       </div>
-      <% JOB_PACK_REQUIRED.forEach(function (jp) { var done = formStatus[jp.key]; var c = jpRow(done, 'required'); %>
+      <% JOB_PACK_REQUIRED.forEach(function (jp) { var done = formStatus[jp.key]; var c = jpChip(done, 'required'); %>
         <a href="/w/forms/<%= jp.path %>?allocationId=<%= allocation.id %>"
            class="flex items-center justify-between py-2.5 px-3.5" style="border-top:1px solid rgba(255,255,255,0.05);">
           <div class="flex items-center gap-3 min-w-0">
-            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                 style="background: <%= c.bg %>; color: <%= c.fg %>;">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 jp-chip <%= c %>">
               <% if (done) { %>
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
               <% } else { %>
@@ -69,12 +68,11 @@
         <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Recommended checklists</h3>
         <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Mandatory by company policy &mdash; you'll get a warning before docket sign if missing</p>
       </div>
-      <% JOB_PACK_RECOMMENDED.forEach(function (jp) { var done = formStatus[jp.key]; var c = jpRow(done, 'recommended'); %>
+      <% JOB_PACK_RECOMMENDED.forEach(function (jp) { var done = formStatus[jp.key]; var c = jpChip(done, 'recommended'); %>
         <a href="/w/forms/<%= jp.path %>?allocationId=<%= allocation.id %>"
            class="flex items-center justify-between py-2.5 px-3.5" style="border-top:1px solid rgba(255,255,255,0.05);">
           <div class="flex items-center gap-3 min-w-0">
-            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                 style="background: <%= c.bg %>; color: <%= c.fg %>;">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 jp-chip <%= c %>">
               <% if (done) { %>
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
               <% } else { %>
@@ -104,12 +102,11 @@
         <h3 class="text-[11px] font-bold uppercase tracking-wider" style="color:#10B981;">Other shift forms</h3>
         <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Added by the office for every shift</p>
       </div>
-      <% shiftTemplates.forEach(function (t) { var done = t.done_count > 0; var c = jpRow(done, 'recommended'); %>
+      <% shiftTemplates.forEach(function (t) { var done = t.done_count > 0; var c = jpChip(done, 'recommended'); %>
         <a href="/w/forms/custom/<%= t.id %>?allocationId=<%= allocation.id %>"
            class="flex items-center justify-between py-2.5 px-3.5" style="border-top:1px solid rgba(255,255,255,0.05);">
           <div class="flex items-center gap-3 min-w-0">
-            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
-                 style="background: <%= c.bg %>; color: <%= c.fg %>;">
+            <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 jp-chip <%= c %>">
               <% if (done) { %>
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
               <% } else { %>

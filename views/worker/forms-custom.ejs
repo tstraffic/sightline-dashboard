@@ -14,16 +14,16 @@
   <% } else { %>
     <div class="mt-4 space-y-2">
       <% templates.forEach(function (t) { %>
-        <a href="/w/forms/custom/<%= t.id %>" class="flex items-center justify-between py-3 px-4 rounded-xl"
-           style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);text-decoration:none;">
+        <a href="/w/forms/custom/<%= t.id %>" class="flex items-center justify-between py-3 px-4 rounded-xl fc-item"
+           style="text-decoration:none;">
           <div style="min-width:0;">
             <p style="font-size:0.92rem;font-weight:700;color:#fff;line-height:1.2;"><%= t.name %></p>
             <% if (t.description) { %>
               <p style="font-size:0.72rem;color:rgba(255,255,255,0.5);margin-top:2px;"><%= t.description %></p>
             <% } %>
             <div style="display:flex;gap:6px;margin-top:6px;flex-wrap:wrap;">
-              <span style="font-size:0.6rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:rgba(16,185,129,0.15);color:#10B981;">Rev <%= t.published_revision %></span>
-              <% if (t.require_signature) { %><span style="font-size:0.6rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;background:rgba(245,158,11,0.15);color:#FCD34D;">Signature</span><% } %>
+              <span class="fc-badge--rev" style="font-size:0.6rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;">Rev <%= t.published_revision %></span>
+              <% if (t.require_signature) { %><span class="fc-badge--sig" style="font-size:0.6rem;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;padding:2px 7px;border-radius:999px;">Signature</span><% } %>
               <% if (t.my_submissions) { %><span style="font-size:0.6rem;font-weight:600;color:rgba(255,255,255,0.45);">&middot; <%= t.my_submissions %> filed by you</span><% } %>
             </div>
           </div>
