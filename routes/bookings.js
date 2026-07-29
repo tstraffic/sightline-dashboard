@@ -7,6 +7,7 @@ const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { requireRole } = require('../middleware/auth');
 const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew, autoAdvanceOngoing } = require('../lib/bookingLifecycle');
+const { getBookingVehicleGroups, buildShiftForms } = require('../lib/shiftForms');
 const { getDocketCrew } = require('../lib/shiftDocket');
 const { generateJobNumber } = require('../lib/jobNumbers');
 const { getJobPlansForBooking, setPlanVisibility } = require('../lib/bookingPlans');
@@ -2581,6 +2582,13 @@ router.get('/:id', (req, res) => {
     user: req.session.user,
     jobPackGrid,
     jobPackTypes: JP_TYPES,
+    // Crew-aware / vehicle-aware checklist status — same model the worker
+    // portal's Forms tab uses (lib/shiftForms). worker id 0: no "mine"
+    // highlighting on the admin side.
+    shiftForms: (() => {
+      try { return buildShiftForms(db, { id: booking.id }, { id: 0 }, getBookingVehicleGroups(db, booking.id, 0)); }
+      catch (e) { return null; }
+    })(),
     safetyRollup,
     shiftTasks: (() => {
       try {

@@ -16,7 +16,7 @@
 //     required checklists (drafts never count — they used to).
 const { test, expect } = require('@playwright/test');
 const Database = require('better-sqlite3');
-const { TEST_DB } = require('./helpers/setup');
+const { loginAs, TEST_DB } = require('./helpers/setup');
 const { sydneyToday } = require('../../lib/sydney');
 
 test.describe.configure({ mode: 'serial' });
@@ -237,6 +237,40 @@ test('a worker outside the booking cannot open the crew PDF', async ({ page }) =
     return r.status;
   }, subId);
   expect(pdf).toBe(404);
+});
+
+test('the admin booking Forms tab shows the same statuses with PDF links', async ({ page }) => {
+  const seed = seedShift();
+  test.skip(!seed, 'EMP-TEST worker not seeded');
+  const tlId = fileAs(seed, 'team_leader', { data: { team_leader_name: 'Jp Teammate One' } });
+  fileAs(seed, 'vehicle_prestart', { vehicleId: seed.v1, data: { vehicle: 'JP-UTE-1' } });
+  fileAs(seed, 'tc_prestart', {});
+
+  await loginAs(page);
+  await page.goto(`/bookings/${seed.bookingId}`);
+
+  // Shift-level: filed-by + working PDF link.
+  const tl = page.locator('[data-shf-row="team_leader"]');
+  await expect(tl).toHaveAttribute('data-shf-state', 'done');
+  await expect(tl).toContainText('Filed by Jp Teammate One');
+  const pdf = await page.evaluate(async (id) => {
+    const r = await fetch(`/safety-forms/${id}/pdf`, { credentials: 'same-origin' });
+    return { status: r.status, type: r.headers.get('content-type') };
+  }, tlId);
+  expect(pdf.status).toBe(200);
+  expect(pdf.type).toContain('application/pdf');
+
+  // Risk & Toolbox still outstanding.
+  await expect(page.locator('[data-shf-row="risk_toolbox"]')).toHaveAttribute('data-shf-state', 'pending');
+
+  // Per-person TC: signer chip links to the PDF; the other is pending.
+  const tcBox = page.locator('[data-shf-tc]');
+  await expect(tcBox).toContainText('Jp Teammate One');
+  await expect(tcBox.locator('a')).toHaveCount(1);
+
+  // Per-vehicle rows.
+  await expect(page.locator(`[data-shf-veh-form="prestart:${seed.v1}"]`)).toHaveAttribute('data-shf-state', 'done');
+  await expect(page.locator(`[data-shf-veh-form="prestart:${seed.v2}"]`)).toHaveAttribute('data-shf-state', 'pending');
 });
 
 test('a pure job shift keeps the legacy per-person list', async ({ page }) => {
