@@ -273,6 +273,25 @@ test('the admin booking Forms tab shows the same statuses with PDF links', async
   await expect(page.locator(`[data-shf-veh-form="prestart:${seed.v2}"]`)).toHaveAttribute('data-shf-state', 'pending');
 });
 
+test('the bookings board card carries the checklist status strip', async ({ page }) => {
+  const seed = seedShift();
+  test.skip(!seed, 'EMP-TEST worker not seeded');
+  fileAs(seed, 'team_leader', {});
+  fileAs(seed, 'tc_prestart', {});
+  fileAs(seed, 'vehicle_prestart', { vehicleId: seed.v1 });
+  fileAs(seed, 'post_shift_vehicle', { vehicleId: seed.v1 });
+
+  await loginAs(page);
+  await page.goto('/bookings/board');
+  const card = page.locator('.bk2-card', { hasText: 'BK-JPFORMS' }).first();
+  await expect(card).toHaveCount(1);
+  const chips = card.locator('.bk2-jp-chip');
+  await expect(chips.nth(0)).toContainText('RA&T');   // pending
+  await expect(chips.nth(1)).toContainText('✓ TL');   // teammate's copy counts
+  await expect(chips.nth(2)).toContainText('TC 1/2');
+  await expect(chips.nth(3)).toContainText('Utes 1/2'); // v1 has both, v2 neither
+});
+
 test('a pure job shift keeps the legacy per-person list', async ({ page }) => {
   const seed = seedShift();
   test.skip(!seed, 'EMP-TEST worker not seeded');

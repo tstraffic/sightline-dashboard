@@ -441,6 +441,27 @@ test('compact density keeps acceptance and the move menu', async ({ page }) => {
   await expect(page.locator('.bk2-editor.is-open')).toHaveCount(0);
 });
 
+test('the editing view lists riders per vehicle with a working take-off control', async ({ page }) => {
+  const seed = seedBoard();
+  await loginAs(page);
+  await page.goto(`/bookings/${seed.bookingId}#crews`);
+
+  // Everyone seeded onto ACC-UTE-1 must be listed as riding it…
+  const riders = page.locator(`[data-veh-riders="${seed.v1}"]`);
+  await expect(riders).toBeVisible();
+  await expect(riders).toContainText('Accept Yes One');
+
+  // …and the × unseats them (assigned_vehicle_id NULL, parked off-vehicle),
+  // which was previously impossible from the editor.
+  await riders.locator('.crew-chip', { hasText: 'Accept Yes One' }).locator('button.crew-chip-x').click();
+  await page.waitForLoadState('networkidle');
+  await expect.poll(
+    () => withDb(db => db.prepare('SELECT assigned_vehicle_id AS v, off_vehicle AS o FROM booking_crew WHERE id = ?')
+      .get(seed.rows['Accept Yes One'])),
+    { timeout: 5000 }
+  ).toEqual({ v: null, o: 1 });
+});
+
 test('the editing view distinguishes declined from awaiting-reply', async ({ page }) => {
   const seed = seedBoard();
   await loginAs(page);

@@ -573,7 +573,15 @@
                        can drag a worker off a UTE. -->
                   <%
                     var unassigned = (b.crew_blocks && b.crew_blocks.unassigned) || [];
-                    var showUnassignedPool = unassigned.length > 0 || (b.crew_blocks || []).some(function (blk) { return blk.vehicle_slot && blk.vehicle_slot.vehicle_id; });
+                    // Spare vehicles count too: on a card whose utes are ALL
+                    // spare (people add-on requirements, no "Nx TC Crew"
+                    // blocks), every worker can be seated with no crew-block
+                    // vehicle in sight — and without this the "take off the
+                    // ute" drop zone never rendered, so a fully-seated crew
+                    // could not be unseated by drag at all.
+                    var showUnassignedPool = unassigned.length > 0
+                      || (b.crew_blocks || []).some(function (blk) { return blk.vehicle_slot && blk.vehicle_slot.vehicle_id; })
+                      || ((b.crew_blocks && b.crew_blocks.spare_vehicles) || []).some(function (v) { return (v.workers || []).length > 0; });
                   %>
                   <% if (showUnassignedPool) { %>
                     <div class="bk2-unassigned bk2-slot--drop bk2-slot--drop-unassign"
@@ -708,6 +716,27 @@
               <% } %>
 
             </div>
+            <% if (b.jp) { %>
+              <%
+                // Checklist status — same crew/vehicle-aware model as the shift
+                // Forms tab. RA&T + TL are one-per-shift; TC is per person;
+                // Utes counts vehicles with BOTH pre-start and post-shift in.
+                function _jpTone(done, total) {
+                  if (!total) return 'off';
+                  if (done >= total) return 'ok';
+                  return done > 0 ? 'part' : 'none';
+                }
+              %>
+              <div class="bk2-jp" data-card-goto="forms" role="link" tabindex="0"
+                   title="Checklist status — open the Forms tab">
+                <span class="bk2-jp-chip bk2-jp--<%= b.jp.rat ? 'ok' : 'none' %>"><%= b.jp.rat ? '✓' : '○' %> RA&T</span>
+                <span class="bk2-jp-chip bk2-jp--<%= b.jp.tl ? 'ok' : 'none' %>"><%= b.jp.tl ? '✓' : '○' %> TL</span>
+                <span class="bk2-jp-chip bk2-jp--<%= _jpTone(b.jp.tc.done, b.jp.tc.total) %>">TC <%= b.jp.tc.done %>/<%= b.jp.tc.total %></span>
+                <% if (b.jp.veh.total) { %>
+                  <span class="bk2-jp-chip bk2-jp--<%= _jpTone(b.jp.veh.done, b.jp.veh.total) %>">Utes <%= b.jp.veh.done %>/<%= b.jp.veh.total %></span>
+                <% } %>
+              </div>
+            <% } %>
             <%
               // Footer counts — always shown (0 included) so the planner can
               // read "how much of each" at a glance. Dockets gets a submitted

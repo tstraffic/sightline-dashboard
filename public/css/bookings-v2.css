@@ -3402,3 +3402,26 @@ body.bk2-dragging-crew [data-bk-crew-drag="1"] { touch-action: none; }
 :root[data-theme="light"] .bk2-card--droptarget .bk2-csum-grp { outline-color: rgba(107,114,128,0.5); }
 body.bk2-dragging-crew .bk2-csum-person { touch-action: none; }
 .bk2-csum-person.is-dragging { opacity: 0.34; }
+
+/* ── Card checklist-status strip (crew/vehicle-aware Job-Pack model) ────
+   Mirrors the shift Forms tab: RA&T + Team Leader are one-per-shift, TC is
+   per person, Utes counts vehicles with both pre-start and post-shift in.
+   The strip is a click-through to the editor's Forms tab. */
+.bk2-jp {
+  display: flex; align-items: center; gap: 5px; flex-wrap: wrap;
+  padding: 7px 14px 0; cursor: pointer;
+}
+.bk2-jp-chip {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 2px 8px; border-radius: 9999px;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.03em;
+  font-family: 'Geist Mono', ui-monospace, monospace;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.bk2-jp--ok   { background: rgba(52,211,153,0.14); color: #6EE7B7; border-color: rgba(52,211,153,0.32); }
+.bk2-jp--part { background: rgba(251,191,36,0.13); color: #FCD34D; border-color: rgba(251,191,36,0.32); }
+.bk2-jp--none { background: rgba(148,163,184,0.12); color: #94A3B8; border-color: rgba(148,163,184,0.25); }
+.bk2-jp--off  { display: none; }
+:root[data-theme="light"] .bk2-jp--ok   { background: #D1FAE5; color: #047857; border-color: #6EE7B7; }
+:root[data-theme="light"] .bk2-jp--part { background: #FEF3C7; color: #B45309; border-color: #FCD34D; }
+:root[data-theme="light"] .bk2-jp--none { background: #F3F4F6; color: #6B7280; border-color: #E5E7EB; }

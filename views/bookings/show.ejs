@@ -698,6 +698,30 @@
                   </select>
                 </form>
               </div>
+              <%
+                // Everyone SEATED in this ute (booking_crew.assigned_vehicle_id),
+                // distinct from the driver pointer above. Each chip's × takes
+                // them off the vehicle — into "not in any vehicle" — via the
+                // same endpoint the board's drag/popover uses. Without this the
+                // editor could seat people (via the board) but never unseat.
+                var _riders = (b.personnel || []).filter(function (p) { return p.assignedVehicleId == v.id; });
+              %>
+              <% if (_riders.length) { %>
+                <div class="mt-2 flex items-center gap-2 flex-wrap" data-veh-riders="<%= v.id %>">
+                  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Riding</span>
+                  <% _riders.forEach(function (p) { %>
+                    <span class="crew-chip assigned" data-crew-id="<%= p.id %>">
+                      <span class="crew-chip-avatar"><%= p.name ? p.name.split(' ').map(function(n){return n[0];}).join('').substring(0,2) : '?' %></span>
+                      <span class="crew-chip-name"><%= p.name %></span>
+                      <form method="POST" action="/bookings/<%= b.id %>/crew/<%= p.bookingCrewId %>/assign-vehicle" class="inline" data-take-off>
+                        <%- include('../partials/csrf') %>
+                        <input type="hidden" name="vehicle_id" value="">
+                        <button type="submit" class="crew-chip-x" title="Take off this vehicle" aria-label="Take <%= p.name %> off this vehicle">×</button>
+                      </form>
+                    </span>
+                  <% }) %>
+                </div>
+              <% } %>
               <%# Gear hitched to this vehicle — trailers, portabooms, etc. Shown
                   nested under the ute (like the crew app) so it reads as riding
                   this vehicle rather than floating in a separate list. %>

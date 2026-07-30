@@ -121,6 +121,24 @@ test('an off-vehicle display-label Spotter lands in the Spotter group, not the p
   await expect(card).toContainText('Phantom Spotter One');
 });
 
+test('a fully-seated spare-vehicle card still offers the take-off drop zone', async ({ page }) => {
+  const seed = seedPhantom();
+  // Seat the spotter too — nobody left in the pool. The zone used to render
+  // only when a CREW BLOCK carried a vehicle or the pool was non-empty, so a
+  // card whose utes are all spare (people add-on requirements) lost the only
+  // drag target for unseating the moment everyone was aboard.
+  withDb(db => db.prepare(
+    'UPDATE booking_crew SET assigned_vehicle_id = ?, off_vehicle = 0 WHERE booking_id = ?'
+  ).run(seed.vehicleId, seed.bookingId));
+
+  await openBoard(page);
+  const card = cardOf(page);
+  await expect(card.locator('.bk2-unassigned')).toHaveCount(0 + 1); // zone present…
+  await expect(card.locator('.bk2-slot--drop-unassign')).toHaveCount(1);
+  // …and it's the empty "drop here" affordance, not a populated pool.
+  await expect(card.locator('.bk2-unassigned')).toContainText('Drop here to take off the ute');
+});
+
 test('the crew-add endpoint canonicalises display labels on write', async ({ page }) => {
   const seed = seedPhantom();
   await loginAs(page);

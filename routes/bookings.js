@@ -7,7 +7,7 @@ const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { requireRole } = require('../middleware/auth');
 const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew, autoAdvanceOngoing } = require('../lib/bookingLifecycle');
-const { getBookingVehicleGroups, buildShiftForms } = require('../lib/shiftForms');
+const { getBookingVehicleGroups, buildShiftForms, buildBoardFormsSummary } = require('../lib/shiftForms');
 const { getDocketCrew } = require('../lib/shiftDocket');
 const { generateJobNumber } = require('../lib/jobNumbers');
 const { getJobPlansForBooking, setPlanVisibility } = require('../lib/bookingPlans');
@@ -1385,6 +1385,10 @@ router.get('/', (req, res) => {
   }
 
   // Build the final bookings array with derived crew_blocks.
+  // Checklist status per card (crew-aware model, lib/shiftForms) — one
+  // batch pass for the whole day, not per card.
+  const jpSummary = buildBoardFormsSummary(db, rows.map(r => r.id));
+
   const bookings = rows
     .map(r => {
       const crewWithWarn = (crewByBooking[r.id] || []).map(c => ({
@@ -1392,7 +1396,7 @@ router.get('/', (req, res) => {
         warnings: conflictIds.has(c.crew_member_id) ? ['tight_schedule'] : [],
       }));
       const crew_blocks = deriveCrewBlocks(crewWithWarn, vehiclesByBooking[r.id], reqsByBooking[r.id], gearByBooking[r.id]);
-      return { ...r, crew_blocks, counts: { docs: r.doc_count, notes: r.note_count, dockets: r.docket_count, tasks: r.task_count, forms: r.form_count } };
+      return { ...r, crew_blocks, jp: jpSummary[r.id] || null, counts: { docs: r.doc_count, notes: r.note_count, dockets: r.docket_count, tasks: r.task_count, forms: r.form_count } };
     })
     .filter(b => {
       if (!filterSearch) return true;
@@ -2554,7 +2558,7 @@ router.get('/:id', (req, res) => {
     booking: { ...booking, supervisor: booking.supervisor_name, requester_name: requesterName, planner_name: plannerName, site_contact_names: siteContactNames, site_contact_details: siteContactDetails, tags_list: tagsList,
       project: { name: booking.title || (booking.job ? booking.job.job_name : ''), client: booking.client ? booking.client.company_name : (booking.job ? booking.job.client : ''), address: booking.site_address || (booking.job ? booking.job.site_address : ''), orderNumber: booking.order_number, billingCode: booking.billing_code },
       startDateTime: booking.start_datetime, endDateTime: booking.end_datetime,
-      personnel: booking.crew.map(c => ({ id: c.crew_member_id, name: c.full_name || 'Unknown', role: c.role_on_site || '', confirmed: c.status === 'confirmed', bcStatus: c.status })),
+      personnel: booking.crew.map(c => ({ id: c.crew_member_id, name: c.full_name || 'Unknown', role: c.role_on_site || '', confirmed: c.status === 'confirmed', bcStatus: c.status, bookingCrewId: c.id, assignedVehicleId: c.assigned_vehicle_id || null })),
       allVehicles: booking.vehicles,
       dockets: booking.dockets || [],
       documents: booking.documents || [],
