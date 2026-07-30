@@ -96,13 +96,21 @@
          const links = s.links.filter(l => nav.linkVisible(ctx, l));
          if (!links.length) return; %>
       <div class="pt-3 mt-2 border-t border-white/10 sidebar-section" data-sb-name="<%= s.label %>">
+        <%# Section icons sit in the same 5×5 + mr-3 slot as the child links'
+            icons, so labels and icons line up down the whole rail. The mark
+            is the section's own (nav registry) — the dept hub page shows the
+            same one in its title. %>
         <% if (s.hubHref) { %>
         <a href="<%= s.hubHref %>" class="sidebar-link sb-section-head flex items-center px-3 py-2.5 text-sm font-medium rounded-xl <%= cp === s.hubActive ? ACTIVE : IDLE %> transition-all" title="Open <%= s.label %> home">
+          <% if (s.icon) { %><svg class="w-5 h-5 mr-3 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><%- s.icon %></svg><% } %>
           <span class="flex-1"><%= s.label %></span>
           <svg class="sb-hub-arrow w-3.5 h-3.5 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M7 17L17 7M17 7H8m9 0v9"/></svg>
         </a>
         <% } else { %>
-        <p class="px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5"><%= s.label %></p>
+        <p class="flex items-center px-3 text-[10px] font-bold text-brand-400/45 uppercase tracking-widest mb-1.5">
+          <% if (s.icon) { %><svg class="w-5 h-5 mr-3 flex-shrink-0 opacity-70" fill="none" stroke="currentColor" viewBox="0 0 24 24"><%- s.icon %></svg><% } %>
+          <span><%= s.label %></span>
+        </p>
         <% } %>
       </div>
       <% let lastSub = null;

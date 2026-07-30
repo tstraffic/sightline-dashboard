@@ -37,6 +37,41 @@ test('all seven hubs render a header, title icon and at least one stat tile', as
   }
 });
 
+test('the title icon is centred on the heading text, not baseline-nudged', async ({ page }) => {
+  await loginAs(page);
+  await page.goto('/departments/planning');
+  const delta = await page.evaluate(() => {
+    const h1 = document.querySelector('h1.page-title');
+    const tile = h1.querySelector('.page-title-icon').getBoundingClientRect();
+    const text = h1.querySelector('span:not(.page-title-icon)').getBoundingClientRect();
+    return Math.abs((tile.top + tile.height / 2) - (text.top + text.height / 2));
+  });
+  expect(delta).toBeLessThanOrEqual(1.5);
+});
+
+test('sidebar section headers carry their icon, aligned with their links', async ({ page }, testInfo) => {
+  // The rail is off-canvas on mobile, so its geometry isn't measurable there.
+  test.skip(testInfo.project.name.includes('mobile'), 'sidebar rail is desktop-only');
+  await loginAs(page);
+  await page.goto('/departments/planning');
+
+  // Section headers that link to a hub each render one icon…
+  const heads = page.locator('a.sb-section-head');
+  expect(await heads.count()).toBeGreaterThan(0);
+  for (let i = 0; i < await heads.count(); i++) {
+    await expect(heads.nth(i).locator('svg').first()).toBeVisible();
+  }
+  // …in the same left slot as the child links' icons, so the rail lines up.
+  const lefts = await page.evaluate(() => {
+    const l = (sel) => { const e = document.querySelector(sel); return e ? e.getBoundingClientRect().left : null; };
+    return {
+      head: l('a.sb-section-head svg'),
+      child: l('a.sidebar-link:not(.sb-section-head) svg'),
+    };
+  });
+  expect(Math.abs(lefts.head - lefts.child)).toBeLessThanOrEqual(1);
+});
+
 test('planning module grid: sidebar icons, Jobs extra, hero deduped, no duplicates', async ({ page }) => {
   await loginAs(page);
   await page.goto('/departments/planning');

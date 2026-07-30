@@ -9,7 +9,7 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
-const { getDepartment, userCanAccessDept, moduleLinks } = require('../lib/departments');
+const { getDepartment, userCanAccessDept, moduleLinks, deptIcon } = require('../lib/departments');
 const { getNeedsYouNow } = require('./helpers/dashboard-queries');
 const { logActivity } = require('../middleware/audit');
 const { sydneyToday } = require('../lib/sydney');
@@ -113,6 +113,7 @@ router.get('/:key', (req, res) => {
     title: dept.label + ' Home',
     user: req.session.user,
     dept, stats, needs,
+    deptIcon: deptIcon(dept.key),
     modules: moduleLinks(req.session.user, dept),
     upcoming, past, openTodos, today,
     pastExpanded: req.query.past === 'all',

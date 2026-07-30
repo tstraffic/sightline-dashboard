@@ -137,7 +137,9 @@ test('the job edit breadcrumb returns to the canonical register', async ({ page 
   await expect(page).toHaveURL(new RegExp('/jobs/' + id + '/edit'));
 
   // "Jobs" in the breadcrumb must land on /projects, not the old register.
-  await page.locator('a:has-text("Jobs")').first().click();
+  // Scope to the breadcrumb: the sidebar's "Jobs" link now points at
+  // /projects too, and on mobile that rail is off-canvas (unclickable).
+  await page.locator('[data-breadcrumb] a').first().click();
   await expect(page).toHaveURL(/\/projects$/);
   await expect(page.locator('h1')).toContainText('Jobs');
 

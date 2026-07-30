@@ -36,7 +36,11 @@
   <div class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3">
     <div class="min-w-0">
       <% if (_eyebrow) { %><p class="page-eyebrow"><%= _eyebrow %></p><% } %>
-      <h1 class="page-title vt-page-title"><% if (_titleIcon) { %><span class="inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-600 mr-2.5 align-[-0.35em] shrink-0"><svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><%- _titleIcon %></svg></span><% } %><%= title %></h1>
+      <%# With an icon the h1 becomes a flex row so the tile centres on the
+          text's own box at every heading size (a baseline nudge can't — the
+          .page-title font-size differs between desktop, mobile and
+          .dark-glass, so a fixed offset is wrong everywhere but one). %>
+      <h1 class="page-title vt-page-title<%= _titleIcon ? ' flex items-center gap-2.5' : '' %>"><% if (_titleIcon) { %><span class="page-title-icon inline-flex items-center justify-center w-9 h-9 rounded-xl bg-brand-600 shrink-0"><svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><%- _titleIcon %></svg></span><span class="min-w-0"><%= title %></span><% } else { %><%= title %><% } %></h1>
       <% if (_subtitle) { %><p class="page-sub"><%= _subtitle %></p><% } %>
     </div>
     <% if (_raw) { %>
