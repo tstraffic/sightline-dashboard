@@ -9,7 +9,8 @@
 const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
-const { getDepartment, userCanAccessDept, visibleQuickLinks } = require('../lib/departments');
+const { getDepartment, userCanAccessDept, moduleLinks } = require('../lib/departments');
+const { getNeedsYouNow } = require('./helpers/dashboard-queries');
 const { logActivity } = require('../middleware/audit');
 const { sydneyToday } = require('../lib/sydney');
 
@@ -74,6 +75,20 @@ router.get('/:key', (req, res) => {
   try { stats = dept.stats(db, today) || []; }
   catch (e) { console.error(`[departments] ${dept.key} stats failed:`, e.message); }
 
+  // Needs-attention panel: registry rows scoped to this department's keys
+  // plus the department's own extra rows. needsKeys [] = extras only; no
+  // needsKeys at all = no panel (reports). Same never-500 rule as stats.
+  let needs = null;
+  if (Array.isArray(dept.needsKeys)) {
+    let extraRows = [];
+    if (dept.needsExtras) {
+      try { extraRows = dept.needsExtras(db, req.session.user, today) || []; }
+      catch (e) { console.error(`[departments] ${dept.key} needsExtras failed:`, e.message); }
+    }
+    try { needs = getNeedsYouNow(db, req.session.user, today, extraRows, { only: dept.needsKeys }); }
+    catch (e) { console.error(`[departments] ${dept.key} needs panel failed:`, e.message); }
+  }
+
   let upcoming = [], past = [];
   try {
     const withTodos = `
@@ -97,8 +112,8 @@ router.get('/:key', (req, res) => {
   res.render('departments/home', {
     title: dept.label + ' Home',
     user: req.session.user,
-    dept, stats,
-    quickLinks: visibleQuickLinks(req.session.user, dept),
+    dept, stats, needs,
+    modules: moduleLinks(req.session.user, dept),
     upcoming, past, openTodos, today,
     pastExpanded: req.query.past === 'all',
     dayLabel: (iso) => dayLabel(iso, today),

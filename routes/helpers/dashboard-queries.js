@@ -220,9 +220,14 @@ const NEEDS_ROWS = [
 // with count 0 are never built, so "zero tiles" cannot render by design.
 // extraRows lets the route inject pre-built rows that need data the
 // registry can't reach (e.g. the weather-driven wet-window row).
-function getNeedsYouNow(db, user, today, extraRows) {
+// opts.only (an ARRAY of registry keys, [] allowed) restricts which NEEDS_ROWS
+// run — the department hubs use it to scope the panel; extras always pass
+// through, so hub extras must permission-check themselves.
+function getNeedsYouNow(db, user, today, extraRows, opts = {}) {
+  const only = Array.isArray(opts.only) ? new Set(opts.only) : null;
   const rows = (extraRows || []).filter(r => r && r.count > 0);
   for (const spec of NEEDS_ROWS) {
+    if (only && !only.has(spec.key)) continue;
     if (!canAccess(user, spec.gate)) continue;
     try {
       const r = spec.build(db, user, today);
