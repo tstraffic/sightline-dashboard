@@ -11,8 +11,10 @@
   const rolInChase = rolApplied && !rolApproved && !rolExpired && rolTodayStr >= rolChaseFrom;
   const rolLinkList = (typeof rolSubs !== 'undefined' && rolSubs) ? rolSubs : [];
   const rolLinkLabel = (r) => (r.rol_actual_number || r.reference_number || ('ROL #' + r.id));
-  const linkedRol = (typeof rolSubs !== 'undefined' && rolSubs && sub.linked_rol_id)
-    ? rolSubs.find(r => String(r.id) === String(sub.linked_rol_id)) : null;
+  // TGS ↔ ROL links are many-to-many (compliance_tgs_rol_links, mig 332).
+  const myRolLinks = (typeof rolLinks !== 'undefined' && rolLinks) ? rolLinks.map(Number) : [];
+  const myTgsBacklinks = (typeof tgsBacklinks !== 'undefined' && tgsBacklinks) ? tgsBacklinks.map(Number) : [];
+  const tgsLinkList = (typeof tgsSubs !== 'undefined' && tgsSubs) ? tgsSubs : [];
   const isSubmitted = ['submitted', 'approved'].includes(sub.status);
   const isApproved = sub.status === 'approved';
   const isRejected = sub.status === 'rejected';
@@ -43,6 +45,17 @@
   const subProfit = subCharge - subCost;
   const showSubCost = canSeeCost && (subHours > 0 || subCharge > 0 || subCouncil > 0);
   const fmtMoneySub = n => '$' + (Math.round(n * 100) / 100).toFixed(2);
+
+  // ── Plans Module enhancements (council/ROL/CTMP) — hoisted so sections
+  //    can render in any order without ReferenceErrors. ──
+  const cExt = (typeof extensions !== 'undefined' && extensions) ? extensions : [];
+  const cShifts = (typeof rolShifts !== 'undefined' && rolShifts) ? rolShifts : [];
+  const cConds = (typeof rolConditions !== 'undefined' && rolConditions) ? rolConditions : [];
+  const isCouncilType = sub.item_type === 'council_permit';
+  const isCtmpType = sub.item_type === 'tmp_approval';
+  const isRolType = sub.item_type === 'rol' || sub.item_type === 'road_occupancy';
+  const condAlerts = cConds.filter(c => c.is_alert);
+  const qaCol = { pending: 'bg-gray-100 text-gray-600', in_qa: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700' };
 %>
 
 <div id="sub-<%= sub.id %>" class="border border-gray-200 rounded-lg p-4 <%= isApproved ? 'bg-emerald-50/30' : isRejected ? 'bg-rose-50/30' : 'bg-white' %>">
@@ -198,31 +211,88 @@
     </div>
   <% } %>
 
-  <!-- TGS → linked ROL (pick the ROL on this plan that covers these works) -->
+  <!-- TGS → linked ROLs: a TGS can be covered by SEVERAL licences (staged /
+       long works), so each ROL on this plan is a toggle chip. Solid = linked
+       (click to unlink), outline = not linked (click to link). -->
   <% if (isTgs) { %>
-    <div class="mb-3 flex flex-wrap items-center gap-2 px-3 py-2 bg-teal-50/60 ring-1 ring-teal-100 rounded text-xs">
-      <span class="text-[10px] font-bold uppercase tracking-wide text-teal-700">Linked ROL</span>
+    <div class="mb-3 flex flex-wrap items-center gap-1.5 px-3 py-2 bg-teal-50/60 ring-1 ring-teal-100 rounded text-xs" data-rol-links>
+      <span class="text-[10px] font-bold uppercase tracking-wide text-teal-700 mr-1">Linked ROLs</span>
       <% if (rolLinkList.length) { %>
-        <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/link-rol" class="flex items-center gap-1.5" onchange="this.requestSubmit ? this.requestSubmit() : this.submit()">
-          <%- include('../partials/csrf') %>
-          <select name="linked_rol_id" class="px-2 py-1 text-xs border border-gray-300 rounded bg-white">
-            <option value="">— not linked —</option>
-            <% rolLinkList.forEach(r => { %>
-              <option value="<%= r.id %>" <%= String(sub.linked_rol_id) === String(r.id) ? 'selected' : '' %>><%= rolLinkLabel(r) %></option>
-            <% }) %>
-          </select>
-          <noscript><button class="px-2 py-1 text-xs bg-teal-600 text-white rounded">Link</button></noscript>
-        </form>
-        <% if (linkedRol) { %><a href="#sub-<%= linkedRol.id %>" class="text-teal-700 hover:text-teal-800 font-medium">→ <%= rolLinkLabel(linkedRol) %></a><% } %>
+        <% rolLinkList.forEach(r => { const isLinked = myRolLinks.includes(Number(r.id)); %>
+          <span class="inline-flex items-stretch rounded overflow-hidden ring-1 <%= isLinked ? 'ring-teal-600' : 'ring-teal-200' %>">
+            <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/link-rol" class="inline-flex">
+              <%- include('../partials/csrf') %>
+              <input type="hidden" name="rol_id" value="<%= r.id %>">
+              <input type="hidden" name="action" value="<%= isLinked ? 'remove' : 'add' %>">
+              <button type="submit"
+                class="px-2 py-0.5 text-[11px] font-medium <%= isLinked ? 'bg-teal-600 text-white hover:bg-teal-700' : 'bg-white text-teal-700 hover:bg-teal-50' %>"
+                title="<%= isLinked ? 'Unlink ' + rolLinkLabel(r) : 'Link ' + rolLinkLabel(r) %>">
+                <%= isLinked ? '✓ ' : '+ ' %><%= rolLinkLabel(r) %>
+              </button>
+            </form>
+            <% if (isLinked) { %>
+              <a href="#sub-<%= r.id %>" class="inline-flex items-center px-1.5 bg-teal-700 text-white/90 hover:text-white text-[11px]" title="Jump to <%= rolLinkLabel(r) %>">→</a>
+            <% } %>
+          </span>
+        <% }) %>
       <% } else { %>
         <span class="text-gray-500 italic">Add a ROL sub-plan to this plan to link it.</span>
       <% } %>
     </div>
   <% } %>
 
-  <!-- Documents -->
-  <% if (docCount > 0) { %>
-    <div class="mb-3 space-y-1">
+  <!-- ROL: expiry banner (14 days from applied-for date) -->
+  <% if (isRolType && rolApplied && !rolApproved) { %>
+    <div class="mb-2 flex flex-wrap items-center gap-2 px-3 py-2 rounded text-xs ring-1 <%= rolExpired ? 'bg-rose-50 ring-rose-200 text-rose-800' : (rolInChase ? 'bg-amber-50 ring-amber-200 text-amber-800' : 'bg-blue-50/60 ring-blue-100 text-blue-800') %>">
+      <span class="text-[10px] font-bold uppercase tracking-wide">ROL application</span>
+      <span>Applied <%= rolApplied %> · <strong><%= rolExpired ? 'EXPIRED ' + rolExpiryStr : 'expires ' + rolExpiryStr %></strong></span>
+      <% if (rolInChase) { %><span class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white">Chase now</span>
+      <% } else if (rolExpired) { %><span class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white">Re-apply</span><% } %>
+    </div>
+  <% } %>
+
+  <!-- ROL condition alerts -->
+  <% if (condAlerts.length) { %>
+    <div class="mb-3 bg-rose-50 ring-1 ring-rose-200 rounded-md p-3">
+      <p class="text-[10px] font-bold uppercase tracking-wide text-rose-700 mb-1.5">Conditions — read before site</p>
+      <ul class="space-y-1">
+        <% condAlerts.forEach(c => { %><li class="text-xs text-rose-800 flex gap-1.5"><span class="font-bold">!</span><span><%= c.text %></span></li><% }) %>
+      </ul>
+    </div>
+  <% } %>
+
+  <!-- CTMP QA status -->
+  <% if (isCtmpType) { %>
+    <div class="mb-3 flex items-center gap-2 text-xs">
+      <span class="text-[10px] font-bold uppercase tracking-wide text-gray-500">CTMP QA</span>
+      <% if (sub.qa_status) { %><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium <%= qaCol[sub.qa_status] || qaCol.pending %>"><%= (sub.qa_status || 'pending').replace('_',' ') %></span><% } %>
+      <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/qa" class="inline-flex items-center gap-1" onsubmit="return window.__subPlanAjaxSave ? window.__subPlanAjaxSave(event, this) : true;" data-ajax-save>
+        <%- include('../partials/csrf') %>
+        <select name="qa_status" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()" class="px-2 py-1 text-xs bg-white border border-gray-300 rounded-md">
+          <% ['pending','in_qa','approved'].forEach(s => { %><option value="<%= s %>" <%= (sub.qa_status || 'pending') === s ? 'selected' : '' %>><%= s.replace('_',' ') %></option><% }) %>
+        </select>
+      </form>
+    </div>
+  <% } %>
+
+  <!-- ROL → covered TGS sheets (back side of the many-to-many link) -->
+  <% if (isRolType && myTgsBacklinks.length && tgsLinkList.length) { %>
+    <div class="mb-3 flex flex-wrap items-center gap-1.5 px-3 py-2 bg-teal-50/60 ring-1 ring-teal-100 rounded text-xs" data-tgs-backlinks>
+      <span class="text-[10px] font-bold uppercase tracking-wide text-teal-700 mr-1">Covers</span>
+      <% tgsLinkList.filter(t => myTgsBacklinks.includes(Number(t.id))).forEach(t => { %>
+        <a href="#sub-<%= t.id %>" class="inline-flex items-center px-2 py-0.5 rounded bg-white ring-1 ring-teal-200 text-teal-700 hover:bg-teal-50 text-[11px] font-medium"><%= t.reference_number || ('TGS #' + t.id) %></a>
+      <% }) %>
+    </div>
+  <% } %>
+
+  <!-- Documents — always visible: attached files + a drop-to-attach zone.
+       Attaching does NOT submit the plan; the full submission (description /
+       dates / hours / status flip) lives in the "Submit plan" disclosure
+       below the zone. -->
+  <div class="mb-3">
+    <p class="text-[10px] font-bold uppercase tracking-wide text-gray-500 mb-1.5">Documents<% if (docCount > 0) { %> · <%= docCount %><% } %></p>
+    <% if (docCount > 0) { %>
+    <div class="mb-2 space-y-1">
       <% docs.forEach(d => { %>
         <div class="flex items-center justify-between gap-2 px-2 py-1.5 bg-gray-50 rounded text-xs">
           <a href="<%= d.file_path %>" target="_blank" class="flex-1 truncate text-brand-600 hover:text-brand-700">
@@ -239,7 +309,20 @@
         </div>
       <% }) %>
     </div>
-  <% } %>
+    <% } %>
+    <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/documents" enctype="multipart/form-data" data-attach-form>
+      <%- include('../partials/csrf') %>
+      <div data-dropzone>
+        <input type="file" name="documents" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.gif,.webp,.dwg,.dxf">
+        <div class="dropzone-label">
+          <svg class="w-6 h-6 mx-auto mb-1 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/></svg>
+          <p class="text-xs text-gray-500">Drag &amp; drop to attach — or <span class="text-brand-600 font-medium">click to browse</span></p>
+          <p class="text-[11px] text-gray-400 mt-0.5">Attaching doesn't submit the plan. Max 25MB / 10 files.</p>
+        </div>
+      </div>
+      <noscript><button type="submit" class="mt-1.5 px-3 py-1.5 text-xs font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md">Attach</button></noscript>
+    </form>
+  </div>
 
   <!-- Council permit two-stage workflow: Applied → Approved.
        Stage 1 lodges the application — Description + Submission date + Job start
@@ -363,7 +446,7 @@
     <details class="group">
       <summary class="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 inline-flex items-center list-none">
         <svg class="w-3.5 h-3.5 mr-1 transition-transform group-open:rotate-180" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        <%= docCount > 0 ? 'Add more files / re-submit' : 'Upload & submit' %>
+        <%= isSubmitted ? 'Re-submit plan…' : 'Submit plan…' %>
       </summary>
       <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/upload-submit" enctype="multipart/form-data" class="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-gray-50 rounded-md">
         <%- include('../partials/csrf') %>
@@ -382,12 +465,17 @@
             class="w-full px-2.5 py-1.5 text-xs bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
         </div>
 
+        <% const fileRequired = docCount === 0 && sub.item_type !== 'council_permit'; %>
         <div class="sm:col-span-2">
-          <label class="block text-xs font-medium text-gray-700 mb-1">Files <% if (sub.item_type !== 'council_permit') { %><span class="text-rose-500">*</span><% } %></label>
-          <input type="file" name="documents" multiple <%= sub.item_type === 'council_permit' ? '' : 'required' %>
-            accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.gif,.webp,.dwg,.dxf"
-            class="w-full text-xs text-gray-700 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-xs file:font-medium file:bg-brand-50 file:text-brand-700 hover:file:bg-brand-100">
-          <p class="mt-1 text-[11px] text-gray-500">PDF, Word, Excel, images, DWG/DXF — max 25MB / 10 files<% if (sub.item_type === 'council_permit') { %> · optional for council<% } %></p>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Files <% if (fileRequired) { %><span class="text-rose-500">*</span><% } %></label>
+          <div data-dropzone>
+            <input type="file" name="documents" multiple <%= fileRequired ? 'required' : '' %>
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.jpg,.jpeg,.png,.gif,.webp,.dwg,.dxf">
+            <div class="dropzone-label">
+              <p class="text-xs text-gray-500">Drag &amp; drop or <span class="text-brand-600 font-medium">click to browse</span></p>
+            </div>
+          </div>
+          <p class="mt-1 text-[11px] text-gray-500">PDF, Word, Excel, images, DWG/DXF — max 25MB / 10 files<% if (!fileRequired && docCount > 0) { %> · optional, <%= docCount %> file<%= docCount > 1 ? 's' : '' %> already attached<% } else if (sub.item_type === 'council_permit') { %> · optional for council<% } %></p>
         </div>
 
         <% const jobMandatory = (sub.item_type === 'council_permit' || sub.item_type === 'rol' || sub.item_type === 'road_occupancy'); %>
@@ -452,43 +540,6 @@
     </details>
   <% } %>
 
-  <%
-    // ── Plans Module enhancements (council/ROL/CTMP) ──
-    // cFees + feesTotal are defined at the top of this card (used by the P&L line).
-    const cExt = (typeof extensions !== 'undefined' && extensions) ? extensions : [];
-    const cShifts = (typeof rolShifts !== 'undefined' && rolShifts) ? rolShifts : [];
-    const cConds = (typeof rolConditions !== 'undefined' && rolConditions) ? rolConditions : [];
-    const isCouncilType = sub.item_type === 'council_permit';
-    const isCtmpType = sub.item_type === 'tmp_approval';
-    const isRolType = sub.item_type === 'rol' || sub.item_type === 'road_occupancy';
-    const condAlerts = cConds.filter(c => c.is_alert);
-    const qaCol = { pending: 'bg-gray-100 text-gray-600', in_qa: 'bg-amber-100 text-amber-700', approved: 'bg-emerald-100 text-emerald-700' };
-  %>
-
-  <!-- ROL condition alerts -->
-  <% if (condAlerts.length) { %>
-    <div class="mt-3 bg-rose-50 ring-1 ring-rose-200 rounded-md p-3">
-      <p class="text-[10px] font-bold uppercase tracking-wide text-rose-700 mb-1.5">Conditions — read before site</p>
-      <ul class="space-y-1">
-        <% condAlerts.forEach(c => { %><li class="text-xs text-rose-800 flex gap-1.5"><span class="font-bold">!</span><span><%= c.text %></span></li><% }) %>
-      </ul>
-    </div>
-  <% } %>
-
-  <!-- CTMP QA status -->
-  <% if (isCtmpType) { %>
-    <div class="mt-3 flex items-center gap-2 text-xs">
-      <span class="text-[10px] font-bold uppercase tracking-wide text-gray-500">CTMP QA</span>
-      <% if (sub.qa_status) { %><span class="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium <%= qaCol[sub.qa_status] || qaCol.pending %>"><%= (sub.qa_status || 'pending').replace('_',' ') %></span><% } %>
-      <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/qa" class="inline-flex items-center gap-1" onsubmit="return window.__subPlanAjaxSave ? window.__subPlanAjaxSave(event, this) : true;" data-ajax-save>
-        <%- include('../partials/csrf') %>
-        <select name="qa_status" onchange="this.form.requestSubmit ? this.form.requestSubmit() : this.form.submit()" class="px-2 py-1 text-xs bg-white border border-gray-300 rounded-md">
-          <% ['pending','in_qa','approved'].forEach(s => { %><option value="<%= s %>" <%= sub.qa_status === s ? 'selected' : '' %>><%= s.replace('_',' ') %></option><% }) %>
-        </select>
-      </form>
-    </div>
-  <% } %>
-
   <!-- Fees (itemised, with receipts) -->
   <details class="mt-3 group">
     <summary class="cursor-pointer text-xs font-medium text-brand-600 hover:text-brand-700 inline-flex items-center list-none">
@@ -538,16 +589,6 @@
   </details>
   <% } %>
 
-  <!-- ROL: expiry banner (14 days from applied-for date) -->
-  <% if (isRolType && rolApplied && !rolApproved) { %>
-    <div class="mb-2 flex flex-wrap items-center gap-2 px-3 py-2 rounded text-xs ring-1 <%= rolExpired ? 'bg-rose-50 ring-rose-200 text-rose-800' : (rolInChase ? 'bg-amber-50 ring-amber-200 text-amber-800' : 'bg-blue-50/60 ring-blue-100 text-blue-800') %>">
-      <span class="text-[10px] font-bold uppercase tracking-wide">ROL application</span>
-      <span>Applied <%= rolApplied %> · <strong><%= rolExpired ? 'EXPIRED ' + rolExpiryStr : 'expires ' + rolExpiryStr %></strong></span>
-      <% if (rolInChase) { %><span class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-white">Chase now</span>
-      <% } else if (rolExpired) { %><span class="ml-auto inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white">Re-apply</span><% } %>
-    </div>
-  <% } %>
-
   <!-- ROL two-stage + PDF auto-extraction + manual entry -->
   <% if (isRolType) { %>
   <details class="mt-2 group"<%= (rolApplied && !rolApproved) ? ' open' : '' %>>
@@ -592,6 +633,31 @@
       </form>
       <div class="bg-brand-50 ring-1 ring-brand-100 rounded p-2">
         <p class="text-[10px] font-bold uppercase tracking-wide text-brand-700 mb-1.5">Or auto-extract from PDF</p>
+        <%
+          // PDFs already attached via the Documents zone — no re-upload
+          // needed: pick one and read it as the ROLA or the issued ROL.
+          const rolDocPdfs = (docs || []).filter(d => /\.pdf$/i.test(d.original_name || d.filename || '') || String(d.mime_type || '').toLowerCase().includes('pdf'));
+        %>
+        <% if (rolDocPdfs.length) { %>
+          <div class="mb-2 space-y-1" data-rol-existing-docs>
+            <% rolDocPdfs.forEach(d => { %>
+              <div class="flex flex-wrap items-center gap-2 px-2 py-1.5 bg-white ring-1 ring-gray-200 rounded text-xs">
+                <span class="flex-1 min-w-0 truncate text-gray-700" title="<%= d.original_name %>"><%= d.original_name %></span>
+                <span class="text-[10px] text-gray-400 shrink-0"><%= (d.created_at || '').slice(0, 10) %></span>
+                <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/rola/parse" enctype="multipart/form-data" class="inline shrink-0">
+                  <%- include('../partials/csrf') %>
+                  <input type="hidden" name="existing_doc_id" value="<%= d.id %>">
+                  <button class="px-2 py-0.5 text-[11px] font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 ring-1 ring-brand-200 rounded">Read as ROLA</button>
+                </form>
+                <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/rol/parse" enctype="multipart/form-data" class="inline shrink-0">
+                  <%- include('../partials/csrf') %>
+                  <input type="hidden" name="existing_doc_id" value="<%= d.id %>">
+                  <button class="px-2 py-0.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 ring-1 ring-emerald-200 rounded">Read as issued ROL</button>
+                </form>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <form method="POST" action="/compliance/sub-plans/<%= sub.id %>/rola/parse" enctype="multipart/form-data" class="flex items-center gap-1.5">
             <%- include('../partials/csrf') %>

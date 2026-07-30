@@ -143,7 +143,9 @@ function createParentPlan(req, res, db, b) {
         const raw = b['count_' + type];
         const count = parseInt(raw, 10);
         if (!Number.isFinite(count) || count <= 0) return;
-        const typeOwnerId = b['owner_' + type] || null;
+        // Owner precedence: per-type override (only posted when "customise
+        // owner per type" is on) → the plan-level default owner → the PM.
+        const typeOwnerId = b['owner_' + type] || b.default_owner_id || b.pm_id || null;
         const raNeeded = type === 'traffic_guidance' && (b['ra_needed_' + type] === '1' || b['ra_needed_' + type] === 1 || b['ra_needed_' + type] === 'on' || b['ra_needed_' + type] === true);
         for (let seq = 1; seq <= count; seq++) {
           const ref = planStatus.buildSubPlanRef(planNumber, type, seq);
@@ -575,6 +577,43 @@ router.post('/sub-plans/:subId/extension', (req, res) => {
 // is required (validated server-side); expiry_date is optional.
 // Notes are stored on the sub-plan's `notes` column. Status flips to
 // 'submitted' as a side-effect of a successful upload.
+// POST /compliance/sub-plans/:subId/documents — attach files WITHOUT
+// submitting. Dropping files on a sub-plan's Documents zone should never
+// force the full submission ritual (description / dates / hours / status
+// flip) — that stays the explicit "Submit plan" action (upload-submit
+// below). Attach-only writes compliance_documents rows and nothing else.
+router.post('/sub-plans/:subId/documents', subPlanUpload.array('documents', 10), (req, res) => {
+  const db = getDb();
+  const sub = getSubPlan(db, req.params.subId);
+  if (!sub) {
+    req.flash('error', 'Sub-plan not found.');
+    return req.session.save(() => res.redirect('/compliance'));
+  }
+  const backTo = '/compliance/' + sub.parent_id + '/edit#sub-' + sub.id;
+  const files = req.files || [];
+  if (!files.length) {
+    req.flash('error', 'No files received — drop or choose at least one file.');
+    return req.session.save(() => res.redirect(backTo));
+  }
+
+  const insDoc = db.prepare('INSERT INTO compliance_documents (compliance_id, filename, original_name, file_path, file_size, mime_type, uploaded_by_id) VALUES (?, ?, ?, ?, ?, ?, ?)');
+  files.forEach(f => {
+    const relPath = '/data/uploads/compliance/' + sub.id + '/' + f.filename;
+    insDoc.run(sub.id, f.filename, f.originalname, relPath, f.size, f.mimetype || '', req.session.user.id);
+  });
+
+  if (sub.job_id || req.session.user) {
+    autoLogDiary(db, {
+      jobId: sub.job_id, complianceItemId: sub.id,
+      summary: `[${req.session.user.full_name}] Attached ${files.length} file(s) to ${sub.reference_number || ('#' + sub.id)}.`,
+      userId: req.session.user.id
+    });
+  }
+
+  req.flash('success', files.length + ' file' + (files.length > 1 ? 's' : '') + ' attached.');
+  req.session.save(() => res.redirect(backTo));
+});
+
 router.post('/sub-plans/:subId/upload-submit', subPlanUpload.array('documents', 10), (req, res) => {
   const db = getDb();
   const sub = getSubPlan(db, req.params.subId);
@@ -833,20 +872,43 @@ router.post('/sub-plans/:subId/rol-manual', (req, res) => {
 });
 
 // Link a TGS sub-plan to a ROL sub-plan of the SAME plan (or clear the link).
+// A TGS can be covered by MULTIPLE ROLs (staged/long works run under several
+// concurrent licences), so links live in compliance_tgs_rol_links (mig 332),
+// toggled one at a time — idempotent add/remove survives double-clicks and
+// stale tabs, where a replace-the-set write could silently drop links.
+// legacy `linked_rol_id` body name still accepted; the column is no longer
+// written (left in place — nothing reads it).
 router.post('/sub-plans/:subId/link-rol', (req, res) => {
   const db = getDb();
   const sub = getSubPlan(db, req.params.subId);
   if (!sub) { if (wantsJson(req)) return res.status(404).json({ error: 'Sub-plan not found' }); req.flash('error', 'Sub-plan not found.'); return req.session.save(() => res.redirect('/compliance')); }
-  let linkId = parseInt(req.body.linked_rol_id, 10) || null;
-  if (linkId) {
-    // Only allow linking to a ROL sub-plan under the same parent plan.
-    const target = db.prepare("SELECT id FROM compliance WHERE id = ? AND parent_id = ? AND item_type IN ('rol','road_occupancy')").get(linkId, sub.parent_id);
-    if (!target) linkId = null;
+  const rolId = parseInt(req.body.rol_id || req.body.linked_rol_id, 10) || null;
+  const action = req.body.action === 'remove' ? 'remove' : 'add';
+  const backTo = '/compliance/' + sub.parent_id + '/edit#sub-' + sub.id;
+
+  if (!rolId) {
+    if (wantsJson(req)) return res.status(400).json({ error: 'rol_id required' });
+    req.flash('error', 'Pick a ROL to link.');
+    return req.session.save(() => res.redirect(backTo));
   }
-  db.prepare("UPDATE compliance SET linked_rol_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(linkId, sub.id);
-  if (wantsJson(req)) return res.json({ success: true, linked_rol_id: linkId });
-  req.flash('success', linkId ? 'Linked to ROL.' : 'ROL link cleared.');
-  req.session.save(() => res.redirect('/compliance/' + sub.parent_id + '/edit'));
+  // Only ROL sub-plans under the same parent plan are valid targets.
+  const target = db.prepare("SELECT id FROM compliance WHERE id = ? AND parent_id = ? AND item_type IN ('rol','road_occupancy')").get(rolId, sub.parent_id);
+  if (!target) {
+    if (wantsJson(req)) return res.status(400).json({ error: 'Not a ROL on this plan' });
+    req.flash('error', 'That ROL is not on this plan.');
+    return req.session.save(() => res.redirect(backTo));
+  }
+
+  if (action === 'remove') {
+    db.prepare('DELETE FROM compliance_tgs_rol_links WHERE tgs_id = ? AND rol_id = ?').run(sub.id, rolId);
+  } else {
+    db.prepare('INSERT OR IGNORE INTO compliance_tgs_rol_links (tgs_id, rol_id) VALUES (?, ?)').run(sub.id, rolId);
+  }
+  db.prepare('UPDATE compliance SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(sub.id);
+
+  if (wantsJson(req)) return res.json({ success: true, action, rol_id: rolId });
+  req.flash('success', action === 'remove' ? 'ROL unlinked.' : 'Linked to ROL.');
+  req.session.save(() => res.redirect(backTo));
 });
 
 // Charge the client — set/clear the charge flag + amount independently of the
@@ -1037,12 +1099,31 @@ function parseComplianceRol(stage) {
     const db = getDb();
     const sub = getSubPlan(db, req.params.subId);
     if (!sub) { req.flash('error', 'Sub-plan not found.'); return req.session.save(() => res.redirect('/compliance')); }
-    if (!req.file) { req.flash('error', 'Choose a PDF to extract.'); return req.session.save(() => res.redirect('/compliance/' + sub.parent_id + '/edit')); }
-    const filePath = subRel(sub, req.file);
+    // The PDF can be a fresh upload OR a document already attached to this
+    // sub-plan (the "grab it from Upload & Submit" path) — no re-upload
+    // needed when the ROL is already sitting in Documents.
+    let filePath, fileOriginalName;
+    if (req.file) {
+      filePath = subRel(sub, req.file);
+      fileOriginalName = req.file.originalname;
+    } else if (req.body && req.body.existing_doc_id) {
+      const doc = db.prepare('SELECT * FROM compliance_documents WHERE id = ? AND compliance_id = ?')
+        .get(req.body.existing_doc_id, sub.id);
+      const isPdf = doc && (/\.pdf$/i.test(doc.original_name || doc.filename || '') || String(doc.mime_type || '').toLowerCase().includes('pdf'));
+      if (!isPdf) {
+        req.flash('error', doc ? 'That attachment is not a PDF.' : 'Attachment not found on this sub-plan.');
+        return req.session.save(() => res.redirect('/compliance/' + sub.parent_id + '/edit#sub-' + sub.id));
+      }
+      filePath = doc.file_path;
+      fileOriginalName = doc.original_name || doc.filename;
+    } else {
+      req.flash('error', 'Choose a PDF to extract.');
+      return req.session.save(() => res.redirect('/compliance/' + sub.parent_id + '/edit'));
+    }
     try {
       const { parseRolPdf } = require('../services/rolParser');
       const parsed = await parseRolPdf(path.join(__dirname, '..', filePath.replace(/^\//, '')), stage);
-      res.render('compliance/rol-review', { title: 'Review extracted ' + stage.toUpperCase(), sub, stage, parsed, filePath, fileOriginalName: req.file.originalname, user: req.session.user });
+      res.render('compliance/rol-review', { title: 'Review extracted ' + stage.toUpperCase(), sub, stage, parsed, filePath, fileOriginalName, user: req.session.user });
     } catch (err) {
       console.error('[Compliance] ' + stage + ' parse failed:', err.message);
       req.flash('error', 'Could not read that PDF automatically — enter details manually. (' + err.message + ')');
@@ -1403,6 +1484,23 @@ router.get('/:id/edit', (req, res) => {
     try { db.prepare(`SELECT * FROM compliance_rol_conditions WHERE compliance_id IN (${ph}) ORDER BY is_alert DESC, condition_no`).all(...subIds).forEach(r => (subPlanRolConditions[r.compliance_id] = subPlanRolConditions[r.compliance_id] || []).push(r)); } catch (e) {}
   }
 
+  // TGS ↔ ROL links (many-to-many, mig 332): forward map for TGS cards
+  // (which ROLs cover this TGS) and back map for ROL cards (which TGS
+  // sheets this licence covers). Guarded — pre-332 DBs lack the table.
+  let subPlanRolLinks = {}, subPlanTgsBacklinks = {};
+  if (isParent && subPlans.length > 0) {
+    try {
+      const subIds = subPlans.map(s => s.id);
+      const ph = subIds.map(() => '?').join(',');
+      db.prepare(`SELECT tgs_id, rol_id FROM compliance_tgs_rol_links WHERE tgs_id IN (${ph}) OR rol_id IN (${ph})`)
+        .all(...subIds, ...subIds)
+        .forEach(l => {
+          (subPlanRolLinks[l.tgs_id] = subPlanRolLinks[l.tgs_id] || []).push(l.rol_id);
+          (subPlanTgsBacklinks[l.rol_id] = subPlanTgsBacklinks[l.rol_id] || []).push(l.tgs_id);
+        });
+    } catch (e) { /* pre-332 */ }
+  }
+
   // Tender link (if this plan is rolled up under a tender)
   let tender = null;
   if (item.tender_id) {
@@ -1419,6 +1517,7 @@ router.get('/:id/edit', (req, res) => {
     documents, linkedTask, revisions, tender,
     isParent, subPlans, subPlanDocs, subPlanTypes: SUB_PLAN_TYPES,
     raBySubPlan, subPlanFees, subPlanExtensions, subPlanRolShifts, subPlanRolConditions,
+    subPlanRolLinks, subPlanTgsBacklinks,
   });
 });
 

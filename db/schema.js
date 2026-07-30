@@ -14703,6 +14703,39 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 331 error:', e.message); }
   }
 
+  // 332 — a TGS sub-plan can be covered by MULTIPLE ROLs. linked_rol_id
+  // (mig 317) held a single ROL per TGS, but jobs routinely run under
+  // several concurrent licences (staged works, long jobs). Join table +
+  // backfill. linked_rol_id STOPS being written but stays in place —
+  // SQLite column drops rewrite the whole table, and after this change
+  // nothing reads it (verified: the /link-rol route and the sub-plan card
+  // were its only consumers). Do not resurrect it.
+  if (!isMigrationApplied.get(332)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS compliance_tgs_rol_links (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          tgs_id INTEGER NOT NULL REFERENCES compliance(id) ON DELETE CASCADE,
+          rol_id INTEGER NOT NULL REFERENCES compliance(id) ON DELETE CASCADE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          UNIQUE(tgs_id, rol_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_tgs_rol_links_tgs ON compliance_tgs_rol_links(tgs_id);
+        CREATE INDEX IF NOT EXISTS idx_tgs_rol_links_rol ON compliance_tgs_rol_links(rol_id);
+      `);
+      // Backfill. The self-join guards against dangling linked_rol_id values
+      // — FK enforcement is PRAGMA-dependent in SQLite, so don't trust it.
+      const n = db.prepare(`
+        INSERT OR IGNORE INTO compliance_tgs_rol_links (tgs_id, rol_id)
+        SELECT c.id, c.linked_rol_id FROM compliance c
+        JOIN compliance r ON r.id = c.linked_rol_id
+        WHERE c.linked_rol_id IS NOT NULL
+      `).run().changes;
+      recordMigration.run(332, `compliance_tgs_rol_links — TGS↔ROL many-to-many (backfilled ${n} links)`);
+      console.log('Migration 332 applied');
+    } catch (e) { console.error('Migration 332 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

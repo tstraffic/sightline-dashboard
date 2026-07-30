@@ -34,6 +34,7 @@
   // ROL sub-plans of this plan — passed to every card so a TGS can offer a
   // "Linked ROL" dropdown listing the ROLs on the same plan.
   const rolSubs = (subPlans || []).filter(s => s.item_type === 'rol' || s.item_type === 'road_occupancy');
+  const tgsSubs = (subPlans || []).filter(s => s.item_type === 'traffic_guidance');
 
   const planNumber = isEdit ? item.plan_number : null;
 %>
@@ -157,7 +158,24 @@
            to the chosen user. -->
       <div class="mt-6 pt-6 border-t border-gray-200">
         <h2 class="text-sm font-semibold text-gray-900 mb-1">Sub-plans to generate</h2>
-        <p class="text-sm text-gray-500 mb-4">Tick each type you need, set how many, and pick an owner for that type. Each one becomes its own slot with a system reference (e.g. <code class="px-1.5 py-0.5 bg-gray-100 rounded">TSTGS3100</code>; additional ones in the same group get <code class="px-1.5 py-0.5 bg-gray-100 rounded">-2</code>, <code class="px-1.5 py-0.5 bg-gray-100 rounded">-3</code>, …) you can name and upload to.</p>
+        <p class="text-sm text-gray-500 mb-4">Tick each type you need and set how many. Each one becomes its own slot with a system reference (e.g. <code class="px-1.5 py-0.5 bg-gray-100 rounded">TSTGS3100</code>; additional ones in the same group get <code class="px-1.5 py-0.5 bg-gray-100 rounded">-2</code>, <code class="px-1.5 py-0.5 bg-gray-100 rounded">-3</code>, …) you can name and upload to.</p>
+        <!-- One owner for everything by default (mirrors the Project PM until
+             touched); the per-type owner selects only appear when the planner
+             genuinely wants different owners per type. Disabled inputs don't
+             post, so the server-side fallback chain stays simple. -->
+        <div class="mb-4 flex flex-wrap items-end gap-4">
+          <div>
+            <label class="block text-xs font-medium text-gray-700 mb-1">Default sub-plan owner</label>
+            <select name="default_owner_id" id="defaultOwnerSelect" class="px-2.5 py-1.5 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500">
+              <option value="">— Unassigned —</option>
+              <% users.forEach(u => { %><option value="<%= u.id %>"><%= u.full_name %></option><% }) %>
+            </select>
+          </div>
+          <label class="flex items-center gap-1.5 text-xs text-gray-600 pb-2 cursor-pointer">
+            <input type="checkbox" id="customiseOwners" class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+            Customise owner per type
+          </label>
+        </div>
         <div class="space-y-2.5">
           <% subPlanTypes.forEach(t => { %>
             <div class="border border-gray-200 rounded-lg hover:border-brand-300 hover:bg-brand-50/40 has-[:checked]:border-brand-400 has-[:checked]:bg-brand-50">
@@ -177,7 +195,7 @@
                 <input type="number" name="count_<%= t %>" min="1" max="20" value="1" disabled
                   class="count-input w-16 px-2 py-1 text-sm text-center border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400">
                 <select name="owner_<%= t %>" disabled
-                  class="owner-input w-full px-2 py-1 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400">
+                  class="owner-input hidden w-full px-2 py-1 text-sm bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500 disabled:bg-gray-50 disabled:text-gray-400">
                   <option value="">— Owner —</option>
                   <% users.forEach(u => { %><option value="<%= u.id %>"><%= u.full_name %></option><% }) %>
                 </select>
@@ -193,14 +211,41 @@
         </div>
       </div>
       <script>
-        // Toggle: ticking a type enables its count + owner inputs.
-        // Disabled inputs aren't submitted, so unticked types vanish.
+        // Toggle: ticking a type enables its count input. The per-type
+        // owner select only participates when "Customise owner per type"
+        // is on — otherwise it stays hidden AND disabled (disabled inputs
+        // aren't submitted), and the server falls back to the default
+        // owner, then the PM.
+        const customiseOwners = document.getElementById('customiseOwners');
+        function syncOwnerInputs() {
+          const custom = customiseOwners && customiseOwners.checked;
+          document.querySelectorAll('.type-toggle').forEach(cb => {
+            const card = cb.closest('.border');
+            const owner = card.querySelector('.owner-input');
+            if (!owner) return;
+            owner.classList.toggle('hidden', !custom);
+            owner.disabled = !(custom && cb.checked);
+          });
+        }
+        if (customiseOwners) customiseOwners.addEventListener('change', syncOwnerInputs);
+
+        // Default owner mirrors the Project PM until the user touches it.
+        const pmSelect = document.querySelector('select[name="pm_id"]');
+        const defaultOwner = document.getElementById('defaultOwnerSelect');
+        if (pmSelect && defaultOwner) {
+          let ownerTouched = false;
+          defaultOwner.addEventListener('change', () => { ownerTouched = true; });
+          pmSelect.addEventListener('change', () => {
+            if (!ownerTouched) defaultOwner.value = pmSelect.value;
+          });
+        }
+
         document.querySelectorAll('.type-toggle').forEach(cb => {
           cb.addEventListener('change', e => {
             const card = e.target.closest('.border');
             const countInput = card.querySelector('.count-input');
             countInput.disabled = !cb.checked;
-            card.querySelector('.owner-input').disabled = !cb.checked;
+            syncOwnerInputs();
             // RA-needed checkbox (only present on TGS row) follows the same gate as count + owner.
             const raLabel = card.querySelector('.ra-toggle');
             const raCheckbox = card.querySelector('.ra-checkbox');
@@ -361,7 +406,7 @@
             </div>
             <div class="space-y-3">
               <% list.forEach(sub => { %>
-                <%- include('./_sub_plan_card', { sub, docs: (subPlanDocs && subPlanDocs[sub.id]) || [], parentId: item.id, statusBadge: STATUS_BADGE, ra: (typeof raBySubPlan !== 'undefined' && raBySubPlan) ? raBySubPlan[sub.id] : null, fees: (typeof subPlanFees !== 'undefined' && subPlanFees) ? (subPlanFees[sub.id] || []) : [], extensions: (typeof subPlanExtensions !== 'undefined' && subPlanExtensions) ? (subPlanExtensions[sub.id] || []) : [], rolShifts: (typeof subPlanRolShifts !== 'undefined' && subPlanRolShifts) ? (subPlanRolShifts[sub.id] || []) : [], rolConditions: (typeof subPlanRolConditions !== 'undefined' && subPlanRolConditions) ? (subPlanRolConditions[sub.id] || []) : [], rolSubs: rolSubs }) %>
+                <%- include('./_sub_plan_card', { sub, docs: (subPlanDocs && subPlanDocs[sub.id]) || [], parentId: item.id, statusBadge: STATUS_BADGE, ra: (typeof raBySubPlan !== 'undefined' && raBySubPlan) ? raBySubPlan[sub.id] : null, fees: (typeof subPlanFees !== 'undefined' && subPlanFees) ? (subPlanFees[sub.id] || []) : [], extensions: (typeof subPlanExtensions !== 'undefined' && subPlanExtensions) ? (subPlanExtensions[sub.id] || []) : [], rolShifts: (typeof subPlanRolShifts !== 'undefined' && subPlanRolShifts) ? (subPlanRolShifts[sub.id] || []) : [], rolConditions: (typeof subPlanRolConditions !== 'undefined' && subPlanRolConditions) ? (subPlanRolConditions[sub.id] || []) : [], rolSubs: rolSubs, tgsSubs: tgsSubs, rolLinks: (typeof subPlanRolLinks !== 'undefined' && subPlanRolLinks) ? (subPlanRolLinks[sub.id] || []) : [], tgsBacklinks: (typeof subPlanTgsBacklinks !== 'undefined' && subPlanTgsBacklinks) ? (subPlanTgsBacklinks[sub.id] || []) : [] }) %>
               <% }) %>
             </div>
           </div>
@@ -386,6 +431,24 @@
         // selected upload in the sibling Upload & Submit form on the same
         // card. Now they POST via fetch and stay on the page. The routes
         // already short-circuit to JSON when Accept: application/json.
+        // Attach-only forms auto-submit the moment files land (drop OR
+        // browse — dropzone.js dispatches a bubbling `change` for both).
+        // dropzone.js REPLACES input.files on every drop, so waiting for a
+        // manual submit would silently lose earlier batches; submitting per
+        // drop loses nothing. Native multipart POST → CSRF-exempt.
+        document.querySelectorAll('form[data-attach-form]').forEach(function (f) {
+          var input = f.querySelector('input[type="file"]');
+          if (!input) return;
+          input.addEventListener('change', function () {
+            if (!input.files.length || f.__busy) return;
+            f.__busy = true;
+            f.classList.add('opacity-60', 'pointer-events-none');
+            var label = f.querySelector('.dropzone-label p');
+            if (label) label.textContent = 'Uploading…';
+            f.submit();
+          });
+        });
+
         window.__subPlanAjaxSave = function (event, form) {
           if (event) event.preventDefault();
           if (!form || form.__saving) return false;
@@ -429,39 +492,49 @@
           <svg class="w-4 h-4 mr-1 transition-transform group-open:rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
           Add a sub-plan
         </summary>
-        <form method="POST" action="/compliance/<%= item.id %>/sub-plans" class="mt-3 space-y-2" id="addSubPlanForm">
+        <%/* One button per type — no dropdown to work through. Each is its
+             own tiny form (mirrors the per-group "+ Add another" pattern).
+             "Other" is different: it needs a description, so its button
+             reveals a small inline form instead of posting immediately. */%>
+        <div class="mt-3 flex flex-wrap gap-1.5">
+          <% subPlanTypes.filter(t => t !== 'other').forEach(t => { %>
+            <form method="POST" action="/compliance/<%= item.id %>/sub-plans" class="inline">
+              <%- include('../partials/csrf') %>
+              <input type="hidden" name="item_type" value="<%= t %>">
+              <button type="submit" data-quick-add="<%= t %>"
+                class="px-2.5 py-1.5 text-xs font-medium text-brand-700 bg-brand-50 hover:bg-brand-100 ring-1 ring-brand-200 rounded-md">
+                + <%= TYPE_LABELS[t] || t %>
+              </button>
+            </form>
+          <% }) %>
+          <button type="button" id="addOtherToggle" data-quick-add="other"
+            class="px-2.5 py-1.5 text-xs font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 ring-1 ring-gray-200 rounded-md">
+            + Other…
+          </button>
+        </div>
+        <form method="POST" action="/compliance/<%= item.id %>/sub-plans" class="mt-2 hidden" id="addOtherForm">
           <%- include('../partials/csrf') %>
+          <input type="hidden" name="item_type" value="other">
           <div class="flex items-center gap-2">
-            <select name="item_type" id="addSubPlanType" required class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500">
-              <% subPlanTypes.forEach(t => { %>
-                <option value="<%= t %>"><%= TYPE_LABELS[t] || t %></option>
-              <% }) %>
-            </select>
-            <button type="submit" class="px-3 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg">Add</button>
-          </div>
-          <%/* Description input only renders + submits when "Other" is picked. Disabled
-               otherwise so it never lands on the body for non-Other types. */%>
-          <div id="addSubPlanOtherDesc" class="hidden">
             <input type="text" name="other_description" maxlength="120" disabled
               placeholder='What is this Other? e.g. "Methodologies", "Staging"'
-              class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
-            <p class="mt-1 text-[11px] text-gray-500">Lets you tell several Other rows apart on the register.</p>
+              class="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-brand-500" />
+            <button type="submit" class="px-3 py-2 text-sm font-medium text-white bg-brand-600 hover:bg-brand-700 rounded-lg">Add Other</button>
           </div>
+          <p class="mt-1 text-[11px] text-gray-500">Lets you tell several Other rows apart on the register.</p>
         </form>
         <script>
           (function () {
-            var sel  = document.getElementById('addSubPlanType');
-            var wrap = document.getElementById('addSubPlanOtherDesc');
-            if (!sel || !wrap) return;
-            var input = wrap.querySelector('input[name="other_description"]');
-            function sync() {
-              var isOther = sel.value === 'other';
-              wrap.classList.toggle('hidden', !isOther);
-              input.disabled = !isOther;
-              if (isOther) input.focus();
-            }
-            sel.addEventListener('change', sync);
-            sync();
+            var toggle = document.getElementById('addOtherToggle');
+            var form = document.getElementById('addOtherForm');
+            if (!toggle || !form) return;
+            var input = form.querySelector('input[name="other_description"]');
+            toggle.addEventListener('click', function () {
+              var show = form.classList.contains('hidden');
+              form.classList.toggle('hidden', !show);
+              input.disabled = !show;
+              if (show) input.focus();
+            });
           })();
         </script>
       </details>

@@ -45,7 +45,7 @@ Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney tr
 - Migration 247 = Compliance council/ROL workflow (council_plan_type, job_date, itemised fees, extensions, ROL two-stage + PDF extraction, CTMP QA)
 
 ## Two "plans" areas — don't confuse them
-- **Compliance / "Plans & Approvals"** (`/compliance`, `compliance` table, sidebar "Plans & Approvals") — **the module the team actually uses.** Parent plans → sub-plans with refs `TSCA` (council_permit), `TSROL` (rol), `TSTMP` (CTMP/tmp_approval), `TSTGS`, `TSSPA`, etc. Owner, status workflow, fees, dates, revisions live here. Council/ROL/CTMP features belong here.
+- **Compliance / "Plans & Approvals"** (`/compliance`, `compliance` table, sidebar "Plans & Approvals") — **the module the team actually uses.** Parent plans → sub-plans with refs `TSCA` (council_permit), `TSROL` (rol), `TSTMP` (CTMP/tmp_approval), `TSTGS`, `TSSPA`, etc. Owner, status workflow, fees, dates, revisions live here. Council/ROL/CTMP features belong here. TGS↔ROL links are **many-to-many** via `compliance_tgs_rol_links` (mig 332) — `compliance.linked_rol_id` is retired (unread, unwritten; left in place because SQLite column drops rewrite the table). Sub-plan documents: attach-only via `POST /sub-plans/:id/documents` (no status change); `upload-submit` remains the explicit submission. The ROL parse routes accept `existing_doc_id` to read an already-attached PDF.
 - **Traffic Plans** (`/plans`, `traffic_plans` table) — a separate, lightly-used design-document register. (A council/ROL build landed here by mistake via PR #462; the real work is in Compliance.)
 
 ## Key Middleware
