@@ -12,6 +12,7 @@ const {
   getComplianceStatusBatch,
   getBatchFatigue,
 } = require('../middleware/compliance');
+const { ensureRosterRecord } = require('../lib/employeeSync');
 
 // GET / — the Workforce listing is retired: the Roster tab (/hr/roster) is
 // the single place that lists every employee and links to their profiles.
@@ -40,6 +41,13 @@ router.post('/', (req, res) => {
       b.licence_type || '', b.licence_expiry || null, b.white_card || '', b.white_card_expiry || null,
       b.induction_date || null, b.medical_expiry || null, b.active ? 1 : 0
     );
+    // The roster (employees) is the source of truth for headcounts — a crew
+    // row without a roster record is exactly the drift migration 333 cleaned
+    // up, so put active additions on the roster immediately.
+    if (b.active) {
+      try { ensureRosterRecord(db, result.lastInsertRowid, 'Created from the Add Crew form (/crew/new).'); }
+      catch (e) { console.error('[crew] roster record create failed:', e.message); }
+    }
     logActivity({ user: req.session.user, action: 'create', entityType: 'crew_member', entityId: result.lastInsertRowid, entityLabel: b.full_name, details: 'Added crew member', ip: req.ip });
     req.flash('success', b.full_name + ' added to workforce.');
     req.session.save(() => res.redirect('/crew/' + result.lastInsertRowid));
@@ -106,7 +114,16 @@ router.post('/bulk', (req, res) => {
 
   if (action === 'deactivate') {
     const stmt = db.prepare('UPDATE crew_members SET active = 0 WHERE id = ?');
-    ids.forEach(id => stmt.run(id));
+    // Mirror the employee cascade from the single-row deactivate above —
+    // without it, bulk-deactivated crew stay "live" on the HR roster and the
+    // two tables drift apart again.
+    const findEmp = db.prepare('SELECT id FROM employees WHERE linked_crew_member_id = ? AND active = 1');
+    const softDeleteEmp = db.prepare(`UPDATE employees SET active = 0, deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?`);
+    ids.forEach(id => {
+      stmt.run(id);
+      const emp = findEmp.get(id);
+      if (emp) softDeleteEmp.run(emp.id);
+    });
     logActivity({ user: req.session.user, action: 'update', entityType: 'crew_member', entityLabel: `Bulk deactivated ${ids.length} crew members`, ip: req.ip });
     req.flash('success', ids.length + ' crew member(s) deactivated.');
   }

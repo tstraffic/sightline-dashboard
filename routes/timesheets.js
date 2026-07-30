@@ -199,10 +199,15 @@ router.get('/crew/new', (req, res) => {
 router.post('/crew', (req, res) => {
   const db = getDb();
   const { full_name, employee_id, role, phone, email, licence_type, licence_expiry, induction_date, hourly_rate, tcp_level, white_card, white_card_expiry, first_aid, first_aid_expiry, tc_ticket, tc_ticket_expiry, ti_ticket, ti_ticket_expiry, induction_status, company, medical_expiry, employment_type } = req.body;
-  db.prepare(`
+  const result = db.prepare(`
     INSERT INTO crew_members (full_name, employee_id, role, phone, email, licence_type, licence_expiry, induction_date, hourly_rate, tcp_level, white_card, white_card_expiry, first_aid, first_aid_expiry, tc_ticket, tc_ticket_expiry, ti_ticket, ti_ticket_expiry, induction_status, company, medical_expiry, employment_type)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(full_name, employee_id || null, role || 'traffic_controller', phone || '', email || '', licence_type || '', licence_expiry || null, induction_date || null, parseFloat(hourly_rate) || 0, tcp_level || '', white_card || '', white_card_expiry || null, first_aid || '', first_aid_expiry || null, tc_ticket || '', tc_ticket_expiry || null, ti_ticket || '', ti_ticket_expiry || null, induction_status || 'pending', company || '', medical_expiry || null, employment_type || 'employee');
+
+  // Crew rows created here default active=1 — put them on the HR roster too,
+  // or the two tables drift apart again (see migration 333).
+  try { require('../lib/employeeSync').ensureRosterRecord(db, result.lastInsertRowid, 'Created from the timesheets Add Crew form.'); }
+  catch (e) { console.error('[timesheets] roster record create failed:', e.message); }
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'crew_member', entityLabel: full_name, ip: req.ip });
   req.flash('success', `Crew member ${full_name} added.`);

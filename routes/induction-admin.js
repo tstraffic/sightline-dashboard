@@ -193,34 +193,10 @@ function seedPayrollFromSubmission(db, employeeId, submission) {
   return seeded;
 }
 
-// Allocate a unique EMP-XXX code based on the largest numeric suffix actually
-// in crew_members (ignoring non-numeric codes like EMP-TEST) and verify
-// it isn't already taken. Returns a string like "EMP-001".
-function allocateEmployeeId(db) {
-  // Scan BOTH crew_members.employee_id AND employees.employee_code for the
-  // largest numeric suffix, so a code already used by an unlinked employee
-  // record can't be reissued (which would collide on the employees insert).
-  const rows = db.prepare(`
-    SELECT employee_id AS code FROM crew_members WHERE employee_id LIKE 'EMP-%'
-    UNION ALL
-    SELECT employee_code AS code FROM employees WHERE employee_code LIKE 'EMP-%'
-  `).all();
-  let maxNum = 0;
-  for (const r of rows) {
-    const suffix = (r.code || '').replace(/^EMP-/, '');
-    if (/^\d+$/.test(suffix)) {
-      const n = parseInt(suffix, 10);
-      if (n > maxNum) maxNum = n;
-    }
-  }
-  const checkCrew = db.prepare('SELECT 1 FROM crew_members WHERE employee_id = ?');
-  const checkEmp = db.prepare('SELECT 1 FROM employees WHERE employee_code = ?');
-  for (let tries = 0; tries < 1000; tries++) {
-    const candidate = `EMP-${String(maxNum + 1 + tries).padStart(3, '0')}`;
-    if (!checkCrew.get(candidate) && !checkEmp.get(candidate)) return candidate;
-  }
-  throw new Error('Could not allocate a free employee_id after 1000 attempts');
-}
+// Allocate a unique EMP-XXX code — canonical implementation lives in
+// lib/employeeSync (shared with the SEEK converter and the roster-record
+// backfill helpers).
+const { allocateEmployeeId } = require('../lib/employeeSync');
 
 // Import induction file uploads as employee_documents AND create the matching
 // employee_competencies rows so the worker's wallet shows both the file and

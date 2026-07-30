@@ -491,6 +491,11 @@ router.post('/quick', async (req, res) => {
         VALUES (?, ?, 1)
       `).run(typedName, placeholderEmpId);
       crewId = ins.lastInsertRowid;
+      // An active crew row must have a roster record behind it (migration
+      // 333 invariant) — and surfacing the placeholder on /hr/roster is how
+      // HR finds and merges these unmatched assessees.
+      try { require('../lib/employeeSync').ensureRosterRecord(db, crewId, `Created from a VOC assessment for an unmatched name ("${typedName}") — review and merge if this person already exists.`); }
+      catch (e) { console.error('[voc] roster record create failed:', e.message); }
     }
   }
 

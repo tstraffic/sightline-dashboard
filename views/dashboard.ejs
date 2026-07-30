@@ -155,6 +155,8 @@
 
     <div class="console-inst" role="group" aria-label="Today at a glance">
       <% if (todayOps) { %>
+      <%# "of N active" reads the roster headcount (crew_members stays in
+          sync with /hr/roster via migration 333 + lib/employeeSync) %>
       <a class="i-cell" href="/bookings">
         <span class="i-k font-mono">Crews out</span>
         <span class="i-v font-mono"><%= todayOps.crewAssignedToday %></span>
@@ -313,7 +315,7 @@
         <a href="/bookings" class="panel-header-link">Bookings &rarr;</a>
       </div>
       <% if (todayOps.todaysBookings.length === 0) { %>
-        <p class="px-4 py-5 text-sm text-gray-400">No bookings scheduled today. <span class="text-gray-300">·</span> <%= todayOps.availableCrew %> of <%= todayOps.totalActiveCrew %> crew available.</p>
+        <p class="px-4 py-5 text-sm text-gray-400">No bookings scheduled today. <span class="text-gray-300">·</span> <a href="/hr/roster" class="hover:text-gray-600 underline decoration-gray-300 underline-offset-2"><%= todayOps.availableCrew %> of <%= todayOps.totalActiveCrew %> crew available</a>.</p>
       <% } else { %>
       <div class="overflow-x-auto">
         <table class="w-full text-sm flight-table">

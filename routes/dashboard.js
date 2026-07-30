@@ -174,7 +174,7 @@ router.get('/', async (req, res) => {
       if (isAdmin) {
         const userCount = db.prepare('SELECT COUNT(*) as c FROM users').get().c;
         const jobCount = db.prepare("SELECT COUNT(*) as c FROM jobs").get().c;
-        const crewCount = db.prepare("SELECT COUNT(*) as c FROM crew_members").get().c;
+        const crewCount = db.prepare("SELECT COUNT(*) as c FROM crew_members WHERE active = 1").get().c;
         checks.push({ key: 'users', label: 'Add a team member', link: '/admin/users', done: userCount > 1 });
         checks.push({ key: 'job', label: 'Create first job', link: '/jobs/new', done: jobCount > 0 });
         checks.push({ key: 'crew', label: 'Add crew member', link: '/crew/new', done: crewCount > 0 });

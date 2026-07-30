@@ -14736,6 +14736,39 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 332 error:', e.message); }
   }
 
+  // 333: reconcile crew_members with the HR roster. employees is the source
+  // of truth for headcounts (roster "All" = deleted_at IS NULL), but
+  // crew_members carried historical orphans — rows still active=1 with no
+  // live roster record behind them (pre-employees imports, legacy /crew/new
+  // and timesheet-import adds, duplicates) — inflating every "active crew"
+  // count and picker (the "Today says 235, roster says 123" bug). The write
+  // paths already cascade both directions (routes/hr.js roster
+  // delete/restore, routes/crew.js deactivate) and every creator now calls
+  // lib/employeeSync ensureRosterRecord, so this one-time sweep closes out
+  // the historical drift. Guarded: skipped on DBs that never adopted the
+  // employees linkage (zero live linked rows) — there the crew table IS the
+  // roster and deactivating everything would be catastrophic.
+  if (!isMigrationApplied.get(333)) {
+    try {
+      const linked = db.prepare(
+        'SELECT COUNT(*) AS c FROM employees WHERE deleted_at IS NULL AND linked_crew_member_id IS NOT NULL'
+      ).get().c;
+      let n = 0;
+      if (linked > 0) {
+        n = db.prepare(`
+          UPDATE crew_members SET active = 0
+          WHERE active = 1
+            AND id NOT IN (SELECT linked_crew_member_id FROM employees
+                           WHERE deleted_at IS NULL AND linked_crew_member_id IS NOT NULL)
+        `).run().changes;
+      }
+      recordMigration.run(333, linked > 0
+        ? `crew_members reconciled with HR roster (${n} orphaned active rows deactivated)`
+        : 'crew_members/roster reconcile skipped — no employees linkage on this DB');
+      console.log(`Migration 333 applied${linked > 0 ? ` (${n} orphaned crew rows deactivated)` : ' (skipped: no linkage)'}`);
+    } catch (e) { console.error('Migration 333 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
