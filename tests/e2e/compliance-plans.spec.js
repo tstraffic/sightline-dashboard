@@ -187,6 +187,42 @@ test('a TGS links to MULTIPLE ROLs, with back-links, and unlinks cleanly', async
   expect(links.map(l => l.rol_id)).toEqual([seed.rol2]);
 });
 
+test('deleting a ROL that a TGS points at succeeds (no FK 500)', async ({ page }) => {
+  const seed = seedPlan();
+  // Two ways a TGS can reference a ROL: the retired linked_rol_id column
+  // (mig 317, REFERENCES compliance(id) with NO ON DELETE — it held the row
+  // hostage and the delete route 500'd with "FOREIGN KEY constraint
+  // failed") and the current join table.
+  withDb(db => {
+    db.prepare('UPDATE compliance SET linked_rol_id = ? WHERE id = ?').run(seed.rol1, seed.tgsId);
+    db.prepare('INSERT OR IGNORE INTO compliance_tgs_rol_links (tgs_id, rol_id) VALUES (?, ?)').run(seed.tgsId, seed.rol1);
+  });
+
+  await loginAs(page);
+  await page.goto(editUrl(seed));
+  const res = await page.evaluate(async (subId) => {
+    const meta = document.querySelector('meta[name="csrf-token"]');
+    const token = meta ? meta.getAttribute('content') : '';
+    const r = await fetch(`/compliance/sub-plans/${subId}/delete`, {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': token },
+      body: new URLSearchParams({ _csrf: token }),
+      credentials: 'same-origin',
+    });
+    return { status: r.status, body: await r.text() };
+  }, seed.rol1);
+
+  expect(res.status, res.body).toBe(200);
+  const after = withDb(db => ({
+    rol: db.prepare('SELECT 1 FROM compliance WHERE id = ?').get(seed.rol1),
+    tgs: db.prepare('SELECT linked_rol_id FROM compliance WHERE id = ?').get(seed.tgsId),
+    links: db.prepare('SELECT COUNT(*) AS n FROM compliance_tgs_rol_links WHERE rol_id = ?').get(seed.rol1).n,
+  }));
+  expect(after.rol).toBeFalsy();              // the ROL is gone
+  expect(after.tgs.linked_rol_id).toBeNull(); // the TGS survives, detached
+  expect(after.links).toBe(0);                // and its links are cleaned up
+});
+
 test('quick-add buttons create sub-plans without the type dropdown', async ({ page }) => {
   const seed = seedPlan();
   await loginAs(page);

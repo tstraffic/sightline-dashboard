@@ -62,6 +62,23 @@ const subPlanUpload = multer({
 });
 
 // Loads a row and confirms it's a sub-plan (parent_id IS NOT NULL).
+// Detach every reference that would BLOCK deleting a compliance row.
+// SQLite runs with `foreign_keys = ON` (db/database.js), so any FK pointing
+// at compliance(id) without an ON DELETE action aborts the DELETE:
+//   - site_diary_entries.compliance_item_id  (NO ACTION)
+//   - compliance.linked_rol_id               (NO ACTION, migration 317)
+// The second one is why deleting a ROL threw "FOREIGN KEY constraint
+// failed": any TGS still pointing at it held the row hostage.
+// linked_rol_id is retired (superseded by compliance_tgs_rol_links, mig
+// 332) so nulling it is the correct detach, not a data loss.
+// The join-table rows are CASCADE, but delete them explicitly too — that
+// keeps this correct even if FK enforcement is ever off.
+function detachComplianceRefs(db, id) {
+  try { db.prepare('UPDATE site_diary_entries SET compliance_item_id = NULL WHERE compliance_item_id = ?').run(id); } catch (e) {}
+  try { db.prepare('UPDATE compliance SET linked_rol_id = NULL WHERE linked_rol_id = ?').run(id); } catch (e) {}
+  try { db.prepare('DELETE FROM compliance_tgs_rol_links WHERE tgs_id = ? OR rol_id = ?').run(id, id); } catch (e) {}
+}
+
 function getSubPlan(db, subId) {
   return db.prepare("SELECT * FROM compliance WHERE id = ? AND parent_id IS NOT NULL").get(subId);
 }
@@ -793,15 +810,25 @@ router.post('/sub-plans/:subId/delete', (req, res) => {
     return req.session.save(() => res.redirect('/compliance'));
   }
   const parentId = sub.parent_id;
-  // Remove docs (rows + files on disk)
   const docs = db.prepare('SELECT id, file_path FROM compliance_documents WHERE compliance_id = ?').all(sub.id);
+  try {
+    // One transaction: either the sub-plan and its rows all go, or nothing
+    // does. Files are unlinked only after the DB work commits, so a failed
+    // delete can't leave the row pointing at missing files.
+    db.transaction(() => {
+      db.prepare('DELETE FROM compliance_documents WHERE compliance_id = ?').run(sub.id);
+      detachComplianceRefs(db, sub.id);
+      db.prepare('DELETE FROM compliance WHERE id = ?').run(sub.id);
+    })();
+  } catch (e) {
+    console.error('[compliance] sub-plan delete failed:', e.message);
+    if (req.headers.accept && req.headers.accept.includes('json')) return res.status(500).json({ error: e.message });
+    req.flash('error', 'Could not delete that sub-plan: ' + e.message);
+    return req.session.save(() => res.redirect('/compliance/' + parentId + '/edit'));
+  }
   docs.forEach(d => {
     try { fs.unlinkSync(path.join(__dirname, '..', 'data', d.file_path)); } catch (e) {}
   });
-  db.prepare('DELETE FROM compliance_documents WHERE compliance_id = ?').run(sub.id);
-  // site_diary_entries.compliance_item_id is ON DELETE NO ACTION; detach first.
-  try { db.prepare('UPDATE site_diary_entries SET compliance_item_id = NULL WHERE compliance_item_id = ?').run(sub.id); } catch (e) {}
-  db.prepare('DELETE FROM compliance WHERE id = ?').run(sub.id);
   planStatus.syncParentStatus(db, parentId);
   if (req.headers.accept && req.headers.accept.includes('json')) return res.json({ success: true });
   req.flash('success', `Sub-plan ${sub.reference_number} removed.`);
@@ -1713,7 +1740,11 @@ router.post('/:id/delete', (req, res) => {
   const db = getDb();
   try {
     const tx = db.transaction(() => {
-      db.prepare('UPDATE site_diary_entries SET compliance_item_id = NULL WHERE compliance_item_id = ?').run(req.params.id);
+      // Sub-plans of this parent can point at each other via the retired
+      // linked_rol_id, so detach each child too before the parent goes.
+      db.prepare('SELECT id FROM compliance WHERE parent_id = ?').all(req.params.id)
+        .forEach(child => detachComplianceRefs(db, child.id));
+      detachComplianceRefs(db, req.params.id);
       db.prepare('DELETE FROM compliance WHERE id = ?').run(req.params.id);
     });
     tx();
