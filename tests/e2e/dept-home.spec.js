@@ -26,11 +26,13 @@ const HUBS = [
   { key: 'reports', h1: 'Reports Home' },
 ];
 
-test('all seven hubs render a header and at least one stat tile', async ({ page }) => {
+test('all seven hubs render a header, title icon and at least one stat tile', async ({ page }) => {
   await loginAs(page);
   for (const hub of HUBS) {
     await page.goto('/departments/' + hub.key);
     await expect(page.locator('h1'), hub.key).toContainText(hub.h1);
+    // Every department carries its own icon in the page title.
+    await expect(page.locator('h1.page-title svg'), hub.key + ' title icon').toHaveCount(1);
     expect(await page.locator('.stat-card').count(), hub.key + ' stat cards').toBeGreaterThan(0);
   }
 });
