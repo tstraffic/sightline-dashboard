@@ -4,7 +4,10 @@
   eyebrow: 'Planning',
   title: 'Jobs',
   subtitle: 'Job register',
-  actions: [{ label: '+ New Job', href: '/projects/new', style: 'primary' }]
+  // /jobs/new is the create form the FAB, the header quick-create menu and
+  // this page's empty state all use — keep this button on the same one so
+  // "New Job" never opens two different forms depending on where you click.
+  actions: [{ label: '+ New Job', href: '/jobs/new', style: 'primary' }]
 }) %>
 
 <!-- Project Register -->

@@ -61,6 +61,15 @@
         </button>
       </form>
     <% } %>
+    <%# Delete is admin/management only. The route refuses jobs that still
+        carry shifts, forms, dockets, timesheets or costs and says what's
+        attached, so this button can't quietly destroy history. %>
+    <% if (user && ['admin', 'management'].includes(String(user.role || '').toLowerCase())) { %>
+      <form method="POST" action="/projects/<%= job.id %>/delete" onsubmit="return confirm('Delete <%= job.job_number %>?\n\nThis removes the job and its planning records (tasks, plans, compliance items, documents, diary). Jobs with shifts, safety forms, dockets, timesheets or costs are protected and will not be deleted.')">
+        <%- include('../partials/csrf') %>
+        <button type="submit" data-delete-job class="px-4 py-2 bg-white border border-red-200 hover:bg-red-50 text-red-600 text-sm font-medium rounded-lg transition-colors" title="Delete this job">Delete</button>
+      </form>
+    <% } %>
   </div>
 </div>
 

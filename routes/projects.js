@@ -554,25 +554,89 @@ router.post('/:id', (req, res) => {
 });
 
 // Delete project (cascades to related records)
+// What must never be silently destroyed by a job delete: operational and
+// financial history. Each entry counts rows that would be lost; anything
+// found blocks the delete and is reported back so the user can decide (close
+// the job instead, or move the records first).
+const DELETE_BLOCKERS = [
+  { table: 'bookings', label: 'shift booking', sql: 'SELECT COUNT(*) AS c FROM bookings WHERE job_id = ? AND deleted_at IS NULL' },
+  { table: 'safety_forms', label: 'submitted safety form', sql: 'SELECT COUNT(*) AS c FROM safety_forms WHERE job_id = ?' },
+  { table: 'hire_dockets', label: 'hire docket', sql: 'SELECT COUNT(*) AS c FROM hire_dockets WHERE job_id = ?' },
+  { table: 'timesheets', label: 'timesheet', sql: 'SELECT COUNT(*) AS c FROM timesheets WHERE job_id = ?' },
+  { table: 'cost_entries', label: 'recorded cost', sql: 'SELECT COUNT(*) AS c FROM cost_entries WHERE job_id = ?' },
+  // Incidents are safety records — schema declares a cascade but the live
+  // table has no FK to jobs, so a delete would silently orphan (or destroy)
+  // them. Block instead.
+  { table: 'incidents', label: 'incident report', sql: 'SELECT COUNT(*) AS c FROM incidents WHERE job_id = ?' },
+  { table: 'jobs', label: 'child job', sql: 'SELECT COUNT(*) AS c FROM jobs WHERE parent_project_id = ?' },
+];
+
+// Tables holding a job_id (or job-shaped) reference. SQLite enforces
+// foreign_keys = ON (db/database.js), and several of these columns declare NO
+// ON DELETE action — bookings.job_id, safety_forms.job_id, toolbox_talks,
+// notifications, opportunities.related_job_id, crm_activities,
+// jobs.parent_project_id, traffio_imports.{matched,created}_job_id — so
+// deleting a job without clearing them first fails with "FOREIGN KEY
+// constraint failed". Rows worth keeping are DETACHED (job_id → NULL);
+// job-only children are deleted.
+const DELETE_DETACH = [
+  ['opportunities', 'related_job_id'], ['crm_activities', 'job_id'], ['notifications', 'job_id'],
+  ['toolbox_talks', 'job_id'], ['site_audits', 'job_id'], ['swms', 'job_id'],
+  ['risk_assessments', 'job_id'], ['sop_register', 'job_id'], ['safety_comments', 'job_id'],
+  ['safety_updates', 'audience_job_id'], ['client_contacts', 'job_id'],
+  ['traffio_imports', 'matched_job_id'], ['traffio_imports', 'created_job_id'],
+  ['jobs', 'rolled_over_to_job_id'],
+  // tasks.job_id declares SET NULL but the live table carries no FK at all
+  // (table rebuilds dropped them) — detach explicitly so tasks survive.
+  ['tasks', 'job_id'],
+];
+const DELETE_CHILDREN = [
+  'project_updates', 'crew_allocations', 'communication_log',
+  'equipment_assignments', 'job_budgets', 'documents', 'job_documents',
+  'traffic_plans', 'ctmps', 'compliance', 'site_diary_entries', 'defects',
+  'plan_flags', 'corrective_actions',
+];
+
 router.post('/:id/delete', (req, res) => {
   const db = getDb();
   const job = db.prepare('SELECT * FROM jobs WHERE id = ?').get(req.params.id);
-  if (!job) { req.flash('error', 'Project not found.'); return req.session.save(() => res.redirect('/projects')); }
+  if (!job) { req.flash('error', 'Job not found.'); return req.session.save(() => res.redirect('/projects')); }
 
-  // Cascade delete all linked records (try/catch each in case table doesn't exist)
-  const linkedTables = [
-    'tasks', 'project_updates', 'crew_allocations', 'timesheets',
-    'incidents', 'corrective_actions', 'client_contacts', 'communication_log',
-    'equipment_assignments', 'job_budgets', 'cost_entries', 'documents',
-    'traffic_plans', 'compliance', 'notifications'
-  ];
-  for (const table of linkedTables) {
-    try { db.prepare(`DELETE FROM ${table} WHERE job_id = ?`).run(req.params.id); } catch (e) { /* table may not exist */ }
+  const backToJob = '/projects/' + job.id;
+
+  // Deleting a job that carries shifts, forms, dockets, timesheets or costs
+  // would destroy the record those things are evidence for, so refuse and say
+  // what's attached rather than cascading through it.
+  const found = [];
+  for (const b of DELETE_BLOCKERS) {
+    try {
+      const c = db.prepare(b.sql).get(job.id).c;
+      if (c > 0) found.push(`${c} ${b.label}${c === 1 ? '' : 's'}`);
+    } catch (e) { /* table absent on a legacy DB — nothing to protect */ }
   }
-  db.prepare('DELETE FROM jobs WHERE id = ?').run(req.params.id);
+  if (found.length) {
+    req.flash('error', `${job.job_number} can't be deleted — it still has ${found.join(', ')}. Set the job to Completed or Cancelled to take it out of the way, or move those records to another job first.`);
+    return req.session.save(() => res.redirect(backToJob));
+  }
 
-  logActivity({ user: req.session.user, action: 'delete', entityType: 'project', entityId: job.id, entityLabel: `${job.job_number} - ${job.client}`, details: 'Deleted project and all associated data', ip: req.ip });
-  req.flash('success', `Project ${job.job_number} deleted.`);
+  try {
+    db.transaction(() => {
+      for (const [table, col] of DELETE_DETACH) {
+        try { db.prepare(`UPDATE ${table} SET ${col} = NULL WHERE ${col} = ?`).run(job.id); } catch (e) { /* table/column absent */ }
+      }
+      for (const table of DELETE_CHILDREN) {
+        try { db.prepare(`DELETE FROM ${table} WHERE job_id = ?`).run(job.id); } catch (e) { /* table absent */ }
+      }
+      db.prepare('DELETE FROM jobs WHERE id = ?').run(job.id);
+    })();
+  } catch (err) {
+    console.error('[projects] delete failed for job', job.id, ':', err.message);
+    req.flash('error', `Could not delete ${job.job_number}: ${err.message}`);
+    return req.session.save(() => res.redirect(backToJob));
+  }
+
+  logActivity({ user: req.session.user, action: 'delete', entityType: 'project', entityId: job.id, entityLabel: `${job.job_number} - ${job.client}`, details: 'Deleted job and its planning records', ip: req.ip });
+  req.flash('success', `Job ${job.job_number} deleted.`);
   req.session.save(() => res.redirect('/projects'));
 });
 

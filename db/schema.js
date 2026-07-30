@@ -14769,6 +14769,63 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 333 error:', e.message); }
   }
 
+  // 334: repair defects.linked_compliance_id, which points at
+  // "_compliance_backup_72" — a temporary table from an old compliance
+  // rebuild that was dropped afterwards. SQLite resolves the schema of every
+  // referencing table when it PREPARES a delete, so this one dangling FK made
+  // `DELETE FROM jobs` fail with "no such table: main._compliance_backup_72"
+  // on every database — i.e. no job could be deleted at all, whatever the
+  // route did. Rebuild the table with the FK pointing at compliance(id).
+  if (!isMigrationApplied.get(334)) {
+    try {
+      const ddl = db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'defects'").get();
+      if (ddl && /_compliance_backup_/.test(ddl.sql || '')) {
+        // Table rebuilds must run with FK enforcement off, and a pragma is a
+        // no-op inside a transaction — so toggle around it, not within.
+        db.pragma('foreign_keys = OFF');
+        try {
+          db.exec(`
+            CREATE TABLE defects_new (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+              defect_number TEXT UNIQUE NOT NULL,
+              title TEXT NOT NULL,
+              description TEXT NOT NULL,
+              location TEXT DEFAULT '',
+              severity TEXT NOT NULL DEFAULT 'minor' CHECK(severity IN ('minor','moderate','major','critical')),
+              status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','investigating','rectification','closed','deferred')),
+              reported_by_id INTEGER NOT NULL REFERENCES users(id),
+              assigned_to_id INTEGER REFERENCES users(id),
+              reported_date DATE NOT NULL,
+              target_close_date DATE,
+              actual_close_date DATE,
+              photo_path TEXT DEFAULT '',
+              rectification_notes TEXT DEFAULT '',
+              linked_compliance_id INTEGER REFERENCES compliance(id) ON DELETE SET NULL,
+              created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+              updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO defects_new SELECT
+              id, job_id, defect_number, title, description, location, severity, status,
+              reported_by_id, assigned_to_id, reported_date, target_close_date,
+              actual_close_date, photo_path, rectification_notes, linked_compliance_id,
+              created_at, updated_at
+            FROM defects;
+            DROP TABLE defects;
+            ALTER TABLE defects_new RENAME TO defects;
+          `);
+          recordMigration.run(334, 'defects FK repaired — dangling _compliance_backup_72 reference blocked all job deletes');
+          console.log('Migration 334 applied: defects FK repaired (job deletes unblocked)');
+        } finally {
+          db.pragma('foreign_keys = ON');
+        }
+      } else {
+        recordMigration.run(334, 'defects FK already clean — nothing to repair');
+        console.log('Migration 334 applied (no repair needed)');
+      }
+    } catch (e) { console.error('Migration 334 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

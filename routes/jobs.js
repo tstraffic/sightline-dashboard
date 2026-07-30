@@ -24,51 +24,17 @@ const diaryStorage = multer.diskStorage({
 });
 const diaryUpload = multer({ storage: diaryStorage, limits: { fileSize: 25 * 1024 * 1024 } });
 
-// List all jobs
+// The jobs register lives at /projects — the sidebar, both department hubs
+// and every "Jobs" link point there. This route used to render a SECOND,
+// differently-styled register (views/jobs/index.ejs, now deleted): same rows,
+// its own stat strip and flat table, reachable only from the edit-form
+// breadcrumb, so editing a job and pressing "Jobs" landed you on a register
+// that looked nothing like the one you came from. Query params carry over so
+// old filter links keep working. /jobs/:id and the rest of this router stay
+// as-is — plenty of deep links point at them.
 router.get('/', (req, res) => {
-  const db = getDb();
-  const { status, search, suburb } = req.query;
-  let query = `SELECT j.*, u.full_name as pm_name, bm.budget_contract, bm.total_spent as budget_spent,
-    (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status != 'complete' AND t.deleted_at IS NULL) as pending_tasks,
-    (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status != 'complete' AND t.deleted_at IS NULL AND t.due_date < date('now')) as overdue_tasks,
-    (SELECT COUNT(*) FROM compliance c WHERE c.job_id = j.id AND c.status NOT IN ('approved')) as pending_plans,
-    (SELECT COUNT(*) FROM compliance c WHERE c.job_id = j.id AND c.status NOT IN ('approved','expired','submitted') AND c.due_date IS NOT NULL AND c.due_date < date('now')) as overdue_compliance,
-    ${HEALTH_CALC_SQL} as calculated_health
-    FROM jobs j LEFT JOIN users u ON j.project_manager_id = u.id LEFT JOIN (SELECT b.job_id, b.contract_value as budget_contract, COALESCE((SELECT SUM(amount) FROM cost_entries ce WHERE ce.job_id = b.job_id), 0) as total_spent FROM job_budgets b) bm ON j.id = bm.job_id WHERE 1=1`;
-  const params = [];
-
-  if (status && status !== 'all') {
-    query += ` AND j.status = ?`;
-    params.push(status);
-  }
-  if (search) {
-    query += ` AND (j.job_number LIKE ? OR j.client LIKE ? OR j.suburb LIKE ? OR j.job_name LIKE ?)`;
-    const s = `%${search}%`;
-    params.push(s, s, s, s);
-  }
-  if (suburb && suburb !== 'all') {
-    query += ` AND j.suburb = ?`;
-    params.push(suburb);
-  }
-  query += ` ORDER BY CASE j.priority WHEN 'high' THEN 0 ELSE 1 END, CASE j.status WHEN 'active' THEN 1 WHEN 'on_hold' THEN 2 WHEN 'won' THEN 3 WHEN 'tender' THEN 4 WHEN 'prestart' THEN 5 WHEN 'completed' THEN 6 ELSE 7 END, j.start_date DESC`;
-
-  const jobs = db.prepare(query).all(...params);
-  // Use auto-calculated health instead of stale DB value
-  jobs.forEach(j => { if (j.calculated_health) j.health = j.calculated_health; });
-  const suburbs = db.prepare('SELECT DISTINCT suburb FROM jobs ORDER BY suburb').all().map(r => r.suburb);
-
-  // Compute stats from the full (unfiltered) job set for the stat cards
-  const allJobs = db.prepare(`SELECT status, ${HEALTH_CALC_SQL} as health, end_date FROM jobs j`).all();
-  const today = new Date().toISOString().split('T')[0];
-  const stats = {
-    active: allJobs.filter(j => j.status === 'active').length,
-    onHold: allJobs.filter(j => j.status === 'on_hold').length,
-    tender: allJobs.filter(j => ['tender', 'won', 'prestart'].includes(j.status)).length,
-    overdue: allJobs.filter(j => j.end_date && j.end_date < today && !['completed', 'closed'].includes(j.status)).length,
-    healthRed: allJobs.filter(j => j.health === 'red' && !['completed', 'closed'].includes(j.status)).length
-  };
-
-  res.render('jobs/index', { title: 'Jobs Register', jobs, suburbs, filters: { status, search, suburb }, user: req.session.user, canViewAccounts: canViewAccounts(req.session.user), stats });
+  const qs = req.originalUrl.includes('?') ? '?' + req.originalUrl.split('?')[1] : '';
+  res.redirect('/projects' + qs);
 });
 
 // Inline status change
@@ -713,12 +679,14 @@ router.post('/:id', (req, res) => {
   }
 });
 
-// Delete job
+// Deleting a job is handled by POST /projects/:id/delete — the one path that
+// checks for attached shifts/forms/dockets/timesheets/costs first and clears
+// every job reference in a transaction. This route was a bare
+// `DELETE FROM jobs`, which throws "FOREIGN KEY constraint failed" the moment
+// a job has a booking (foreign_keys = ON), so it forwards rather than
+// duplicating that logic.
 router.post('/:id/delete', (req, res) => {
-  const db = getDb();
-  db.prepare('DELETE FROM jobs WHERE id = ?').run(req.params.id);
-  req.flash('success', 'Job deleted.');
-  req.session.save(() => res.redirect('/jobs'));
+  res.redirect(307, '/projects/' + req.params.id + '/delete');
 });
 
 // Add member to job chat
