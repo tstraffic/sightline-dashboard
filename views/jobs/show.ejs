@@ -229,25 +229,21 @@
 
 <% const isAdmin = canAccess(user, 'admin'); %>
 <%
-  // Per-role tab visibility on the job detail page.
-  // Matrix (handles legacy role aliases: management→admin, accounts→finance, marketing→operations):
-  //   admin      → every tab
-  //   operations → ops work: diary/tasks/compliance/incidents/equipment/contacts + final plans + budget
-  //   planning   → plan production: diary + traffic plans + final plans (read-only) + safety + chat
-  //   finance    → money view: budget + accounts + timesheets + final plans (to check scope) + chat
-  // Any other role (sales, hr, etc.) gets just the two universally-safe tabs.
-  const ROLE_ALIASES_TABS = { management: 'admin', accounts: 'finance' };
-  const _rawRole = (user && user.role) ? user.role : '';
-  const role = ROLE_ALIASES_TABS[_rawRole] || _rawRole;
-  const TABS_BY_ROLE = {
-    admin:      ['overview','diary','tasks','plans','final-plans','safety','timesheets','incidents','equipment','contacts','chat','budget','accounts'],
-    operations: ['overview','diary','tasks',         'final-plans','safety','timesheets','incidents','equipment','contacts','chat','budget'],
-    planning:   ['overview','diary','plans','final-plans','safety',                                                                  'chat'],
-    finance:    ['overview',                'final-plans',             'timesheets',                                             'chat','budget','accounts'],
-    safety:     ['overview',                'final-plans','safety',                                              'incidents',         'chat'],
+  // Per-tab visibility on the job detail page, driven by the permission map
+  // (middleware/auth.js "Job detail page tabs" block) so /admin/permissions
+  // overrides actually apply. canAccess handles role aliases (management→
+  // admin, accounts→finance) and per-role overrides. Overview is ungated —
+  // it's the universally-safe landing tab for any role that can reach the page.
+  const TAB_PERMS = {
+    overview: null,
+    diary: 'planning_diary',      tasks: 'ops_tasks',
+    plans: 'planning_plans',      'final-plans': 'job_final_plans',
+    safety: 'job_safety',         timesheets: 'ops_timesheets',
+    incidents: 'ops_incidents',   equipment: 'job_equipment',
+    contacts: 'job_contacts',     chat: 'planning_chat',
+    budget: 'job_budget',         accounts: 'job_accounts',
   };
-  const visibleTabs = TABS_BY_ROLE[role] || ['overview','chat'];
-  function showTab(t) { return visibleTabs.includes(t); }
+  function showTab(t) { const p = TAB_PERMS[t]; return !p || canAccess(user, p); }
 %>
 
 <!-- Tab Navigation -->
@@ -1912,7 +1908,12 @@
         <div class="flex items-center justify-between">
           <div class="flex items-center gap-2">
             <span class="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+            <% if (showTab('equipment')) { %>
             <a href="#equipment" onclick="activateTab(document.querySelector('a[href=\'#equipment\']'))" class="text-sm text-amber-700 hover:underline">Equipment Maintenance</a>
+            <% } else { %>
+            <%# Roles with Budget but not Equipment (e.g. finance) get plain text — the tab link would throw on a missing target %>
+            <span class="text-sm text-gray-700">Equipment Maintenance</span>
+            <% } %>
           </div>
           <span class="text-sm font-semibold text-gray-900">$<%= (equipmentCosts || 0).toLocaleString() %></span>
         </div>

@@ -26,8 +26,11 @@ const ROLES = ['admin', 'operations', 'planning', 'safety', 'hr', 'finance', 'ma
 const MODULE_GROUPS = [
   { label: 'Core', items: ['dashboard', 'notes', 'jobs', 'projects', 'clients', 'notifications', 'tenders', 'quoting'] },
   { label: 'Operations', items: ['tasks', 'incidents', 'contacts', 'timesheets', 'crew', 'allocations', 'traffio_imports', 'schedule', 'equipment', 'fleet', 'defects', 'documents', 'bookings', 'reports', 'exports'] },
-  { label: 'Planning', items: ['compliance', 'plans', 'updates', 'planning_plans', 'planning_diary', 'planning_chat'] },
-  { label: 'Operations job tabs', items: ['ops_final_plans', 'ops_tasks', 'ops_timesheets', 'ops_incidents', 'ops_flag'] },
+  { label: 'Planning', items: ['compliance', 'plans', 'updates'] },
+  // One toggle per tab on the job detail page (planning_/ops_ names are
+  // historical; ops_final_plans + ops_flag are sidebar/action gates that
+  // live alongside them).
+  { label: 'Job page tabs', items: ['planning_diary', 'ops_tasks', 'planning_plans', 'job_final_plans', 'job_safety', 'ops_timesheets', 'ops_incidents', 'job_equipment', 'job_contacts', 'planning_chat', 'job_budget', 'job_accounts', 'ops_flag', 'ops_final_plans'] },
   { label: 'Safety', items: ['audits', 'checklists', 'swms', 'sop_register', 'safety_updates', 'toolbox_talks', 'safety_comments', 'safety_quizzes', 'safety_workshops', 'safety_reports', 'risk_assessments', 'voc', 'voc_admin'] },
   { label: 'Induction', items: ['induction'] },
   { label: 'HR', items: ['hr_dashboard', 'hr_employees', 'leave_approvals', 'hr_documents', 'hr_competencies', 'hr_reports', 'hr_settings', 'hr_compliance_view'] },
