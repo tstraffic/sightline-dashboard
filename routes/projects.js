@@ -432,17 +432,31 @@ router.get('/:id', (req, res) => {
   }
 
   // Site audits attached to this job — also surface under the Safety tab.
+  // Same storage-coercion gotcha as SWMS / RA above: job_id may be stored
+  // as TEXT on legacy rows so SQL `= ?` can silently miss matches. Filter
+  // in JS with String() coercion to be bulletproof.
   let auditsForJob = [];
   try {
-    auditsForJob = db.prepare(`
-      SELECT a.id, a.audit_datetime, a.auditor_name, a.overall_result, a.overall_finding,
-        a.score_total, a.score_max, a.score_percent, a.status
-      FROM audits a
-      WHERE a.job_id = ?
-      ORDER BY a.audit_datetime DESC
-    `).all(jobIdInt);
+    const rows = db.prepare(`
+      SELECT a.id, a.job_id, a.audit_datetime, a.auditor_name, a.overall_result, a.overall_finding,
+        a.score_total, a.score_max, a.score_percent, a.status,
+        u.full_name AS auditor_user_name
+      FROM site_audits a
+      LEFT JOIN users u ON u.id = a.auditor_id
+      WHERE a.job_id IS NOT NULL
+      ORDER BY COALESCE(a.audit_datetime, a.created_at) DESC, a.id DESC
+    `).all();
+    auditsForJob = rows.filter(r => matchesJob(r.job_id));
   } catch (e) {
-    console.error('[Projects] Audits Safety tab query failed for job', job.id, ':', e.message);
+    console.error('[Projects] Site Audits Safety tab query failed for job', job.id, ':', e.message);
+  }
+
+  // Scoped Safety roll-up for the #safety tab (reuses the Safety Today helpers).
+  let safetyRollup = null;
+  try {
+    safetyRollup = require('./helpers/safety-today-queries').buildScopedRollup(db, { jobId: job.id });
+  } catch (e) {
+    console.error('[Projects] safety rollup failed for job', job.id, ':', e.message);
   }
 
   const viewMode = req.query.view || '';
@@ -455,7 +469,7 @@ router.get('/:id', (req, res) => {
     equipmentAssignments, hireDockets, trafficPlans, chatThreadId, diaryEntries, tgsPlans,
     complianceTgsItems, allUsers, diaryAttachments, chatMembers, activities,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
-    swmsForJob, riskAssessmentsForJob, auditsForJob,
+    swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });

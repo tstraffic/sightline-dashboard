@@ -361,10 +361,25 @@ router.post('/draft', (req, res) => {
 router.get('/new', (req, res) => {
   const db = getDb();
   const jobs = db.prepare("SELECT id, job_number, job_name, client, site_address, suburb FROM jobs WHERE status NOT IN ('closed','completed','cancelled') ORDER BY job_number").all();
-  const { tpl, workType, timeOfDay, onSiteCrew } = contextFor(db, { audit: null, b: {} });
+  // Started from a job page (`/audits/new?job_id=…`)? Pre-link the job and
+  // pre-fill the site fields the same way the job-select onchange does, so
+  // the audit actually lands attached instead of saving as "— Not linked —".
+  let prefill = null;
+  if (req.query.job_id) {
+    const linked = jobs.find(j => String(j.id) === String(req.query.job_id));
+    if (linked) {
+      prefill = {
+        job_id: linked.id,
+        project_site: linked.job_number + (linked.client ? ' — ' + linked.client : ''),
+        client: linked.client || '',
+        location: [linked.site_address, linked.suburb].filter(Boolean).join(', '),
+      };
+    }
+  }
+  const { tpl, workType, timeOfDay, onSiteCrew } = contextFor(db, { audit: null, b: prefill || {} });
   decorateCrewCompetency(db, onSiteCrew);
   res.render('audits/form', {
-    title: 'New Site Audit', audit: null,
+    title: 'New Site Audit', audit: prefill,
     responses: {}, sectionComments: {}, nonconformances: [], attachments: [], attachmentsByContext: {},
     sections: tpl.sections, scoreGroups: SCORE_GROUPS, score: scoreFor(tpl, {}, onSiteCrew.length),
     templateDraft: tpl.isDraft, templateLegacy: tpl.isLegacy,
