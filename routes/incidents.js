@@ -40,7 +40,14 @@ router.get('/', (req, res) => {
   if (req.query.job_id) { where.push('i.job_id = ?'); params.push(req.query.job_id); }
   if (req.query.incident_type) { where.push('i.incident_type = ?'); params.push(req.query.incident_type); }
   if (req.query.severity) { where.push('i.severity = ?'); params.push(req.query.severity); }
-  if (req.query.status) { where.push('i.investigation_status = ?'); params.push(req.query.status); }
+  // `status=open` is the same definition the Safety roll-up counts with
+  // (reported + investigating), so the "Open incidents" tile and the list it
+  // links to always agree. Any other value is an exact status match.
+  if (req.query.status === 'open') {
+    where.push("i.investigation_status IN ('reported','investigating')");
+  } else if (req.query.status) {
+    where.push('i.investigation_status = ?'); params.push(req.query.status);
+  }
 
   const whereClause = where.length > 0 ? 'WHERE ' + where.join(' AND ') : '';
 

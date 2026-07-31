@@ -78,6 +78,7 @@
         <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
         <select name="status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           <option value="">All</option>
+          <option value="open" <%= filters.status === 'open' ? 'selected' : '' %>>Open (reported + investigating)</option>
           <option value="reported" <%= filters.status === 'reported' ? 'selected' : '' %>>Reported</option>
           <option value="investigating" <%= filters.status === 'investigating' ? 'selected' : '' %>>Investigating</option>
           <option value="resolved" <%= filters.status === 'resolved' ? 'selected' : '' %>>Resolved</option>

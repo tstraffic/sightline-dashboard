@@ -8,23 +8,51 @@
     var jid = rollup.scope.jobId || rollup.scope.parentJobId;
     return jid ? base + j + 'job_id=' + jid : base;
   }
+  // Every register this links to is permission-gated, and the roll-up is shown
+  // to roles that can't reach all of them (planning sees the job Safety tab but
+  // has no `incidents` access). Render an unreachable tile as plain text rather
+  // than a link into a 403. `perm: null` = ungated.
+  var _u = (typeof user !== 'undefined') ? user : null;
+  var _can = (typeof canAccess === 'function') ? canAccess : function () { return true; };
+  function reachable(perm) { return !perm || _can(_u, perm); }
+  // Queue items carry a link but no permission, so map the mount to its gate
+  // (mirrors the requirePermission() calls in server.js).
+  var MOUNT_PERMS = [
+    ['/incidents', 'incidents'], ['/actions', 'incidents'],
+    ['/safety-forms', 'audits'], ['/audits', 'audits'],
+    ['/swms', 'swms'], ['/risk-assessments', 'risk_assessments'],
+    ['/safety-today', 'safety_today'], ['/safety-comments', 'safety_comments'],
+    ['/safety-reports', 'safety_reports'], ['/safety-quizzes', 'safety_quizzes'],
+    ['/safety-updates', 'safety_updates'], ['/toolbox-talks', 'toolbox_talks'],
+    ['/voc-assessments', 'voc'], ['/sop-register', 'sop_register'],
+  ];
+  function linkReachable(href) {
+    if (!href) return false;
+    var m = MOUNT_PERMS.find(function (p) { return href === p[0] || href.indexOf(p[0] + '?') === 0 || href.indexOf(p[0] + '/') === 0 || href.indexOf(p[0] + '#') === 0; });
+    return m ? reachable(m[1]) : true;
+  }
   var h = rollup.health, k = rollup.kpis, jp = rollup.jobPacks, fat = rollup.fatigue;
   var ringColor = h.band === 'green' ? '#059669' : h.band === 'red' ? '#DC2626' : h.band === 'amber' ? '#B45309' : '#9CA3AF';
   var pct = h.score == null ? 0 : h.score;
   var notMeasured = h.factors.filter(function (f) { return !f.measured; }).map(function (f) { return f.label; });
   var fullLink = '/safety-today' + (rollup.scope ? (rollup.scope.bookingId ? '?booking_id=' + rollup.scope.bookingId : '?job_id=' + (rollup.scope.jobId || rollup.scope.parentJobId)) : '');
   var mini = [
-    { v: k.openIncidents, t: 'Open incidents', tone: k.openIncidents ? 'text-red-600' : 'text-gray-900', link: lnk('/incidents?status=reported') },
-    { v: k.openActions, t: 'Open actions', tone: k.openActions ? 'text-amber-600' : 'text-gray-900', link: lnk('/actions') },
-    { v: k.expiredDocs, t: 'Expired docs', tone: k.expiredDocs ? 'text-red-600' : 'text-gray-900', link: lnk('/swms') },
-    { v: (k.avgAuditScore == null ? '—' : k.avgAuditScore + '%'), t: 'Avg audit', tone: 'text-gray-900', link: lnk('/audits') },
-    { v: (jp.total ? jp.complete + '/' + jp.total : '—'), t: 'Job packs', tone: (jp.total && jp.complete < jp.total) ? 'text-amber-600' : 'text-gray-900', link: lnk('/safety-forms?scope=jobpack') },
+    // `status=open` is reported + investigating — the same definition this
+    // count uses, so the tile and the list it links to always agree. It used
+    // to link to status=reported, which could show fewer rows than the count.
+    { v: k.openIncidents, t: 'Open incidents', tone: k.openIncidents ? 'text-red-600' : 'text-gray-900', link: lnk('/incidents?status=open'), perm: 'incidents' },
+    { v: k.openActions, t: 'Open actions', tone: k.openActions ? 'text-amber-600' : 'text-gray-900', link: lnk('/actions'), perm: 'incidents' },
+    { v: k.expiredDocs, t: 'Expired docs', tone: k.expiredDocs ? 'text-red-600' : 'text-gray-900', link: lnk('/swms'), perm: 'swms' },
+    { v: (k.avgAuditScore == null ? '—' : k.avgAuditScore + '%'), t: 'Avg audit', tone: 'text-gray-900', link: lnk('/audits'), perm: 'audits' },
+    { v: (jp.total ? jp.complete + '/' + jp.total : '—'), t: 'Job packs', tone: (jp.total && jp.complete < jp.total) ? 'text-amber-600' : 'text-gray-900', link: lnk('/safety-forms?scope=jobpack'), perm: 'audits' },
   ];
 %>
 <div class="bg-white border border-gray-200 rounded-2xl p-4 mb-5">
   <div class="flex items-center justify-between gap-2 mb-3">
     <h3 class="text-sm font-bold text-gray-900">Safety overview</h3>
+    <% if (reachable('safety_today')) { %>
     <a href="<%= fullLink %>" class="text-xs font-semibold text-brand-600 hover:underline">View full safety →</a>
+    <% } %>
   </div>
   <div class="flex items-center gap-5 flex-wrap">
     <div class="flex items-center gap-3 shrink-0">
@@ -43,10 +71,17 @@
     </div>
     <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 flex-1 min-w-[260px]">
       <% mini.forEach(function (m) { %>
+        <% if (reachable(m.perm)) { %>
         <a href="<%= m.link %>" class="block p-2 rounded-lg border border-gray-200 hover:border-gray-300 transition-colors">
           <p class="font-display font-bold <%= m.tone %>" style="font-size:18px;letter-spacing:-.02em"><%= m.v %></p>
           <p class="text-[9px] font-mono text-gray-500 uppercase mt-0.5" style="letter-spacing:.06em"><%= m.t %></p>
         </a>
+        <% } else { %>
+        <div class="block p-2 rounded-lg border border-gray-200">
+          <p class="font-display font-bold <%= m.tone %>" style="font-size:18px;letter-spacing:-.02em"><%= m.v %></p>
+          <p class="text-[9px] font-mono text-gray-500 uppercase mt-0.5" style="letter-spacing:.06em"><%= m.t %></p>
+        </div>
+        <% } %>
       <% }) %>
     </div>
   </div>
@@ -65,9 +100,10 @@
     </div>
   <% } %>
 
-  <% if (rollup.queue && rollup.queue.items.length) { %>
+  <% var queueItems = (rollup.queue ? rollup.queue.items : []).filter(function (it) { return linkReachable(it.link); }); %>
+  <% if (queueItems.length) { %>
     <div class="mt-3 pt-3 border-t border-gray-100">
-      <% rollup.queue.items.slice(0, 4).forEach(function (it) { %>
+      <% queueItems.slice(0, 4).forEach(function (it) { %>
         <a href="<%= it.link %>" class="flex items-center gap-2 py-1.5 text-xs hover:bg-gray-50 rounded -mx-1 px-1">
           <span class="text-[9px] font-bold uppercase px-1.5 py-0.5 rounded <%= it.tone === 'r' ? 'bg-red-50 text-red-600' : it.tone === 'a' ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-600' %>"><%= it.tag %></span>
           <span class="font-medium text-gray-800 truncate flex-1"><%= it.what %></span>
