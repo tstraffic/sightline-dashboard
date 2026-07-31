@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const upload = require('../middleware/upload');
+const { STORED_PREFIX, resolveUploadPath } = require('../middleware/upload');
 const { autoLogDiary, logStatusChange } = require('../lib/diary');
 const { logActivity } = require('../middleware/audit');
 const { notifyPlanSubmission, parseTaggedIds } = require('../lib/planNotify');
@@ -138,11 +139,11 @@ router.post('/', uploadPlanFile(false), (req, res) => {
     return req.session.save(() => res.redirect(b.return_to && b.return_to !== '/plans' ? b.return_to : '/plans/new'));
   }
 
-  // Handle file upload. Store the public URL path (uploads/<filename>),
-  // NOT the absolute filesystem path — multer's req.file.path resolves to
-  // /app/public/uploads/... on Railway, and rendering that with a leading
-  // slash produced //app/... which browsers parse as protocol-relative.
-  const filePath = req.file ? 'uploads/' + req.file.filename : '';
+  // Handle file upload. Store the relative served path (data/uploads/shared/
+  // <filename>), NOT multer's absolute req.file.path — templates render this
+  // as `/` + value, and an absolute /app/... path produced //app/... which
+  // browsers parse as protocol-relative.
+  const filePath = req.file ? STORED_PREFIX + '/' + req.file.filename : '';
   const fileOriginalName = req.file ? req.file.originalname : '';
 
   // The "Push to Final Plans" + "Client Provided" toggles must work from
@@ -279,7 +280,7 @@ router.post('/quick-upload', uploadPlanFile(true), (req, res) => {
     }
     const planNumber = `${codePrefix}-${jobSeq}-${String(nextSuffix).padStart(2, '0')}`;
 
-    const filePath = 'uploads/' + req.file.filename;
+    const filePath = STORED_PREFIX + '/' + req.file.filename;
     const fileOriginalName = req.file.originalname;
     // Use filename (without extension) as the plan title
     const fileTitle = req.file.originalname.replace(/\.[^.]+$/, '');
@@ -367,7 +368,7 @@ router.post('/:id', upload.single('plan_file'), (req, res) => {
   let filePath = b.existing_file_path || '';
   let fileOriginalName = b.existing_file_original_name || '';
   if (req.file) {
-    filePath = 'uploads/' + req.file.filename;
+    filePath = STORED_PREFIX + '/' + req.file.filename;
     fileOriginalName = req.file.originalname;
   }
 
@@ -430,10 +431,12 @@ router.post('/:id/delete', (req, res) => {
       return req.session.save(() => res.redirect(returnTo));
     }
 
-    // Delete physical file if exists
+    // Delete physical file if exists. resolveUploadPath handles both the
+    // current data/uploads location and legacy public/uploads rows — the old
+    // hardcoded join guessed one directory and silently orphaned the other.
     if (plan.file_path) {
-      const fullPath = require('path').join(__dirname, '..', 'public', plan.file_path);
-      try { require('fs').unlinkSync(fullPath); } catch (e) { /* file may not exist */ }
+      const fullPath = resolveUploadPath(plan.file_path);
+      if (fullPath) { try { require('fs').unlinkSync(fullPath); } catch (e) { /* already gone */ } }
     }
 
     // Delete any revisions
@@ -467,8 +470,8 @@ router.post('/:id/delete-file', (req, res) => {
 
   // Delete physical file
   if (plan.file_path) {
-    const fullPath = require('path').join(__dirname, '..', plan.file_path);
-    try { require('fs').unlinkSync(fullPath); } catch (e) { /* file may not exist */ }
+    const fullPath = resolveUploadPath(plan.file_path);
+    if (fullPath) { try { require('fs').unlinkSync(fullPath); } catch (e) { /* already gone */ } }
   }
 
   // Clear file columns
@@ -539,7 +542,7 @@ router.post('/:id/revisions', upload.single('revision_file'), (req, res) => {
   if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
 
   const b = req.body;
-  const filePath = req.file ? 'uploads/' + req.file.filename : '';
+  const filePath = req.file ? STORED_PREFIX + '/' + req.file.filename : '';
   const fileOriginalName = req.file ? req.file.originalname : '';
 
   // Auto-increment revision label (Rev A → Rev B → Rev C...)
@@ -641,7 +644,7 @@ router.post('/:id/fees', upload.single('receipt'), (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT id, plan_number, job_id FROM traffic_plans WHERE id = ?').get(req.params.id);
   if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
-  const receiptPath = req.file ? 'uploads/' + req.file.filename : '';
+  const receiptPath = req.file ? STORED_PREFIX + '/' + req.file.filename : '';
   const receiptName = req.file ? req.file.originalname : '';
   const amount = parseFloat(req.body.amount) || 0;
   try {
@@ -657,7 +660,7 @@ router.post('/:id/fees/:feeId/delete', (req, res) => {
   const db = getDb();
   const fee = db.prepare('SELECT * FROM plan_fees WHERE id = ? AND plan_id = ?').get(req.params.feeId, req.params.id);
   if (fee) {
-    if (fee.receipt_file_path) { try { require('fs').unlinkSync(require('path').join(__dirname, '..', 'public', fee.receipt_file_path)); } catch (e) {} }
+    if (fee.receipt_file_path) { const p = resolveUploadPath(fee.receipt_file_path); if (p) { try { require('fs').unlinkSync(p); } catch (e) {} } }
     db.prepare('DELETE FROM plan_fees WHERE id = ?').run(fee.id);
   }
   res.redirect(`/plans/${req.params.id}`);
@@ -668,7 +671,7 @@ router.post('/:id/extensions', upload.single('extension_file'), (req, res) => {
   const db = getDb();
   const plan = db.prepare('SELECT id, plan_number, job_id FROM traffic_plans WHERE id = ?').get(req.params.id);
   if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
-  const filePath = req.file ? 'uploads/' + req.file.filename : '';
+  const filePath = req.file ? STORED_PREFIX + '/' + req.file.filename : '';
   const fileName = req.file ? req.file.originalname : '';
   try {
     db.prepare('INSERT INTO plan_extensions (plan_id, label, extended_to, reason, file_path, file_original_name, created_by) VALUES (?, ?, ?, ?, ?, ?, ?)')
@@ -684,7 +687,7 @@ router.post('/:id/extensions/:extId/delete', (req, res) => {
   const db = getDb();
   const ext = db.prepare('SELECT * FROM plan_extensions WHERE id = ? AND plan_id = ?').get(req.params.extId, req.params.id);
   if (ext) {
-    if (ext.file_path) { try { require('fs').unlinkSync(require('path').join(__dirname, '..', 'public', ext.file_path)); } catch (e) {} }
+    if (ext.file_path) { const p = resolveUploadPath(ext.file_path); if (p) { try { require('fs').unlinkSync(p); } catch (e) {} } }
     db.prepare('DELETE FROM plan_extensions WHERE id = ?').run(ext.id);
   }
   res.redirect(`/plans/${req.params.id}`);
@@ -720,7 +723,7 @@ router.post('/:id/rola', upload.single('rola_file'), (req, res) => {
   const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
   if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
   const b = req.body;
-  const filePath = req.file ? 'uploads/' + req.file.filename : (b.existing_rola_file_path || plan.rola_file_path || '');
+  const filePath = req.file ? STORED_PREFIX + '/' + req.file.filename : (b.existing_rola_file_path || plan.rola_file_path || '');
   const fileName = req.file ? req.file.originalname : (b.existing_rola_file_original_name || plan.rola_file_original_name || '');
   const stage = plan.rol_stage === 'approved' ? 'approved' : 'applied';
   try {
@@ -741,7 +744,7 @@ router.post('/:id/rol', upload.single('rol_file'), (req, res) => {
   const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
   if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
   const b = req.body;
-  const filePath = req.file ? 'uploads/' + req.file.filename : (b.existing_rol_file_path || plan.rol_file_path || '');
+  const filePath = req.file ? STORED_PREFIX + '/' + req.file.filename : (b.existing_rol_file_path || plan.rol_file_path || '');
   const fileName = req.file ? req.file.originalname : (b.existing_rol_file_original_name || plan.rol_file_original_name || '');
   try {
     db.prepare(`UPDATE traffic_plans SET rol_actual_number=?, rol_file_path=?, rol_file_original_name=?,
@@ -768,7 +771,7 @@ function parsePlanPdf(stage, fileField) {
     const plan = db.prepare('SELECT * FROM traffic_plans WHERE id = ?').get(req.params.id);
     if (!plan) { req.flash('error', 'Plan not found.'); return req.session.save(() => res.redirect('/plans')); }
     if (!req.file) { req.flash('error', 'Please choose a PDF to extract.'); return req.session.save(() => res.redirect(`/plans/${plan.id}`)); }
-    const filePath = 'uploads/' + req.file.filename;
+    const filePath = STORED_PREFIX + '/' + req.file.filename;
     try {
       const { parseRolPdf } = require('../services/rolParser');
       const path = require('path');

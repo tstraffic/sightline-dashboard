@@ -7,8 +7,12 @@ const { getDb } = require('../../db/database');
 const { sydneyToday } = require('../../lib/sydney');
 const { stashForm, takeForm } = require('../../lib/formEcho');
 
-// Multer config for incident photo uploads
-const incidentUploadsDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'incidents');
+// Multer config for incident photo uploads.
+// Lives under data/ — the only tree on the persistent volume. public/uploads
+// is rebuilt from the image on every deploy, which silently destroyed every
+// crew-submitted incident photo and left the DB pointing at nothing.
+const INCIDENT_STORED_PREFIX = 'data/uploads/incidents';
+const incidentUploadsDir = path.join(__dirname, '..', '..', INCIDENT_STORED_PREFIX);
 if (!fs.existsSync(incidentUploadsDir)) fs.mkdirSync(incidentUploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -127,8 +131,9 @@ router.post('/incidents', upload.array('photos', 5), (req, res) => {
   try {
     const incidentNumber = nextIncidentNumber(db);
 
-    // Build photo path (comma-separated)
-    const photoPaths = (req.files || []).map(f => '/uploads/incidents/' + f.filename);
+    // Build photo path (comma-separated — incidents.photo_path holds the list;
+    // every reader must split on ',' before using a value as a URL)
+    const photoPaths = (req.files || []).map(f => '/' + INCIDENT_STORED_PREFIX + '/' + f.filename);
     const photoPath = photoPaths.join(',');
 
     // GPS + weather now go to first-class columns (mig 218). Coerce GPS to

@@ -160,13 +160,30 @@
   <p class="text-sm text-gray-600 whitespace-pre-wrap"><%= incident.description || 'No description provided.' %></p>
 </div>
 
-<!-- Photo -->
-<% if (incident.photo_path) { %>
+<!-- Photo / Evidence -->
+<%
+  // photo_path holds ONE path from the admin form but a comma-joined LIST
+  // from the worker portal (routes/worker/incidents.js posts up to 5). Emitting
+  // the raw column as a single src produced "a.jpg,/uploads/…/b.jpg" — a URL
+  // no file matches, so every multi-photo incident 404'd and the inline <img>
+  // collapsed to an empty box. Split, and render each one.
+  const incidentPhotos = String(incident.photo_path || '')
+    .split(',').map(p => p.trim()).filter(Boolean);
+%>
+<% if (incidentPhotos.length) { %>
 <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
-  <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">Photo / Evidence</h3>
-  <a href="<%= incident.photo_path %>" target="_blank" class="block">
-    <img src="<%= incident.photo_path %>" alt="Incident photo" class="rounded-xl border border-gray-200 max-w-full max-h-96 shadow-sm hover:shadow-md transition-shadow cursor-pointer">
-  </a>
+  <h3 class="text-sm font-medium text-gray-500 uppercase tracking-wide mb-3">
+    Photo / Evidence<% if (incidentPhotos.length > 1) { %> <span class="text-gray-400 normal-case font-normal">(<%= incidentPhotos.length %>)</span><% } %>
+  </h3>
+  <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+    <% incidentPhotos.forEach((photo, i) => { %>
+      <%# data-lightbox is handled globally in views/layout.ejs — opens in a modal, no separate tab %>
+      <a href="<%= photo %>" data-lightbox data-lightbox-name="Incident photo <%= i + 1 %>" data-lightbox-mime="image/*"
+         class="block aspect-square rounded-lg overflow-hidden border border-gray-200 hover:border-brand-400 hover:shadow-md transition-all">
+        <img src="<%= photo %>" alt="Incident photo <%= i + 1 %>" loading="lazy" class="w-full h-full object-cover">
+      </a>
+    <% }) %>
+  </div>
 </div>
 <% } %>
 

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const upload = require('../middleware/upload');
+const { STORED_PREFIX } = require('../middleware/upload');
 const { autoLogDiary } = require('../lib/diary');
 const { logActivity } = require('../middleware/audit');
 
@@ -42,7 +43,7 @@ router.post('/', upload.single('ctmp_file'), (req, res) => {
   // CTMP number: derive from parent plan + sequence
   const count = db.prepare('SELECT COUNT(*) AS c FROM ctmps WHERE plan_id = ?').get(parent.id).c;
   const ctmpNumber = `CTMP-${parent.plan_number}-${String(count + 1).padStart(2, '0')}`;
-  const filePath = req.file ? 'uploads/' + req.file.filename : '';
+  const filePath = req.file ? STORED_PREFIX + '/' + req.file.filename : '';
   const fileName = req.file ? req.file.originalname : '';
 
   try {
@@ -93,7 +94,7 @@ router.post('/:id', upload.single('ctmp_file'), (req, res) => {
   const b = req.body;
   let filePath = ctmp.file_path || '';
   let fileName = ctmp.file_original_name || '';
-  if (req.file) { filePath = 'uploads/' + req.file.filename; fileName = req.file.originalname; }
+  if (req.file) { filePath = STORED_PREFIX + '/' + req.file.filename; fileName = req.file.originalname; }
   try {
     db.prepare(`UPDATE ctmps SET title=?, status=?, qa_status=?, designer=?, file_path=?, file_original_name=?, notes=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`)
       .run(b.title || ctmp.ctmp_number, b.status || 'draft', b.qa_status || 'pending', b.designer || '', filePath, fileName, b.notes || '', ctmp.id);
@@ -110,7 +111,7 @@ router.post('/:id/revisions', upload.single('revision_file'), (req, res) => {
   if (!ctmp) { req.flash('error', 'CTMP not found.'); return req.session.save(() => res.redirect('/plans')); }
   const b = req.body;
   const label = nextCtmpRevision(db, ctmp);
-  const filePath = req.file ? 'uploads/' + req.file.filename : '';
+  const filePath = req.file ? STORED_PREFIX + '/' + req.file.filename : '';
   const fileName = req.file ? req.file.originalname : '';
   const qaStatus = b.qa_status || 'pending';
   try {

@@ -2,7 +2,20 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 
-const uploadsDir = path.join(__dirname, '..', 'public', 'uploads');
+// Shared uploads (traffic plans, CTMPs, incident photos).
+//
+// These used to land in public/uploads. That directory is baked into the
+// container image and is NOT on the persistent volume — only `data/` is
+// (render.yaml mounts the disk at .../data; Railway mounts /app/data). So
+// every redeploy wiped the files while the DB rows survived, and the stored
+// path then 404'd. Compliance documents never had this problem because they
+// already lived under data/uploads. Now everything does.
+//
+// STORED_PREFIX is the relative path written to the DB. Templates render it
+// as `/` + value, which lands on the `/data/uploads` static mount in
+// server.js — so no template changes were needed when this moved.
+const STORED_PREFIX = 'data/uploads/shared';
+const uploadsDir = path.join(__dirname, '..', STORED_PREFIX);
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const storage = multer.diskStorage({
@@ -12,6 +25,23 @@ const storage = multer.diskStorage({
     cb(null, uniqueSuffix + path.extname(file.originalname));
   }
 });
+
+/**
+ * Resolve a stored upload path to a file on disk, tolerating both the current
+ * `data/uploads/shared/x.pdf` convention and the legacy `uploads/x.pdf` one
+ * (which lived under public/). Returns null when nothing exists — callers
+ * should treat that as "already gone" rather than an error.
+ */
+function resolveUploadPath(stored) {
+  if (!stored) return null;
+  const rel = String(stored).replace(/^\/+/, '');
+  const candidates = [
+    path.isAbsolute(stored) ? stored : null,
+    path.join(__dirname, '..', rel),            // data/uploads/... (current)
+    path.join(__dirname, '..', 'public', rel),  // public/uploads/... (legacy)
+  ].filter(Boolean);
+  return candidates.find(p => { try { return fs.existsSync(p); } catch (e) { return false; } }) || null;
+}
 
 const upload = multer({
   storage,
@@ -62,5 +92,7 @@ const payrollReceiptUpload = multer({
 
 module.exports = upload;
 module.exports.upload = upload;
+module.exports.STORED_PREFIX = STORED_PREFIX;
+module.exports.resolveUploadPath = resolveUploadPath;
 module.exports.payrollReceiptUpload = payrollReceiptUpload;
 module.exports.payrollReceiptsDir = payrollReceiptsDir;
