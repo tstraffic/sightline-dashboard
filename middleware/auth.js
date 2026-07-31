@@ -133,16 +133,27 @@ const PERMISSIONS = {
   activity:      ['admin'],
   settings:      ['admin', 'planning'],
 
-  // ── Dual-view: Planning job tabs ──
-  planning_plans:     ['admin', 'planning'],              // full plan workspace (drafts, revisions, mark final)
-  planning_diary:     ['admin', 'planning', 'operations'],// site diary (both views)
-  planning_chat:      ['admin', 'planning'],              // job-level chat
+  // ── Job detail page tabs ──
+  // Each key gates one tab on views/jobs/show.ejs (both the /jobs/:id and
+  // /projects/:id mounts). Defaults reproduce the old hardcoded TABS_BY_ROLE
+  // matrix exactly; /admin/permissions overrides now actually apply. The
+  // planning_/ops_ prefixes are historical — kept so saved override rows and
+  // admin-UI labels stay valid. The Overview tab is deliberately ungated.
+  planning_plans:     ['admin', 'planning'],              // Traffic Plans tab (drafts, revisions, mark final)
+  planning_diary:     ['admin', 'planning', 'operations'],// Site Diary tab
+  planning_chat:      ['admin', 'operations', 'planning', 'finance', 'safety', 'hr', 'marketing'], // Chat tab (the old matrix's fallback gave Chat to every role)
+  ops_tasks:          ['admin', 'operations'],            // Tasks tab
+  ops_timesheets:     ['admin', 'operations', 'finance'], // Timesheets tab
+  ops_incidents:      ['admin', 'operations', 'safety'],  // Incidents tab
+  job_final_plans:    ['admin', 'operations', 'planning', 'finance', 'safety'], // Final Plans tab (read-only view; distinct from ops_final_plans below)
+  job_safety:         ['admin', 'operations', 'planning', 'safety'], // Safety tab (SWMS/RA/audits/incidents roll-up)
+  job_equipment:      ['admin', 'operations'],            // Equipment tab
+  job_contacts:       ['admin', 'operations'],            // Contacts tab
+  job_budget:         ['admin', 'operations', 'finance'], // Budget tab
+  job_accounts:       ['admin', 'finance'],               // Accounts tab + accounts document library (canViewAccounts delegates here)
 
-  // ── Dual-view: Operations job tabs ──
-  ops_final_plans:    ['admin', 'operations'],            // read-only final plans
-  ops_tasks:          ['admin', 'operations'],            // tasks (ops only)
-  ops_timesheets:     ['admin', 'operations', 'finance'], // timesheet entry
-  ops_incidents:      ['admin', 'operations'],            // incident reporting
+  // ── Ops sidebar links (NOT job tabs) ──
+  ops_final_plans:    ['admin', 'operations'],            // "Tasks Board" + "Job Pack" sidebar links (lib/sidebarNav.js) — widening this moves the sidebar/hubs too
   ops_flag:           ['admin', 'operations'],            // flag for review on final plans
 
   // ── Induction ──
@@ -292,8 +303,7 @@ function requireAccountsAccess(req, res, next) {
   if (!req.session || !req.session.user) {
     return res.redirect('/login');
   }
-  const role = normaliseRole(req.session.user.role);
-  if (role === 'finance' || role === 'admin') {
+  if (canViewAccounts(req.session.user)) {
     return next();
   }
   res.status(403).render('error', {
@@ -303,10 +313,12 @@ function requireAccountsAccess(req, res, next) {
   });
 }
 
+// Accounts surface = the job Accounts tab, the "Accounts Owner" overview
+// field, and the accounts document library (documents/exports/reports).
+// One `job_accounts` toggle in /admin/permissions governs all of it —
+// default finance + admin, same as the old hardcoded role check.
 function canViewAccounts(user) {
-  if (!user) return false;
-  const role = normaliseRole(user.role);
-  return role === 'finance' || role === 'admin';
+  return canAccess(user, 'job_accounts');
 }
 
 /** Check if user can view sensitive HR data (DOB, emergency contacts, disciplinary, etc.) */

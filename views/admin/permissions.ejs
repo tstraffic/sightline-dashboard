@@ -22,11 +22,17 @@
     risk_assessments: 'Risk Assessments', sop_register: 'SOP Register',
     voc_admin: 'VOC Admin',
     traffio_imports: 'Traffio Imports',
-    ops_final_plans: 'Ops · Final Plans', ops_tasks: 'Ops · Tasks',
-    ops_timesheets: 'Ops · Timesheets', ops_incidents: 'Ops · Incidents',
+    // "Job page tabs" group — one toggle per tab on the job detail page.
+    // Keys keep their historical planning_/ops_ names; labels say what
+    // they actually gate today.
+    planning_diary: 'Job · Site Diary', ops_tasks: 'Job · Tasks',
+    planning_plans: 'Job · Traffic Plans', job_final_plans: 'Job · Final Plans',
+    job_safety: 'Job · Safety', ops_timesheets: 'Job · Timesheets',
+    ops_incidents: 'Job · Incidents', job_equipment: 'Job · Equipment',
+    job_contacts: 'Job · Contacts', planning_chat: 'Job · Chat',
+    job_budget: 'Job · Budget', job_accounts: 'Job · Accounts + docs',
     ops_flag: 'Ops · Flag for Review',
-    planning_plans: 'Planning · Plans', planning_diary: 'Planning · Diary',
-    planning_chat: 'Planning · Chat',
+    ops_final_plans: 'Ops · Tasks Board + Job Pack (sidebar)',
   };
   function moduleLabel(k) {
     if (MODULE_LABEL[k]) return MODULE_LABEL[k];
