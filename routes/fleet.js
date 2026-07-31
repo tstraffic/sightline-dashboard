@@ -9,9 +9,38 @@ const { badgesFor, needsAction, todayISO } = require('../lib/fleetStatus');
 
 // Service-record invoice uploads — drag-drop PDFs / images of the
 // workshop invoice straight onto the service record. Stored under
-// uploads/fleet/vehicle_<id>/ so deleting a vehicle leaves a single
+// data/uploads/fleet/vehicle_<id>/ so deleting a vehicle leaves a single
 // directory to clear out.
-const INVOICE_UPLOAD_DIR = path.join(__dirname, '..', 'uploads', 'fleet');
+//
+// data/ is the only tree on the persistent volume; the old root ./uploads/fleet
+// was baked into the container image and wiped on every deploy. file_path is
+// now stored RELATIVE to the app root — it used to hold multer's absolute
+// f.path, which embedded the deploy root and so broke on any redeploy.
+const INVOICE_STORED_PREFIX = 'data/uploads/fleet';
+const INVOICE_UPLOAD_DIR = path.join(__dirname, '..', INVOICE_STORED_PREFIX);
+// Legacy location, still readable so pre-migration rows keep working.
+const LEGACY_INVOICE_DIR = path.join(__dirname, '..', 'uploads', 'fleet');
+
+/**
+ * Resolve a stored invoice path to a file on disk, keeping the containment
+ * guard that stops `../` escaping the invoice directories. Accepts the current
+ * relative form and legacy absolute rows. Returns null if missing or outside.
+ */
+function resolveInvoice(stored) {
+  if (!stored) return null;
+  const abs = path.isAbsolute(stored)
+    ? path.resolve(stored)
+    : path.resolve(path.join(__dirname, '..', stored));
+  const allowed = [path.resolve(INVOICE_UPLOAD_DIR), path.resolve(LEGACY_INVOICE_DIR)];
+  if (!allowed.some(base => abs === base || abs.startsWith(base + path.sep))) return null;
+  return fs.existsSync(abs) ? abs : null;
+}
+
+/** Path to store for an uploaded invoice — relative to the app root. */
+function invoiceRelPath(file) {
+  return path.relative(path.join(__dirname, '..'), file.path);
+}
+
 const invoiceStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const dir = path.join(INVOICE_UPLOAD_DIR, 'vehicle_' + req.params.id);
@@ -612,9 +641,8 @@ router.get('/:id/service/:sid/invoice', (req, res) => {
   const db = getDb();
   const record = db.prepare('SELECT invoice_file_path, invoice_file_name FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
   if (!record || !record.invoice_file_path) { req.flash('error', 'Invoice file not found.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
-  const abs = path.resolve(record.invoice_file_path);
-  if (!abs.startsWith(path.resolve(INVOICE_UPLOAD_DIR))) { return res.status(403).send('Forbidden'); }
-  if (!fs.existsSync(abs)) { req.flash('error', 'Invoice file missing on disk.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
+  const abs = resolveInvoice(record.invoice_file_path);
+  if (!abs) { req.flash('error', 'Invoice file missing on disk.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
   res.download(abs, record.invoice_file_name || path.basename(abs));
 });
 
@@ -623,7 +651,8 @@ router.post('/:id/service/:sid/invoice/delete', (req, res) => {
   const db = getDb();
   const record = db.prepare('SELECT id, invoice_file_path FROM service_records WHERE id = ? AND vehicle_id = ?').get(req.params.sid, req.params.id);
   if (record && record.invoice_file_path) {
-    try { if (fs.existsSync(record.invoice_file_path)) fs.unlinkSync(record.invoice_file_path); } catch (e) { /* ignore */ }
+    const absOld = resolveInvoice(record.invoice_file_path);
+    if (absOld) { try { fs.unlinkSync(absOld); } catch (e) { /* ignore */ } }
     db.prepare('UPDATE service_records SET invoice_file_path = NULL, invoice_file_name = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(req.params.sid);
     logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Invoice removed from #${req.params.sid}`, ip: req.ip });
   }
@@ -640,7 +669,7 @@ router.post('/:id/service/:sid/invoices/add', invoiceUpload.array('invoice_file'
   const files = req.files || [];
   if (!files.length) { req.flash('error', 'Choose a file first.'); return req.session.save(() => res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`)); }
   const insInv = db.prepare('INSERT INTO service_record_invoices (service_record_id, file_path, file_name) VALUES (?, ?, ?)');
-  files.forEach(f => insInv.run(req.params.sid, f.path, f.originalname));
+  files.forEach(f => insInv.run(req.params.sid, invoiceRelPath(f), f.originalname));
   req.flash('success', files.length === 1 ? 'Invoice added.' : (files.length + ' invoices added.'));
   req.session.save(() => res.redirect(`/fleet/${req.params.id}/service/${req.params.sid}/edit`));
 });
@@ -654,9 +683,8 @@ router.get('/:id/service/:sid/invoice/:invId', (req, res) => {
     WHERE sri.id = ? AND sri.service_record_id = ? AND sr.vehicle_id = ?
   `).get(req.params.invId, req.params.sid, req.params.id);
   if (!inv || !inv.file_path) { req.flash('error', 'Invoice file not found.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
-  const abs = path.resolve(inv.file_path);
-  if (!abs.startsWith(path.resolve(INVOICE_UPLOAD_DIR))) { return res.status(403).send('Forbidden'); }
-  if (!fs.existsSync(abs)) { req.flash('error', 'Invoice file missing on disk.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
+  const abs = resolveInvoice(inv.file_path);
+  if (!abs) { req.flash('error', 'Invoice file missing on disk.'); return req.session.save(() => res.redirect('/fleet/' + req.params.id)); }
   res.download(abs, inv.file_name || path.basename(abs));
 });
 
@@ -669,7 +697,8 @@ router.post('/:id/service/:sid/invoice/:invId/delete', (req, res) => {
     WHERE sri.id = ? AND sri.service_record_id = ? AND sr.vehicle_id = ?
   `).get(req.params.invId, req.params.sid, req.params.id);
   if (inv) {
-    try { if (inv.file_path && fs.existsSync(inv.file_path)) fs.unlinkSync(inv.file_path); } catch (e) { /* ignore */ }
+    const absInv = resolveInvoice(inv.file_path);
+    if (absInv) { try { fs.unlinkSync(absInv); } catch (e) { /* ignore */ } }
     db.prepare('DELETE FROM service_record_invoices WHERE id = ?').run(inv.id);
     logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Invoice removed from #${req.params.sid}`, ip: req.ip });
   }
@@ -797,7 +826,7 @@ router.post('/:id/service', invoiceUpload.array('invoice_file', 10), (req, res) 
   );
   // Store every uploaded invoice as its own attachment row.
   const insInv = db.prepare('INSERT INTO service_record_invoices (service_record_id, file_path, file_name) VALUES (?, ?, ?)');
-  files.forEach(f => insInv.run(result.lastInsertRowid, f.path, f.originalname));
+  files.forEach(f => insInv.run(result.lastInsertRowid, invoiceRelPath(f), f.originalname));
   logActivity({
     user: req.session.user, action: 'create', entityType: 'service_record',
     entityId: result.lastInsertRowid,
@@ -845,7 +874,7 @@ router.post('/:id/service/:sid', invoiceUpload.array('invoice_file', 10), (req, 
   // Newly-dropped invoices are ADDED (existing ones are kept; remove via the
   // per-attachment delete link).
   const insInv = db.prepare('INSERT INTO service_record_invoices (service_record_id, file_path, file_name) VALUES (?, ?, ?)');
-  files.forEach(f => insInv.run(req.params.sid, f.path, f.originalname));
+  files.forEach(f => insInv.run(req.params.sid, invoiceRelPath(f), f.originalname));
   logActivity({ user: req.session.user, action: 'update', entityType: 'service_record', entityId: req.params.sid, entityLabel: `Service record #${req.params.sid}`, ip: req.ip });
   req.flash('success', 'Service record updated.');
   // Stay on the edit page after saving so the user can keep working (add an

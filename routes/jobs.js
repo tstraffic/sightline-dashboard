@@ -735,11 +735,18 @@ router.post('/:id/unlink-compliance', (req, res) => {
 
 // =============================================
 // Compliance Document Upload
+//
+// NOTE: this block is currently unreachable — nothing in the app POSTs to
+// /:id/compliance-upload, and the INSERT below writes library='compliance',
+// which violates the documents table's CHECK(library IN ('delivery','accounts'))
+// and would throw on every attempt. Left in place (rather than deleted) but
+// moved onto the persistent volume with everything else, so it is not a
+// landmine if it is ever wired up.
 // =============================================
 
 const complianceDocStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const dir = pathLib.join(__dirname, '..', 'uploads', 'compliance', `job_${req.params.id}`, req.body.category || 'general');
+    const dir = pathLib.join(__dirname, '..', 'data', 'uploads', 'documents', 'compliance', `job_${req.params.id}`, req.body.category || 'general');
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -769,7 +776,7 @@ router.post('/:id/compliance-upload', complianceDocUpload.array('files', 10), (r
 
   const ins = db.prepare('INSERT INTO documents (job_id, library, category, filename, original_name, file_path, file_size, uploaded_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
   files.forEach(f => {
-    const relPath = `/uploads/compliance/job_${jobId}/${category}/${f.filename}`;
+    const relPath = `data/uploads/documents/compliance/job_${jobId}/${category}/${f.filename}`;
     ins.run(jobId, 'compliance', category, f.filename, f.originalname, relPath, f.size, req.session.user.id);
   });
 
