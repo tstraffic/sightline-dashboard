@@ -235,7 +235,6 @@ router.get('/:id', (req, res) => {
   }
 
   const deliveryDocs = db.prepare("SELECT * FROM documents WHERE job_id = ? AND library = 'delivery' ORDER BY category, original_name").all(job.id);
-  const complianceDocs = db.prepare("SELECT d.*, u.full_name as uploaded_by_name FROM documents d LEFT JOIN users u ON d.uploaded_by_id = u.id WHERE d.job_id = ? AND d.library = 'compliance' ORDER BY d.category, d.created_at DESC").all(job.id);
   const accountsDocs = canViewAccounts(req.session.user)
     ? db.prepare("SELECT * FROM documents WHERE job_id = ? AND library = 'accounts' ORDER BY category, original_name").all(job.id)
     : [];
@@ -463,7 +462,7 @@ router.get('/:id', (req, res) => {
 
   res.render('jobs/show', {
     title: job.job_number,
-    job, tasks, complianceItems, subPlansByParent, complianceDocs, deliveryDocs, accountsDocs,
+    job, tasks, complianceItems, subPlansByParent, deliveryDocs, accountsDocs,
     incidents, contacts, timesheets, budget, costEntries, totalSpend,
     complianceCosts, equipmentCosts,
     equipmentAssignments, hireDockets, trafficPlans, chatThreadId, diaryEntries, tgsPlans,
