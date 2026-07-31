@@ -6,7 +6,17 @@ const fs = require('fs');
 const { getDb } = require('../db/database');
 const { requireAccountsAccess, canViewAccounts } = require('../middleware/auth');
 
-const UPLOAD_BASE = path.join(__dirname, '..', 'uploads');
+const { resolveUploadPath } = require('../middleware/upload');
+
+// Stored under data/ — the only tree on the persistent volume. Root ./uploads
+// is baked into the container image and wiped on every deploy.
+// file_path is now stored RELATIVE to the app root. It used to hold multer's
+// absolute req.file.path, which embedded the deploy root
+// (/opt/render/project/src/... or /app/...) — so those rows broke on any
+// redeploy even before the volume problem, and any template rendering the
+// value as a URL emitted a filesystem path.
+const DOCS_STORED_PREFIX = 'data/uploads/documents';
+const UPLOAD_BASE = path.join(__dirname, '..', DOCS_STORED_PREFIX);
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -101,10 +111,12 @@ router.post('/upload', upload.single('file'), (req, res) => {
     return req.session.save(() => res.redirect(`/documents/job/${b.job_id}`));
   }
 
+  // Store relative to the app root, never multer's absolute req.file.path.
+  const relPath = path.relative(path.join(__dirname, '..'), req.file.path);
   db.prepare(`
     INSERT INTO documents (job_id, library, category, filename, original_name, file_path, file_size, uploaded_by_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(b.job_id, b.library, b.category, req.file.filename, req.file.originalname, req.file.path, req.file.size, req.session.user.id);
+  `).run(b.job_id, b.library, b.category, req.file.filename, req.file.originalname, relPath, req.file.size, req.session.user.id);
 
   req.flash('success', `Uploaded: ${req.file.originalname}`);
   req.session.save(() => res.redirect(`/documents/job/${b.job_id}`));
@@ -121,12 +133,15 @@ router.get('/download/:id', (req, res) => {
     return res.status(403).render('error', { title: 'Access Denied', message: 'You do not have access to Accounts documents.', user: req.session.user });
   }
 
-  if (!fs.existsSync(doc.file_path)) {
+  // resolveUploadPath handles the current relative form and legacy absolute
+  // rows alike; a miss means the file was lost to a pre-volume deploy.
+  const abs = resolveUploadPath(doc.file_path);
+  if (!abs) {
     req.flash('error', 'File not found on disk.');
     return req.session.save(() => res.redirect(`/documents/job/${doc.job_id}`));
   }
 
-  res.download(doc.file_path, doc.original_name);
+  res.download(abs, doc.original_name);
 });
 
 // Delete document
@@ -139,7 +154,8 @@ router.post('/delete/:id', (req, res) => {
     return res.status(403).render('error', { title: 'Access Denied', message: 'You do not have access to Accounts documents.', user: req.session.user });
   }
 
-  if (fs.existsSync(doc.file_path)) fs.unlinkSync(doc.file_path);
+  const absDel = resolveUploadPath(doc.file_path);
+  if (absDel) { try { fs.unlinkSync(absDel); } catch (e) { /* already gone */ } }
   db.prepare('DELETE FROM documents WHERE id = ?').run(req.params.id);
   req.flash('success', 'File deleted.');
   req.session.save(() => res.redirect(`/documents/job/${doc.job_id}`));

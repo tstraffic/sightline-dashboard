@@ -15009,6 +15009,107 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 337 error:', e.message); }
   }
 
+  // =============================================
+  // Migration 338: Last of the ephemeral upload trees — root ./uploads.
+  // Same volume problem as 335/336, but these two modules stored multer's
+  // ABSOLUTE req.file.path, which embeds the deploy root
+  // (/opt/render/project/src/... or /app/...). Those rows broke on any
+  // redeploy even before the volume issue, and could never be rendered as a
+  // URL. Normalise every shape to a path relative to the app root so
+  // resolveUploadPath() handles them uniformly:
+  //
+  //   documents.file_path                    absolute  -> data/uploads/documents/...
+  //   documents.file_path (compliance rows)  /uploads/compliance/...
+  //                                                    -> data/uploads/documents/compliance/...
+  //   service_record_invoices.file_path      absolute  -> data/uploads/fleet/...
+  //   service_records.invoice_file_path      absolute  -> data/uploads/fleet/...
+  //
+  // Unlike 319 (which used renameSync and only walked one level), this copies
+  // — the app root and the data/ volume are different devices, where rename
+  // fails — verifies size, and recurses, because every path here is nested.
+  // =============================================
+  if (!isMigrationApplied.get(338)) {
+    try {
+      const fsx = require('fs');
+      const px = require('path');
+      const root = px.join(__dirname, '..');
+      const legacyRoot = px.join(root, 'uploads');
+
+      let moved = 0, repointed = 0;
+
+      // Copy one file, creating parent dirs. Returns true only once the
+      // destination exists with a matching size.
+      const copyFile = (src, dst) => {
+        try {
+          if (!fsx.existsSync(src)) return false;
+          if (fsx.existsSync(dst)) return true; // already rescued by an earlier row
+          fsx.mkdirSync(px.dirname(dst), { recursive: true });
+          fsx.copyFileSync(src, dst);
+          if (fsx.statSync(dst).size !== fsx.statSync(src).size) { fsx.unlinkSync(dst); return false; }
+          return true;
+        } catch (e) { return false; }
+      };
+
+      // Map a stored value to { rel, src } or null to leave the row alone.
+      // `subDir` is where under data/uploads the tree lands.
+      const planMove = (stored, legacySubDir, newSubDir) => {
+        if (!stored) return null;
+        let tail = null;
+        const legacyDir = px.join(legacyRoot, legacySubDir);
+        if (px.isAbsolute(stored)) {
+          // Absolute row — only touch it if it points inside the old tree.
+          // Compare on the resolved path so a stale deploy root still matches
+          // by suffix below.
+          const norm = px.normalize(stored);
+          const marker = px.sep + px.join('uploads', legacySubDir) + px.sep;
+          const at = norm.indexOf(marker);
+          if (at === -1) return null;
+          tail = norm.slice(at + marker.length);
+        } else {
+          const rel = stored.replace(/^\/+/, '');
+          const prefix = px.join('uploads', legacySubDir) + px.sep;
+          if (rel.indexOf(prefix.split(px.sep).join('/')) !== 0 && rel.indexOf(prefix) !== 0) return null;
+          tail = rel.slice(prefix.length);
+        }
+        if (!tail || tail.indexOf('..') !== -1) return null;
+        const src = px.join(legacyDir, tail);
+        const relNew = px.join('data', 'uploads', newSubDir, tail);
+        return { src, dst: px.join(root, relNew), rel: relNew };
+      };
+
+      // [table, column, legacySubDir, newSubDir]
+      const targets = [
+        ['documents', 'file_path', 'delivery',   px.join('documents', 'delivery')],
+        ['documents', 'file_path', 'accounts',   px.join('documents', 'accounts')],
+        ['documents', 'file_path', 'compliance', px.join('documents', 'compliance')],
+        ['service_record_invoices', 'file_path',    'fleet', 'fleet'],
+        ['service_records', 'invoice_file_path',    'fleet', 'fleet'],
+      ];
+
+      for (const [table, col, legacySubDir, newSubDir] of targets) {
+        let rows;
+        try {
+          rows = db.prepare(`SELECT id, ${col} AS v FROM ${table} WHERE ${col} IS NOT NULL AND ${col} != ''`).all();
+        } catch (e) { continue; } // table/column may not exist on older DBs
+        const upd = db.prepare(`UPDATE ${table} SET ${col} = ? WHERE id = ?`);
+        for (const r of rows) {
+          const plan = planMove(String(r.v), legacySubDir, newSubDir);
+          if (!plan) continue;
+          // Repoint only when the bytes are safely on the volume. If the file
+          // is already gone, leave the row untouched rather than pointing it
+          // at a path that will never exist.
+          if (!copyFile(plan.src, plan.dst)) continue;
+          moved++;
+          upd.run(plan.rel, r.id);
+          repointed++;
+        }
+      }
+
+      recordMigration.run(338, `root ./uploads moved onto the persistent volume, paths normalised to relative (${moved} file(s), ${repointed} row(s))`);
+      console.log(`Migration 338 applied: rescued ${moved} document/fleet upload(s), repointed ${repointed} row(s)`);
+    } catch (e) { console.error('Migration 338 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
