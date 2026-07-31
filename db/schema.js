@@ -14903,6 +14903,112 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 335 error:', e.message); }
   }
 
+  // =============================================
+  // Migration 336: Same rescue as 335, for the two modules it missed —
+  // chat attachments and TGS risk-assessment PDFs. Both also wrote to
+  // public/uploads (wiped on every deploy) and both use NESTED sub-paths
+  // (chat/thread_N/f.png, tgs-risk-assessments/f.pdf), which 335's mover
+  // deliberately skipped because it only handled a flat filename.
+  //
+  // Also rewrites plan_revisions rows pointing at a TGS PDF: attaching an
+  // assessment to a plan copies pdf_path verbatim, and views/plans/show.ejs
+  // links it statically with no regeneration fallback — so those 404 for
+  // good, unlike the assessment's own PDF button which re-renders on miss.
+  // =============================================
+  if (!isMigrationApplied.get(336)) {
+    try {
+      const fsx = require('fs');
+      const px = require('path');
+      const root = px.join(__dirname, '..');
+      const legacyBase = px.join(root, 'public', 'uploads');
+
+      // [table, column, legacy prefix, new prefix]  — sub-path after the
+      // prefix is preserved verbatim (thread_N/f.png stays nested).
+      const targets = [
+        ['message_attachments', 'file_url',      '/uploads/chat/', '/data/uploads/chat/'],
+        ['message_attachments', 'thumbnail_url', '/uploads/chat/', '/data/uploads/chat/'],
+        ['tgs_risk_assessments', 'pdf_path',     'uploads/tgs-risk-assessments/', 'data/uploads/tgs-risk-assessments/'],
+        ['plan_revisions', 'file_path',          'uploads/tgs-risk-assessments/', 'data/uploads/tgs-risk-assessments/'],
+      ];
+
+      let moved = 0, repointed = 0;
+      const moveOne = (storedValue, legacyPrefix, newPrefix) => {
+        if (!storedValue || storedValue.indexOf(legacyPrefix) !== 0) return null;
+        const subPath = storedValue.slice(legacyPrefix.length);
+        // Reject traversal / absolute escapes; anything else keeps its nesting.
+        if (!subPath || subPath.indexOf('..') !== -1 || subPath.charAt(0) === '/') return null;
+        // Legacy prefix minus its leading slash, relative to public/uploads.
+        const legacyRel = legacyPrefix.replace(/^\/+/, '').replace(/^uploads\//, '');
+        const src = px.join(legacyBase, legacyRel, subPath);
+        const dst = px.join(root, newPrefix.replace(/^\/+/, ''), subPath);
+        if (!fsx.existsSync(src)) return null; // already wiped — leave the row alone
+        try {
+          fsx.mkdirSync(px.dirname(dst), { recursive: true });
+          if (!fsx.existsSync(dst)) {
+            fsx.copyFileSync(src, dst);
+            if (fsx.statSync(dst).size !== fsx.statSync(src).size) { fsx.unlinkSync(dst); return null; }
+          }
+          moved++;
+          return newPrefix + subPath;
+        } catch (e) { return null; }
+      };
+
+      for (const [table, col, legacyPrefix, newPrefix] of targets) {
+        let rows;
+        try {
+          rows = db.prepare(`SELECT id, ${col} AS v FROM ${table} WHERE ${col} IS NOT NULL AND ${col} != ''`).all();
+        } catch (e) { continue; } // table/column may not exist on older DBs
+        const upd = db.prepare(`UPDATE ${table} SET ${col} = ? WHERE id = ?`);
+        for (const r of rows) {
+          const rewritten = moveOne(String(r.v), legacyPrefix, newPrefix);
+          if (rewritten) { upd.run(rewritten, r.id); repointed++; }
+        }
+      }
+
+      recordMigration.run(336, `chat + TGS RA uploads moved off ephemeral public/uploads (${moved} file(s), ${repointed} row(s))`);
+      console.log(`Migration 336 applied: rescued ${moved} chat/TGS upload(s), repointed ${repointed} row(s)`);
+    } catch (e) { console.error('Migration 336 error:', e.message); }
+  }
+
+  // =============================================
+  // Migration 337: Re-issue the tgs_risk_assessments table.
+  // Version 210 was used twice — older databases recorded it as
+  // "birthday_messages", so the later 210 block (which creates this table)
+  // is treated as already-applied and silently skips. On any such DB the
+  // table never exists and the whole TGS Risk Assessment module 500s on
+  // every route. Re-run the DDL under a fresh version; CREATE TABLE IF NOT
+  // EXISTS makes it a no-op where 210 did land.
+  // (This is the duplicate-version trap CLAUDE.md warns about — always
+  // check the current max version before adding a migration.)
+  // =============================================
+  if (!isMigrationApplied.get(337)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS tgs_risk_assessments (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          plan_id INTEGER REFERENCES traffic_plans(id) ON DELETE SET NULL,
+          job_id INTEGER REFERENCES jobs(id) ON DELETE SET NULL,
+          title TEXT DEFAULT '',
+          tgs_ref_no TEXT DEFAULT '',
+          status TEXT DEFAULT 'draft',
+          responses_json TEXT DEFAULT '{}',
+          residual_risk TEXT DEFAULT NULL,
+          requires_one_up INTEGER DEFAULT 0,
+          pdf_path TEXT DEFAULT '',
+          pdf_generated_at DATETIME DEFAULT NULL,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_tgs_ra_plan_id ON tgs_risk_assessments(plan_id);
+        CREATE INDEX IF NOT EXISTS idx_tgs_ra_job_id ON tgs_risk_assessments(job_id);
+        CREATE INDEX IF NOT EXISTS idx_tgs_ra_status ON tgs_risk_assessments(status);
+      `);
+      recordMigration.run(337, 'tgs_risk_assessments re-issued (version 210 was double-booked)');
+      console.log('Migration 337 applied: tgs_risk_assessments table ensured');
+    } catch (e) { console.error('Migration 337 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

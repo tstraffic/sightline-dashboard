@@ -25,8 +25,15 @@ const {
   computeResidualRisk,
 } = require('../lib/raTemplates/tgsRiskOptions');
 const { renderTgsRiskAssessmentPdf } = require('../lib/pdf/tgsRiskAssessmentPdf');
+const { resolveUploadPath } = require('../middleware/upload');
 
-const PDF_DIR = path.join(__dirname, '..', 'public', 'uploads', 'tgs-risk-assessments');
+// Stored under data/ — the only tree on the persistent volume. public/uploads
+// is rebuilt from the container image on every deploy. These PDFs are
+// regenerable from responses_json (see GET /:id/pdf), so a wiped file was
+// cosmetic here — but an attached plan revision links the path statically with
+// no regeneration fallback, and that link 404'd for good.
+const PDF_STORED_PREFIX = 'data/uploads/tgs-risk-assessments';
+const PDF_DIR = path.join(__dirname, '..', PDF_STORED_PREFIX);
 function ensurePdfDir() {
   try { fs.mkdirSync(PDF_DIR, { recursive: true }); } catch (e) { /* ignore */ }
 }
@@ -305,7 +312,7 @@ router.post('/:id/finalize', async (req, res) => {
     const buf = await renderTgsRiskAssessmentPdf(assessment, responses);
     const filename = `tgs-ra-${assessment.id}-${Date.now()}.pdf`;
     fs.writeFileSync(path.join(PDF_DIR, filename), buf);
-    const relPath = 'uploads/tgs-risk-assessments/' + filename;
+    const relPath = PDF_STORED_PREFIX + '/' + filename;
     db.prepare(`
       UPDATE tgs_risk_assessments
       SET status = 'finalized', pdf_path = ?, pdf_generated_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
@@ -329,9 +336,11 @@ router.get('/:id/pdf', async (req, res) => {
   }
 
   // If a PDF was generated previously and still exists, stream it.
+  // resolveUploadPath covers both the current data/uploads location and
+  // legacy public/uploads rows; a miss just falls through to regeneration.
   if (assessment.pdf_path) {
-    const fullPath = path.join(__dirname, '..', 'public', assessment.pdf_path);
-    if (fs.existsSync(fullPath)) {
+    const fullPath = resolveUploadPath(assessment.pdf_path);
+    if (fullPath) {
       res.setHeader('Content-Type', 'application/pdf');
       res.setHeader('Content-Disposition', `inline; filename="TGS-RA-${assessment.id}.pdf"`);
       return fs.createReadStream(fullPath).pipe(res);
@@ -426,8 +435,8 @@ router.post('/:id/delete', (req, res) => {
   try {
     // Remove generated PDF file if present (best-effort; ignore missing file).
     if (assessment.pdf_path) {
-      const fullPath = path.join(__dirname, '..', 'public', assessment.pdf_path);
-      try { fs.unlinkSync(fullPath); } catch (e) { /* ignore */ }
+      const fullPath = resolveUploadPath(assessment.pdf_path);
+      if (fullPath) { try { fs.unlinkSync(fullPath); } catch (e) { /* ignore */ } }
     }
     db.prepare('DELETE FROM tgs_risk_assessments WHERE id = ?').run(assessment.id);
     req.flash('success', 'Assessment deleted.');

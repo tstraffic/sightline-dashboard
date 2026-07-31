@@ -13,10 +13,19 @@ const typingUsers = new Map(); // threadId -> Map(userId -> { name, timestamp })
 // ============================================
 // Multer config for chat image uploads
 // ============================================
+// Stored under data/ — the only tree on the persistent volume. public/uploads
+// is rebuilt from the container image on every deploy, so attachments used to
+// disappear while the message_attachments rows kept pointing at them.
+// NOTE: req.body.thread_id is usually still undefined here — multer runs
+// destination() when it reaches the file part, and the client appends the file
+// before thread_id — so in practice almost everything lands in thread_general.
+// Harmless (the URL is stored per file), left as-is to keep this change to the
+// storage location only.
+const CHAT_STORED_PREFIX = 'data/uploads/chat';
 const chatStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const threadId = req.body.thread_id || 'general';
-    const dir = path.join(__dirname, '..', 'public', 'uploads', 'chat', `thread_${threadId}`);
+    const dir = path.join(__dirname, '..', CHAT_STORED_PREFIX, `thread_${threadId}`);
     fs.mkdirSync(dir, { recursive: true });
     cb(null, dir);
   },
@@ -520,8 +529,11 @@ router.post('/api/upload', chatUpload.single('file'), async (req, res) => {
     }
   }
 
+  // Served URL — public/js/chat.js uses these verbatim as src/href, so this
+  // must be a working absolute path. `/` + CHAT_STORED_PREFIX lands on the
+  // /data/uploads static mount in server.js.
   const threadDir = path.basename(req.file.destination);
-  const fileUrl = `/uploads/chat/${threadDir}/${req.file.filename}`;
+  const fileUrl = `/${CHAT_STORED_PREFIX}/${threadDir}/${req.file.filename}`;
   const isImage = req.file.mimetype.startsWith('image/');
 
   // Generate thumbnail only for images
@@ -537,7 +549,7 @@ router.post('/api/upload', chatUpload.single('file'), async (req, res) => {
 
       return res.json({
         file_url: fileUrl,
-        thumbnail_url: `/uploads/chat/${threadDir}/${thumbFilename}`,
+        thumbnail_url: `/${CHAT_STORED_PREFIX}/${threadDir}/${thumbFilename}`,
         mime_type: req.file.mimetype,
         file_size: req.file.size,
         original_name: req.file.originalname
