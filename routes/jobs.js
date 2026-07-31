@@ -287,7 +287,6 @@ router.get('/:id', (req, res) => {
   }
 
   const deliveryDocs = db.prepare("SELECT * FROM documents WHERE job_id = ? AND library = 'delivery' ORDER BY category, original_name").all(job.id);
-  const complianceDocs = db.prepare("SELECT d.*, u.full_name as uploaded_by_name FROM documents d LEFT JOIN users u ON d.uploaded_by_id = u.id WHERE d.job_id = ? AND d.library = 'compliance' ORDER BY d.category, d.created_at DESC").all(job.id);
   const accountsDocs = canViewAccounts(req.session.user)
     ? db.prepare("SELECT * FROM documents WHERE job_id = ? AND library = 'accounts' ORDER BY category, original_name").all(job.id)
     : [];
@@ -572,7 +571,7 @@ router.get('/:id', (req, res) => {
 
   res.render('jobs/show', {
     title: job.job_number,
-    job, tasks, complianceItems, subPlansByParent, complianceDocs, deliveryDocs, accountsDocs,
+    job, tasks, complianceItems, subPlansByParent, deliveryDocs, accountsDocs,
     incidents, contacts, timesheets, budget, costEntries, totalSpend,
     complianceCosts, equipmentCosts,
     equipmentAssignments, hireDockets, trafficPlans, chatThreadId, diaryEntries, tgsPlans,
@@ -733,78 +732,11 @@ router.post('/:id/unlink-compliance', (req, res) => {
   req.session.save(() => res.redirect(`/projects/${req.params.id}#${hash}`));
 });
 
-// =============================================
-// Compliance Document Upload
-//
-// NOTE: this block is currently unreachable — nothing in the app POSTs to
-// /:id/compliance-upload, and the INSERT below writes library='compliance',
-// which violates the documents table's CHECK(library IN ('delivery','accounts'))
-// and would throw on every attempt. Left in place (rather than deleted) but
-// moved onto the persistent volume with everything else, so it is not a
-// landmine if it is ever wired up.
-// =============================================
-
-const complianceDocStorage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    const dir = pathLib.join(__dirname, '..', 'data', 'uploads', 'documents', 'compliance', `job_${req.params.id}`, req.body.category || 'general');
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + Math.round(Math.random() * 1E9) + '-' + file.originalname);
-  }
-});
-const complianceDocUpload = multer({
-  storage: complianceDocStorage,
-  limits: { fileSize: 50 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => {
-    const allowed = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|png|jpg|jpeg|gif|csv|txt|zip|dwg|dxf)$/i;
-    cb(null, allowed.test(pathLib.extname(file.originalname)));
-  }
-});
-
-router.post('/:id/compliance-upload', complianceDocUpload.array('files', 10), (req, res) => {
-  const db = getDb();
-  const jobId = req.params.id;
-  const category = req.body.category || 'general';
-  const files = req.files || [];
-
-  if (files.length === 0) {
-    req.flash('error', 'No files selected.');
-    return req.session.save(() => res.redirect(`/projects/${jobId}#compliance`));
-  }
-
-  const ins = db.prepare('INSERT INTO documents (job_id, library, category, filename, original_name, file_path, file_size, uploaded_by_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
-  files.forEach(f => {
-    const relPath = `data/uploads/documents/compliance/job_${jobId}/${category}/${f.filename}`;
-    ins.run(jobId, 'compliance', category, f.filename, f.originalname, relPath, f.size, req.session.user.id);
-  });
-
-  req.flash('success', `${files.length} document(s) uploaded.`);
-  req.session.save(() => res.redirect(`/projects/${jobId}#compliance`));
-});
-
-router.post('/:id/compliance-doc/:docId/delete', (req, res) => {
-  const db = getDb();
-  const doc = db.prepare("SELECT * FROM documents WHERE id = ? AND job_id = ? AND library = 'compliance'").get(req.params.docId, req.params.id);
-  if (doc) {
-    const fullPath = pathLib.join(__dirname, '..', doc.file_path);
-    try { fs.unlinkSync(fullPath); } catch (e) { /* file may not exist */ }
-    db.prepare('DELETE FROM documents WHERE id = ?').run(doc.id);
-    req.flash('success', 'Document deleted.');
-  }
-  req.session.save(() => res.redirect(`/projects/${req.params.id}#compliance`));
-});
-
-// Serve compliance uploads
-router.get('/:id/compliance-doc/:filename', (req, res) => {
-  const db = getDb();
-  const doc = db.prepare("SELECT * FROM documents WHERE job_id = ? AND library = 'compliance' AND filename = ?").get(req.params.id, req.params.filename);
-  if (!doc) return res.status(404).send('File not found');
-  const filePath = pathLib.join(__dirname, '..', doc.file_path);
-  if (fs.existsSync(filePath)) return res.download(filePath, doc.original_name);
-  res.status(404).send('File not found');
-});
+// Compliance Document Upload was removed here: it wrote library='compliance',
+// which the documents table's CHECK(library IN ('delivery','accounts')) has
+// always rejected, so the upload could never succeed and the matching
+// delete/serve routes could never find a row. Nothing linked any of them.
+// Plan documents live in the Compliance module (/compliance) instead.
 
 // =============================================
 // Site Diary CRUD
