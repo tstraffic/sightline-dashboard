@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const upload = require('../middleware/upload');
+const { STORED_PREFIX } = require('../middleware/upload');
 const { ensureThreadForEntity, addMembersToThread, postSystemMessage, getThreadForEntity } = require('../lib/chat');
 const { createLinkedTask, closeTaskFromCa } = require('../lib/correctiveActions');
 const { sydneyToday } = require('../lib/sydney');
@@ -138,7 +139,7 @@ router.post('/', upload.single('photo'), (req, res) => {
   const vehicleId = req.body.vehicle_id ? parseInt(req.body.vehicle_id, 10) || null : null;
   const incident_number = nextIncidentNumber(db);
   const job = jobId ? db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(jobId) : null;
-  const photo_path = req.file ? '/uploads/' + req.file.filename : '';
+  const photo_path = req.file ? '/' + STORED_PREFIX + '/' + req.file.filename : '';
 
   const result = db.prepare(`
     INSERT INTO incidents (job_id, vehicle_id, incident_number, incident_type, severity, title, description, location, incident_date, incident_time, reported_by_id, persons_involved, witnesses, immediate_actions, notifiable_incident, traffic_disruption, police_notified, client_notified, close_out_date, photo_path)
@@ -280,7 +281,7 @@ router.post('/:id', upload.single('photo'), (req, res) => {
   const existing = db.prepare('SELECT incident_number, photo_path FROM incidents WHERE id = ?').get(req.params.id);
 
   // Use new photo if uploaded, otherwise keep existing
-  const photo_path = req.file ? '/uploads/' + req.file.filename : (existing ? existing.photo_path : '');
+  const photo_path = req.file ? '/' + STORED_PREFIX + '/' + req.file.filename : (existing ? existing.photo_path : '');
 
   db.prepare(`
     UPDATE incidents SET job_id=?, vehicle_id=?, incident_type=?, severity=?, title=?, description=?, location=?, incident_date=?, incident_time=?, persons_involved=?, witnesses=?, immediate_actions=?, root_cause=?, investigation_status=?, notifiable_incident=?, traffic_disruption=?, police_notified=?, client_notified=?, close_out_date=?, photo_path=?, updated_at=CURRENT_TIMESTAMP

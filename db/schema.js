@@ -14826,6 +14826,83 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 334 error:', e.message); }
   }
 
+  // =============================================
+  // Migration 335: Rescue uploads stranded in public/uploads.
+  // Traffic plans, CTMPs and incident photos used to be written to
+  // public/uploads, which is part of the container image and NOT on the
+  // persistent volume (only data/ is). Every redeploy wiped them while the
+  // DB rows survived, so the stored path 404'd. Uploads now go to
+  // data/uploads/shared (see middleware/upload.js) — but any file still
+  // present from since the last deploy would be destroyed by THIS deploy,
+  // so move whatever survives onto the volume and repoint the rows.
+  // Copy-then-verify, never delete on failure: losing a file is worse than
+  // leaving a duplicate behind.
+  // =============================================
+  if (!isMigrationApplied.get(335)) {
+    try {
+      const fsx = require('fs');
+      const px = require('path');
+      const root = px.join(__dirname, '..');
+      const destDir = px.join(root, 'data', 'uploads', 'shared');
+      const incDestDir = px.join(root, 'data', 'uploads', 'incidents');
+
+      // [table, column, legacy prefix, new prefix, dest dir, leading slash?]
+      const targets = [
+        ['traffic_plans', 'file_path',         'uploads/',  'data/uploads/shared/', destDir, false],
+        ['traffic_plans', 'rola_file_path',    'uploads/',  'data/uploads/shared/', destDir, false],
+        ['traffic_plans', 'rol_file_path',     'uploads/',  'data/uploads/shared/', destDir, false],
+        ['plan_revisions', 'file_path',        'uploads/',  'data/uploads/shared/', destDir, false],
+        ['ctmps', 'file_path',                 'uploads/',  'data/uploads/shared/', destDir, false],
+        ['ctmp_revisions', 'file_path',        'uploads/',  'data/uploads/shared/', destDir, false],
+        ['incidents', 'photo_path',            '/uploads/incidents/', '/data/uploads/incidents/', incDestDir, true],
+        ['incidents', 'photo_path',            '/uploads/',           '/data/uploads/shared/',    destDir, true],
+      ];
+
+      let moved = 0, repointed = 0;
+      const moveOne = (storedValue, legacyPrefix, newPrefix, dir) => {
+        // Returns the rewritten value, or null to leave the row untouched.
+        if (!storedValue || storedValue.indexOf(legacyPrefix) !== 0) return null;
+        const filename = storedValue.slice(legacyPrefix.length);
+        if (!filename || filename.indexOf('/') !== -1) return null; // nested/unknown shape — leave alone
+        const src = px.join(root, 'public', 'uploads',
+          legacyPrefix.indexOf('incidents/') !== -1 ? 'incidents' : '', filename);
+        const dst = px.join(dir, filename);
+        if (!fsx.existsSync(src)) return null;   // already wiped — nothing to rescue, leave the row as-is
+        try {
+          fsx.mkdirSync(dir, { recursive: true });
+          if (!fsx.existsSync(dst)) {
+            fsx.copyFileSync(src, dst);
+            if (fsx.statSync(dst).size !== fsx.statSync(src).size) { fsx.unlinkSync(dst); return null; }
+          }
+          moved++;
+          return newPrefix + filename;
+        } catch (e) { return null; }
+      };
+
+      for (const [table, col, legacyPrefix, newPrefix, dir] of targets) {
+        let rows;
+        try {
+          rows = db.prepare(`SELECT id, ${col} AS v FROM ${table} WHERE ${col} IS NOT NULL AND ${col} != ''`).all();
+        } catch (e) { continue; } // table/column may not exist on older DBs
+        const upd = db.prepare(`UPDATE ${table} SET ${col} = ? WHERE id = ?`);
+        for (const r of rows) {
+          // photo_path can hold a comma-joined list — rewrite each entry.
+          const parts = String(r.v).split(',').map(s => s.trim()).filter(Boolean);
+          let changed = false;
+          const next = parts.map(p => {
+            const rewritten = moveOne(p, legacyPrefix, newPrefix, dir);
+            if (rewritten) { changed = true; return rewritten; }
+            return p;
+          });
+          if (changed) { upd.run(next.join(','), r.id); repointed++; }
+        }
+      }
+
+      recordMigration.run(335, `uploads moved off ephemeral public/uploads onto the persistent volume (${moved} file(s), ${repointed} row(s))`);
+      console.log(`Migration 335 applied: rescued ${moved} upload(s) onto the persistent volume, repointed ${repointed} row(s)`);
+    } catch (e) { console.error('Migration 335 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
