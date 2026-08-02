@@ -17,21 +17,50 @@ const { resolveUploadPath } = require('../middleware/upload');
 // value as a URL emitted a filesystem path.
 const DOCS_STORED_PREFIX = 'data/uploads/documents';
 const UPLOAD_BASE = path.join(__dirname, '..', DOCS_STORED_PREFIX);
+// Files land here first, then move to their final home once the request body
+// is parsed — see the note on storage below.
+const INCOMING_DIR = path.join(UPLOAD_BASE, '_incoming');
 
+const LIBRARIES = ['delivery', 'accounts'];
+const CATEGORIES = {
+  delivery: ['01_Quote & Tender', '02_Contracts & Insurances', '03_Planning', '04_Operations', '05_Marketing', '06_Closeout'],
+  accounts: ['01_Purchase Orders', '02_Invoices Received', '03_Invoices Issued', '04_Variations', '05_Payments & Remittances', '06_Closeout'],
+};
+
+// Multer streams the file as soon as it reaches the file part, so any text
+// field posted AFTER it is still missing from req.body inside destination().
+// The upload form posts `category` after the file input, so building the path
+// here filed every document under "uncategorised" regardless of the category
+// chosen. Stage into one directory instead and move the file in the handler,
+// where the body is fully parsed — that is also immune to future field
+// reordering, which a template edit could otherwise silently break.
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const library = req.body.library || 'delivery';
-    const jobId = req.body.job_id;
-    const category = req.body.category || 'uncategorised';
-    const dir = path.join(UPLOAD_BASE, library, `job_${jobId}`, category);
-    fs.mkdirSync(dir, { recursive: true });
-    cb(null, dir);
+    fs.mkdirSync(INCOMING_DIR, { recursive: true });
+    cb(null, INCOMING_DIR);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, uniqueSuffix + '-' + file.originalname);
   }
 });
+
+/**
+ * Normalise a posted category to one of the known values for its library.
+ * These become directory names and arrive unvalidated from the form, so a
+ * crafted POST could otherwise use `../` to write outside the uploads tree.
+ * The result is used for BOTH the path and the stored category column, so the
+ * grouping shown in the UI always matches where the file actually lives.
+ */
+function normaliseCategory(library, category) {
+  return (CATEGORIES[library] || []).includes(category) ? category : 'uncategorised';
+}
+
+/** Final resting place for an upload, as a path relative to the app root. */
+function targetRelPath(library, jobId, category, filename) {
+  const job = `job_${parseInt(jobId, 10) || 0}`;
+  return path.join(DOCS_STORED_PREFIX, library, job, category, filename);
+}
 
 const ALLOWED_DOC_FILES = /\.(pdf|doc|docx|xls|xlsx|ppt|pptx|png|jpg|jpeg|gif|csv|txt|zip|dwg)$/i;
 const docFileFilter = (req, file, cb) => {
@@ -83,12 +112,10 @@ router.get('/job/:jobId', (req, res) => {
     `).all(job.id);
   }
 
-  const deliveryCategories = ['01_Quote & Tender', '02_Contracts & Insurances', '03_Planning', '04_Operations', '05_Marketing', '06_Closeout'];
-  const accountsCategories = ['01_Purchase Orders', '02_Invoices Received', '03_Invoices Issued', '04_Variations', '05_Payments & Remittances', '06_Closeout'];
-
   res.render('documents/index', {
     title: `Documents: ${job.job_number}`,
-    job, deliveryDocs, accountsDocs, deliveryCategories, accountsCategories,
+    job, deliveryDocs, accountsDocs,
+    deliveryCategories: CATEGORIES.delivery, accountsCategories: CATEGORIES.accounts,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });
@@ -99,9 +126,21 @@ router.post('/upload', upload.single('file'), (req, res) => {
   const db = getDb();
   const b = req.body;
 
+  const discardStaged = () => {
+    if (req.file) { try { fs.unlinkSync(req.file.path); } catch (e) { /* already gone */ } }
+  };
+
+  // library is a CHECK-constrained column, so an unknown value would throw a
+  // 500 out of the INSERT and strand the uploaded file. Reject it up front.
+  if (!LIBRARIES.includes(b.library)) {
+    discardStaged();
+    req.flash('error', 'Unknown document library.');
+    return req.session.save(() => res.redirect(`/documents/job/${b.job_id}`));
+  }
+
   // Enforce accounts library access
   if (b.library === 'accounts' && !canViewAccounts(req.session.user)) {
-    if (req.file) fs.unlinkSync(req.file.path);
+    discardStaged();
     req.flash('error', 'You do not have permission to upload to Accounts.');
     return req.session.save(() => res.redirect(`/documents/job/${b.job_id}`));
   }
@@ -111,12 +150,25 @@ router.post('/upload', upload.single('file'), (req, res) => {
     return req.session.save(() => res.redirect(`/documents/job/${b.job_id}`));
   }
 
-  // Store relative to the app root, never multer's absolute req.file.path.
-  const relPath = path.relative(path.join(__dirname, '..'), req.file.path);
+  // Move out of the staging dir now that library/job_id/category are known.
+  // Same filesystem, so rename is atomic and cheap. If it somehow fails, keep
+  // the staged file and record that path rather than losing the upload.
+  const category = normaliseCategory(b.library, b.category);
+  const relPath = targetRelPath(b.library, b.job_id, category, req.file.filename);
+  const absPath = path.join(__dirname, '..', relPath);
+  let storedPath = path.relative(path.join(__dirname, '..'), req.file.path);
+  try {
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+    fs.renameSync(req.file.path, absPath);
+    storedPath = relPath;
+  } catch (e) {
+    console.error('[Documents] could not move upload out of staging:', e.message);
+  }
+
   db.prepare(`
     INSERT INTO documents (job_id, library, category, filename, original_name, file_path, file_size, uploaded_by_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(b.job_id, b.library, b.category, req.file.filename, req.file.originalname, relPath, req.file.size, req.session.user.id);
+  `).run(b.job_id, b.library, category, req.file.filename, req.file.originalname, storedPath, req.file.size, req.session.user.id);
 
   req.flash('success', `Uploaded: ${req.file.originalname}`);
   req.session.save(() => res.redirect(`/documents/job/${b.job_id}`));
