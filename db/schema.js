@@ -15110,6 +15110,81 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 338 error:', e.message); }
   }
 
+  // =============================================
+  // Migration 339: Company Meetings + Reports dept merged into Assets.
+  //
+  // company_meetings is the weekly all-of-company meeting: minutes are a list
+  // of discussion items, each optionally tagged to a department, each with
+  // optional to-dos. Department hubs render their tagged slice directly from
+  // these tables (same rows — ticking a to-do on a hub updates the meeting),
+  // so there is deliberately NO copying into dept_meetings.
+  //
+  // Modelled on migration 328 (dept_meetings): dept_key has NO CHECK so a new
+  // department never forces a table rebuild — the single write path validates
+  // against the registry. todos.item_id is ON DELETE SET NULL, not CASCADE:
+  // deleting a discussion item must never silently destroy open action items;
+  // they keep their dept_key and surface in the meeting's General bucket.
+  // todos.source mirrors dept_meeting_todos so AI generation needs no schema
+  // change later.
+  //
+  // The UPDATEs fold in the Assets-absorbs-Reports merge: the reports hub is
+  // gone, so its notebook meetings/todos move to the assets hub.
+  // =============================================
+  if (!isMigrationApplied.get(339)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS company_meetings (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          title TEXT NOT NULL,
+          meeting_date DATE NOT NULL,
+          meeting_time TEXT NOT NULL DEFAULT '',
+          attendees TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled','cancelled')),
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_company_meetings_date ON company_meetings(meeting_date);
+
+        CREATE TABLE IF NOT EXISTS company_meeting_items (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          meeting_id INTEGER NOT NULL REFERENCES company_meetings(id) ON DELETE CASCADE,
+          dept_key TEXT,
+          body TEXT NOT NULL,
+          position INTEGER NOT NULL DEFAULT 0,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_company_meeting_items_meeting ON company_meeting_items(meeting_id, position);
+        CREATE INDEX IF NOT EXISTS idx_company_meeting_items_dept ON company_meeting_items(dept_key);
+
+        CREATE TABLE IF NOT EXISTS company_meeting_todos (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          meeting_id INTEGER NOT NULL REFERENCES company_meetings(id) ON DELETE CASCADE,
+          item_id INTEGER REFERENCES company_meeting_items(id) ON DELETE SET NULL,
+          dept_key TEXT,
+          text TEXT NOT NULL,
+          priority TEXT NOT NULL DEFAULT 'low' CHECK(priority IN ('high','low')),
+          done INTEGER NOT NULL DEFAULT 0,
+          position INTEGER NOT NULL DEFAULT 0,
+          source TEXT NOT NULL DEFAULT 'manual' CHECK(source IN ('manual','ai')),
+          created_by_id INTEGER REFERENCES users(id),
+          done_at DATETIME,
+          done_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_company_meeting_todos_meeting ON company_meeting_todos(meeting_id);
+        CREATE INDEX IF NOT EXISTS idx_company_meeting_todos_item ON company_meeting_todos(item_id);
+        CREATE INDEX IF NOT EXISTS idx_company_meeting_todos_open ON company_meeting_todos(dept_key, done);
+      `);
+      const m1 = db.prepare("UPDATE dept_meetings SET dept_key = 'assets' WHERE dept_key = 'reports'").run().changes;
+      const m2 = db.prepare("UPDATE dept_meeting_todos SET dept_key = 'assets' WHERE dept_key = 'reports'").run().changes;
+      recordMigration.run(339, `company_meetings/items/todos + reports dept merged into assets (${m1} meetings, ${m2} todos re-keyed)`);
+      console.log(`Migration 339 applied: company meetings tables created, ${m1} meeting(s) + ${m2} todo(s) re-keyed reports->assets`);
+    } catch (e) { console.error('Migration 339 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

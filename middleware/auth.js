@@ -40,6 +40,13 @@ const PERMISSIONS = {
   quoting:       ['admin', 'planning', 'management'],
   clients:       ['admin', 'operations', 'planning', 'finance', 'hr', 'management', 'accounts'],
   notifications: ['admin', 'operations', 'planning', 'finance', 'hr', 'management', 'accounts', 'safety'],
+  // ── Company Meetings (weekly all-of-company minutes; each department's
+  //     tagged slice surfaces on its dept hub, so only admin/management need
+  //     the main register. 'management' is redundant at runtime — ROLE_ALIASES
+  //     normalises it to admin before canAccess checks — but listing it keeps
+  //     the /admin/permissions matrix column honest, which reads these
+  //     defaults without normalising.) ──
+  meetings:      ['admin', 'management'],
 
   // ── Operations only (no planning) ──
   tasks:         ['admin', 'operations', 'planning'],  // planning sees only their own + plan-linked tasks

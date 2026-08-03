@@ -37,6 +37,12 @@ function isAdmin(user) {
 }
 
 router.param('key', (req, res, next, key) => {
+  // Reports merged into Assets (Jul 2026): migration 339 re-keyed its
+  // meetings/todos, so old bookmarks — including deep meeting URLs — land on
+  // the assets equivalent and resolve.
+  if (key === 'reports') {
+    return res.redirect(req.originalUrl.replace('/departments/reports', '/departments/assets'));
+  }
   const dept = getDepartment(key);
   if (!dept) {
     return res.status(404).render('error', { title: 'Not Found', message: 'Unknown department.', user: req.session.user });
@@ -109,13 +115,33 @@ router.get('/:key', (req, res) => {
     `).all(dept.key);
   } catch (e) { console.error('[departments] todos query failed:', e.message); }
 
+  // Slice of the COMPANY meetings tagged to this department (routes/meetings.js
+  // owns the writes; these are the same rows, not copies). Items age out after
+  // 30 days; open to-dos never do — an action item must not vanish because the
+  // meeting it came from got old. Same never-500 rule as everything above.
+  let companyItems = [], companyTodos = [];
+  try {
+    companyItems = db.prepare(`
+      SELECT i.*, m.title AS meeting_title, m.meeting_date
+      FROM company_meeting_items i JOIN company_meetings m ON m.id = i.meeting_id
+      WHERE i.dept_key = ? AND m.status = 'scheduled' AND m.meeting_date >= date(?, '-30 day')
+      ORDER BY m.meeting_date DESC, i.position ASC, i.id ASC
+    `).all(dept.key, today);
+    companyTodos = db.prepare(`
+      SELECT t.*, m.title AS meeting_title, m.meeting_date
+      FROM company_meeting_todos t JOIN company_meetings m ON m.id = t.meeting_id
+      WHERE t.dept_key = ? AND t.done = 0
+      ORDER BY CASE t.priority WHEN 'high' THEN 0 ELSE 1 END, t.created_at ASC
+    `).all(dept.key);
+  } catch (e) { console.error('[departments] company meetings slice failed:', e.message); }
+
   res.render('departments/home', {
     title: dept.label + ' Home',
     user: req.session.user,
     dept, stats, needs,
     deptIcon: deptIcon(dept.key),
     modules: moduleLinks(req.session.user, dept),
-    upcoming, past, openTodos, today,
+    upcoming, past, openTodos, companyItems, companyTodos, today,
     pastExpanded: req.query.past === 'all',
     dayLabel: (iso) => dayLabel(iso, today),
     currentPage: 'dept-' + dept.key,
@@ -271,6 +297,28 @@ router.post('/:key/todos/:todoId/toggle', (req, res) => {
   const db = getDb();
   const todo = db.prepare('SELECT id FROM dept_meeting_todos WHERE id = ? AND dept_key = ?').get(req.params.todoId, req.dept.key);
   if (todo) toggleTodo(db, todo.id, req.session.user.id);
+  req.session.save(() => res.redirect('/departments/' + req.dept.key));
+});
+
+// COMPANY-meeting to-do tick from the hub. Dept members lack the `meetings`
+// permission, so this lives here where dept access (router.param) is the
+// gate; the dept_key ownership check stops a crafted id toggling another
+// department's to-do. Same rows the /meetings page renders — no copies.
+// (Duplicated toggle rather than parameterising the table name — house style.)
+function toggleCompanyTodo(db, todoId, userId) {
+  db.prepare(`
+    UPDATE company_meeting_todos SET
+      done = CASE done WHEN 1 THEN 0 ELSE 1 END,
+      done_at = CASE done WHEN 1 THEN NULL ELSE CURRENT_TIMESTAMP END,
+      done_by_id = CASE done WHEN 1 THEN NULL ELSE ? END
+    WHERE id = ?
+  `).run(userId, todoId);
+}
+
+router.post('/:key/company-todos/:todoId/toggle', (req, res) => {
+  const db = getDb();
+  const todo = db.prepare('SELECT id FROM company_meeting_todos WHERE id = ? AND dept_key = ?').get(req.params.todoId, req.dept.key);
+  if (todo) toggleCompanyTodo(db, todo.id, req.session.user.id);
   req.session.save(() => res.redirect('/departments/' + req.dept.key));
 });
 

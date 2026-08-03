@@ -1,0 +1,165 @@
+<%
+// Company Meetings register — the weekly all-of-company minutes list.
+// Transplanted from the dept hub's Meetings + Open to-dos cards
+// (views/departments/home.ejs) and promoted to a full page. Dept tags on
+// to-dos show where each one's hub slice lives.
+function fmtTime(hhmm) {
+  const m = String(hhmm || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return '';
+  let h = parseInt(m[1], 10);
+  const ap = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return h + ':' + m[2] + ' ' + ap;
+}
+const deptLabel = {};
+depts.forEach(function (d) { deptLabel[d.key] = d.label; });
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'Company',
+  title: 'Meetings',
+  subtitle: 'Weekly meeting minutes for the whole company — tag items to a department and they land on that department\'s hub.',
+  rail: true,
+  actions: [{ label: 'Add meeting', href: '#add-meeting', style: 'primary' }]
+}) %>
+
+<div class="grid lg:grid-cols-3 gap-6 items-start">
+<div class="lg:col-span-2 space-y-6 min-w-0">
+
+  <!-- ── Meetings ─────────────────────────────────────────────── -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+    <div class="flex items-center justify-between gap-2 mb-4">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Meetings</p>
+      <a href="#add-meeting" class="text-xs font-semibold text-brand-600 hover:text-brand-700">+ Add meeting</a>
+    </div>
+
+    <details id="add-meeting" class="mb-5 rounded-lg border border-dashed border-gray-300">
+      <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-gray-600 hover:text-gray-900 select-none">New company meeting…</summary>
+      <form method="POST" action="/meetings" class="px-4 pb-4 pt-1 grid sm:grid-cols-2 gap-3">
+        <%- include('../partials/csrf') %>
+        <div class="sm:col-span-2">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Title</label>
+          <input type="text" name="title" required placeholder="e.g. Weekly leadership meeting"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+          <input type="date" name="meeting_date" required value="<%= today %>"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Time <span class="normal-case font-normal">(optional)</span></label>
+          <input type="time" name="meeting_time"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Attendees <span class="normal-case font-normal">(optional)</span></label>
+          <input type="text" name="attendees" placeholder="Names, free text"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div class="sm:col-span-2">
+          <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition-colors">Create meeting</button>
+        </div>
+      </form>
+    </details>
+
+    <%
+      // Group upcoming meetings by date for the calendar-style list.
+      const groups = [];
+      let cur = null;
+      upcoming.forEach(function (m) {
+        if (!cur || cur.date !== m.meeting_date) { cur = { date: m.meeting_date, items: [] }; groups.push(cur); }
+        cur.items.push(m);
+      });
+
+      function meetingRow(m) { %>
+        <a href="/meetings/<%= m.id %>"
+           class="flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-gray-50 transition-colors <%= m.status === 'cancelled' ? 'opacity-60' : '' %>">
+          <span class="shrink-0 w-16 text-[11px] font-mono <%= m.meeting_time ? 'text-gray-600' : 'text-gray-300' %>"><%= m.meeting_time ? fmtTime(m.meeting_time) : '—' %></span>
+          <span class="flex-1 min-w-0">
+            <span class="block text-sm font-medium text-gray-900 truncate <%= m.status === 'cancelled' ? 'line-through' : '' %>"><%= m.title %></span>
+            <% if (m.attendees) { %><span class="block text-xs text-gray-400 truncate"><%= m.attendees %></span><% } %>
+          </span>
+          <% if (m.status === 'cancelled') { %>
+            <span class="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold bg-gray-100 text-gray-500">CANCELLED</span>
+          <% } else if (m.open_todos > 0) { %>
+            <span class="shrink-0 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700" title="Open to-dos"><%= m.open_todos %> to-do<%= m.open_todos !== 1 ? 's' : '' %></span>
+          <% } %>
+          <svg class="w-4 h-4 text-gray-300 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </a>
+    <% }
+    %>
+
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Upcoming</p>
+    <% if (!groups.length) { %>
+      <p class="text-sm text-gray-400 italic px-3 py-4">No upcoming meetings — add the first one above.</p>
+    <% } else { %>
+      <div class="divide-y divide-gray-50">
+        <% groups.forEach(function (g) { %>
+          <div class="py-2">
+            <p class="px-3 text-xs font-semibold text-brand-700 mb-1"><%= dayLabel(g.date) %></p>
+            <% g.items.forEach(function (m) { meetingRow(m); }); %>
+          </div>
+        <% }); %>
+      </div>
+    <% } %>
+
+    <% if (past.length) { %>
+      <details class="mt-4" <%= pastExpanded ? 'open' : '' %>>
+        <summary class="cursor-pointer text-[10px] font-bold text-gray-400 uppercase tracking-widest select-none">Past meetings (<%= past.length %><%= !pastExpanded && past.length >= 15 ? '+' : '' %>)</summary>
+        <div class="mt-2 divide-y divide-gray-50">
+          <% past.forEach(function (m) { %>
+            <div class="py-1">
+              <p class="px-3 text-[11px] text-gray-400 mb-0.5"><%= formatDateShort(m.meeting_date) %></p>
+              <% meetingRow(m); %>
+            </div>
+          <% }); %>
+        </div>
+        <% if (!pastExpanded && past.length >= 15) { %>
+          <a href="/meetings?past=all" class="inline-block mt-2 text-xs font-semibold text-brand-600 hover:text-brand-700">Show all past meetings</a>
+        <% } %>
+      </details>
+    <% } %>
+  </div>
+</div>
+
+<div class="space-y-6 min-w-0">
+  <!-- ── Open to-dos across meetings ──────────────────────────── -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5 h-fit">
+    <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Open to-dos</p>
+    <p class="text-xs text-gray-400 mb-3">Across all company meetings</p>
+    <% if (!openTodos.length) { %>
+      <p class="text-sm text-gray-400 italic">Nothing open. Nice.</p>
+    <% } else {
+         const high = openTodos.filter(t => t.priority === 'high');
+         const low = openTodos.filter(t => t.priority !== 'high');
+         function todoRow(t) { %>
+          <div class="flex items-start gap-2 py-1.5">
+            <form method="POST" action="/meetings/todos/<%= t.id %>/toggle" class="shrink-0 pt-0.5">
+              <%- include('../partials/csrf') %>
+              <button type="submit" class="w-4 h-4 rounded border border-gray-300 hover:border-brand-500 hover:bg-brand-50 transition-colors" title="Mark done"></button>
+            </form>
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-gray-800 leading-snug"><%= t.text %></p>
+              <p class="text-[11px] text-gray-400 truncate">
+                <% if (t.dept_key && deptLabel[t.dept_key]) { %>
+                  <span class="inline-block px-1.5 py-px rounded bg-brand-50 text-brand-700 font-semibold"><%= deptLabel[t.dept_key] %></span> ·
+                <% } %>
+                <a href="/meetings/<%= t.meeting_id %>" class="hover:text-brand-600"><%= t.meeting_title %> · <%= formatDateShort(t.meeting_date) %></a>
+              </p>
+            </div>
+          </div>
+    <%   }
+    %>
+      <% if (high.length) { %>
+        <p class="flex items-center gap-1.5 text-[10px] font-bold text-red-500 uppercase tracking-widest mt-2 mb-1"><span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>High priority</p>
+        <% high.forEach(function (t) { todoRow(t); }); %>
+      <% } %>
+      <% if (low.length) { %>
+        <p class="flex items-center gap-1.5 text-[10px] font-bold text-gray-400 uppercase tracking-widest mt-3 mb-1"><span class="w-1.5 h-1.5 rounded-full bg-gray-300"></span>Low priority</p>
+        <% low.forEach(function (t) { todoRow(t); }); %>
+      <% } %>
+    <% } %>
+  </div>
+</div>
+</div>
