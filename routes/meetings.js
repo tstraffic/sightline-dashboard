@@ -221,11 +221,13 @@ router.post('/:id/items/:itemId', (req, res) => {
     return req.session.save(() => res.redirect(meetingUrl(meeting.id) + '#item-' + item.id));
   }
   const db = getDb();
-  // Re-tagging an item moves its to-dos' hub slice with it — dept_key on the
-  // todo is a denormalised copy of the item's, kept in lockstep here.
+  // Re-tagging an item drags along only the to-dos that were FOLLOWING it
+  // (dept matches the item's old tag). To-dos an operator deliberately tagged
+  // to another department keep their tag — `IS ?` so NULL-tagged (General)
+  // followers under a General item move too.
   db.transaction(() => {
+    db.prepare('UPDATE company_meeting_todos SET dept_key = ? WHERE item_id = ? AND dept_key IS ?').run(deptKey, item.id, item.dept_key);
     db.prepare('UPDATE company_meeting_items SET body = ?, dept_key = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(body, deptKey, item.id);
-    db.prepare('UPDATE company_meeting_todos SET dept_key = ? WHERE item_id = ?').run(deptKey, item.id);
   })();
   req.flash('success', 'Saved.');
   req.session.save(() => res.redirect(meetingUrl(meeting.id) + '#item-' + item.id));
@@ -254,20 +256,38 @@ router.post('/:id/todos', (req, res) => {
     return req.session.save(() => res.redirect(meetingUrl(meeting.id)));
   }
   const db = getDb();
-  // Optional item link — must belong to this meeting; the todo inherits the
-  // item's dept tag (that inheritance is what routes it to a hub).
+  // Optional item link — must belong to this meeting.
   let item = null;
   if (req.body.item_id) {
     item = db.prepare('SELECT * FROM company_meeting_items WHERE id = ? AND meeting_id = ?').get(req.body.item_id, meeting.id);
   }
+  // To-dos carry their own department tag (that tag is what routes them to a
+  // hub). The form pre-selects the item's dept, so an explicit dept_key wins;
+  // a POST without one (older client) falls back to inheriting from the item.
+  const deptKey = ('dept_key' in req.body)
+    ? normaliseDeptKey(req.body.dept_key)
+    : (item ? item.dept_key : null);
   db.transaction(() => {
     const pos = db.prepare('SELECT COALESCE(MAX(position), 0) + 1 AS p FROM company_meeting_todos WHERE meeting_id = ? AND priority = ?').get(meeting.id, priority).p;
     db.prepare(`
       INSERT INTO company_meeting_todos (meeting_id, item_id, dept_key, text, priority, position, created_by_id)
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(meeting.id, item ? item.id : null, item ? item.dept_key : null, text, priority, pos, req.session.user.id);
+    `).run(meeting.id, item ? item.id : null, deptKey, text, priority, pos, req.session.user.id);
   })();
   const anchor = item ? '#item-' + item.id : '#general-todos';
+  req.session.save(() => res.redirect(meetingUrl(meeting.id) + anchor));
+});
+
+// Re-tag a single to-do — the per-row dept select on the meeting page.
+router.post('/:id/todos/:todoId/dept', (req, res) => {
+  const meeting = loadMeeting(req, res);
+  if (!meeting) return;
+  const db = getDb();
+  const todo = db.prepare('SELECT id, item_id FROM company_meeting_todos WHERE id = ? AND meeting_id = ?').get(req.params.todoId, meeting.id);
+  if (todo) {
+    db.prepare('UPDATE company_meeting_todos SET dept_key = ? WHERE id = ?').run(normaliseDeptKey(req.body.dept_key), todo.id);
+  }
+  const anchor = todo && todo.item_id ? '#item-' + todo.item_id : '#general-todos';
   req.session.save(() => res.redirect(meetingUrl(meeting.id) + anchor));
 });
 
