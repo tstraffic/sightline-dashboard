@@ -20,7 +20,11 @@ const path = require('path');
 //        backlog consciously: its stat queries span legacy tables without
 //        tenant_id columns, so req.db's assertScoped would reject them
 //        until Phase 2 backfills tenant_id. Migrate it with the rest.
-const BASELINE = 141;
+//   142  2026-08-03  +routes/meetings.js — company_meetings tables mirror
+//        dept_meetings (no tenant_id yet, Phase 2 backfills) and the module
+//        is joined at the hip to routes/departments.js, which is already on
+//        this backlog. Migrate the pair together.
+const BASELINE = 142;
 
 // spawnSync (not execFileSync): check-raw-db exits 1 while violations exist,
 // and the JSON must still be read off stdout without an exception path.

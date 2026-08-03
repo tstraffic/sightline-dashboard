@@ -321,6 +321,9 @@ app.use('/profile', requireLogin, require('./routes/profile'));
 app.use('/feedback', require('./routes/feedback'));
 app.use('/dashboard', requireLogin, requirePermission('dashboard'), require('./routes/dashboard'));
 app.use('/notes', requireLogin, requirePermission('notes'), require('./routes/notes'));
+// Company Meetings — weekly all-of-company minutes (admin/management). Dept
+// slices render on the dept hubs via routes/departments.js, not here.
+app.use('/meetings', requireLogin, requirePermission('meetings'), require('./routes/meetings'));
 // Department home pages — no requirePermission here: access depends on :key,
 // enforced per-department inside the router (lib/departments.js accessKeys).
 app.use('/departments', requireLogin, require('./routes/departments'));

@@ -24,7 +24,7 @@ const ROLES = ['admin', 'operations', 'planning', 'safety', 'hr', 'finance', 'ma
 // Human-friendly section grouping for the UI. Keys must match keys in
 // PERMISSIONS exactly; modules not listed here drop into "Other".
 const MODULE_GROUPS = [
-  { label: 'Core', items: ['dashboard', 'notes', 'jobs', 'projects', 'clients', 'notifications', 'tenders', 'quoting'] },
+  { label: 'Core', items: ['dashboard', 'notes', 'meetings', 'jobs', 'projects', 'clients', 'notifications', 'tenders', 'quoting'] },
   { label: 'Operations', items: ['tasks', 'incidents', 'contacts', 'timesheets', 'crew', 'allocations', 'traffio_imports', 'schedule', 'equipment', 'fleet', 'defects', 'documents', 'bookings', 'reports', 'exports'] },
   { label: 'Planning', items: ['compliance', 'plans', 'updates'] },
   // One toggle per tab on the job detail page (planning_/ops_ names are
