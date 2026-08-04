@@ -2689,7 +2689,7 @@
       // (/bookings/:id/plans/:planId/visibility) — it posts from the same
       // lifted documents pane, and without this it did a full-page POST
       // that threw the planner off the board.
-      if (!/\/bookings\/\d+\/(documents|plans)\b/.test(action)) return;
+      if (!/\/bookings\/\d+\/(documents|plans|final-plans)\b/.test(action)) return;
       e.preventDefault();
       e.stopPropagation();
       // In-flight guard: while a request for THIS form is running, ignore

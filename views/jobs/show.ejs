@@ -985,11 +985,11 @@
       ondragleave="this.classList.remove('border-brand-500','bg-brand-50')"
       ondrop="handlePlanDrop(event, this)"
       onclick="document.getElementById('plan-file-input').click()">
-      <input type="file" id="plan-file-input" accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg" class="hidden" onchange="handlePlanFileSelect(this)">
+      <input type="file" id="plan-file-input" accept=".pdf,.dwg,.dxf,.png,.jpg,.jpeg" multiple class="hidden" onchange="handlePlanFileSelect(this)">
       <div id="plan-drop-idle">
         <svg class="w-8 h-8 mx-auto mb-2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-        <p class="text-sm font-medium text-gray-600">Drop TGS / TMP files here</p>
-        <p class="text-xs text-gray-400 mt-0.5">or click to browse — PDF, DWG, images accepted</p>
+        <p class="text-sm font-medium text-gray-600">Drop TGS / TMP / CTMP files here — several at once is fine</p>
+        <p class="text-xs text-gray-400 mt-0.5">or click to browse — PDF, DWG, images accepted (up to 10 files)</p>
       </div>
       <div id="plan-drop-uploading" class="hidden">
         <svg class="w-8 h-8 mx-auto mb-2 text-brand-500 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
@@ -998,24 +998,25 @@
     </div>
     <!-- Upload options (shown after file selected, before upload) -->
     <div id="plan-upload-confirm" class="hidden bg-white border border-gray-200 rounded-xl shadow-sm p-4 mb-4">
-      <div class="flex items-center gap-3 mb-3">
+      <div class="flex items-start gap-3 mb-3">
         <svg class="w-8 h-8 text-red-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
         <div class="flex-1 min-w-0">
-          <p id="plan-upload-filename" class="text-sm font-medium text-gray-900 truncate"></p>
-          <p id="plan-upload-filesize" class="text-xs text-gray-400"></p>
+          <p id="plan-upload-filename" class="text-sm font-medium text-gray-900"></p>
+          <ul id="plan-upload-filelist" class="text-xs text-gray-600 mt-1 space-y-0.5"></ul>
         </div>
       </div>
       <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div class="flex flex-col gap-2">
+          <%# One checkbox set for the whole batch. %>
           <label class="flex items-center gap-2 cursor-pointer select-none">
             <input type="checkbox" id="plan-client-provided" class="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500">
             <span class="text-sm font-medium text-gray-700">Client Provided</span>
             <span class="inline-flex px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-50 text-amber-700 border border-amber-200">CLIENT</span>
           </label>
           <label class="flex items-center gap-2 cursor-pointer select-none">
-            <input type="checkbox" id="plan-mark-final" class="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
-            <span class="text-sm font-medium text-gray-700">Push to Final Plans</span>
-            <span class="text-xs text-gray-400">(visible to ops)</span>
+            <input type="checkbox" id="plan-mark-final" checked class="w-4 h-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500">
+            <span class="text-sm font-medium text-gray-700">Visible to crew</span>
+            <span class="text-xs text-gray-400">(publishes to Final Plans — crews on this job's bookings can open it)</span>
           </label>
         </div>
         <div class="flex items-center gap-2">
@@ -1026,7 +1027,8 @@
     </div>
     <script>
     (function() {
-      let pendingFile = null;
+      let pendingFiles = [];
+      const MAX_FILES = 10; // matches upload.array('plan_file', 10) on the server
       const jobId = '<%= job.id %>';
       const dropZone = document.getElementById('plan-drop-zone');
       const confirmBox = document.getElementById('plan-upload-confirm');
@@ -1036,35 +1038,48 @@
       window.handlePlanDrop = function(e, el) {
         e.preventDefault();
         el.classList.remove('border-brand-500', 'bg-brand-50');
-        const files = e.dataTransfer.files;
-        if (files.length > 0) showConfirm(files[0]);
+        if (e.dataTransfer.files.length > 0) showConfirm(e.dataTransfer.files);
       };
 
       window.handlePlanFileSelect = function(input) {
-        if (input.files.length > 0) showConfirm(input.files[0]);
+        if (input.files.length > 0) showConfirm(input.files);
         input.value = '';
       };
 
-      function showConfirm(file) {
-        pendingFile = file;
-        document.getElementById('plan-upload-filename').textContent = file.name;
-        const sizeKB = (file.size / 1024).toFixed(0);
-        document.getElementById('plan-upload-filesize').textContent = sizeKB > 1024 ? (file.size / 1048576).toFixed(1) + ' MB' : sizeKB + ' KB';
-        // Auto-check "Push to Final" if filename contains "final" or "approved"
-        const lname = file.name.toLowerCase();
-        document.getElementById('plan-mark-final').checked = lname.includes('final') || lname.includes('approved');
+      function fmtSize(bytes) {
+        const kb = bytes / 1024;
+        return kb > 1024 ? (bytes / 1048576).toFixed(1) + ' MB' : kb.toFixed(0) + ' KB';
+      }
+
+      // One confirm card for the whole batch — a single set of checkboxes
+      // applies to every file. "Visible to crew" defaults ON.
+      function showConfirm(fileList) {
+        pendingFiles = Array.from(fileList).slice(0, MAX_FILES);
+        const dropped = fileList.length - pendingFiles.length;
+        document.getElementById('plan-upload-filename').textContent =
+          pendingFiles.length === 1 ? pendingFiles[0].name
+            : pendingFiles.length + ' files' + (dropped > 0 ? ' (first ' + MAX_FILES + ' of ' + fileList.length + ')' : '');
+        const list = document.getElementById('plan-upload-filelist');
+        list.innerHTML = '';
+        pendingFiles.forEach(function (f) {
+          const li = document.createElement('li');
+          li.className = 'truncate';
+          li.textContent = f.name + ' · ' + fmtSize(f.size);
+          list.appendChild(li);
+        });
+        document.getElementById('plan-mark-final').checked = true;
         confirmBox.classList.remove('hidden');
         dropZone.classList.add('hidden');
       }
 
       window.cancelPlanUpload = function() {
-        pendingFile = null;
+        pendingFiles = [];
         confirmBox.classList.add('hidden');
         dropZone.classList.remove('hidden');
       };
 
       window.confirmPlanUpload = function() {
-        if (!pendingFile) return;
+        if (!pendingFiles.length) return;
         const markFinal = document.getElementById('plan-mark-final').checked;
         const clientProvided = document.getElementById('plan-client-provided').checked;
 
@@ -1074,8 +1089,11 @@
         idleState.classList.add('hidden');
         uploadingState.classList.remove('hidden');
 
+        // Whole batch in ONE request: plan numbers are generated server-side
+        // from a MAX read, so parallel requests would race into UNIQUE
+        // violations. The server accepts up to MAX_FILES under 'plan_file'.
         const formData = new FormData();
-        formData.append('plan_file', pendingFile);
+        pendingFiles.forEach(function (f) { formData.append('plan_file', f); });
         formData.append('job_id', jobId);
         formData.append('mark_final', markFinal ? '1' : '0');
         formData.append('client_provided', clientProvided ? '1' : '0');
@@ -1084,14 +1102,16 @@
           .then(r => r.json())
           .then(data => {
             if (data.success) {
-              // Show success toast
+              const label = (data.count || 1) > 1
+                ? (data.count + ' plans uploaded')
+                : (data.planNumber + ' uploaded');
               const toast = document.createElement('div');
               toast.className = 'fixed bottom-4 right-4 bg-emerald-600 text-white px-4 py-3 rounded-lg shadow-lg z-50 flex items-center gap-2 text-sm font-medium';
               toast.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>' +
-                data.planNumber + ' uploaded' + (data.isFinal ? ' → Final Plans' : '');
+                label + (data.isFinal ? ' → visible to crew' : '');
               document.body.appendChild(toast);
               setTimeout(() => toast.remove(), 3000);
-              // Reload to show new plan
+              // Reload to show new plans
               setTimeout(() => {
                 if (data.isFinal) {
                   window.location.href = window.location.pathname + '#final-plans';
@@ -1112,7 +1132,7 @@
       };
 
       function resetDropZone() {
-        pendingFile = null;
+        pendingFiles = [];
         idleState.classList.remove('hidden');
         uploadingState.classList.add('hidden');
       }

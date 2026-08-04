@@ -40,13 +40,18 @@ function multerErrorMessage(err) {
   return err.message || 'Upload failed.';
 }
 
-// Wrap upload.single so a multer error becomes a JSON response (for the
-// quick-upload XHR) or a flash + redirect (for the regular form). Without this
-// the multer error bubbles up to Express, which returns an HTML 500 page —
-// and the XHR client fails to parse it as JSON.
-function uploadPlanFile(jsonResponse) {
+// Wrap the multer middleware so a multer error becomes a JSON response (for
+// the quick-upload XHR) or a flash + redirect (for the regular form). Without
+// this the multer error bubbles up to Express, which returns an HTML 500 page
+// — and the XHR client fails to parse it as JSON.
+// maxFiles > 1 accepts a batch under the same field name (quick-upload drag
+// drop); the default stays single-file for the New Plan form.
+function uploadPlanFile(jsonResponse, maxFiles) {
+  const mw = (maxFiles && maxFiles > 1)
+    ? upload.array('plan_file', maxFiles)
+    : upload.single('plan_file');
   return (req, res, next) => {
-    upload.single('plan_file')(req, res, (err) => {
+    mw(req, res, (err) => {
       if (err) {
         const msg = multerErrorMessage(err);
         if (jsonResponse) return res.status(400).json({ error: msg });
@@ -239,17 +244,29 @@ router.post('/', uploadPlanFile(false), (req, res) => {
 });
 
 // ─── QUICK UPLOAD (drag-drop from job page) ─────
-router.post('/quick-upload', uploadPlanFile(true), (req, res) => {
+// Sniff a plan type from a filename. CTMP is tested before TMP — "ctmp"
+// contains "tmp", so the old order stored every CTMP as a TMP.
+function sniffPlanType(originalname) {
+  const fileName = String(originalname || '').toLowerCase();
+  if (fileName.includes('ctmp')) return 'CTMP';
+  if (fileName.includes('tmp')) return 'TMP';
+  if (fileName.includes('tcp')) return 'TCP';
+  if (fileName.includes('rol')) return 'ROL';
+  return 'TGS';
+}
+
+router.post('/quick-upload', uploadPlanFile(true, 10), (req, res) => {
   const db = getDb();
   const b = req.body;
   const jobId = b.job_id;
   const markFinal = b.mark_final === '1';
   const isClientProvided = b.client_provided === '1';
+  const files = req.files && req.files.length ? req.files : (req.file ? [req.file] : []);
 
   if (!jobId) {
     return res.status(400).json({ error: 'Job ID is required.' });
   }
-  if (!req.file) {
+  if (!files.length) {
     return res.status(400).json({ error: 'No file uploaded.' });
   }
 
@@ -263,73 +280,98 @@ router.post('/quick-upload', uploadPlanFile(true), (req, res) => {
       else jobSeq = job.job_number.replace(/[^0-9]/g, '').padStart(4, '0').slice(-4);
     }
 
-    // Determine type from filename or default to TGS
-    const fileName = req.file.originalname.toLowerCase();
-    let planType = 'TGS';
-    if (fileName.includes('tmp')) planType = 'TMP';
-    else if (fileName.includes('tcp')) planType = 'TCP';
-    else if (fileName.includes('rol')) planType = 'ROL';
+    // Plan numbers are UNIQUE and derived from the current MAX suffix per
+    // (job, prefix). The whole batch runs in ONE request and ONE transaction
+    // for exactly that reason: read each prefix's MAX once, then hand out
+    // sequential suffixes locally. Parallel per-file requests would race the
+    // MAX read into UNIQUE violations.
+    const suffixByPrefix = {};
+    const nextNumber = (codePrefix) => {
+      if (!(codePrefix in suffixByPrefix)) {
+        let nextSuffix = 1;
+        const maxRow = db.prepare('SELECT plan_number FROM traffic_plans WHERE job_id = ? AND plan_number LIKE ? ORDER BY plan_number DESC LIMIT 1')
+          .get(jobId, `${codePrefix}-${jobSeq}-%`);
+        if (maxRow) {
+          const lastNum = parseInt(maxRow.plan_number.split('-').pop(), 10);
+          if (!isNaN(lastNum)) nextSuffix = lastNum + 1;
+        }
+        suffixByPrefix[codePrefix] = nextSuffix;
+      }
+      return `${codePrefix}-${jobSeq}-${String(suffixByPrefix[codePrefix]++).padStart(2, '0')}`;
+    };
 
-    const codePrefix = planType === 'TMP' ? 'TSTMP' : 'TSTGS';
-    let nextSuffix = 1;
-    const maxRow = db.prepare('SELECT plan_number FROM traffic_plans WHERE job_id = ? AND plan_number LIKE ? ORDER BY plan_number DESC LIMIT 1')
-      .get(jobId, `${codePrefix}-${jobSeq}-%`);
-    if (maxRow) {
-      const lastNum = parseInt(maxRow.plan_number.split('-').pop(), 10);
-      if (!isNaN(lastNum)) nextSuffix = lastNum + 1;
-    }
-    const planNumber = `${codePrefix}-${jobSeq}-${String(nextSuffix).padStart(2, '0')}`;
-
-    const filePath = STORED_PREFIX + '/' + req.file.filename;
-    const fileOriginalName = req.file.originalname;
-    // Use filename (without extension) as the plan title
-    const fileTitle = req.file.originalname.replace(/\.[^.]+$/, '');
     const status = markFinal ? 'approved' : 'draft';
     const designer = isClientProvided ? 'Client Provided' : '';
-
-    const result = db.prepare(`
+    const insert = db.prepare(`
       INSERT INTO traffic_plans (job_id, plan_number, plan_type, plan_types, designer, status, file_path, file_original_name, is_final, marked_final_at, marked_final_by, notes, created_by_id)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      jobId, planNumber, planType, planType, designer,
-      status, filePath, fileOriginalName,
-      markFinal ? 1 : 0,
-      markFinal ? new Date().toISOString() : null,
-      markFinal ? req.session.user.id : null,
-      fileTitle,
-      req.session.user.id
-    );
+    `);
 
-    // Explicitly set is_final after insert (safety net — some SQLite versions may not persist default column values on INSERT)
-    if (markFinal && result.lastInsertRowid) {
-      db.prepare('UPDATE traffic_plans SET is_final = 1, marked_final_at = ?, marked_final_by = ?, status = ? WHERE id = ?')
-        .run(new Date().toISOString(), req.session.user.id, 'approved', result.lastInsertRowid);
-    }
+    const created = db.transaction(() => {
+      const out = [];
+      for (const f of files) {
+        const planType = sniffPlanType(f.originalname);
+        // CTMP shares the TSTMP numbering family — no new prefix.
+        const codePrefix = (planType === 'TMP' || planType === 'CTMP') ? 'TSTMP' : 'TSTGS';
+        const planNumber = nextNumber(codePrefix);
+        const fileTitle = f.originalname.replace(/\.[^.]+$/, '');
 
-    autoLogDiary(db, {
-      jobId,
-      category: markFinal ? 'Final Plan Uploaded' : 'Traffic Plan Uploaded',
-      summary: `[${req.session.user.full_name}] Uploaded ${planType}: ${fileOriginalName}${isClientProvided ? ' (client provided)' : ''}${markFinal ? ' → FINAL' : ''}.`,
-      userId: req.session.user.id
-    });
+        const result = insert.run(
+          jobId, planNumber, planType, planType, designer,
+          status, STORED_PREFIX + '/' + f.filename, f.originalname,
+          markFinal ? 1 : 0,
+          markFinal ? new Date().toISOString() : null,
+          markFinal ? req.session.user.id : null,
+          fileTitle,
+          req.session.user.id
+        );
 
-    // Notify admin + planning. Quick-upload is a drag-drop with no tagging UI.
+        // Explicitly set is_final after insert (safety net — some SQLite versions may not persist default column values on INSERT)
+        if (markFinal && result.lastInsertRowid) {
+          db.prepare('UPDATE traffic_plans SET is_final = 1, marked_final_at = ?, marked_final_by = ?, status = ? WHERE id = ?')
+            .run(new Date().toISOString(), req.session.user.id, 'approved', result.lastInsertRowid);
+        }
+
+        autoLogDiary(db, {
+          jobId,
+          category: markFinal ? 'Final Plan Uploaded' : 'Traffic Plan Uploaded',
+          summary: `[${req.session.user.full_name}] Uploaded ${planType}: ${f.originalname}${isClientProvided ? ' (client provided)' : ''}${markFinal ? ' → FINAL' : ''}.`,
+          userId: req.session.user.id
+        });
+
+        out.push({ planNumber, planId: result.lastInsertRowid, title: fileTitle, planType });
+      }
+      return out;
+    })();
+
+    // Notify admin + planning ONCE per batch. Quick-upload is a drag-drop
+    // with no tagging UI.
     try {
+      const first = created[0];
       notifyPlanSubmission(db, {
         submitterId: req.session.user.id,
         submitterName: req.session.user.full_name,
         taggedIds: [],
-        ref: planNumber,
-        label: `traffic plan ${planType}`,
+        ref: created.length > 1 ? `${first.planNumber} +${created.length - 1}` : first.planNumber,
+        label: created.length > 1 ? `${created.length} traffic plans` : `traffic plan ${first.planType}`,
         jobNumber: job && job.job_number ? job.job_number : null,
-        link: '/plans/' + result.lastInsertRowid,
+        link: '/plans/' + first.planId,
         jobId: jobId || null,
       });
     } catch (notifyErr) {
       console.error('[Plans] quick-upload notify failed:', notifyErr.message);
     }
 
-    res.json({ success: true, planNumber, planId: result.lastInsertRowid, isFinal: markFinal, title: fileTitle });
+    res.json({
+      success: true,
+      count: created.length,
+      plans: created,
+      // First plan kept at the top level for older toast code.
+      planNumber: created[0].planNumber,
+      planId: created[0].planId,
+      title: created[0].title,
+      isFinal: markFinal,
+    });
   } catch (err) {
     console.error('[Plans] Quick upload error:', err.message);
     res.status(500).json({ error: 'Upload failed: ' + err.message });

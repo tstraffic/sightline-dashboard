@@ -515,6 +515,7 @@ router.get('/jobs/:id', (req, res) => {
       const finalPlans = allocation.job_id ? db.prepare(`
         SELECT id, plan_number, plan_type, file_original_name, file_path, marked_final_at
         FROM traffic_plans WHERE job_id = ? AND is_final = 1 AND COALESCE(file_path, '') != ''
+          AND COALESCE(visible_to_crew, 1) = 1
       `).all(allocation.job_id).map(d => ({
         id: d.id, source: 'final', doc_type: (d.plan_type || 'plan').toLowerCase(),
         title: d.plan_number || 'Final plan',
@@ -621,10 +622,28 @@ router.get('/booking-documents/:id', (req, res) => {
 router.get('/doc/:source/:id', (req, res) => {
   const db = getDb();
   const worker = req.session.worker;
-  const source = req.params.source === 'job' ? 'job' : (req.params.source === 'plan' ? 'plan' : 'booking');
+  const source = req.params.source === 'job' ? 'job'
+    : (req.params.source === 'plan' ? 'plan'
+    : (req.params.source === 'final' ? 'final' : 'booking'));
   let doc = null, jobId = null, bookingId = null, fileUrl = null;
 
-  if (source === 'job') {
+  if (source === 'final') {
+    // A final traffic plan. Without this branch, 'final' fell through to the
+    // booking_documents lookup and opened whatever row shared the id.
+    // visible_to_crew is the office's crew-side kill switch (migration 340) —
+    // hidden plans must be unreachable here just like in /w/final-plans.
+    const tp = db.prepare(`
+      SELECT id, job_id, plan_number, file_original_name
+      FROM traffic_plans
+      WHERE id = ? AND is_final = 1 AND COALESCE(file_path, '') != ''
+        AND COALESCE(visible_to_crew, 1) = 1
+    `).get(req.params.id);
+    if (tp) {
+      doc = { id: tp.id, title: tp.plan_number || 'Final plan', original_name: tp.file_original_name };
+      jobId = tp.job_id;
+      fileUrl = '/w/final-plans/' + tp.id;
+    }
+  } else if (source === 'job') {
     doc = db.prepare(`SELECT jd.*, j.id AS jid FROM job_documents jd JOIN jobs j ON jd.job_id = j.id WHERE jd.id = ? AND jd.archived_at IS NULL`).get(req.params.id);
     if (doc) { jobId = doc.jid; fileUrl = '/w/job-documents/' + doc.id; }
   } else if (source === 'plan') {
@@ -719,6 +738,7 @@ router.get('/final-plans/:id', (req, res) => {
   const plan = db.prepare(`
     SELECT id, job_id, plan_number, file_path, file_original_name
     FROM traffic_plans WHERE id = ? AND is_final = 1
+      AND COALESCE(visible_to_crew, 1) = 1
   `).get(req.params.id);
   if (!plan || !plan.file_path) return res.status(404).send('Not found');
 
@@ -926,6 +946,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
       const finalPlans = booking.job_id ? db.prepare(`
         SELECT id, plan_number, plan_type, file_original_name, file_path, marked_final_at
         FROM traffic_plans WHERE job_id = ? AND is_final = 1 AND COALESCE(file_path, '') != ''
+          AND COALESCE(visible_to_crew, 1) = 1
       `).all(booking.job_id).map(d => ({
         id: d.id, source: 'final', doc_type: (d.plan_type || 'plan').toLowerCase(),
         title: d.plan_number || 'Final plan',

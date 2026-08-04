@@ -3808,7 +3808,7 @@ router.get('/:id/documents.json', (req, res) => {
     const jobDocs = getJobDocumentsForJob(db, bkRow.job_id);
     const REQ_LABEL_TO_PLAN = [
       { match: /traffic guidance|^tgs$/i, type: 'tgs',  label: 'TGS',        jobPlans: (jp && jp.tgs) || [], jobDocTypes: ['tgs'] },
-      { match: /^tmp\b|^ctmp$|traffic management plan/i, type: 'tmp', label: 'TMP / CTMP', jobPlans: (jp && jp.tmp) || [], jobDocTypes: ['tmp'] },
+      { match: /^tmp\b|^ctmp$|traffic management plan/i, type: 'tmp', label: 'TMP / CTMP', jobPlans: (jp && jp.tmp) || [], jobDocTypes: ['tmp', 'ctmp'] },
     ];
     const reqRows = db.prepare("SELECT resource_type, quantity_required FROM booking_requirements WHERE booking_id = ?").all(req.params.id);
     for (const m of REQ_LABEL_TO_PLAN) {
@@ -3881,6 +3881,49 @@ router.post('/:id/plans/:planId/visibility', (req, res) => {
   req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
 });
 
+// POST /:id/final-plans/:planId/visibility — hide/show a FINAL traffic plan
+// (traffic_plans register row) from crew. Unlike the compliance toggle above
+// this is job-global: the flag lives on the plan itself
+// (traffic_plans.visible_to_crew, migration 340), so hiding it hides it on
+// every booking of the job. is_final is untouched — the plan stays in the
+// office Final Plans tab and keeps its audit trail.
+router.post('/:id/final-plans/:planId/visibility', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const booking = db.prepare('SELECT id, job_id FROM bookings WHERE id = ?').get(req.params.id);
+  if (!booking || !booking.job_id) {
+    if (isJson) return res.status(404).json({ error: 'Booking or linked job not found' });
+    req.flash('error', 'Booking or linked job not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
+  }
+  const plan = db.prepare('SELECT id FROM traffic_plans WHERE id = ? AND job_id = ?')
+    .get(req.params.planId, booking.job_id);
+  if (!plan) {
+    if (isJson) return res.status(404).json({ error: 'Plan not found on the linked job' });
+    req.flash('error', 'Plan not found on the linked job.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
+  }
+  const visible = (req.body.visible === '1' || req.body.visible === 1 || req.body.visible === true || req.body.visible === 'on') ? 1 : 0;
+  db.prepare('UPDATE traffic_plans SET visible_to_crew = ? WHERE id = ?').run(visible, plan.id);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
+    details: `Final plan #${plan.id} ${visible ? 'visible to' : 'hidden from'} crew (job-wide)`, req });
+  if (isJson) return res.json({ ok: true, visible_to_crew: visible });
+  req.flash('success', visible ? 'Plan visible to crew.' : 'Plan hidden from crew (all bookings on this job).');
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
+});
+
+// Sniff a plan-ish document_type from a filename — CTMP before TMP ("ctmp"
+// contains "tmp"). Only consulted when the user left the type at 'other':
+// dropping a TGS and clicking Upload used to file it as a generic document,
+// which then sorted to the bottom of the crew's list.
+function sniffBookingDocType(originalname) {
+  const n = String(originalname || '').toLowerCase();
+  if (n.includes('ctmp')) return 'ctmp';
+  if (n.includes('tmp')) return 'tmp';
+  if (n.includes('tgs')) return 'tgs';
+  if (n.includes('tcp')) return 'tcp';
+  if (n.includes('rol')) return 'rol';
+  return null;
+}
+
 router.post('/:id/documents', uploadDoc.single('file'), (req, res) => {
   const db = getDb();
   const wantsJson = req.headers.accept && req.headers.accept.includes('application/json');
@@ -3893,13 +3936,20 @@ router.post('/:id/documents', uploadDoc.single('file'), (req, res) => {
     req.flash('error', 'No file selected.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
   }
   const b = req.body;
+  // A deliberate type choice always wins; only an untouched 'other' gets the
+  // filename sniff. Server-side (not client) because the board drawer lifts
+  // this form's HTML without running the page's scripts.
+  let docType = b.document_type || 'other';
+  if (docType === 'other') {
+    docType = sniffBookingDocType(req.file.originalname) || 'other';
+  }
   const info = db.prepare(`
     INSERT INTO booking_documents (booking_id, document_type, title, description, filename, original_name, file_path, file_size, uploaded_by_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(req.params.id, b.document_type || 'other', b.title || req.file.originalname, b.description || '',
+  `).run(req.params.id, docType, b.title || req.file.originalname, b.description || '',
     req.file.filename, req.file.originalname, req.file.path, req.file.size, req.session.user.id);
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking_document', entityId: req.params.id, details: `Uploaded ${req.file.originalname}`, req });
-  if (wantsJson) return res.json({ ok: true, id: info.lastInsertRowid, document_type: b.document_type || 'other', original_name: req.file.originalname });
+  if (wantsJson) return res.json({ ok: true, id: info.lastInsertRowid, document_type: docType, original_name: req.file.originalname });
   req.flash('success', 'Document uploaded.');
   req.session.save(() => res.redirect('/bookings/' + req.params.id));
 });

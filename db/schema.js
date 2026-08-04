@@ -15185,6 +15185,24 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 339 error:', e.message); }
   }
 
+  // =============================================
+  // Migration 340: traffic_plans.visible_to_crew — crew-side override on
+  // final plans. is_final stays the publish gate; this flag lets the office
+  // hide a published plan from crew (booking Documents panel eye toggle)
+  // without revoking final status. Crew sees a plan iff
+  // is_final = 1 AND COALESCE(visible_to_crew, 1) = 1.
+  // =============================================
+  if (!isMigrationApplied.get(340)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(traffic_plans)").all().map(c => c.name);
+      if (!cols.includes('visible_to_crew')) {
+        db.exec("ALTER TABLE traffic_plans ADD COLUMN visible_to_crew INTEGER DEFAULT 1");
+      }
+      recordMigration.run(340, 'traffic_plans: visible_to_crew — crew-side override on final plans');
+      console.log('Migration 340 applied');
+    } catch (e) { console.error('Migration 340 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
