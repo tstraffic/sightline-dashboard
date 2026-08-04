@@ -155,8 +155,29 @@ app.use(flash());
 // midnight by tz conversion.
 const { formatDateAU, formatDateShortAU, formatDateTimeAU, formatTimeAU, parseAsSydney } = require('./lib/sydney');
 
+// Identifies THIS running instance. Railway sets these per deploy, so the
+// value changes the moment a new container takes over — which is what lets a
+// loaded tab notice it's running old code (see the Refresh control in
+// views/partials/header.ejs). Locally it falls back to boot time, so a
+// restart also counts as a new build.
+const APP_BUILD = String(
+  process.env.RAILWAY_GIT_COMMIT_SHA ||
+  process.env.RAILWAY_DEPLOYMENT_ID ||
+  process.env.SOURCE_VERSION ||
+  Date.now()
+).slice(0, 12);
+
+// Cheap, unauthenticated build probe. The admin shell polls this to tell
+// whether the server has moved on since the page was served. Deliberately
+// tiny and no-store: it must never itself be cached.
+app.get('/__build', (req, res) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.json({ build: APP_BUILD });
+});
+
 // Flash messages + permission helper available in all templates
 app.use((req, res, next) => {
+  res.locals.appBuild = APP_BUILD;
   res.locals.flash_success = req.flash('success');
   res.locals.flash_error = req.flash('error');
   res.locals.user = req.session.user || null;
@@ -485,7 +506,7 @@ app.use((err, req, res, _next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Atomis running at http://localhost:${PORT} (build 117)`);
+  console.log(`Atomis running at http://localhost:${PORT} (build ${APP_BUILD})`);
 
   // ── Production security checks ──
   if (isProduction) {
