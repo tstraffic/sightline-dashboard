@@ -2146,11 +2146,18 @@ body.bk2-sidebar-hidden #sidebar-backdrop { display: none !important; }
   padding: 5px 7px 7px;
   background: rgba(148,163,184,0.06);
   border: 1px solid rgba(148,163,184,0.14);
-  box-shadow: inset 2px 0 0 rgba(14,165,233,0.40);
+  box-shadow: inset 2px 0 0 rgba(148,163,184,0.35);
 }
+/* The ute chip inside is already amber (it reads as a numberplate). Boxing it
+   in a visible frame made the whole unit look like an amber warning band —
+   the same colour as .bk2-warn--amber — so light mode groups with a soft fill
+   and a neutral left rail only, no outer border. The rail is slate, not sky:
+   this override never reset box-shadow, so a blue bar used to sit beside the
+   amber chip. */
 :root[data-theme="light"] .bk2-vehunit.has-gear {
-  background: rgba(15,23,42,0.025);
-  border-color: rgba(148,163,184,0.28);
+  background: rgba(15,23,42,0.03);
+  border-color: transparent;
+  box-shadow: inset 2px 0 0 rgba(100,116,139,0.30);
 }
 /* Whole-unit highlight while a gear/equipment drag hovers anywhere over it. */
 .bk2-vehunit.is-drag-over {

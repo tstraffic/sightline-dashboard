@@ -830,7 +830,12 @@ const EQUIP_CATEGORY_TO_REQ = {
 // exact name match against a known requirement label wins, else its category,
 // else the raw name (so it still shows up as its own requirement line).
 function equipmentReqLabel(name, category) {
-  const n = String(name || '').trim();
+  // Hired units are stored as "Portaboom · PB-01" (base name + unit number).
+  // Strip the unit suffix before matching: the requirement row is created
+  // from the base name, so leaving it on meant a hired unit never matched
+  // its own requirement and the row sat at 0/1 "Unfulfilled" forever. Every
+  // caller has to agree on this, hence doing it here rather than at one site.
+  const n = String(name || '').split(' · ')[0].trim();
   for (const [, l] of QUICK_REQ_FIELDS) { if (l.toLowerCase() === n.toLowerCase()) return l; }
   const c = String(category || '').trim().toLowerCase();
   if (EQUIP_CATEGORY_TO_REQ[c]) return EQUIP_CATEGORY_TO_REQ[c];
@@ -4005,7 +4010,7 @@ router.post('/:id/equipment', (req, res) => {
   } else if (b.equipment_name) {
     addedName = b.equipment_name;
     addedCategory = b.equipment_type || '';
-    const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_name, equipment_type, quantity, attached_vehicle_id) VALUES (?, ?, ?, ?, ?, ?)")
+    const r = db.prepare("INSERT INTO booking_equipment (booking_id, equipment_name, equipment_type, quantity, attached_vehicle_id) VALUES (?, ?, ?, ?, ?)")
       .run(req.params.id, addedName, addedCategory, qty, attachedVehicleId);
     newId = r.lastInsertRowid;
   }
