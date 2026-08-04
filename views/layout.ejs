@@ -257,6 +257,85 @@
     }
   </script>
 
+  <!-- Refresh control (header). The SW serves CSS/JS cache-first, and its
+       CACHE_NAME is hand-bumped, so a Railway deploy that doesn't touch
+       admin-sw.js leaves a loaded tab running the previous bundle with no
+       update event to reload it. This gives an explicit way out, and flags
+       when the server build has moved on. -->
+  <script>
+  (function () {
+    var btn = document.getElementById('app-refresh');
+    if (!btn) return;
+    var loadedBuild = btn.getAttribute('data-build') || '';
+
+    // Full reset: drop every cache, push the SW to check for a new version,
+    // then reload past the HTTP cache. Each step is independently guarded —
+    // a browser with caches or SW blocked must still end up reloading.
+    async function hardRefresh() {
+      btn.disabled = true;
+      btn.classList.add('opacity-60');
+      try {
+        if (window.caches && caches.keys) {
+          var keys = await caches.keys();
+          await Promise.all(keys.map(function (k) { return caches.delete(k); }));
+        }
+      } catch (e) { /* ignore — reload anyway */ }
+      try {
+        if (navigator.serviceWorker) {
+          var regs = await navigator.serviceWorker.getRegistrations();
+          await Promise.all(regs.map(function (r) { return r.update().catch(function () {}); }));
+        }
+      } catch (e) { /* ignore — reload anyway */ }
+      // Cache-bust the document itself: a plain reload() can still be served
+      // the previous HTML from the back/forward or HTTP cache.
+      var u = new URL(window.location.href);
+      u.searchParams.set('_r', Date.now().toString(36));
+      window.location.replace(u.toString());
+    }
+    btn.addEventListener('click', hardRefresh);
+
+    // Strip the cache-buster from the address bar after the reload lands, so
+    // it doesn't get bookmarked or shared.
+    try {
+      var cur = new URL(window.location.href);
+      if (cur.searchParams.has('_r')) {
+        cur.searchParams.delete('_r');
+        history.replaceState(null, '', cur.pathname + (cur.search || '') + (cur.hash || ''));
+      }
+    } catch (e) {}
+
+    // Poll for a newer server build. Only ever surfaces a hint — never
+    // reloads on its own, since that would throw away whatever is half-typed.
+    // Every run self-reports onto the button (data-last-check/-result) so
+    // "is the poller working?" is a DOM read in any environment.
+    var dot = document.getElementById('app-refresh-dot');
+    function checkBuild(force) {
+      btn.dataset.lastCheck = String(Date.now());
+      if (!loadedBuild) { btn.dataset.lastResult = 'no-build'; return; }
+      if (document.hidden && !force) { btn.dataset.lastResult = 'skipped-hidden'; return; }
+      fetch('/__build', { cache: 'no-store', credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) {
+          if (!d || !d.build) { btn.dataset.lastResult = 'error'; return; }
+          if (d.build === loadedBuild) { btn.dataset.lastResult = 'same'; return; }
+          btn.dataset.lastResult = 'newer';
+          dot.classList.remove('hidden');
+          btn.classList.add('text-emerald-600');
+          btn.title = 'A new version has been deployed — click to reload';
+        })
+        .catch(function () { btn.dataset.lastResult = 'error'; /* offline or mid-deploy; next tick retries */ });
+    }
+    setInterval(checkBuild, 60000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) checkBuild(); });
+    // Focus fires more reliably than visibilitychange when switching back to
+    // a background window — the natural "am I stale?" moment.
+    window.addEventListener('focus', function () { checkBuild(); });
+    // First check is forced: a just-loaded tab is being looked at, whatever
+    // document.hidden claims (embedded panes/webviews often report hidden).
+    setTimeout(function () { checkBuild(true); }, 5000);
+  })();
+  </script>
+
   <!-- Global Quick Actions FAB — bottom-right, visible everywhere admin
        so the user can spawn the most-used flows from any page. Replaces
        the per-page dashboard Quick Actions strip. -->
