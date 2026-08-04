@@ -633,7 +633,7 @@
   <!-- FORMS TAB &mdash; shared partial keeps this 1:1 with views/worker/job-detail.ejs -->
   <% if (tab === 'forms') { %>
     <% if (allocation) { %>
-      <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, shiftForms: typeof shiftForms !== 'undefined' ? shiftForms : null, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null }) %>
+      <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, shiftForms: typeof shiftForms !== 'undefined' ? shiftForms : null, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null, formsBack: '/w/booking-shift/' + booking.id }) %>
     <% } else { %>
       <div class="rounded-xl p-4" style="background:rgba(244,63,94,0.10);border:1px solid rgba(244,63,94,0.30);">
         <p class="text-sm font-semibold" style="color:#FDA4AF;">Couldn't link this shift to your roster</p>

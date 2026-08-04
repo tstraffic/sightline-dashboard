@@ -11,6 +11,13 @@
   //    crew tally. Vehicle Pre-Start / Post-Shift are PER VEHICLE — each
   //    ute has its own pair, owed by its driver.
   //  - shiftForms null (pure job shifts): the legacy per-person list.
+  // Completed checklists open in the in-app viewer (/view), never the raw
+  // /pdf stream — an inline PDF in the iOS shell has no back button and
+  // strands the crew member. `formsBack` is where its back chevron returns to.
+  var jpBack = (typeof formsBack !== 'undefined' && formsBack) ? formsBack : '/w/forms/history';
+  function jpViewUrl(id) {
+    return '/w/forms/history/' + id + '/view?back=' + encodeURIComponent(jpBack);
+  }
   var JOB_PACK_REQUIRED = [
     { key: 'risk_toolbox', path: 'risk-assessment', label: '2. Risk Assessment & Toolbox', hint: 'Run with the crew on site' },
     { key: 'team_leader',  path: 'team-leader',     label: '4. Team Leader Checklist',     hint: 'Crew lead / acting TL' },
@@ -53,7 +60,7 @@
            var c = jpChip(top, 'required');
       %>
         <div data-jp="<%= jp.key %>" data-jp-state="<%= top ? 'done' : (st.draft ? 'draft' : 'pending') %>" style="border-top:1px solid rgba(255,255,255,0.05);">
-          <a href="<%= top ? ('/w/forms/history/' + top.id + '/pdf') : ('/w/forms/' + jp.path + '?allocationId=' + allocation.id) %>"
+          <a href="<%= top ? (jpViewUrl(top.id)) : ('/w/forms/' + jp.path + '?allocationId=' + allocation.id) %>"
              class="flex items-center justify-between py-2.5 px-3.5">
             <div class="flex items-center gap-3 min-w-0">
               <div class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 jp-chip <%= c %>">
@@ -100,7 +107,7 @@
         <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Every crew member signs their own</p>
       </div>
       <% var tcMine = _sf.tc.mine; var tcC = jpChip(tcMine, 'recommended'); %>
-      <a href="<%= tcMine ? ('/w/forms/history/' + tcMine.id + '/pdf') : ('/w/forms/tc-prestart?allocationId=' + allocation.id) %>"
+      <a href="<%= tcMine ? (jpViewUrl(tcMine.id)) : ('/w/forms/tc-prestart?allocationId=' + allocation.id) %>"
          data-jp="tc_prestart" data-jp-state="<%= tcMine ? 'done' : 'pending' %>"
          class="flex items-center justify-between py-2.5 px-3.5" style="border-top:1px solid rgba(255,255,255,0.05);">
         <div class="flex items-center gap-3 min-w-0">
@@ -153,7 +160,7 @@
                  var done = row.sub; var c = jpChip(done, 'recommended');
                  var owes = !done && v.driver && v.driver.is_you;
             %>
-              <a href="<%= done ? ('/w/forms/history/' + done.id + '/pdf') : ('/w/forms/' + row.path + '?allocationId=' + allocation.id + '&vehicleId=' + v.vehicle_id) %>"
+              <a href="<%= done ? (jpViewUrl(done.id)) : ('/w/forms/' + row.path + '?allocationId=' + allocation.id + '&vehicleId=' + v.vehicle_id) %>"
                  data-jp-veh-form="<%= row.key %>:<%= v.vehicle_id %>" data-jp-state="<%= done ? 'done' : 'pending' %>"
                  class="flex items-center justify-between py-2 px-3.5 pl-5">
                 <div class="flex items-center gap-3 min-w-0">

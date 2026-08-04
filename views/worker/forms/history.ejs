@@ -52,10 +52,13 @@
             <p class="text-sm text-gray-900"><%= f.client || f.job_number %></p>
           <% } %>
           <p class="text-xs text-gray-500"><%= new Date(f.created_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) %></p>
-          <a href="/w/forms/history/<%= f.id %>/pdf" target="_blank"
+          <%# Opens the in-app viewer, not the raw /pdf stream — target="_blank"
+              onto an inline PDF leaves the crew member with no way back inside
+              the iOS shell. %>
+          <a href="/w/forms/history/<%= f.id %>/view?back=<%= encodeURIComponent('/w/forms/history') %>"
              class="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-brand-700 active:text-brand-900">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6zM14 2v6h6"/></svg>
-            Open as PDF
+            View PDF
           </a>
         </div>
       <% }) %>

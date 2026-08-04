@@ -433,7 +433,7 @@
          so a worker who tapped a checklist (which can swap their entry
          point between job-detail and booking-detail via the lazy-alloc
          redirect) sees the exact same UI on the way back in. -->
-    <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, shiftForms: null, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null }) %>
+    <%- include('_shift_forms', { allocation: allocation, formStatus: formStatus, shiftForms: null, docket: typeof docket !== 'undefined' ? docket : null, docketSignUrl: typeof docketSignUrl !== 'undefined' ? docketSignUrl : null, formsBack: '/w/jobs/' + allocation.id }) %>
 
     <!-- Reporting -->
     <div class="bg-white border border-gray-200 rounded-xl overflow-hidden">
