@@ -4337,3 +4337,10 @@ router.post('/:id/tasks/:taskId/status', (req, res) => {
 });
 
 module.exports = router;
+// Exported for lib/shiftForms.js: the worker portal has to group crew by the
+// vehicle the planner SEES them in, which for an unpinned row is derived at
+// render time — not what booking_crew.assigned_vehicle_id says. Sharing this
+// one implementation is what stops the board and the portal disagreeing.
+// (Longer term this and deriveCrewBlocks belong in lib/, but they depend on
+// several module-scope helpers here, so the move is its own change.)
+module.exports.snapshotDisplayedVehicles = snapshotDisplayedVehicles;
