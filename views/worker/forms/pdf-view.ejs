@@ -1,0 +1,61 @@
+<%
+// In-app viewer for a completed checklist PDF. Renders through the shared
+// pdf.js viewer (public/js/worker-pdf-viewer.js) rather than navigating to
+// the raw byte stream — an inline PDF in iOS WKWebView has no chrome and no
+// back button, which used to strand crew inside the Capacitor shell.
+// Chrome matches the SWMS/SOP viewers (views/worker/safety/swms-view.ejs).
+const pdfUrl = '/w/forms/history/' + meta.id + '/pdf';
+const fileName = 'TSTC_' + (meta.form_type || 'checklist') + '_' + String(meta.submitted_at || '').slice(0, 10) + '.pdf';
+%>
+<style>
+  body { background: #020817; }
+  .pv-wrap { min-height: 100dvh; display: flex; flex-direction: column; }
+  .pv-topbar {
+    position: sticky; top: 0; z-index: 10;
+    padding: calc(env(safe-area-inset-top, 0px) + 4px) 12px 8px;
+    background: rgba(10,22,40,0.96);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    display: flex; align-items: center; gap: 10px;
+    backdrop-filter: blur(8px);
+  }
+  .pv-back, .pv-dl {
+    width: 36px; height: 36px; border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #fff; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08);
+    text-decoration: none; flex: none;
+  }
+  .pv-back:active, .pv-dl:active { background: rgba(255,255,255,0.12); }
+  .pv-title { flex: 1; min-width: 0; font-size: 0.95rem; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pv-pages { flex: 1; padding: 8px 8px calc(16px + env(safe-area-inset-bottom, 0px)); }
+
+  :root[data-theme="light"] body { background: #F7F8FA; }
+  :root[data-theme="light"] .pv-topbar { background: rgba(255,255,255,0.96); border-bottom-color: #E5E7EB; }
+  :root[data-theme="light"] .pv-back,
+  :root[data-theme="light"] .pv-dl { color: #0F1115; background: #F3F4F6; border-color: #E5E7EB; }
+  :root[data-theme="light"] .pv-back:active,
+  :root[data-theme="light"] .pv-dl:active { background: #E5E7EB; }
+  :root[data-theme="light"] .pv-title { color: #0F1115; }
+</style>
+
+<div class="pv-wrap">
+  <div class="pv-topbar">
+    <%# history.back() when there's somewhere to go back to, otherwise the
+        server-sanitised `back` path — so a deep link or a cold app launch
+        still has a way out. %>
+    <a href="<%= back %>" class="pv-back" onclick="if(history.length>1){history.back();return false}" aria-label="Back">
+      <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+    </a>
+    <div class="pv-title"><%= title %></div>
+    <a href="<%= pdfUrl %>" download="<%= fileName %>" class="pv-dl" aria-label="Download PDF">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v2a2 2 0 002 2h12a2 2 0 002-2v-2M7 10l5 5 5-5M12 15V3"/></svg>
+    </a>
+  </div>
+
+  <div class="pv-pages">
+    <div class="pdf-viewer"
+         data-pdf-src="<%= pdfUrl %>"
+         data-pdf-name="<%= fileName %>"></div>
+  </div>
+</div>
+
+<script src="/js/worker-pdf-viewer.js?v=7"></script>

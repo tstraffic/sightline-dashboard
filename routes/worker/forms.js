@@ -1431,25 +1431,52 @@ function upsertDraft(db, opts) {
 // else stays a 404 (no job-wide or org-wide leak; drafts stay private
 // to their author; photo streaming stays owner-only — the PDF embeds
 // photos server-side).
+// Can this worker see this submission? Their own, or a submitted one from a
+// booking they're crewed on. Shared by the PDF stream and the viewer page so
+// the two can never drift apart.
+function canViewSubmission(db, worker, id) {
+  const sf = db.prepare('SELECT id, crew_member_id, status, booking_id, allocation_id FROM safety_forms WHERE id = ?').get(id);
+  if (!sf) return false;
+  if (sf.crew_member_id === worker.id) return true;
+  if (sf.status !== 'submitted') return false;
+  let bookingId = sf.booking_id;
+  if (!bookingId && sf.allocation_id) {
+    const alloc = db.prepare('SELECT booking_id FROM crew_allocations WHERE id = ?').get(sf.allocation_id);
+    bookingId = alloc ? alloc.booking_id : null;
+  }
+  if (!bookingId) return false;
+  return !!db.prepare(
+    "SELECT 1 FROM booking_crew WHERE booking_id = ? AND crew_member_id = ? AND status != 'declined'"
+  ).get(bookingId, worker.id);
+}
+
+// GET /w/forms/history/:id/view — In-app viewer for a completed checklist.
+// Navigating straight to the /pdf byte stream strands the crew member: iOS
+// WKWebView (and the installed PWA) render it with no chrome and no back
+// button, so the only way out of the Capacitor shell was to force-quit.
+// This renders the PDF through the shared pdf.js viewer inside the app shell,
+// with a back chevron — same pattern as the SWMS/SOP viewers.
+router.get('/forms/history/:id/view', (req, res) => {
+  const db = getDb();
+  if (!canViewSubmission(db, req.session.worker, req.params.id)) return res.status(404).send('Not found');
+  const meta = db.prepare('SELECT id, form_type, submitted_at FROM safety_forms WHERE id = ?').get(req.params.id);
+  // Only ever bounce back to an internal worker path (same rule as the
+  // job/booking doc viewer in routes/worker/jobs.js).
+  const back = (typeof req.query.back === 'string' && req.query.back.startsWith('/w/'))
+    ? req.query.back
+    : '/w/forms/history';
+  const { FORM_HEADING } = require('../../services/jobPackPdf');
+  res.render('worker/forms/pdf-view', {
+    layout: 'worker/layout-bare',
+    title: FORM_HEADING[meta.form_type] || 'Checklist',
+    meta, back,
+    worker: req.session.worker,
+  });
+});
+
 router.get('/forms/history/:id/pdf', async (req, res) => {
   const db = getDb();
-  const worker = req.session.worker;
-  const sf = db.prepare('SELECT id, crew_member_id, status, booking_id, allocation_id FROM safety_forms WHERE id = ?').get(req.params.id);
-  if (!sf) return res.status(404).send('Not found');
-  let allowed = sf.crew_member_id === worker.id;
-  if (!allowed && sf.status === 'submitted') {
-    let bookingId = sf.booking_id;
-    if (!bookingId && sf.allocation_id) {
-      const alloc = db.prepare('SELECT booking_id FROM crew_allocations WHERE id = ?').get(sf.allocation_id);
-      bookingId = alloc ? alloc.booking_id : null;
-    }
-    if (bookingId) {
-      allowed = !!db.prepare(
-        "SELECT 1 FROM booking_crew WHERE booking_id = ? AND crew_member_id = ? AND status != 'declined'"
-      ).get(bookingId, worker.id);
-    }
-  }
-  if (!allowed) return res.status(404).send('Not found');
+  if (!canViewSubmission(db, req.session.worker, req.params.id)) return res.status(404).send('Not found');
   try {
     const { renderSubmissionPdf } = require('../../services/jobPackPdf');
     const buf = await renderSubmissionPdf(db, req.params.id);
