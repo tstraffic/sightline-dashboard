@@ -3240,9 +3240,20 @@ body.bk2-rp-detail .bk2-rp-warns { display: inline-flex; }
 
 /* People sit on white, so the ute band reads as a container above them. */
 :root[data-theme="light"] .bk2-slot--filled { background: #FFFFFF; border: 1px solid #E5E7EB; border-left-width: 3px; }
-:root[data-theme="light"] .bk2-veh-slot {
-  background: linear-gradient(#FEF3C7, #FDE68A);
-  border-color: #F59E0B; color: #78350F; font-weight: 600;
+/* An assigned vehicle is information, not a warning. This used to be a solid
+   amber band — the loudest thing on the card, sitting right above the calm
+   blue gear chips and white crew rows, and near-identical to
+   .bk2-warn--amber, so planners read a hitched ute as a problem. It now
+   follows the crew-row idiom (white body + 3px left accent, see
+   .bk2-slot--filled) with the accent and the UTE badge carrying the amber.
+   Scoped off --empty so the dashed "drop a vehicle here" prompt keeps its
+   amber — that one IS a prompt. (The :not() also lifts specificity above the
+   old blanket rule, which had been overriding the empty slot's own styling.) */
+:root[data-theme="light"] .bk2-veh-slot:not(.bk2-veh-slot--empty) {
+  background: #FFFFFF;
+  border: 1px solid #E5E7EB;
+  border-left: 3px solid #F59E0B;
+  color: #111827; font-weight: 600;
 }
 :root[data-theme="light"] .bk2-veh-tag { background: #B45309; color: #FFFBEB; }
 :root[data-theme="light"] .bk2-addon-tag { background: #6D28D9; color: #F5F3FF; }
