@@ -3509,8 +3509,12 @@
   // crew/vehicle slots, drag handles, buttons and nested links keep working,
   // and modified clicks (cmd/ctrl/middle) still open the full page in a new
   // tab via the anchor's href.
+  // .bk2-vehunit is listed as well as .bk2-veh-slot: once gear is hitched the
+  // unit gains padding and gaps between the ute chip and its gear chips, and
+  // a click landing in that gutter used to miss every interactive selector
+  // and fall through to "open the booking editor".
   var CARD_INTERACTIVE = 'button, a[href]:not(.bk2-card), input, select, textarea, label,' +
-    '[data-bk-crew-drag], .bk2-slot, .bk2-slot--drop, .bk2-veh-slot, .bk2-unassigned,' +
+    '[data-bk-crew-drag], .bk2-slot, .bk2-slot--drop, .bk2-vehunit, .bk2-veh-slot, .bk2-unassigned,' +
     '.bk2-csum-person,' +
     '.bk2-addon, [role="button"], [draggable="true"], [data-card-goto]';
 
