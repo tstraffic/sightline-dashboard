@@ -15203,6 +15203,40 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 340 error:', e.message); }
   }
 
+  // =============================================
+  // Migration 341: booking_documents.file_path — absolute → relative.
+  // These rows stored multer's absolute file.path, which bakes in the deploy
+  // root (/app on Railway, the checkout dir locally). The bytes are already
+  // on the persistent volume, but the stored path stops resolving the moment
+  // that root differs — a DB restored onto another host, or a platform that
+  // changes its app dir, loses every booking document. Every other upload
+  // table stores relative to the app root; this brings the last one into
+  // line (routes/bookings.js toRelDocPath writes relative from now on).
+  //
+  // Rewritten by locating the 'data/uploads/' marker rather than stripping
+  // the CURRENT root, so rows written under a previous root convert too.
+  // =============================================
+  if (!isMigrationApplied.get(341)) {
+    try {
+      let fixed = 0;
+      let rows = [];
+      try {
+        rows = db.prepare("SELECT id, file_path FROM booking_documents WHERE file_path IS NOT NULL AND file_path != ''").all();
+      } catch (e) { rows = []; } // table may not exist on a legacy DB
+      const upd = db.prepare('UPDATE booking_documents SET file_path = ? WHERE id = ?');
+      for (const r of rows) {
+        const p = String(r.file_path).replace(/\\/g, '/');
+        if (!p.startsWith('/') && !/^[A-Za-z]:/.test(p)) continue; // already relative
+        const at = p.indexOf('data/uploads/');
+        if (at === -1) continue;                                   // outside the volume tree — leave alone
+        const rel = p.slice(at);
+        if (rel && rel !== p) { upd.run(rel, r.id); fixed++; }
+      }
+      recordMigration.run(341, `booking_documents.file_path made relative to the app root (${fixed} row(s))`);
+      console.log(`Migration 341 applied: ${fixed} booking document path(s) made relative`);
+    } catch (e) { console.error('Migration 341 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

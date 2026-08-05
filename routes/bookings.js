@@ -71,6 +71,17 @@ const BOOKING_UPLOAD_DIR = path.join(__dirname, '..', 'data', 'uploads', 'bookin
 // relative to the app root, and pre-migration rows still pointing at the old
 // uploads/ location whose file was moved to data/uploads/. Returns null when
 // the file is genuinely gone (e.g. wiped by a deploy before the volume fix).
+// Store paths RELATIVE to the app root. multer's file.path is absolute, and
+// an absolute path bakes in the deploy root (/app on Railway, the checkout
+// dir locally) — so the row stops resolving the moment the root differs.
+// Every other upload table already stores relative; this brings
+// booking_documents into line. Migration 341 normalised the existing rows.
+function toRelDocPath(absPath) {
+  if (!absPath) return absPath;
+  const appRoot = path.join(__dirname, '..');
+  return path.isAbsolute(absPath) ? path.relative(appRoot, absPath) : absPath;
+}
+
 function resolveDocPath(storedPath) {
   if (!storedPath) return null;
   const appRoot = path.join(__dirname, '..');
@@ -3947,7 +3958,7 @@ router.post('/:id/documents', uploadDoc.single('file'), (req, res) => {
     INSERT INTO booking_documents (booking_id, document_type, title, description, filename, original_name, file_path, file_size, uploaded_by_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(req.params.id, docType, b.title || req.file.originalname, b.description || '',
-    req.file.filename, req.file.originalname, req.file.path, req.file.size, req.session.user.id);
+    req.file.filename, req.file.originalname, toRelDocPath(req.file.path), req.file.size, req.session.user.id);
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking_document', entityId: req.params.id, details: `Uploaded ${req.file.originalname}`, req });
   if (wantsJson) return res.json({ ok: true, id: info.lastInsertRowid, document_type: docType, original_name: req.file.originalname });
   req.flash('success', 'Document uploaded.');
@@ -4239,7 +4250,7 @@ router.post('/:id/clone', (req, res) => {
         db.prepare(`INSERT INTO booking_documents (booking_id, document_type, title, description, filename, original_name, file_path, file_size, uploaded_by_id, visible_to_crew)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
           .run(newId, d.document_type || 'other', d.title || '', d.description || '',
-               d.filename || path.basename(destAbs), d.original_name, destAbs, d.file_size || 0,
+               d.filename || path.basename(destAbs), d.original_name, toRelDocPath(destAbs), d.file_size || 0,
                req.session.user.id, d.visible_to_crew != null ? d.visible_to_crew : 1);
       } catch (e) { console.error('[bookings/clone] doc copy failed:', e.message); }
     }

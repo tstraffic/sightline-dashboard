@@ -7,6 +7,10 @@ npm-debug.log
 .env
 .env.*
 data/uploads
+# Legacy pre-volume upload tree. Nothing writes here any more (migrations
+# 335-341 moved every module onto data/uploads), but leftover files would
+# otherwise ride into the image and masquerade as real uploads.
+uploads
 data/database.sqlite
 data/database.sqlite-*
 *.sqlite
