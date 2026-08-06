@@ -91,8 +91,12 @@ router.get('/:id', (req, res) => {
     if (revisions.length > 0) {
       const latest = revisions[0];
       const liveItems = JSON.parse(latest.items_json || '[]');
-      const draftSig = JSON.stringify(items.map(i => [i.item_order, i.section, i.question, i.response_type, i.required]));
-      const liveSig  = JSON.stringify((liveItems || []).map(i => [i.item_order, i.section, i.question, i.response_type, i.required]));
+      // Field-wise signature (NOT whole-row: publish snapshots raw rows
+      // including id/created_at). Includes options_json + item_key so an
+      // options-only edit still lights the "Unpublished changes" banner.
+      const sig = i => [i.item_order, i.section, i.question, i.response_type, i.required, i.item_key || '', i.options_json || ''];
+      const draftSig = JSON.stringify(items.map(sig));
+      const liveSig  = JSON.stringify((liveItems || []).map(sig));
       dirty = (draftSig !== liveSig)
         || (latest.name !== template.name)
         || ((latest.description || '') !== (template.description || ''))
@@ -184,21 +188,36 @@ const ELEMENT_TYPES = {
   yes_no_na:      { category: 'special', label: 'Yes / No / N/A' },
   pass_fail:      { category: 'special', label: 'Pass / Fail' },
   multiple_choice:{ category: 'special', label: 'Multiple choice' },
-  radio:          { category: 'special', label: 'Single choice' },
-  checkbox:       { category: 'special', label: 'Multi-select' },
+  // radio/checkbox are retired (migration 342 converted every live item to
+  // multiple_choice) but stay in the allow-list so stale form posts and any
+  // straggler rows keep working; they are deliberately absent from the picker.
+  radio:          { category: 'special', label: 'Single choice (legacy)' },
+  checkbox:       { category: 'special', label: 'Multi-select (legacy)' },
   media_upload:   { category: 'special', label: 'Media upload' },
   signature:      { category: 'special', label: 'Signature' },
 };
 const VALID_TYPES = Object.keys(ELEMENT_TYPES);
+
+// Options arrive either as repeated opt_options[] inputs (the option-row
+// widget; extended urlencoded parses them into an array) or as a legacy
+// newline-separated string (old form markup / scripted callers).
+function parseOptionList(raw) {
+  if (Array.isArray(raw)) return raw.map(s => String(s).trim()).filter(Boolean);
+  return String(raw || '').split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+}
 
 // Pull element-specific config fields off the body and serialise to
 // options_json so each element can carry the bits it needs (URL for
 // hyperlink, unit for measurement, options for multiple choice, etc.).
 function buildOptionsJson(body, rType) {
   const opts = {};
+  // The config form carries an opt_url input in BOTH the hyperlink and
+  // media blocks (the hidden one still submits empty), so the value can
+  // arrive as an array — take the first non-empty entry.
+  const first = v => Array.isArray(v) ? (v.find(x => String(x).trim()) || '') : (v || '');
   if (rType === 'hyperlink' || rType === 'media') {
-    if (body.opt_url) opts.url = String(body.opt_url).trim();
-    if (body.opt_alt) opts.alt = String(body.opt_alt).trim();
+    if (first(body.opt_url)) opts.url = String(first(body.opt_url)).trim();
+    if (first(body.opt_alt)) opts.alt = String(first(body.opt_alt)).trim();
   }
   if (rType === 'measurement') {
     if (body.opt_unit) opts.unit = String(body.opt_unit).trim();
@@ -207,10 +226,11 @@ function buildOptionsJson(body, rType) {
     const scheme = body.opt_scheme;
     opts.scheme = ['ok_notok_na','yes_no_na','pass_fail'].includes(scheme) ? scheme : 'ok_notok_na';
   }
-  if (rType === 'multiple_choice') {
-    const raw = String(body.opt_options || '').trim();
-    opts.options = raw ? raw.split(/\r?\n/).map(s => s.trim()).filter(Boolean) : [];
-    opts.multi   = body.opt_multi === '1' || body.opt_multi === 'on';
+  if (rType === 'multiple_choice' || rType === 'radio' || rType === 'checkbox') {
+    // radio/checkbox are retired aliases (migration 342). Persisting their
+    // options here is belt-and-braces: an edit must never silently drop them.
+    opts.options = parseOptionList(body.opt_options);
+    opts.multi   = rType === 'checkbox' ? true : (body.opt_multi === '1' || body.opt_multi === 'on');
   }
   if (rType === 'information') {
     if (body.opt_body) opts.body = String(body.opt_body);

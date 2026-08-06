@@ -15237,6 +15237,90 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 341 error:', e.message); }
   }
 
+  // Migration 342: retire the legacy radio/checkbox checklist element types
+  // by converting them to multiple_choice. The worker fill view never grew
+  // radio/checkbox branches, so those questions rendered as plain text boxes
+  // — workers couldn't see the options at all. multiple_choice with
+  // {options, multi} is the shape every consumer already handles.
+  //
+  // Two passes:
+  //   1. Draft rows (checklist_template_items) — what the admin editor shows.
+  //   2. Each template's LATEST published revision, when it still carries
+  //      radio/checkbox items: derive a new revision from THAT revision's
+  //      items_json (never from drafts, so unpublished admin edits don't
+  //      accidentally ship), converting only the type + options shape. Item
+  //      ids inside items_json are preserved so answers keyed by id/item_key
+  //      keep resolving. Older revisions are never rewritten — historical
+  //      responses render exactly as filled.
+  if (!isMigrationApplied.get(342)) {
+    try {
+      // Canonicalise any legacy options value (flat array from the mig-151
+      // seeds, or an {options,...} object) to {options:[...], multi:bool}.
+      const convertOpts = (optionsJson, isCheckbox) => {
+        let parsed = null;
+        try { parsed = JSON.parse(optionsJson || 'null'); } catch (e) { parsed = null; }
+        let options = [];
+        let multi = !!isCheckbox;
+        if (Array.isArray(parsed)) options = parsed.map(String);
+        else if (parsed && typeof parsed === 'object') {
+          options = Array.isArray(parsed.options) ? parsed.options.map(String) : [];
+          if (parsed.multi != null) multi = !!parsed.multi;
+        }
+        return JSON.stringify({ options, multi });
+      };
+
+      // 1) Draft rows.
+      let drafts = [];
+      try {
+        drafts = db.prepare("SELECT id, response_type, options_json FROM checklist_template_items WHERE response_type IN ('radio','checkbox')").all();
+      } catch (e) { drafts = []; } // table may not exist on a legacy DB
+      const updDraft = db.prepare('UPDATE checklist_template_items SET response_type = ?, options_json = ? WHERE id = ?');
+      for (const d of drafts) {
+        updDraft.run('multiple_choice', convertOpts(d.options_json, d.response_type === 'checkbox'), d.id);
+      }
+
+      // 2) Latest published revisions still carrying radio/checkbox items.
+      let republished = 0;
+      let tpls = [];
+      try {
+        tpls = db.prepare(`
+          SELECT t.id, r.name, r.description, r.require_signature, r.require_photo, r.items_json
+          FROM checklist_templates t
+          JOIN checklist_template_revisions r
+            ON r.template_id = t.id AND r.revision_number = t.published_revision
+          WHERE t.published_revision IS NOT NULL AND t.published_revision > 0
+        `).all();
+      } catch (e) { tpls = []; }
+      const insRev = db.prepare(`
+        INSERT INTO checklist_template_revisions
+          (template_id, revision_number, name, description, require_signature, require_photo, items_json, published_by_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, NULL)
+      `);
+      const bumpTpl = db.prepare("UPDATE checklist_templates SET published_revision = ?, published_at = datetime('now') WHERE id = ?");
+      for (const t of tpls) {
+        let items;
+        try { items = JSON.parse(t.items_json || '[]'); } catch (e) { continue; }
+        if (!Array.isArray(items)) continue;
+        let touched = false;
+        items.forEach(it => {
+          if (it && (it.response_type === 'radio' || it.response_type === 'checkbox')) {
+            it.options_json = convertOpts(it.options_json, it.response_type === 'checkbox');
+            it.response_type = 'multiple_choice';
+            touched = true;
+          }
+        });
+        if (!touched) continue;
+        const next = (db.prepare('SELECT MAX(revision_number) AS m FROM checklist_template_revisions WHERE template_id = ?').get(t.id).m || 0) + 1;
+        insRev.run(t.id, next, t.name, t.description || '', t.require_signature ? 1 : 0, t.require_photo ? 1 : 0, JSON.stringify(items));
+        bumpTpl.run(next, t.id);
+        republished++;
+      }
+
+      recordMigration.run(342, `checklist radio/checkbox → multiple_choice (${drafts.length} draft item(s), ${republished} template(s) auto-republished)`);
+      console.log(`Migration 342 applied: ${drafts.length} draft item(s) converted, ${republished} template(s) auto-republished`);
+    } catch (e) { console.error('Migration 342 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
