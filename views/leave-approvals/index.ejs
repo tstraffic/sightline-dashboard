@@ -1,439 +1,451 @@
 <% locals.currentPage = 'leave-approvals' %>
-<meta name="color-scheme" content="light only">
-
 <%
-  function fmtDate(iso) {
-    if (!iso) return '';
-    const d = new Date(iso + 'T00:00:00');
-    return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short' });
+  // Everything here is composed from existing admin devices — .stat-card
+  // (admin-polish §9), .panel-header (§17), the induction pill tabs and the
+  // timesheets filter shell. The old version shipped 181 lines of bespoke
+  // .la-* CSS plus <meta color-scheme="light only">, which opted the page
+  // out of the app's dark-first theme and then patched it back by hand.
+
+  function buildUrl(overrides) {
+    const q = Object.assign({}, filters, overrides);
+    const parts = Object.keys(q)
+      .filter(k => q[k] !== '' && q[k] != null && !(k === 'view' && q[k] === 'list'))
+      .map(k => k + '=' + encodeURIComponent(q[k]));
+    return '/leave-approvals' + (parts.length ? '?' + parts.join('&') : '');
   }
-  function fmtRange(s, e) { return s === e ? fmtDate(s) : (fmtDate(s) + ' – ' + fmtDate(e)); }
-  function daysAgo(iso) {
-    if (!iso) return '';
-    const d = new Date(iso); const diff = Math.max(0, Math.floor((Date.now() - d.getTime()) / 86400000));
-    if (diff === 0) return 'today';
-    if (diff === 1) return 'yesterday';
-    if (diff < 7) return diff + 'd ago';
-    return d.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short' });
+
+  const TYPE_PILL = {
+    annual:   'bg-blue-50 text-blue-700 ring-blue-600/20',
+    sick:     'bg-red-50 text-red-700 ring-red-600/20',
+    personal: 'bg-purple-50 text-purple-700 ring-purple-600/20',
+    unpaid:   'bg-gray-100 text-gray-600 ring-gray-500/20',
+    other:    'bg-amber-50 text-amber-700 ring-amber-600/20',
+  };
+  const STATUS_PILL = {
+    pending:   { label: 'Pending',   cls: 'bg-amber-50 text-amber-700 ring-amber-600/20' },
+    approved:  { label: 'Approved',  cls: 'bg-emerald-50 text-emerald-700 ring-emerald-600/20' },
+    rejected:  { label: 'Rejected',  cls: 'bg-red-50 text-red-700 ring-red-600/20' },
+    cancelled: { label: 'Cancelled', cls: 'bg-gray-100 text-gray-500 ring-gray-500/20' },
+  };
+
+  // start_date/end_date are bare DATE columns — formatDateShort handles them
+  // without a timezone shift. created_at/approved_at are UTC datetimes and
+  // go through formatDateTime, which converts properly. The old view parsed
+  // those as local and THEN converted to Sydney: ~20h of double-shift.
+  function span(r) {
+    if (r.start_date === r.end_date) return formatDateShort(r.start_date);
+    return formatDateShort(r.start_date) + ' → ' + formatDateShort(r.end_date);
   }
-  function leaveTypePill(t) {
-    const map = {
-      annual:   'bg-blue-50 text-blue-700 ring-blue-600/20',
-      sick:     'bg-rose-50 text-rose-700 ring-rose-600/20',
-      personal: 'bg-violet-50 text-violet-700 ring-violet-600/20',
-      unpaid:   'bg-amber-50 text-amber-700 ring-amber-600/20',
-      other:    'bg-gray-100 text-gray-600 ring-gray-600/15',
-    };
-    return map[t] || map.other;
-  }
-  function rolePill(pr) {
-    if (pr === 'supervisor')  return 'bg-violet-50 text-violet-700';
-    if (pr === 'team_leader') return 'bg-amber-50 text-amber-700';
-    return                            'bg-gray-100 text-gray-600';
-  }
-  function roleLabel(pr) {
-    if (pr === 'supervisor')  return 'Supervisor';
-    if (pr === 'team_leader') return 'Team Leader';
-    return                            'TC';
+  function initials(name) {
+    return (name || '?').split(' ').filter(Boolean).map(p => p[0]).join('').slice(0, 2).toUpperCase();
   }
 %>
 
-<style>
-  /* Stat tiles at the top */
-  .la-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
-  @media (min-width: 640px) { .la-stats { grid-template-columns: repeat(4, 1fr); } }
-  .la-stat {
-    background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
-    padding: 12px 14px; display: flex; align-items: center; gap: 12px;
-    transition: box-shadow 0.15s, border-color 0.15s, transform 0.1s;
-    text-decoration: none;
-  }
-  .la-stat:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.05); border-color: #D1D5DB; }
-  .la-stat-ic { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-  .la-stat-ic svg { width: 18px; height: 18px; }
-  .la-stat-ic.urgent  { background: #FEE2E2; color: #DC2626; }
-  .la-stat-ic.month   { background: #FEF3C7; color: #B45309; }
-  .la-stat-ic.later   { background: #DBEAFE; color: #1D4ED8; }
-  .la-stat-ic.done    { background: #D1FAE5; color: #059669; }
-  .la-stat-num { font-size: 1.55rem; font-weight: 800; color: #0F172A; line-height: 1; letter-spacing: -0.02em; }
-  .la-stat-lbl { font-size: 0.65rem; font-weight: 700; color: #6B7280; text-transform: uppercase; letter-spacing: 0.07em; margin-top: 4px; }
-
-  /* Filter bar */
-  .la-filter-bar {
-    background: #fff; border: 1px solid #E5E7EB; border-radius: 12px;
-    padding: 8px;
-    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
-  }
-  .la-status-chip {
-    display: inline-flex; align-items: center; gap: 6px;
-    padding: 6px 11px; border-radius: 999px;
-    font-size: 0.72rem; font-weight: 700;
-    background: transparent; color: #4B5563;
-    border: 1px solid transparent;
-    text-decoration: none; cursor: pointer; transition: all 0.12s;
-  }
-  .la-status-chip:hover { background: #F3F4F6; }
-  .la-status-chip.active { background: #0F172A; color: #fff; }
-  .la-status-chip .n {
-    background: rgba(0,0,0,0.06); color: inherit;
-    font-size: 0.62rem; font-weight: 800; padding: 1px 6px; border-radius: 999px;
-    min-width: 18px; text-align: center;
-  }
-  .la-status-chip.active .n { background: rgba(255,255,255,0.18); }
-  .la-status-chip .dot { width: 6px; height: 6px; border-radius: 999px; }
-
-  .la-search-input {
-    width: 100%;
-    background: #fff; color: #0F172A;
-    border: 1px solid #D1D5DB; border-radius: 8px;
-    padding: 7px 12px 7px 32px;
-    font-size: 0.82rem;
-    color-scheme: light;
-  }
-  .la-search-input:focus { outline: none; border-color: #2B7FFF; box-shadow: 0 0 0 3px rgba(43,127,255,0.18); }
-
-  /* Section heading */
-  .la-section-head { display: flex; align-items: center; justify-content: space-between; margin: 18px 2px 8px; }
-  .la-section-title-wrap { display: flex; align-items: center; gap: 10px; }
-  .la-section-icon {
-    width: 26px; height: 26px; border-radius: 8px;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-  }
-  .la-section-icon.now   { background: #FEE2E2; color: #DC2626; }
-  .la-section-icon.month { background: #FEF3C7; color: #B45309; }
-  .la-section-icon.later { background: #DBEAFE; color: #1D4ED8; }
-  .la-section-icon.done  { background: #F3F4F6; color: #6B7280; }
-  .la-section-title { font-size: 0.88rem; font-weight: 800; color: #111827; letter-spacing: -0.005em; }
-  .la-section-sub { font-size: 0.7rem; color: #9CA3AF; font-weight: 500; margin-top: 1px; }
-  .la-section-count {
-    font-size: 0.65rem; font-weight: 800; color: #4B5563;
-    background: #F3F4F6; padding: 3px 9px; border-radius: 999px;
-  }
-
-  /* Cards */
-  .la-card { background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; overflow: hidden; }
-  .la-row {
-    display: flex; align-items: flex-start; gap: 12px;
-    padding: 14px 16px;
-    border-top: 1px solid #F3F4F6;
-    transition: background 0.12s;
-  }
-  .la-row:first-child { border-top: none; }
-  .la-row:hover { background: #FAFBFD; }
-  .la-avatar {
-    width: 36px; height: 36px; flex-shrink: 0; border-radius: 999px;
-    background: linear-gradient(135deg, #DBEAFE, #EFF6FF);
-    color: #1D4ED8;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 800; font-size: 0.78rem;
-    border: 1px solid rgba(29,78,216,0.1);
-  }
-  .la-meta { flex: 1; min-width: 0; }
-  .la-name-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-  .la-name { font-size: 0.92rem; font-weight: 700; color: #0F172A; line-height: 1.2; }
-  .la-emp { font-size: 0.7rem; color: #9CA3AF; margin-top: 2px; font-family: ui-monospace, SFMono-Regular, monospace; letter-spacing: 0.02em; }
-  .la-when { font-size: 0.85rem; color: #1F2937; font-weight: 600; margin-top: 6px; display: flex; align-items: center; gap: 5px; }
-  .la-when svg { width: 13px; height: 13px; color: #9CA3AF; }
-  .la-reason {
-    font-size: 0.78rem; color: #4B5563; margin-top: 6px; line-height: 1.4;
-    background: #F9FAFB; border-left: 3px solid #E5E7EB;
-    padding: 6px 10px; border-radius: 0 6px 6px 0;
-    max-width: 540px;
-  }
-  .la-pills { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; align-items: center; }
-  .la-pill {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 2px 8px; border-radius: 999px;
-    font-size: 0.62rem; font-weight: 700;
-    text-transform: uppercase; letter-spacing: 0.04em;
-  }
-  .la-meta-text { font-size: 0.7rem; color: #9CA3AF; }
-
-  /* Action buttons */
-  .la-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
-  .la-btn {
-    display: inline-flex; align-items: center; gap: 5px;
-    padding: 7px 12px;
-    font-size: 0.78rem; font-weight: 700;
-    border-radius: 8px;
-    transition: background 0.12s;
-    cursor: pointer;
-    border: none;
-    white-space: nowrap;
-  }
-  .la-btn.la-approve { background: #10B981; color: #fff; }
-  .la-btn.la-approve:hover { background: #059669; }
-  .la-btn.la-reject { background: #FEE2E2; color: #B91C1C; }
-  .la-btn.la-reject:hover { background: #FECACA; }
-
-  /* Empty states — compact */
-  .la-empty {
-    padding: 20px 16px;
-    background: #fff;
-    border: 1px dashed #E5E7EB;
-    border-radius: 12px;
-    text-align: center;
-    color: #9CA3AF;
-    font-size: 0.82rem;
-    font-style: italic;
-  }
-  .la-empty-big {
-    padding: 36px 20px;
-    text-align: center;
-    background: #fff;
-    border: 1px solid #E5E7EB;
-    border-radius: 14px;
-  }
-  .la-empty-big .ic {
-    width: 52px; height: 52px; border-radius: 999px;
-    background: #D1FAE5; color: #059669;
-    display: flex; align-items: center; justify-content: center;
-    margin: 0 auto 10px;
-  }
-  .la-empty-big .ic svg { width: 26px; height: 26px; }
-  .la-empty-big h3 { font-size: 1rem; font-weight: 700; color: #1F2937; }
-  .la-empty-big p { font-size: 0.82rem; color: #6B7280; margin-top: 4px; }
-
-  /* Dark mode — the la- family is styled light above (white cards, slate
-     text) while the global dark-glass remaps turn the grays white, which
-     left white text on white cards. Key off data-theme (dark-glass is on
-     the body in BOTH modes, so it can't be the switch). */
-  :root[data-theme="dark"] .la-stat { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.09); }
-  :root[data-theme="dark"] .la-stat:hover { border-color: rgba(255,255,255,0.18); box-shadow: 0 4px 12px rgba(0,0,0,0.4); }
-  :root[data-theme="dark"] .la-stat-num { color: rgba(255,255,255,0.92); }
-  :root[data-theme="dark"] .la-stat-lbl { color: rgba(255,255,255,0.5); }
-  :root[data-theme="dark"] .la-stat-ic.urgent { background: rgba(239,68,68,0.16); color: #F87171; }
-  :root[data-theme="dark"] .la-stat-ic.month  { background: rgba(251,191,36,0.16); color: #FBBF24; }
-  :root[data-theme="dark"] .la-stat-ic.later  { background: rgba(59,130,246,0.16); color: #93C5FD; }
-  :root[data-theme="dark"] .la-stat-ic.done   { background: rgba(16,185,129,0.16); color: #34D399; }
-  :root[data-theme="dark"] .la-card { background: rgba(255,255,255,0.05); border-color: rgba(255,255,255,0.09); }
-  :root[data-theme="dark"] .la-row { border-top-color: rgba(255,255,255,0.06); }
-  :root[data-theme="dark"] .la-row:hover { background: rgba(255,255,255,0.04); }
-  :root[data-theme="dark"] .la-name { color: rgba(255,255,255,0.92); }
-  :root[data-theme="dark"] .la-when { color: rgba(255,255,255,0.85); }
-  :root[data-theme="dark"] .la-reason { color: rgba(255,255,255,0.65); background: rgba(255,255,255,0.04); border-left-color: rgba(255,255,255,0.14); }
-  :root[data-theme="dark"] .la-avatar { background: rgba(59,130,246,0.18); color: #93C5FD; border-color: rgba(59,130,246,0.25); }
-  :root[data-theme="dark"] .la-btn.la-reject { background: rgba(239,68,68,0.14); color: #FCA5A5; }
-  :root[data-theme="dark"] .la-btn.la-reject:hover { background: rgba(239,68,68,0.22); }
-  :root[data-theme="dark"] .la-empty,
-  :root[data-theme="dark"] .la-empty-big { background: rgba(255,255,255,0.04); border-color: rgba(255,255,255,0.10); }
-  :root[data-theme="dark"] .la-empty-big h3 { color: rgba(255,255,255,0.9); }
-  :root[data-theme="dark"] .la-empty-big .ic { background: rgba(16,185,129,0.16); color: #34D399; }
-</style>
-
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-4">
-
+<div class="space-y-5">
   <%- include('../partials/page-header', { rail: true, wrapperClass: '',
     eyebrow: 'Operations',
     title: 'Leave Approvals',
-    subtitle: 'Approve or decline worker leave requests, organised by urgency.'
+    subtitle: 'One card per request · decide a whole block at once'
   }) %>
 
-  <!-- ── Top stat tiles ── -->
-  <div class="la-stats">
-    <a href="/leave-approvals?status=pending#urgent" class="la-stat">
-      <div class="la-stat-ic urgent">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-      </div>
-      <div>
-        <p class="la-stat-num"><%= counts.actionNow %></p>
-        <p class="la-stat-lbl">Action now</p>
-      </div>
+  <!-- Stat tiles double as status filters. -->
+  <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+    <a href="<%= buildUrl({ status: 'pending', from: '', to: '' }) %>" class="stat-card <%= filters.status === 'pending' ? 'ring-2 ring-amber-500' : '' %>">
+      <p class="stat-card-label">Needs decision</p>
+      <p class="stat-card-value <%= counts.pending > 0 ? 'is-warn' : 'is-muted' %>"><%= counts.pending %></p>
     </a>
-    <a href="/leave-approvals?status=pending" class="la-stat">
-      <div class="la-stat-ic month">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      </div>
-      <div>
-        <p class="la-stat-num"><%= counts.pending %></p>
-        <p class="la-stat-lbl">Pending</p>
-      </div>
+    <a href="<%= buildUrl({ status: 'pending', from: '', to: '' }) %>" class="stat-card accent-amber">
+      <p class="stat-card-label">Starting ≤ 7 days</p>
+      <p class="stat-card-value <%= counts.actionNow > 0 ? 'is-critical' : 'is-muted' %>"><%= counts.actionNow %></p>
     </a>
-    <a href="/leave-approvals?status=approved" class="la-stat">
-      <div class="la-stat-ic done">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-      </div>
-      <div>
-        <p class="la-stat-num"><%= counts.approved %></p>
-        <p class="la-stat-lbl">Approved</p>
-      </div>
+    <a href="<%= buildUrl({ status: 'approved' }) %>" class="stat-card <%= filters.status === 'approved' ? 'ring-2 ring-emerald-500' : '' %>">
+      <p class="stat-card-label">Approved</p>
+      <p class="stat-card-value <%= counts.approved > 0 ? 'is-good' : 'is-muted' %>"><%= counts.approved %></p>
     </a>
-    <a href="/leave-approvals?status=rejected" class="la-stat">
-      <div class="la-stat-ic later" style="background:#FEE2E2;color:#DC2626;">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-      </div>
-      <div>
-        <p class="la-stat-num"><%= counts.rejected %></p>
-        <p class="la-stat-lbl">Rejected</p>
-      </div>
+    <a href="<%= buildUrl({ status: 'rejected' }) %>" class="stat-card <%= filters.status === 'rejected' ? 'ring-2 ring-red-500' : '' %>">
+      <p class="stat-card-label">Rejected</p>
+      <p class="stat-card-value is-muted"><%= counts.rejected %></p>
+    </a>
+    <a href="<%= buildUrl({ status: 'cancelled' }) %>" class="stat-card <%= filters.status === 'cancelled' ? 'ring-2 ring-gray-400' : '' %>">
+      <p class="stat-card-label">Cancelled</p>
+      <p class="stat-card-value is-muted"><%= counts.cancelled %></p>
     </a>
   </div>
 
-  <!-- ── Filter bar ── -->
-  <div class="la-filter-bar">
-    <form method="GET" class="flex flex-wrap items-center gap-1">
-      <% [
-        ['pending',  'Pending',  counts.pending,  '#F59E0B'],
-        ['approved', 'Approved', counts.approved, '#10B981'],
-        ['rejected', 'Rejected', counts.rejected, '#EF4444'],
-        ['all',      'All',      counts.pending + counts.approved + counts.rejected, '#6B7280'],
-      ].forEach(function (p) { %>
-        <button type="submit" name="status" value="<%= p[0] %>" class="la-status-chip <%= status === p[0] ? 'active' : '' %>">
-          <span class="dot" style="background:<%= p[3] %>;"></span>
-          <%= p[1] %>
-          <span class="n"><%= p[2] %></span>
-        </button>
+  <!-- Status tabs + list/calendar toggle -->
+  <div class="flex items-center justify-between gap-3 flex-wrap">
+    <div class="flex flex-wrap items-center gap-2">
+      <%
+        const tabs = [
+          { key: 'pending',   label: 'Pending',   count: counts.pending,   dot: 'bg-amber-500',   active: 'bg-amber-50 text-amber-800 ring-1 ring-amber-300 shadow-sm' },
+          { key: 'approved',  label: 'Approved',  count: counts.approved,  dot: 'bg-emerald-500', active: 'bg-emerald-50 text-emerald-800 ring-1 ring-emerald-300 shadow-sm' },
+          { key: 'rejected',  label: 'Rejected',  count: counts.rejected,  dot: 'bg-red-500',     active: 'bg-red-50 text-red-800 ring-1 ring-red-300 shadow-sm' },
+          { key: 'cancelled', label: 'Cancelled', count: counts.cancelled, dot: 'bg-gray-400',    active: 'bg-gray-100 text-gray-800 ring-1 ring-gray-300 shadow-sm' },
+          { key: 'all',       label: 'All',       count: counts.all,       dot: 'bg-brand-500',   active: 'bg-white text-gray-900 ring-1 ring-gray-300 shadow-sm' },
+        ];
+      %>
+      <% tabs.forEach(function (t) { const isOn = filters.status === t.key; %>
+        <a href="<%= buildUrl({ status: t.key }) %>" class="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-sm font-semibold transition <%= isOn ? t.active : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-200' %>">
+          <span class="w-2 h-2 rounded-full <%= t.dot %>"></span>
+          <%= t.label %>
+          <span class="inline-flex items-center justify-center px-1.5 min-w-[1.5rem] h-5 rounded-full text-[11px] font-bold <%= isOn ? 'bg-white/70 text-gray-900' : 'bg-gray-200 text-gray-600' %>"><%= t.count %></span>
+        </a>
       <% }) %>
-      <% if (search) { %><input type="hidden" name="q" value="<%= search %>"><% } %>
-      <% if (crewId) { %><input type="hidden" name="crew_member_id" value="<%= crewId %>"><% } %>
-    </form>
-
-    <form method="GET" class="ml-auto flex-1 min-w-[200px] max-w-[320px]" role="search">
-      <input type="hidden" name="status" value="<%= status %>">
-      <% if (crewId) { %><input type="hidden" name="crew_member_id" value="<%= crewId %>"><% } %>
-      <label class="relative block">
-        <span class="sr-only">Search</span>
-        <svg class="w-3.5 h-3.5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35M11 19a8 8 0 100-16 8 8 0 000 16z"/></svg>
-        <input type="text" name="q" value="<%= search %>" placeholder="Search name, code, reason…" class="la-search-input">
-      </label>
-    </form>
-
-    <% if (search || crewId || status !== 'pending') { %>
-      <a href="/leave-approvals" class="text-xs text-gray-500 hover:text-gray-700 px-2">Clear</a>
-    <% } %>
+    </div>
+    <div class="flex rounded-lg overflow-hidden border border-gray-200 text-sm flex-shrink-0">
+      <a href="<%= buildUrl({ view: 'list' }) %>" class="px-3 py-1.5 font-medium transition <%= filters.view === 'list' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50' %>">List</a>
+      <a href="<%= buildUrl({ view: 'calendar' }) %>" class="px-3 py-1.5 font-medium transition border-l border-gray-200 <%= filters.view === 'calendar' ? 'bg-brand-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50' %>">Calendar</a>
+    </div>
   </div>
 
-  <!-- ── PENDING — bucketed by urgency ── -->
-  <% if (status === 'pending' || status === 'all') { %>
-
-    <% if (counts.pending === 0) { %>
-      <div class="la-empty-big">
-        <div class="ic"><svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg></div>
-        <h3>All clear</h3>
-        <p>No pending leave requests. New ones will appear here.</p>
+  <!-- Filters -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-3">
+    <form method="GET" action="/leave-approvals" class="flex flex-col sm:flex-row sm:flex-wrap sm:items-end gap-2 sm:gap-3">
+      <input type="hidden" name="status" value="<%= filters.status %>">
+      <input type="hidden" name="view" value="<%= filters.view %>">
+      <div class="flex-1 min-w-0 sm:min-w-[180px]">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Search</label>
+        <input type="text" name="q" value="<%= filters.q %>" placeholder="Name, employee ID or reason"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
-    <% } else { %>
-
-      <!-- Action now -->
-      <div id="urgent">
-        <div class="la-section-head">
-          <div class="la-section-title-wrap">
-            <span class="la-section-icon now"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg></span>
-            <div>
-              <p class="la-section-title">Action now</p>
-              <p class="la-section-sub">Starting in the next 7 days or already in progress</p>
-            </div>
-          </div>
-          <span class="la-section-count"><%= buckets.actionNow.length %></span>
-        </div>
-        <% if (buckets.actionNow.length === 0) { %>
-          <div class="la-empty">Nothing urgent — caught up here.</div>
-        <% } else { %>
-          <%- include('_pending_card', { rows: buckets.actionNow, csrfToken: typeof csrfToken !== 'undefined' ? csrfToken : '' }) %>
-        <% } %>
+      <div class="sm:min-w-[160px]">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Worker</label>
+        <select name="crew_member_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">All workers</option>
+          <% crew.forEach(function (c) { %>
+            <option value="<%= c.id %>" <%= String(filters.crew_member_id) === String(c.id) ? 'selected' : '' %>><%= c.full_name %></option>
+          <% }) %>
+        </select>
       </div>
+      <div class="sm:min-w-[130px]">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Type</label>
+        <select name="leave_type" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">All types</option>
+          <% ['annual','sick','personal','unpaid','other'].forEach(function (t) { %>
+            <option value="<%= t %>" <%= filters.leave_type === t ? 'selected' : '' %>><%= t.charAt(0).toUpperCase() + t.slice(1) %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">From</label>
+        <input type="date" name="from" value="<%= filters.from %>" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">To</label>
+        <input type="date" name="to" value="<%= filters.to %>" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="flex gap-2">
+        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Apply</button>
+        <a href="/leave-approvals" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Clear</a>
+      </div>
+    </form>
+  </div>
 
-      <!-- This month -->
-      <% if (buckets.thisMonth.length > 0) { %>
-        <div>
-          <div class="la-section-head">
-            <div class="la-section-title-wrap">
-              <span class="la-section-icon month"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg></span>
-              <div>
-                <p class="la-section-title">This month</p>
-                <p class="la-section-sub">Pending requests starting before month-end</p>
-              </div>
-            </div>
-            <span class="la-section-count"><%= buckets.thisMonth.length %></span>
-          </div>
-          <%- include('_pending_card', { rows: buckets.thisMonth, csrfToken: typeof csrfToken !== 'undefined' ? csrfToken : '' }) %>
-        </div>
-      <% } %>
+<% if (filters.view === 'calendar' && calendar) { %>
+  <!-- ── Calendar ─────────────────────────────────────────────────── -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+    <div class="panel-header">
+      <h2 class="panel-header-title"><%= calendar.label %></h2>
+      <div class="ml-auto flex items-center gap-1">
+        <a href="<%= buildUrl({ view: 'calendar', month: calendar.prev }) %>" class="p-1.5 rounded hover:bg-gray-100 text-gray-500 transition" title="Previous month" aria-label="Previous month">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/></svg>
+        </a>
+        <a href="<%= buildUrl({ view: 'calendar', month: '' }) %>" class="px-2 py-1 rounded text-xs font-semibold text-gray-500 hover:bg-gray-100 transition">Today</a>
+        <a href="<%= buildUrl({ view: 'calendar', month: calendar.next }) %>" class="p-1.5 rounded hover:bg-gray-100 text-gray-500 transition" title="Next month" aria-label="Next month">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/></svg>
+        </a>
+      </div>
+    </div>
+    <div class="p-3 overflow-x-auto">
+      <table class="w-full table-fixed" style="min-width:720px;">
+        <thead>
+          <tr>
+            <% ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].forEach(function (d) { %>
+              <th class="w-[14.28%] px-2 py-1.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest"><%= d %></th>
+            <% }) %>
+          </tr>
+        </thead>
+        <tbody>
+          <% calendar.weeks.forEach(function (week) { %>
+            <tr>
+              <% week.forEach(function (cell) { %>
+                <td class="p-1 align-top h-24 border border-gray-100">
+                  <% if (cell) { %>
+                    <div class="h-full rounded-lg p-1.5 <%= cell.isToday ? 'bg-brand-50 ring-1 ring-brand-300' : '' %>">
+                      <div class="flex items-center justify-between mb-1">
+                        <span class="text-[11px] font-semibold <%= cell.isToday ? 'text-brand-700' : 'text-gray-500' %>"><%= cell.day %></span>
+                        <% if (cell.people.length) { %>
+                          <span class="text-[10px] font-bold text-gray-400"><%= cell.people.length %> off</span>
+                        <% } %>
+                      </div>
+                      <% cell.people.slice(0, 3).forEach(function (p) { %>
+                        <div class="truncate text-[10px] px-1 py-0.5 mb-0.5 rounded <%= p.status === 'approved' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700 ring-1 ring-amber-200' %>"
+                             title="<%= p.crew_name || 'Unknown' %> · <%= p.leave_type %> · <%= p.status %>">
+                          <%= p.crew_name || 'Unknown' %>
+                        </div>
+                      <% }) %>
+                      <% if (cell.people.length > 3) { %>
+                        <div class="text-[10px] text-gray-400 px-1">+<%= cell.people.length - 3 %> more</div>
+                      <% } %>
+                    </div>
+                  <% } %>
+                </td>
+              <% }) %>
+            </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <p class="mt-2 text-[11px] text-gray-400 flex items-center gap-3">
+        <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-emerald-100 border border-emerald-300"></span> Approved</span>
+        <span class="inline-flex items-center gap-1"><span class="w-2.5 h-2.5 rounded bg-amber-50 border border-amber-300"></span> Pending</span>
+      </p>
+    </div>
+  </div>
+<% } else { %>
 
-      <!-- Later -->
-      <% if (buckets.later.length > 0) { %>
-        <div>
-          <div class="la-section-head">
-            <div class="la-section-title-wrap">
-              <span class="la-section-icon later"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></span>
-              <div>
-                <p class="la-section-title">Later</p>
-                <p class="la-section-sub">Further out — review when you have time</p>
-              </div>
-            </div>
-            <span class="la-section-count"><%= buckets.later.length %></span>
-          </div>
-          <%- include('_pending_card', { rows: buckets.later, csrfToken: typeof csrfToken !== 'undefined' ? csrfToken : '' }) %>
+  <!-- ── Pending queue ────────────────────────────────────────────── -->
+  <% if (filters.status === 'pending' || filters.status === 'all') { %>
+    <%
+      const pendingSections = [
+        { key: 'actionNow', title: 'Action now', hint: 'Starts within 7 days', rows: buckets.actionNow, critical: true },
+        { key: 'thisMonth', title: 'This month', hint: '',                     rows: buckets.thisMonth, critical: false },
+        { key: 'later',     title: 'Later',      hint: '',                     rows: buckets.later,     critical: false },
+      ];
+      const totalPending = buckets.actionNow.length + buckets.thisMonth.length + buckets.later.length;
+    %>
+
+    <% if (totalPending === 0) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-8 text-center">
+        <div class="w-10 h-10 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-3">
+          <svg class="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
         </div>
-      <% } %>
+        <h3 class="text-gray-900 font-semibold text-base mb-1">Nothing waiting on you</h3>
+        <p class="text-gray-500 text-sm">Every leave request has been decided.</p>
+      </div>
     <% } %>
+
+    <form method="POST" action="/leave-approvals/bulk" id="leaveBulkForm">
+      <%- include('../partials/csrf') %>
+      <input type="hidden" name="action" id="leaveBulkAction" value="approve">
+
+      <% pendingSections.forEach(function (sec) { %>
+        <% if (sec.rows.length) { %>
+          <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-4 <%= sec.critical ? 'chevron-rail-left is-warn' : '' %>">
+            <div class="panel-header">
+              <h2 class="panel-header-title"><%= sec.title %></h2>
+              <span class="panel-header-count <%= sec.critical ? 'is-critical' : '' %>"><%= sec.rows.length %></span>
+              <% if (sec.hint) { %><span class="text-[11px] text-gray-400"><%= sec.hint %></span><% } %>
+            </div>
+            <% sec.rows.forEach(function (r) { %>
+              <div class="px-4 py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition flex items-start gap-3">
+                <input type="checkbox" name="ids" value="<%= r.group_id %>" class="leave-chk mt-1.5 rounded border-gray-300 text-brand-600 focus:ring-brand-500 flex-shrink-0">
+                <div class="w-9 h-9 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center text-xs font-bold flex-shrink-0"><%= initials(r.crew_name) %></div>
+
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <p class="text-sm font-semibold text-gray-900"><%= r.crew_name || 'Unknown worker' %></p>
+                    <% if (!r.crew_name) { %><span class="text-[10px] font-bold text-red-600 uppercase">orphaned record</span><% } %>
+                    <span class="text-[11px] text-gray-400"><%= r.crew_emp_id || '—' %><% if (r.crew_phone) { %> · <%= r.crew_phone %><% } %></span>
+                  </div>
+
+                  <p class="text-sm text-gray-700 mt-0.5">
+                    <span class="font-medium"><%= span(r) %></span>
+                    <span class="text-gray-400">· <%= r.day_count %> day<%= r.day_count === 1 ? '' : 's' %><% if (r.days && r.days !== r.day_count) { %> (<%= r.days %> counted)<% } %></span>
+                  </p>
+
+                  <div class="flex items-center gap-1.5 mt-1 flex-wrap">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 <%= TYPE_PILL[r.leave_type] || TYPE_PILL.other %>"><%= (r.leave_type || 'leave').replace('_',' ') %></span>
+                    <% if (r.shift_period && r.shift_period !== 'full_day') { %>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600/20"><%= r.shift_period.replace('_',' ') %></span>
+                    <% } %>
+                    <span class="text-[11px] text-gray-400">submitted <%= formatDateTime(r.created_at) %></span>
+                  </div>
+
+                  <% if (r.reason) { %><p class="text-[12px] text-gray-500 mt-1 italic">“<%= r.reason %>”</p><% } %>
+
+                  <%# Decision context — the office should not have to approve blind. %>
+                  <% if (r.clash_days > 0 || r.others_off > 0) { %>
+                    <div class="flex items-center gap-3 mt-1.5 flex-wrap">
+                      <% if (r.clash_days > 0) { %>
+                        <span class="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 ring-1 ring-amber-600/20 rounded-full px-2 py-0.5">
+                          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                          Already rostered on <%= r.clash_days %> shift<%= r.clash_days === 1 ? '' : 's' %> in this range
+                        </span>
+                      <% } %>
+                      <% if (r.others_off > 0) { %>
+                        <span class="text-[11px] text-gray-500"><%= r.others_off %> other<%= r.others_off === 1 ? '' : 's' %> already off these dates</span>
+                      <% } %>
+                    </div>
+                  <% } %>
+                </div>
+
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  <button type="submit" formaction="/leave-approvals/<%= encodeURIComponent(r.group_id) %>/approve" formmethod="POST"
+                    class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg transition">
+                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                    Approve
+                  </button>
+                  <button type="button"
+                    onclick="leaveOpenReject('<%= encodeURIComponent(r.group_id) %>', <%= JSON.stringify(r.crew_name || 'this worker') %>, <%= JSON.stringify(span(r)) %>)"
+                    class="px-3 py-1.5 text-red-700 bg-red-50 hover:bg-red-100 ring-1 ring-red-200 text-xs font-semibold rounded-lg transition">
+                    Reject
+                  </button>
+                </div>
+              </div>
+            <% }) %>
+          </div>
+        <% } %>
+      <% }) %>
+    </form>
   <% } %>
 
-  <!-- ── DECIDED list ── -->
-  <% if (status === 'approved' || status === 'rejected' || (status === 'all' && buckets.decided.length > 0)) { %>
-    <div>
-      <div class="la-section-head">
-        <div class="la-section-title-wrap">
-          <span class="la-section-icon done"><svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/></svg></span>
-          <div>
-            <p class="la-section-title"><%= status === 'approved' ? 'Approved' : status === 'rejected' ? 'Rejected' : 'Decided' %></p>
-            <p class="la-section-sub">Use Cancel on an approved row if the worker is needed back on shift</p>
-          </div>
-        </div>
-        <span class="la-section-count"><%= buckets.decided.length %></span>
+  <!-- ── Decided register ─────────────────────────────────────────── -->
+  <% if (filters.status !== 'pending') { %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="panel-header">
+        <h2 class="panel-header-title">Decided</h2>
+        <span class="panel-header-count"><%= buckets.decided.length %></span>
       </div>
       <% if (buckets.decided.length === 0) { %>
-        <div class="la-empty">Nothing here yet.</div>
+        <div class="py-8 text-center text-gray-400">
+          <p class="text-sm">No decided requests match these filters.</p>
+        </div>
       <% } else { %>
-        <div class="la-card">
-          <% buckets.decided.forEach(function (l) { %>
-            <div class="la-row">
-              <div class="la-avatar"><%= (l.crew_name || '?').split(' ').map(function (p) { return p[0] || ''; }).join('').slice(0, 2).toUpperCase() %></div>
-              <div class="la-meta">
-                <div class="la-name-row">
-                  <span class="la-name"><%= l.crew_name %></span>
-                  <% if (l.portal_role) { %><span class="la-pill <%= rolePill(l.portal_role) %>"><%= roleLabel(l.portal_role) %></span><% } %>
-                </div>
-                <p class="la-emp"><%= l.crew_emp_id || '—' %></p>
-                <p class="la-when">
-                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                  <%= fmtRange(l.start_date, l.end_date) %><% if (l.total_days) { %><span class="text-gray-400 font-normal">&nbsp;· <%= l.total_days %> day<%= l.total_days === 1 ? '' : 's' %></span><% } %>
-                </p>
-                <% if (l.reason) { %><p class="la-reason"><%= l.reason %></p><% } %>
-                <div class="la-pills">
-                  <span class="la-pill ring-1 <%= leaveTypePill(l.leave_type) %>"><%= (l.leave_type || 'leave').replace('_',' ') %></span>
-                  <% if (l.status === 'approved') { %>
-                    <span class="la-pill ring-1 bg-emerald-50 text-emerald-700 ring-emerald-600/20">✓ Approved</span>
-                  <% } else if (l.status === 'rejected') { %>
-                    <span class="la-pill ring-1 bg-red-50 text-red-700 ring-red-600/20">✕ Rejected</span>
-                  <% } else if (l.status === 'cancelled') { %>
-                    <span class="la-pill ring-1 bg-gray-100 text-gray-600 ring-gray-600/15">⊘ Cancelled</span>
-                  <% } %>
-                  <% if (l.approver_name) { %>
-                    <span class="la-meta-text">by <%= l.approver_name %> · <%= daysAgo(l.approved_at) %></span>
-                  <% } %>
-                </div>
-              </div>
-              <% if (l.status === 'approved') { %>
-                <!-- Approved leave can still be retracted from this row —
-                     useful when ops needs the worker back (illness recovery,
-                     shift came up, mistake) without making them resubmit. -->
-                <div class="la-actions">
-                  <form method="POST" action="/leave-approvals/<%= l.id %>/cancel"
-                        onsubmit="return confirm('Cancel <%= (l.crew_name || 'this worker') %>’s approved leave on <%= fmtRange(l.start_date, l.end_date) %>? They’ll be free to be rostered again.');">
-                    <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-                    <button type="submit" class="la-btn la-reject" aria-label="Cancel <%= l.crew_name %>'s approved leave">
-                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.4"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
-                      Cancel
-                    </button>
-                  </form>
-                </div>
-              <% } %>
-            </div>
-          <% }) %>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="border-b border-gray-200">
+                <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Worker</th>
+                <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Dates</th>
+                <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:table-cell">Type</th>
+                <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+                <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Decided by</th>
+                <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <% buckets.decided.forEach(function (r) { const sp = STATUS_PILL[r.status] || STATUS_PILL.cancelled; %>
+                <tr class="hover:bg-gray-50">
+                  <td class="px-3 py-2.5">
+                    <p class="font-medium text-gray-900"><%= r.crew_name || 'Unknown worker' %></p>
+                    <p class="text-[11px] text-gray-400"><%= r.crew_emp_id || '—' %></p>
+                  </td>
+                  <td class="px-3 py-2.5 text-gray-700">
+                    <%= span(r) %>
+                    <span class="text-gray-400 text-[11px]">· <%= r.day_count %>d</span>
+                  </td>
+                  <td class="px-3 py-2.5 hidden sm:table-cell">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 <%= TYPE_PILL[r.leave_type] || TYPE_PILL.other %>"><%= (r.leave_type || 'leave').replace('_',' ') %></span>
+                  </td>
+                  <td class="px-3 py-2.5">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ring-1 <%= sp.cls %>"><%= sp.label %></span>
+                    <% if (r.decision_note) { %>
+                      <p class="text-[11px] text-gray-500 mt-0.5 italic max-w-[240px] truncate" title="<%= r.decision_note %>"><%= r.decision_note %></p>
+                    <% } %>
+                  </td>
+                  <td class="px-3 py-2.5 text-gray-500 text-[12px] hidden md:table-cell">
+                    <%= r.approver_name || '—' %>
+                    <% if (r.approved_at) { %><span class="text-gray-400">· <%= formatDateTime(r.approved_at) %></span><% } %>
+                  </td>
+                  <td class="px-3 py-2.5 text-right">
+                    <% if (r.status === 'approved') { %>
+                      <form method="POST" action="/leave-approvals/<%= encodeURIComponent(r.group_id) %>/cancel" class="inline" onsubmit="return confirm('Retract this approved leave? The worker can re-submit.');">
+                        <%- include('../partials/csrf') %>
+                        <button type="submit" class="text-[11px] font-semibold text-gray-500 hover:text-red-600 transition">Retract</button>
+                      </form>
+                    <% } %>
+                  </td>
+                </tr>
+              <% }) %>
+            </tbody>
+          </table>
         </div>
       <% } %>
     </div>
   <% } %>
-
+<% } %>
 </div>
+
+<!-- Bulk bar — only appears once pending requests are ticked. -->
+<div id="leaveBulkBar" class="hidden fixed bottom-4 left-1/2 -translate-x-1/2 z-40 bg-gray-900 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-4 text-sm">
+  <span id="leaveBulkCount" class="font-semibold">0 selected</span>
+  <button type="button" onclick="leaveBulkSubmit('approve')" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 rounded-lg font-medium transition-colors">Approve</button>
+  <button type="button" onclick="leaveBulkSubmit('reject')" class="px-4 py-1.5 bg-red-600 hover:bg-red-500 rounded-lg font-medium transition-colors">Reject</button>
+  <button type="button" onclick="leaveClearSelection()" class="text-gray-400 hover:text-white transition-colors" aria-label="Clear selection">
+    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+  </button>
+</div>
+
+<!-- Reject modal — the reason is required and travels to the worker. -->
+<div id="leaveRejectModal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+  <div class="fixed inset-0 bg-black/50" onclick="leaveCloseReject()"></div>
+  <div class="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6 z-10">
+    <div class="flex items-center gap-3 mb-4">
+      <div class="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+        <svg class="w-5 h-5 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+      </div>
+      <div class="min-w-0">
+        <h3 class="text-lg font-bold text-gray-900">Reject leave</h3>
+        <p class="text-sm text-gray-500 truncate" id="leaveRejectWho"></p>
+      </div>
+    </div>
+    <form method="POST" id="leaveRejectForm" onsubmit="if(!this.decision_note.value.trim()){alert('Give a reason — the worker sees it.');return false;}">
+      <%- include('../partials/csrf') %>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Reason <span class="text-red-500">*</span></label>
+      <textarea name="decision_note" rows="3" required placeholder="e.g. Two others already off that week — can you move it?"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-red-500 focus:border-transparent resize-none"></textarea>
+      <p class="text-[11px] text-gray-400 mt-1">Sent to the worker with the decision.</p>
+      <div class="flex items-center gap-3 justify-end mt-4">
+        <button type="button" onclick="leaveCloseReject()" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-sm font-medium rounded-lg transition">Cancel</button>
+        <button type="submit" class="px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition">Reject</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  var form  = document.getElementById('leaveBulkForm');
+  var bar   = document.getElementById('leaveBulkBar');
+  var count = document.getElementById('leaveBulkCount');
+
+  function checks() { return Array.prototype.slice.call(document.querySelectorAll('.leave-chk')); }
+  function selected() { return checks().filter(function (c) { return c.checked; }); }
+  function refresh() {
+    var n = selected().length;
+    if (count) count.textContent = n + ' selected';
+    if (bar) bar.classList.toggle('hidden', n === 0);
+  }
+  document.addEventListener('change', function (e) {
+    if (e.target && e.target.classList && e.target.classList.contains('leave-chk')) refresh();
+  });
+
+  window.leaveClearSelection = function () {
+    checks().forEach(function (c) { c.checked = false; });
+    refresh();
+  };
+  window.leaveBulkSubmit = function (action) {
+    if (!form || selected().length === 0) return;
+    if (action === 'reject' && !confirm('Reject ' + selected().length + ' request(s)? Workers will be notified.')) return;
+    document.getElementById('leaveBulkAction').value = action;
+    form.submit();
+  };
+
+  // Reject modal — points the shared form at the request being rejected.
+  window.leaveOpenReject = function (groupId, who, dates) {
+    var m = document.getElementById('leaveRejectModal');
+    document.getElementById('leaveRejectForm').action = '/leave-approvals/' + groupId + '/reject';
+    document.getElementById('leaveRejectWho').textContent = who + ' · ' + dates;
+    m.classList.remove('hidden');
+    setTimeout(function () { m.querySelector('textarea').focus(); }, 50);
+  };
+  window.leaveCloseReject = function () {
+    document.getElementById('leaveRejectModal').classList.add('hidden');
+  };
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') window.leaveCloseReject();
+  });
+
+  refresh();
+})();
+</script>

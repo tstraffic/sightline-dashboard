@@ -313,6 +313,50 @@ function buildSmartCards(db, worker, member, employee) {
     });
   }
 
+  // Leave DECISION card. The pending card above used to just vanish once
+  // the office decided, so a worker never learned the outcome in the app.
+  // Grouped by request_group_id (migration 343) so a Mon-Fri block is one
+  // card, and the rejection reason (employee_leave.notes) is carried
+  // through — a bare "declined" with no reason is worse than useless.
+  try {
+    const decided = db.prepare(`
+      SELECT request_group_id AS gid, status,
+             MIN(start_date) AS start_date, MAX(end_date) AS end_date,
+             COUNT(*) AS day_count, MAX(notes) AS decision_note,
+             MAX(approved_at) AS approved_at
+      FROM employee_leave
+      WHERE crew_member_id = ?
+        AND status IN ('approved','rejected')
+        AND approved_at IS NOT NULL
+        AND approved_at >= datetime('now', '-14 days')
+      GROUP BY request_group_id, status
+      ORDER BY MAX(approved_at) DESC
+      LIMIT 1
+    `).get(worker.id);
+    if (decided && decided.gid) {
+      const fmt = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-AU', { day: 'numeric', month: 'short' });
+      const when = decided.start_date === decided.end_date
+        ? fmt(decided.start_date)
+        : `${fmt(decided.start_date)} – ${fmt(decided.end_date)} (${decided.day_count} days)`;
+      const ok = decided.status === 'approved';
+      derived.push({
+        card_key: `leave_decision_${decided.gid}`,
+        card_type: ok ? 'leave_approved' : 'leave_rejected',
+        priority: 44,
+        payload: {
+          icon: 'plane',
+          tone: ok ? 'emerald' : 'red',
+          title: ok ? 'Leave approved' : 'Leave not approved',
+          body: ok
+            ? `${when} — you're all set.`
+            : `${when}${decided.decision_note ? ' — ' + decided.decision_note : ' — speak to your supervisor.'}`,
+          cta: 'View',
+          link: '/w/hr/leave',
+        }
+      });
+    }
+  } catch (e) { /* pre-migration-343 deploy: no request_group_id column */ }
+
   // Prune stale "shift_<iso>" cards — the buildSmartCards run for
   // tomorrow's shift writes a card keyed by tomorrow's ISO date. Once
   // that date passes (or the next day's run swaps in a new key), the
@@ -330,6 +374,21 @@ function buildSmartCards(db, worker, member, employee) {
         AND card_type = 'shift_tomorrow'
         AND card_key <= ?
     `).run(worker.id, 'shift_' + today);
+  } catch (e) { /* ignore */ }
+
+  // Prune "leave awaiting approval" cards whose request has since been
+  // decided. Cards are upserted and never expire on their own, so without
+  // this the worker keeps seeing "Leave awaiting approval" sitting right
+  // next to the "Leave approved / not approved" card for the same request.
+  try {
+    db.prepare(`
+      DELETE FROM home_cards
+      WHERE crew_member_id = ?
+        AND card_type = 'leave_pending'
+        AND CAST(REPLACE(card_key, 'leave_', '') AS INTEGER) IN (
+          SELECT id FROM employee_leave WHERE crew_member_id = ? AND status != 'pending'
+        )
+    `).run(worker.id, worker.id);
   } catch (e) { /* ignore */ }
 
   // Upsert derived cards — keep existing dismissals/acks

@@ -541,15 +541,20 @@ router.post('/hr/leave', (req, res) => {
   const employee = db.prepare('SELECT id FROM employees WHERE linked_crew_member_id = ?').get(worker.id);
   const empId = employee ? employee.id : null;
 
+  // One row per date, but all of them stamped with the same
+  // request_group_id so the office sees (and decides) ONE request rather
+  // than one card per day. See migration 343.
+  const groupId = 'lg-' + worker.id + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+
   const insert = db.prepare(`
-    INSERT INTO employee_leave (employee_id, crew_member_id, leave_type, shift_period, start_date, end_date, total_days, reason, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    INSERT INTO employee_leave (employee_id, crew_member_id, leave_type, shift_period, start_date, end_date, total_days, reason, status, request_group_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?)
   `);
   let inserted = 0;
   try {
     const tx = db.transaction(() => {
       for (const d of capped) {
-        const r = insert.run(empId, worker.id, leaveType, shiftPeriod, d, d, shiftPeriod === 'full_day' ? 1 : 0.5, reason);
+        const r = insert.run(empId, worker.id, leaveType, shiftPeriod, d, d, shiftPeriod === 'full_day' ? 1 : 0.5, reason, groupId);
         if (r.changes > 0) inserted++;
       }
     });

@@ -15321,6 +15321,63 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 342 error:', e.message); }
   }
 
+  // Migration 343: give leave a "request" identity.
+  //
+  // employee_leave stores ONE ROW PER CALENDAR DAY — the worker submitter
+  // fans a submission out into one row per date with start_date = end_date.
+  // So a Mon-Fri request arrived in the approvals queue as five separate
+  // approve/reject decisions, the pending badge counted days rather than
+  // requests, and total_days could never read more than 1.
+  //
+  // request_group_id ties a submission's rows back together. Backfill keys
+  // on (crew_member_id, leave_type, shift_period, created_at): every row of
+  // one submission is written inside a single transaction, so those four
+  // match exactly and differ across submissions.
+  //
+  // The notes column is repurposed as the DECISION NOTE (why ops rejected).
+  // It has never been written by any code path — `reason` carries the
+  // worker's side — so there is nothing to migrate.
+  if (!isMigrationApplied.get(343)) {
+    try {
+      const cols = db.prepare("PRAGMA table_info(employee_leave)").all().map(c => c.name);
+      if (!cols.includes('request_group_id')) {
+        db.exec('ALTER TABLE employee_leave ADD COLUMN request_group_id TEXT');
+      }
+      db.exec('CREATE INDEX IF NOT EXISTS idx_employee_leave_group ON employee_leave(request_group_id)');
+
+      let groups = 0, rowsTouched = 0;
+      const tuples = db.prepare(`
+        SELECT crew_member_id, leave_type, shift_period, created_at, COUNT(*) AS n
+        FROM employee_leave
+        WHERE request_group_id IS NULL OR request_group_id = ''
+        GROUP BY crew_member_id, leave_type, shift_period, created_at
+        ORDER BY created_at, crew_member_id
+      `).all();
+      const stamp = db.prepare(`
+        UPDATE employee_leave SET request_group_id = ?
+        WHERE (request_group_id IS NULL OR request_group_id = '')
+          AND IFNULL(crew_member_id, -1) = IFNULL(?, -1)
+          AND IFNULL(leave_type, '') = IFNULL(?, '')
+          AND IFNULL(shift_period, '') = IFNULL(?, '')
+          AND IFNULL(created_at, '') = IFNULL(?, '')
+      `);
+      const tx = db.transaction(() => {
+        tuples.forEach((t, i) => {
+          const gid = 'lg-' + (t.crew_member_id == null ? 'x' : t.crew_member_id) + '-' + i + '-' + String(t.created_at || '').replace(/\D/g, '').slice(0, 14);
+          const r = stamp.run(gid, t.crew_member_id, t.leave_type, t.shift_period, t.created_at);
+          if (r.changes > 0) { groups++; rowsTouched += r.changes; }
+        });
+        // Belt and braces: anything the tuple match missed still groups as a
+        // request of one rather than collapsing every stray row together.
+        db.prepare("UPDATE employee_leave SET request_group_id = 'row-' || id WHERE request_group_id IS NULL OR request_group_id = ''").run();
+      });
+      tx();
+
+      recordMigration.run(343, `employee_leave.request_group_id — ${rowsTouched} row(s) grouped into ${groups} request(s)`);
+      console.log(`Migration 343 applied: ${rowsTouched} leave row(s) grouped into ${groups} request(s)`);
+    } catch (e) { console.error('Migration 343 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

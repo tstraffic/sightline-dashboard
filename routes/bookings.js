@@ -2195,6 +2195,17 @@ router.get('/api/resources', (req, res) => {
     // Bookings on this date and the crew already on them.
     const assignedIds = db.prepare(`SELECT DISTINCT bc.crew_member_id FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id WHERE DATE(b.start_datetime) = ? AND b.status NOT IN ('cancelled','complete','late_cancellation','finalised') AND b.deleted_at IS NULL`).all(date).map(r => r.crew_member_id);
 
+    // Anyone with APPROVED leave covering the viewed day. Surfaced as a
+    // warning chip so a planner doesn't roster someone onto a day the
+    // office already signed off — nothing here blocks the allocation.
+    let onLeaveIds = [];
+    try {
+      onLeaveIds = db.prepare(`
+        SELECT DISTINCT crew_member_id FROM employee_leave
+        WHERE status = 'approved' AND ? BETWEEN start_date AND end_date
+      `).all(date).map(r => r.crew_member_id);
+    } catch (e) { onLeaveIds = []; }
+
     // PEOPLE — driven by the HR roster (employees), not the raw crew_members
     // table. crew_members carries a lot of legacy / orphaned / duplicate rows
     // (225 vs. the roster's 113), so querying it directly showed "149 active"
@@ -2226,6 +2237,10 @@ router.get('/api/resources', (req, res) => {
       if (p.first_aid_expiry && p.first_aid_expiry < today) warnings.push('firstaid_expired');
       if (p.medical_expiry && p.medical_expiry < today) warnings.push('medical_expired');
       if (p.employment_status === 'on_leave') warnings.push('on_leave');
+      // NB: employment_status 'on_leave' is a manually-set HR field. It has
+      // nothing to do with an actual approved leave request, so it will not
+      // catch someone who booked this specific day off — onLeaveIds does.
+      if (onLeaveIds.includes(p.id)) warnings.push('on_approved_leave');
       const assignedToday = assignedIds.includes(p.id);
       return { ...p, warnings, assigned_today: assignedToday };
     });

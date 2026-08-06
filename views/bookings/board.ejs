@@ -4897,6 +4897,9 @@
     if (p.blocked_from_allocation)  return 'Blocked from allocation';
     if (p.employment_status === 'on_leave') return 'On leave';
     if (p.warnings && p.warnings.length) {
+      // Approved leave first — it's about THIS day, so it outranks a
+      // credential expiry when explaining why someone shouldn't be picked.
+      if (p.warnings.indexOf('on_approved_leave') !== -1) return 'On approved leave';
       if (p.warnings.indexOf('licence_expired')   !== -1) return 'Licence expired';
       if (p.warnings.indexOf('tc_expired')        !== -1) return 'TC ticket expired';
       if (p.warnings.indexOf('whitecard_expired') !== -1) return 'White card expired';
@@ -4956,6 +4959,8 @@
     whitecard_expired: ['CARD',  'White card expired'],
     firstaid_expired:  ['FA',    'First-aid expired'],
     medical_expired:   ['MED',   'Medical expired'],
+    // Not a credential — an approved leave request covering the viewed day.
+    on_approved_leave: ['LEAVE', 'On approved leave this day'],
   };
   function rpWarnChips(warnings) {
     return (warnings || []).map(function (w) {

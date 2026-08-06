@@ -70,7 +70,10 @@ function sidebarBadges(req, res, next) {
       hireOverdue: safeCount(db, "SELECT COUNT(*) as c FROM hire_dockets WHERE status = 'picked_up' AND hire_end_date IS NOT NULL AND hire_end_date < ? AND deleted_at IS NULL", [today]),
 
       // Pending leave requests waiting on an approver decision.
-      leavePending: safeCount(db, "SELECT COUNT(*) as c FROM employee_leave WHERE status = 'pending'"),
+      // Count REQUESTS, not days. employee_leave holds one row per calendar
+      // date, so counting rows showed "5 pending" for a single Mon-Fri
+      // submission — a number the approvals screen could never match.
+      leavePending: safeCount(db, "SELECT COUNT(DISTINCT request_group_id) as c FROM employee_leave WHERE status = 'pending'"),
 
       // Traffio imports awaiting reconciliation (ambiguous bookings/dockets).
       traffioPending: safeCount(db, "SELECT COUNT(*) as c FROM traffio_imports WHERE status = 'pending'"),
