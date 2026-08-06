@@ -148,10 +148,16 @@
           </label>
         <% } %>
       </div>
-      <button type="button" onclick="clOpenAdd()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition">
-        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-        Add element
-      </button>
+      <div class="flex items-center gap-2">
+        <button type="button" id="clAddSectionBtn" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-gray-300 hover:border-brand-400 hover:text-brand-600 text-gray-700 text-xs font-semibold rounded-lg transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h16"/></svg>
+          Add section
+        </button>
+        <button type="button" onclick="clOpenAdd()" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition">
+          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+          Add element
+        </button>
+      </div>
     </div>
 
     <!-- Bulk-edit toolbar — appears as soon as one row is checked. Lets
@@ -192,17 +198,42 @@
       </form>
     <% } %>
 
-    <% if (items.length > 0) { %>
-      <p class="px-4 py-2 text-[11px] text-gray-400 italic bg-gray-50 border-b border-gray-100">
-        <svg class="w-3 h-3 inline-block mr-0.5 align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
-        Drag the grip handle to reorder. Drop a row under a different section header to move it across.
-      </p>
-      <div id="itemsList">
-        <% sectionGroups.forEach(function (sec) { %>
-          <div class="cl-section" data-section-name="<%= sec %>">
-            <div class="cl-section-header px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
-              <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest"><%= sec || '(No section)' %></span>
-              <span class="text-[9px] text-gray-300">drop zone</span>
+    <p id="clDragHint" class="<%= items.length ? '' : 'hidden' %> px-4 py-2 text-[11px] text-gray-400 italic bg-gray-50 border-b border-gray-100">
+      <svg class="w-3 h-3 inline-block mr-0.5 align-middle" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/></svg>
+      Drag the grip handle to reorder. Drop a row onto another section's header to move it across.
+    </p>
+
+    <!-- New-section composer — opened by the "Add section" button. A section
+         is just a label on its questions, so a brand-new one lives in the
+         page until its first question is added. -->
+    <div id="clNewSectionRow" class="hidden px-4 py-3 bg-brand-50/50 border-b border-gray-200 flex items-center gap-2 flex-wrap">
+      <label class="text-[10px] font-bold text-gray-500 uppercase tracking-widest">New section</label>
+      <input type="text" id="clNewSectionName" placeholder="e.g. PPE, Vehicle, Site Setup" class="flex-1 min-w-[180px] px-3 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <button type="button" id="clNewSectionCreate" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition">Create</button>
+      <button type="button" id="clNewSectionCancel" class="px-2 py-1 text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+    </div>
+
+    <div id="itemsList" class="<%= items.length ? 'p-3 space-y-3 bg-gray-50/60' : 'hidden p-3 space-y-3 bg-gray-50/60' %>">
+      <% sectionGroups.forEach(function (sec) { var secCount = items.filter(function (it) { return (it.section || '') === sec; }).length; %>
+        <div class="cl-section bg-white border border-gray-200 rounded-xl overflow-hidden" data-section-name="<%= sec %>">
+            <div class="cl-section-header px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-center gap-2 flex-wrap">
+              <span class="w-1.5 h-4 rounded-full flex-shrink-0 <%= sec ? 'bg-brand-500' : 'bg-gray-300' %>"></span>
+              <span class="cl-section-label text-[11px] font-bold uppercase tracking-widest font-mono <%= sec ? 'text-gray-700' : 'text-gray-400' %>"><%= sec || 'No section' %></span>
+              <span class="cl-section-count inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-white border border-gray-200 text-[10px] font-semibold text-gray-500"><%= secCount %></span>
+              <div class="ml-auto flex items-center gap-1">
+                <button type="button" data-cl-add-here="<%= sec %>" class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-gray-500 hover:text-brand-600 hover:bg-white transition" title="Add an element to this section">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                  Element
+                </button>
+                <% if (sec) { %>
+                  <button type="button" data-cl-rename="<%= sec %>" class="p-1 rounded-md text-gray-400 hover:text-brand-600 hover:bg-white transition" title="Rename section" aria-label="Rename section">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                  </button>
+                  <button type="button" data-cl-unsection="<%= sec %>" data-cl-count="<%= secCount %>" class="p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-white transition" title="Remove section (questions stay)" aria-label="Remove section">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                  </button>
+                <% } %>
+              </div>
             </div>
             <% items.filter(function (it) { return (it.section || '') === sec; }).forEach(function(item) {
               // Parse options_json so the edit modal can pre-fill type-
@@ -301,19 +332,24 @@
                 </div>
               </div>
             <% }); %>
-          </div>
-        <% }); %>
-      </div>
-    <% } else { %>
-      <div class="p-10 text-center">
-        <p class="text-sm text-gray-400 mb-4">No questions yet — build the checklist your crew will see.</p>
-        <button type="button" onclick="clOpenAdd()" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
-          Add your first element
-        </button>
-      </div>
-    <% } %>
+        </div>
+      <% }); %>
+    </div>
+    <div id="clEmptyState" class="<%= items.length ? 'hidden' : '' %> p-10 text-center">
+      <p class="text-sm text-gray-400 mb-4">No questions yet — build the checklist your crew will see.</p>
+      <button type="button" onclick="clOpenAdd()" class="inline-flex items-center gap-1.5 px-4 py-2.5 bg-brand-600 hover:bg-brand-500 text-white text-sm font-semibold rounded-lg transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+        Add your first element
+      </button>
+    </div>
   </div>
+
+  <!-- Section rename / remove posts here; the buttons fill in from/to. -->
+  <form id="clSectionForm" method="POST" action="/checklists/<%= template.id %>/sections" class="hidden">
+    <%- include('../partials/csrf') %>
+    <input type="hidden" name="from" id="clSectionFrom">
+    <input type="hidden" name="to" id="clSectionTo">
+  </form>
 
   <!-- Revision history -->
   <% if (typeof revisions !== 'undefined' && revisions.length > 0) { %>
@@ -419,12 +455,10 @@
             class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
         </div>
         <div>
-          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Section (optional)</label>
-          <input type="text" name="section" list="sectionList" placeholder="e.g. Site Setup, Vehicle, PPE…"
-            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-          <datalist id="sectionList">
-            <% sectionGroups.forEach(function (s) { if (s) { %><option value="<%= s %>"></option><% } }); %>
-          </datalist>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Section</label>
+          <select id="cfgSectionPick" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></select>
+          <input type="text" name="section" id="cfgSection" placeholder="New section name"
+            class="hidden w-full mt-2 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
         </div>
 
         <!-- Type-specific extra fields. Each block is shown only when its
@@ -559,6 +593,43 @@
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
+
+  // ── Section picker ──
+  // A section is just a label shared by its questions, so the picker is
+  // built from whatever sections the page currently shows — including one
+  // you created a moment ago that has no questions in it yet.
+  var secPick  = document.getElementById('cfgSectionPick');
+  var secInput = document.getElementById('cfgSection');
+  function setSection(value) {
+    var names = [], seen = {};
+    document.querySelectorAll('#itemsList .cl-section').forEach(function (s) {
+      var n = s.getAttribute('data-section-name') || '';
+      if (n && !seen[n]) { seen[n] = true; names.push(n); }
+    });
+    if (value && names.indexOf(value) === -1) names.push(value);
+    secPick.innerHTML = '';
+    function opt(v, label) {
+      var o = document.createElement('option');
+      o.value = v; o.textContent = label;
+      secPick.appendChild(o);
+    }
+    opt('', '— No section —');
+    names.forEach(function (n) { opt(n, n); });
+    opt('__new__', '+ New section…');
+    secPick.value = value || '';
+    secInput.value = value || '';
+    secInput.classList.add('hidden');
+  }
+  secPick.addEventListener('change', function () {
+    if (secPick.value === '__new__') {
+      secInput.value = '';
+      secInput.classList.remove('hidden');
+      secInput.focus();
+    } else {
+      secInput.value = secPick.value;
+      secInput.classList.add('hidden');
+    }
+  });
 
   // ── Option rows ──
   function addOptRow(value, focus) {
@@ -715,6 +786,7 @@
     document.getElementById('cfgSubmit').textContent = 'Add element';
     document.getElementById('modalTitle').textContent = 'Add element';
     document.getElementById('cfgQuestion').required = false;
+    setSection('');
     document.querySelectorAll('#elementConfigForm [data-show-when]').forEach(function (el) { el.classList.add('hidden'); });
   }
 
@@ -743,8 +815,11 @@
 
   window.clBackToPicker = function () { showPicker(); };
 
-  window.clOpenAdd = function () {
+  // presetSection — set when opened from a section header's "+ Element",
+  // so the new question lands in the section you clicked from.
+  window.clOpenAdd = function (presetSection) {
     resetForm();
+    setSection(presetSection || '');
     showModal();
     showPicker();
   };
@@ -770,7 +845,7 @@
     document.getElementById('modalTitle').textContent = 'Edit element';
 
     form.querySelector('input[name="question"]').value = data.question || '';
-    form.querySelector('input[name="section"]').value = data.section || '';
+    setSection(data.section || '');
     form.querySelector('input[name="item_key"]').value = data.item_key || '';
     form.querySelector('#cfgRequiredWrap input[type="checkbox"]').checked = !!data.required;
 
@@ -836,6 +911,11 @@
   }
 
   function postOrder() {
+    // A pending section stops being empty the moment a row lands in it.
+    list.querySelectorAll('.cl-section').forEach(function (sec) {
+      var empty = sec.querySelector('.cl-empty');
+      if (empty && sec.querySelector('.cl-row')) empty.remove();
+    });
     var items = rowsInOrder().filter(function (r) { return !isNaN(r.id); });
     fetch('/checklists/<%= template.id %>/reorder', {
       method: 'POST',
@@ -952,10 +1032,12 @@
   });
 
   // Section header is itself a drop target — drop into the empty
-  // space at the top of the section to land an item there.
-  list.querySelectorAll('.cl-section').forEach(function (sec) {
+  // space at the top of the section to land an item there. Exposed so a
+  // section created after page load becomes a drop target too.
+  function wireSection(sec) {
     var header = sec.querySelector('.cl-section-header');
-    if (!header) return;
+    if (!header || header.getAttribute('data-cl-wired')) return;
+    header.setAttribute('data-cl-wired', '1');
     header.addEventListener('dragover', function (e) {
       if (!dragId) return;
       e.preventDefault();
@@ -965,6 +1047,160 @@
       sec.insertBefore(dragged, header.nextSibling);
     });
     header.addEventListener('drop', function (e) { e.preventDefault(); postOrder(); });
+  }
+  list.querySelectorAll('.cl-section').forEach(wireSection);
+  window._clWireSection = wireSection;
+})();
+
+// ── Sections ──
+// A section isn't a record of its own — it's a label shared by its
+// questions. So: creating one drops an empty block into the list that
+// becomes real as soon as a question lands in it, while renaming and
+// removing post to /sections, which rewrites the label across members.
+(function () {
+  var list     = document.getElementById('itemsList');
+  var addBtn   = document.getElementById('clAddSectionBtn');
+  var composer = document.getElementById('clNewSectionRow');
+  var nameInp  = document.getElementById('clNewSectionName');
+  if (!list || !addBtn || !composer) return;
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+  }
+  function sectionEls() { return Array.prototype.slice.call(list.querySelectorAll('.cl-section')); }
+  function findSection(name) {
+    return sectionEls().filter(function (s) { return (s.getAttribute('data-section-name') || '') === name; })[0] || null;
+  }
+  function flash(el) {
+    el.classList.add('ring-2', 'ring-brand-400');
+    setTimeout(function () { el.classList.remove('ring-2', 'ring-brand-400'); }, 900);
+  }
+
+  // ── Composer ──
+  function openComposer() {
+    composer.classList.remove('hidden');
+    nameInp.value = '';
+    nameInp.focus();
+  }
+  function closeComposer() { composer.classList.add('hidden'); nameInp.value = ''; }
+  addBtn.addEventListener('click', function () {
+    composer.classList.contains('hidden') ? openComposer() : closeComposer();
+  });
+  document.getElementById('clNewSectionCancel').addEventListener('click', closeComposer);
+  nameInp.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') { e.preventDefault(); createSection(); }
+    else if (e.key === 'Escape') { e.preventDefault(); closeComposer(); }
+  });
+  document.getElementById('clNewSectionCreate').addEventListener('click', createSection);
+
+  function createSection() {
+    var name = nameInp.value.trim();
+    if (!name) { nameInp.focus(); return; }
+    var existing = findSection(name);
+    if (existing) { closeComposer(); existing.scrollIntoView({ behavior: 'smooth', block: 'center' }); flash(existing); return; }
+
+    var wrap = document.createElement('div');
+    wrap.className = 'cl-section bg-white border border-gray-200 rounded-xl overflow-hidden';
+    wrap.setAttribute('data-section-name', name);
+    wrap.innerHTML =
+      '<div class="cl-section-header px-3 py-2 bg-gray-100 border-b border-gray-200 flex items-center gap-2 flex-wrap">' +
+        '<span class="w-1.5 h-4 rounded-full flex-shrink-0 bg-brand-500"></span>' +
+        '<span class="cl-section-label text-[11px] font-bold uppercase tracking-widest font-mono text-gray-700">' + esc(name) + '</span>' +
+        '<span class="cl-section-count inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-white border border-gray-200 text-[10px] font-semibold text-gray-500">0</span>' +
+        '<div class="ml-auto flex items-center gap-1">' +
+          '<button type="button" data-cl-add-here="' + esc(name) + '" class="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[10px] font-semibold text-gray-500 hover:text-brand-600 hover:bg-white transition" title="Add an element to this section">' +
+            '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>Element</button>' +
+          '<button type="button" data-cl-rename="' + esc(name) + '" class="p-1 rounded-md text-gray-400 hover:text-brand-600 hover:bg-white transition" title="Rename section" aria-label="Rename section">' +
+            '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg></button>' +
+          '<button type="button" data-cl-unsection="' + esc(name) + '" data-cl-count="0" class="p-1 rounded-md text-gray-400 hover:text-red-600 hover:bg-white transition" title="Remove section" aria-label="Remove section">' +
+            '<svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>' +
+        '</div>' +
+      '</div>' +
+      '<div class="cl-empty px-4 py-4 text-center">' +
+        '<p class="text-[11px] text-gray-400 italic mb-2">Empty section — it saves once a question lands in it.</p>' +
+        '<button type="button" data-cl-add-here="' + esc(name) + '" class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold rounded-lg transition">' +
+          '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>Add the first element</button>' +
+      '</div>';
+
+    list.appendChild(wrap);
+    list.classList.remove('hidden');
+    var empty = document.getElementById('clEmptyState');
+    if (empty) empty.classList.add('hidden');
+    if (typeof window._clWireSection === 'function') window._clWireSection(wrap);
+    closeComposer();
+    wrap.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    flash(wrap);
+  }
+
+  // ── Rename / remove — delegated so sections added after load work too ──
+  function submitSection(from, to) {
+    document.getElementById('clSectionFrom').value = from;
+    document.getElementById('clSectionTo').value = to;
+    document.getElementById('clSectionForm').submit();
+  }
+
+  function startRename(sec) {
+    var header = sec.querySelector('.cl-section-header');
+    var label  = header && header.querySelector('.cl-section-label');
+    if (!label || header.querySelector('.cl-rename-input')) return;
+    var current = sec.getAttribute('data-section-name') || '';
+    var saved = false;
+
+    var inp = document.createElement('input');
+    inp.type = 'text';
+    inp.value = current;
+    inp.className = 'cl-rename-input flex-1 min-w-[140px] px-2 py-1 bg-white border border-brand-400 rounded-md text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-brand-500';
+    header.replaceChild(inp, label);
+    inp.focus();
+    inp.select();
+
+    function cancel() { if (!saved) header.replaceChild(label, inp); }
+    function commit() {
+      if (saved) return;
+      var next = inp.value.trim();
+      if (!next || next === current) { cancel(); return; }
+      saved = true;
+      // A section with no saved questions exists only in this page, so
+      // renaming it is a local relabel — there's nothing to UPDATE yet.
+      if (sec.querySelectorAll('.cl-row').length === 0) {
+        saved = false;
+        sec.setAttribute('data-section-name', next);
+        label.textContent = next;
+        header.replaceChild(label, inp);
+        sec.querySelectorAll('[data-cl-add-here]').forEach(function (b) { b.setAttribute('data-cl-add-here', next); });
+        header.querySelector('[data-cl-rename]').setAttribute('data-cl-rename', next);
+        header.querySelector('[data-cl-unsection]').setAttribute('data-cl-unsection', next);
+        return;
+      }
+      submitSection(current, next);
+    }
+    inp.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); commit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); saved = true; header.replaceChild(label, inp); }
+    });
+    inp.addEventListener('blur', commit);
+  }
+
+  document.addEventListener('click', function (e) {
+    var addHere = e.target.closest && e.target.closest('[data-cl-add-here]');
+    if (addHere) { window.clOpenAdd(addHere.getAttribute('data-cl-add-here') || ''); return; }
+
+    var ren = e.target.closest && e.target.closest('[data-cl-rename]');
+    if (ren) { startRename(ren.closest('.cl-section')); return; }
+
+    var del = e.target.closest && e.target.closest('[data-cl-unsection]');
+    if (del) {
+      var sec = del.closest('.cl-section');
+      var name = del.getAttribute('data-cl-unsection') || '';
+      var n = sec.querySelectorAll('.cl-row').length;
+      if (n === 0) { sec.remove(); return; } // never saved — just drop it
+      if (!confirm('Remove the "' + name + '" section?\n\n' + (n === 1
+        ? 'Its question stays in the checklist and moves to (No section).'
+        : 'Its ' + n + ' questions stay in the checklist and move to (No section).'))) return;
+      submitSection(name, '');
+    }
   });
 })();
 

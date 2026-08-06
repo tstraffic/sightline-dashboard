@@ -334,6 +334,37 @@ router.post('/:id/items/bulk', (req, res) => {
   req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
 });
 
+// POST /:id/sections — rename a section, or clear it. Sections aren't rows
+// of their own — they're a string column on each item — so renaming one is
+// an UPDATE across its members. Renaming onto an existing name merges the
+// two; an empty `to` drops the questions back to "(No section)".
+router.post('/:id/sections', (req, res) => {
+  const db = getDb();
+  const from = String(req.body.from || '').trim();
+  const to   = String(req.body.to || '').trim();
+  const back = () => req.session.save(() => res.redirect(`/checklists/${req.params.id}`));
+
+  const tpl = db.prepare('SELECT id, name FROM checklist_templates WHERE id = ?').get(req.params.id);
+  if (!tpl) { req.flash('error', 'Template not found.'); return req.session.save(() => res.redirect('/checklists')); }
+  if (!from) { req.flash('error', 'Pick a section to rename.'); return back(); }
+  if (from === to) return back(); // no-op
+
+  const merging = to && db.prepare("SELECT COUNT(*) AS c FROM checklist_template_items WHERE template_id = ? AND IFNULL(section, '') = ?").get(tpl.id, to).c > 0;
+  const r = db.prepare("UPDATE checklist_template_items SET section = ? WHERE template_id = ? AND IFNULL(section, '') = ?")
+    .run(to, tpl.id, from);
+
+  if (r.changes > 0) {
+    db.prepare('UPDATE checklist_templates SET updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(tpl.id);
+    logActivity({ user: req.session.user, action: 'update', entityType: 'checklist_template', entityId: tpl.id, entityLabel: tpl.name, details: to ? `Section "${from}" → "${to}" (${r.changes} question(s))` : `Section "${from}" removed (${r.changes} question(s) unsectioned)`, ip: req.ip });
+  }
+  req.flash('success', !to
+    ? `Section removed — ${r.changes} question${r.changes === 1 ? '' : 's'} moved to (No section).`
+    : merging
+      ? `Merged "${from}" into "${to}" — ${r.changes} question${r.changes === 1 ? '' : 's'} moved.`
+      : `Section renamed to "${to}".`);
+  back();
+});
+
 // POST /:id/items/:itemId — Update a single item. Declared after /items/bulk
 // so /items/bulk doesn't get hijacked by this catch-all route.
 router.post('/:id/items/:itemId', (req, res) => {
