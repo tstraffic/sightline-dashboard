@@ -1254,6 +1254,13 @@ router.post('/reviews/comments/:id/delete', requirePermission('hr_employees'), (
 // ============================================
 // EDIT EMPLOYEE FORM
 // ============================================
+// The editor's section ids. Whitelisted rather than passed through so a
+// crafted ?section= / body value can never reach the redirect URL or the view.
+const EMPLOYEE_FORM_SECTIONS = ['personal', 'employment', 'operational', 'licences', 'emergency', 'payroll', 'notes'];
+function safeEmployeeSection(value) {
+  return EMPLOYEE_FORM_SECTIONS.includes(value) ? value : 'personal';
+}
+
 router.get('/employees/:id/edit', requirePermission('hr_employees'), (req, res) => {
   const db = getDb();
   const employee = db.prepare('SELECT * FROM employees WHERE id = ?').get(req.params.id);
@@ -1281,6 +1288,7 @@ router.get('/employees/:id/edit', requirePermission('hr_employees'), (req, res) 
     users,
     settingsOptions,
     latestBank, latestSuper, latestTfn,
+    initialSection: safeEmployeeSection(req.query.section),
     canViewSensitive: canViewSensitiveHR(req.session.user),
     showRates: canViewRates(req.session.user),
     user: req.session.user
@@ -1476,7 +1484,12 @@ router.post('/employees/:id', requirePermission('hr_employees'), (req, res) => {
     console.error('UPDATE employee error:', err.message, { id: req.params.id, setCount: sets.length, paramCount: params.length });
     req.flash('error', 'Error updating employee: ' + err.message);
   }
-  req.session.save(() => res.redirect(`/hr/employees/${req.params.id}`));
+  // Stay in the editor on the section that was just saved — editing an
+  // employee usually means working through several sections, and bouncing
+  // out to the read-only profile each time meant re-navigating every save.
+  // "Back to profile" in the footer is the way out.
+  const section = safeEmployeeSection(b.section);
+  req.session.save(() => res.redirect(`/hr/employees/${req.params.id}/edit?section=${section}`));
 });
 
 // ============================================
