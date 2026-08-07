@@ -61,6 +61,10 @@ function collectFields(body) {
   }
   if (fields.WORKER_DOB && !/^\d{4}-\d{2}-\d{2}$/.test(fields.WORKER_DOB)) errors.push('Date of birth must be a valid date.');
   if (fields.START_DATE && !/^\d{4}-\d{2}-\d{2}$/.test(fields.START_DATE)) errors.push('Commencement date must be a valid date.');
+  // Lock today's wage panel into the contract. A signed agreement must keep
+  // rendering the rates it was signed on, no matter how many Annual Wage
+  // Reviews land afterwards — editing a contract re-snapshots deliberately.
+  fields.RATES_SNAPSHOT = tpl.ratesSnapshot();
   return { fields, errors };
 }
 
@@ -280,7 +284,9 @@ router.get('/:id', requirePermission('hr_contracts'), (req, res) => {
     contract, fields,
     acks: loadAcks(db, contract.id),
     ackDefs: tpl.ACKNOWLEDGEMENTS,
-    tiers: tpl.TIERS,
+    // The contract's own locked-in rates, not today's — so an old signed
+    // agreement keeps showing what was actually agreed.
+    tiers: tpl.ratesFor(fields).tiers,
     signUrl: contract.token ? `${base}/contract-sign/${contract.token}` : null,
     STATUS_LABELS,
     user: req.session.user,
