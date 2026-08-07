@@ -3236,6 +3236,13 @@
     var active = document.querySelector('.bk2-edit-statuspill.is-active');
     var st = active ? active.getAttribute('data-status-set') : '';
     btn.hidden = !(isEdit && (st === 'cancelled' || st === 'late_cancellation'));
+    // This button element is reused for every shift the editor opens. The
+    // click handler disables it while the delete is in flight but only
+    // re-enables it in the error path, so a SUCCESSFUL delete used to leave
+    // it disabled forever — every later shift showed a greyed-out, unclickable
+    // "Delete shift" until the page was reloaded. Re-enable whenever we show
+    // it, unless a delete is genuinely still running.
+    if (!btn.hidden) btn.disabled = btn.dataset.inflight === '1';
   }
   (function () {
     var delBtn = document.getElementById('bk2-edit-delete');
@@ -3246,6 +3253,7 @@
       if (!id) return;
       if (!confirm('Delete this cancelled shift? It will be removed from the board and the crew notified.')) return;
       var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
+      delBtn.dataset.inflight = '1';
       delBtn.disabled = true;
       fetch('/bookings/' + id + '/delete', {
         method: 'POST',
@@ -3260,8 +3268,14 @@
           if (typeof closeEditor === 'function') closeEditor();
         })
         .catch(function (e) {
-          delBtn.disabled = false;
           if (typeof window.bk2Toast === 'function') window.bk2Toast(e.message, 'error'); else alert(e.message);
+        })
+        // Always clear the in-flight lock — on success the editor closes and
+        // the button is reused by the next shift, so leaving it set is what
+        // broke delete for the rest of the session.
+        .then(function () {
+          delBtn.dataset.inflight = '';
+          delBtn.disabled = false;
         });
     });
   })();
