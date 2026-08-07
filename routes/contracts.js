@@ -312,10 +312,13 @@ router.post('/:id/send', requirePermission('hr_contracts'), async (req, res) => 
   }
 
   // Fresh token on every send: a re-send always supersedes the old link.
+  // link_expiry_notified_at resets too, so the new link earns its own
+  // expiring-soon reminder from the notification engine.
   const token = crypto.randomBytes(24).toString('hex');
   db.prepare(`
     UPDATE contracts SET token = ?, token_expires_at = datetime('now', '+${TOKEN_DAYS} days'),
-      status = 'sent', sent_to_email = ?, sent_at = datetime('now'), updated_at = datetime('now')
+      status = 'sent', sent_to_email = ?, sent_at = datetime('now'),
+      link_expiry_notified_at = NULL, updated_at = datetime('now')
     WHERE id = ?
   `).run(token, mode === 'email' ? email : (contract.sent_to_email || null), contract.id);
 
@@ -365,6 +368,53 @@ router.post('/:id/void', requirePermission('hr_contracts'), (req, res) => {
   `).run((req.body.reason || '').trim() || null, contract.id);
   logActivity({ user: req.session.user, action: 'update', entityType: 'contract', entityId: contract.id, entityLabel: contract.agreement_number, details: 'Voided' + (req.body.reason ? ': ' + req.body.reason : ''), ip: req.ip });
   req.flash('success', `${contract.agreement_number} voided — its signing link no longer works.`);
+  req.session.save(() => res.redirect('/contracts'));
+});
+
+// ── Delete ───────────────────────────────────────────────────────────
+// Drafts, sent and voided contracts delete outright — nothing was signed,
+// so there is no record to preserve. A SIGNED agreement is a legal record
+// (Fair Work record-keeping: retain 7 years), so deleting one demands the
+// agreement number typed back as confirmation, and the signed PDF already
+// archived in the worker's HR documents is deliberately left alone — that
+// copy remains the retained record unless it is removed there separately.
+router.post('/:id/delete', requirePermission('hr_contracts'), (req, res) => {
+  const db = getDb();
+  const contract = db.prepare('SELECT c.*, e.full_name AS employee_name FROM contracts c JOIN employees e ON e.id = c.employee_id WHERE c.id = ?').get(req.params.id);
+  if (!contract) { req.flash('error', 'Contract not found.'); return req.session.save(() => res.redirect('/contracts')); }
+
+  if (contract.status === 'signed') {
+    const typed = (req.body.confirm_number || '').trim().toUpperCase();
+    if (typed !== contract.agreement_number.toUpperCase()) {
+      req.flash('error', `To delete a signed agreement, type its number (${contract.agreement_number}) exactly. Nothing was deleted.`);
+      return req.session.save(() => res.redirect('/contracts/' + contract.id));
+    }
+  }
+
+  // Files first (best-effort): the unsigned PDF and signature PNG belong
+  // only to this row. The signed PDF is shared with the HR archive row —
+  // remove it only when no archive link exists (i.e. archiving failed).
+  const rels = [contract.unsigned_pdf_path, contract.signature_path];
+  if (!contract.employee_document_id) rels.push(contract.signed_pdf_path);
+  for (const rel of rels) {
+    if (!rel) continue;
+    try { fs.unlinkSync(path.join(__dirname, '..', rel)); } catch (e) { /* already gone */ }
+  }
+
+  db.transaction(() => {
+    db.prepare('DELETE FROM contract_acknowledgements WHERE contract_id = ?').run(contract.id);
+    db.prepare('DELETE FROM contracts WHERE id = ?').run(contract.id);
+  })();
+
+  logActivity({
+    user: req.session.user, action: 'delete',
+    entityType: 'contract', entityId: contract.id, entityLabel: contract.agreement_number,
+    details: `Deleted (${contract.status}) contract for ${contract.employee_name}` +
+      (contract.status === 'signed' && contract.employee_document_id ? ' — archived HR copy retained' : ''),
+    ip: req.ip,
+  });
+  req.flash('success', `${contract.agreement_number} deleted.` +
+    (contract.status === 'signed' && contract.employee_document_id ? ' The signed PDF archived in the worker\'s HR documents was kept.' : ''));
   req.session.save(() => res.redirect('/contracts'));
 });
 

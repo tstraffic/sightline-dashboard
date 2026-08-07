@@ -159,6 +159,25 @@
           <button type="submit" class="w-full px-4 py-2 text-red-600 bg-red-50 hover:bg-red-100 ring-1 ring-red-200 text-sm font-medium rounded-lg transition">Void this contract</button>
         </form>
       <% } %>
+
+      <% if (contract.status === 'signed') { %>
+        <%# Deleting a signed agreement = destroying a legal record that
+            Fair Work record-keeping says to retain for 7 years. Allowed,
+            but only with the agreement number typed back — and the copy
+            archived in the worker's HR documents stays. %>
+        <form method="POST" action="/contracts/<%= contract.id %>/delete"
+          onsubmit="var t = prompt('DELETE signed agreement <%= contract.agreement_number %>?\n\nSigned agreements are legal records (Fair Work: retain 7 years). The copy archived in the worker\'s HR documents will be KEPT.\n\nType the agreement number to confirm:'); if (t === null) return false; this.confirm_number.value = t; return true;">
+          <%- include('../partials/csrf') %>
+          <input type="hidden" name="confirm_number" value="">
+          <button type="submit" class="w-full px-4 py-2 text-gray-500 hover:text-red-600 hover:bg-red-50 ring-1 ring-gray-200 hover:ring-red-200 text-sm font-medium rounded-lg transition">Delete from register…</button>
+        </form>
+      <% } else { %>
+        <form method="POST" action="/contracts/<%= contract.id %>/delete"
+          onsubmit="return confirm('Delete <%= contract.agreement_number %> completely? The PDF and any signing link are removed. This can\'t be undone.');">
+          <%- include('../partials/csrf') %>
+          <button type="submit" class="w-full px-4 py-2 text-gray-500 hover:text-red-600 hover:bg-red-50 ring-1 ring-gray-200 hover:ring-red-200 text-sm font-medium rounded-lg transition">Delete this contract</button>
+        </form>
+      <% } %>
     </div>
   </div>
 

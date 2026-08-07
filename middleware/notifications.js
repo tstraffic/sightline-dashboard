@@ -244,6 +244,70 @@ function generateNotifications() {
       console.error('SWMS expiry reminder error:', e.message);
     }
 
+    // 2c-pre. Employment contract reminders. Two obligations ride on every
+    // signed contract, and one operational nudge on every sent one:
+    //   - CEIS re-issue: the Fair Work Act requires the Casual Employment
+    //     Information Statement to be given again at 6 and 12 months after
+    //     commencement. Fires 7 days ahead of each due date so HR can act,
+    //     then stamps ceis_*_notified_at so it never repeats (SWMS pattern).
+    //   - Signing link expiring: a 'sent' contract whose link dies within
+    //     3 days (or already died) unsigned nudges whoever sent it to
+    //     re-send. The stamp is cleared on every re-send (routes/contracts)
+    //     so each fresh link earns its own future reminder.
+    try {
+      const contractsAvailable = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='contracts'").get();
+      const contractCols = contractsAvailable ? db.prepare('PRAGMA table_info(contracts)').all().map(c => c.name) : [];
+      if (contractsAvailable && contractCols.includes('ceis_6m_notified_at')) {
+        const hrUsers = db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) IN ('admin','hr')").all();
+
+        // CEIS at 6 and 12 months — signed contracts, worker still current.
+        for (const [monthsOut, stampCol] of [[6, 'ceis_6m_notified_at'], [12, 'ceis_12m_notified_at']]) {
+          const due = db.prepare(`
+            SELECT c.id, c.agreement_number, c.fields_json, e.full_name,
+              date(json_extract(c.fields_json, '$.START_DATE'), '+${monthsOut} months') AS due_date
+            FROM contracts c
+            JOIN employees e ON e.id = c.employee_id
+            WHERE c.status = 'signed'
+              AND c.${stampCol} IS NULL
+              AND e.deleted_at IS NULL
+              AND e.employment_status NOT IN ('terminated','offboarded')
+              AND json_extract(c.fields_json, '$.START_DATE') IS NOT NULL
+              AND date('now') >= date(json_extract(c.fields_json, '$.START_DATE'), '+${monthsOut} months', '-7 days')
+          `).all();
+          const stamp = db.prepare(`UPDATE contracts SET ${stampCol} = CURRENT_TIMESTAMP WHERE id = ?`);
+          for (const c of due) {
+            const title = `CEIS re-issue due (${monthsOut} months): ${c.full_name}`;
+            const msg = `${c.full_name} hits ${monthsOut} months of casual employment on ${c.due_date} (${c.agreement_number}). ` +
+              'The Fair Work Act requires the Casual Employment Information Statement to be given again — send it and note it on their record.';
+            for (const u of hrUsers) insertAndTrack(u.id, 'deadline_reminder', title, msg, '/contracts/' + c.id, null);
+            stamp.run(c.id);
+          }
+        }
+
+        // Signing link expiring / expired, still unsigned.
+        const expiring = db.prepare(`
+          SELECT c.id, c.agreement_number, c.token_expires_at, c.created_by_id, e.full_name
+          FROM contracts c
+          JOIN employees e ON e.id = c.employee_id
+          WHERE c.status = 'sent'
+            AND c.token_expires_at IS NOT NULL
+            AND c.link_expiry_notified_at IS NULL
+            AND c.token_expires_at <= datetime('now', '+3 days')
+        `).all();
+        const stampLink = db.prepare('UPDATE contracts SET link_expiry_notified_at = CURRENT_TIMESTAMP WHERE id = ?');
+        for (const c of expiring) {
+          const expired = c.token_expires_at <= new Date().toISOString().replace('T', ' ').slice(0, 19);
+          const title = `Contract signing link ${expired ? 'expired' : 'expiring'}: ${c.full_name}`;
+          const msg = `${c.agreement_number} for ${c.full_name} is still unsigned and its signing link ${expired ? 'has expired' : 'expires within 3 days'}. Re-send a fresh link from the contract page.`;
+          const recipients = c.created_by_id ? [{ id: c.created_by_id }] : hrUsers;
+          for (const u of recipients) insertAndTrack(u.id, 'deadline_reminder', title, msg, '/contracts/' + c.id, null);
+          stampLink.run(c.id);
+        }
+      }
+    } catch (e) {
+      console.error('Contract reminder error:', e.message);
+    }
+
     // 2c-bis. SOP register expiring within 30 days. Mirrors the SWMS block
     // exactly — templates 3mo, job-linked 6mo, same recipient roles, same
     // de-dupe via last_reminded_at.

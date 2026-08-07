@@ -15444,6 +15444,22 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 344 error:', e.message); }
   }
 
+  // Migration 345: contract reminder stamps. The notification engine fires
+  // three automatic reminders per contract — CEIS re-issue at 6 and 12
+  // months after commencement (Fair Work Act requirement for casuals) and
+  // a signing-link-expiring nudge — and each stamps its column after
+  // dispatch so it fires once, not daily (same pattern as swms.last_reminded_at).
+  if (!isMigrationApplied.get(345)) {
+    try {
+      const cols = db.prepare('PRAGMA table_info(contracts)').all().map(c => c.name);
+      if (!cols.includes('ceis_6m_notified_at')) db.exec('ALTER TABLE contracts ADD COLUMN ceis_6m_notified_at DATETIME');
+      if (!cols.includes('ceis_12m_notified_at')) db.exec('ALTER TABLE contracts ADD COLUMN ceis_12m_notified_at DATETIME');
+      if (!cols.includes('link_expiry_notified_at')) db.exec('ALTER TABLE contracts ADD COLUMN link_expiry_notified_at DATETIME');
+      recordMigration.run(345, 'Contract reminder stamps (CEIS 6m/12m, signing-link expiry)');
+      console.log('Migration 345 applied: contract reminder stamps');
+    } catch (e) { console.error('Migration 345 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
