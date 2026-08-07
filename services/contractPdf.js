@@ -127,10 +127,43 @@ function drawTable(doc, header, rows, widths, opts = {}) {
   doc.y += 6;
 }
 
+// Label + value stacked in a column of width w. Measures first and breaks
+// the page if it won't fit — without this a run of rows walked straight
+// through the bottom margin and overprinted the page footer.
+function metaCellHeight(doc, value, w) {
+  doc.font('Helvetica').fontSize(9.5);
+  return 10 + doc.heightOfString(String(value || '—'), { width: w, lineGap: 1.5 }) + 7;
+}
+function drawMetaCell(doc, label, value, x, y, w) {
+  doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text(String(label).toUpperCase(), x, y, { width: w });
+  doc.font('Helvetica').fontSize(9.5).fillColor(INK).text(String(value || '—'), x, y + 10, { width: w, lineGap: 1.5 });
+}
 function metaRow(doc, label, value, x, w) {
-  doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text(label.toUpperCase(), x, doc.y, { width: w });
-  doc.font('Helvetica').fontSize(9.5).fillColor(INK).text(value || '—', x, doc.y + 1, { width: w, lineGap: 1.5 });
-  doc.y += 6;
+  const h = metaCellHeight(doc, value, w);
+  need(doc, h);
+  const y = doc.y;
+  drawMetaCell(doc, label, value, x, y, w);
+  doc.y = y + h;
+}
+
+// Two-column grid of label/value pairs — keeps the signing record compact
+// instead of a long single-file stack running off the page.
+function metaGrid(doc, pairs) {
+  const gap = 20;
+  const colW = (CW - gap) / 2;
+  for (let i = 0; i < pairs.length; i += 2) {
+    const left = pairs[i];
+    const right = pairs[i + 1];
+    const h = Math.max(
+      metaCellHeight(doc, left[1], colW),
+      right ? metaCellHeight(doc, right[1], colW) : 0
+    );
+    need(doc, h);
+    const y = doc.y;
+    drawMetaCell(doc, left[0], left[1], ML, y, colW);
+    if (right) drawMetaCell(doc, right[0], right[1], ML + colW + gap, y, colW);
+    doc.y = y + h;
+  }
 }
 
 function dataUrlToBuffer(dataUrl) {
@@ -290,7 +323,10 @@ function renderContractPdf(contract, fields, acks = []) {
     }
 
     // ── Signature blocks ──
-    need(doc, 210);
+    // The whole employee block (rule, heading, name, signature box and the
+    // signing record) is kept together — reserved as one slab so it never
+    // splits across a page break.
+    need(doc, signed ? 250 : 170);
     doc.moveDown(1);
     doc.moveTo(ML, doc.y).lineTo(ML + CW, doc.y).lineWidth(0.7).strokeColor(RULE).stroke();
     doc.y += 12;
@@ -311,11 +347,16 @@ function renderContractPdf(contract, fields, acks = []) {
         }
       } catch (e) { /* image missing — metadata below still records the signing */ }
       doc.y += 74;
-      metaRow(doc, 'Signed name (typed)', contract.signed_name_typed, ML, CW);
-      metaRow(doc, 'Date and time signed', fields.SIGNED_AT_DISPLAY || contract.signed_at, ML, CW);
-      metaRow(doc, 'IP address', contract.signer_ip, ML, CW);
-      metaRow(doc, 'Device / browser', contract.signer_user_agent, ML, CW);
-      metaRow(doc, 'Link sent to', contract.sent_to_email || fields.WORKER_EMAIL, ML, CW);
+      // Two columns rather than a long single-file stack. The raw
+      // user-agent string is deliberately NOT printed here — it's a wall of
+      // machine text on a document a person has to read, and it stays on
+      // the signing record in the dashboard either way.
+      metaGrid(doc, [
+        ['Signed name (typed)', contract.signed_name_typed],
+        ['Date and time signed', fields.SIGNED_AT_DISPLAY || contract.signed_at],
+        ['IP address', contract.signer_ip],
+        ['Link sent to', contract.sent_to_email || fields.WORKER_EMAIL],
+      ]);
       metaRow(doc, 'Identity checks', 'Date of birth verified · full agreement scrolled · name typed to confirm', ML, CW);
     } else {
       need(doc, 92);
@@ -325,23 +366,31 @@ function renderContractPdf(contract, fields, acks = []) {
       doc.y += 78;
     }
 
-    doc.y += 8;
-    // The company block is one unit: heading, name, position, signature.
-    blockHeading(doc, 'For and on behalf of T&S Traffic Control Pty Ltd', { follow: 110 });
-    doc.y += 2;
-    metaRow(doc, 'Name', fields.TS_SIGNATORY_NAME, ML, CW);
-    metaRow(doc, 'Position', fields.TS_SIGNATORY_POSITION, ML, CW);
-    doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text('SIGNATURE', ML, doc.y, { width: CW });
-    doc.fillColor(INK).font('Helvetica-Oblique').fontSize(15).text(fields.TS_SIGNATORY_NAME || '', ML, doc.y + 3, { width: CW });
-    doc.y += 6;
-    metaRow(doc, 'Date', fields.OFFER_DATE || '—', ML, CW);
-
     doc.y += 10;
+    // The company block is one unit: heading, name, position, signature, date.
+    blockHeading(doc, 'For and on behalf of T&S Traffic Control Pty Ltd', { follow: 96 });
+    doc.y += 2;
+    metaGrid(doc, [
+      ['Name', fields.TS_SIGNATORY_NAME],
+      ['Position', fields.TS_SIGNATORY_POSITION],
+    ]);
+    need(doc, 46);
+    const tsSigY = doc.y;
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text('SIGNATURE', ML, tsSigY, { width: CW });
+    doc.fillColor(INK).font('Helvetica-Oblique').fontSize(15).text(fields.TS_SIGNATORY_NAME || '', ML, tsSigY + 11, { width: CW / 2 });
+    // Date sits alongside the signature rather than under it.
+    doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text('DATE', ML + CW / 2 + 20, tsSigY, { width: CW / 2 - 20 });
+    doc.font('Helvetica').fontSize(9.5).fillColor(INK).text(fields.OFFER_DATE || '—', ML + CW / 2 + 20, tsSigY + 10, { width: CW / 2 - 20 });
+    doc.y = tsSigY + 34;
+
+    const closing = signed
+      ? `Document ${contract.agreement_number} · Version ${contract.version} · Generated by the T&S Control Room · A copy of this signed agreement has been emailed to ${fields.WORKER_EMAIL || 'the employee'} and stored against the worker record.`
+      : `Document ${contract.agreement_number} · Version ${contract.version} · Generated by the T&S Control Room · This copy is unsigned.`;
+    doc.font('Helvetica-Oblique').fontSize(7.5);
+    need(doc, 14 + doc.heightOfString(closing, { width: CW, lineGap: 1.5 }));
+    doc.y += 12;
     doc.fillColor(FAINT).font('Helvetica-Oblique').fontSize(7.5)
-      .text(signed
-        ? `Document ${contract.agreement_number} · Version ${contract.version} · Generated by the T&S Control Room · A copy of this signed agreement has been emailed to ${fields.WORKER_EMAIL || 'the employee'} and stored against the worker record.`
-        : `Document ${contract.agreement_number} · Version ${contract.version} · Generated by the T&S Control Room · This copy is unsigned.`,
-        ML, doc.y, { width: CW, lineGap: 1.5 });
+      .text(closing, ML, doc.y, { width: CW, lineGap: 1.5 });
 
     // ── Page footers (buffered) ──
     const range = doc.bufferedPageRange();

@@ -49,14 +49,30 @@ const HEADINGS = [
   /^CASUAL EMPLOYMENT AGREEMENT$/,
 ];
 
+// A real signature file matters: the renderer only takes the signed
+// layout branch when signature_path points at something that exists, and
+// the image reserves 74pt that shifts everything below it. Without this
+// the "signed" check silently exercised the unsigned layout instead.
+const SIG_REL = path.join('data', 'contracts', '_layout-check-signature.png');
+const SIG_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+  'base64');
+function withSignatureFile(fn) {
+  const abs = path.join(REPO, SIG_REL);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, SIG_PNG);
+  return Promise.resolve(fn()).finally(() => { try { fs.unlinkSync(abs); } catch (e) {} });
+}
+
 function contractFor(signed) {
   return {
     id: 0, agreement_number: 'TSEA-CHECK', version: 1,
     status: signed ? 'signed' : 'draft',
     signed_at: '2026-08-07 04:02:00', signed_name_typed: 'Layout Check',
     signer_ip: '203.0.113.44',
-    signer_user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.2 Mobile/15E148 Safari/604.1',
-    sent_to_email: 'layout@example.com', signature_path: null,
+    signer_user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.5.2 Mobile/15E148 Safari/604.1',
+    sent_to_email: 'layout@example.com',
+    signature_path: signed ? SIG_REL : null,
   };
 }
 
@@ -71,6 +87,12 @@ async function checkVariant(pdfjsLib, signed) {
   const doc = await pdfjsLib.getDocument({ data: new Uint8Array(buf), verbosity: 0 }).promise;
 
   const orphans = [];
+  const overruns = [];
+  // The footer band. Body content must stop above it — anything printed
+  // inside collides with "… Private & confidential / Page n of m", which is
+  // exactly what happened when metaRow had no page-break check.
+  const FOOTER_TOP = 30;
+  const FOOTER_BOTTOM = 44;
   for (let p = 1; p <= doc.numPages; p++) {
     const tc = await (await doc.getPage(p)).getTextContent();
     const rows = {};
@@ -78,15 +100,24 @@ async function checkVariant(pdfjsLib, signed) {
       const y = Math.round(it.transform[5]);
       (rows[y] = rows[y] || []).push({ x: it.transform[4], s: it.str });
     }
-    const lines = Object.keys(rows).map(Number).sort((a, b) => b - a)
+    const all = Object.keys(rows).map(Number).sort((a, b) => b - a)
       .map(y => ({ y, text: rows[y].sort((a, b) => a.x - b.x).map(i => i.s).join(' ').replace(/\s+/g, ' ').trim() }))
-      .filter(l => l.text && l.y > 40);            // exclude the footer band
-    const last = lines[lines.length - 1];
+      .filter(l => l.text);
+
+    // Body text sitting in or below the footer band.
+    for (const l of all) {
+      if (l.y > FOOTER_BOTTOM) continue;
+      const isFooter = /Private & confidential/.test(l.text) || /^Page \d+ of \d+$/.test(l.text);
+      if (!isFooter) overruns.push({ page: p, of: doc.numPages, text: l.text, y: l.y });
+    }
+
+    const body = all.filter(l => l.y > FOOTER_BOTTOM);
+    const last = body[body.length - 1];
     if (last && HEADINGS.some(re => re.test(last.text))) {
       orphans.push({ page: p, of: doc.numPages, text: last.text });
     }
   }
-  return { pages: doc.numPages, orphans };
+  return { pages: doc.numPages, orphans, overruns };
 }
 
 (async () => {
@@ -94,16 +125,19 @@ async function checkVariant(pdfjsLib, signed) {
   let failed = 0;
   for (const signed of [false, true]) {
     const label = signed ? 'signed  ' : 'unsigned';
-    const { pages, orphans } = await checkVariant(pdfjsLib, signed);
-    if (orphans.length) {
-      failed += orphans.length;
-      for (const o of orphans) console.error(`  ${label} — page ${o.page}/${o.of} ends on heading: "${o.text}"`);
-    }
-    console.log(`check-contract-layout: ${label} — ${pages} pages, ${orphans.length ? orphans.length + ' ORPHAN(S)' : 'no dangling headings'}`);
+    const { pages, orphans, overruns } = await withSignatureFile(() => checkVariant(pdfjsLib, signed));
+    for (const o of orphans) console.error(`  ${label} — page ${o.page}/${o.of} ends on heading: "${o.text}"`);
+    for (const o of overruns) console.error(`  ${label} — page ${o.page}/${o.of} content collides with the footer: "${o.text.slice(0, 60)}"`);
+    failed += orphans.length + overruns.length;
+    const issues = [];
+    if (orphans.length) issues.push(orphans.length + ' orphan heading(s)');
+    if (overruns.length) issues.push(overruns.length + ' footer collision(s)');
+    console.log(`check-contract-layout: ${label} — ${pages} pages, ${issues.length ? issues.join(' + ') : 'clean'}`);
   }
   if (failed) {
-    console.error(`\ncheck-contract-layout: FAIL — ${failed} heading(s) stranded at a page foot.`);
-    console.error('Give the heading more keep-with-next room in services/contractPdf.js (blockHeading / sectionHeading).');
+    console.error(`\ncheck-contract-layout: FAIL — ${failed} layout problem(s).`);
+    console.error('Headings need keep-with-next room (blockHeading / sectionHeading); anything that writes');
+    console.error('at doc.y must call need() first, or it walks straight through the bottom margin.');
     process.exit(1);
   }
   console.log('check-contract-layout: PASS');
