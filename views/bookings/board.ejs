@@ -2823,7 +2823,24 @@
   }
   // After any allocation change (drop / remove / assign), keep the glowing
   // card (the shift surface) AND the Overview requirement steppers in sync.
+  // Re-sync the resource pool after an allocation change. flashAssigned()
+  // sets p.assigned_today = true on the cached row when someone is placed,
+  // but nothing ever set it back — so removing a worker from a shift left the
+  // flag stuck true and rpRepaint's pre-filter kept them out of the pool for
+  // the rest of the session. They looked deleted; only a page reload or a
+  // date change brought them back. Re-hydrating from the server after every
+  // change fixes it for every removal path, including ones added later.
+  // Debounced so a burst of drag-drops coalesces into one fetch.
+  var rpResyncTimer = null;
+  function rpResyncSoon() {
+    clearTimeout(rpResyncTimer);
+    rpResyncTimer = setTimeout(function () {
+      try { if (window.bk2ReloadResources) window.bk2ReloadResources(); } catch (e) {}
+    }, 400);
+  }
+
   document.addEventListener('bk2:alloc-changed', function () {
+    rpResyncSoon();
     // Route through the canonical refresh so the floating card, the static
     // board card, and the requirement steppers all track the change live.
     var ed = $('#bk2-editor');
@@ -5093,7 +5110,14 @@
     var meta = $('#bk2-rp-meta');
     // Anyone/anything already allocated on the viewed day leaves the pool —
     // a worker or ute can't be picked twice for the same day.
-    var ppl = (rpData.people    || []).filter(function (p) { return !p.assigned_today; }).filter(rpSearchHit).filter(rpPersonOk);
+    // Allocated workers drop out of the pool by default — you can't pick the
+    // same person twice for a day. But this pre-filter runs BEFORE the chips,
+    // so it also swallowed anyone a chip was meant to reveal: the "Assigned"
+    // chip could never match a single row, and a worker whose assigned_today
+    // was stale stayed invisible no matter which chip you pressed. Let the
+    // Assigned chip opt them back in; rpPersonOk then narrows to just them.
+    var showAssigned = !!rpFilters.people.assigned;
+    var ppl = (rpData.people    || []).filter(function (p) { return showAssigned || !p.assigned_today; }).filter(rpSearchHit).filter(rpPersonOk);
     var veh = (rpData.vehicles  || []).filter(function (v) { return !v.assigned_today; }).filter(rpSearchHit).filter(rpVehicleOk);
     var eqp = (rpData.equipment || []).filter(rpSearchHit).filter(rpEquipmentOk);
     var pList = $('#bk2-rp-list-people');     if (pList) pList.innerHTML = rpRenderPeople(ppl);
