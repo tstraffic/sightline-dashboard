@@ -41,12 +41,35 @@ function need(doc, h) {
   return false;
 }
 
+// A heading must never be the last thing on a page. Every heading reserves
+// itself PLUS a slab of whatever follows, so if both don't fit we break
+// early and they start the next page together. ~70pt ≈ a table header plus
+// its first row, or three lines of clause text.
+const KEEP_WITH_NEXT = 72;
+
+// Sub-heading inside a schedule (A1 / A2 / A3, "How penalties apply", the
+// signatory blocks). Measures its own height rather than assuming one line.
+function blockHeading(doc, text, opts = {}) {
+  const size = opts.size || 10.5;
+  const color = opts.color || BRAND_DARK;
+  const follow = opts.follow == null ? KEEP_WITH_NEXT : opts.follow;
+  doc.font('Helvetica-Bold').fontSize(size);
+  const h = doc.heightOfString(text, { width: CW });
+  need(doc, h + 6 + follow);
+  doc.fillColor(color).font('Helvetica-Bold').fontSize(size).text(text, ML, doc.y, { width: CW });
+  doc.y += 6;
+}
+
 function sectionHeading(doc, num, heading) {
-  need(doc, 46);
+  const label = `${num}.  ${heading}`;
+  doc.font('Helvetica-Bold').fontSize(11.5);
+  const h = doc.heightOfString(label, { width: CW });
+  // gap + heading + rule + the opening lines of clause 1
+  need(doc, 12 + h + 12 + KEEP_WITH_NEXT);
   doc.moveDown(0.9);
   const y = doc.y;
   doc.fillColor(BRAND).font('Helvetica-Bold').fontSize(11.5)
-    .text(`${num}.  ${heading}`, ML, y, { width: CW });
+    .text(label, ML, y, { width: CW });
   doc.moveTo(ML, doc.y + 3).lineTo(ML + CW, doc.y + 3).lineWidth(0.7).strokeColor(RULE).stroke();
   doc.y += 9;
 }
@@ -87,7 +110,8 @@ function drawTable(doc, header, rows, widths, opts = {}) {
   };
 
   const headH = rowH(header, true);
-  need(doc, headH + 26);
+  // Never strand a table header: reserve it plus its first real row.
+  need(doc, headH + (rows.length ? rowH(rows[0], false) : 0) + 4);
   drawRow(header, doc.y, headH, { bold: true, fill: PANEL, color: BRAND_DARK });
   doc.y += headH;
   for (const row of rows) {
@@ -206,21 +230,18 @@ function renderContractPdf(contract, fields, acks = []) {
     doc.fillColor(MUTED).font('Helvetica-Oblique').fontSize(8.6).text(A.intro, ML, doc.y, { width: CW, lineGap: 1.5 });
     doc.y += 10;
 
-    doc.fillColor(BRAND_DARK).font('Helvetica-Bold').fontSize(10.5).text('A1 — Base hourly rates (Mon–Fri, day)', ML, doc.y, { width: CW });
-    doc.y += 6;
+    blockHeading(doc, 'A1 — Base hourly rates (Mon–Fri, day)');
     drawTable(doc,
       ['Tier', 'Award level', 'Role', 'Hourly rate'],
       A.a1.map(r => [r.tier, r.level, r.role, money2(r.rate)]),
       [50, 100, CW - 260, 110]);
 
-    doc.fillColor(BRAND_DARK).font('Helvetica-Bold').fontSize(10.5).text('A2 — Penalty rates', ML, doc.y, { width: CW });
-    doc.y += 6;
+    blockHeading(doc, 'A2 — Penalty rates');
     const a2w = [42].concat(Array(7).fill((CW - 42) / 7));
     drawTable(doc, A.a2Header, A.a2.map(r => [r.tier].concat(r.cells)), a2w);
 
-    need(doc, 90);
-    doc.fillColor(INK).font('Helvetica-Bold').fontSize(9).text('How penalties apply:', ML, doc.y, { width: CW });
-    doc.y += 3;
+    blockHeading(doc, 'How penalties apply:', { size: 9, color: INK, follow: 78 });
+    doc.y -= 3;
     for (const n of A.penaltyNotes) {
       doc.fillColor(INK).font('Helvetica').fontSize(8.6).text('•  ' + n, ML + 6, doc.y, { width: CW - 6, lineGap: 1.5 });
       doc.y += 2;
@@ -229,8 +250,7 @@ function renderContractPdf(contract, fields, acks = []) {
     doc.fillColor(MUTED).font('Helvetica-Oblique').fontSize(8.4).text(tpl.toPlain(A.penaltyFootnote), ML, doc.y, { width: CW, lineGap: 1.5 });
     doc.y += 12;
 
-    doc.fillColor(BRAND_DARK).font('Helvetica-Bold').fontSize(10.5).text('A3 — Allowances', ML, doc.y, { width: CW });
-    doc.y += 6;
+    blockHeading(doc, 'A3 — Allowances');
     drawTable(doc,
       ['Allowance', 'Rate', 'Notes'],
       A.a3.map(r => [r.name, r.rate, r.notes]),
@@ -279,6 +299,8 @@ function renderContractPdf(contract, fields, acks = []) {
     doc.y += 8;
     metaRow(doc, 'Full name', fields.WORKER_FULL_NAME, ML, CW);
     if (signed && contract.signature_path) {
+      // Label + box are one unit — never split them across a page.
+      need(doc, 92);
       doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text('SIGNATURE', ML, doc.y, { width: CW });
       const sigAbs = path.join(__dirname, '..', contract.signature_path);
       try {
@@ -296,6 +318,7 @@ function renderContractPdf(contract, fields, acks = []) {
       metaRow(doc, 'Link sent to', contract.sent_to_email || fields.WORKER_EMAIL, ML, CW);
       metaRow(doc, 'Identity checks', 'Date of birth verified · full agreement scrolled · name typed to confirm', ML, CW);
     } else {
+      need(doc, 92);
       doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text('SIGNATURE', ML, doc.y, { width: CW });
       doc.rect(ML, doc.y + 3, 210, 64).lineWidth(0.7).strokeColor(RULE).stroke();
       doc.fillColor(FAINT).font('Helvetica-Oblique').fontSize(8.5).text('Not yet signed', ML + 12, doc.y + 28);
@@ -303,8 +326,9 @@ function renderContractPdf(contract, fields, acks = []) {
     }
 
     doc.y += 8;
-    doc.fillColor(BRAND_DARK).font('Helvetica-Bold').fontSize(10.5).text('For and on behalf of T&S Traffic Control Pty Ltd', ML, doc.y, { width: CW });
-    doc.y += 8;
+    // The company block is one unit: heading, name, position, signature.
+    blockHeading(doc, 'For and on behalf of T&S Traffic Control Pty Ltd', { follow: 110 });
+    doc.y += 2;
     metaRow(doc, 'Name', fields.TS_SIGNATORY_NAME, ML, CW);
     metaRow(doc, 'Position', fields.TS_SIGNATORY_POSITION, ML, CW);
     doc.font('Helvetica-Bold').fontSize(8).fillColor(MUTED).text('SIGNATURE', ML, doc.y, { width: CW });

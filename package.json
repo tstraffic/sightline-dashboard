@@ -12,7 +12,8 @@
     "test:smoke": "playwright test auth.spec.js smoke.spec.js worker.spec.js",
     "test:cross-tenant": "node --test tests/cross-tenant/*.test.js",
     "lint:tenant": "node scripts/check-raw-db.js",
-    "lint:tenant:ratchet": "node scripts/lint-tenant-ratchet.js"
+    "lint:tenant:ratchet": "node scripts/lint-tenant-ratchet.js",
+    "check:contract": "node scripts/check-contract-layout.js"
   },
   "engines": {
     "node": ">=18.0.0"
