@@ -88,6 +88,12 @@ async function checkVariant(pdfjsLib, signed) {
 
   const orphans = [];
   const overruns = [];
+  const sparse = [];
+  // A page must carry more than a stray line or two. Clause 26.6
+  // ("Survival") once had page 8 of 11 to itself — one sentence, 731pt of
+  // white — because the section it closes began a few points too late.
+  // 60pt ≈ five lines of clause text.
+  const MIN_CONTENT_SPAN = 60;
   // The footer band. Body content must stop above it — anything printed
   // inside collides with "… Private & confidential / Page n of m", which is
   // exactly what happened when metaRow had no page-break check.
@@ -111,13 +117,19 @@ async function checkVariant(pdfjsLib, signed) {
       if (!isFooter) overruns.push({ page: p, of: doc.numPages, text: l.text, y: l.y });
     }
 
-    const body = all.filter(l => l.y > FOOTER_BOTTOM);
+    const body = all.filter(l => l.y > FOOTER_BOTTOM && !/^Casual Employment Agreement · /.test(l.text) && l.text !== 'SIGNED' && l.text !== 'UNSIGNED');
     const last = body[body.length - 1];
     if (last && HEADINGS.some(re => re.test(last.text))) {
       orphans.push({ page: p, of: doc.numPages, text: last.text });
     }
+    if (body.length) {
+      const span = body[0].y - last.y;
+      if (span < MIN_CONTENT_SPAN) {
+        sparse.push({ page: p, of: doc.numPages, span: Math.round(span), lines: body.length, text: last.text });
+      }
+    }
   }
-  return { pages: doc.numPages, orphans, overruns };
+  return { pages: doc.numPages, orphans, overruns, sparse };
 }
 
 (async () => {
@@ -125,13 +137,15 @@ async function checkVariant(pdfjsLib, signed) {
   let failed = 0;
   for (const signed of [false, true]) {
     const label = signed ? 'signed  ' : 'unsigned';
-    const { pages, orphans, overruns } = await withSignatureFile(() => checkVariant(pdfjsLib, signed));
+    const { pages, orphans, overruns, sparse } = await withSignatureFile(() => checkVariant(pdfjsLib, signed));
     for (const o of orphans) console.error(`  ${label} — page ${o.page}/${o.of} ends on heading: "${o.text}"`);
     for (const o of overruns) console.error(`  ${label} — page ${o.page}/${o.of} content collides with the footer: "${o.text.slice(0, 60)}"`);
-    failed += orphans.length + overruns.length;
+    for (const o of sparse) console.error(`  ${label} — page ${o.page}/${o.of} is near-empty: ${o.lines} line(s), ${o.span}pt of content — "${o.text.slice(0, 60)}"`);
+    failed += orphans.length + overruns.length + sparse.length;
     const issues = [];
     if (orphans.length) issues.push(orphans.length + ' orphan heading(s)');
     if (overruns.length) issues.push(overruns.length + ' footer collision(s)');
+    if (sparse.length) issues.push(sparse.length + ' near-empty page(s)');
     console.log(`check-contract-layout: ${label} — ${pages} pages, ${issues.length ? issues.join(' + ') : 'clean'}`);
   }
   if (failed) {

@@ -74,13 +74,49 @@ function sectionHeading(doc, num, heading) {
   doc.y += 9;
 }
 
+// Height a section would occupy if laid out from the current y. Mirrors
+// sectionHeading + clauseText, so the two must stay in step.
+function measureSection(doc, sec) {
+  doc.font('Helvetica-Bold').fontSize(11.5);
+  let h = doc.currentLineHeight(true) * 0.9;                       // moveDown(0.9)
+  h += doc.heightOfString(`${sec.num}.  ${sec.heading}`, { width: CW });
+  h += 9;                                                          // rule + gap
+  for (const clause of sec.clauses) {
+    const blocks = tpl.toPlain(clause).split(/\n+/).map(s => s.trim()).filter(Boolean);
+    doc.font('Helvetica').fontSize(9.3);
+    for (const block of blocks) {
+      const indent = /^\([a-z]\)/.test(block) ? 14 : 0;
+      h += doc.heightOfString(block, { width: CW - indent, lineGap: 2.1 }) + 4;
+    }
+    h += 3;
+  }
+  return h;
+}
+
+// Widow control for sections. "A whole page for one sentence" was clause
+// 26.6 alone on page 8, because section 26 began ~15pt too late to fit.
+// When a section would drop only a stub onto the next page, start the
+// whole section there instead. Both bounds matter: only rescue an actual
+// widow (a section splitting evenly is fine and should stay split, or we
+// just move the hole up the document), and only for a section short
+// enough that the gap left behind is smaller than the page it saved.
+const WIDOW_MAX = 96;         // ≈ 7 lines — below this, a tail reads as stranded
+const KEEP_SECTION_MAX = 300; // ≈ 40% of a page — the most blank space we'll leave
+
 function clauseText(doc, text) {
   // Split a clause into its paragraphs / sub-points so pdfkit flows each
   // block and page-breaks between points rather than mid-line.
   const blocks = tpl.toPlain(text).split(/\n+/).map(s => s.trim()).filter(Boolean);
   for (const block of blocks) {
     const indent = /^\([a-z]\)/.test(block) ? 14 : 0;
-    need(doc, 24);
+    doc.font('Helvetica').fontSize(9.3);
+    const h = doc.heightOfString(block, { width: CW - indent, lineGap: 2.1 });
+    // Reserve what the block ACTUALLY needs when it's short; for a long
+    // paragraph reserve only its opening lines and let pdfkit flow the
+    // rest over the break. The old flat 24pt over-reserved every
+    // one-line clause — that's what exiled clause 26.6 ("Survival") to a
+    // page of its own when 19pt of room was still available.
+    need(doc, Math.min(h, 30) + 4);
     doc.fillColor(INK).font('Helvetica').fontSize(9.3)
       .text(block, ML + indent, doc.y, { width: CW - indent, lineGap: 2.1, align: 'left' });
     doc.y += 4;
@@ -250,10 +286,21 @@ function renderContractPdf(contract, fields, acks = []) {
     doc.y = stripY + 44;
 
     // ── Body sections ──
-    for (const sec of tpl.sections(fields)) {
+    const secs = tpl.sections(fields);
+    secs.forEach((sec, i) => {
+      // Only the final section gets widow protection. A section in the
+      // middle that spills two lines is fine — the next heading follows
+      // it straight down the same page. The last one is followed by a
+      // forced page break for Schedule A, so its tail has nothing to
+      // share a page with and ends up alone.
+      if (i === secs.length - 1) {
+        const secH = measureSection(doc, sec);
+        const spill = doc.y + secH - (doc.page.height - MB);
+        if (spill > 0 && spill < WIDOW_MAX && secH <= KEEP_SECTION_MAX) doc.addPage();
+      }
       sectionHeading(doc, sec.num, sec.heading);
       for (const clause of sec.clauses) clauseText(doc, clause);
-    }
+    });
 
     // ── Schedule A ──
     const A = tpl.scheduleA(fields);
