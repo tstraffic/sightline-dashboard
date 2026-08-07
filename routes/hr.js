@@ -256,8 +256,14 @@ router.get('/roster', requireRosterView, (req, res) => {
   // counts against the same population: employees not deleted, matching
   // whichever status tab the operator has selected. Cash/TFN/ABN are strict
   // subsets so they can never exceed "All" on this row.
-  // Build the "currently viewed population" predicate once and reuse it for
-  // every pill so they're guaranteed to share the same scope.
+  //
+  // The predicate MUST mirror the table's own WHERE above, including when no
+  // status tab is selected. It used to add employment_status='active' in that
+  // case so Cash+TFN+ABN would sum to the Active tab — but the table on the
+  // All tab lists every non-deleted employee, so the pills undercounted
+  // anyone on leave / reserved / inactive / terminated. Clicking a pill then
+  // returned MORE rows than the number printed on it, because the resulting
+  // ?payment_type=tfn view carries no status filter either.
   let pillWhere = 'deleted_at IS NULL';
   const pillParams = [];
   if (status === 'inactive' || status === 'deactivated') {
@@ -266,12 +272,6 @@ router.get('/roster', requireRosterView, (req, res) => {
     pillWhere += " AND employment_status IN ('terminated','offboarded')";
   } else if (status) {
     pillWhere += ' AND employment_status = ?'; pillParams.push(status);
-  } else {
-    // No status filter selected → default the payment pills to the "Active"
-    // population so Cash + TFN + ABN add up to the green Active tab number,
-    // not the broader "All employees" tab. That's what operators expect from
-    // the row and matches the page's primary working set.
-    pillWhere += " AND employment_status = 'active'";
   }
   const totalPillAll = db.prepare(`SELECT COUNT(*) AS c FROM employees WHERE ${pillWhere}`).get(...pillParams).c;
   const totalCash = db.prepare(`SELECT COUNT(*) AS c FROM employees WHERE ${pillWhere} AND payment_type = 'cash'`).get(...pillParams).c;
