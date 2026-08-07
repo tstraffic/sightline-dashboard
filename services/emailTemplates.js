@@ -125,6 +125,29 @@ function toolboxSignLinkEmail(fullName, toolbox, signUrl) {
   `);
 }
 
+// Employment agreement — signing link. The unsigned PDF rides along as an
+// attachment so the worker has the offer in hand before opening the link.
+function contractSignLinkEmail(fullName, signUrl, agreementNumber) {
+  return baseTemplate('Your employment agreement — review and sign', `
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 8px;">Hi ${escapeHtml(fullName || 'there')},</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Your casual employment agreement with T&amp;S Traffic Control (<strong>${escapeHtml(agreementNumber)}</strong>) is ready for you to review and sign.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Open the link below, read the agreement carefully — the whole document, including your rates in Schedule A — then tick the acknowledgements and sign on your phone. A copy is attached to this email so you can read it first, and you're welcome to seek independent advice before signing.</p>
+    ${buttonHtml('Review and sign your agreement', signUrl)}
+    <p style="color:#6B7280;font-size:13px;margin:0 0 8px;">This link is unique to you — please don't forward it. It expires after 14 days; if it does, contact the office for a fresh one.</p>
+    <p style="color:#6B7280;font-size:13px;margin:0;">If the button doesn't work, copy and paste this link into your browser:<br><a href="${signUrl}" style="color:#059669;word-break:break-all;">${signUrl}</a></p>
+  `);
+}
+
+// Employment agreement — signed confirmation, with the executed PDF attached.
+function contractSignedEmail(fullName, agreementNumber) {
+  return baseTemplate('Your signed employment agreement', `
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 8px;">Hi ${escapeHtml(fullName || 'there')},</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Thanks — your casual employment agreement with T&amp;S Traffic Control (<strong>${escapeHtml(agreementNumber)}</strong>) has been signed. Your copy is attached to this email; keep it for your records.</p>
+    <p style="color:#374151;font-size:15px;line-height:1.6;margin:0 0 16px;">Welcome aboard. The office will be in touch with your onboarding and first-shift details.</p>
+    <p style="color:#6B7280;font-size:13px;margin:0;">If anything in the agreement looks wrong, contact the T&amp;S office straight away.</p>
+  `);
+}
+
 function escapeHtml(s) {
   return String(s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -201,4 +224,6 @@ module.exports = {
   sopSignLinkEmail,
   toolboxClientEmail,
   toolboxSignLinkEmail,
+  contractSignLinkEmail,
+  contractSignedEmail,
 };

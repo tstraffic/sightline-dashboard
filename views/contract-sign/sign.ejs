@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Employment Agreement <%= contract.agreement_number %> — T&S Traffic Control</title>
+<style>
+  :root { --brand:#059669; --brand-dark:#065F46; --ink:#111827; --muted:#6B7280; --faint:#9CA3AF; --rule:#E5E7EB; --panel:#F9FAFB; --warn:#B45309; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { -webkit-text-size-adjust: 100%; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: var(--ink); background: #F3F4F6; line-height: 1.55; }
+  .topbar { position: sticky; top: 0; z-index: 30; background: #0F1115; color: #fff; padding: 12px 16px; display: flex; align-items: center; gap: 12px; }
+  .topbar .brand { font-weight: 800; letter-spacing: -0.02em; font-size: 15px; }
+  .topbar .brand span { color: #10B981; }
+  .topbar .ref { margin-left: auto; font-size: 11px; color: #9CA3AF; font-variant-numeric: tabular-nums; }
+  .topbar a.pdf { color: #10B981; font-size: 12px; font-weight: 600; text-decoration: none; border: 1px solid rgba(16,185,129,.4); padding: 5px 10px; border-radius: 8px; white-space: nowrap; }
+  #progress { position: sticky; top: 48px; z-index: 29; height: 3px; background: rgba(5,150,105,.15); }
+  #progress i { display: block; height: 100%; width: 0; background: var(--brand); transition: width .1s linear; }
+  .wrap { max-width: 760px; margin: 0 auto; padding: 16px 14px 80px; }
+  .card { background: #fff; border: 1px solid var(--rule); border-radius: 14px; padding: 20px 18px; margin-bottom: 14px; }
+  h1 { font-size: 21px; letter-spacing: -0.02em; line-height: 1.2; }
+  .sub { color: var(--brand-dark); font-weight: 700; font-size: 13.5px; margin-top: 2px; }
+  .meta-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 14px; margin-top: 14px; }
+  .meta-grid .cell b { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); font-weight: 700; }
+  .meta-grid .cell span { font-size: 13.5px; font-weight: 600; }
+  .notice { background: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; border-radius: 10px; padding: 10px 12px; font-size: 12.5px; margin-top: 14px; }
+  section.clause h2 { color: var(--brand-dark); font-size: 15px; margin: 22px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--rule); }
+  section.clause p { font-size: 13.5px; margin: 8px 0; color: #1F2937; }
+  section.clause p.pt { padding-left: 16px; }
+  .sched h2 { font-size: 16px; margin: 4px 0 2px; }
+  .sched .intro { font-size: 12px; color: var(--muted); font-style: italic; margin-bottom: 10px; }
+  .sched h3 { font-size: 13.5px; color: var(--brand-dark); margin: 14px 0 6px; }
+  .tblwrap { overflow-x: auto; -webkit-overflow-scrolling: touch; border: 1px solid var(--rule); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; min-width: 460px; font-size: 12.5px; }
+  th { background: var(--panel); color: var(--brand-dark); text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; padding: 7px 9px; }
+  td { padding: 7px 9px; border-top: 1px solid var(--rule); font-variant-numeric: tabular-nums; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  ul.notes { font-size: 12.5px; color: #1F2937; margin: 8px 0 0 18px; }
+  .lockable { position: relative; }
+  .locked-overlay { position: absolute; inset: 0; background: rgba(243,244,246,.72); backdrop-filter: blur(2px); border-radius: 14px; display: flex; align-items: center; justify-content: center; z-index: 5; }
+  .locked-overlay .msg { background: #111827; color: #fff; font-size: 13px; padding: 10px 16px; border-radius: 999px; box-shadow: 0 8px 24px rgba(0,0,0,.25); }
+  .ack { display: flex; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--panel); align-items: flex-start; }
+  .ack input { width: 20px; height: 20px; margin-top: 1px; accent-color: var(--brand); flex-shrink: 0; }
+  .ack label { font-size: 13px; }
+  .field { margin: 14px 0; }
+  .field b { display: block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 700; margin-bottom: 4px; }
+  .field input { width: 100%; padding: 11px 12px; font-size: 15px; border: 1px solid #D1D5DB; border-radius: 10px; background: #fff; }
+  .field input:focus { outline: 2px solid var(--brand); border-color: transparent; }
+  .field .why { font-size: 11.5px; color: var(--faint); margin-top: 3px; }
+  #sig-box { border: 1.5px dashed #9CA3AF; border-radius: 12px; background: #fff; position: relative; }
+  #sig-canvas { width: 100%; height: 170px; touch-action: none; display: block; border-radius: 12px; }
+  #sig-hintline { position: absolute; left: 10%; right: 10%; bottom: 38px; border-bottom: 1px solid var(--rule); pointer-events: none; }
+  #sig-hint { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; color: var(--faint); font-size: 11.5px; pointer-events: none; }
+  .sigrow { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
+  .sigrow button { background: none; border: none; color: var(--muted); font-size: 12.5px; text-decoration: underline; padding: 6px; }
+  #submit { width: 100%; margin-top: 16px; background: var(--brand); color: #fff; font-size: 16px; font-weight: 700; border: none; border-radius: 12px; padding: 15px; cursor: pointer; }
+  #submit:disabled { background: #9CA3AF; cursor: not-allowed; }
+  #err { display: none; background: #FEF2F2; border: 1px solid #FECACA; color: #B91C1C; font-size: 13px; border-radius: 10px; padding: 10px 12px; margin-top: 12px; }
+  .fw-links { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+  .fw-links a { font-size: 12px; color: var(--brand-dark); font-weight: 600; border: 1px solid var(--rule); border-radius: 999px; padding: 6px 11px; text-decoration: none; background: var(--panel); }
+  footer { text-align: center; color: var(--faint); font-size: 11px; padding: 18px 14px 30px; }
+  @media (min-width: 640px) { .wrap { padding-top: 24px; } .card { padding: 26px 26px; } h1 { font-size: 24px; } }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">T&amp;S <span>Traffic Control</span></div>
+  <div class="ref"><%= contract.agreement_number %> · v<%= contract.version %></div>
+  <a class="pdf" href="/contract-sign/<%= token %>/pdf" target="_blank" rel="noopener">Download PDF</a>
+</div>
+<div id="progress"><i></i></div>
+
+<div class="wrap">
+
+  <!-- Cover -->
+  <div class="card">
+    <h1>Casual Employment Agreement</h1>
+    <div class="sub">Traffic Controller — Civil Construction</div>
+    <div class="meta-grid">
+      <div class="cell"><b>The company</b><span><%= company.name %></span><div style="font-size:12px;color:var(--muted);">ABN <%= company.abn %> · <%= company.address %></div></div>
+      <div class="cell"><b>You</b><span><%= fields.WORKER_FULL_NAME %></span><div style="font-size:12px;color:var(--muted);">DOB <%= fields.WORKER_DOB_DISPLAY %> · <%= fields.WORKER_MOBILE %></div><div style="font-size:12px;color:var(--muted);"><%= fields.WORKER_ADDRESS %></div></div>
+      <div class="cell"><b>Position</b><span><%= fields.POSITION_TITLE %> · Tier <%= fields.TIER %></span></div>
+      <div class="cell"><b>Commencement</b><span><%= fields.START_DATE_DISPLAY %></span></div>
+      <div class="cell"><b>Date offered</b><span><%= fields.OFFER_DATE %></span></div>
+      <div class="cell"><b>Agreement reference</b><span><%= contract.agreement_number %></span></div>
+    </div>
+    <div class="notice">
+      Read this agreement carefully — the whole document. The signing section unlocks once you've scrolled to the end.
+      Take your time; you can also <a href="/contract-sign/<%= token %>/pdf" target="_blank" rel="noopener" style="color:var(--brand-dark);font-weight:700;">download the PDF</a> to read or keep, and you're welcome to seek independent advice before signing.
+    </div>
+  </div>
+
+  <!-- Agreement body -->
+  <div class="card">
+    <% sections.forEach(function (sec) { %>
+      <section class="clause">
+        <h2><%= sec.num %>. <%= sec.heading %></h2>
+        <% sec.clauses.forEach(function (clause) { %>
+          <% clause.split(/\n+/).map(function (s) { return s.trim(); }).filter(Boolean).forEach(function (block) { %>
+            <p class="<%= /^\([a-z]\)/.test(block) ? 'pt' : '' %>"><%- toHtml(block) %></p>
+          <% }) %>
+        <% }) %>
+      </section>
+    <% }) %>
+  </div>
+
+  <!-- Schedule A -->
+  <div class="card sched">
+    <h2>Schedule A — Rates of pay and allowances</h2>
+    <p class="intro"><%= scheduleA.intro %></p>
+
+    <h3>A1 — Base hourly rates (Mon–Fri, day)</h3>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Tier</th><th>Award level</th><th>Role</th><th>Hourly rate</th></tr></thead>
+      <tbody>
+        <% scheduleA.a1.forEach(function (r) { %>
+          <tr <%= String(r.tier) === String(fields.TIER) ? 'style="background:#ECFDF5;font-weight:700;"' : '' %>>
+            <td><%= r.tier %></td><td><%= r.level %></td><td><%= r.role %></td><td><%= r.rate %></td>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table></div>
+    <p class="hint">Your tier is highlighted.</p>
+
+    <h3>A2 — Penalty rates</h3>
+    <div class="tblwrap"><table>
+      <thead><tr><% scheduleA.a2Header.forEach(function (h) { %><th><%= h %></th><% }) %></tr></thead>
+      <tbody>
+        <% scheduleA.a2.forEach(function (r) { %>
+          <tr <%= String(r.tier) === String(fields.TIER) ? 'style="background:#ECFDF5;font-weight:700;"' : '' %>>
+            <td><%= r.tier %></td><% r.cells.forEach(function (c) { %><td><%= c %></td><% }) %>
+          </tr>
+        <% }) %>
+      </tbody>
+    </table></div>
+    <b style="display:block;font-size:12.5px;margin-top:10px;">How penalties apply:</b>
+    <ul class="notes"><% scheduleA.penaltyNotes.forEach(function (n) { %><li><%= n %></li><% }) %></ul>
+    <p class="hint"><%- toHtml(scheduleA.penaltyFootnote) %></p>
+
+    <h3>A3 — Allowances</h3>
+    <div class="tblwrap"><table>
+      <thead><tr><th>Allowance</th><th>Rate</th><th>Notes</th></tr></thead>
+      <tbody>
+        <% scheduleA.a3.forEach(function (r) { %>
+          <tr><td><%= r.name %></td><td><%= r.rate %></td><td><%= r.notes %></td></tr>
+        <% }) %>
+      </tbody>
+    </table></div>
+  </div>
+
+  <!-- Scroll sentinel: the signing card unlocks when this becomes visible -->
+  <div id="read-end" aria-hidden="true"></div>
+
+  <!-- Schedule B + signing -->
+  <div class="card lockable" id="sign-card">
+    <div class="locked-overlay" id="lock">
+      <div class="msg">🔒 Read the agreement to the end to unlock signing</div>
+    </div>
+
+    <h2 style="font-size:16px;">Schedule B — Acknowledgements and electronic signature</h2>
+    <p class="hint" style="margin-bottom:6px;">Tick each box to confirm. All boxes must be ticked before you can submit. Each tick is recorded individually with its time.</p>
+    <div class="fw-links">
+      <a href="https://www.fairwork.gov.au/employment-conditions/national-employment-standards/fair-work-information-statement" target="_blank" rel="noopener">Fair Work Information Statement ↗</a>
+      <a href="https://www.fairwork.gov.au/employment-conditions/national-employment-standards/casual-employment-information-statement" target="_blank" rel="noopener">Casual Employment Information Statement ↗</a>
+    </div>
+
+    <div style="margin-top:12px;">
+      <% acks.forEach(function (a) { %>
+        <div class="ack">
+          <input type="checkbox" id="ack-<%= a.key %>" data-ack="<%= a.key %>">
+          <label for="ack-<%= a.key %>"><%- toHtml(a.label) %></label>
+        </div>
+      <% }) %>
+    </div>
+
+    <div class="field">
+      <b>Type your full legal name</b>
+      <input type="text" id="typed-name" autocomplete="name" placeholder="<%= fields.WORKER_FULL_NAME %>">
+      <div class="why">Must match the name on this agreement exactly.</div>
+    </div>
+    <div class="field">
+      <b>Confirm your date of birth</b>
+      <input type="date" id="dob">
+      <div class="why">Checked against T&amp;S records to confirm it's really you signing.</div>
+    </div>
+
+    <div class="field">
+      <b>Draw your signature</b>
+      <div id="sig-box">
+        <canvas id="sig-canvas"></canvas>
+        <div id="sig-hintline"></div>
+        <div id="sig-hint">Sign above the line with your finger or mouse</div>
+      </div>
+      <div class="sigrow">
+        <span style="font-size:11.5px;color:var(--faint);">Your signature, tick times, IP address and device are recorded with the agreement.</span>
+        <button type="button" id="sig-clear">Clear</button>
+      </div>
+    </div>
+
+    <div id="err"></div>
+    <button id="submit" disabled>Sign the agreement</button>
+    <p class="hint" style="text-align:center;margin-top:10px;">By signing you agree your electronic signature has the same legal effect as a handwritten one (<i>Electronic Transactions Act 2000</i> (NSW)). You'll be emailed the signed PDF at <b><%= fields.WORKER_EMAIL %></b>.</p>
+  </div>
+
+  <footer>
+    <%= company.name %> · ABN <%= company.abn %> · <%= company.address %><br>
+    Document <%= contract.agreement_number %> · version <%= contract.version %> · This link is unique to you — don't forward it.
+  </footer>
+</div>
+
+<script>
+(function () {
+  var TOKEN = <%- JSON.stringify(token) %>;
+
+  // ── Reading progress bar ──
+  var bar = document.querySelector('#progress i');
+  function onScroll() {
+    var h = document.documentElement;
+    var max = h.scrollHeight - h.clientHeight;
+    bar.style.width = (max > 0 ? Math.min(100, (h.scrollTop / max) * 100) : 100) + '%';
+  }
+  document.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // ── Scroll-to-end gate ──
+  var scrolled = false;
+  var lock = document.getElementById('lock');
+  var sentinel = document.getElementById('read-end');
+  if ('IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function (entries) {
+      if (entries.some(function (e) { return e.isIntersecting; })) {
+        scrolled = true;
+        lock.style.display = 'none';
+        io.disconnect();
+        refresh();
+      }
+    }, { rootMargin: '0px 0px -40px 0px' });
+    io.observe(sentinel);
+  } else {
+    // Ancient browser: don't brick the page — unlock and rely on the
+    // server-side checks that remain.
+    scrolled = true; lock.style.display = 'none';
+  }
+
+  // ── Acknowledgements — stamp each tick the moment it happens ──
+  var ackTimes = {};
+  var ackBoxes = Array.prototype.slice.call(document.querySelectorAll('[data-ack]'));
+  ackBoxes.forEach(function (box) {
+    box.addEventListener('change', function () {
+      if (box.checked) ackTimes[box.dataset.ack] = new Date().toISOString();
+      else delete ackTimes[box.dataset.ack];
+      refresh();
+    });
+  });
+
+  // ── Signature pad (hand-rolled, no dependencies) ──
+  var canvas = document.getElementById('sig-canvas');
+  var ctx = canvas.getContext('2d');
+  var drawing = false, hasInk = false, last = null;
+  function sizeSig() {
+    var dpr = window.devicePixelRatio || 1;
+    var rect = canvas.getBoundingClientRect();
+    // preserve drawing on resize by snapshotting
+    var snap = hasInk ? canvas.toDataURL('image/png') : null;
+    canvas.width = rect.width * dpr; canvas.height = rect.height * dpr;
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.scale(dpr, dpr);
+    ctx.lineWidth = 2.2; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = '#0f172a';
+    if (snap) { var img = new Image(); img.onload = function () { ctx.drawImage(img, 0, 0, rect.width, rect.height); }; img.src = snap; }
+  }
+  function pos(e) {
+    var rect = canvas.getBoundingClientRect();
+    var p = e.touches && e.touches[0] ? e.touches[0] : e;
+    return { x: p.clientX - rect.left, y: p.clientY - rect.top };
+  }
+  function start(e) { e.preventDefault(); drawing = true; last = pos(e); }
+  function move(e) {
+    if (!drawing) return;
+    e.preventDefault();
+    var p = pos(e);
+    ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    last = p; hasInk = true;
+    document.getElementById('sig-hint').style.display = 'none';
+    refresh();
+  }
+  function end() { drawing = false; }
+  canvas.addEventListener('mousedown', start); canvas.addEventListener('mousemove', move); document.addEventListener('mouseup', end);
+  canvas.addEventListener('touchstart', start, { passive: false });
+  canvas.addEventListener('touchmove', move, { passive: false });
+  canvas.addEventListener('touchend', end);
+  window.addEventListener('resize', sizeSig);
+  sizeSig();
+  document.getElementById('sig-clear').addEventListener('click', function () {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    hasInk = false;
+    document.getElementById('sig-hint').style.display = '';
+    refresh();
+  });
+
+  // ── Gate the submit button ──
+  var submitBtn = document.getElementById('submit');
+  var typedEl = document.getElementById('typed-name');
+  var dobEl = document.getElementById('dob');
+  typedEl.addEventListener('input', refresh);
+  dobEl.addEventListener('input', refresh);
+  function refresh() {
+    var allAcks = ackBoxes.every(function (b) { return b.checked; });
+    submitBtn.disabled = !(scrolled && allAcks && hasInk && typedEl.value.trim() && dobEl.value);
+  }
+
+  // ── Submit ──
+  var err = document.getElementById('err');
+  function showErr(msg) { err.textContent = msg; err.style.display = 'block'; err.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+  submitBtn.addEventListener('click', function () {
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Signing…';
+    err.style.display = 'none';
+    var body = new URLSearchParams();
+    body.set('typed_name', typedEl.value.trim());
+    body.set('dob', dobEl.value);
+    body.set('scrolled', scrolled ? '1' : '0');
+    body.set('acks_json', JSON.stringify(ackTimes));
+    body.set('signature_data', canvas.toDataURL('image/png'));
+    fetch('/contract-sign/' + TOKEN + '/sign', {
+      method: 'POST',
+      headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: body,
+    }).then(function (r) { return r.json().catch(function () { return { ok: false, error: 'Something went wrong — try again.' }; }); })
+      .then(function (j) {
+        if (j.ok) { window.location.reload(); return; }
+        showErr(j.error || 'Something went wrong — try again.');
+        submitBtn.textContent = 'Sign the agreement';
+        refresh();
+      })
+      .catch(function () {
+        showErr('Network problem — check your connection and try again. Nothing was lost.');
+        submitBtn.textContent = 'Sign the agreement';
+        refresh();
+      });
+  });
+})();
+</script>
+</body>
+</html>

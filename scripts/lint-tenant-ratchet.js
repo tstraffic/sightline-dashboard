@@ -24,7 +24,12 @@ const path = require('path');
 //        dept_meetings (no tenant_id yet, Phase 2 backfills) and the module
 //        is joined at the hip to routes/departments.js, which is already on
 //        this backlog. Migrate the pair together.
-const BASELINE = 142;
+//   144  2026-08-07  +routes/contracts.js, +routes/contract-sign.js — the
+//        employment-contracts module (migration 344). Its tables carry no
+//        tenant_id yet and the queries join employees/users, so req.db's
+//        assertScoped would reject them until Phase 2 backfills. Conscious
+//        add; migrate both together with the HR cluster.
+const BASELINE = 144;
 
 // spawnSync (not execFileSync): check-raw-db exits 1 while violations exist,
 // and the JSON must still be read off stdout without an exception path.

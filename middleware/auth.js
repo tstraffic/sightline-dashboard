@@ -172,6 +172,9 @@ const PERMISSIONS = {
   // Leave approvals — ops + HR + admin can approve/reject worker leave.
   leave_approvals:    ['admin', 'operations', 'hr', 'management'],
   hr_documents:       ['admin', 'hr'],
+  // Employment contracts — generation + signing links carry pay rates and
+  // personal details, so this stays as tight as the other sensitive HR keys.
+  hr_contracts:       ['admin', 'hr'],
   hr_competencies:    ['admin', 'hr'],
   hr_reports:         ['admin', 'hr'],
   hr_settings:        ['admin'],

@@ -238,6 +238,10 @@ app.use('/toolbox-attend', require('./routes/toolbox-attend'));
 // Public VOC cert verification (auditors scan a QR on a printed cert).
 // Mounted before blockWorkerFromAdmin so it works in any session state.
 app.use('/voc', require('./routes/voc-public'));
+// Public token-protected contract signing (new hires have no login yet;
+// the unguessable URL token is the capability). CSRF skipped by prefix in
+// middleware/csrf.js.
+app.use('/contract-sign', require('./routes/contract-sign'));
 
 // Rate limiting on login endpoints (prevent brute force)
 const loginLimiter = rateLimit({
@@ -425,6 +429,7 @@ app.use('/reports', requireLogin, requirePermission('reports'), require('./route
 app.use('/marketing', requireLogin, requirePermission('marketing'), require('./routes/marketing'));
 app.use('/hr', requireLogin, require('./routes/hr-secure'));
 app.use('/hr', requireLogin, require('./routes/hr'));
+app.use('/contracts', requireLogin, require('./routes/contracts'));
 app.use('/kudos-admin', requireLogin, require('./routes/kudos-admin'));
 app.use('/payroll', requireLogin, require('./routes/payslips-admin'));
 app.use('/payroll', requireLogin, require('./routes/payroll-runs'));

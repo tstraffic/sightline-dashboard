@@ -15,6 +15,9 @@ const SKIP_PATHS = [
 const SKIP_PREFIXES = [
   '/sop-sign/',
   '/toolbox-attend/',
+  // /contract-sign/:token/sign — a new hire's phone has no session, so no
+  // CSRF token; the unguessable URL token is the capability that gates it.
+  '/contract-sign/',
   // /wq/:code is the participant entry point for Safety > Workshops.
   // Office staff scan the room QR; the session_code in the URL is the
   // capability that gates POSTs to start / submit / poll the leaderboard.

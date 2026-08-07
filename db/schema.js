@@ -15378,6 +15378,72 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 343 error:', e.message); }
   }
 
+  // Migration 344: employment contracts — generated from the T&S casual
+  // employment agreement template, sent as a tokenised public signing link,
+  // and archived as a PDF before and after signature.
+  //
+  // Design notes (from the onboarding-pack legal review):
+  //   - Every acknowledgement checkbox is stored as its OWN timestamped row
+  //     with the signer's IP (contract_acknowledgements) — "ticked the D&A
+  //     consent at 14:02:07 from this IP" is far stronger evidence than one
+  //     signature image over a blob.
+  //   - Agreements are versioned: editing a contract bumps `version` and
+  //     regenerates the PDF; nothing is edited in place after signing.
+  //   - PDFs live in data/contracts/ (NOT data/uploads/, which is statically
+  //     served without auth) and are only streamed through authed or
+  //     token-gated routes. Paths are stored relative to the app root.
+  //   - fields_json snapshots every placeholder value used to render the
+  //     agreement, so the signed document can always be reproduced even if
+  //     the employee record changes later.
+  if (!isMigrationApplied.get(344)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS contracts (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          agreement_number TEXT UNIQUE NOT NULL,
+          employee_id INTEGER NOT NULL REFERENCES employees(id),
+          status TEXT NOT NULL DEFAULT 'draft' CHECK(status IN ('draft','sent','signed','void')),
+          version INTEGER NOT NULL DEFAULT 1,
+          template_version TEXT NOT NULL DEFAULT '1.0',
+          fields_json TEXT NOT NULL DEFAULT '{}',
+          token TEXT UNIQUE,
+          token_expires_at DATETIME,
+          sent_to_email TEXT,
+          sent_at DATETIME,
+          viewed_at DATETIME,
+          signed_at DATETIME,
+          signer_ip TEXT,
+          signer_user_agent TEXT,
+          signed_name_typed TEXT,
+          signature_path TEXT,
+          unsigned_pdf_path TEXT,
+          signed_pdf_path TEXT,
+          employee_document_id INTEGER,
+          voided_at DATETIME,
+          void_reason TEXT,
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT (datetime('now')),
+          updated_at DATETIME
+        );
+        CREATE INDEX IF NOT EXISTS idx_contracts_employee ON contracts(employee_id, status);
+        CREATE INDEX IF NOT EXISTS idx_contracts_token ON contracts(token);
+
+        CREATE TABLE IF NOT EXISTS contract_acknowledgements (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          contract_id INTEGER NOT NULL REFERENCES contracts(id) ON DELETE CASCADE,
+          ack_key TEXT NOT NULL,
+          ack_label TEXT NOT NULL,
+          ticked_at_client TEXT,
+          recorded_at DATETIME DEFAULT (datetime('now')),
+          ip TEXT,
+          UNIQUE(contract_id, ack_key)
+        );
+      `);
+      recordMigration.run(344, 'Employment contracts: contracts + per-tick contract_acknowledgements');
+      console.log('Migration 344 applied: contracts tables created');
+    } catch (e) { console.error('Migration 344 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
