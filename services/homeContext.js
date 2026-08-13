@@ -2,12 +2,15 @@
 // Pure data assembly — no HTML. View consumes whatever this returns.
 
 const https = require('https');
+const { WORKER_VISIBLE_STATUSES } = require('../lib/bookingLifecycle');
 
 // A booking-linked shift only surfaces to crew once the allocator has
-// confirmed the booking ('confirmed' or later). Allocations with no booking
-// (pure job rosters) are unaffected. Mirrors the worker portal's
-// VISIBLE_BOOKING_STATUSES / bookingNotify.isNotifiable.
-const NOTIFIABLE_BOOKING_STATUSES = ['confirmed', 'green_to_go', 'in_progress', 'complete', 'on_hold'];
+// committed the booking. Canonical list from lib/bookingLifecycle —
+// the old local copy omitted 'locked', so a worker push-notified to
+// accept a locked shift found no "shift tomorrow" card and a hero that
+// said they were off. Allocations with no booking (pure job rosters)
+// are unaffected.
+const NOTIFIABLE_BOOKING_STATUSES = WORKER_VISIBLE_STATUSES;
 
 // Date in Sydney timezone (YYYY-MM-DD). Railway containers run on UTC so
 // using the JS Date getters lands on the previous day for several hours
@@ -660,16 +663,22 @@ function buildTodayTimeline(todaysShifts) {
   const [sh, sm] = (s.start_time || '06:00').split(':').map(Number);
   const [eh, em] = (s.end_time || '18:00').split(':').map(Number);
   const startMin = (sh || 0) * 60 + (sm || 0);
-  const endMin = (eh || 0) * 60 + (em || 0);
+  // Overnight shift (end on the next calendar day): unwrap before the
+  // midpoint maths, or a 22:00–06:00 shift got its "Scheduled break" at
+  // 14:00 — eight hours before it starts.
+  let endMin = (eh || 0) * 60 + (em || 0);
+  if (endMin <= startMin) endMin += 24 * 60;
 
   const blocks = [];
-  blocks.push({ kind: 'shift_start', label: 'Clock on', at: s.start_time, icon: 'play' });
+  // Labels say what actually happens — there is no clock-on flow in the
+  // portal, the shift bookends are the pre-start and the docket.
+  blocks.push({ kind: 'shift_start', label: 'Shift start', at: s.start_time, icon: 'play' });
   // Pre-start form 15 min before
   blocks.push({ kind: 'prestart', label: 'Pre-start check', at: minutesToTime(Math.max(0, startMin - 15)), icon: 'check' });
   // Break — mid-shift
   const midMin = Math.round((startMin + endMin) / 2);
-  blocks.push({ kind: 'break', label: 'Scheduled break', at: minutesToTime(midMin), icon: 'coffee' });
-  blocks.push({ kind: 'shift_end', label: 'Clock off', at: s.end_time, icon: 'stop' });
+  blocks.push({ kind: 'break', label: 'Scheduled break', at: minutesToTime(midMin % (24 * 60)), icon: 'coffee' });
+  blocks.push({ kind: 'shift_end', label: 'Shift finish', at: s.end_time, icon: 'stop' });
 
   return {
     startMin, endMin,

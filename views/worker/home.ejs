@@ -1198,7 +1198,9 @@
           // the primary CTA on the shift card instead. Pick the next
           // outstanding step: Pre-Start checklists if not all done, then
           // Sign Docket. Falls back to "Open shift" once everything is in.
-          var jpDone = (typeof formStatus !== 'undefined' && formStatus) ? Object.values(formStatus).filter(function(v){return v && !Array.isArray(v);}).length : 0;
+          // Per-shift Job-Pack progress, computed by the route (the old
+          // global formStatus was never passed in, so this was always 0).
+          var jpDone = shift.jpDone || 0;
           var nextHref, nextLabel;
           var shiftLink = (shift.source === 'booking') ? ('/w/booking-shift/' + shift.booking_id) : ('/w/jobs/' + (shift.id || shift.job_id));
           // For booking shifts shift.id is the booking_crew row id, NOT a

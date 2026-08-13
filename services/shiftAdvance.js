@@ -18,9 +18,13 @@ const { sendPushToCrew } = require('./pushNotification');
 const { sydneyWallClock } = require('../lib/sydney');
 
 // Statuses from which a shift can roll into 'in_progress' at start time.
-const PRE_PROGRESS_STATUSES = ['confirmed', 'green_to_go'];
+// 'locked' included to match lib/bookingLifecycle.autoAdvanceOngoing — the
+// two auto-advance paths (this 15-min cron and the render-time sweep) used
+// to disagree on it, so whether a locked shift went Ongoing depended on
+// whether anyone happened to open the board.
+const PRE_PROGRESS_STATUSES = ['confirmed', 'green_to_go', 'locked'];
 // While a shift is genuinely running, its booking sits in one of these.
-const RUNNING_STATUSES = ['confirmed', 'green_to_go', 'in_progress'];
+const RUNNING_STATUSES = ['confirmed', 'green_to_go', 'locked', 'in_progress'];
 
 // Sydney wall-clock 'YYYY-MM-DD HH:MM:SS' for now ± hours. Shift start times
 // are stored as naive Sydney local strings, so the comparison must be in

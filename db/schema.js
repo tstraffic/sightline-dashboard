@@ -15460,6 +15460,26 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 345 error:', e.message); }
   }
 
+  // Migration 346: job_documents.visible_to_crew — the last document source
+  // the office could NOT withhold from the field. booking_documents,
+  // traffic_plans and compliance plans all carry a crew-visibility switch;
+  // job_documents had none, so every upload in a job's pack (invoices
+  // included — doc_type 'invoice' is a first-class type here) was
+  // unconditionally readable by any worker rostered on the job. Default 1
+  // keeps today's behaviour; invoices are backfilled hidden because no
+  // field crew needs the client's pricing.
+  if (!isMigrationApplied.get(346)) {
+    try {
+      const cols = db.prepare('PRAGMA table_info(job_documents)').all().map(c => c.name);
+      if (!cols.includes('visible_to_crew')) {
+        db.exec('ALTER TABLE job_documents ADD COLUMN visible_to_crew INTEGER NOT NULL DEFAULT 1');
+      }
+      const hidden = db.prepare("UPDATE job_documents SET visible_to_crew = 0 WHERE doc_type = 'invoice'").run().changes;
+      recordMigration.run(346, 'job_documents.visible_to_crew (default 1; invoices backfilled hidden)');
+      console.log(`Migration 346 applied: job_documents.visible_to_crew (${hidden} invoice(s) hidden)`);
+    } catch (e) { console.error('Migration 346 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
@@ -16194,40 +16214,15 @@ function initializeDatabase() {
     }
   }
 
-  // ── One-time cleanup: ensure all demo/seed data is gone ──
-  // Uses system_config flag so it only runs once (won't wipe real data added later)
-  try {
-    const cleanupDone = db.prepare("SELECT value FROM system_config WHERE key = 'demo_data_cleaned'").get();
-    if (!cleanupDone) {
-      console.log('Cleaning up demo/seed data...');
-      const demoTables = [
-        'traffic_plans', 'crew_allocations', 'timesheets', 'cost_entries',
-        'job_budgets', 'incidents', 'defects', 'tasks', 'equipment',
-        'contacts', 'compliance_items', 'crew_members', 'employees',
-        'jobs', 'clients', 'equipment_assignments', 'equipment_maintenance',
-        'activity_log', 'opportunities', 'crm_activities', 'communication_log',
-        'project_updates', 'compliance',
-      ];
-      for (const table of demoTables) {
-        try {
-          const count = db.prepare(`SELECT COUNT(*) as c FROM ${table}`).get().c;
-          if (count > 0) {
-            db.exec(`DELETE FROM ${table}`);
-            console.log(`  Cleared ${count} rows from ${table}`);
-          }
-        } catch (e) { /* table may not exist */ }
-      }
-      // Reset auto-increment counters
-      try {
-        db.exec(`DELETE FROM sqlite_sequence WHERE name IN (${demoTables.map(t => "'" + t + "'").join(',')})`);
-      } catch (e) { /* ignore */ }
-      // Mark cleanup as done so it never runs again
-      db.prepare("INSERT OR REPLACE INTO system_config (key, value) VALUES ('demo_data_cleaned', '1')").run();
-      console.log('Demo data cleanup complete.');
-    }
-  } catch (e) {
-    console.error('Demo cleanup error (non-fatal):', e.message);
-  }
+  // The old "one-time demo data cleanup" block that lived here has been
+  // REMOVED, deliberately. It was dead code — it queried system_config with
+  // the wrong column names (key/value instead of config_key/config_value),
+  // threw on every boot, and the catch swallowed it. Had anyone "fixed" the
+  // column names, the guard flag would never have been found and the block
+  // would have DELETEd crew_members, employees, jobs, clients, allocations
+  // and 18 other tables on the next boot of every existing deployment.
+  // There is no demo data left to clean (seedDemoData is a no-op); nothing
+  // should ever bulk-delete live tables at startup.
 
   // Ensure key T&S admin accounts always exist (survives DB resets).
   //

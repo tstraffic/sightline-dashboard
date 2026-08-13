@@ -825,7 +825,9 @@ function generateWeeklySummaries() {
     const last7 = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
 
     // Check if we already ran this week (prevent duplicate runs)
-    const lastRun = db.prepare("SELECT value FROM system_config WHERE key = 'last_weekly_summary_date'").get();
+    // system_config columns are config_key/config_value — the old key/value
+    // names threw here, aborting the whole weekly-summary run silently.
+    const lastRun = db.prepare("SELECT config_value AS value FROM system_config WHERE config_key = 'last_weekly_summary_date'").get();
     if (lastRun && lastRun.value === today) return;
 
     // Get all active jobs with diary entries in the past 7 days
@@ -841,7 +843,7 @@ function generateWeeklySummaries() {
 
     if (jobsWithEntries.length === 0) {
       // Mark as run even if no entries
-      db.prepare("INSERT OR REPLACE INTO system_config (key, value) VALUES ('last_weekly_summary_date', ?)").run(today);
+      db.prepare("INSERT OR REPLACE INTO system_config (config_key, config_value) VALUES ('last_weekly_summary_date', ?)").run(today);
       return;
     }
 
@@ -891,7 +893,7 @@ function generateWeeklySummaries() {
     // the old T&S-specific "taj, saadat" hardcode is no longer baked in.
     // Set the key explicitly from /settings to override the admin-fallback.
     let notifyUsers;
-    const cfgRow = db.prepare("SELECT value FROM system_config WHERE key = 'weekly_summary_recipients'").get();
+    const cfgRow = db.prepare("SELECT config_value AS value FROM system_config WHERE config_key = 'weekly_summary_recipients'").get();
     const cfgList = cfgRow && cfgRow.value
       ? String(cfgRow.value).split(',').map(s => s.trim()).filter(Boolean)
       : [];
@@ -925,7 +927,7 @@ function generateWeeklySummaries() {
     }
 
     // Mark as run
-    db.prepare("INSERT OR REPLACE INTO system_config (key, value) VALUES ('last_weekly_summary_date', ?)").run(today);
+    db.prepare("INSERT OR REPLACE INTO system_config (config_key, config_value) VALUES ('last_weekly_summary_date', ?)").run(today);
 
     console.log(`[WeeklySummary] Generated for ${summaries.length} jobs, notified ${notifyUsers.length} users.`);
   } catch (err) {

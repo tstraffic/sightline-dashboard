@@ -80,7 +80,7 @@
         <% dockets.forEach(d => { %>
           <div class="p-3">
             <div class="flex items-center justify-between mb-1">
-              <span class="text-xs text-gray-500"><%= d.signed_at ? new Date(d.signed_at).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) : '' %></span>
+              <span class="text-xs text-gray-500"><%= d.signed_at ? new Date(String(d.signed_at).replace(' ','T') + (String(d.signed_at).endsWith('Z') ? '' : 'Z')).toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', year: 'numeric' }) : '' %></span>
               <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700">Signed</span>
             </div>
             <p class="text-sm font-medium text-gray-900"><%= d.client || d.job_number || 'Docket' %></p>

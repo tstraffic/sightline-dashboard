@@ -1,12 +1,28 @@
 <%
+  // allocation_date is a plain Sydney calendar date — format it without a
+  // timezone hop (weekday of a calendar date needs none).
   const dateObj = new Date(allocation.allocation_date + 'T00:00:00');
-  const dayName = dateObj.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long' });
-  const dateFormatted = dateObj.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: '2-digit' });
+  const dayName = dateObj.toLocaleDateString('en-AU', { weekday: 'long' });
+  const dateFormatted = dateObj.toLocaleDateString('en-AU', { day: '2-digit', month: '2-digit' });
   const isPending = allocation.status === 'allocated';
   const isFinished = allocation.status === 'completed' || allocation.status === 'declined';
-  const today = new Date().toISOString().split('T')[0];
+  // Sydney date, NOT toISOString() (UTC) — the UTC date is a day behind
+  // Sydney until ~10-11am, so every morning a today shift read as future.
+  const today = new Date().toLocaleDateString('en-CA', { timeZone: 'Australia/Sydney' });
   const isToday = allocation.allocation_date === today;
   const isFuture = allocation.allocation_date >= today;
+
+  // 12-hour times, matching booking-detail (this view printed raw 24h).
+  function fmtTime12(t) {
+    if (!t) return '';
+    var parts = String(t).split(':');
+    var h = parseInt(parts[0], 10);
+    if (isNaN(h)) return String(t);
+    var m = parts[1] || '00';
+    var am = h < 12;
+    h = h % 12; if (h === 0) h = 12;
+    return h + (m === '00' ? '' : ':' + m) + (am ? 'am' : 'pm');
+  }
 
   // Count completed forms
   const formsCompleted = (formStatus.prestart ? 1 : 0) + (formStatus.take5 ? 1 : 0) + (formStatus.equipment ? 1 : 0);
@@ -104,7 +120,7 @@
     // tgs/tmp/rol_day/rol_night/stage_plan/swms/permit/other) AND the legacy
     // booking_documents.document_type values (tgs/ctmp/rol/permit/invoice/photo/other).
     var DOC_TYPE_LABEL = {
-      tgs:'TGS', tmp:'TMP', ctmp:'CTMP', rol:'ROL', rol_day:'ROL — Day', rol_night:'ROL — Night',
+      tgs:'TGS', tmp:'TMP', ctmp:'CTMP', tcp:'TCP', rol:'ROL', rol_day:'ROL — Day', rol_night:'ROL — Night',
       stage_plan:'Stage Plan', swms:'SWMS', permit:'Permit', invoice:'Invoice', photo:'Photo', other:'Other',
     };
     function fmtSize(n) { if (!n) return ''; if (n < 1024) return n + ' B'; if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB'; return (n/1048576).toFixed(1) + ' MB'; }
@@ -188,8 +204,8 @@
       <h2 class="text-xs font-bold text-brand-600 uppercase tracking-wider mb-2">Your shift</h2>
       <p class="text-sm font-semibold text-gray-900">
         <%= dayName %>, <%= dateFormatted %>
-        &nbsp;&nbsp;<%= allocation.start_time %> at <%= allocation.suburb || 'Depot' %>
-        <% if (allocation.end_time) { %> &ndash; <%= allocation.end_time %> (approx)<% } %>
+        &nbsp;&nbsp;<%= fmtTime12(allocation.start_time) %> at <%= allocation.suburb || 'Depot' %>
+        <% if (allocation.end_time) { %> &ndash; <%= fmtTime12(allocation.end_time) %> (approx)<% } %>
       </p>
       <% if (allocation.role_on_site) { %>
         <p class="text-xs text-gray-500 mt-1">
@@ -210,7 +226,7 @@
         <tbody>
           <tr class="border-t border-gray-100">
             <td class="px-4 py-2.5 text-gray-500 font-medium w-1/3">Booking</td>
-            <td class="px-4 py-2.5 text-gray-900"><%= allocation.start_time %><% if (allocation.end_time) { %> &ndash; <%= allocation.end_time %><% } %></td>
+            <td class="px-4 py-2.5 text-gray-900"><%= fmtTime12(allocation.start_time) %><% if (allocation.end_time) { %> &ndash; <%= fmtTime12(allocation.end_time) %><% } %></td>
           </tr>
           <tr class="border-t border-gray-100">
             <td class="px-4 py-2.5 text-gray-500 font-medium">Job number</td>
@@ -349,7 +365,7 @@
           <div>
             <p class="text-sm font-semibold text-gray-900"><%= typeof worker !== 'undefined' && worker ? worker.full_name : 'You' %> <span class="text-xs text-gray-400">(You)</span></p>
             <p class="text-xs text-gray-500"><%= allocation.role_on_site ? allocation.role_on_site.replace(/_/g, ' ') : (typeof worker !== 'undefined' && worker.role ? worker.role.replace(/_/g, ' ') : 'Crew') %></p>
-            <p class="text-xs text-gray-400"><%= allocation.start_time %> at <%= allocation.suburb || 'depot' %></p>
+            <p class="text-xs text-gray-400"><%= fmtTime12(allocation.start_time) %> at <%= allocation.suburb || 'depot' %></p>
           </div>
         </div>
       </div>
@@ -398,7 +414,7 @@
                   <p class="text-sm font-semibold text-gray-900 truncate"><%= c.full_name %></p>
                   <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide <%= t.bg %> <%= t.fg %> ring-1 <%= t.ring %>"><%= t.label %></span>
                 </div>
-                <p class="text-xs text-gray-400"><%= c.start_time %> at depot</p>
+                <p class="text-xs text-gray-400"><%= fmtTime12(c.start_time) %> at depot</p>
               </div>
             </div>
             <% if (c.phone) { %>
@@ -507,7 +523,7 @@
             </div>
             <div>
               <p class="text-xs text-gray-500">Signed at</p>
-              <p class="text-sm font-medium text-gray-900"><%= docket.signed_at ? new Date(docket.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—' %></p>
+              <p class="text-sm font-medium text-gray-900"><%= docket.signed_at ? new Date(String(docket.signed_at).replace(' ','T') + (String(docket.signed_at).endsWith('Z') ? '' : 'Z')).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—' %></p>
             </div>
             <% if (docket.client_name) { %>
               <div>

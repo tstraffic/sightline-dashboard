@@ -6,7 +6,7 @@ const multer = require('multer');
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
 const { requireRole } = require('../middleware/auth');
-const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew, autoAdvanceOngoing } = require('../lib/bookingLifecycle');
+const { TERMINAL_STATUSES, syncAllocationsToBooking, cascadeCancel, cascadeRestore, diffCrew, autoAdvanceOngoing, maybePromoteToGreenToGo } = require('../lib/bookingLifecycle');
 const { getBookingVehicleGroups, buildShiftForms, buildBoardFormsSummary } = require('../lib/shiftForms');
 const { getDocketCrew } = require('../lib/shiftDocket');
 const { generateJobNumber } = require('../lib/jobNumbers');
@@ -660,6 +660,7 @@ router.post('/', (req, res) => {
   const allocDate = (b.start_date + 'T' + b.start_time + ':00').substring(0, 10);
   const allocStart = b.start_time || '06:00';
   const allocEnd = b.end_time || '15:00';
+  const notifyNewCrew = [];
   crewIds.forEach(cid => {
     if (cid) {
       const member = db.prepare("SELECT role, portal_role FROM crew_members WHERE id = ?").get(cid);
@@ -669,8 +670,17 @@ router.post('/', (req, res) => {
       // allocation row or the worker portal only sees them via fallbacks
       // (matches the crew-add endpoint, which already passes null).
       try { insertAlloc.run(jobId, cid, allocDate, allocStart, allocEnd, siteRole, bookingId, req.session.user.id); } catch (e) {}
+      notifyNewCrew.push(parseInt(cid, 10));
     }
   });
+  // A booking CREATED at a committed status with crew pre-attached used to
+  // notify nobody — every other crew-attachment path pushes. Same gate.
+  try {
+    if (notifyNewCrew.length) {
+      const newBk = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(bookingId);
+      if (newBk && bookingNotify.isNotifiable(newBk.status)) bookingNotify.notifyAssigned(notifyNewCrew, newBk);
+    }
+  } catch (e) { console.error('[bookings create] notify failed:', e.message); }
 
   logActivity({ user: req.session.user, action: 'create', entityType: 'booking', entityId: bookingId, details: `Created booking ${bookingNumber}`, req });
   req.flash('success', `Booking ${bookingNumber} created — now assign your crew and vehicles below.`);
@@ -1301,7 +1311,9 @@ router.get('/', (req, res) => {
       j.job_name, j.job_number, c.company_name AS client_name,
       cm_req.full_name AS requester_name, cm_plan.full_name AS planner_name,
       (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id) AS crew_count,
-      (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id AND bc.status = 'confirmed') AS crew_confirmed,
+      -- 'completed' counts as in: docket submitted, they worked the shift.
+      -- Counting only 'confirmed' made every completed card read "0/N in".
+      (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id AND bc.status IN ('confirmed','completed')) AS crew_confirmed,
       (SELECT COUNT(*) FROM booking_crew bc WHERE bc.booking_id = b.id AND bc.status = 'declined') AS crew_declined,
       (SELECT COUNT(*) FROM booking_vehicles bv WHERE bv.booking_id = b.id) AS vehicle_count,
       (SELECT COUNT(*) FROM booking_documents bd WHERE bd.booking_id = b.id)
@@ -1324,9 +1336,17 @@ router.get('/', (req, res) => {
     ORDER BY b.start_datetime
   `).all(...params);
 
+  // ?missing_docs=1 — the dashboard's "booking starting soon with no site
+  // docs" alert deep-links here with this flag. It only ever worked on the
+  // retired /bookings/classic page; the board ignored it and dumped the
+  // user on an unfiltered day. doc_count above already matches the
+  // dashboard's coverage rule, so filter on it directly.
+  const missingDocsOnly = req.query.missing_docs === '1';
+  const boardRows = missingDocsOnly ? rows.filter(r => !r.doc_count) : rows;
+
   // Eager-load crew, vehicles and requirements for every booking so the
   // dream cards render without N+1 queries.
-  const bookingIds = rows.map(r => r.id);
+  const bookingIds = boardRows.map(r => r.id);
   const crewByBooking = {};
   const vehiclesByBooking = {};
   const reqsByBooking = {};
@@ -1403,9 +1423,9 @@ router.get('/', (req, res) => {
   // Build the final bookings array with derived crew_blocks.
   // Checklist status per card (crew-aware model, lib/shiftForms) — one
   // batch pass for the whole day, not per card.
-  const jpSummary = buildBoardFormsSummary(db, rows.map(r => r.id));
+  const jpSummary = buildBoardFormsSummary(db, boardRows.map(r => r.id));
 
-  const bookings = rows
+  const bookings = boardRows
     .map(r => {
       const crewWithWarn = (crewByBooking[r.id] || []).map(c => ({
         ...c,
@@ -1434,6 +1454,7 @@ router.get('/', (req, res) => {
     title: 'Bookings — Board',
     currentPage: 'bookings',
     bookings,
+    missingDocsOnly,
     dateStr,
     isToday,
     prevDate: prevDate.toISOString().substring(0,10),
@@ -1772,7 +1793,9 @@ router.get('/api/:id/edit-data', (req, res) => {
 router.post('/:id/quick-update', (req, res) => {
   const db = getDb();
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
-  const existing = db.prepare('SELECT id FROM bookings WHERE id = ?').get(req.params.id);
+  // Full row, not just the id — the pre-save values drive the "did the
+  // time/notes actually change" checks that decide whether crew get pinged.
+  const existing = db.prepare('SELECT * FROM bookings WHERE id = ?').get(req.params.id);
   if (!existing) {
     if (isJson) return res.status(404).json({ error: 'Booking not found' });
     req.flash('error', 'Booking not found.'); return req.session.save(() => res.redirect('/bookings'));
@@ -1877,10 +1900,20 @@ router.post('/:id/quick-update', (req, res) => {
   }
 
   // Fields the base quick-update statement doesn't cover but the slide-over
-  // now carries: description + mobile-works flag (only when submitted).
+  // carries (only written when submitted so a partial POST never wipes
+  // them). location_notes / location_context / booking_type / the two
+  // reporting times used to be POSTED BY THE FORM AND SILENTLY DISCARDED
+  // here — the office watched their edit "save" and vanish.
   try {
     const bid = parseInt(req.params.id, 10);
     if (b.description !== undefined) db.prepare('UPDATE bookings SET description = ? WHERE id = ?').run(b.description || '', bid);
+    if (b.location_notes !== undefined) db.prepare('UPDATE bookings SET location_notes = ? WHERE id = ?').run(b.location_notes || '', bid);
+    if (b.location_context !== undefined) db.prepare('UPDATE bookings SET location_context = ? WHERE id = ?').run(b.location_context || '', bid);
+    if (b.booking_type !== undefined && ['regular', 'hire'].includes(String(b.booking_type))) {
+      db.prepare('UPDATE bookings SET booking_type = ? WHERE id = ?').run(String(b.booking_type), bid);
+    }
+    if (b.depot_meeting_time !== undefined) db.prepare('UPDATE bookings SET depot_meeting_time = ? WHERE id = ?').run(b.depot_meeting_time || '', bid);
+    if (b.straight_to_site_time !== undefined) db.prepare('UPDATE bookings SET straight_to_site_time = ? WHERE id = ?').run(b.straight_to_site_time || '', bid);
     if (b.mobile_works !== undefined || b.has_mobile_works !== undefined) {
       db.prepare('UPDATE bookings SET has_mobile_works = ? WHERE id = ?').run((b.mobile_works || b.has_mobile_works) ? 1 : 0, bid);
     }
@@ -1890,6 +1923,24 @@ router.post('/:id/quick-update', (req, res) => {
 
   // Move crew allocations along with any date/time change.
   try { syncAllocationsToBooking(db, parseInt(req.params.id, 10)); } catch (e) {}
+
+  // Tell the crew what changed — the board slide-over is the office's main
+  // edit surface and it used to change times and notes in total silence.
+  try {
+    const updated = db.prepare('SELECT * FROM bookings WHERE id = ?').get(req.params.id);
+    if (bookingNotify.isNotifiable(updated.status)) {
+      const crewIds = bookingNotify.activeCrewIds(db, updated.id);
+      if (crewIds.length) {
+        const startChanged = String(existing.start_datetime || '') !== String(updated.start_datetime || '');
+        const endChanged = String(existing.end_datetime || '') !== String(updated.end_datetime || '');
+        if (startChanged || endChanged) bookingNotify.notifyRescheduled(crewIds, updated, existing.start_datetime);
+        const changed = [];
+        if (b.description !== undefined && String(existing.description || '') !== String(updated.description || '')) changed.push('About this job');
+        if (b.location_notes !== undefined && String(existing.location_notes || '') !== String(updated.location_notes || '')) changed.push('Location notes');
+        if (changed.length) bookingNotify.notifyShiftNotesUpdated(crewIds, updated, changed);
+      }
+    }
+  } catch (e) { console.error('[bookings/quick-update] notify failed:', e.message); }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Quick-edited booking #${req.params.id}`, req });
   if (isJson) return res.json({ ok: true, id: parseInt(req.params.id, 10) });
   req.flash('success', 'Booking saved.');
@@ -1904,13 +1955,14 @@ router.post('/:id/quick-update', (req, res) => {
 //
 // Key resolution chain (matches services/bookingGeocode.getGoogleKey):
 //   1. GEOAPIFY_API_KEY env var (preferred — easy to rotate per-env)
-//   2. system_config 'geoapify_api_key' row
-//   3. Hard-coded operational key handed over with the brief — last resort
-//      so a fresh container still autocompletes before env wiring is done.
+//   2. system_config 'geoapify_api_key' row (settable from /settings)
+// The old hard-coded fallback key is gone — a live API key does not belong
+// in a public-ish git history. Set GEOAPIFY_API_KEY on Railway (or the
+// system_config row); without one, address autocomplete degrades gracefully
+// to manual typing.
 function getGeoapifyKey() {
   return process.env.GEOAPIFY_API_KEY
-      || getConfig('geoapify_api_key', '')
-      || '4bdbe7bd52a944579817e5a60a4cbdd0';
+      || getConfig('geoapify_api_key', '');
 }
 router.get('/api/places', async (req, res) => {
   const q = (req.query.q || '').trim();
@@ -2790,21 +2842,26 @@ router.post('/:id', (req, res) => {
   // Date/time changes must follow through to the worker portal — move the
   // booking's crew_allocations to the new schedule (statuses preserved).
   syncAllocationsToBooking(db, parseInt(req.params.id, 10));
-  const newStartDt = b.start_date + 'T' + b.start_time + ':00';
-  if (existing.start_datetime && existing.start_datetime !== newStartDt) {
-    const bkAfter = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+  const bkAfter = db.prepare('SELECT booking_number, title, start_datetime, end_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+  const startChangedFF = existing.start_datetime && bkAfter && existing.start_datetime !== bkAfter.start_datetime;
+  // A finish-time-only change matters just as much on site (shift extended
+  // or cut short) — it used to be completely silent.
+  const endChangedFF = bkAfter && String(existing.end_datetime || '') !== String(bkAfter.end_datetime || '');
+  if (startChangedFF || endChangedFF) {
     // Don't announce a time change for a shift the crew were never told about.
     if (bkAfter && bookingNotify.isNotifiable(bkAfter.status)) bookingNotify.notifyRescheduled(bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10)), bkAfter, existing.start_datetime);
   }
 
   // Worker-facing notes changed? Tell the crew their shift info was updated
-  // — only the fields they actually see (About this job + Location notes),
-  // and only once the booking is confirmed so they'd already have it.
+  // — only the fields they actually see (About this job, Location notes,
+  // Site requirements / PPE), and only once the booking is committed so
+  // they'd already have it.
   const newDesc = (b.description || '').trim();
   const newLoc  = (b.location_notes || '').trim();
   const notesChanged = [];
   if (newDesc !== (existing.description || '').trim()) notesChanged.push('About this job');
   if (newLoc  !== (existing.location_notes || '').trim()) notesChanged.push('Location notes');
+  if (b.requirements_text !== undefined && (b.requirements_text || '').trim() !== (existing.requirements_text || '').trim()) notesChanged.push('Site requirements / PPE');
   if (notesChanged.length) {
     const bkNotes = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
     if (bkNotes && bookingNotify.isNotifiable(bkNotes.status)) {
@@ -2859,6 +2916,21 @@ router.post('/:id/status', (req, res) => {
     if (bk && bookingNotify.isNotifiable(existing.status)) bookingNotify.notifyCancelled(crewIds, bk);
   } else if (CANCEL_LIKE.includes(existing.status) && !CANCEL_LIKE.includes(newStatus)) {
     cascadeRestore(db, parseInt(req.params.id, 10));
+    // The cancellation told the crew not to attend — un-cancelling must
+    // tell them the shift is back on (mirrors the undelete route).
+    if (bookingNotify.isNotifiable(newStatus)) {
+      const crewIds = bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10));
+      const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
+      if (bk && crewIds.length) bookingNotify.notifyAssigned(crewIds, bk);
+    }
+  } else if (['complete', 'finalised'].includes(existing.status) && ['unconfirmed', 'confirmed', 'locked', 'green_to_go', 'in_progress'].includes(newStatus)) {
+    // Reopening a completed shift: the crew rows were flipped to
+    // 'completed' by the docket submit, and leaving them there made the
+    // card read "0/N in" and hid the shift from workers' active views.
+    try {
+      db.prepare("UPDATE booking_crew SET status = 'confirmed' WHERE booking_id = ? AND status = 'completed'").run(req.params.id);
+      db.prepare("UPDATE crew_allocations SET status = 'confirmed' WHERE booking_id = ? AND status = 'completed'").run(req.params.id);
+    } catch (e) { console.error('[bookings/status] reopen cascade failed:', e.message); }
   } else if (!bookingNotify.isNotifiable(existing.status) && bookingNotify.isNotifiable(newStatus)) {
     // The allocator just committed the booking (e.g. unconfirmed → confirmed).
     // This is the moment crew should hear about their shift — push the
@@ -2902,6 +2974,16 @@ router.post('/:id/undelete', (req, res) => {
   db.prepare("UPDATE bookings SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(req.params.id);
   // Revive the crew's allocations that the delete cancelled.
   cascadeRestore(db, parseInt(req.params.id, 10));
+  // The delete told the crew their shift was cancelled — the restore must
+  // tell them it's back on, or they simply don't turn up. (This was the
+  // silent half of a notify-on-delete / silence-on-restore asymmetry.)
+  try {
+    const restBk = db.prepare('SELECT booking_number, title, start_datetime, status FROM bookings WHERE id=?').get(req.params.id);
+    if (restBk && bookingNotify.isNotifiable(restBk.status)) {
+      const crewIds = bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10));
+      if (crewIds.length) bookingNotify.notifyAssigned(crewIds, restBk);
+    }
+  } catch (e) { console.error('[bookings/undelete] notify failed:', e.message); }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id, details: `Restored ${booking.booking_number}`, req });
   if (isJson) return res.json({ ok: true });
   req.flash('success', `Booking ${booking.booking_number} restored.`); req.session.save(() => res.redirect('/bookings'));
@@ -3401,6 +3483,17 @@ router.post('/:id/crew/:crewId/confirm', (req, res) => {
   const isJson = req.headers.accept && req.headers.accept.includes('application/json');
   db.prepare("UPDATE booking_crew SET status='confirmed', confirmed_at=CURRENT_TIMESTAMP WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
   db.prepare("UPDATE crew_allocations SET status='confirmed', confirmed_at=CURRENT_TIMESTAMP WHERE booking_id=? AND crew_member_id=?").run(req.params.id, req.params.crewId);
+  // Same promotion the worker accept paths run: if the office just
+  // confirmed the LAST outstanding member, advance to green_to_go and tell
+  // the crew. Without this the booking sat at 'locked' forever and the
+  // "good to go" push never fired when the final confirm came in by phone.
+  try {
+    if (maybePromoteToGreenToGo(db, parseInt(req.params.id, 10))) {
+      const gtgBk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id=?').get(req.params.id);
+      const gtgCrew = bookingNotify.activeCrewIds(db, parseInt(req.params.id, 10));
+      if (gtgBk && gtgCrew.length) bookingNotify.notifyGreenToGo(gtgCrew, gtgBk);
+    }
+  } catch (e) { console.error('[bookings/confirm] GTG promote failed:', e.message); }
   logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
     details: `Confirmed crew #${req.params.crewId} on booking`, req });
   if (isJson) return res.json({ ok: true });
@@ -3933,6 +4026,34 @@ router.post('/:id/final-plans/:planId/visibility', (req, res) => {
     details: `Final plan #${plan.id} ${visible ? 'visible to' : 'hidden from'} crew (job-wide)`, req });
   if (isJson) return res.json({ ok: true, visible_to_crew: visible });
   req.flash('success', visible ? 'Plan visible to crew.' : 'Plan hidden from crew (all bookings on this job).');
+  req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
+});
+
+// POST /:id/job-documents/:docId/visibility — hide/show a job-pack document
+// from crew (job_documents.visible_to_crew, migration 346). Job-global like
+// the final-plans toggle: job docs are shared by every booking on the job.
+// Until 346, job_documents was the ONE source the office could not withhold
+// — invoices in the job pack were readable by any rostered worker.
+router.post('/:id/job-documents/:docId/visibility', (req, res) => {
+  const db = getDb();
+  const isJson = req.headers.accept && req.headers.accept.includes('application/json');
+  const booking = db.prepare('SELECT id, job_id FROM bookings WHERE id = ?').get(req.params.id);
+  if (!booking || !booking.job_id) {
+    if (isJson) return res.status(404).json({ error: 'Booking or linked job not found' });
+    req.flash('error', 'Booking or linked job not found.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id));
+  }
+  const doc = db.prepare('SELECT id FROM job_documents WHERE id = ? AND job_id = ?')
+    .get(req.params.docId, booking.job_id);
+  if (!doc) {
+    if (isJson) return res.status(404).json({ error: 'Document not found on the linked job' });
+    req.flash('error', 'Document not found on the linked job.'); return req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
+  }
+  const visible = (req.body.visible === '1' || req.body.visible === 1 || req.body.visible === true || req.body.visible === 'on') ? 1 : 0;
+  db.prepare('UPDATE job_documents SET visible_to_crew = ? WHERE id = ?').run(visible, doc.id);
+  logActivity({ user: req.session.user, action: 'update', entityType: 'booking', entityId: req.params.id,
+    details: `Job document #${doc.id} ${visible ? 'visible to' : 'hidden from'} crew (job-wide)`, req });
+  if (isJson) return res.json({ ok: true, visible_to_crew: visible });
+  req.flash('success', visible ? 'Document visible to crew.' : 'Document hidden from crew (all bookings on this job).');
   req.session.save(() => res.redirect('/bookings/' + req.params.id + '#documents'));
 });
 

@@ -3,6 +3,7 @@ const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday } = require('../../lib/sydney');
 const { resolveShift, getCurrentDocket, getDocketCrew, completeShift, calcHours, generateDocketNumber } = require('../../lib/shiftDocket');
+const { WORKER_VISIBLE_STATUSES } = require('../../lib/bookingLifecycle');
 const bookingNotify = require('../../services/bookingNotify');
 const { logActivity } = require('../../middleware/audit');
 
@@ -57,8 +58,8 @@ router.get('/dockets', (req, res) => {
     LEFT JOIN jobs j ON ca.job_id = j.id
     LEFT JOIN bookings b ON ca.booking_id = b.id
     WHERE ca.crew_member_id = ? AND ca.allocation_date = ? AND ca.status != 'cancelled'
-      AND (ca.booking_id IS NULL OR (b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')))
-  `).all(worker.id, today);
+      AND (ca.booking_id IS NULL OR (b.deleted_at IS NULL AND b.status IN (${WORKER_VISIBLE_STATUSES.map(() => '?').join(',')})))
+  `).all(worker.id, today, ...WORKER_VISIBLE_STATUSES);
 
   // Booking-only fallback: workers assigned to a booking via booking_crew
   // who haven't yet hit /w/booking-shift/:id (which lazy-creates the alloc
@@ -66,8 +67,10 @@ router.get('/dockets', (req, res) => {
   // see "needs signing" — clicking the row routes to /w/booking-shift/...
   // which creates the alloc and then they can sign the docket from there.
   // Excludes 'unconfirmed' — crew don't see a shift until the allocator
-  // confirms the booking (matches routes/worker/jobs.js).
-  const VISIBLE_BOOKING_STATUSES = ['confirmed','green_to_go','in_progress','complete','on_hold'];
+  // commits the booking. Canonical list (the old local copy here was
+  // missing 'locked', so a worker on a locked booking couldn't reach
+  // their docket from this page while /w/jobs showed the shift fine).
+  const VISIBLE_BOOKING_STATUSES = WORKER_VISIBLE_STATUSES;
   let bookingFallback = [];
   try {
     bookingFallback = db.prepare(`
@@ -381,27 +384,69 @@ router.post('/dockets/sign/:allocationId', (req, res) => {
   submitShiftDocket(req, res, shift);
 });
 
+// Only crew who are actually ON the shift may open or sign its docket.
+// These routes took any booking/job id straight from the URL with no
+// membership check — any logged-in worker could read another crew's
+// docket (client signature image included) and even SIGN it, cascading
+// the booking to 'complete' and pushing the whole crew. Returns null when
+// access is denied (response already sent).
+function requireShiftMembership(req, res, shift) {
+  const db = getDb();
+  const worker = req.session.worker;
+  const deny = () => {
+    req.flash('error', 'That docket belongs to a shift you are not rostered on.');
+    req.session.save(() => res.redirect('/w/dockets'));
+    return null;
+  };
+  try {
+    if (shift.type === 'booking') {
+      const bk = db.prepare('SELECT status, deleted_at FROM bookings WHERE id = ?').get(shift.bookingId);
+      if (!bk || bk.deleted_at || ['cancelled', 'late_cancellation'].includes(bk.status)) return deny();
+      const onCrew = db.prepare(
+        "SELECT 1 FROM booking_crew WHERE booking_id = ? AND crew_member_id = ? AND status != 'declined'"
+      ).get(shift.bookingId, worker.id) || db.prepare(
+        "SELECT 1 FROM crew_allocations WHERE booking_id = ? AND crew_member_id = ? AND status NOT IN ('cancelled','declined')"
+      ).get(shift.bookingId, worker.id);
+      if (!onCrew) return deny();
+    } else {
+      const onJob = db.prepare(
+        "SELECT 1 FROM crew_allocations WHERE job_id = ? AND allocation_date = ? AND crew_member_id = ? AND status NOT IN ('cancelled','declined')"
+      ).get(shift.jobId, shift.shiftDate, worker.id);
+      if (!onJob) return deny();
+    }
+  } catch (e) { return deny(); }
+  return shift;
+}
+
 // Job + date shift (no booking) — registered before the booking route.
 router.get('/dockets/shift/job/:jobId/:date', (req, res) => {
-  const shift = resolveShift(getDb(), { jobId: req.params.jobId, date: req.params.date });
+  let shift = resolveShift(getDb(), { jobId: req.params.jobId, date: req.params.date });
   if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
+  shift = requireShiftMembership(req, res, shift);
+  if (!shift) return;
   renderShiftSign(req, res, shift);
 });
 router.post('/dockets/shift/job/:jobId/:date', (req, res) => {
-  const shift = resolveShift(getDb(), { jobId: req.params.jobId, date: req.params.date });
+  let shift = resolveShift(getDb(), { jobId: req.params.jobId, date: req.params.date });
   if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
+  shift = requireShiftMembership(req, res, shift);
+  if (!shift) return;
   submitShiftDocket(req, res, shift);
 });
 
 // Booking shift.
 router.get('/dockets/shift/:bookingId', (req, res) => {
-  const shift = resolveShift(getDb(), { bookingId: req.params.bookingId });
+  let shift = resolveShift(getDb(), { bookingId: req.params.bookingId });
   if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
+  shift = requireShiftMembership(req, res, shift);
+  if (!shift) return;
   renderShiftSign(req, res, shift);
 });
 router.post('/dockets/shift/:bookingId', (req, res) => {
-  const shift = resolveShift(getDb(), { bookingId: req.params.bookingId });
+  let shift = resolveShift(getDb(), { bookingId: req.params.bookingId });
   if (!shift) { req.flash('error', 'Shift not found.'); return req.session.save(() => res.redirect('/w/dockets')); }
+  shift = requireShiftMembership(req, res, shift);
+  if (!shift) return;
   submitShiftDocket(req, res, shift);
 });
 

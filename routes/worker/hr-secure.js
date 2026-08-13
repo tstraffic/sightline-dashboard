@@ -58,7 +58,9 @@ function workerForAudit(worker) {
 function getDefaultSuper() {
   const db = getDb();
   try {
-    const row = db.prepare("SELECT value FROM system_config WHERE key = 'default_super_fund'").get();
+    // system_config columns are config_key/config_value — the old key/value
+    // names threw on every call, so the default fund never applied.
+    const row = db.prepare("SELECT config_value AS value FROM system_config WHERE config_key = 'default_super_fund'").get();
     if (row && row.value) return JSON.parse(row.value);
   } catch (e) { /* ignore */ }
   return null;

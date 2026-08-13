@@ -18,7 +18,9 @@ function defaultRecipients(db) {
   // Configurable via system_config.job_pack_notify_to. Falls back to
   // operations@tstc.com.au which the office asked for.
   try {
-    const row = db.prepare("SELECT value FROM system_config WHERE key = 'job_pack_notify_to'").get();
+    // system_config columns are config_key/config_value — the old key/value
+    // names threw on every call, silently pinning the hardcoded fallback.
+    const row = db.prepare("SELECT config_value AS value FROM system_config WHERE config_key = 'job_pack_notify_to'").get();
     if (row && row.value) {
       return String(row.value).split(/[,;\s]+/).filter(Boolean);
     }

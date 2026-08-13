@@ -13,12 +13,16 @@
 const { getDb } = require('../db/database');
 const { sendPushToCrew } = require('./pushNotification');
 const { sydneyWallClock } = require('../lib/sydney');
+const { REMINDABLE_STATUSES } = require('../lib/bookingLifecycle');
 
 // Crew must never hear about a shift — including 24h reminders — until the
-// allocator has confirmed the booking. Mirrors bookingNotify.isNotifiable:
-// a booking-bound shift only qualifies once its booking is 'confirmed' or
-// later. Used as a SQL allow-list below.
-const NOTIFIABLE_BOOKING_STATUSES = ['confirmed', 'locked', 'conflict', 'green_to_go', 'in_progress', 'complete', 'finalised'];
+// allocator has committed the booking. The list is the canonical
+// REMINDABLE_STATUSES from lib/bookingLifecycle: pre-shift states only.
+// (The old local copy here claimed to "mirror bookingNotify.isNotifiable"
+// while actually differing from it, and included 'conflict' — a status the
+// portal never shows — plus already-running/finished states no pre-shift
+// reminder can apply to.)
+const NOTIFIABLE_BOOKING_STATUSES = REMINDABLE_STATUSES;
 
 function pad2(n) { return n < 10 ? '0' + n : '' + n; }
 

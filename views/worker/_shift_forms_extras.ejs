@@ -54,7 +54,7 @@
     <div class="min-w-0">
       <p class="text-sm font-semibold text-white">Docket</p>
       <% if (docket) { %>
-        <p class="text-[11px]" style="color:#60A5FA;">Signed &middot; <%= docket.total_hours || 0 %> h &middot; <%= new Date(docket.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></p>
+        <p class="text-[11px]" style="color:#60A5FA;">Signed &middot; <%= docket.total_hours || 0 %> h &middot; <%= new Date(String(docket.signed_at).replace(' ','T') + (String(docket.signed_at).endsWith('Z') ? '' : 'Z')).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' }) %></p>
       <% } else { %>
         <p class="text-[11px]" style="color:rgba(255,255,255,0.5);">Sign at end of shift &mdash; proof of hours.</p>
       <% } %>

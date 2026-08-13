@@ -44,14 +44,29 @@
   <div class="p-3 rounded-xl text-center text-sm font-medium" style="background:rgba(22,163,74,0.12);color:#4ade80;border:1px solid rgba(22,163,74,0.25);">
     &#10003; You have accepted this shift
   </div>
+  <% } else if (myStatus === 'completed') { %>
+  <div class="p-3 rounded-xl text-center text-sm font-medium" style="background:rgba(96,165,250,0.10);color:#93C5FD;border:1px solid rgba(96,165,250,0.25);">
+    &#10003; Shift completed
+  </div>
   <% } %>
 
-  <!-- Location -->
+  <!-- Location — address AND suburb (the old chain dropped the suburb whenever an address was set) -->
   <div>
-    <p class="text-base font-semibold"><%= booking.site_address || booking.suburb || 'Location TBC' %><%= booking.suburb && booking.state ? ', ' + booking.state : '' %></p>
+    <p class="text-base font-semibold"><%
+      var locBits = [];
+      if (booking.site_address) locBits.push(booking.site_address);
+      if (booking.suburb && !(booking.site_address || '').toLowerCase().includes(String(booking.suburb).toLowerCase())) locBits.push(booking.suburb);
+      if (booking.state) locBits.push(booking.state);
+    %><%= locBits.length ? locBits.join(', ') : 'Location TBC' %></p>
     <p class="text-sm text-gray-400 mt-1">
       Your shift: <%= startDay %>, <%= startDate %> at
-      <% if (booking.depot_meeting_time) { %>Depot <%= fmtTime12(booking.depot_meeting_time) %><% } else { %><%= startTime12 %><% } %>
+      <%
+        // The worker's OWN reporting instruction wins: a per-crew
+        // straight-to-site flag, then the booking-wide straight-to-site
+        // time, then the depot meeting, then plain start time.
+        var mySts = !!(typeof myAssignment !== 'undefined' && myAssignment && myAssignment.straight_to_site);
+      %>
+      <% if (booking.straight_to_site_time) { %>Site <%= fmtTime12(booking.straight_to_site_time) %> (straight to site)<% } else if (booking.depot_meeting_time && !mySts) { %>Depot <%= fmtTime12(booking.depot_meeting_time) %><% } else { %><%= startTime12 %><%= mySts ? ' (straight to site)' : '' %><% } %>
       <% if (endTime) { %> – <%= endTime12 %> (approx)<% } %>
     </p>
   </div>
@@ -88,13 +103,24 @@
         ['Booking', (startTime12 || '') + ' – ' + (endTime12 || '') + ' (approx)'],
         ['Booking #', booking.booking_number],
         ['Depot', booking.depot || '-'],
-        ['Depot Meeting', booking.depot_meeting_time ? fmtTime12(booking.depot_meeting_time) : '-'],
-        ['Client', booking.client_name || '-'],
-        ['Site Address', (booking.site_address || '-') + (booking.suburb ? ', ' + booking.suburb : '')],
-        ['Order #', booking.order_number || '-'],
-        ['Billing Code', booking.billing_code || '-'],
-        ['Status', STATUS_LABELS[booking.status] || booking.status],
       ]; %>
+      <%
+        // Reporting instruction: show straight-to-site when that's the plan,
+        // depot meeting otherwise — not a dash where the real instruction is.
+        if (booking.straight_to_site_time) details.push(['Straight to site', fmtTime12(booking.straight_to_site_time)]);
+        else details.push(['Depot Meeting', booking.depot_meeting_time ? fmtTime12(booking.depot_meeting_time) : '-']);
+        details.push(['Client', booking.client_name || '-']);
+        details.push(['Site Address', (booking.site_address || '-') + (booking.suburb ? ', ' + booking.suburb : '')]);
+        if (typeof supervisor !== 'undefined' && supervisor && supervisor.name) details.push(['Supervisor', supervisor.name + (supervisor.phone ? ' · ' + supervisor.phone : '')]);
+        if (typeof myAssignment !== 'undefined' && myAssignment && myAssignment.role_on_site) {
+          var ROLE_LABELS = { traffic_controller: 'Traffic Controller', team_leader: 'Team Leader', supervisor: 'Supervisor', spotter: 'Spotter', driver: 'Driver' };
+          details.push(['Your role', ROLE_LABELS[myAssignment.role_on_site] || String(myAssignment.role_on_site).replace(/_/g, ' ')]);
+        }
+        if (typeof allocation !== 'undefined' && allocation && allocation.shift_type && allocation.shift_type !== 'day') details.push(['Shift type', allocation.shift_type.charAt(0).toUpperCase() + allocation.shift_type.slice(1)]);
+        details.push(['Order #', booking.order_number || '-']);
+        details.push(['Billing Code', booking.billing_code || '-']);
+        details.push(['Status', STATUS_LABELS[booking.status] || booking.status]);
+      %>
       <% details.forEach(function(d) { %>
         <div class="flex items-start justify-between py-2" style="border-bottom:1px solid rgba(255,255,255,0.06);">
           <span class="text-xs text-gray-400 w-28 shrink-0"><%= d[0] %></span>
@@ -102,6 +128,78 @@
         </div>
       <% }); %>
     </div>
+
+    <!-- Meeting point — where the crew actually musters (may differ from
+         the worksite). Note + a directions deeplink when coordinates exist. -->
+    <% if (booking.meeting_point_note || (booking.meeting_point_latitude && booking.meeting_point_longitude)) { %>
+    <div class="mt-3 p-3 rounded-xl" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);">
+      <h3 class="text-[11px] font-bold uppercase tracking-wider mb-1.5" style="color:#6EE7B7;">
+        <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        Meeting point
+      </h3>
+      <% if (booking.meeting_point_note) { %><p class="text-sm whitespace-pre-wrap" style="color:rgba(255,255,255,0.85);"><%= booking.meeting_point_note %></p><% } %>
+      <% if (booking.meeting_point_latitude && booking.meeting_point_longitude) { %>
+      <a href="https://www.google.com/maps/dir/?api=1&destination=<%= booking.meeting_point_latitude %>,<%= booking.meeting_point_longitude %>"
+         target="_blank" rel="noopener" class="inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-lg text-xs font-bold" style="background:rgba(16,185,129,0.18);color:#6EE7B7;">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+        Directions to meeting point
+      </a>
+      <% } %>
+    </div>
+    <% } %>
+
+    <!-- Mobile works — per-leg times and locations. -->
+    <% if (typeof mobileLegs !== 'undefined' && mobileLegs && mobileLegs.length) { %>
+    <div class="mt-3 p-3 rounded-xl" style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.22);">
+      <h3 class="text-[11px] font-bold uppercase tracking-wider mb-1.5" style="color:#C4B5FD;">
+        <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0"/></svg>
+        Mobile works — legs
+      </h3>
+      <div class="space-y-1.5">
+        <% mobileLegs.forEach(function(leg, i) { %>
+        <div class="flex items-start gap-2 text-sm" style="color:rgba(255,255,255,0.85);">
+          <span class="shrink-0 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center mt-0.5" style="background:rgba(167,139,250,0.2);color:#C4B5FD;"><%= i + 1 %></span>
+          <div>
+            <span class="font-semibold"><%= leg.start_time ? fmtTime12(leg.start_time) : '' %></span>
+            <%= leg.address || '' %>
+            <% if (leg.notes) { %><span class="text-xs text-gray-400 block"><%= leg.notes %></span><% } %>
+          </div>
+        </div>
+        <% }); %>
+      </div>
+    </div>
+    <% } %>
+
+    <!-- On-site contacts — who the crew reports to at the gate. -->
+    <% if (typeof siteContacts !== 'undefined' && siteContacts && siteContacts.length) { %>
+    <div class="mt-3 p-3 rounded-xl" style="background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.10);">
+      <h3 class="text-[11px] font-bold uppercase tracking-wider mb-1.5" style="color:rgba(255,255,255,0.6);">
+        <svg class="w-3.5 h-3.5 inline -mt-0.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        On-site contacts
+      </h3>
+      <div class="space-y-2">
+        <% siteContacts.forEach(function(c) { %>
+        <div class="flex items-center justify-between gap-2">
+          <div class="min-w-0">
+            <p class="text-sm font-semibold truncate"><%= c.full_name %></p>
+            <p class="text-xs text-gray-400 truncate"><%= [c.position, c.company].filter(Boolean).join(' · ') %></p>
+          </div>
+          <% if (c.phone) { %>
+          <a href="tel:<%= c.phone %>" class="shrink-0 px-3 py-1.5 rounded-lg text-xs font-bold" style="background:rgba(16,185,129,0.15);color:#10B981;">Call</a>
+          <% } %>
+        </div>
+        <% }); %>
+      </div>
+    </div>
+    <% } %>
+
+    <!-- Your allocation notes from the office (per-worker, not the whole crew). -->
+    <% if (typeof allocation !== 'undefined' && allocation && allocation.notes) { %>
+    <div class="mt-3 p-3 rounded-xl" style="background:rgba(244,114,182,0.07);border:1px solid rgba(244,114,182,0.2);">
+      <h3 class="text-[11px] font-bold uppercase tracking-wider mb-1.5" style="color:#F9A8D4;">Note for you</h3>
+      <p class="text-sm whitespace-pre-wrap" style="color:rgba(255,255,255,0.85);"><%= allocation.notes %></p>
+    </div>
+    <% } %>
 
     <!-- What the office wrote on the booking — description, location notes
          and site requirements each get their own clearly-labelled card.
@@ -216,6 +314,16 @@
                           Driver
                         </span>
                       <% } %>
+                      <%# Per-SHIFT designations set on the bookings board — distinct from the person's standing portal role %>
+                      <% if (c.is_team_leader && c.portal_role !== 'team_leader') { %>
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style="background:rgba(245,158,11,0.18);color:#FCD34D;">TL — this shift</span>
+                      <% } %>
+                      <% if (c.is_first_aid) { %>
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style="background:rgba(239,68,68,0.16);color:#FCA5A5;">First Aid</span>
+                      <% } %>
+                      <% if (c.straight_to_site) { %>
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);">Straight to site</span>
+                      <% } %>
                     </div>
                   </div>
                   <% if (c.phone && !c.is_you) { %>
@@ -230,6 +338,28 @@
               <% }) %>
             </div>
           <% }) %>
+
+          <%# Gear on the booking that isn't hitched to any ute — it still
+              has to get to site with someone, so the crew must see it. %>
+          <% if (vehicleGroups.looseGear && vehicleGroups.looseGear.length) { %>
+            <div class="rounded-xl overflow-hidden" style="background:rgba(251,146,60,0.05);border:1px solid rgba(251,146,60,0.18);">
+              <div class="px-3 py-2" style="border-bottom:1px solid rgba(255,255,255,0.06);">
+                <p class="text-sm font-bold" style="color:#FDBA74;">Other gear for this shift</p>
+                <p class="text-[11px]" style="color:rgba(255,255,255,0.45);">Not loaded on a ute yet — check with your team leader.</p>
+              </div>
+              <div class="px-3 py-2 flex flex-col gap-1.5">
+                <% vehicleGroups.looseGear.forEach(function (g) { %>
+                  <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 rounded-md flex items-center justify-center shrink-0" style="background:rgba(251,146,60,0.16);color:#FB923C;">
+                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m10.656-1.344l1.5-1.5a4 4 0 00-5.656-5.656l-3 3a4 4 0 000 5.656"/></svg>
+                    </div>
+                    <p class="text-xs font-semibold flex-1 min-w-0 truncate" style="color:rgba(255,255,255,0.85);"><%= g.name %><% if (g.quantity > 1) { %> <span style="color:rgba(255,255,255,0.45);">×<%= g.quantity %></span><% } %></p>
+                    <% if (g.hired) { %><span class="text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0" style="background:rgba(251,191,36,0.16);color:#FBBF24;" title="Hired<%= g.supplier ? ' from ' + g.supplier : '' %>">HIRED</span><% } %>
+                  </div>
+                <% }) %>
+              </div>
+            </div>
+          <% } %>
         </div>
       <% } else if (sortedCrew.length > 0) { %>
         <div class="space-y-2">
@@ -242,6 +372,15 @@
               <div class="flex items-center gap-1.5 flex-wrap">
                 <p class="text-sm font-medium truncate"><%= c.full_name %></p>
                 <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style="background:<%= t.bg %>;color:<%= t.color %>;"><%= t.label %></span>
+                <% if (c.is_team_leader && c.portal_role !== 'team_leader') { %>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style="background:rgba(245,158,11,0.18);color:#FCD34D;">TL — this shift</span>
+                <% } %>
+                <% if (c.is_first_aid) { %>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style="background:rgba(239,68,68,0.16);color:#FCA5A5;">First Aid</span>
+                <% } %>
+                <% if (c.straight_to_site) { %>
+                  <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide" style="background:rgba(255,255,255,0.08);color:rgba(255,255,255,0.6);">Straight to site</span>
+                <% } %>
               </div>
               <% if (c.phone) { %>
                 <a href="tel:<%= c.phone %>" class="inline-flex items-center gap-1 text-xs mt-0.5" style="color:#10B981;">
@@ -272,7 +411,7 @@
   <% if (tab === 'docs') { %>
     <%
       var DOC_TYPE_LABEL = {
-        tgs:'TGS', tmp:'TMP', ctmp:'CTMP', rol:'ROL', rol_day:'ROL &mdash; Day', rol_night:'ROL &mdash; Night',
+        tgs:'TGS', tmp:'TMP', ctmp:'CTMP', tcp:'TCP', rol:'ROL', rol_day:'ROL &mdash; Day', rol_night:'ROL &mdash; Night',
         stage_plan:'Stage Plan', swms:'SWMS', permit:'Permit', invoice:'Invoice', photo:'Photo', other:'Other',
       };
       function fmtSize(n) { if (!n) return ''; if (n < 1024) return n + ' B'; if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB'; return (n/1048576).toFixed(1) + ' MB'; }

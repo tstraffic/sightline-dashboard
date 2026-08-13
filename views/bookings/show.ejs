@@ -1503,14 +1503,16 @@
           <div>
             <p class="page-eyebrow" style="margin-bottom:0.25rem">From the linked job</p>
             <h3 class="font-display font-medium text-gray-900" style="font-size:14px;letter-spacing:-0.01em">Job documents <span class="text-gray-400 font-normal">(<%= jobDocList.length %>)</span></h3>
-            <p class="text-[11px] text-gray-400 mt-0.5">Job files are always visible to the crew · final plans can be hidden per plan (applies to every booking on this job).</p>
+            <p class="text-[11px] text-gray-400 mt-0.5">The eye toggles crew visibility per document — hiding applies to every booking on this job.</p>
           </div>
           <a href="/jobs/<%= b.job_id %>/documents" class="text-xs font-medium text-brand-600 hover:text-brand-700">Manage on the job →</a>
         </div>
         <ul class="divide-y divide-gray-100">
           <% jobDocList.forEach(function (d) {
                var isFinalPlan = d.source === 'final_plan';
-               var planHidden = isFinalPlan && !d.visible_to_crew; %>
+               // Both sources now carry a crew switch (final plans since 340,
+               // job documents since 346) — grey out whichever is hidden.
+               var planHidden = d.visible_to_crew != null && !d.visible_to_crew; %>
             <li class="flex items-center gap-3 px-4 py-2.5 hover:bg-gray-50 <%= planHidden ? 'bg-gray-50/50' : '' %>">
               <div class="w-9 h-9 rounded-lg <%= planHidden ? 'bg-gray-100' : 'bg-blue-50' %> flex items-center justify-center shrink-0">
                 <svg class="w-5 h-5 <%= planHidden ? 'text-gray-400' : 'text-blue-600' %>" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.7"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8l-6-6z"/><path d="M14 2v6h6M9 14h6M9 18h6M9 10h2"/></svg>
@@ -1526,15 +1528,16 @@
                   <% if (isFinalPlan) { %>· <a href="/plans/<%= d.id %>" class="text-brand-600 hover:underline">Manage →</a><% } %>
                 </p>
               </div>
-              <% if (isFinalPlan) { %>
+              <% if (isFinalPlan || d.source === 'job_document') { %>
                 <%# Same eye-toggle contract as the compliance plans above —
                     the generic data-vis-toggle-form JS flips it in place.
-                    This one is JOB-WIDE: it writes traffic_plans.visible_to_crew. %>
-                <form method="POST" action="/bookings/<%= b.id %>/final-plans/<%= d.id %>/visibility" class="inline shrink-0" data-vis-toggle-form>
+                    Both are JOB-WIDE: traffic_plans.visible_to_crew (340) /
+                    job_documents.visible_to_crew (346). %>
+                <form method="POST" action="/bookings/<%= b.id %>/<%= isFinalPlan ? 'final-plans' : 'job-documents' %>/<%= d.id %>/visibility" class="inline shrink-0" data-vis-toggle-form>
                   <%- include('../partials/csrf') %>
                   <input type="hidden" name="visible" value="<%= d.visible_to_crew ? '0' : '1' %>">
                   <button type="submit" class="bk2-vis-toggle <%= d.visible_to_crew ? 'is-on' : 'is-off' %>"
-                    title="<%= d.visible_to_crew ? 'Crew can open this plan — click to hide it on every booking of this job' : 'Hidden from crew (job-wide) — click to show' %>">
+                    title="<%= d.visible_to_crew ? 'Crew can open this file — click to hide it on every booking of this job' : 'Hidden from crew (job-wide) — click to show' %>">
                     <% if (d.visible_to_crew) { %>
                       <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
                       <span>Crew visible</span>

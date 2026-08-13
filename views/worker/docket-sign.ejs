@@ -363,7 +363,7 @@
         <p class="t">Docket signed</p>
         <p class="s">
           <% if (lockedDocket.signed_by_name) { %>by <%= lockedDocket.signed_by_name %> &middot; <% } %>
-          <%= lockedDocket.signed_at ? new Date(lockedDocket.signed_at).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '' %>
+          <%= lockedDocket.signed_at ? new Date(String(lockedDocket.signed_at).replace(' ','T') + (String(lockedDocket.signed_at).endsWith('Z') ? '' : 'Z')).toLocaleString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '' %>
         </p>
       </div>
     </div>

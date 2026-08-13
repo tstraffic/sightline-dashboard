@@ -26,6 +26,10 @@
   function acceptState(st) {
     var v = String(st || 'assigned').toLowerCase();
     if (v === 'confirmed') return { key: 'yes',     mark: '\u2713', label: 'Accepted' };
+    // Docket submitted \u2192 completeShift flips crew to 'completed'. That is
+    // the strongest form of "in" there is \u2014 it used to fall through to
+    // "Awaiting reply", so the moment a shift completed its card read 0/N.
+    if (v === 'completed') return { key: 'yes',     mark: '\u2713', label: 'Worked (docket in)' };
     if (v === 'declined')  return { key: 'no',      mark: '\u2715', label: 'Declined' };
     return                        { key: 'pending', mark: '\u25CB', label: 'Awaiting reply' };
   }
@@ -90,23 +94,10 @@
         <% } %>
       </div>
 
-      <!-- Bulk actions toolbar — visual scaffolding to match the Traffio
-           top bar. Wired to no-op placeholders for now; future work
-           hooks each into the multi-select / send-to-supplier flows. -->
-      <div class="bk2-bulkbar" aria-label="Bulk actions">
-        <button type="button" class="bk2-bulkbtn" title="Set supplier on selected" data-bulk="supplier" disabled>
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-          <span>Set supplier</span>
-        </button>
-        <button type="button" class="bk2-bulkbtn" title="Send selected bookings" data-bulk="send" disabled>
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12l4-4m-4 4l4 4m-4-4h14"/></svg>
-          <span>Send</span>
-        </button>
-        <button type="button" class="bk2-bulkbtn" title="Lock selected" data-bulk="lock" disabled>
-          <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 11v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-          <span>Lock many</span>
-        </button>
-      </div>
+      <%# The bulk-actions toolbar (Set supplier / Send / Lock many) is
+          hidden for launch — the buttons were permanently-disabled visual
+          scaffolding, and dead controls read as broken to the office.
+          Rebuild alongside the real multi-select flow when that lands. %>
 
       <button type="button" class="bk2-newbtn" id="bk2-new-btn" title="Create a booking (N)">
         <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
@@ -149,60 +140,27 @@
         <span class="bk2-fs-value" data-fs-display></span>
       </button>
 
-      <!-- Row 2: Client / Project / Supplier / Project category -->
+      <!-- Row 2: Client / Project / Booking status / Location -->
       <button type="button" class="bk2-fs-chip" data-fs-search="client"           data-fs-source="bookings"   data-fs-source-key="client">           <span class="bk2-fs-label">Client</span>           <span class="bk2-fs-value" data-fs-display></span></button>
       <button type="button" class="bk2-fs-chip" data-fs-search="project"          data-fs-source="bookings"   data-fs-source-key="job">              <span class="bk2-fs-label">Project</span>          <span class="bk2-fs-value" data-fs-display></span></button>
-      <button type="button" class="bk2-fs-chip" data-fs-search="supplier"         data-fs-placeholder="1">                                              <span class="bk2-fs-label">Supplier</span>         <span class="bk2-fs-value" data-fs-display></span></button>
-      <button type="button" class="bk2-fs-chip" data-fs-search="project_category" data-fs-placeholder="1">                                              <span class="bk2-fs-label">Project category</span> <span class="bk2-fs-value" data-fs-display></span></button>
-
-      <!-- Row 3: Classification / Booking status / Location context -->
-      <button type="button" class="bk2-fs-chip" data-fs-search="classification"   data-fs-placeholder="1">                                              <span class="bk2-fs-label">Classification</span>   <span class="bk2-fs-value" data-fs-display></span></button>
       <button type="button" class="bk2-fs-chip" data-fs-search="booking_status"   data-fs-options='<%= JSON.stringify(statuses || []) %>'>            <span class="bk2-fs-label">Booking status</span>   <span class="bk2-fs-value" data-fs-display></span></button>
-      <button type="button" class="bk2-fs-chip" data-fs-search="location_context" data-fs-placeholder="1">                                              <span class="bk2-fs-label">Location context</span> <span class="bk2-fs-value" data-fs-display></span></button>
-
-      <!-- Row 4: cycle buttons — Billable / Invoiced / Cash -->
-      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="billable"
-              data-fs-cycle-labels="Billable &amp; non billable|Billable|Non billable">
-        Billable &amp; non billable
-      </button>
-      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="invoiced"
-              data-fs-cycle-labels="Invoiced &amp; not invoiced|Invoiced|Not invoiced">
-        Invoiced &amp; not invoiced
-      </button>
-      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="payment"
-              data-fs-cycle-labels="Cash &amp; account|Cash|Account">
-        Cash &amp; account
+      <button type="button" class="bk2-fs-chip" data-fs-search="location" data-fs-source="bookings" data-fs-source-key="location">
+        <span class="bk2-fs-label">Location</span><span class="bk2-fs-value" data-fs-display></span>
       </button>
 
-      <!-- Row 5: callout cycle, Location/People search, supplier cycle, client changes cycle -->
+      <!-- Row 3: callout cycle — the one cycle filter that's implemented. -->
       <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="callouts"
               data-fs-cycle-labels="Includes callouts|Only callouts|No callouts">
         Includes callouts
       </button>
-      <button type="button" class="bk2-fs-chip" data-fs-search="location" data-fs-source="bookings" data-fs-source-key="location">
-        <span class="bk2-fs-label">Location</span><span class="bk2-fs-value" data-fs-display></span>
-      </button>
-      <button type="button" class="bk2-fs-chip" data-fs-search="people" data-fs-placeholder="1">
-        <span class="bk2-fs-label">People</span><span class="bk2-fs-value" data-fs-display></span>
-      </button>
-      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="supplier_scope"
-              data-fs-cycle-labels="Supplier/All|Supplier only|Direct only">
-        Supplier/All
-      </button>
-      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="client_changes"
-              data-fs-cycle-labels="Client Changes/all|Client Changes only|No client changes">
-        Client Changes/all
-      </button>
 
-      <!-- Row 6: Hire cycle + Deleted items -->
-      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="hire"
-              data-fs-cycle-labels="Hire/Non-Hire|Non-Hire|Hire">
-        Hire/Non-Hire
-      </button>
-      <button type="button" class="bk2-fs-chip bk2-fs-cycle" data-fs-cycle="deleted"
-              data-fs-cycle-labels="Hide Deleted|Show Deleted|Deleted only">
-        <span class="bk2-fs-label">Deleted items</span><span class="bk2-fs-value">Hide Deleted</span>
-      </button>
+      <%# Removed for launch (were placeholders / no-ops that looked live):
+          Supplier, Project category, Classification, Location context and
+          People search chips carried data-fs-placeholder="1" (disabled
+          popover); the Billable / Invoiced / Cash / Supplier-scope /
+          Client-changes / Hire / Deleted cycle chips changed their label
+          but fsCardOk never applied them, so they filtered nothing.
+          Reintroduce each one WITH its backend when the data exists. %>
     </div>
 
     <div class="bk2-fs-toolbar">
@@ -254,6 +212,14 @@
        ============================================================ -->
   <section class="bk2-pane bk2-pane--with-panel" data-view-pane="board" aria-current="true">
     <div class="bk2-board-col">
+    <% if (typeof missingDocsOnly !== 'undefined' && missingDocsOnly) { %>
+      <%# The dashboard's "no site docs" alert deep-links here — say so, or
+          a filtered-down board reads like bookings have vanished. %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 mb-3 flex items-center justify-between gap-3">
+        <p class="text-sm text-gray-700"><span class="font-semibold text-amber-600">Filtered:</span> showing only bookings with <span class="font-semibold">no site documents</span> for <%= dayLabel %>.</p>
+        <a href="/bookings?date=<%= dateStr %>" class="text-xs font-semibold text-brand-600 hover:text-brand-700 shrink-0">Show all →</a>
+      </div>
+    <% } %>
     <% if (!bookings.length) { %>
       <div class="bk2-empty">
         <div class="bk2-empty-icon">

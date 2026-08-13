@@ -3,7 +3,7 @@ const router = express.Router();
 const { getDb } = require('../../db/database');
 const { sydneyToday, TZ: SYD_TZ } = require('../../lib/sydney');
 const { resolveShift, getCurrentDocket } = require('../../lib/shiftDocket');
-const { maybePromoteToGreenToGo } = require('../../lib/bookingLifecycle');
+const { maybePromoteToGreenToGo, WORKER_VISIBLE_STATUSES, reconcileWorkerAllocations } = require('../../lib/bookingLifecycle');
 const bookingNotify = require('../../services/bookingNotify');
 const { syncBookingReturnTasks, syncBookingTaskGroups, createTeamTask } = require('../../services/returnTasks');
 const { logActivity } = require('../../middleware/audit');
@@ -21,6 +21,29 @@ function promoteAndNotifyGTG(db, bookingId, req, worker) {
       try { logActivity({ user: null, action: 'update', entityType: 'booking', entityId: bookingId, details: `Auto: ${bk ? bk.booking_number : 'booking'} → green_to_go (all crew confirmed; last: ${worker && worker.full_name})`, ip: req && req.ip }); } catch (e) {}
     }
   } catch (e) { console.error('[GTG] promote failed for booking', bookingId, ':', e.message); }
+}
+
+// A worker declining a shift is an operational event the office must see —
+// someone has to fill the slot. It used to land only in the audit log.
+// In-app notification to admin/management/operations; failure never blocks
+// the decline itself.
+function notifyOfficeOfDecline(db, worker, bookingId) {
+  try {
+    let label = 'a shift';
+    let link = '/bookings';
+    if (bookingId) {
+      const bk = db.prepare('SELECT booking_number, title, start_datetime FROM bookings WHERE id = ?').get(bookingId);
+      if (bk) {
+        label = (bk.booking_number || '') + (bk.title ? ' — ' + bk.title : '') + (bk.start_datetime ? ' on ' + String(bk.start_datetime).slice(0, 10) : '');
+        link = '/bookings/' + bookingId;
+      }
+    }
+    const officeUsers = db.prepare("SELECT id FROM users WHERE role IN ('admin','management','operations') AND COALESCE(active, 1) = 1").all();
+    const ins = db.prepare("INSERT INTO notifications (user_id, type, title, message, link) VALUES (?, 'general', ?, ?, ?)");
+    for (const u of officeUsers) {
+      ins.run(u.id, 'Shift declined', `${worker.full_name || 'A worker'} declined ${label}. The slot needs re-filling.`, link);
+    }
+  } catch (e) { console.error('[worker/respond] office decline notify failed:', e.message); }
 }
 
 // Admin-built form templates flagged to appear on every shift's Forms tab
@@ -79,46 +102,19 @@ router.get('/jobs', (req, res) => {
   // this worker — a previous bug in the /w/booking-shift/:id/respond
   // handler updated booking_crew but not the lazy-bound allocation, so
   // existing accepted shifts can be stuck in Requests forever. Fix on
-  // read so the user sees the correct state without us having to ship
-  // a one-off migration.
-  try {
-    db.prepare(`
-      UPDATE crew_allocations
-      SET status = 'confirmed', confirmed_at = COALESCE(confirmed_at, CURRENT_TIMESTAMP)
-      WHERE crew_member_id = ?
-        AND status = 'allocated'
-        AND booking_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1 FROM booking_crew bc
-           WHERE bc.booking_id = crew_allocations.booking_id
-             AND bc.crew_member_id = crew_allocations.crew_member_id
-             AND bc.status = 'confirmed'
-        )
-    `).run(worker.id);
-    db.prepare(`
-      UPDATE crew_allocations
-      SET status = 'declined'
-      WHERE crew_member_id = ?
-        AND status IN ('allocated','confirmed')
-        AND booking_id IS NOT NULL
-        AND EXISTS (
-          SELECT 1 FROM booking_crew bc
-           WHERE bc.booking_id = crew_allocations.booking_id
-             AND bc.crew_member_id = crew_allocations.crew_member_id
-             AND bc.status = 'declined'
-        )
-    `).run(worker.id);
-  } catch (e) { /* legacy DB without booking_crew — skip */ }
+  // read (shared with /w/home, which used to skip it and show stale
+  // statuses until the worker visited this page).
+  reconcileWorkerAllocations(db, worker.id);
 
-  // The bookings table CHECK uses these literal status values:
-  //   'unconfirmed','confirmed','green_to_go','in_progress','completed',
-  //   'cancelled','late_cancellation','on_hold'
-  // Crew don't see a shift until the ALLOCATOR confirms the booking, so
+  // Crew don't see a shift until the ALLOCATOR commits the booking, so
   // 'unconfirmed' is deliberately excluded — a pre-confirmation booking never
-  // surfaces in the portal. Once confirmed it appears as a request the worker
+  // surfaces in the portal. Once committed it appears as a request the worker
   // can accept/decline (that accept/decline drives allocation status, which is
-  // separate from booking status).
-  const VISIBLE_BOOKING_STATUSES = ['locked','confirmed','green_to_go','in_progress','complete','on_hold']; // locked: workers are push-notified to accept while locked, so the shift must be visible
+  // separate from booking status). Canonical list from lib/bookingLifecycle,
+  // shared with home, dockets, home cards, reminders and the push gate —
+  // it now includes 'finalised', so a worked shift no longer vanishes from
+  // the worker's Past tab the moment the office finalises its docket.
+  const VISIBLE_BOOKING_STATUSES = WORKER_VISIBLE_STATUSES;
 
   // Upcoming from crew_allocations. Falls back to booking columns when the
   // allocation isn't linked to a job (ad-hoc bookings post-migration 142),
@@ -500,7 +496,7 @@ router.get('/jobs/:id', (req, res) => {
   const jobLevel = db.prepare(`
     SELECT id, doc_type, title, original_name, mime_type, size_bytes, uploaded_at
     FROM job_documents
-    WHERE job_id = ? AND archived_at IS NULL
+    WHERE job_id = ? AND archived_at IS NULL AND COALESCE(visible_to_crew, 1) = 1
   `).all(allocation.job_id).map(d => ({
     id: d.id, source: 'job', doc_type: d.doc_type, title: d.title,
     original_name: d.original_name, mime_type: d.mime_type,
@@ -539,7 +535,7 @@ router.get('/jobs/:id', (req, res) => {
 
   // Sort by doc_type priority then most-recent first. Booking docs sit
   // alongside job docs — same priority weights, same chip in the view.
-  const DOC_PRIORITY = { tgs:1, tmp:2, ctmp:2, rol_day:3, rol_night:4, rol:3, stage_plan:5, swms:6, permit:7, other:8, photo:9, invoice:10 };
+  const DOC_PRIORITY = { tgs:1, tmp:2, ctmp:2, tcp:2, rol_day:3, rol_night:4, rol:3, stage_plan:5, swms:6, permit:7, other:8, photo:9, invoice:10 };
   const jobDocuments = [...jobLevel, ...finalPlans, ...bookingLevel].sort((a, b) => {
     const pa = DOC_PRIORITY[a.doc_type] || 99;
     const pb = DOC_PRIORITY[b.doc_type] || 99;
@@ -585,9 +581,12 @@ router.get('/booking-documents/:id', (req, res) => {
   // Docs hidden from crew never leave the admin side, even by direct URL.
   if (doc.visible_to_crew != null && !doc.visible_to_crew) return res.status(404).send('Not found');
 
+  // Declined workers are off the shift — they lose the site pack too
+  // (the gates used to mix != 'cancelled' and != 'declined' across the
+  // four streamers; now every one excludes both).
   const linked = db.prepare(`
     SELECT 1 FROM crew_allocations
-    WHERE crew_member_id = ? AND booking_id = ? AND status != 'cancelled' LIMIT 1
+    WHERE crew_member_id = ? AND booking_id = ? AND status NOT IN ('cancelled','declined') LIMIT 1
   `).get(worker.id, doc.booking_id);
   if (!linked) return res.status(403).send('Forbidden');
 
@@ -644,7 +643,7 @@ router.get('/doc/:source/:id', (req, res) => {
       fileUrl = '/w/final-plans/' + tp.id;
     }
   } else if (source === 'job') {
-    doc = db.prepare(`SELECT jd.*, j.id AS jid FROM job_documents jd JOIN jobs j ON jd.job_id = j.id WHERE jd.id = ? AND jd.archived_at IS NULL`).get(req.params.id);
+    doc = db.prepare(`SELECT jd.*, j.id AS jid FROM job_documents jd JOIN jobs j ON jd.job_id = j.id WHERE jd.id = ? AND jd.archived_at IS NULL AND COALESCE(jd.visible_to_crew, 1) = 1`).get(req.params.id);
     if (doc) { jobId = doc.jid; fileUrl = '/w/job-documents/' + doc.id; }
   } else if (source === 'plan') {
     // A compliance-plan file (TGS / TMP / ROL) inherited from the linked
@@ -664,15 +663,48 @@ router.get('/doc/:source/:id', (req, res) => {
   if (!doc) { req.flash('error', 'Document not found.'); return req.session.save(() => res.redirect('/w/jobs')); }
 
   const linked = bookingId
-    ? db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND booking_id = ? AND status != 'cancelled' LIMIT 1`).get(worker.id, bookingId)
+    ? db.prepare(`SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND booking_id = ? AND status NOT IN ('cancelled','declined') LIMIT 1`).get(worker.id, bookingId)
     : db.prepare(`
-        SELECT 1 FROM crew_allocations WHERE crew_member_id = @cm AND job_id = @job AND status != 'cancelled'
+        SELECT 1 FROM crew_allocations WHERE crew_member_id = @cm AND job_id = @job AND status NOT IN ('cancelled','declined')
         UNION
         SELECT 1 FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id
         WHERE bc.crew_member_id = @cm AND b.job_id = @job AND bc.status != 'declined'
         LIMIT 1
       `).get({ cm: worker.id, job: jobId });
   if (!linked) { req.flash('error', 'You don’t have access to that document.'); return req.session.save(() => res.redirect('/w/jobs')); }
+
+  // Compliance plans carry a per-booking crew-visibility switch
+  // (booking_plan_visibility; default = visible only once approved). The
+  // list view honours it, but this direct-URL branch used to skip it — a
+  // plan the office explicitly hid was still one shared link away.
+  if (source === 'plan') {
+    let planVisible = false;
+    try {
+      const planRow = db.prepare('SELECT c.id, c.status FROM compliance c JOIN compliance_documents cd ON cd.compliance_id = c.id WHERE cd.id = ?').get(req.params.id);
+      if (planRow) {
+        const myBookings = db.prepare(`
+          SELECT DISTINCT b.id FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id
+          WHERE bc.crew_member_id = @cm AND b.job_id = @job AND bc.status != 'declined'
+          UNION
+          SELECT DISTINCT ca.booking_id FROM crew_allocations ca JOIN bookings b2 ON b2.id = ca.booking_id
+          WHERE ca.crew_member_id = @cm AND b2.job_id = @job AND ca.status NOT IN ('cancelled','declined')
+        `).all({ cm: worker.id, job: jobId });
+        const ovStmt = db.prepare('SELECT visible_to_crew FROM booking_plan_visibility WHERE booking_id = ? AND compliance_id = ?');
+        for (const bk of myBookings) {
+          if (!bk.id) continue;
+          const ov = ovStmt.get(bk.id, planRow.id);
+          const vis = (ov && ov.visible_to_crew != null) ? !!ov.visible_to_crew : planRow.status === 'approved';
+          if (vis) { planVisible = true; break; }
+        }
+        if (!planVisible && planRow.status === 'approved') {
+          // Job-only roster (no booking context) — approved plans are fair game.
+          const jobOnly = db.prepare("SELECT 1 FROM crew_allocations WHERE crew_member_id = ? AND job_id = ? AND booking_id IS NULL AND status NOT IN ('cancelled','declined') LIMIT 1").get(worker.id, jobId);
+          if (jobOnly) planVisible = true;
+        }
+      }
+    } catch (e) { planVisible = false; }
+    if (!planVisible) { req.flash('error', 'You don’t have access to that document.'); return req.session.save(() => res.redirect('/w/jobs')); }
+  }
 
   const name = doc.original_name || doc.title || 'Document';
   const ext = (name.split('.').pop() || '').toLowerCase();
@@ -704,13 +736,13 @@ router.get('/job-documents/:id', (req, res) => {
     SELECT jd.*, j.id AS jid
     FROM job_documents jd
     JOIN jobs j ON jd.job_id = j.id
-    WHERE jd.id = ? AND jd.archived_at IS NULL
+    WHERE jd.id = ? AND jd.archived_at IS NULL AND COALESCE(jd.visible_to_crew, 1) = 1
   `).get(req.params.id);
   if (!doc) return res.status(404).send('Not found');
 
   const linked = db.prepare(`
     SELECT 1 FROM crew_allocations
-    WHERE crew_member_id = @cm AND job_id = @job AND status != 'cancelled'
+    WHERE crew_member_id = @cm AND job_id = @job AND status NOT IN ('cancelled','declined')
     UNION
     SELECT 1 FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id
     WHERE bc.crew_member_id = @cm AND b.job_id = @job AND bc.status != 'declined'
@@ -744,7 +776,7 @@ router.get('/final-plans/:id', (req, res) => {
 
   const linked = db.prepare(`
     SELECT 1 FROM crew_allocations
-    WHERE crew_member_id = @cm AND job_id = @job AND status != 'cancelled'
+    WHERE crew_member_id = @cm AND job_id = @job AND status NOT IN ('cancelled','declined')
     UNION
     SELECT 1 FROM booking_crew bc JOIN bookings b ON b.id = bc.booking_id
     WHERE bc.crew_member_id = @cm AND b.job_id = @job AND bc.status != 'declined'
@@ -799,6 +831,18 @@ router.post('/jobs/:id/respond', (req, res) => {
   // Get full allocation details for booking sync
   const fullAlloc = db.prepare('SELECT * FROM crew_allocations WHERE id = ?').get(allocation.id);
 
+  // The parent booking may have been cancelled/deleted since the push that
+  // brought the worker here — don't let a stale accept flip statuses on a
+  // dead shift (the allocation itself gets cancelled by the cascade, but a
+  // race can land the respond first).
+  if (fullAlloc && fullAlloc.booking_id) {
+    const parentBk = db.prepare('SELECT status, deleted_at FROM bookings WHERE id = ?').get(fullAlloc.booking_id);
+    if (!parentBk || parentBk.deleted_at || ['cancelled', 'late_cancellation'].includes(parentBk.status)) {
+      req.flash('error', 'That shift has been cancelled.');
+      return req.session.save(() => res.redirect('/w/jobs'));
+    }
+  }
+
   if (action === 'accept') {
     db.prepare(`
       UPDATE crew_allocations SET status = 'confirmed', confirmed_at = CURRENT_TIMESTAMP
@@ -827,6 +871,7 @@ router.post('/jobs/:id/respond', (req, res) => {
       db.prepare("UPDATE booking_crew SET status = 'declined' WHERE booking_id = ? AND crew_member_id = ?")
         .run(fullAlloc.booking_id, worker.id);
     }
+    notifyOfficeOfDecline(db, worker, fullAlloc && fullAlloc.booking_id);
 
     req.flash('success', 'Shift declined.');
   }
@@ -902,10 +947,16 @@ router.get('/booking-shift/:bookingId', (req, res) => {
   }
   booking.client_name = clientName || booking.client_contact || '';
 
-  // Format dates
-  const startDt = booking.start_datetime ? new Date(booking.start_datetime) : new Date();
-  const startDay = startDt.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', weekday: 'long' });
-  const startDate = startDt.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: 'numeric', month: 'long', year: 'numeric' });
+  // Format dates. start_datetime is a NAIVE Sydney wall-clock string —
+  // `new Date()` on it parses as UTC on Railway, and re-formatting that
+  // in Sydney shifted every shift starting ≥14:00 AEST onto the NEXT
+  // day's weekday/date (a Thu 18:00 shift read "Friday"). The stored
+  // date part already IS the Sydney calendar date, so format it alone;
+  // weekday-of-a-calendar-date needs no timezone at all.
+  const startDatePart = String(booking.start_datetime || '').slice(0, 10);
+  const startDt = /^\d{4}-\d{2}-\d{2}$/.test(startDatePart) ? new Date(startDatePart + 'T00:00:00') : new Date();
+  const startDay = startDt.toLocaleDateString('en-AU', { weekday: 'long' });
+  const startDate = startDt.toLocaleDateString('en-AU', { day: 'numeric', month: 'long', year: 'numeric' });
   const startTime = booking.start_datetime ? booking.start_datetime.substring(11, 16) : '';
   const endTime = booking.end_datetime ? booking.end_datetime.substring(11, 16) : '';
 
@@ -932,7 +983,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
     try {
       const jobLevel = booking.job_id ? db.prepare(`
         SELECT id, doc_type, title, original_name, mime_type, size_bytes, uploaded_at
-        FROM job_documents WHERE job_id = ? AND archived_at IS NULL
+        FROM job_documents WHERE job_id = ? AND archived_at IS NULL AND COALESCE(visible_to_crew, 1) = 1
       `).all(booking.job_id).map(d => ({
         id: d.id, source: 'job', doc_type: d.doc_type, title: d.title,
         original_name: d.original_name, mime_type: d.mime_type,
@@ -992,7 +1043,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
           }
         });
       } catch (e) { console.error('[booking-shift] plan fetch:', e.message); }
-      const DOC_PRIORITY = { tgs:1, tmp:2, ctmp:2, rol_day:3, rol_night:4, rol:3, stage_plan:5, swms:6, permit:7, other:8, photo:9, invoice:10 };
+      const DOC_PRIORITY = { tgs:1, tmp:2, ctmp:2, tcp:2, rol_day:3, rol_night:4, rol:3, stage_plan:5, swms:6, permit:7, other:8, photo:9, invoice:10 };
       jobDocuments = [...planLevel, ...jobLevel, ...finalPlans, ...bookingLevel].sort((a, b) => {
         const pa = DOC_PRIORITY[a.doc_type] || 99;
         const pb = DOC_PRIORITY[b.doc_type] || 99;
@@ -1066,6 +1117,43 @@ router.get('/booking-shift/:bookingId', (req, res) => {
   const vehicleGroups = getBookingVehicleGroups(db, booking.id, worker.id);
   const shiftForms = allocation ? buildShiftForms(db, booking, worker, vehicleGroups) : null;
 
+  // ── Essential field info the office records but crew never saw ──
+  // Supervisor: the booking-level supervisor (crew_members) wins; fall back
+  // to the job's ops supervisor. Booking-only shifts used to show none.
+  let supervisor = null;
+  try {
+    if (booking.supervisor_id) {
+      const s = db.prepare('SELECT full_name, phone FROM crew_members WHERE id = ?').get(booking.supervisor_id);
+      if (s) supervisor = { name: s.full_name, phone: s.phone || '' };
+    }
+    if (!supervisor && booking.job_id) {
+      const s = db.prepare('SELECT u.full_name FROM jobs j JOIN users u ON u.id = j.ops_supervisor_id WHERE j.id = ?').get(booking.job_id);
+      if (s) supervisor = { name: s.full_name, phone: '' };
+    }
+  } catch (e) { /* informational */ }
+
+  // On-site client contacts (bookings.site_contacts = JSON id array into
+  // client_contacts) — who the crew reports to at the gate.
+  let siteContacts = [];
+  try {
+    const ids = JSON.parse(booking.site_contacts || '[]').map(Number).filter(n => n > 0);
+    if (ids.length) {
+      siteContacts = db.prepare(`
+        SELECT id, full_name, company, position, phone
+        FROM client_contacts WHERE id IN (${ids.map(() => '?').join(',')})
+      `).all(...ids);
+    }
+  } catch (e) { /* malformed JSON → no contacts */ }
+
+  // Mobile-works legs — per-leg time/address/notes. Mobile crews used to
+  // see only the base site address.
+  let mobileLegs = [];
+  if (booking.has_mobile_works) {
+    try {
+      mobileLegs = db.prepare('SELECT seq, start_time, address, notes FROM booking_mobile_legs WHERE booking_id = ? ORDER BY seq, id').all(booking.id);
+    } catch (e) { /* table missing on legacy DBs */ }
+  }
+
   res.render('worker/booking-detail', {
     title: booking.title || booking.booking_number,
     currentPage: 'shifts',
@@ -1073,6 +1161,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
     booking,
     crew,
     myStatus: myAssignment.status,
+    myAssignment,
     startDay, startDate, startTime, endTime,
     allocation, formStatus, docket, jobDocuments,
     shiftForms,
@@ -1080,6 +1169,7 @@ router.get('/booking-shift/:bookingId', (req, res) => {
     vehicleGroups,
     docketSignUrl: '/w/dockets/shift/' + booking.id,
     myTasks, teamTasks,
+    supervisor, siteContacts, mobileLegs,
   });
 });
 
@@ -1118,6 +1208,7 @@ router.post('/bookings/:id/respond', (req, res) => {
     // A declined worker isn't bringing gear back — drop them from any
     // return-to-depot task groups on this shift.
     try { syncBookingTaskGroups(db, parseInt(req.params.id, 10)); } catch (e) { console.error('[worker respond] task-group sync failed:', e.message); }
+    notifyOfficeOfDecline(db, worker, parseInt(req.params.id, 10));
     req.flash('success', 'Shift declined.');
   }
 

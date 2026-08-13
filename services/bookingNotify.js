@@ -6,19 +6,17 @@
 // /w/profile/notifications — sendPushToCrew honours that.
 
 const { sendPushToCrew } = require('./pushNotification');
+const { NOTIFIABLE_STATUSES } = require('../lib/bookingLifecycle');
 
-// Workers must not hear about a shift until the allocator has committed it.
-// Per the office's lifecycle: LOCKED is the moment the allocation notice goes
-// out (confirmed is still internal working state), then workers confirm →
-// green_to_go → ongoing → complete → finalised. So a booking is "notifiable"
-// only from 'locked' onward. Before that (client_booking / unconfirmed /
-// confirmed / on_hold) assignment/reschedule/removal pushes are suppressed.
-// Callers gate on this so the policy lives in one place.
-const NOTIFIABLE_STATUSES = new Set([
-  'locked', 'conflict', 'green_to_go', 'in_progress', 'complete', 'finalised',
-]);
+// Workers must not hear about a shift until the allocator has committed it
+// (client_booking / unconfirmed / conflict stay silent). The list itself
+// lives in lib/bookingLifecycle so notifiability can never drift from
+// portal visibility again: the old local copy here excluded 'confirmed'
+// while the portal showed confirmed shifts — so a worker could watch a
+// visible shift get cancelled or rescheduled without a single push.
+const NOTIFIABLE = new Set(NOTIFIABLE_STATUSES);
 function isNotifiable(status) {
-  return NOTIFIABLE_STATUSES.has(String(status || ''));
+  return NOTIFIABLE.has(String(status || ''));
 }
 
 function fmtDate(dt) {

@@ -8,6 +8,7 @@ const {
 } = require('../../services/homeContext');
 const { enrichTodaysShifts } = require('../../services/todayBriefing');
 const { todaysBirthdays, messagesForBirthday, hasMessaged } = require('../../lib/birthdays');
+const { WORKER_VISIBLE_STATUSES, reconcileWorkerAllocations } = require('../../lib/bookingLifecycle');
 
 // GET /w/home — Worker home screen (dynamic, contextual)
 router.get('/home', async (req, res) => {
@@ -19,11 +20,23 @@ router.get('/home', async (req, res) => {
   const today = localIso(new Date());
   const todayDate = new Date(today + 'T00:00:00');
 
+  // Repair booking_crew ↔ crew_allocations status drift before reading —
+  // /w/jobs has always done this, but home didn't, so an accepted shift
+  // could render as a pending request here until the worker opened My Shifts.
+  reconcileWorkerAllocations(db, worker.id);
+
   // ---- Kick off parallel work where it helps ----
   // Synchronous DB queries first (SQLite is sync) — all very fast
-  // Crew don't see a shift until the allocator confirms the booking, so
-  // 'unconfirmed' is excluded here (matches routes/worker/jobs.js).
-  const VISIBLE_BOOKING_STATUSES = ['locked','confirmed','green_to_go','in_progress','complete','on_hold']; // locked: workers are push-notified to accept while locked, so the shift must be visible
+  // Crew don't see a shift until the allocator commits the booking —
+  // canonical list from lib/bookingLifecycle, shared with /w/jobs, the
+  // dockets page, home cards and the push gate so they can't drift.
+  const VISIBLE_BOOKING_STATUSES = WORKER_VISIBLE_STATUSES;
+  // Booking-linked allocations obey the same visibility gate as the
+  // booking_crew fallback below. This filter was missing on the
+  // crew_allocations path, so an UNCONFIRMED booking's crew appeared on
+  // the home screen (today card, coming-up, week strip) while /w/jobs
+  // correctly hid it.
+  const ALLOC_BOOKING_GATE = `(ca.booking_id IS NULL OR (b.deleted_at IS NULL AND b.status IN (${VISIBLE_BOOKING_STATUSES.map(() => '?').join(',')})))`;
 
   // Tag the source like /w/jobs does so the home card's "Open shift" /
   // "Fill docket" buttons route correctly: booking-only allocations
@@ -39,17 +52,20 @@ router.get('/home', async (req, res) => {
            COALESCE(j.site_address, b.site_address) AS site_address,
            COALESCE(j.suburb,     b.suburb)         AS suburb,
            j.status AS job_status,
-           u.full_name AS supervisor_name,
+           COALESCE(u.full_name, scm.full_name) AS supervisor_name,
+           b.meeting_point_latitude, b.meeting_point_longitude, b.meeting_point_note,
+           b.straight_to_site_time, b.depot_meeting_time,
            CASE WHEN ca.job_id IS NULL AND ca.booking_id IS NOT NULL
                 THEN 'booking' ELSE 'allocation' END AS source
     FROM crew_allocations ca
     LEFT JOIN jobs j     ON ca.job_id = j.id
     LEFT JOIN bookings b ON ca.booking_id = b.id
     LEFT JOIN users u    ON j.ops_supervisor_id = u.id
+    LEFT JOIN crew_members scm ON b.supervisor_id = scm.id
     WHERE ca.crew_member_id = ? AND ca.allocation_date = ? AND ca.status != 'cancelled'
-      AND (ca.booking_id IS NULL OR (b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')))
+      AND ${ALLOC_BOOKING_GATE}
     ORDER BY ca.start_time ASC
-  `).all(worker.id, today);
+  `).all(worker.id, today, ...VISIBLE_BOOKING_STATUSES);
 
   // Fallback: if the worker is on a booking via booking_crew but no
   // crew_allocations row was generated, surface it on home anyway. We
@@ -66,7 +82,9 @@ router.get('/home', async (req, res) => {
         SUBSTR(b.start_datetime, 12, 5) AS start_time,
         SUBSTR(b.end_datetime, 12, 5) AS end_time,
         b.title AS project_name,
-        '' AS supervisor_name,
+        (SELECT full_name FROM crew_members WHERE id = b.supervisor_id) AS supervisor_name,
+        b.meeting_point_latitude, b.meeting_point_longitude, b.meeting_point_note,
+        b.straight_to_site_time, b.depot_meeting_time,
         'booking' AS source
       FROM booking_crew bc
       JOIN bookings b ON bc.booking_id = b.id
@@ -80,6 +98,68 @@ router.get('/home', async (req, res) => {
     `).all(worker.id, today, ...VISIBLE_BOOKING_STATUSES);
   } catch (e) { /* booking_crew may not exist on legacy DBs */ }
   todaysShifts.push(...todaysFromBooking);
+
+  // Overnight carry-over: a shift that started YESTERDAY and runs past
+  // midnight (end_time < start_time) used to vanish from home at the stroke
+  // of 12 — a worker standing on site at 02:00 read "No shift today". Carry
+  // it at the top of today's list while it's still running.
+  try {
+    const yesterday = localIso(new Date(todayDate.getTime() - 86400000));
+    const nowHM = new Intl.DateTimeFormat('en-GB', { timeZone: 'Australia/Sydney', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date());
+    const overnightCarry = db.prepare(`
+      SELECT ca.*,
+             COALESCE(j.job_number, b.booking_number) AS job_number,
+             COALESCE(j.job_name,   b.title)          AS job_name,
+             COALESCE(j.client,     b.title)          AS client,
+             COALESCE(j.site_address, b.site_address) AS site_address,
+             COALESCE(j.suburb,     b.suburb)         AS suburb,
+             j.status AS job_status,
+             COALESCE(u.full_name, scm.full_name) AS supervisor_name,
+             b.meeting_point_latitude, b.meeting_point_longitude, b.meeting_point_note,
+             b.straight_to_site_time, b.depot_meeting_time,
+             CASE WHEN ca.job_id IS NULL AND ca.booking_id IS NOT NULL
+                  THEN 'booking' ELSE 'allocation' END AS source,
+             1 AS started_yesterday
+      FROM crew_allocations ca
+      LEFT JOIN jobs j     ON ca.job_id = j.id
+      LEFT JOIN bookings b ON ca.booking_id = b.id
+      LEFT JOIN users u    ON j.ops_supervisor_id = u.id
+      LEFT JOIN crew_members scm ON b.supervisor_id = scm.id
+      WHERE ca.crew_member_id = ? AND ca.allocation_date = ? AND ca.status != 'cancelled'
+        AND ca.end_time IS NOT NULL AND ca.start_time IS NOT NULL
+        AND ca.end_time < ca.start_time
+        AND ca.end_time > ?
+        AND ${ALLOC_BOOKING_GATE}
+      ORDER BY ca.start_time ASC
+    `).all(worker.id, yesterday, nowHM, ...VISIBLE_BOOKING_STATUSES);
+    todaysShifts.unshift(...overnightCarry);
+  } catch (e) { /* non-fatal — worst case the pre-midnight behaviour */ }
+
+  // Job-Pack progress per shift card. The card's CTA flips from "Open
+  // checklists" to "Fill docket" once the checklists are in — but the view's
+  // formStatus was never passed from this route, so jpDone was always 0 and
+  // the button stayed "Open checklists" for the whole shift. Attach the
+  // count per shift row (a global map would be wrong with two shifts).
+  const JP_TYPES = ['vehicle_prestart', 'risk_toolbox', 'tc_prestart', 'team_leader', 'post_shift_vehicle'];
+  for (const s of todaysShifts) {
+    s.jpDone = 0;
+    try {
+      let allocId = null;
+      if (s.booking_id) {
+        const a = db.prepare('SELECT id FROM crew_allocations WHERE booking_id = ? AND crew_member_id = ? LIMIT 1').get(s.booking_id, worker.id);
+        allocId = a && a.id;
+      } else {
+        allocId = s.id; // allocation-path rows are ca.* — id IS the allocation id
+      }
+      if (allocId) {
+        s.jpDone = db.prepare(`
+          SELECT COUNT(DISTINCT form_type) AS c FROM safety_forms
+          WHERE crew_member_id = ? AND allocation_id = ?
+            AND form_type IN (${JP_TYPES.map(() => '?').join(',')})
+        `).get(worker.id, allocId, ...JP_TYPES).c || 0;
+      }
+    } catch (e) { /* stays 0 — CTA falls back to checklists */ }
+  }
 
   const inTwoWeeks = new Date(todayDate); inTwoWeeks.setDate(inTwoWeeks.getDate() + 14);
   const upcomingShifts = db.prepare(`
@@ -97,9 +177,9 @@ router.get('/home', async (req, res) => {
     LEFT JOIN bookings b ON ca.booking_id = b.id
     WHERE ca.crew_member_id = ? AND ca.allocation_date > ?
       AND ca.allocation_date <= ? AND ca.status != 'cancelled'
-      AND (ca.booking_id IS NULL OR (b.deleted_at IS NULL AND b.status NOT IN ('cancelled','late_cancellation')))
+      AND ${ALLOC_BOOKING_GATE}
     ORDER BY ca.allocation_date ASC, ca.start_time ASC LIMIT 5
-  `).all(worker.id, today, localIso(inTwoWeeks));
+  `).all(worker.id, today, localIso(inTwoWeeks), ...VISIBLE_BOOKING_STATUSES);
 
   // Same fallback for upcoming.
   let upcomingFromBooking = [];
@@ -141,9 +221,11 @@ router.get('/home', async (req, res) => {
     });
   }
   const weekAlloc = db.prepare(`
-    SELECT allocation_date, shift_type, status FROM crew_allocations
-    WHERE crew_member_id = ? AND allocation_date BETWEEN ? AND ? AND status != 'cancelled'
-  `).all(worker.id, weekDays[0].iso, weekDays[6].iso);
+    SELECT ca.allocation_date, ca.shift_type, ca.status FROM crew_allocations ca
+    LEFT JOIN bookings b ON ca.booking_id = b.id
+    WHERE ca.crew_member_id = ? AND ca.allocation_date BETWEEN ? AND ? AND ca.status != 'cancelled'
+      AND ${ALLOC_BOOKING_GATE}
+  `).all(worker.id, weekDays[0].iso, weekDays[6].iso, ...VISIBLE_BOOKING_STATUSES);
   const weekLeave = db.prepare(`
     SELECT start_date, end_date, status FROM employee_leave
     WHERE crew_member_id = ? AND status != 'cancelled' AND NOT (end_date < ? OR start_date > ?)
@@ -157,8 +239,27 @@ router.get('/home', async (req, res) => {
 
   // Stats
   const last7 = new Date(todayDate); last7.setDate(last7.getDate() - 6);
-  const hoursRow = db.prepare(`SELECT COALESCE(SUM(total_hours), 0) as hrs FROM timesheets
-    WHERE crew_member_id = ? AND work_date BETWEEN ? AND ?`).get(worker.id, weekDays[0].iso, weekDays[6].iso);
+  // "Hours this week" counts the worker's SIGNED DOCKET lines — the thing
+  // they actually produce after every shift. It used to read from
+  // `timesheets`, which only admin entry / the Traffio import write, so a
+  // worker who docketed all week saw 0.0. Traffio-imported timesheets stay
+  // the payroll source on the admin side (deliberately not mixed in here —
+  // both would double-count the same shift).
+  let hoursRow = { hrs: 0 };
+  try {
+    hoursRow = db.prepare(`
+      SELECT COALESCE(SUM(dc.total_hours), 0) AS hrs
+      FROM docket_crew dc
+      JOIN docket_signatures ds ON ds.id = dc.docket_id
+      WHERE dc.crew_member_id = ?
+        AND COALESCE(ds.status, 'current') = 'current'
+        AND COALESCE(ds.shift_date, DATE(ds.signed_at)) BETWEEN ? AND ?
+    `).get(worker.id, weekDays[0].iso, weekDays[6].iso);
+  } catch (e) {
+    // Legacy DB without shift dockets — fall back to timesheets.
+    hoursRow = db.prepare(`SELECT COALESCE(SUM(total_hours), 0) as hrs FROM timesheets
+      WHERE crew_member_id = ? AND work_date BETWEEN ? AND ?`).get(worker.id, weekDays[0].iso, weekDays[6].iso);
+  }
   const daysWorkedRow = db.prepare(`SELECT COUNT(DISTINCT DATE(event_time)) as c FROM clock_events
     WHERE crew_member_id = ? AND event_type = 'clock_in' AND DATE(event_time) BETWEEN ? AND ?`).get(worker.id, localIso(last7), today);
   const pendingLeaveCount = db.prepare(`SELECT COUNT(*) as c FROM employee_leave
@@ -527,7 +628,7 @@ router.get('/weather.json', async (req, res) => {
         AND ca.allocation_date = ?
         AND ca.status NOT IN ('cancelled','declined')
       ORDER BY ca.allocation_date LIMIT 1
-    `).get(worker.crew_member_id, today);
+    `).get(worker.id, today); // session worker key is `id` — `crew_member_id` was undefined, so this always fell back to depot weather
     const upcoming = db.prepare(`
       SELECT ca.status, b.suburb, b.site_address
       FROM crew_allocations ca
@@ -536,7 +637,7 @@ router.get('/weather.json', async (req, res) => {
         AND ca.allocation_date > ?
         AND ca.status NOT IN ('cancelled','declined')
       ORDER BY ca.allocation_date LIMIT 5
-    `).all(worker.crew_member_id, today);
+    `).all(worker.id, today);
 
     const nextConfirmed = upcoming.find(s => s.status === 'confirmed');
     const shiftForWeather = todays || nextConfirmed || upcoming[0];

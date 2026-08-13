@@ -28,11 +28,20 @@ function buildMapsUrl(siteAddress, suburb) {
 // Build a "starts in N" / "started N ago" label from the shift's start_time
 // + end_time (both HH:MM strings on `today`). `now` is a Date in worker
 // local time — caller passes one anchored on Sydney midnight + minutesSinceMidnight.
-function buildCountdown(startTime, endTime, minsNow) {
+function buildCountdown(startTime, endTime, minsNow, startedYesterday) {
   if (!startTime) return null;
   var sm = parseHHMM(startTime);
   var em = parseHHMM(endTime);
   if (sm == null) return null;
+  // Overnight shift: the end lands on the next calendar day, so its
+  // raw minutes are "before" the start (22:00→06:00). Unwrap by a day,
+  // or a 22:00 shift read "Shift finished" from 06:01 in the morning —
+  // including at 23:00, one hour INTO the shift.
+  if (em != null && em <= sm) em += 24 * 60;
+  // A shift that STARTED yesterday and runs past midnight (the home route
+  // carries it into today's list while it's live): shift its clock back a
+  // day so "now" lands inside it, not 20h before it.
+  if (startedYesterday) { sm -= 24 * 60; if (em != null) em -= 24 * 60; }
   var delta = sm - minsNow;
   if (delta > 0) return { kind: 'before', minutes: delta, label: formatDelta(delta, 'in') };
   if (em != null && minsNow >= em) return { kind: 'after', minutes: minsNow - em, label: 'Shift finished' };
@@ -131,8 +140,15 @@ function enrichTodaysShifts(db, shifts, opts) {
   var minsNow = sydneyMinutesNow(opts.now);
   for (var i = 0; i < shifts.length; i++) {
     var s = shifts[i];
-    s.mapsUrl = buildMapsUrl(s.site_address, s.suburb);
-    s.countdown = buildCountdown(s.start_time, s.end_time, minsNow);
+    // Navigate to the crew MEETING POINT when the office pinned one —
+    // that's where the crew musters; the worksite may be a closed road.
+    if (s.meeting_point_latitude && s.meeting_point_longitude) {
+      s.mapsUrl = 'https://www.google.com/maps/dir/?api=1&destination=' +
+        encodeURIComponent(s.meeting_point_latitude + ',' + s.meeting_point_longitude);
+    } else {
+      s.mapsUrl = buildMapsUrl(s.site_address, s.suburb);
+    }
+    s.countdown = buildCountdown(s.start_time, s.end_time, minsNow, !!s.started_yesterday);
     s.crewCount = countOtherCrew(db, s, workerId, today);
     s.supervisorUserId = lookupSupervisorUserId(db, s);
   }
