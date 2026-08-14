@@ -15682,6 +15682,72 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 349 error:', e.message); }
   }
 
+  // Migration 350: referrals register (brief §3.1). Who introduced the
+  // opportunity and what it generated. Attributed proposal/won values are
+  // DERIVED via joins at read time (never stored — they'd drift).
+  // outcome mirrors the linked opportunity's won/lost state and is synced
+  // by the opportunity write paths.
+  if (!isMigrationApplied.get(350)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS referrals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          referring_client_id INTEGER REFERENCES clients(id),
+          referring_contact_id INTEGER REFERENCES client_contacts(id),
+          referred_client_id INTEGER REFERENCES clients(id),
+          referred_contact_id INTEGER REFERENCES client_contacts(id),
+          opportunity_id INTEGER REFERENCES opportunities(id),
+          referral_date DATE,
+          owner_id INTEGER REFERENCES users(id),
+          channel TEXT DEFAULT '',
+          notes TEXT DEFAULT '',
+          thank_you_status TEXT DEFAULT 'pending',
+          thank_you_date DATE,
+          outcome TEXT DEFAULT 'open',
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_referrals_opportunity ON referrals(opportunity_id);
+        CREATE INDEX IF NOT EXISTS idx_referrals_referring ON referrals(referring_client_id);
+      `);
+      recordMigration.run(350, 'Sightline referrals register');
+      console.log('Migration 350 applied: referrals table');
+    } catch (e) { console.error('Migration 350 error:', e.message); }
+  }
+
+  // Migration 351: opportunities — brief §3.1 minimum fields. All plain
+  // ALTERs, no CHECKs (stage/status stay app-enforced).
+  // expected_close_date doubles as the brief's "expected decision date"
+  // (relabelled in views); probability_override_reason records why a
+  // stage's default probability was manually overridden (§3.2).
+  if (!isMigrationApplied.get(351)) {
+    try {
+      const oCols = db.prepare('PRAGMA table_info(opportunities)').all().map(c => c.name);
+      const addO = (col, ddl) => { if (!oCols.includes(col)) db.exec(`ALTER TABLE opportunities ADD COLUMN ${ddl}`); };
+      addO('end_client', "end_client TEXT DEFAULT ''");
+      addO('site_name', "site_name TEXT DEFAULT ''");
+      addO('site_address', "site_address TEXT DEFAULT ''");
+      addO('lga', "lga TEXT DEFAULT ''");
+      addO('client_sector', "client_sector TEXT DEFAULT ''");
+      addO('service_streams', "service_streams TEXT DEFAULT ''");
+      addO('referral_id', 'referral_id INTEGER REFERENCES referrals(id)');
+      addO('commercial_owner_id', 'commercial_owner_id INTEGER REFERENCES users(id)');
+      addO('received_date', 'received_date DATE');
+      addO('expected_start_date', 'expected_start_date DATE');
+      addO('scope_summary', "scope_summary TEXT DEFAULT ''");
+      addO('key_assumptions', "key_assumptions TEXT DEFAULT ''");
+      addO('capacity_flag', 'capacity_flag INTEGER DEFAULT 0');
+      addO('conflict_flag', 'conflict_flag INTEGER DEFAULT 0');
+      addO('risk_notes', "risk_notes TEXT DEFAULT ''");
+      addO('won_reason', "won_reason TEXT DEFAULT ''");
+      addO('competitor', "competitor TEXT DEFAULT ''");
+      addO('probability_override_reason', "probability_override_reason TEXT DEFAULT ''");
+      recordMigration.run(351, 'Sightline opportunities: site/sector/streams/referral/owners/flags/reasons');
+      console.log('Migration 351 applied: opportunity brief fields');
+    } catch (e) { console.error('Migration 351 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

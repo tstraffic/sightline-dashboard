@@ -5,13 +5,13 @@
 <div class="flex items-center gap-2 text-sm text-gray-400 mb-4">
   <a href="/opportunities" class="hover:text-gray-900 transition">Opportunities</a>
   <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/></svg>
-  <span class="text-gray-900"><%= isEdit ? 'OPP-' + String(opportunity.id).padStart(3, '0') : 'New Opportunity' %></span>
+  <span class="text-gray-900"><%= isEdit ? opportunity.opportunity_number : 'New Opportunity' %></span>
 </div>
 
 <!-- Page Header -->
 <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
   <div>
-    <h1 class="text-2xl font-bold text-gray-900"><%= isEdit ? 'Edit: OPP-' + String(opportunity.id).padStart(3, '0') : 'New Opportunity' %></h1>
+    <h1 class="text-2xl font-bold text-gray-900"><%= isEdit ? 'Edit: ' + opportunity.opportunity_number : 'New Opportunity' %></h1>
     <p class="text-gray-500 text-sm mt-0.5"><%= isEdit ? 'Update opportunity details' : 'Create a new sales opportunity' %></p>
   </div>
 </div>
@@ -30,21 +30,7 @@
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
       <div>
-        <label for="service_type" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Service Type</label>
-        <select id="service_type" name="service_type"
-          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-          <option value="">Select service type...</option>
-          <% if (typeof settingsOptions !== 'undefined' && settingsOptions.service_categories) { %>
-            <% settingsOptions.service_categories.forEach(function(opt) { %>
-                            <option value="<%= opt.key %>" <%= isEdit && opportunity.service_type === opt.key ? 'selected' : '' %>>
-                <%= opt.label || opt.key %>
-              </option>
-            <% }) %>
-          <% } %>
-        </select>
-      </div>
-      <div>
-        <label for="source" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Source</label>
+        <label for="source" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Lead Source</label>
         <select id="source" name="source"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           <option value="">Select source...</option>
@@ -58,12 +44,139 @@
         </select>
       </div>
       <div>
+        <label for="received_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Received Date</label>
+        <input type="date" id="received_date" name="received_date"
+          value="<%= isEdit && opportunity.received_date ? String(opportunity.received_date).split('T')[0] : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div class="sm:col-span-2 lg:col-span-3">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Requested Service Streams</label>
+        <div class="flex flex-wrap gap-2 mt-1">
+          <%
+            const oppStreams = (typeof settingsOptions !== 'undefined' && settingsOptions.service_streams) ? settingsOptions.service_streams : [];
+            const oppSelectedStreams = isEdit && opportunity.service_streams ? opportunity.service_streams.split(',') : [];
+          %>
+          <% oppStreams.forEach(function(svc) { %>
+            <label class="cursor-pointer">
+              <input type="checkbox" name="service_streams" value="<%= svc.key %>"
+                <%= oppSelectedStreams.includes(svc.key) ? 'checked' : '' %> class="peer sr-only">
+              <span class="peer-checked:bg-brand-100 peer-checked:text-brand-800 peer-checked:ring-1 peer-checked:ring-brand-500 inline-flex items-center px-3 py-1.5 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 transition-all hover:bg-gray-200">
+                <%= svc.label || svc.key %>
+              </span>
+            </label>
+          <% }) %>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Site & scope (brief §3.1) -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Site &amp; Scope</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label for="site_name" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Site / Project Name</label>
+        <input type="text" id="site_name" name="site_name" value="<%= isEdit ? (opportunity.site_name || '') : '' %>" placeholder="e.g. 25 Smith Street"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label for="site_address" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Site Address</label>
+        <input type="text" id="site_address" name="site_address" value="<%= isEdit ? (opportunity.site_address || '') : '' %>" placeholder="Street address"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label for="lga" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">LGA</label>
+        <input type="text" id="lga" name="lga" value="<%= isEdit ? (opportunity.lga || '') : '' %>" placeholder="e.g. Parramatta"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label for="end_client" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">End Client</label>
+        <input type="text" id="end_client" name="end_client" value="<%= isEdit ? (opportunity.end_client || '') : '' %>" placeholder="If different from the account"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label for="client_sector" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Sector</label>
+        <select id="client_sector" name="client_sector"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">Select sector...</option>
+          <% ((typeof settingsOptions !== 'undefined' && settingsOptions.industry_segments) || []).forEach(function(opt) { %>
+            <option value="<%= opt.key %>" <%= isEdit && opportunity.client_sector === opt.key ? 'selected' : '' %>><%= opt.label || opt.key %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
         <label for="region" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Region</label>
         <input type="text" id="region" name="region" value="<%= isEdit ? (opportunity.region || '') : '' %>" placeholder="e.g. Sydney CBD, Western Sydney"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
+      <div class="sm:col-span-2 lg:col-span-3">
+        <label for="scope_summary" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Scope Summary</label>
+        <textarea id="scope_summary" name="scope_summary" rows="2" placeholder="What Sightline is being asked to do..."
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= isEdit ? (opportunity.scope_summary || '') : '' %></textarea>
+      </div>
+      <div class="sm:col-span-2 lg:col-span-2">
+        <label for="key_assumptions" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Key Assumptions</label>
+        <textarea id="key_assumptions" name="key_assumptions" rows="2"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"><%= isEdit ? (opportunity.key_assumptions || '') : '' %></textarea>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Flags</label>
+        <div class="space-y-2 mt-1.5">
+          <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" name="capacity_flag" value="1" <%= isEdit && opportunity.capacity_flag ? 'checked' : '' %> class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+            Capacity concern
+          </label>
+          <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+            <input type="checkbox" name="conflict_flag" value="1" <%= isEdit && opportunity.conflict_flag ? 'checked' : '' %> class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+            Conflict of interest check
+          </label>
+        </div>
+      </div>
+      <div class="sm:col-span-2 lg:col-span-3">
+        <label for="risk_notes" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Risk Notes</label>
+        <input type="text" id="risk_notes" name="risk_notes" value="<%= isEdit ? (opportunity.risk_notes || '') : '' %>" placeholder="Professional/commercial risk observations"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
     </div>
   </div>
+
+  <% if (!isEdit) { %>
+  <!-- Referral capture (creates a referrals row linked to this opportunity) -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Referral (if introduced by someone)</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label for="referring_client_id" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Referring Organisation</label>
+        <select id="referring_client_id" name="referring_client_id"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">Not a referral</option>
+          <% (clients || []).forEach(function(c) { %>
+            <option value="<%= c.id %>"><%= c.company_name || c.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label for="referring_contact_id" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Referring Contact</label>
+        <select id="referring_contact_id" name="referring_contact_id"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">Unknown / n/a</option>
+          <% (contacts || []).forEach(function(ct) { %>
+            <option value="<%= ct.id %>"><%= ct.full_name || ct.name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label for="referral_channel" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Referral Channel</label>
+        <select id="referral_channel" name="referral_channel"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <% ((typeof settingsOptions !== 'undefined' && settingsOptions.referral_channels) || []).forEach(function(opt) { %>
+            <option value="<%= opt.key %>"><%= opt.label || opt.key %></option>
+          <% }) %>
+        </select>
+      </div>
+    </div>
+  </div>
+  <% } %>
 
   <!-- 2. Account & Contact -->
   <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
@@ -116,9 +229,12 @@
         <select id="stage" name="stage"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           <% if (typeof settingsOptions !== 'undefined' && settingsOptions.opportunity_stages) { %>
-            <% settingsOptions.opportunity_stages.forEach(function(opt, idx) { %>
+            <% settingsOptions.opportunity_stages.forEach(function(opt, idx) {
+                 let stageProb = '';
+                 try { const m = JSON.parse(opt.metadata || '{}'); if (Number.isFinite(m.probability)) stageProb = m.probability; } catch (e) {}
+            %>
                             <option value="<%= opt.key %>"
-                data-probability=""
+                data-probability="<%= stageProb %>"
                 <%= isEdit && opportunity.stage === opt.key ? 'selected' : (!isEdit && idx === 0) ? 'selected' : '' %>>
                 <%= opt.label || opt.key %>
               </option>
@@ -129,20 +245,43 @@
       <div>
         <label for="probability" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Probability %</label>
         <input type="number" id="probability" name="probability" min="0" max="100" step="5"
-          value="<%= isEdit ? (opportunity.probability || 0) : '' %>" placeholder="0-100"
+          value="<%= isEdit ? (opportunity.probability || 0) : '' %>" placeholder="stage default"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+        <p class="text-[10px] text-gray-400 mt-1">Defaults to the stage's probability — overriding requires a reason.</p>
       </div>
       <div>
-        <label for="estimated_value" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Estimated Value ($)</label>
+        <label for="estimated_value" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Expected Value ($)</label>
         <input type="number" id="estimated_value" name="estimated_value" min="0" step="100"
           value="<%= isEdit ? (opportunity.estimated_value || '') : '' %>" placeholder="0"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
       <div>
-        <label for="expected_close_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Expected Close Date</label>
+        <label for="expected_close_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Expected Decision Date</label>
         <input type="date" id="expected_close_date" name="expected_close_date"
           value="<%= isEdit && opportunity.expected_close_date ? opportunity.expected_close_date.split('T')[0] : '' %>"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div id="probability-override-field" class="sm:col-span-2 hidden">
+        <label for="probability_override_reason" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Probability Override Reason <span class="text-red-500">*</span></label>
+        <input type="text" id="probability_override_reason" name="probability_override_reason"
+          value="<%= isEdit ? (opportunity.probability_override_reason || '') : '' %>" placeholder="Why does this differ from the stage default?"
+          class="w-full px-3 py-2 bg-white border border-amber-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+      </div>
+      <div>
+        <label for="expected_start_date" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Expected Start</label>
+        <input type="date" id="expected_start_date" name="expected_start_date"
+          value="<%= isEdit && opportunity.expected_start_date ? String(opportunity.expected_start_date).split('T')[0] : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label for="commercial_owner_id" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Commercial Owner</label>
+        <select id="commercial_owner_id" name="commercial_owner_id"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">Same as relationship owner</option>
+          <% (users || []).forEach(function(u) { %>
+            <option value="<%= u.id %>" <%= isEdit && opportunity.commercial_owner_id == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
       </div>
     </div>
   </div>
@@ -188,7 +327,7 @@
         </select>
       </div>
       <div id="loss-reason-field" class="<%= opportunity.status !== 'lost' ? 'hidden' : '' %>">
-        <label for="loss_reason" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Loss Reason</label>
+        <label for="loss_reason" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Lost Reason</label>
         <select id="loss_reason" name="loss_reason"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           <option value="">Select reason...</option>
@@ -200,6 +339,21 @@
             <% }) %>
           <% } %>
         </select>
+      </div>
+      <div id="won-reason-field" class="<%= opportunity.status !== 'won' ? 'hidden' : '' %>">
+        <label for="won_reason" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Won Reason</label>
+        <select id="won_reason" name="won_reason"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">Select reason...</option>
+          <% ((typeof settingsOptions !== 'undefined' && settingsOptions.won_reasons) || []).forEach(function(opt) { %>
+            <option value="<%= opt.key %>" <%= opportunity.won_reason === opt.key ? 'selected' : '' %>><%= opt.label || opt.key %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div id="competitor-field" class="<%= ['won','lost'].includes(opportunity.status) || opportunity.stage === 'negotiation' ? '' : 'hidden' %>">
+        <label for="competitor" class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Competitor (if known)</label>
+        <input type="text" id="competitor" name="competitor" value="<%= opportunity.competitor || '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
     </div>
   </div>
@@ -215,14 +369,34 @@
 </form>
 
 <script>
-  // Auto-update probability when stage changes
-  document.getElementById('stage').addEventListener('change', function() {
-    var selected = this.options[this.selectedIndex];
-    var prob = selected.dataset.probability;
-    if (prob !== undefined && prob !== '') {
-      document.getElementById('probability').value = prob;
-    }
+  // Probability follows the stage default (brief §3.2); a manual override
+  // reveals the required reason field.
+  var stageSel = document.getElementById('stage');
+  var probInput = document.getElementById('probability');
+  var overrideField = document.getElementById('probability-override-field');
+  var overrideInput = document.getElementById('probability_override_reason');
+
+  function stageDefaultProb() {
+    var selected = stageSel.options[stageSel.selectedIndex];
+    var p = selected ? selected.dataset.probability : '';
+    return p === undefined || p === '' ? null : parseInt(p, 10);
+  }
+  function syncOverrideVisibility() {
+    var def = stageDefaultProb();
+    var val = probInput.value === '' ? null : parseInt(probInput.value, 10);
+    var overridden = def !== null && val !== null && val !== def;
+    overrideField.classList.toggle('hidden', !overridden);
+    overrideInput.required = overridden;
+  }
+  stageSel.addEventListener('change', function() {
+    var def = stageDefaultProb();
+    if (def !== null) probInput.value = def;
+    syncOverrideVisibility();
   });
+  probInput.addEventListener('input', syncOverrideVisibility);
+  // Initial state: default new-opportunity probability from the first stage.
+  if (probInput.value === '' && stageDefaultProb() !== null) probInput.value = stageDefaultProb();
+  syncOverrideVisibility();
 
   // Filter contacts by selected account
   document.getElementById('client_id').addEventListener('change', function() {
@@ -239,16 +413,15 @@
     });
   });
 
-  // Toggle loss reason field visibility
+  // Toggle won/lost outcome fields with status
   function toggleLossReason() {
     var status = document.getElementById('status');
+    if (!status) return;
     var lossField = document.getElementById('loss-reason-field');
-    if (status && lossField) {
-      if (status.value === 'lost') {
-        lossField.classList.remove('hidden');
-      } else {
-        lossField.classList.add('hidden');
-      }
-    }
+    var wonField = document.getElementById('won-reason-field');
+    var compField = document.getElementById('competitor-field');
+    if (lossField) lossField.classList.toggle('hidden', status.value !== 'lost');
+    if (wonField) wonField.classList.toggle('hidden', status.value !== 'won');
+    if (compField) compField.classList.toggle('hidden', !['won', 'lost'].includes(status.value));
   }
 </script>

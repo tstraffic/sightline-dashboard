@@ -1,0 +1,138 @@
+<% locals.currentPage = 'referrals' %>
+<%
+  function money(v) { return '$' + (v || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  const OUTCOME_BADGE = {
+    open: 'bg-sky-50 text-sky-700 ring-1 ring-sky-600/20',
+    won: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+    lost: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
+  };
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'CRM',
+  title: 'Referrals',
+  subtitle: 'Who introduced each opportunity, and the value those relationships generate.',
+  actions: [{ label: 'New Referral', href: '/referrals/new', style: 'primary' }]
+}) %>
+
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+  <div class="stat-card">
+    <p class="stat-card-label">Referrals</p>
+    <p class="stat-card-value <%= stats.total ? 'is-info' : 'is-muted' %>"><%= stats.total || 0 %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Open</p>
+    <p class="stat-card-value <%= stats.open ? 'is-info' : 'is-muted' %>"><%= stats.open || 0 %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Won</p>
+    <p class="stat-card-value <%= stats.won ? 'is-good' : 'is-muted' %>"><%= stats.won || 0 %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Attributed Won Value</p>
+    <p class="stat-card-value <%= attributed.attributed_won ? 'is-good' : 'is-muted' %>"><%= money(attributed.attributed_won) %></p>
+  </div>
+  <div class="stat-card <%= stats.thanks_pending ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">Thank-yous Pending</p>
+    <p class="stat-card-value <%= stats.thanks_pending ? 'is-warn' : 'is-muted' %>"><%= stats.thanks_pending || 0 %></p>
+  </div>
+</div>
+
+<form method="GET" action="/referrals" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 mb-5">
+  <div class="flex flex-wrap items-end gap-3">
+    <div class="flex-1 min-w-[180px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Search</label>
+      <input type="text" name="search" value="<%= filters.search || '' %>" placeholder="Company, opportunity..."
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Outcome</label>
+      <select name="outcome" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% ['open','won','lost'].forEach(o => { %>
+          <option value="<%= o %>" <%= filters.outcome === o ? 'selected' : '' %>><%= o.charAt(0).toUpperCase() + o.slice(1) %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Channel</label>
+      <select name="channel" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% (settingsOptions.referral_channels || []).forEach(opt => { %>
+          <option value="<%= opt.key %>" <%= filters.channel === opt.key ? 'selected' : '' %>><%= opt.label || opt.key %></option>
+        <% }) %>
+      </select>
+    </div>
+    <label class="flex items-center gap-2 text-sm text-gray-700 pb-2 cursor-pointer">
+      <input type="checkbox" name="thank_you" value="pending" <%= filters.thank_you === 'pending' ? 'checked' : '' %> class="rounded border-gray-300 text-brand-600 focus:ring-brand-500">
+      Thank-you pending
+    </label>
+    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Filter</button>
+  </div>
+</form>
+
+<% if (!referrals.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center">
+    <p class="text-gray-500 text-sm mb-1">No referrals recorded yet.</p>
+    <p class="text-gray-400 text-xs">Referrals are captured automatically when a new opportunity names a referring organisation, or record one directly.</p>
+  </div>
+<% } else { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100">
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referred By</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referred</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Opportunity</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Date</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Outcome</th>
+        <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:table-cell">Value</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Thank-you</th>
+        <th class="px-3 py-2.5"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      <% referrals.forEach(r => { %>
+      <tr class="hover:bg-gray-50">
+        <td class="px-3 py-2.5">
+          <p class="text-gray-900 font-medium"><%= r.referring_company || '—' %></p>
+          <% if (r.referring_contact) { %><p class="text-gray-400 text-xs"><%= r.referring_contact %></p><% } %>
+        </td>
+        <td class="px-3 py-2.5">
+          <% if (r.referred_client_id) { %>
+            <a href="/clients/<%= r.referred_client_id %>" class="text-brand-600 hover:text-brand-700 font-medium hover:underline"><%= r.referred_company || '—' %></a>
+          <% } else { %><span class="text-gray-500"><%= r.referred_company || '—' %></span><% } %>
+          <% if (r.referred_contact) { %><p class="text-gray-400 text-xs"><%= r.referred_contact %></p><% } %>
+        </td>
+        <td class="px-3 py-2.5 hidden md:table-cell">
+          <% if (r.opportunity_id) { %>
+            <a href="/opportunities/<%= r.opportunity_id %>" class="text-brand-600 hover:text-brand-700 font-mono text-xs hover:underline"><%= r.opportunity_number %></a>
+            <p class="text-gray-400 text-xs truncate max-w-[200px]"><%= r.opp_title %></p>
+          <% } else { %><span class="text-gray-300 text-xs">—</span><% } %>
+        </td>
+        <td class="px-3 py-2.5 text-gray-500 text-xs tabular-nums hidden lg:table-cell"><%= r.referral_date ? formatDateShort(r.referral_date) : '—' %></td>
+        <td class="px-3 py-2.5 text-center">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= OUTCOME_BADGE[r.outcome] || OUTCOME_BADGE.open %>"><%= (r.outcome || 'open').toUpperCase() %></span>
+        </td>
+        <td class="px-3 py-2.5 text-right text-gray-700 text-xs tabular-nums hidden sm:table-cell">
+          <%= r.opp_status === 'won' ? money(r.job_value || r.opp_value) : (r.opp_value ? money(r.opp_value) : '—') %>
+        </td>
+        <td class="px-3 py-2.5 text-center">
+          <form method="POST" action="/referrals/<%= r.id %>/thank-you" class="inline">
+            <%- include('../partials/csrf') %>
+            <% if (r.thank_you_status === 'done') { %>
+              <button type="submit" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-50 text-teal-700 ring-1 ring-teal-600/20" title="Thanked <%= r.thank_you_date ? formatDateShort(r.thank_you_date) : '' %> — click to reopen">THANKED</button>
+            <% } else { %>
+              <button type="submit" class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20 hover:bg-amber-100" title="Click once the referrer has been thanked">PENDING</button>
+            <% } %>
+          </form>
+        </td>
+        <td class="px-3 py-2.5 text-right">
+          <a href="/referrals/<%= r.id %>/edit" class="text-gray-400 hover:text-brand-600 text-xs font-medium">Edit</a>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>

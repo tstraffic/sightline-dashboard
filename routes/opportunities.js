@@ -2,7 +2,22 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
-const { generateJobNumber } = require('../lib/jobNumbers');
+const { generateOpportunityRef } = require('../lib/refNumbers');
+const { defaultProbability, validateStageTransition } = require('../lib/crmStages');
+const { sydneyToday } = require('../lib/sydney');
+
+// Comma-join a multi-select body value (service_streams checkboxes).
+function joinMulti(v) {
+  return Array.isArray(v) ? v.join(',') : (v || '');
+}
+
+// Keep the linked referral's outcome in step with the opportunity (§3.1:
+// referrals carry won/lost outcome for attribution reporting).
+function syncReferralOutcome(db, opp, newStatus) {
+  if (!opp.referral_id) return;
+  const outcome = newStatus === 'won' ? 'won' : newStatus === 'lost' ? 'lost' : 'open';
+  db.prepare('UPDATE referrals SET outcome = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(outcome, opp.referral_id);
+}
 
 // JSON API - search opportunities (for autocomplete/dropdowns) — MUST be before /:id
 router.get('/api/search.json', (req, res) => {
@@ -199,31 +214,50 @@ router.post('/', (req, res) => {
   const b = req.body;
 
   try {
-    // Auto-generate opportunity_number: OPP-001, OPP-002, etc.
-    const maxRow = db.prepare(`
-      SELECT opportunity_number FROM opportunities
-      WHERE opportunity_number LIKE 'OPP-%'
-      ORDER BY CAST(SUBSTR(opportunity_number, 5) AS INTEGER) DESC
-      LIMIT 1
-    `).get();
-    let nextNum = 1;
-    if (maxRow && maxRow.opportunity_number) {
-      const parsed = parseInt(maxRow.opportunity_number.replace('OPP-', ''), 10);
-      if (!isNaN(parsed)) nextNum = parsed + 1;
-    }
-    const opportunityNumber = 'OPP-' + String(nextNum).padStart(3, '0');
+    // OPP-YY#### — Sydney-year-scoped sequence (brief §2.4).
+    const opportunityNumber = generateOpportunityRef();
 
+    const stage = b.stage || 'lead';
+    const stageDefault = defaultProbability(db, stage);
     const estimatedValue = parseFloat(b.estimated_value) || 0;
-    const probability = parseInt(b.probability) || 10;
+    // Probability defaults from the stage (§3.2); a manual override must
+    // carry a recorded reason.
+    let probability = b.probability !== undefined && b.probability !== '' ? parseInt(b.probability) : (stageDefault !== null ? stageDefault : 10);
+    if (isNaN(probability)) probability = stageDefault !== null ? stageDefault : 10;
+    const overrideReason = (stageDefault !== null && probability !== stageDefault) ? (b.probability_override_reason || '') : '';
+    if (stageDefault !== null && probability !== stageDefault && !overrideReason) {
+      req.flash('error', `Probability ${probability}% differs from the ${stage} stage default (${stageDefault}%) — an override reason is required.`);
+      return req.session.save(() => res.redirect('/opportunities/new'));
+    }
     const weightedValue = estimatedValue * probability / 100;
+
+    // Referral capture: a referring organisation/contact spawns a referrals
+    // row up-front so attribution survives the whole lifecycle.
+    let referralId = null;
+    if (b.referring_client_id || b.referring_contact_id) {
+      referralId = db.prepare(`
+        INSERT INTO referrals (referring_client_id, referring_contact_id, referred_client_id, referred_contact_id,
+          referral_date, owner_id, channel, notes, created_by_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        b.referring_client_id || null, b.referring_contact_id || null,
+        b.client_id || null, b.contact_id || null,
+        sydneyToday(), b.owner_id || (req.session.user ? req.session.user.id : null),
+        b.referral_channel || 'client_referral', '', req.session.user ? req.session.user.id : null
+      ).lastInsertRowid;
+    }
 
     const result = db.prepare(`
       INSERT INTO opportunities (
         opportunity_number, title, client_id, contact_id, owner_id,
         service_type, stage, probability, estimated_value, weighted_value,
         expected_close_date, source, region, notes, next_step, next_step_due_date,
-        status, created_by_id
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        status, created_by_id,
+        end_client, site_name, site_address, lga, client_sector, service_streams,
+        referral_id, commercial_owner_id, received_date, expected_start_date,
+        scope_summary, key_assumptions, capacity_flag, conflict_flag, risk_notes,
+        probability_override_reason
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       opportunityNumber,
       b.title,
@@ -231,7 +265,7 @@ router.post('/', (req, res) => {
       b.contact_id || null,
       b.owner_id || null,
       b.service_type || '',
-      b.stage || 'new_lead',
+      stage,
       probability,
       estimatedValue,
       weightedValue,
@@ -242,8 +276,19 @@ router.post('/', (req, res) => {
       b.next_step || '',
       b.next_step_due_date || null,
       b.status || 'open',
-      req.session.user ? req.session.user.id : null
+      req.session.user ? req.session.user.id : null,
+      b.end_client || '', b.site_name || '', b.site_address || '', b.lga || '',
+      b.client_sector || '', joinMulti(b.service_streams),
+      referralId, b.commercial_owner_id || null,
+      b.received_date || sydneyToday(), b.expected_start_date || null,
+      b.scope_summary || '', b.key_assumptions || '',
+      b.capacity_flag ? 1 : 0, b.conflict_flag ? 1 : 0, b.risk_notes || '',
+      overrideReason
     );
+
+    if (referralId) {
+      db.prepare('UPDATE referrals SET opportunity_id = ? WHERE id = ?').run(result.lastInsertRowid, referralId);
+    }
 
     logActivity({
       user: req.session.user,
@@ -277,6 +322,7 @@ router.get('/:id', (req, res, next) => {
       SELECT o.*,
         c.company_name as client_name,
         u.full_name as owner_name,
+        co.full_name as commercial_owner_name,
         cc.full_name as contact_name,
         cc.email as contact_email,
         cc.phone as contact_phone,
@@ -284,6 +330,7 @@ router.get('/:id', (req, res, next) => {
       FROM opportunities o
       LEFT JOIN clients c ON o.client_id = c.id
       LEFT JOIN users u ON o.owner_id = u.id
+      LEFT JOIN users co ON o.commercial_owner_id = co.id
       LEFT JOIN client_contacts cc ON o.contact_id = cc.id
       LEFT JOIN users cb ON o.created_by_id = cb.id
       WHERE o.id = ?
@@ -293,6 +340,15 @@ router.get('/:id', (req, res, next) => {
       req.flash('error', 'Opportunity not found.');
       return req.session.save(() => res.redirect('/opportunities'));
     }
+
+    // Linked referral (for the Referred By panel)
+    const referral = opportunity.referral_id ? db.prepare(`
+      SELECT r.*, rc.company_name AS referring_company, rcc.full_name AS referring_contact
+      FROM referrals r
+      LEFT JOIN clients rc ON r.referring_client_id = rc.id
+      LEFT JOIN client_contacts rcc ON r.referring_contact_id = rcc.id
+      WHERE r.id = ?
+    `).get(opportunity.referral_id) : null;
 
     // CRM activities linked to this opportunity
     const activities = db.prepare(`
@@ -321,6 +377,7 @@ router.get('/:id', (req, res, next) => {
       opportunity,
       activities,
       relatedJob,
+      referral,
     });
   } catch (err) {
     console.error('Opportunity detail error:', err);
@@ -369,13 +426,40 @@ router.post('/:id', (req, res) => {
       return req.session.save(() => res.redirect('/opportunities'));
     }
 
+    const newStage = b.stage || current.stage;
+
+    // Stage gating (brief §6.3) — enforced on the edit path too, not just
+    // the kanban, so a form save can't sidestep the Proposal Sent/Won gates.
+    if (newStage !== current.stage) {
+      const gate = validateStageTransition(db, current, newStage, b);
+      if (!gate.ok) {
+        req.flash('error', `Cannot move to ${newStage.replace(/_/g, ' ')}: ` + gate.errors.join(' '));
+        return req.session.save(() => res.redirect('/opportunities/' + req.params.id + '/edit'));
+      }
+    }
+
     const estimatedValue = parseFloat(b.estimated_value) || 0;
-    const probability = parseInt(b.probability) || 10;
+    const stageDefault = defaultProbability(db, newStage);
+    let probability = b.probability !== undefined && b.probability !== '' ? parseInt(b.probability) : (stageDefault !== null ? stageDefault : current.probability);
+    if (isNaN(probability)) probability = current.probability;
+    let overrideReason = current.probability_override_reason || '';
+    if (stageDefault !== null && probability !== stageDefault) {
+      overrideReason = b.probability_override_reason || overrideReason;
+      if (!overrideReason) {
+        req.flash('error', `Probability ${probability}% differs from the ${newStage} stage default (${stageDefault}%) — an override reason is required.`);
+        return req.session.save(() => res.redirect('/opportunities/' + req.params.id + '/edit'));
+      }
+    } else if (stageDefault !== null && probability === stageDefault) {
+      overrideReason = '';
+    }
     const weightedValue = estimatedValue * probability / 100;
 
-    // Determine won/lost dates
-    const newStatus = b.status || 'open';
-    const todayStr = new Date().toISOString().slice(0, 10);
+    // Stage drives status; the standalone status select can still park an
+    // opportunity on hold or reopen it.
+    let newStatus = b.status || 'open';
+    if (newStage === 'won') newStatus = 'won';
+    else if (newStage === 'lost') newStatus = 'lost';
+    const todayStr = sydneyToday();
     let wonDate = current.won_date || null;
     let lostDate = current.lost_date || null;
     if (newStatus === 'won' && current.status !== 'won') wonDate = todayStr;
@@ -388,7 +472,12 @@ router.post('/:id', (req, res) => {
         service_type = ?, stage = ?, probability = ?, estimated_value = ?, weighted_value = ?,
         expected_close_date = ?, source = ?, region = ?, notes = ?,
         next_step = ?, next_step_due_date = ?, status = ?, loss_reason = ?,
-        won_date = ?, lost_date = ?, updated_at = CURRENT_TIMESTAMP
+        won_date = ?, lost_date = ?,
+        end_client = ?, site_name = ?, site_address = ?, lga = ?, client_sector = ?,
+        service_streams = ?, commercial_owner_id = ?, received_date = ?, expected_start_date = ?,
+        scope_summary = ?, key_assumptions = ?, capacity_flag = ?, conflict_flag = ?, risk_notes = ?,
+        won_reason = ?, competitor = ?, probability_override_reason = ?,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
       b.title,
@@ -396,7 +485,7 @@ router.post('/:id', (req, res) => {
       b.contact_id || null,
       b.owner_id || null,
       b.service_type || '',
-      b.stage || current.stage,
+      newStage,
       probability,
       estimatedValue,
       weightedValue,
@@ -409,11 +498,20 @@ router.post('/:id', (req, res) => {
       newStatus,
       b.loss_reason || '',
       wonDate, lostDate,
+      b.end_client || '', b.site_name || '', b.site_address || '', b.lga || '',
+      b.client_sector || '', joinMulti(b.service_streams),
+      b.commercial_owner_id || null, b.received_date || current.received_date,
+      b.expected_start_date || null,
+      b.scope_summary || '', b.key_assumptions || '',
+      b.capacity_flag ? 1 : 0, b.conflict_flag ? 1 : 0, b.risk_notes || '',
+      b.won_reason || current.won_reason || '', b.competitor || current.competitor || '',
+      overrideReason,
       req.params.id
     );
 
+    syncReferralOutcome(db, current, newStatus);
+
     // If stage changed, log a CRM activity automatically
-    const newStage = b.stage || current.stage;
     if (newStage !== current.stage) {
       db.prepare(`
         INSERT INTO crm_activities (
@@ -501,9 +599,26 @@ router.post('/:id/stage', (req, res) => {
     }
 
     const { stage, probability } = req.body;
-    const newProbability = probability !== undefined ? parseInt(probability) : opportunity.probability;
+
+    // Stage gating (brief §6.3) — a blocked move returns 422 so the board
+    // can toast the reasons and snap the card back.
+    if (stage && stage !== opportunity.stage) {
+      const gate = validateStageTransition(db, opportunity, stage, req.body);
+      if (!gate.ok) {
+        return res.status(422).json({ success: false, error: gate.errors.join(' '), errors: gate.errors });
+      }
+    }
+
+    // Probability follows the target stage's default (§3.2) unless the
+    // caller sends an explicit value (manual override path lives on the
+    // edit form, where the reason is captured).
+    const stageDefault = stage ? defaultProbability(db, stage) : null;
+    let newProbability = probability !== undefined && probability !== '' ? parseInt(probability)
+      : (stageDefault !== null ? stageDefault : opportunity.probability);
+    if (isNaN(newProbability)) newProbability = opportunity.probability;
+    const clearOverride = stageDefault !== null && newProbability === stageDefault;
     const weightedValue = opportunity.estimated_value * newProbability / 100;
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = sydneyToday();
 
     // Determine status and won/lost dates from stage
     let newStatus = opportunity.status;
@@ -517,9 +632,13 @@ router.post('/:id/stage', (req, res) => {
     db.prepare(`
       UPDATE opportunities SET
         stage = ?, probability = ?, weighted_value = ?, status = ?,
-        won_date = ?, lost_date = ?, updated_at = CURRENT_TIMESTAMP
+        won_date = ?, lost_date = ?,
+        probability_override_reason = CASE WHEN ? THEN '' ELSE probability_override_reason END,
+        updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(stage, newProbability, weightedValue, newStatus, wonDate, lostDate, req.params.id);
+    `).run(stage, newProbability, weightedValue, newStatus, wonDate, lostDate, clearOverride ? 1 : 0, req.params.id);
+
+    syncReferralOutcome(db, opportunity, newStatus);
 
     // Log stage change as CRM activity if stage actually changed
     if (stage && stage !== opportunity.stage) {

@@ -449,6 +449,7 @@ app.get('/crm/accounts', requireLogin, (req, res) => {
 });
 app.use('/crm', requireLogin, requirePermission('crm'), require('./routes/crm'));
 app.use('/opportunities', requireLogin, requirePermission('crm'), require('./routes/opportunities'));
+app.use('/referrals', requireLogin, requirePermission('crm'), require('./routes/referrals'));
 app.use('/chat', requireLogin, require('./routes/chat'));
 app.use('/notifications', requireLogin, requirePermission('notifications'), require('./routes/notifications'));
 app.use('/admin/integrations', requireLogin, requirePermission('admin'), require('./routes/integrations'));

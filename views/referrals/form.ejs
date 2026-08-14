@@ -1,0 +1,113 @@
+<% locals.currentPage = 'referrals' %>
+<% const isEdit = referral !== null && typeof referral !== 'undefined' && referral %>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'CRM',
+  title: isEdit ? 'Edit Referral' : 'New Referral',
+  subtitle: 'Record who introduced the work so the relationship gets stewarded and attributed.',
+  actions: [{ label: 'Back to Referrals', href: '/referrals', style: 'secondary' }]
+}) %>
+
+<form method="POST" action="<%= isEdit ? '/referrals/' + referral.id : '/referrals' %>" class="space-y-5 max-w-3xl">
+  <%- include('../partials/csrf') %>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Referring Party</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Referring Organisation</label>
+        <select name="referring_client_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select...</option>
+          <% companies.forEach(c => { %>
+            <option value="<%= c.id %>" <%= isEdit && referral.referring_client_id == c.id ? 'selected' : '' %>><%= c.company_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Referring Contact</label>
+        <select name="referring_contact_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Unknown / n/a</option>
+          <% contacts.forEach(ct => { %>
+            <option value="<%= ct.id %>" <%= isEdit && referral.referring_contact_id == ct.id ? 'selected' : '' %>><%= ct.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Channel</label>
+        <select name="channel" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% (settingsOptions.referral_channels || []).forEach(opt => { %>
+            <option value="<%= opt.key %>" <%= isEdit && referral.channel === opt.key ? 'selected' : '' %>><%= opt.label || opt.key %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Referral Date</label>
+        <input type="date" name="referral_date" value="<%= isEdit && referral.referral_date ? String(referral.referral_date).split('T')[0] : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Referred Work</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Referred Organisation</label>
+        <select name="referred_client_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select...</option>
+          <% companies.forEach(c => { %>
+            <option value="<%= c.id %>" <%= isEdit && referral.referred_client_id == c.id ? 'selected' : '' %>><%= c.company_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Referred Contact</label>
+        <select name="referred_contact_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Unknown / n/a</option>
+          <% contacts.forEach(ct => { %>
+            <option value="<%= ct.id %>" <%= isEdit && referral.referred_contact_id == ct.id ? 'selected' : '' %>><%= ct.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Linked Opportunity</label>
+        <select name="opportunity_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">None yet</option>
+          <% opportunities.forEach(o => { %>
+            <option value="<%= o.id %>" <%= isEdit && referral.opportunity_id == o.id ? 'selected' : '' %>><%= o.opportunity_number %> — <%= o.title %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Relationship Owner</label>
+        <select name="owner_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Unassigned</option>
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>" <%= isEdit && referral.owner_id == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Notes</label>
+        <textarea name="notes" rows="2" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? (referral.notes || '') : '' %></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between">
+    <% if (isEdit) { %>
+    <button type="submit" form="delete-referral" class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium rounded-lg transition-colors">Delete</button>
+    <% } else { %><span></span><% } %>
+    <div class="flex items-center gap-3">
+      <a href="/referrals" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Cancel</a>
+      <button type="submit" class="px-6 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
+        <%= isEdit ? 'Update Referral' : 'Record Referral' %>
+      </button>
+    </div>
+  </div>
+</form>
+<% if (isEdit) { %>
+<form id="delete-referral" method="POST" action="/referrals/<%= referral.id %>/delete" onsubmit="return confirm('Delete this referral? Attribution history will be lost.');">
+  <%- include('../partials/csrf') %>
+</form>
+<% } %>

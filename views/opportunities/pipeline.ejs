@@ -271,20 +271,36 @@
       sourceCol.innerHTML = '<div class="text-center py-6 text-xs text-gray-300"><p>Drop opportunities here</p></div>';
     }
 
-    // POST to server
+    // POST to server. A 422 is a blocked stage gate (brief §6.3) — surface
+    // the reasons, then reload so the card snaps back to its real column.
     fetch('/opportunities/' + draggedId + '/stage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-csrf-token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
       body: JSON.stringify({ stage: newStage })
     }).then(function(res) {
       if (!res.ok) {
-        console.error('Failed to update stage');
-        window.location.reload();
+        return res.json().catch(function(){ return {}; }).then(function(d) {
+          showStageGateToast(d && d.error ? d.error : 'Stage change failed.');
+          setTimeout(function(){ window.location.reload(); }, 2600);
+        });
       }
     }).catch(function(err) {
       console.error('Error updating stage:', err);
       window.location.reload();
     });
+  }
+
+  // Bottom-centre toast for blocked stage moves.
+  function showStageGateToast(msg) {
+    var t = document.getElementById('stage-gate-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'stage-gate-toast';
+      t.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:9999;max-width:520px;background:#2D232A;color:#F8F6F2;border:1px solid rgba(248,246,242,0.15);border-left:3px solid #A34652;border-radius:10px;padding:12px 16px;font-size:13px;box-shadow:0 12px 32px rgba(0,0,0,0.35)';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.display = 'block';
   }
 
   // ── Tap-to-move sheet ────────────────────────────────────────
@@ -368,7 +384,12 @@
       headers: { 'Content-Type': 'application/json', 'x-csrf-token': document.querySelector('meta[name="csrf-token"]')?.content || '' },
       body: JSON.stringify({ stage: newStage })
     }).then(function (res) {
-      if (!res.ok) { window.location.reload(); return; }
+      if (!res.ok) {
+        return res.json().catch(function(){ return {}; }).then(function(d) {
+          showStageGateToast(d && d.error ? d.error : 'Stage change failed.');
+          setTimeout(function(){ window.location.reload(); }, 2600);
+        });
+      }
       if (reloadAfter || !col) window.location.reload();
     }).catch(function () { window.location.reload(); });
   }

@@ -152,12 +152,47 @@
       <p class="text-sm text-gray-900 mt-1"><%= opportunity.owner_name || 'Unassigned' %></p>
     </div>
     <div>
-      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Service Type</p>
-      <p class="text-sm text-gray-600 mt-1"><%= opportunity.service_type ? opportunity.service_type.replace(/_/g, ' ') : '-' %></p>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Commercial Owner</p>
+      <p class="text-sm text-gray-900 mt-1"><%= opportunity.commercial_owner_name || opportunity.owner_name || '-' %></p>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Service Streams</p>
+      <div class="mt-1 flex flex-wrap gap-1">
+        <% if (opportunity.service_streams) { %>
+          <% opportunity.service_streams.split(',').filter(Boolean).forEach(s => { %>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-brand-50 text-brand-700 ring-1 ring-brand-600/20"><%= s %></span>
+          <% }) %>
+        <% } else { %><span class="text-sm text-gray-400">-</span><% } %>
+      </div>
     </div>
     <div>
       <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Source</p>
       <p class="text-sm text-gray-600 mt-1"><%= opportunity.source ? opportunity.source.replace(/_/g, ' ') : '-' %></p>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Site / Project</p>
+      <p class="text-sm text-gray-900 mt-1"><%= opportunity.site_name || '-' %></p>
+      <% if (opportunity.site_address) { %><p class="text-xs text-gray-400"><%= opportunity.site_address %></p><% } %>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">LGA</p>
+      <p class="text-sm text-gray-600 mt-1"><%= opportunity.lga || '-' %></p>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">End Client</p>
+      <p class="text-sm text-gray-600 mt-1"><%= opportunity.end_client || '-' %></p>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Client Sector</p>
+      <p class="text-sm text-gray-600 mt-1"><%= opportunity.client_sector ? opportunity.client_sector.replace(/_/g, ' ') : '-' %></p>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Received</p>
+      <p class="text-sm text-gray-600 mt-1"><%= formatDate(opportunity.received_date) %></p>
+    </div>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Expected Start</p>
+      <p class="text-sm text-gray-600 mt-1"><%= formatDate(opportunity.expected_start_date) %></p>
     </div>
     <div>
       <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Region</p>
@@ -213,8 +248,44 @@
     </div>
     <% if (opportunity.loss_reason) { %>
     <div>
-      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Loss Reason</p>
-      <p class="text-sm text-red-600 font-medium mt-1"><%= opportunity.loss_reason.replace(/_/g, ' ') %></p>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Lost Reason</p>
+      <p class="text-sm text-red-600 font-medium mt-1"><%= opportunity.loss_reason.replace(/_/g, ' ') %><%= opportunity.competitor ? ' · ' + opportunity.competitor : '' %></p>
+    </div>
+    <% } %>
+    <% if (opportunity.won_reason) { %>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Won Reason</p>
+      <p class="text-sm text-teal-700 font-medium mt-1"><%= opportunity.won_reason.replace(/_/g, ' ') %></p>
+    </div>
+    <% } %>
+    <% if (opportunity.probability_override_reason) { %>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Probability Override</p>
+      <p class="text-sm text-amber-700 mt-1"><%= opportunity.probability_override_reason %></p>
+    </div>
+    <% } %>
+    <% if (opportunity.capacity_flag || opportunity.conflict_flag) { %>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Flags</p>
+      <div class="mt-1 flex flex-wrap gap-1">
+        <% if (opportunity.capacity_flag) { %><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 ring-1 ring-amber-600/20">Capacity</span><% } %>
+        <% if (opportunity.conflict_flag) { %><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-50 text-red-700 ring-1 ring-red-600/20">Conflict Check</span><% } %>
+      </div>
+    </div>
+    <% } %>
+    <% if (typeof referral !== 'undefined' && referral) { %>
+    <div>
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Referred By</p>
+      <p class="text-sm text-gray-900 mt-1">
+        <a href="/referrals" class="text-brand-600 hover:text-brand-700"><%= referral.referring_company || referral.referring_contact || 'Referral #' + referral.id %></a>
+        <% if (referral.thank_you_status === 'pending') { %><span class="text-[10px] font-bold text-amber-600 ml-1">THANK-YOU PENDING</span><% } %>
+      </p>
+    </div>
+    <% } %>
+    <% if (opportunity.scope_summary) { %>
+    <div class="col-span-2 md:col-span-3 lg:col-span-4">
+      <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Scope Summary</p>
+      <p class="text-sm text-gray-700 mt-1"><%= opportunity.scope_summary %></p>
     </div>
     <% } %>
   </div>
