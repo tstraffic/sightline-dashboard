@@ -46,14 +46,60 @@
 %>
 
 <%- include('../partials/page-header', { rail: true,
-  eyebrow: 'Sales & CRM',
-  title: 'BDM Dashboard',
-  subtitle: 'Pipeline overview and activity tracking',
+  eyebrow: 'CRM',
+  title: 'CRM Dashboard',
+  subtitle: 'Pipeline, conversion, sales cycle and client development (brief §3.7)',
   actions: [
     { label: 'Log Activity', href: '/crm/activities/new', style: 'secondary', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
     { label: 'New Opportunity', href: '/opportunities/new', style: 'primary', icon: 'M12 6v6m0 0v6m0-6h6m-6 0H6' }
   ]
 }) %>
+
+<%# ---- Sightline §3.7 KPI strip ---- %>
+<% if (typeof briefKpis !== 'undefined' && briefKpis) { %>
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 mb-5">
+  <div class="stat-card">
+    <p class="stat-card-label">Proposal Conversion</p>
+    <p class="stat-card-value <%= briefKpis.proposal_conversion_pct !== null ? 'is-info' : 'is-muted' %>"><%= briefKpis.proposal_conversion_pct !== null ? briefKpis.proposal_conversion_pct + '%' : '—' %></p>
+    <p class="stat-card-sub"><%= briefKpis.proposal_accepted %>/<%= briefKpis.proposal_decided %> decided · <%= formatCurrency(briefKpis.proposal_accepted_value) %> won</p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Avg Sales Cycle</p>
+    <p class="stat-card-value <%= briefKpis.avg_cycle_days !== null ? 'is-info' : 'is-muted' %>"><%= briefKpis.avg_cycle_days !== null ? briefKpis.avg_cycle_days + 'd' : '—' %></p>
+    <p class="stat-card-sub"><%= briefKpis.median_cycle_days !== null ? 'median ' + briefKpis.median_cycle_days + 'd' : 'enquiry → decision' %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">New Clients (month)</p>
+    <p class="stat-card-value <%= briefKpis.new_clients_month ? 'is-good' : 'is-muted' %>"><%= briefKpis.new_clients_month %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Repeat Revenue (12m)</p>
+    <p class="stat-card-value <%= briefKpis.repeat_revenue_12m ? 'is-good' : 'is-muted' %>"><%= formatCurrency(briefKpis.repeat_revenue_12m) %></p>
+    <p class="stat-card-sub">referral-attributed <%= formatCurrency(briefKpis.referral_revenue_12m) %></p>
+  </div>
+  <div class="stat-card <%= briefKpis.dormant_key_clients ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">Dormant Key Clients</p>
+    <p class="stat-card-value <%= briefKpis.dormant_key_clients ? 'is-warn' : 'is-muted' %>"><%= briefKpis.dormant_key_clients %></p>
+    <p class="stat-card-sub">60d, nothing live</p>
+  </div>
+  <div class="stat-card <%= briefKpis.actions_overdue ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">Next Actions</p>
+    <p class="stat-card-value <%= briefKpis.actions_overdue ? 'is-critical' : (briefKpis.actions_due_today ? 'is-warn' : 'is-muted') %>"><%= briefKpis.actions_due_today %> today</p>
+    <p class="stat-card-sub"><%= briefKpis.actions_due_week %> this week · <%= briefKpis.actions_overdue %> overdue</p>
+  </div>
+</div>
+<% if (briefKpis.revenue_by_stream && briefKpis.revenue_by_stream.length) { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 mb-5 flex flex-wrap items-center gap-x-6 gap-y-2">
+  <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Revenue by Stream (12m)</span>
+  <% briefKpis.revenue_by_stream.forEach(rs => { %>
+    <span class="inline-flex items-center gap-1.5 text-sm">
+      <span class="font-mono text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-50 text-brand-700 ring-1 ring-brand-600/20"><%= rs.stream %></span>
+      <span class="text-gray-900 font-medium tabular-nums"><%= formatCurrency(rs.v) %></span>
+    </span>
+  <% }) %>
+</div>
+<% } %>
+<% } %>
 
 <!-- Dashboard Filters -->
 <% const f = typeof filters !== 'undefined' ? filters : { view: 'my', period: 'month' }; %>

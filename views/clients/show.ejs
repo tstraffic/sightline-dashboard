@@ -316,6 +316,77 @@
         <% } %>
       </div>
 
+      <!-- Commercial (brief §3.5) — project-facing finance, Xero-sourced figures manual in Phase 1 -->
+      <% if (typeof commercial !== 'undefined' && commercial) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider mb-3">Commercial</h3>
+        <dl class="space-y-2.5 text-sm">
+          <div class="flex justify-between"><dt class="text-gray-500 text-xs">Won Value (contracts)</dt><dd class="font-medium text-gray-900 tabular-nums">$<%= (commercial.won_value || 0).toLocaleString() %></dd></div>
+          <% if (commercial.variations) { %><div class="flex justify-between"><dt class="text-gray-500 text-xs">Approved Variations</dt><dd class="font-medium text-gray-900 tabular-nums">$<%= commercial.variations.toLocaleString() %></dd></div><% } %>
+          <div class="flex justify-between"><dt class="text-gray-500 text-xs">Invoiced (projects)</dt><dd class="font-medium text-gray-900 tabular-nums">$<%= (commercial.invoiced || 0).toLocaleString() %></dd></div>
+          <div class="flex justify-between"><dt class="text-gray-500 text-xs">Paid</dt><dd class="font-medium text-teal-700 tabular-nums">$<%= (commercial.paid || 0).toLocaleString() %></dd></div>
+          <div class="flex justify-between"><dt class="text-gray-500 text-xs">Outstanding</dt><dd class="font-medium <%= (commercial.invoiced - commercial.paid) > 0 ? 'text-amber-700' : 'text-gray-900' %> tabular-nums">$<%= Math.max(0, (commercial.invoiced || 0) - (commercial.paid || 0)).toLocaleString() %></dd></div>
+          <div class="border-t border-gray-100 pt-2 flex justify-between"><dt class="text-gray-500 text-xs">Lifetime Invoiced (Xero)</dt><dd class="font-medium text-gray-900 tabular-nums">$<%= (company.xero_lifetime_invoiced || 0).toLocaleString() %></dd></div>
+          <div class="flex justify-between"><dt class="text-gray-500 text-xs">Lifetime Paid (Xero)</dt><dd class="font-medium text-gray-900 tabular-nums">$<%= (company.xero_lifetime_paid || 0).toLocaleString() %></dd></div>
+          <% if (company.xero_contact_id) { %><div class="flex justify-between"><dt class="text-gray-500 text-xs">Xero Contact</dt><dd class="font-mono text-xs text-gray-600"><%= company.xero_contact_id %></dd></div><% } %>
+        </dl>
+      </div>
+      <% } %>
+
+      <!-- Proposals -->
+      <% if (typeof clientProposals !== 'undefined' && clientProposals.length) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Proposals</h3>
+          <% if (canAccess(user, 'crm')) { %><a href="/proposals?search=<%= encodeURIComponent(company.company_name) %>" class="text-xs font-semibold text-brand-600 hover:text-brand-700">View all →</a><% } %>
+        </div>
+        <div class="space-y-2">
+          <% const CP_BADGE = { draft:'bg-gray-50 text-gray-600', sent:'bg-amber-50 text-amber-700', accepted:'bg-teal-50 text-teal-700', declined:'bg-red-50 text-red-700', superseded:'bg-slate-50 text-slate-500', withdrawn:'bg-slate-50 text-slate-500' } %>
+          <% clientProposals.slice(0, 6).forEach(p => { %>
+          <a href="/proposals/<%= p.id %>" class="flex items-center justify-between gap-2 text-sm hover:bg-gray-50 -mx-2 px-2 py-1.5 rounded-lg">
+            <span class="font-mono text-xs font-bold text-brand-700"><%= p.proposal_ref %></span>
+            <span class="flex-1 text-gray-500 text-xs truncate"><%= p.opp_title %></span>
+            <span class="text-gray-900 text-xs font-medium tabular-nums">$<%= (p.fee || 0).toLocaleString() %></span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold <%= CP_BADGE[p.status] || '' %>"><%= p.status.toUpperCase() %></span>
+          </a>
+          <% }) %>
+        </div>
+      </div>
+      <% } %>
+
+      <!-- Referrals -->
+      <% if ((typeof referralsGiven !== 'undefined' && referralsGiven.length) || (typeof referralsReceived !== 'undefined' && referralsReceived.length)) { %>
+      <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-sm font-semibold text-gray-900 uppercase tracking-wider">Referrals</h3>
+          <% if (canAccess(user, 'crm')) { %><a href="/referrals" class="text-xs font-semibold text-brand-600 hover:text-brand-700">Register →</a><% } %>
+        </div>
+        <% if (referralsGiven.length) { %>
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Referred to Sightline</p>
+        <div class="space-y-1.5 mb-3">
+          <% referralsGiven.forEach(r => { %>
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <span class="text-gray-700"><%= r.referred_company || r.opportunity_number || '—' %></span>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold <%= r.outcome === 'won' ? 'bg-teal-50 text-teal-700' : r.outcome === 'lost' ? 'bg-gray-50 text-gray-500' : 'bg-sky-50 text-sky-700' %>"><%= (r.outcome || 'open').toUpperCase() %></span>
+            <% if (r.thank_you_status === 'pending') { %><span class="text-[9px] font-bold text-amber-600">THANK-YOU DUE</span><% } %>
+          </div>
+          <% }) %>
+        </div>
+        <% } %>
+        <% if (referralsReceived.length) { %>
+        <p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Introduced By</p>
+        <div class="space-y-1.5">
+          <% referralsReceived.forEach(r => { %>
+          <div class="flex items-center justify-between gap-2 text-xs">
+            <span class="text-gray-700"><%= r.referring_company || '—' %></span>
+            <span class="text-gray-400"><%= r.channel ? r.channel.replace(/_/g, ' ') : '' %></span>
+          </div>
+          <% }) %>
+        </div>
+        <% } %>
+      </div>
+      <% } %>
+
       <!-- Notes -->
       <% if (company.notes) { %>
       <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-5">

@@ -85,16 +85,21 @@ router.get('/job/:jobId', (req, res) => {
 // UPDATE BUDGET
 router.post('/job/:jobId', (req, res) => {
   const db = getDb();
-  const { contract_value, budget_labour, budget_materials, budget_subcontractors, budget_equipment, budget_other, budget_contingency, variations_approved, notes } = req.body;
+  const { contract_value, budget_labour, budget_materials, budget_subcontractors, budget_equipment, budget_other, budget_contingency, variations_approved, notes,
+    invoiced_to_date, paid_to_date } = req.body;
   const job = db.prepare('SELECT job_number FROM jobs WHERE id = ?').get(req.params.jobId);
 
   db.prepare(`
-    UPDATE job_budgets SET contract_value=?, budget_labour=?, budget_materials=?, budget_subcontractors=?, budget_equipment=?, budget_other=?, budget_contingency=?, variations_approved=?, notes=?, updated_by_id=?, updated_at=CURRENT_TIMESTAMP
+    UPDATE job_budgets SET contract_value=?, budget_labour=?, budget_materials=?, budget_subcontractors=?, budget_equipment=?, budget_other=?, budget_contingency=?, variations_approved=?, notes=?,
+      invoiced_to_date=?, paid_to_date=?,
+      updated_by_id=?, updated_at=CURRENT_TIMESTAMP
     WHERE job_id = ?
   `).run(
     parseFloat(contract_value) || 0, parseFloat(budget_labour) || 0, parseFloat(budget_materials) || 0,
     parseFloat(budget_subcontractors) || 0, parseFloat(budget_equipment) || 0, parseFloat(budget_other) || 0,
-    parseFloat(budget_contingency) || 0, parseFloat(variations_approved) || 0, notes || '', req.session.user.id, req.params.jobId
+    parseFloat(budget_contingency) || 0, parseFloat(variations_approved) || 0, notes || '',
+    parseFloat(invoiced_to_date) || 0, parseFloat(paid_to_date) || 0,
+    req.session.user.id, req.params.jobId
   );
 
   logActivity({ user: req.session.user, action: 'update', entityType: 'budget', entityLabel: job ? job.job_number : '', jobId: parseInt(req.params.jobId), jobNumber: job ? job.job_number : '', ip: req.ip });

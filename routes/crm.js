@@ -198,10 +198,118 @@ router.get('/', (req, res, next) => {
     const emailsThisWeek = activitiesThisWeek.find(a => a.activity_type === 'email');
     const meetingsThisWeek = activitiesThisWeek.find(a => a.activity_type === 'meeting');
 
+    // ---- Sightline CRM KPIs (brief §3.7) ----
+    // Trailing-12-month window for rate/revenue KPIs; live figures for
+    // pipeline and next actions. Wrapped so one failed query can't take
+    // the dashboard down (tables may be empty on a fresh deployment).
+    let briefKpis = null;
+    try {
+      const yearAgo = new Date(todayDate); yearAgo.setDate(yearAgo.getDate() - 365);
+      const yearAgoStr = yearAgo.toISOString().slice(0, 10);
+
+      // Proposal conversion — accepted / decided (accepted + declined), count and value.
+      const propDecided = db.prepare(`
+        SELECT COUNT(*) AS decided,
+          SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) AS accepted,
+          COALESCE(SUM(fee), 0) AS decided_value,
+          COALESCE(SUM(CASE WHEN status = 'accepted' THEN fee ELSE 0 END), 0) AS accepted_value
+        FROM proposals
+        WHERE status IN ('accepted', 'declined') AND updated_at >= ?
+      `).get(yearAgoStr);
+
+      // Average + median sales cycle: received (or created) → won/lost decision.
+      const cycles = db.prepare(`
+        SELECT CAST(julianday(COALESCE(won_date, lost_date)) - julianday(COALESCE(received_date, DATE(created_at))) AS REAL) AS days
+        FROM opportunities
+        WHERE status IN ('won', 'lost') AND COALESCE(won_date, lost_date) >= ?
+          AND COALESCE(won_date, lost_date) IS NOT NULL
+        ORDER BY days
+      `).all(yearAgoStr).map(r => r.days).filter(d => Number.isFinite(d) && d >= 0);
+      const avgCycle = cycles.length ? cycles.reduce((a, b) => a + b, 0) / cycles.length : null;
+      const medianCycle = cycles.length ? cycles[Math.floor(cycles.length / 2)] : null;
+
+      // New clients this month — first engagement stamped in the month.
+      const newClients = db.prepare(`
+        SELECT COUNT(*) AS c FROM clients WHERE first_engagement_date >= ?
+      `).get(monthStart).c;
+
+      // Repeat revenue (12m) — won projects for clients with earlier projects.
+      const repeatRevenue = db.prepare(`
+        SELECT COALESCE(SUM(j.contract_value), 0) AS v
+        FROM jobs j
+        WHERE j.opportunity_id IS NOT NULL AND j.created_at >= ?
+          AND EXISTS (SELECT 1 FROM jobs prior WHERE prior.client_id = j.client_id AND prior.id != j.id AND prior.created_at < j.created_at)
+      `).get(yearAgoStr).v;
+
+      // Revenue attributed through referrals (12m).
+      const referralRevenue = db.prepare(`
+        SELECT COALESCE(SUM(j.contract_value), 0) AS v
+        FROM jobs j JOIN opportunities o ON j.opportunity_id = o.id
+        WHERE o.referral_id IS NOT NULL AND j.created_at >= ?
+      `).get(yearAgoStr).v;
+
+      // Revenue by service stream — package fee allocations (12m).
+      const revenueByStream = db.prepare(`
+        SELECT sp.service_stream AS stream, COALESCE(SUM(sp.fee_allocation), 0) AS v
+        FROM service_packages sp JOIN jobs j ON sp.job_id = j.id
+        WHERE j.created_at >= ?
+        GROUP BY sp.service_stream ORDER BY v DESC
+      `).all(yearAgoStr);
+
+      // Dormant key/repeat clients — no touch in 60 days, nothing live.
+      const dormantKey = db.prepare(`
+        SELECT COUNT(*) AS c FROM clients c
+        WHERE c.active = 1
+          AND (c.key_account_tier != '' OR c.repeat_client_status IN ('repeat', 'key_account'))
+          AND (c.last_contacted_date IS NULL OR c.last_contacted_date < ?)
+          AND NOT EXISTS (SELECT 1 FROM opportunities o WHERE o.client_id = c.id AND o.status = 'open')
+          AND NOT EXISTS (SELECT 1 FROM jobs j WHERE j.client_id = c.id AND j.status IN ('active', 'won', 'prestart', 'on_hold'))
+      `).get(sixtyDaysAgoStr).c;
+
+      // Next actions due — union of the three next-action surfaces.
+      const weekAhead = new Date(todayDate); weekAhead.setDate(weekAhead.getDate() + 7);
+      const weekAheadStr = weekAhead.toISOString().slice(0, 10);
+      const nextActions = db.prepare(`
+        SELECT
+          SUM(CASE WHEN due = ? THEN 1 ELSE 0 END) AS due_today,
+          SUM(CASE WHEN due > ? AND due <= ? THEN 1 ELSE 0 END) AS due_week,
+          SUM(CASE WHEN due < ? THEN 1 ELSE 0 END) AS overdue
+        FROM (
+          SELECT next_step_due_date AS due FROM opportunities WHERE status = 'open' AND next_step_due_date IS NOT NULL
+          UNION ALL
+          SELECT next_step_due_date FROM crm_activities WHERE is_completed = 0 AND next_step_due_date IS NOT NULL
+          UNION ALL
+          SELECT next_action_date FROM clients WHERE active = 1 AND next_action_date IS NOT NULL
+          UNION ALL
+          SELECT follow_up_date FROM proposals WHERE status = 'sent' AND follow_up_date IS NOT NULL
+        )
+      `).get(today, today, weekAheadStr, today);
+
+      briefKpis = {
+        proposal_conversion_pct: propDecided.decided ? Math.round(propDecided.accepted / propDecided.decided * 100) : null,
+        proposal_accepted: propDecided.accepted || 0,
+        proposal_decided: propDecided.decided || 0,
+        proposal_accepted_value: propDecided.accepted_value || 0,
+        avg_cycle_days: avgCycle !== null ? Math.round(avgCycle) : null,
+        median_cycle_days: medianCycle !== null ? Math.round(medianCycle) : null,
+        new_clients_month: newClients,
+        repeat_revenue_12m: repeatRevenue,
+        referral_revenue_12m: referralRevenue,
+        revenue_by_stream: revenueByStream,
+        dormant_key_clients: dormantKey,
+        actions_due_today: nextActions.due_today || 0,
+        actions_due_week: nextActions.due_week || 0,
+        actions_overdue: nextActions.overdue || 0,
+      };
+    } catch (e) {
+      console.error('CRM brief KPIs failed:', e.message);
+    }
+
     res.render('crm/dashboard', {
-      title: 'BDM Dashboard',
+      title: 'CRM Dashboard',
       currentPage: 'crm-dashboard',
       today,
+      briefKpis,
       pipeline: {
         open_count: pipelineSummary.total_open,
         total_value: pipelineSummary.total_value,

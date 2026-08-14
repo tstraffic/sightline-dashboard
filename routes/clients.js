@@ -422,6 +422,43 @@ router.get('/:id', (req, res, next) => {
     meta: { contact_name: a.contact_name, opp_title: a.opp_title },
   }));
 
+  // Sightline: proposals for this organisation
+  const clientProposals = db.prepare(`
+    SELECT p.*, o.opportunity_number, o.title AS opp_title
+    FROM proposals p JOIN opportunities o ON p.opportunity_id = o.id
+    WHERE p.client_id = ? OR o.client_id = ?
+    ORDER BY p.updated_at DESC LIMIT 20
+  `).all(client.id, client.id);
+
+  // Sightline: referrals given and received
+  const referralsGiven = db.prepare(`
+    SELECT r.*, dc.company_name AS referred_company, o.opportunity_number, o.estimated_value AS opp_value, o.status AS opp_status
+    FROM referrals r
+    LEFT JOIN clients dc ON r.referred_client_id = dc.id
+    LEFT JOIN opportunities o ON r.opportunity_id = o.id
+    WHERE r.referring_client_id = ? ORDER BY r.referral_date DESC LIMIT 10
+  `).all(client.id);
+  const referralsReceived = db.prepare(`
+    SELECT r.*, rc.company_name AS referring_company, o.opportunity_number
+    FROM referrals r
+    LEFT JOIN clients rc ON r.referring_client_id = rc.id
+    LEFT JOIN opportunities o ON r.opportunity_id = o.id
+    WHERE r.referred_client_id = ? ORDER BY r.referral_date DESC LIMIT 10
+  `).all(client.id);
+
+  // Sightline: commercial rollup (brief §3.5 Commercial panel) —
+  // contract values from projects, invoiced/paid from job_budgets (manual
+  // Xero figures), lifetime from the client's Xero fields.
+  const commercial = db.prepare(`
+    SELECT
+      COALESCE(SUM(j.contract_value), 0) AS won_value,
+      COALESCE(SUM(b.invoiced_to_date), 0) AS invoiced,
+      COALESCE(SUM(b.paid_to_date), 0) AS paid,
+      COALESCE(SUM(b.variations_approved), 0) AS variations
+    FROM jobs j LEFT JOIN job_budgets b ON b.job_id = j.id
+    WHERE j.client_id = ?
+  `).get(client.id);
+
   // Users for owner dropdowns
   const users = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
 
@@ -441,6 +478,10 @@ router.get('/:id', (req, res, next) => {
     accountContacts,
     timelineEvents,
     users,
+    clientProposals,
+    referralsGiven,
+    referralsReceived,
+    commercial,
   });
   } catch (err) {
     console.error('Client detail error:', err);

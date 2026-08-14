@@ -160,6 +160,7 @@
 
   <!-- Edit form (hidden by default, shown when .editing class added) -->
   <form method="POST" action="/budgets/job/<%= job.id %>" class="budget-edit-form">
+    <%- include('../partials/csrf') %>
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
       <div>
         <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Contract Value ($)</label>
@@ -169,6 +170,16 @@
       <div>
         <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Variations Approved ($)</label>
         <input type="number" step="0.01" name="variations_approved" value="<%= budget.variations_approved || 0 %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Invoiced to Date ($, from Xero)</label>
+        <input type="number" step="0.01" name="invoiced_to_date" value="<%= budget.invoiced_to_date || 0 %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Paid to Date ($, from Xero)</label>
+        <input type="number" step="0.01" name="paid_to_date" value="<%= budget.paid_to_date || 0 %>"
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
       </div>
     </div>
@@ -217,6 +228,36 @@
   #budget-breakdown.editing .budget-edit-form { display: block; }
 </style>
 
+<!-- Invoicing position (brief §7.2) — invoiced/paid entered from Xero;
+     outstanding and remaining-fee are DERIVED, never stored. -->
+<%
+  const invContract = (budget.contract_value || 0) + (budget.variations_approved || 0);
+  const invInvoiced = budget.invoiced_to_date || 0;
+  const invPaid = budget.paid_to_date || 0;
+%>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
+  <h2 class="text-lg font-semibold text-gray-900 mb-4">Invoicing Position</h2>
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div class="text-center">
+      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Invoiced to Date</p>
+      <p class="text-xl font-bold text-gray-900 mt-2 tabular-nums"><%= fmtCurrency(invInvoiced) %></p>
+    </div>
+    <div class="text-center">
+      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Paid to Date</p>
+      <p class="text-xl font-bold text-teal-700 mt-2 tabular-nums"><%= fmtCurrency(invPaid) %></p>
+    </div>
+    <div class="text-center">
+      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Outstanding</p>
+      <p class="text-xl font-bold <%= invInvoiced - invPaid > 0 ? 'text-amber-600' : 'text-gray-900' %> mt-2 tabular-nums"><%= fmtCurrency(Math.max(0, invInvoiced - invPaid)) %></p>
+    </div>
+    <div class="text-center">
+      <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Remaining Fee to Invoice</p>
+      <p class="text-xl font-bold text-gray-900 mt-2 tabular-nums"><%= fmtCurrency(Math.max(0, invContract - invInvoiced)) %></p>
+    </div>
+  </div>
+  <p class="text-[10px] text-gray-400 mt-3">Invoices themselves live in Xero — enter invoiced/paid figures above; outstanding and remaining fee are calculated.</p>
+</div>
+
 <!-- P&L Summary -->
 <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
   <h2 class="text-lg font-semibold text-gray-900 mb-4">Profit & Loss</h2>
@@ -256,6 +297,7 @@
 
   <!-- Add Cost Entry Form -->
   <form method="POST" action="/budgets/job/<%= job.id %>/costs" class="mb-6">
+    <%- include('../partials/csrf') %>
     <div class="bg-white/30 border border-gray-300 rounded-lg p-4">
       <h3 class="text-sm font-medium text-gray-600 mb-3">Add Cost Entry</h3>
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -360,6 +402,7 @@
           <td class="px-4 py-3 text-gray-500 text-xs"><%= entry.entered_by_name %></td>
           <td class="px-4 py-3 text-center">
             <form method="POST" action="/budgets/job/<%= job.id %>/costs/<%= entry.id %>/delete" class="inline" onsubmit="return confirm('Delete this cost entry?');">
+              <%- include('../partials/csrf') %>
               <button type="submit" class="text-red-600 hover:text-red-600 text-xs font-medium transition-colors">Delete</button>
             </form>
           </td>
