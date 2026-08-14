@@ -8,9 +8,11 @@
         </button>
         <% } %>
         <a href="/dashboard" class="header-logo-wrap flex items-center gap-2.5 sm:gap-3 group">
-          <img src="/images/atomis-mark-animated.svg" alt="Atomis" class="h-6 sm:h-7 w-auto">
+          <img src="/images/sightline-mark.svg" alt="Sightline" class="sightline-mark-colour h-6 sm:h-7 w-auto">
+          <img src="/images/sightline-mark-reversed.svg" alt="Sightline" class="sightline-mark-reversed h-6 sm:h-7 w-auto">
+          <span class="hidden md:block text-gray-900 leading-none" style="font-family:'Hanken Grotesk',sans-serif;font-weight:500;font-size:17px;letter-spacing:-0.02em">Sightline</span>
           <% if (typeof title !== 'undefined' && title) { %>
-          <span class="hidden sm:block text-gray-500 font-medium text-[14px] leading-none border-l border-gray-200 pl-3 ml-1" style="font-family:'Geist',sans-serif;letter-spacing:-0.01em"><%= title %></span>
+          <span class="hidden sm:block text-gray-500 font-medium text-[14px] leading-none border-l border-gray-200 pl-3 ml-1" style="font-family:'Hanken Grotesk',sans-serif;letter-spacing:-0.01em"><%= title %></span>
           <% } %>
         </a>
       </div>

@@ -1,17 +1,17 @@
 {
-  "name": "Atomis",
-  "short_name": "Atomis",
-  "description": "Atomis — Operations Dashboard built for T&S Traffic Control",
+  "name": "Sightline Traffic Engineers",
+  "short_name": "Sightline",
+  "description": "Sightline Traffic Engineers — operating platform powered by Atomis",
   "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#10B981",
+  "background_color": "#3E2632",
+  "theme_color": "#3E2632",
   "orientation": "any",
   "icons": [
-    { "src": "/images/atomis-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/images/atomis-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "/images/atomis-icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
-    { "src": "/images/atomis-icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "/images/sightline-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/images/sightline-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/images/sightline-icon-192-maskable.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/images/sightline-icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

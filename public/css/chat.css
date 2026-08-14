@@ -85,7 +85,7 @@
 }
 
 .chat-msg-own .chat-msg-bubble {
-  background: #059669;
+  background: #8F3D48;
   color: #ffffff;
   border-top-right-radius: 0.25rem;
 }
@@ -96,7 +96,7 @@ body.dark-glass .chat-msg:not(.chat-msg-own) .chat-msg-bubble {
   color: #e2e8f0 !important;
 }
 body.dark-glass .chat-msg-own .chat-msg-bubble {
-  background: #059669 !important;
+  background: #8F3D48 !important;
   color: #ffffff !important;
 }
 body.dark-glass .chat-msg-time {
@@ -151,7 +151,7 @@ body.dark-glass .chat-mention {
 
 /* Mention highlight */
 .chat-mention {
-  color: #10B981;
+  color: #A34652;
   font-weight: 500;
 }
 

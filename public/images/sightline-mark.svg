@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+  <!-- Sightline master mark — two angled stripes, Aubergine + Oxide.
+       Geometry locked per Brand Guidelines v3.2 §6: no third stripe,
+       no brass inside the mark. -->
+  <polygon points="8,88 34,88 56,8 30,8" fill="#3E2632"/>
+  <polygon points="40,88 58,88 80,8 62,8" fill="#A34652"/>
+</svg>

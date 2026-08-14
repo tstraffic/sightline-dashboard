@@ -1,7 +1,7 @@
 {
-  "name": "atomis-dashboard",
+  "name": "sightline-dashboard",
   "version": "1.0.0",
-  "description": "Atomis — Operations Dashboard, built for T&S Traffic Control",
+  "description": "Sightline Traffic Engineers — operating platform, powered by Atomis",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

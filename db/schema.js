@@ -15480,6 +15480,175 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 346 error:', e.message); }
   }
 
+  // Migration 347: Sightline reference sequences (brief §2.4). One
+  // ref_sequences row per scope drives every new identifier format
+  // (ORG-000123, CON-000456, OPP-260187, ST-260041 — year-scoped formats
+  // use a per-year scope like 'opp:26' so counters reset each January).
+  // clients/client_contacts get their ref columns here; SQLite ALTER can't
+  // add UNIQUE, so uniqueness comes from partial unique indexes (NULL refs
+  // stay legal for pre-existing rows). Backfill assigns refs in id order so
+  // any imported data gets stable numbers before the sequences hand out new
+  // ones. lib/refNumbers.js is the only writer.
+  if (!isMigrationApplied.get(347)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS ref_sequences (
+          scope TEXT PRIMARY KEY,
+          last_number INTEGER NOT NULL DEFAULT 0
+        );
+      `);
+      const clientCols = db.prepare('PRAGMA table_info(clients)').all().map(c => c.name);
+      if (!clientCols.includes('org_ref')) db.exec('ALTER TABLE clients ADD COLUMN org_ref TEXT');
+      const contactCols = db.prepare('PRAGMA table_info(client_contacts)').all().map(c => c.name);
+      if (!contactCols.includes('contact_ref')) db.exec('ALTER TABLE client_contacts ADD COLUMN contact_ref TEXT');
+      db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_clients_org_ref ON clients(org_ref) WHERE org_ref IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_contacts_contact_ref ON client_contacts(contact_ref) WHERE contact_ref IS NOT NULL;
+      `);
+
+      // Backfill existing rows (no-op on a fresh DB).
+      const backfill = (table, col, scope, prefix, pad) => {
+        const rows = db.prepare(`SELECT id FROM ${table} WHERE ${col} IS NULL ORDER BY id`).all();
+        if (!rows.length) {
+          db.prepare('INSERT OR IGNORE INTO ref_sequences (scope, last_number) VALUES (?, 0)').run(scope);
+          return;
+        }
+        const upd = db.prepare(`UPDATE ${table} SET ${col} = ? WHERE id = ?`);
+        let n = 0;
+        for (const r of rows) {
+          n++;
+          upd.run(prefix + String(n).padStart(pad, '0'), r.id);
+        }
+        db.prepare('INSERT OR REPLACE INTO ref_sequences (scope, last_number) VALUES (?, ?)').run(scope, n);
+      };
+      backfill('clients', 'org_ref', 'org', 'ORG-', 6);
+      backfill('client_contacts', 'contact_ref', 'contact', 'CON-', 6);
+
+      recordMigration.run(347, 'Sightline ref_sequences + clients.org_ref + client_contacts.contact_ref');
+      console.log('Migration 347 applied: reference sequences + org/contact refs');
+    } catch (e) { console.error('Migration 347 error:', e.message); }
+  }
+
+  // Migration 348: Sightline CRM vocabulary (brief §3.2). Stages move to
+  // the 8-stage brief lifecycle — Lead → Qualified → Scoping → Proposal
+  // Sent → Follow-up → Negotiation → Won/Lost. The 'won' and 'lost' KEYS
+  // are load-bearing: routes/opportunities.js derives opportunities.status
+  // from them, so they survive every reseed. 'on_hold' is a status, not a
+  // stage, and is dropped from the stage list. Default probability per
+  // stage rides in the row's metadata JSON ({"probability":60}) — the
+  // settings loader already surfaces metadata, so no loader change.
+  // Guarded reseed: with zero opportunities the old rows are wiped; with
+  // data present the old rows are only deactivated so history keeps
+  // rendering. Client sectors reuse the existing industry_segments
+  // category (relabelled in CATEGORY_META).
+  if (!isMigrationApplied.get(348)) {
+    try {
+      const seed = db.prepare(`
+        INSERT INTO app_settings (category, key, label, color, display_order, is_active, metadata)
+        VALUES (?, ?, ?, ?, ?, 1, ?)
+        ON CONFLICT(category, key) DO UPDATE SET
+          label = excluded.label, color = excluded.color,
+          display_order = excluded.display_order, is_active = 1,
+          metadata = excluded.metadata, updated_at = CURRENT_TIMESTAMP
+      `);
+      const seedCategory = (category, rows, wipe) => {
+        if (wipe) {
+          db.prepare('DELETE FROM app_settings WHERE category = ?').run(category);
+        } else {
+          db.prepare('UPDATE app_settings SET is_active = 0 WHERE category = ?').run(category);
+        }
+        rows.forEach((r, i) => seed.run(category, r.key, r.label, r.color || '', i + 1, JSON.stringify(r.meta || {})));
+      };
+
+      const oppCount = db.prepare('SELECT COUNT(*) AS c FROM opportunities').get().c;
+      seedCategory('opportunity_stages', [
+        { key: 'lead', label: 'Lead / New Enquiry', color: 'sky', meta: { probability: 10 } },
+        { key: 'qualified', label: 'Qualified', color: 'blue', meta: { probability: 25 } },
+        { key: 'scoping', label: 'Scoping', color: 'indigo', meta: { probability: 40 } },
+        { key: 'proposal_sent', label: 'Proposal Sent', color: 'amber', meta: { probability: 60 } },
+        { key: 'follow_up', label: 'Follow-up', color: 'orange', meta: { probability: 65 } },
+        { key: 'negotiation', label: 'Negotiation', color: 'purple', meta: { probability: 75 } },
+        { key: 'won', label: 'Won', color: 'green', meta: { probability: 100 } },
+        { key: 'lost', label: 'Lost', color: 'gray', meta: { probability: 0 } },
+      ], oppCount === 0);
+
+      seedCategory('industry_segments', [
+        { key: 'developer', label: 'Developer', color: 'blue' },
+        { key: 'planner', label: 'Planner / Town-Planning Consultant', color: 'indigo' },
+        { key: 'architect', label: 'Architect', color: 'purple' },
+        { key: 'civil_structural', label: 'Civil / Structural Engineer', color: 'sky' },
+        { key: 'builder', label: 'Builder / Contractor', color: 'amber' },
+        { key: 'project_manager', label: 'Project Manager', color: 'orange' },
+        { key: 'property_owner', label: 'Property Owner / Operator', color: 'teal' },
+        { key: 'government_authority', label: 'Government / Authority', color: 'red' },
+        { key: 'legal_advisory', label: 'Legal / Advisory', color: 'pink' },
+        { key: 'other', label: 'Other', color: 'gray' },
+      ], oppCount === 0);
+
+      seedCategory('loss_reasons', [
+        { key: 'no_decision', label: 'No Decision / Deferred', color: 'gray' },
+        { key: 'price', label: 'Price', color: 'amber' },
+        { key: 'timing_capacity', label: 'Timing / Capacity', color: 'orange' },
+        { key: 'capability_gap', label: 'Service or Capability Gap', color: 'purple' },
+        { key: 'competitor', label: 'Competitor / Incumbent', color: 'red' },
+        { key: 'unresponsive', label: 'Client Stopped Responding', color: 'slate' },
+        { key: 'conflict_declined', label: 'Conflict / Risk Declined', color: 'pink' },
+        { key: 'withdrawn', label: 'Proposal Withdrawn', color: 'blue' },
+        { key: 'cancelled', label: 'Project Cancelled', color: 'gray' },
+        { key: 'other', label: 'Other', color: 'gray' },
+      ], oppCount === 0);
+
+      seedCategory('won_reasons', [
+        { key: 'relationship', label: 'Relationship / Repeat Client', color: 'blue' },
+        { key: 'technical_capability', label: 'Technical Capability', color: 'indigo' },
+        { key: 'response_time', label: 'Response Time', color: 'sky' },
+        { key: 'value_fee', label: 'Value / Fee', color: 'amber' },
+        { key: 'availability', label: 'Availability / Programme', color: 'orange' },
+        { key: 'service_fit', label: 'Service Fit', color: 'teal' },
+        { key: 'referral_strength', label: 'Referral Strength', color: 'purple' },
+        { key: 'bundled_services', label: 'Bundled Services', color: 'pink' },
+        { key: 'other', label: 'Other', color: 'gray' },
+      ], true);
+
+      seedCategory('service_streams', [
+        { key: 'DEV', label: 'DEV — Development Traffic Engineering', color: 'blue' },
+        { key: 'PAS', label: 'PAS — Parking, Access & Swept Paths', color: 'teal' },
+        { key: 'MOD', label: 'MOD — Traffic Modelling & Network Assessment', color: 'purple' },
+        { key: 'CON', label: 'CON — Construction Traffic Engineering', color: 'amber' },
+        { key: 'APR', label: 'APR — Approvals & Delivery Support', color: 'indigo' },
+      ], true);
+
+      seedCategory('repeat_client_status', [
+        { key: 'prospect', label: 'Prospect', color: 'sky' },
+        { key: 'new_client', label: 'New Client', color: 'blue' },
+        { key: 'active_first_time', label: 'Active First-Time Client', color: 'teal' },
+        { key: 'repeat', label: 'Repeat Client', color: 'indigo' },
+        { key: 'key_account', label: 'Key Account', color: 'purple' },
+        { key: 'dormant', label: 'Dormant Client', color: 'amber' },
+        { key: 'inactive', label: 'Inactive / Do Not Pursue', color: 'gray' },
+      ], true);
+
+      seedCategory('referral_channels', [
+        { key: 'client_referral', label: 'Client Referral', color: 'blue' },
+        { key: 'professional_network', label: 'Professional Network', color: 'indigo' },
+        { key: 'authority_contact', label: 'Authority / Industry Contact', color: 'teal' },
+        { key: 'partner', label: 'Partner Firm', color: 'purple' },
+        { key: 'internal', label: 'Internal / Team', color: 'sky' },
+        { key: 'other', label: 'Other', color: 'gray' },
+      ], true);
+
+      seedCategory('contact_statuses', [
+        { key: 'active', label: 'Active', color: 'blue' },
+        { key: 'left_company', label: 'Left Company', color: 'amber' },
+        { key: 'do_not_contact', label: 'Do Not Contact', color: 'red' },
+        { key: 'inactive', label: 'Inactive', color: 'gray' },
+      ], true);
+
+      recordMigration.run(348, 'Sightline CRM vocabulary: brief stages w/ probability metadata + sectors + reasons + streams');
+      console.log('Migration 348 applied: Sightline CRM vocabulary seeded');
+    } catch (e) { console.error('Migration 348 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

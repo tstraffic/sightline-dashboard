@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" fill="none">
+  <!-- Favicon: mark on a Drawing Paper tile so it reads on any tab strip. -->
+  <rect width="96" height="96" rx="20" fill="#F8F6F2"/>
+  <polygon points="14,80 37,80 56,16 33,16" fill="#3E2632"/>
+  <polygon points="42,80 58,80 77,16 61,16" fill="#A34652"/>
+</svg>

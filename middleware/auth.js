@@ -135,7 +135,7 @@ const PERMISSIONS = {
   payslips:      ['admin', 'finance', 'accounts'],   // payslips list (alias for clarity)
   abergeldie_payments: ['admin', 'finance', 'accounts'], // client payment sheet
   budgets:       ['admin', 'finance'],
-  crm:           ['admin'],
+  crm:           ['admin', 'management', 'operations', 'planning', 'finance'],
   admin:         ['admin'],
   activity:      ['admin'],
   settings:      ['admin', 'planning'],

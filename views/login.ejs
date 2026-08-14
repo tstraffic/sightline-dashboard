@@ -6,26 +6,23 @@
     // mode so the login screen's light/dark styles still apply. Mirrors the
     // registry in the main layout.
     (function () {
-      var MODE = { daylight:'light', 'warm-paper':'light', 'mint-glass':'light' }; // everything else is dark
-      function modeOf(id) {
-        if (id === 'light') return 'light';
-        if (id === 'dark') return 'dark';
-        return MODE[id] || 'dark';
-      }
+      // Sightline (Brand v3.2): light (Drawing Paper) is the default.
+      var MODE = { paper:'light', aubergine:'dark', light:'light', dark:'dark',
+                   daylight:'light', 'warm-paper':'light', 'mint-glass':'light' };
+      function modeOf(id) { return MODE[id] || (id ? 'dark' : 'light'); }
       try {
         var saved = localStorage.getItem('atomis-theme');
-        var id = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'daylight' : 'slate');
-        document.documentElement.setAttribute('data-theme', modeOf(id));
+        document.documentElement.setAttribute('data-theme', saved ? modeOf(saved) : 'light');
       } catch (e) {
-        document.documentElement.setAttribute('data-theme', 'dark');
+        document.documentElement.setAttribute('data-theme', 'light');
       }
     })();
     window.toggleAtomisTheme = function () {
       var cur = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
       var next = cur === 'light' ? 'dark' : 'light';
       document.documentElement.setAttribute('data-theme', next);
-      // Persist as a baseline id so the main app picks a sensible default.
-      try { localStorage.setItem('atomis-theme', next === 'light' ? 'daylight' : 'slate'); } catch (e) {}
+      // Persist as a theme id so the main app picks the same side.
+      try { localStorage.setItem('atomis-theme', next === 'light' ? 'paper' : 'aubergine'); } catch (e) {}
     };
     document.addEventListener('click', function (e) {
       var btn = e.target.closest && e.target.closest('.theme-toggle');
@@ -36,41 +33,42 @@
   </script>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Sign in | T&S Traffic Control</title>
-  <meta name="theme-color" content="#0F1115">
+  <title>Sign in | Sightline Traffic Engineers</title>
+  <meta name="theme-color" content="#3E2632">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <link rel="icon" type="image/svg+xml" href="/images/atomis-favicon-dark.svg">
-  <link rel="apple-touch-icon" href="/images/atomis-apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="/images/sightline-favicon.svg">
+  <link rel="apple-touch-icon" href="/images/sightline-apple-touch-icon.png">
   <link rel="manifest" href="/manifest-admin.json">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,300..800&family=Geist:wght@300..700&family=Geist+Mono:wght@400..500&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@300..700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {
-      --base: #0F1115;
-      --surface: #1A1D24;
-      --surface-2: #22262F;
-      --emerald: #10B981;
-      --text: #F5F5F7;
-      --text-mute: #8B8E95;
-      --text-faint: #5A5D64;
+      --base: #171014;
+      --surface: #231A20;
+      --surface-2: #2D232A;
+      --oxide: #A34652;
+      --brass: #C9A15A;
+      --text: #F8F6F2;
+      --text-mute: #9A8F94;
+      --text-faint: #6A5F64;
       --border: rgba(245, 245, 247, 0.06);
       --border-strong: rgba(245, 245, 247, 0.12);
       --danger: #EF4444;
-      --font-display: 'Bricolage Grotesque', sans-serif;
-      --font-body: 'Geist', 'Inter', system-ui, sans-serif;
-      --font-mono: 'Geist Mono', monospace;
+      --font-display: 'Hanken Grotesk', sans-serif;
+      --font-body: 'Hanken Grotesk', 'Inter', system-ui, sans-serif;
+      --font-mono: 'IBM Plex Mono', monospace;
     }
     :root[data-theme="light"] {
-      --base: #F7F8FA;
+      --base: #F8F6F2;      /* Drawing Paper */
       --surface: #FFFFFF;
-      --surface-2: #F1F3F6;
-      --text: #0F1115;
-      --text-mute: #555A63;
-      --text-faint: #8B8E95;
-      --border: rgba(15, 17, 21, 0.08);
-      --border-strong: rgba(15, 17, 21, 0.16);
+      --surface-2: #EEEAE6;
+      --text: #24272A;      /* Carbon */
+      --text-mute: #657278; /* Survey Grey */
+      --text-faint: #98A0A4;
+      --border: rgba(23,16,20, 0.08);
+      --border-strong: rgba(23,16,20, 0.16);
     }
 
     /* ============ Theme toggle ============ */
@@ -102,22 +100,34 @@
     :root[data-theme="light"] .theme-toggle .icon-sun { display: block; }
     :root[data-theme="light"] .theme-toggle .icon-moon { display: none; }
 
-    /* Theme-swapped T&S logo */
+    /* Theme-swapped Sightline mark (reversed on dark, colour on light) */
     .ts-logo-dark { display: block; }
     .ts-logo-light { display: none; }
     :root[data-theme="light"] .ts-logo-dark { display: none; }
     :root[data-theme="light"] .ts-logo-light { display: block; }
-    /* Pin both variants to the SAME bounding box and let object-fit center
-       each within it. The two source PNGs differ in natural aspect ratio
-       (1024x640 vs 512x332), so without this lock the rendered logos look
-       different sizes when you toggle. Fixed pixel box → identical visual
-       footprint in either theme. */
     .ts-logo-dark, .ts-logo-light {
-      width: 320px;
-      max-width: 80%;
-      height: 200px;
+      width: 88px;
+      height: 88px;
       object-fit: contain;
       object-position: center;
+    }
+    /* Sightline lockup — mark + wordmark + letterspaced mono descriptor */
+    .sl-lockup { display: flex; flex-direction: column; align-items: center; gap: 18px; }
+    .sl-wordmark {
+      font-family: var(--font-display);
+      font-weight: 500;
+      font-size: 44px;
+      letter-spacing: -0.03em;
+      line-height: 1;
+      color: var(--text);
+    }
+    .sl-descriptor {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      letter-spacing: 0.34em;
+      text-transform: uppercase;
+      color: var(--oxide);
+      margin-top: 6px;
     }
     html, body { height: 100%; }
     body {
@@ -152,7 +162,7 @@
       content: "";
       position: absolute;
       inset: 0;
-      background: radial-gradient(ellipse 700px 500px at 50% 50%, rgba(16,185,129,0.06), transparent 65%);
+      background: radial-gradient(ellipse 700px 500px at 50% 50%, rgba(163,70,82,0.06), transparent 65%);
       pointer-events: none;
     }
     .left-inner {
@@ -196,7 +206,7 @@
     }
     .headline em {
       font-style: italic;
-      color: var(--emerald);
+      color: var(--oxide);
       font-weight: 400;
     }
     .sub {
@@ -267,7 +277,7 @@
     }
     .field input:focus {
       outline: none;
-      border-color: var(--emerald);
+      border-color: var(--oxide);
       background: var(--surface-2);
     }
     .field input::placeholder { color: var(--text-faint); }
@@ -287,7 +297,7 @@
 
     .btn-primary {
       width: 100%;
-      background: var(--emerald);
+      background: var(--oxide);
       color: var(--base);
       border: none;
       padding: 13px;
@@ -320,8 +330,8 @@
       transition: color 0.15s, border-color 0.15s;
     }
     .forgot a:hover {
-      color: var(--emerald);
-      border-color: var(--emerald);
+      color: var(--oxide);
+      border-color: var(--oxide);
     }
 
     .err {
@@ -366,13 +376,19 @@
     <div class="left">
       <div class="left-inner">
         <div class="mark-stage">
-          <img class="ts-logo-dark" src="/images/ts-logo-white.png" alt="T&amp;S Traffic Control">
-          <img class="ts-logo-light" src="/images/logo-colour.png" alt="T&amp;S Traffic Control">
+          <div class="sl-lockup">
+            <img class="ts-logo-dark" src="/images/sightline-mark-reversed.svg" alt="Sightline Traffic Engineers">
+            <img class="ts-logo-light" src="/images/sightline-mark.svg" alt="Sightline Traffic Engineers">
+            <div style="text-align:center">
+              <div class="sl-wordmark">Sightline</div>
+              <div class="sl-descriptor">Traffic Engineers</div>
+            </div>
+          </div>
         </div>
 
         <div class="headline-wrap">
-          <h1 class="headline">Control <em>Room.</em></h1>
-          <p class="sub">A Safe Way Home.</p>
+          <h1 class="headline">Designed for approval. <em>Built for construction.</em></h1>
+          <p class="sub">Independent traffic engineering consultancy — development approvals and construction traffic.</p>
         </div>
       </div>
 
@@ -386,7 +402,8 @@
         <svg class="icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/></svg>
       </button>
       <div class="right-inner">
-        <img src="/images/atomis-mark-animated.svg" alt="Atomis" style="width:56px;height:56px;display:block;margin-bottom:22px;opacity:0.95">
+        <img class="ts-logo-dark" src="/images/sightline-mark-reversed.svg" alt="Sightline" style="width:44px;height:44px;display:block;margin-bottom:22px;opacity:0.95">
+        <img class="ts-logo-light" src="/images/sightline-mark.svg" alt="Sightline" style="width:44px;height:44px;display:block;margin-bottom:22px;opacity:0.95">
         <h2>Welcome back.</h2>
         <p class="lead">Sign in to run the day.</p>
 
@@ -404,7 +421,7 @@
           <% if (typeof nextPath !== 'undefined' && nextPath) { %><input type="hidden" name="next" value="<%= nextPath %>"><% } %>
           <div class="field">
             <label for="username">Username/Email</label>
-            <input type="text" id="username" name="username" required autofocus autocomplete="username" placeholder="username / you@tstc.com.au">
+            <input type="text" id="username" name="username" required autofocus autocomplete="username" placeholder="username / email">
           </div>
           <div class="field">
             <label for="password">Password</label>

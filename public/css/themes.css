@@ -75,14 +75,14 @@
 /* Atomis — on-brand: slate base, faint emerald wash behind the header,
    green-tinted card borders. Restrained so it doesn't fight status badges. */
 :root[data-skin="atomis"] {
-  --atomis-base: #0F1115;
-  --dark-border: rgba(16,185,129,0.20);
-  --dark-border-strong: rgba(16,185,129,0.30);
+  --atomis-base: #171014;
+  --dark-border: rgba(163,70,82,0.20);
+  --dark-border-strong: rgba(163,70,82,0.30);
 }
 :root[data-skin="atomis"] body, :root[data-skin="atomis"] body.dark-glass {
   background-color: var(--atomis-base);
   background-image: var(--atomis-grain),
-    radial-gradient(120% 70% at 50% -20%, rgba(16,185,129,0.14), rgba(16,185,129,0.04) 38%, transparent 64%);
+    radial-gradient(120% 70% at 50% -20%, rgba(163,70,82,0.14), rgba(163,70,82,0.04) 38%, transparent 64%);
   background-attachment: fixed;
   background-repeat: repeat, no-repeat;
   background-position: 0 0, center top;
@@ -110,8 +110,8 @@
   --atomis-base: #070b09;
   --dark-surface: rgba(15,22,18,0.92);
   --dark-surface-hover: rgba(22,32,26,0.94);
-  --dark-border: rgba(16,185,129,0.16);
-  --skin-gradient: linear-gradient(180deg, rgba(6,78,59,0.55) 0%, rgba(6,40,32,0.30) 28%, rgba(7,11,9,0) 62%);
+  --dark-border: rgba(163,70,82,0.16);
+  --skin-gradient: linear-gradient(180deg, rgba(71,32,38,0.55) 0%, rgba(46,20,24,0.30) 28%, rgba(7,11,9,0) 62%);
 }
 
 /* Violet Haze — purple → indigo concentrated behind header/KPIs. */
@@ -133,7 +133,7 @@
   --dark-border: rgba(255,255,255,0.09);
   --skin-gradient:
     radial-gradient(80% 60% at 6% 0%, rgba(124,58,237,0.22), transparent 55%),
-    radial-gradient(85% 70% at 100% 100%, rgba(16,185,129,0.16), transparent 58%);
+    radial-gradient(85% 70% at 100% 100%, rgba(163,70,82,0.16), transparent 58%);
 }
 
 /* Nebula — richest + darkest: indigo, violet, rose; grain is prominent. */
@@ -184,7 +184,7 @@
   background: rgba(255,255,255,0.82) !important;
   backdrop-filter: blur(12px) saturate(150%) !important;
   -webkit-backdrop-filter: blur(12px) saturate(150%) !important;
-  border-color: rgba(16,185,129,0.16) !important;
+  border-color: rgba(163,70,82,0.16) !important;
 }
 :root[data-skin="mint-glass"][data-theme="light"] body.dark-glass .bg-gray-50 { background: rgba(236,248,242,0.7) !important; }
 

@@ -107,7 +107,7 @@ function buildGreetingSubtext(db, worker, member, employee, todaysShifts) {
     const now = new Date();
     if (start.getMonth() === now.getMonth() && start.getDate() === now.getDate() && now > start) {
       const years = now.getFullYear() - start.getFullYear();
-      if (years >= 1) return { kind: 'anniversary', text: `${years} year${years === 1 ? '' : 's'} with T&S today 🎉` };
+      if (years >= 1) return { kind: 'anniversary', text: `${years} year${years === 1 ? '' : 's'} with Sightline today 🎉` };
     }
   }
 
