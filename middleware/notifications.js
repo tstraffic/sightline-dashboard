@@ -725,6 +725,120 @@ function generateNotifications() {
       }
     } catch (e) { console.error('[notifications] ROL chase step failed:', e.message); }
 
+    // ============================================================
+    // Sightline CRM automations (brief §3.6 / §10.1). Each block is
+    // independently try/caught — one bad query must never abort the
+    // engine. Types are in the notifications CHECK via migration 354.
+    // ============================================================
+
+    // S1. CRM follow-up reminders — next actions due today/tomorrow or
+    // overdue, across all four next-action surfaces. Owner-targeted;
+    // insertIfNew's 24h dedupe keeps the 15-min sweep quiet.
+    try {
+      const followUps = db.prepare(`
+        SELECT 'opportunity' AS kind, o.id, o.opportunity_number AS ref, o.title AS label,
+               o.next_step AS action, o.next_step_due_date AS due, o.owner_id AS recipient,
+               '/opportunities/' || o.id AS link
+        FROM opportunities o
+        WHERE o.status = 'open' AND o.next_step_due_date IS NOT NULL
+          AND o.next_step_due_date <= date('now', 'localtime', '+1 day')
+        UNION ALL
+        SELECT 'activity', ca.id, COALESCE(c.company_name, ''), ca.subject,
+               ca.next_step, ca.next_step_due_date, ca.owner_id,
+               CASE WHEN ca.opportunity_id IS NOT NULL THEN '/opportunities/' || ca.opportunity_id
+                    WHEN ca.client_id IS NOT NULL THEN '/clients/' || ca.client_id
+                    ELSE '/crm/activities' END
+        FROM crm_activities ca LEFT JOIN clients c ON ca.client_id = c.id
+        WHERE ca.is_completed = 0 AND ca.next_step_due_date IS NOT NULL
+          AND ca.next_step_due_date <= date('now', 'localtime', '+1 day')
+        UNION ALL
+        SELECT 'client', cl.id, cl.org_ref, cl.company_name,
+               cl.next_action_note, cl.next_action_date, COALESCE(cl.account_owner_id, cl.bdm_owner_id),
+               '/clients/' || cl.id
+        FROM clients cl
+        WHERE cl.active = 1 AND cl.next_action_date IS NOT NULL
+          AND cl.next_action_date <= date('now', 'localtime', '+1 day')
+      `).all();
+      for (const f of followUps) {
+        if (!f.recipient) continue;
+        const overdue = f.due < new Date().toISOString().slice(0, 10);
+        const title = `${overdue ? 'Overdue follow-up' : 'Follow-up due'}: ${f.label || f.ref}`;
+        const message = `${f.action || 'Next action'} — due ${f.due}${f.ref && f.label !== f.ref ? ' (' + f.ref + ')' : ''}.`;
+        insertAndTrack(f.recipient, 'crm_follow_up_due', title, message, f.link, null);
+      }
+    } catch (e) { console.error('[notifications] CRM follow-up step failed:', e.message); }
+
+    // S2. Stale opportunity flags — open, past the configurable inactivity
+    // threshold, and carrying no future next action to excuse the silence.
+    try {
+      const staleRow = db.prepare("SELECT config_value FROM system_config WHERE config_key = 'crm_stale_days'").get();
+      const staleDays = Math.max(3, parseInt(staleRow && staleRow.config_value, 10) || 14);
+      const staleOpps = db.prepare(`
+        SELECT o.id, o.opportunity_number, o.title, o.stage, o.estimated_value, o.owner_id,
+          COALESCE((SELECT MAX(ca.activity_date) FROM crm_activities ca WHERE ca.opportunity_id = o.id), DATE(o.created_at)) AS last_touch
+        FROM opportunities o
+        WHERE o.status = 'open'
+          AND (o.next_step_due_date IS NULL OR o.next_step_due_date < date('now', 'localtime'))
+          AND COALESCE((SELECT MAX(ca.activity_date) FROM crm_activities ca WHERE ca.opportunity_id = o.id), DATE(o.created_at))
+              < date('now', 'localtime', '-' || ? || ' days')
+      `).all(String(staleDays));
+      for (const o of staleOpps) {
+        if (!o.owner_id) continue;
+        const title = `Stale opportunity: ${o.opportunity_number}`;
+        const message = `"${o.title}" (${o.stage.replace(/_/g, ' ')}, $${(o.estimated_value || 0).toLocaleString('en-AU')}) has had no activity since ${String(o.last_touch).slice(0, 10)} and no dated next action.`;
+        insertAndTrack(o.owner_id, 'opportunity_stale', title, message, '/opportunities/' + o.id, null);
+      }
+    } catch (e) { console.error('[notifications] stale opportunity step failed:', e.message); }
+
+    // S3. Proposal follow-up — sent proposals at/past their follow-up date
+    // notify the preparer; 7+ days past also escalate to management.
+    try {
+      const dueProps = db.prepare(`
+        SELECT p.id, p.proposal_ref, p.fee, p.follow_up_date, p.prepared_by_id, p.created_by_id,
+               o.title AS opp_title, o.owner_id AS opp_owner_id
+        FROM proposals p JOIN opportunities o ON p.opportunity_id = o.id
+        WHERE p.status = 'sent' AND p.follow_up_date IS NOT NULL
+          AND p.follow_up_date <= date('now', 'localtime')
+      `).all();
+      const mgmt = dueProps.length ? db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) IN ('admin','management')").all() : [];
+      const escalateBefore = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+      for (const p of dueProps) {
+        const recipient = p.prepared_by_id || p.opp_owner_id || p.created_by_id;
+        const title = `Proposal awaiting response: ${p.proposal_ref}`;
+        const message = `"${p.opp_title}" ($${(p.fee || 0).toLocaleString('en-AU')}) was due for follow-up on ${p.follow_up_date}. Chase the client or record the outcome.`;
+        if (recipient) insertAndTrack(recipient, 'proposal_follow_up_due', title, message, '/proposals/' + p.id, null);
+        if (p.follow_up_date <= escalateBefore) {
+          for (const u of mgmt) {
+            if (u.id === recipient) continue;
+            insertAndTrack(u.id, 'proposal_follow_up_due', `Escalation — ${title}`, message + ' (7+ days past follow-up.)', '/proposals/' + p.id, null);
+          }
+        }
+      }
+    } catch (e) { console.error('[notifications] proposal follow-up step failed:', e.message); }
+
+    // S4. Won but unconverted — the §3.4 conversion safety net: a Won
+    // opportunity still without a project a day later means the controlled
+    // conversion stalled or a link step failed. Surface it, don't lose it.
+    try {
+      const unconverted = db.prepare(`
+        SELECT o.id, o.opportunity_number, o.title, o.owner_id, o.won_date, o.estimated_value
+        FROM opportunities o
+        WHERE o.status = 'won' AND o.related_job_id IS NULL
+          AND o.won_date IS NOT NULL AND o.won_date < date('now', 'localtime')
+      `).all();
+      const mgmtW = unconverted.length ? db.prepare("SELECT id FROM users WHERE active = 1 AND LOWER(role) IN ('admin','management')").all() : [];
+      for (const o of unconverted) {
+        const title = `Won but not converted: ${o.opportunity_number}`;
+        const message = `"${o.title}" was won on ${o.won_date} ($${(o.estimated_value || 0).toLocaleString('en-AU')}) but no project has been created. Run the conversion so delivery records exist.`;
+        const link = '/opportunities/' + o.id + '/convert';
+        if (o.owner_id) insertAndTrack(o.owner_id, 'won_unconverted', title, message, link, null);
+        for (const u of mgmtW) {
+          if (u.id === o.owner_id) continue;
+          insertAndTrack(u.id, 'won_unconverted', title, message, link, null);
+        }
+      }
+    } catch (e) { console.error('[notifications] won-unconverted step failed:', e.message); }
+
     // Send immediate email notifications for newly created notifications
     sendImmediateEmails(db, newNotificationIds);
 

@@ -65,6 +65,31 @@ const CHECKLIST_TARGET_PCT = 75;
 // builder whose gate fails is never run.
 const NEEDS_ROWS = [
   {
+    // Sightline CRM: follow-ups due/overdue + proposals awaiting response +
+    // won-but-unconverted (brief §3.6). One row so the dashboard stays calm.
+    key: 'crm_followups_due', gate: 'crm', priority: 18, tone: 'warn', href: '/crm',
+    build(db, user, today) {
+      const due = db.prepare(`
+        SELECT COUNT(*) AS c FROM (
+          SELECT next_step_due_date AS d FROM opportunities WHERE status = 'open' AND next_step_due_date IS NOT NULL AND next_step_due_date <= ?
+          UNION ALL
+          SELECT next_step_due_date FROM crm_activities WHERE is_completed = 0 AND next_step_due_date IS NOT NULL AND next_step_due_date <= ?
+          UNION ALL
+          SELECT next_action_date FROM clients WHERE active = 1 AND next_action_date IS NOT NULL AND next_action_date <= ?
+          UNION ALL
+          SELECT follow_up_date FROM proposals WHERE status = 'sent' AND follow_up_date IS NOT NULL AND follow_up_date <= ?
+        )
+      `).get(today, today, today, today).c;
+      const unconverted = db.prepare("SELECT COUNT(*) AS c FROM opportunities WHERE status = 'won' AND related_job_id IS NULL").get().c;
+      return {
+        count: due + unconverted,
+        label: 'CRM follow-ups due',
+        detail: unconverted > 0 ? `${unconverted} won not converted` : '',
+        tone: unconverted > 0 ? 'critical' : undefined,
+      };
+    },
+  },
+  {
     key: 'overdue_plans', gate: 'compliance', priority: 10, tone: 'critical', href: '/compliance',
     build(db, user, today) {
       // Canonical overdue definition — submitted-inclusive, same as the

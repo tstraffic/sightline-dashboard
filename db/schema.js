@@ -15871,6 +15871,58 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 353 error:', e.message); }
   }
 
+  // Migration 354: expand the notifications type CHECK for the Sightline
+  // CRM automations (brief §3.6/§10) — crm_follow_up_due, opportunity_stale,
+  // proposal_follow_up_due, won_unconverted. The CHECK is live (last rebuilt
+  // by migration 329): an unexpanded type THROWS on insert inside
+  // generateNotifications' try/catch, so the reminders would silently never
+  // arrive. Same table-rebuild dance as 290/327/329.
+  if (!isMigrationApplied.get(354)) {
+    let needsExpand = true;
+    try {
+      const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='notifications'").get();
+      if (tableInfo && tableInfo.sql && tableInfo.sql.includes("'crm_follow_up_due'")) needsExpand = false;
+    } catch (e) {}
+
+    if (needsExpand) {
+      db.exec('BEGIN TRANSACTION');
+      try {
+        const cols = db.prepare("PRAGMA table_info('notifications')").all();
+        const hasEmailSent = cols.some(c => c.name === 'email_sent_at');
+        const emailSentCol = hasEmailSent ? 'email_sent_at DATETIME,' : '';
+        const emailSentSelect = hasEmailSent ? ',email_sent_at' : '';
+
+        db.exec(`
+          CREATE TABLE notifications_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            type TEXT NOT NULL CHECK(type IN ('overdue_task','expiring_compliance','missing_update','corrective_action_due','follow_up_due','equipment_overdue','critical_defect','rol_pending','ticket_expiry','equipment_inspection_due','induction_overdue','induction_reminder','over_budget','deadline_reminder','chat_message','weekly_summary','invoice_ready','plan_submitted','plan_tagged','audit_failed','repeat_offender','task_assigned','swms_expiring','sop_expiring','risk_assessment_expiring','cert_expiry','birthday_today','crm_follow_up_due','opportunity_stale','proposal_follow_up_due','won_unconverted','general')),
+            title TEXT NOT NULL,
+            message TEXT NOT NULL DEFAULT '',
+            link TEXT DEFAULT '',
+            job_id INTEGER REFERENCES jobs(id),
+            is_read INTEGER NOT NULL DEFAULT 0,
+            ${emailSentCol}
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          INSERT INTO notifications_new (id, user_id, type, title, message, link, job_id, is_read${emailSentSelect}, created_at)
+            SELECT id, user_id, type, title, message, link, job_id, is_read${emailSentSelect}, created_at FROM notifications;
+          DROP TABLE notifications;
+          ALTER TABLE notifications_new RENAME TO notifications;
+          CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+          CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, is_read);
+          CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+        `);
+        db.exec('COMMIT');
+        console.log('Migration 354: Expanded notifications type CHECK for the Sightline CRM sweeps');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch (r) {}
+        console.error('Migration 354 error:', e.message);
+      }
+    }
+    recordMigration.run(354, 'Expand notifications type CHECK: crm_follow_up_due, opportunity_stale, proposal_follow_up_due, won_unconverted');
+  }
+
   console.log('All migrations checked/applied.');
 }
 
