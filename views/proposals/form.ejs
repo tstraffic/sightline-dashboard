@@ -1,0 +1,186 @@
+<% locals.currentPage = 'proposals' %>
+<% const isEdit = proposal !== null && typeof proposal !== 'undefined' && proposal %>
+
+<%- include('../partials/page-header', {
+  eyebrow: opportunity.opportunity_number + ' · ' + (opportunity.client_name || 'No account'),
+  title: isEdit ? 'Edit ' + proposal.proposal_ref : 'New Proposal',
+  subtitle: opportunity.title,
+  actions: [{ label: 'Back to Opportunity', href: '/opportunities/' + opportunity.id, style: 'secondary' }]
+}) %>
+
+<form method="POST" action="<%= isEdit ? '/proposals/' + proposal.id : '/proposals' %>" class="space-y-5 max-w-4xl">
+  <%- include('../partials/csrf') %>
+  <input type="hidden" name="opportunity_id" value="<%= opportunity.id %>">
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Offer</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Issue Date</label>
+        <input type="date" name="issue_date" value="<%= isEdit && proposal.issue_date ? String(proposal.issue_date).split('T')[0] : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fee ($ ex GST) <span class="text-red-500">*</span></label>
+        <input type="number" name="fee" min="0" step="50" required value="<%= isEdit ? (proposal.fee || '') : (opportunity.estimated_value || '') %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Validity (days)</label>
+        <input type="number" name="validity_days" min="1" value="<%= isEdit ? (proposal.validity_days || 30) : 30 %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Prepared By</label>
+        <select name="prepared_by_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>" <%= (isEdit ? proposal.prepared_by_id : (user && user.id)) == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Approver</label>
+        <select name="approved_by_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Not yet assigned</option>
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>" <%= isEdit && proposal.approved_by_id == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Recipient Contact</label>
+        <select name="contact_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select...</option>
+          <% contacts.forEach(ct => { %>
+            <option value="<%= ct.id %>" <%= (isEdit ? proposal.contact_id : opportunity.contact_id) == ct.id ? 'selected' : '' %>><%= ct.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Payment Terms</label>
+        <input type="text" name="payment_terms" value="<%= isEdit ? (proposal.payment_terms || '') : '' %>" placeholder="e.g. 14 days from invoice"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Expected Start</label>
+        <input type="date" name="expected_start_date" value="<%= isEdit && proposal.expected_start_date ? String(proposal.expected_start_date).split('T')[0] : (opportunity.expected_start_date || '') %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">SharePoint Link</label>
+        <input type="url" name="sharepoint_url" value="<%= isEdit ? (proposal.sharepoint_url || '') : '' %>" placeholder="https://...sharepoint.com/..."
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Service Packages</h2>
+      <button type="button" onclick="addPkgRow()" class="text-xs font-semibold text-brand-600 hover:text-brand-700">+ Add package</button>
+    </div>
+    <div id="pkg-rows" class="space-y-3">
+      <% const rows = (packages && packages.length) ? packages : [{}] %>
+      <% rows.forEach(pkg => { %>
+      <div class="pkg-row grid grid-cols-12 gap-2 items-start">
+        <div class="col-span-3 sm:col-span-2">
+          <select name="pkg_stream" class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">Stream…</option>
+            <% (settingsOptions.service_streams || []).forEach(s => { %>
+              <option value="<%= s.key %>" <%= pkg.service_stream === s.key ? 'selected' : '' %>><%= s.key %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="col-span-5 sm:col-span-6">
+          <input type="text" name="pkg_scope" value="<%= pkg.scope || '' %>" placeholder="Package scope (e.g. Development Traffic Assessment)"
+            class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div class="col-span-2">
+          <input type="number" name="pkg_fee" value="<%= pkg.fee_allocation || '' %>" min="0" step="50" placeholder="Fee $"
+            class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div class="col-span-1">
+          <input type="number" name="pkg_hours" value="<%= pkg.budget_hours || '' %>" min="0" step="0.5" placeholder="Hrs"
+            class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div class="col-span-1 pt-2">
+          <button type="button" onclick="this.closest('.pkg-row').remove()" class="text-gray-300 hover:text-red-500" title="Remove package">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+      </div>
+      <% }) %>
+    </div>
+    <p class="text-[10px] text-gray-400 mt-3">Each package becomes a Service Package (e.g. ST-260041-DEV-01) when the opportunity converts to a project.</p>
+  </div>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Document Content</h2>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div class="lg:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Scope</label>
+        <textarea name="scope" rows="3" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? (proposal.scope || '') : (opportunity.scope_summary || '') %></textarea>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Deliverables</label>
+        <textarea name="deliverables" rows="3" placeholder="One per line" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? (proposal.deliverables || '') : '' %></textarea>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Programme</label>
+        <textarea name="programme" rows="3" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? (proposal.programme || '') : '' %></textarea>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Assumptions</label>
+        <textarea name="assumptions" rows="3" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? (proposal.assumptions || '') : (opportunity.key_assumptions || '') %></textarea>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Exclusions</label>
+        <textarea name="exclusions" rows="3" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"><%= isEdit ? (proposal.exclusions || '') : '' %></textarea>
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-end gap-3">
+    <a href="<%= isEdit ? '/proposals/' + proposal.id : '/opportunities/' + opportunity.id %>" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Cancel</a>
+    <button type="submit" class="px-6 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
+      <%= isEdit ? 'Save Draft' : 'Create Draft Proposal' %>
+    </button>
+  </div>
+</form>
+
+<template id="pkg-row-template">
+  <div class="pkg-row grid grid-cols-12 gap-2 items-start">
+    <div class="col-span-3 sm:col-span-2">
+      <select name="pkg_stream" class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">Stream…</option>
+        <% (settingsOptions.service_streams || []).forEach(s => { %>
+          <option value="<%= s.key %>"><%= s.key %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div class="col-span-5 sm:col-span-6">
+      <input type="text" name="pkg_scope" placeholder="Package scope"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div class="col-span-2">
+      <input type="number" name="pkg_fee" min="0" step="50" placeholder="Fee $"
+        class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div class="col-span-1">
+      <input type="number" name="pkg_hours" min="0" step="0.5" placeholder="Hrs"
+        class="w-full px-2 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div class="col-span-1 pt-2">
+      <button type="button" onclick="this.closest('.pkg-row').remove()" class="text-gray-300 hover:text-red-500" title="Remove package">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </div>
+</template>
+
+<script>
+function addPkgRow() {
+  var tpl = document.getElementById('pkg-row-template');
+  document.getElementById('pkg-rows').appendChild(tpl.content.cloneNode(true));
+}
+</script>

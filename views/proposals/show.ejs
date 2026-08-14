@@ -1,0 +1,184 @@
+<% locals.currentPage = 'proposals' %>
+<%
+  function money(v) { return '$' + (v || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  const STATUS_BADGE = {
+    draft: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
+    sent: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    accepted: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+    declined: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+    superseded: 'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20',
+    withdrawn: 'bg-slate-50 text-slate-500 ring-1 ring-slate-600/20',
+  };
+%>
+
+<!-- Header -->
+<div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3 mb-5">
+  <div>
+    <div class="flex items-center gap-2 mb-1 flex-wrap">
+      <a href="/proposals" class="text-gray-400 hover:text-gray-600 transition">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/></svg>
+      </a>
+      <h1 class="text-2xl font-bold text-gray-900 font-mono"><%= proposal.proposal_ref %></h1>
+      <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[proposal.status] || STATUS_BADGE.draft %>"><%= proposal.status.toUpperCase() %></span>
+      <span class="text-xs text-gray-400">Rev <%= proposal.revision %></span>
+    </div>
+    <p class="text-sm text-gray-500 ml-7">
+      <a href="/opportunities/<%= proposal.opportunity_id %>" class="text-brand-600 hover:text-brand-700 font-medium"><%= proposal.opportunity_number %></a>
+      · <%= proposal.opp_title %><%= proposal.client_name ? ' · ' + proposal.client_name : '' %>
+      <% if (proposal.sharepoint_url) { %> · <a href="<%= proposal.sharepoint_url %>" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700">SharePoint ↗</a><% } %>
+    </p>
+  </div>
+  <div class="flex items-center gap-2 flex-wrap">
+    <% if (proposal.status === 'draft') { %>
+      <a href="/proposals/<%= proposal.id %>/edit" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Edit Draft</a>
+      <button type="button" onclick="document.getElementById('send-panel').classList.toggle('hidden')" class="inline-flex items-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Mark Sent…</button>
+    <% } %>
+    <% if (proposal.status === 'sent') { %>
+      <button type="button" onclick="document.getElementById('accept-panel').classList.toggle('hidden')" class="inline-flex items-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Record Acceptance…</button>
+      <form method="POST" action="/proposals/<%= proposal.id %>/decline" class="inline" onsubmit="return confirm('Mark this proposal declined?')">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 text-sm font-medium rounded-lg transition-colors">Declined</button>
+      </form>
+    <% } %>
+    <% if (['draft','sent','declined'].includes(proposal.status)) { %>
+      <form method="POST" action="/proposals/<%= proposal.id %>/revise" class="inline">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="inline-flex items-center px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">New Revision</button>
+      </form>
+    <% } %>
+    <% if (proposal.status === 'draft') { %>
+      <form method="POST" action="/proposals/<%= proposal.id %>/delete" class="inline" onsubmit="return confirm('Delete this draft proposal?')">
+        <%- include('../partials/csrf') %>
+        <button type="submit" class="inline-flex items-center px-3 py-2 bg-gray-100 hover:bg-red-50 text-gray-400 hover:text-red-600 text-sm font-medium rounded-lg transition-colors" title="Delete draft">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+        </button>
+      </form>
+    <% } %>
+  </div>
+</div>
+
+<!-- Send panel -->
+<div id="send-panel" class="hidden bg-white border border-brand-200 rounded-xl shadow-sm p-4 sm:p-5 mb-5">
+  <form method="POST" action="/proposals/<%= proposal.id %>/send" class="flex flex-wrap items-end gap-3">
+    <%- include('../partials/csrf') %>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Follow-up Date <span class="text-red-500">*</span></label>
+      <input type="date" name="follow_up_date" required
+        class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Confirm Sent</button>
+    <p class="text-xs text-gray-400 basis-full sm:basis-auto">Marks the proposal sent today, creates the dated follow-up action, and moves the opportunity to Proposal Sent.</p>
+  </form>
+</div>
+
+<!-- Accept panel -->
+<div id="accept-panel" class="hidden bg-white border border-teal-200 rounded-xl shadow-sm p-4 sm:p-5 mb-5">
+  <form method="POST" action="/proposals/<%= proposal.id %>/accept" class="flex flex-wrap items-end gap-3">
+    <%- include('../partials/csrf') %>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Acceptance / PO Reference</label>
+      <input type="text" name="acceptance_reference" placeholder="e.g. email 14/8, PO-4471"
+        class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div class="flex-1 min-w-[200px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Response</label>
+      <input type="text" name="client_response" placeholder="Summary of the client's response"
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <button type="submit" class="px-5 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Record Acceptance</button>
+  </form>
+</div>
+
+<!-- Info grid -->
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5 mb-5">
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-x-6 gap-y-4">
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fee (ex GST)</p><p class="text-sm font-bold text-gray-900 mt-1"><%= money(proposal.fee) %></p></div>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Issued</p><p class="text-sm text-gray-600 mt-1"><%= formatDate(proposal.issue_date) %></p></div>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Sent</p><p class="text-sm text-gray-600 mt-1"><%= proposal.sent_date ? formatDate(proposal.sent_date) : '—' %></p></div>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Follow-up</p><p class="text-sm text-gray-600 mt-1"><%= proposal.follow_up_date ? formatDate(proposal.follow_up_date) : '—' %></p></div>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Prepared By</p><p class="text-sm text-gray-600 mt-1"><%= proposal.prepared_by_name || '—' %></p></div>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Approver</p><p class="text-sm text-gray-600 mt-1"><%= proposal.approved_by_name || '—' %></p></div>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Recipient</p><p class="text-sm text-gray-600 mt-1"><%= proposal.contact_name || '—' %></p></div>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Validity</p><p class="text-sm text-gray-600 mt-1"><%= proposal.validity_days || 30 %> days</p></div>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Payment Terms</p><p class="text-sm text-gray-600 mt-1"><%= proposal.payment_terms || '—' %></p></div>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Expected Start</p><p class="text-sm text-gray-600 mt-1"><%= proposal.expected_start_date ? formatDate(proposal.expected_start_date) : '—' %></p></div>
+    <% if (proposal.acceptance_reference) { %>
+    <div><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Acceptance Ref</p><p class="text-sm font-medium text-teal-700 mt-1"><%= proposal.acceptance_reference %></p></div>
+    <% } %>
+    <% if (proposal.client_response) { %>
+    <div class="col-span-2"><p class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Client Response</p><p class="text-sm text-gray-600 mt-1"><%= proposal.client_response %></p></div>
+    <% } %>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+  <div class="lg:col-span-2 space-y-5">
+    <!-- Packages -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100"><h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Service Packages</h2></div>
+      <% if (!packages.length) { %>
+        <p class="p-4 text-sm text-gray-400">No packages defined.</p>
+      <% } else { %>
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-100">
+            <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stream</th>
+            <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Scope</th>
+            <th class="px-4 py-2 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fee</th>
+            <th class="px-4 py-2 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Hours</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-gray-100">
+          <% packages.forEach(pkg => { %>
+          <tr>
+            <td class="px-4 py-2.5"><span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-brand-50 text-brand-700 ring-1 ring-brand-600/20"><%= pkg.service_stream %></span></td>
+            <td class="px-4 py-2.5 text-gray-700"><%= pkg.scope || '—' %></td>
+            <td class="px-4 py-2.5 text-right text-gray-900 tabular-nums"><%= money(pkg.fee_allocation) %></td>
+            <td class="px-4 py-2.5 text-right text-gray-500 tabular-nums"><%= pkg.budget_hours || '—' %></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+      <% } %>
+    </div>
+
+    <!-- Document content -->
+    <% const sections = [['Scope', proposal.scope], ['Deliverables', proposal.deliverables], ['Programme', proposal.programme], ['Assumptions', proposal.assumptions], ['Exclusions', proposal.exclusions]] %>
+    <% sections.forEach(([label, content]) => { if (!content) return; %>
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-2"><%= label %></h2>
+      <p class="text-sm text-gray-700 whitespace-pre-line"><%= content %></p>
+    </div>
+    <% }) %>
+  </div>
+
+  <div class="space-y-5">
+    <!-- Revision chain -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100"><h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Revisions</h2></div>
+      <div class="divide-y divide-gray-100">
+        <% revisions.forEach(rev => { %>
+        <a href="/proposals/<%= rev.id %>" class="flex items-center justify-between px-4 py-2.5 hover:bg-gray-50 <%= rev.id === proposal.id ? 'bg-brand-50/50' : '' %>">
+          <span class="font-mono text-xs font-bold <%= rev.id === proposal.id ? 'text-brand-700' : 'text-gray-600' %>"><%= rev.proposal_ref %></span>
+          <span class="text-[10px] font-bold <%= STATUS_BADGE[rev.status] ? '' : '' %> px-2 py-0.5 rounded-full <%= STATUS_BADGE[rev.status] || '' %>"><%= rev.status.toUpperCase() %></span>
+        </a>
+        <% }) %>
+      </div>
+    </div>
+
+    <!-- Audit trail -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="px-4 py-3 border-b border-gray-100"><h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">History</h2></div>
+      <% if (!trail.length) { %><p class="p-4 text-sm text-gray-400">No history yet.</p><% } else { %>
+      <div class="divide-y divide-gray-100">
+        <% trail.forEach(ev => { %>
+        <div class="px-4 py-2.5">
+          <p class="text-xs text-gray-700"><span class="font-semibold"><%= ev.user_name || 'System' %></span> — <%= ev.action %><%= ev.details ? ': ' + ev.details : '' %></p>
+          <p class="text-[10px] text-gray-400 mt-0.5"><%= formatDateTime(ev.created_at) %></p>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+  </div>
+</div>

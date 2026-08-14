@@ -15748,6 +15748,64 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 351 error:', e.message); }
   }
 
+  // Migration 352: proposals (brief §3.1) — the controlled commercial offer.
+  // A document-revision entity, deliberately separate from the T&S quoting
+  // module (rate-card/site-matrix pricing, hidden in Sightline): ref format
+  // PROP-{opp#}-{rev}, supersession chain via supersedes_id, acceptance
+  // reference, per-package fee allocations. status is app-enforced:
+  // draft | sent | accepted | declined | superseded | withdrawn.
+  if (!isMigrationApplied.get(352)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS proposals (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          proposal_ref TEXT UNIQUE NOT NULL,
+          opportunity_id INTEGER NOT NULL REFERENCES opportunities(id),
+          revision INTEGER NOT NULL DEFAULT 1,
+          client_id INTEGER REFERENCES clients(id),
+          contact_id INTEGER REFERENCES client_contacts(id),
+          issue_date DATE,
+          prepared_by_id INTEGER REFERENCES users(id),
+          approved_by_id INTEGER REFERENCES users(id),
+          scope TEXT DEFAULT '',
+          deliverables TEXT DEFAULT '',
+          assumptions TEXT DEFAULT '',
+          exclusions TEXT DEFAULT '',
+          programme TEXT DEFAULT '',
+          fee REAL DEFAULT 0,
+          payment_terms TEXT DEFAULT '',
+          validity_days INTEGER DEFAULT 30,
+          expected_start_date DATE,
+          sharepoint_url TEXT DEFAULT '',
+          status TEXT NOT NULL DEFAULT 'draft',
+          sent_date DATE,
+          follow_up_date DATE,
+          client_response TEXT DEFAULT '',
+          acceptance_reference TEXT DEFAULT '',
+          supersedes_id INTEGER REFERENCES proposals(id),
+          created_by_id INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_proposals_opportunity ON proposals(opportunity_id);
+        CREATE INDEX IF NOT EXISTS idx_proposals_status ON proposals(status);
+
+        CREATE TABLE IF NOT EXISTS proposal_service_packages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          proposal_id INTEGER NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+          service_stream TEXT NOT NULL,
+          scope TEXT DEFAULT '',
+          fee_allocation REAL DEFAULT 0,
+          budget_hours REAL DEFAULT 0,
+          display_order INTEGER DEFAULT 0
+        );
+        CREATE INDEX IF NOT EXISTS idx_proposal_packages_proposal ON proposal_service_packages(proposal_id);
+      `);
+      recordMigration.run(352, 'Sightline proposals + proposal_service_packages');
+      console.log('Migration 352 applied: proposals tables');
+    } catch (e) { console.error('Migration 352 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

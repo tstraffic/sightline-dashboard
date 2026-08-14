@@ -350,6 +350,13 @@ router.get('/:id', (req, res, next) => {
       WHERE r.id = ?
     `).get(opportunity.referral_id) : null;
 
+    // Proposal revisions for this opportunity
+    const proposals = db.prepare(`
+      SELECT p.*, u.full_name AS prepared_by_name
+      FROM proposals p LEFT JOIN users u ON p.prepared_by_id = u.id
+      WHERE p.opportunity_id = ? ORDER BY p.revision DESC
+    `).all(opportunity.id);
+
     // CRM activities linked to this opportunity
     const activities = db.prepare(`
       SELECT a.*,
@@ -378,6 +385,7 @@ router.get('/:id', (req, res, next) => {
       activities,
       relatedJob,
       referral,
+      proposals,
     });
   } catch (err) {
     console.error('Opportunity detail error:', err);
