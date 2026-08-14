@@ -35,8 +35,17 @@
         <% } else { %>
           <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-gray-100 text-gray-600">Inactive</span>
         <% } %>
+        <% if (company.key_account_tier) { %>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 ring-1 ring-purple-600/20">Key Account · <%= company.key_account_tier %></span>
+        <% } %>
       </div>
-      <p class="text-sm text-gray-500 ml-7"><%= company.abn ? 'ABN: ' + company.abn : '' %></p>
+      <p class="text-sm text-gray-500 ml-7">
+        <% if (company.org_ref) { %><span class="font-mono text-xs text-gray-400 mr-2"><%= company.org_ref %></span><% } %>
+        <%= company.abn ? 'ABN: ' + company.abn : '' %>
+        <% if (company.sharepoint_url) { %>
+          · <a href="<%= company.sharepoint_url %>" target="_blank" rel="noopener" class="text-brand-600 hover:text-brand-700 font-medium">Open in SharePoint ↗</a>
+        <% } %>
+      </p>
     </div>
     <div class="flex items-center gap-2">
       <a href="/clients/<%= company.id %>/edit" class="inline-flex items-center px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition">

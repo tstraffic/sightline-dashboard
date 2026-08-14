@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
+const { generateContactRef } = require('../lib/refNumbers');
 
 // ============================================
 // CONTACTS LIST
@@ -68,13 +69,17 @@ router.get('/new', (req, res) => {
 router.post('/', (req, res) => {
   const db = getDb();
   const { job_id, company_id, contact_type, company, full_name, position, phone, mobile, email, notes, is_primary,
-    relationship_strength, influence_level, buying_role, preferred_comm_method, referred_by, contact_owner_id } = req.body;
+    relationship_strength, influence_level, buying_role, preferred_comm_method, referred_by, contact_owner_id,
+    contact_status, service_interests } = req.body;
+  const svcInterests = Array.isArray(service_interests) ? service_interests.join(',') : (service_interests || '');
   const result = db.prepare(`
-    INSERT INTO client_contacts (job_id, company_id, contact_type, company, full_name, position, phone, mobile, email, notes, is_primary,
-      relationship_strength, influence_level, buying_role, preferred_comm_method, referred_by, contact_owner_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(job_id || null, company_id || null, contact_type, company, full_name, position || '', phone || '', mobile || '', email || '', notes || '', is_primary ? 1 : 0,
-    relationship_strength || '', influence_level || '', buying_role || '', preferred_comm_method || '', referred_by || '', contact_owner_id || null);
+    INSERT INTO client_contacts (contact_ref, job_id, company_id, contact_type, company, full_name, position, phone, mobile, email, notes, is_primary,
+      relationship_strength, influence_level, buying_role, preferred_comm_method, referred_by, contact_owner_id,
+      contact_status, service_interests)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(generateContactRef(), job_id || null, company_id || null, contact_type, company, full_name, position || '', phone || '', mobile || '', email || '', notes || '', is_primary ? 1 : 0,
+    relationship_strength || '', influence_level || '', buying_role || '', preferred_comm_method || '', referred_by || '', contact_owner_id || null,
+    contact_status || 'active', svcInterests);
 
   logActivity({
     user: req.session.user,
@@ -111,9 +116,9 @@ router.post('/api/quick-create', (req, res) => {
     if (!company) return res.status(400).json({ error: 'That client no longer exists.' });
 
     const result = db.prepare(`
-      INSERT INTO client_contacts (company_id, contact_type, company, full_name, position, phone, email)
-      VALUES (?, 'client', ?, ?, ?, ?, ?)
-    `).run(company_id, company.company_name, full_name, position, phone, email);
+      INSERT INTO client_contacts (contact_ref, company_id, contact_type, company, full_name, position, phone, email)
+      VALUES (?, ?, 'client', ?, ?, ?, ?, ?)
+    `).run(generateContactRef(), company_id, company.company_name, full_name, position, phone, email);
 
     const id = result.lastInsertRowid;
 
@@ -383,14 +388,18 @@ router.get('/:id/edit', (req, res) => {
 router.post('/:id', (req, res) => {
   const db = getDb();
   const { job_id, company_id, contact_type, company, full_name, position, phone, mobile, email, notes, is_primary,
-    relationship_strength, influence_level, buying_role, preferred_comm_method, referred_by, contact_owner_id } = req.body;
+    relationship_strength, influence_level, buying_role, preferred_comm_method, referred_by, contact_owner_id,
+    contact_status, service_interests } = req.body;
+  const svcInterests = Array.isArray(service_interests) ? service_interests.join(',') : (service_interests || '');
   db.prepare(`
     UPDATE client_contacts SET job_id=?, company_id=?, contact_type=?, company=?, full_name=?, position=?, phone=?, mobile=?, email=?, notes=?, is_primary=?,
       relationship_strength=?, influence_level=?, buying_role=?, preferred_comm_method=?, referred_by=?, contact_owner_id=?,
+      contact_status=?, service_interests=?,
       updated_at=CURRENT_TIMESTAMP
     WHERE id=?
   `).run(job_id || null, company_id || null, contact_type, company, full_name, position || '', phone || '', mobile || '', email || '', notes || '', is_primary ? 1 : 0,
-    relationship_strength || '', influence_level || '', buying_role || '', preferred_comm_method || '', referred_by || '', contact_owner_id || null, req.params.id);
+    relationship_strength || '', influence_level || '', buying_role || '', preferred_comm_method || '', referred_by || '', contact_owner_id || null,
+    contact_status || 'active', svcInterests, req.params.id);
 
   logActivity({
     user: req.session.user,

@@ -5,6 +5,7 @@ const { logActivity } = require('../middleware/audit');
 const { canAccess } = require('../middleware/auth');
 const { addDays } = require('./helpers/dashboard-queries');
 const { sydneyToday } = require('../lib/sydney');
+const { generateOrgRef } = require('../lib/refNumbers');
 
 // JSON API - search companies (for autocomplete/dropdowns) — MUST be before /:id
 router.get('/api/search.json', (req, res) => {
@@ -91,7 +92,7 @@ router.get('/', (req, res) => {
 // Same filters and rollups; dates are Sydney-anchored (the old copy used
 // UTC and misjudged the 30-day dormant window for most of the working day).
 function renderCrmView(db, req, res) {
-  const { search, owner, type, status, priority, dormant, no_action } = req.query;
+  const { search, owner, type, status, priority, dormant, no_action, repeat_status } = req.query;
   const today = sydneyToday();
   const thirtyDaysAgo = addDays(today, -30);
 
@@ -118,9 +119,16 @@ function renderCrmView(db, req, res) {
     query += ` AND c.account_owner_id = ?`;
     params.push(owner);
   }
-  if (type && ['lead', 'prospect', 'client', 'active_client', 'inactive_client', 'partner', 'contractor', 'subcontractor', 'supplier'].includes(type)) {
+  if (type && ['client', 'subcontractor', 'supplier'].includes(type)) {
     query += ` AND c.company_type = ?`;
     params.push(type);
+  }
+  // Lifecycle filter — repeat_client_status is the CRM axis (the old code
+  // filtered company_type for 'lead'/'prospect', values the form never
+  // offered, so those filters and counters were structurally always 0).
+  if (repeat_status) {
+    query += ` AND c.repeat_client_status = ?`;
+    params.push(repeat_status);
   }
   if (status === 'active') {
     query += ` AND c.active = 1`;
@@ -145,9 +153,9 @@ function renderCrmView(db, req, res) {
   const stats = db.prepare(`
     SELECT
       COUNT(*) as total,
-      SUM(CASE WHEN company_type IN ('lead') THEN 1 ELSE 0 END) as leads,
-      SUM(CASE WHEN company_type IN ('prospect') THEN 1 ELSE 0 END) as prospects,
-      SUM(CASE WHEN company_type IN ('client', 'active_client') THEN 1 ELSE 0 END) as active_clients,
+      SUM(CASE WHEN repeat_client_status = 'prospect' THEN 1 ELSE 0 END) as leads,
+      SUM(CASE WHEN repeat_client_status IN ('new_client', 'active_first_time') THEN 1 ELSE 0 END) as prospects,
+      SUM(CASE WHEN repeat_client_status IN ('active_first_time', 'repeat', 'key_account') THEN 1 ELSE 0 END) as active_clients,
       SUM(CASE WHEN active = 1 AND (last_contacted_date < ? OR last_contacted_date IS NULL) THEN 1 ELSE 0 END) as dormant
     FROM clients
   `).get(thirtyDaysAgo);
@@ -161,7 +169,7 @@ function renderCrmView(db, req, res) {
     stats,
     users,
     thirtyDaysAgo,
-    filters: { search, owner, type, status, priority, dormant, no_action },
+    filters: { search, owner, type, status, priority, dormant, no_action, repeat_status },
   });
 }
 
@@ -170,12 +178,14 @@ router.get('/new', (req, res) => {
   const db = getDb();
   const preselectedType = req.query.type || 'client';
   const users = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
+  const companies = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
   res.render('clients/form', {
     title: 'Add New Company',
     currentPage: 'clients',
     company: null,
     preselectedType,
     users,
+    companies,
   });
 });
 
@@ -186,29 +196,35 @@ router.post('/', (req, res) => {
   const companyType = b.company_type || 'client';
 
   try {
+    const serviceInterests = Array.isArray(b.service_interests) ? b.service_interests.join(',') : (b.service_interests || '');
     const result = db.prepare(`
-      INSERT INTO clients (company_name, abn, primary_contact_name, primary_contact_phone, primary_contact_email,
+      INSERT INTO clients (org_ref, company_name, abn, primary_contact_name, primary_contact_phone, primary_contact_email,
         address, billing_address, payment_terms, notes, company_type, trade_specialty, insurance_expiry,
         insurance_policy, product_categories, account_number, website, approved, rating,
         account_owner_id, bdm_owner_id, lead_source, estimated_annual_value, service_interests,
         target_regions, priority, prequal_status, vendor_status, contract_status, industry_segment,
         next_action_date, next_action_note, phone, email_general, suburb, state, postcode,
-        client_category, onboarding_stage, tender_panel_status)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        client_category, onboarding_stage, tender_panel_status,
+        repeat_client_status, key_account_tier, referred_by_client_id, referred_by_contact_id,
+        xero_contact_id, sharepoint_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      b.company_name, b.abn || '', b.primary_contact_name || '', b.primary_contact_phone || '',
+      generateOrgRef(), b.company_name, b.abn || '', b.primary_contact_name || '', b.primary_contact_phone || '',
       b.primary_contact_email || '', b.address || '', b.billing_address || '',
       b.payment_terms || '', b.notes || '', companyType,
       b.trade_specialty || '', b.insurance_expiry || null,
       b.insurance_policy || '', b.product_categories || '', b.account_number || '',
       b.website || '', b.approved ? 1 : (companyType === 'client' ? 1 : 0), parseInt(b.rating) || 0,
       b.account_owner_id || null, b.bdm_owner_id || null, b.lead_source || '',
-      parseFloat(b.estimated_annual_value) || 0, b.service_interests || '',
+      parseFloat(b.estimated_annual_value) || 0, serviceInterests,
       b.target_regions || '', b.priority || 'normal', b.prequal_status || 'none',
       b.vendor_status || 'none', b.contract_status || '', b.industry_segment || '',
       b.next_action_date || null, b.next_action_note || '',
       b.phone || '', b.email_general || '', b.suburb || '', b.state || '', b.postcode || '',
-      b.client_category || '', b.onboarding_stage || '', b.tender_panel_status || ''
+      b.client_category || '', b.onboarding_stage || '', b.tender_panel_status || '',
+      b.repeat_client_status || 'prospect', b.key_account_tier || '',
+      b.referred_by_client_id || null, b.referred_by_contact_id || null,
+      b.xero_contact_id || '', b.sharepoint_url || ''
     );
 
     const typeLabel = companyType.charAt(0).toUpperCase() + companyType.slice(1);
@@ -441,12 +457,14 @@ router.get('/:id/edit', (req, res) => {
     return req.session.save(() => res.redirect('/clients'));
   }
   const users = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
+  const companies = db.prepare('SELECT id, company_name FROM clients WHERE active = 1 ORDER BY company_name').all();
   res.render('clients/form', {
     title: 'Edit ' + client.company_name,
     currentPage: 'clients',
     company: client,
     preselectedType: client.company_type || 'client',
     users,
+    companies,
   });
 });
 
@@ -456,6 +474,7 @@ router.post('/:id', (req, res) => {
   const b = req.body;
   const companyType = b.company_type || 'client';
   try {
+    const serviceInterests = Array.isArray(b.service_interests) ? b.service_interests.join(',') : (b.service_interests || '');
     db.prepare(`
       UPDATE clients SET company_name=?, abn=?, primary_contact_name=?, primary_contact_phone=?,
         primary_contact_email=?, address=?, billing_address=?, payment_terms=?, notes=?,
@@ -466,6 +485,9 @@ router.post('/:id', (req, res) => {
         contract_status=?, industry_segment=?, next_action_date=?, next_action_note=?,
         phone=?, email_general=?, suburb=?, state=?, postcode=?,
         client_category=?, onboarding_stage=?, tender_panel_status=?,
+        repeat_client_status=?, key_account_tier=?, referred_by_client_id=?, referred_by_contact_id=?,
+        first_engagement_date=?, xero_contact_id=?, xero_lifetime_invoiced=?, xero_lifetime_paid=?,
+        sharepoint_url=?,
         updated_at=CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(
@@ -476,12 +498,17 @@ router.post('/:id', (req, res) => {
       b.insurance_policy || '', b.product_categories || '', b.account_number || '',
       b.website || '', b.approved ? 1 : (companyType === 'client' ? 1 : 0), parseInt(b.rating) || 0,
       b.account_owner_id || null, b.bdm_owner_id || null, b.lead_source || '',
-      parseFloat(b.estimated_annual_value) || 0, b.service_interests || '',
+      parseFloat(b.estimated_annual_value) || 0, serviceInterests,
       b.target_regions || '', b.priority || 'normal', b.prequal_status || 'none',
       b.vendor_status || 'none', b.contract_status || '', b.industry_segment || '',
       b.next_action_date || null, b.next_action_note || '',
       b.phone || '', b.email_general || '', b.suburb || '', b.state || '', b.postcode || '',
       b.client_category || '', b.onboarding_stage || '', b.tender_panel_status || '',
+      b.repeat_client_status || 'prospect', b.key_account_tier || '',
+      b.referred_by_client_id || null, b.referred_by_contact_id || null,
+      b.first_engagement_date || null, b.xero_contact_id || '',
+      parseFloat(b.xero_lifetime_invoiced) || 0, parseFloat(b.xero_lifetime_paid) || 0,
+      b.sharepoint_url || '',
       req.params.id
     );
 

@@ -18,27 +18,25 @@
     return dt.toLocaleDateString('en-AU', { timeZone: 'Australia/Sydney', day: '2-digit', month: 'short', year: 'numeric' });
   }
 
+  // Lifecycle badge (repeat_client_status, mig 349) — replaces the old
+  // company_type badge, which conflated the directory axis with the CRM one.
   const typeColors = {
-    lead: 'bg-sky-50 text-sky-700 ring-1 ring-sky-600/20',
-    prospect: 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600/20',
-    client: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
-    active_client: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-600/20',
-    inactive_client: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
-    partner: 'bg-purple-50 text-purple-700 ring-1 ring-purple-600/20',
-    contractor: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
-    subcontractor: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
-    supplier: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20'
+    prospect: 'bg-sky-50 text-sky-700 ring-1 ring-sky-600/20',
+    new_client: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+    active_first_time: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+    repeat: 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-600/20',
+    key_account: 'bg-purple-50 text-purple-700 ring-1 ring-purple-600/20',
+    dormant: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    inactive: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20'
   };
   const typeLabels = {
-    lead: 'Lead',
     prospect: 'Prospect',
-    client: 'Client',
-    active_client: 'Active Client',
-    inactive_client: 'Inactive',
-    partner: 'Partner',
-    contractor: 'Contractor',
-    subcontractor: 'Subcontractor',
-    supplier: 'Supplier'
+    new_client: 'New Client',
+    active_first_time: 'Active First-Time',
+    repeat: 'Repeat Client',
+    key_account: 'Key Account',
+    dormant: 'Dormant',
+    inactive: 'Inactive'
   };
   const priorityColors = {
     low: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
@@ -64,11 +62,11 @@
     <p class="stat-card-value"><%= stats.total || 0 %></p>
   </div>
   <div class="stat-card">
-    <p class="stat-card-label">Leads</p>
+    <p class="stat-card-label">Prospects</p>
     <p class="stat-card-value <%= (stats.leads || 0) > 0 ? 'is-info' : 'is-muted' %>"><%= stats.leads || 0 %></p>
   </div>
   <div class="stat-card">
-    <p class="stat-card-label">Prospects</p>
+    <p class="stat-card-label">New Clients</p>
     <p class="stat-card-value <%= (stats.prospects || 0) > 0 ? 'is-info' : 'is-muted' %>"><%= stats.prospects || 0 %></p>
   </div>
   <div class="stat-card">
@@ -101,18 +99,12 @@
         </select>
       </div>
       <div class="flex-1 sm:flex-none sm:min-w-[130px]">
-        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Type</label>
-        <select name="type" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
-          <option value="">All Types</option>
-          <option value="lead" <%= filters.type === 'lead' ? 'selected' : '' %>>Lead</option>
-          <option value="prospect" <%= filters.type === 'prospect' ? 'selected' : '' %>>Prospect</option>
-          <option value="client" <%= filters.type === 'client' ? 'selected' : '' %>>Client</option>
-          <option value="active_client" <%= filters.type === 'active_client' ? 'selected' : '' %>>Active Client</option>
-          <option value="inactive_client" <%= filters.type === 'inactive_client' ? 'selected' : '' %>>Inactive</option>
-          <option value="partner" <%= filters.type === 'partner' ? 'selected' : '' %>>Partner</option>
-          <option value="contractor" <%= filters.type === 'contractor' ? 'selected' : '' %>>Contractor</option>
-          <option value="subcontractor" <%= filters.type === 'subcontractor' ? 'selected' : '' %>>Subcontractor</option>
-          <option value="supplier" <%= filters.type === 'supplier' ? 'selected' : '' %>>Supplier</option>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Lifecycle</label>
+        <select name="repeat_status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">All Lifecycles</option>
+          <% (settingsOptions.repeat_client_status || []).forEach(opt => { %>
+            <option value="<%= opt.key %>" <%= filters.repeat_status === opt.key ? 'selected' : '' %>><%= opt.label || opt.key %></option>
+          <% }) %>
         </select>
       </div>
     </div>
@@ -183,11 +175,11 @@
       <tr class="hover:bg-gray-50">
         <td class="px-3 py-2.5">
           <a href="/clients/<%= acct.id %>" class="text-brand-600 hover:text-brand-700 font-semibold text-sm hover:underline"><%= acct.company_name || '-' %></a>
-          <p class="text-gray-400 text-xs truncate max-w-[180px] sm:hidden"><%= typeLabels[acct.company_type] || acct.company_type || '-' %></p>
+          <p class="text-gray-400 text-[10px] font-mono truncate max-w-[180px]"><%= acct.org_ref || '' %></p>
         </td>
         <td class="px-3 py-2.5">
-          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= typeColors[acct.company_type] || 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20' %>">
-            <%= typeLabels[acct.company_type] || (acct.company_type || '-').replace(/_/g, ' ') %>
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= typeColors[acct.repeat_client_status] || 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20' %>">
+            <%= typeLabels[acct.repeat_client_status] || (acct.repeat_client_status || 'prospect').replace(/_/g, ' ') %><%= acct.key_account_tier ? ' · ' + acct.key_account_tier : '' %>
           </span>
         </td>
         <td class="px-3 py-2.5 text-gray-600 text-xs hidden md:table-cell truncate max-w-[120px]"><%= acct.owner_name || '-' %></td>

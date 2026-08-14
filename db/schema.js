@@ -15649,6 +15649,39 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 348 error:', e.message); }
   }
 
+  // Migration 349: organisations & contacts — Sightline brief §3.1 minimum
+  // fields. repeat_client_status is the CRM lifecycle axis (prospect →
+  // new_client → active_first_time → repeat → key_account → dormant →
+  // inactive; vocabulary seeded by migration 348) and REPLACES the misuse
+  // of company_type for lead/prospect states — company_type stays the
+  // directory axis (client/subcontractor/supplier). Xero fields are
+  // manual-entry in Phase 1 (no API); sharepoint_url mirrors the long-
+  // standing jobs.sharepoint_url convention at the organisation level.
+  if (!isMigrationApplied.get(349)) {
+    try {
+      const cCols = db.prepare('PRAGMA table_info(clients)').all().map(c => c.name);
+      const addC = (col, ddl) => { if (!cCols.includes(col)) db.exec(`ALTER TABLE clients ADD COLUMN ${ddl}`); };
+      addC('repeat_client_status', "repeat_client_status TEXT DEFAULT 'prospect'");
+      addC('key_account_tier', "key_account_tier TEXT DEFAULT ''");
+      addC('referred_by_client_id', 'referred_by_client_id INTEGER REFERENCES clients(id)');
+      addC('referred_by_contact_id', 'referred_by_contact_id INTEGER REFERENCES client_contacts(id)');
+      addC('first_engagement_date', 'first_engagement_date DATE');
+      addC('xero_contact_id', "xero_contact_id TEXT DEFAULT ''");
+      addC('xero_lifetime_invoiced', 'xero_lifetime_invoiced REAL DEFAULT 0');
+      addC('xero_lifetime_paid', 'xero_lifetime_paid REAL DEFAULT 0');
+      addC('sharepoint_url', "sharepoint_url TEXT DEFAULT ''");
+
+      const ccCols = db.prepare('PRAGMA table_info(client_contacts)').all().map(c => c.name);
+      if (!ccCols.includes('contact_status')) db.exec("ALTER TABLE client_contacts ADD COLUMN contact_status TEXT DEFAULT 'active'");
+      if (!ccCols.includes('service_interests')) db.exec("ALTER TABLE client_contacts ADD COLUMN service_interests TEXT DEFAULT ''");
+
+      db.exec('CREATE INDEX IF NOT EXISTS idx_clients_repeat_status ON clients(repeat_client_status)');
+
+      recordMigration.run(349, 'Sightline organisations & contacts: repeat-client status, key-account tier, referral link, Xero/SharePoint fields');
+      console.log('Migration 349 applied: organisation/contact brief fields');
+    } catch (e) { console.error('Migration 349 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

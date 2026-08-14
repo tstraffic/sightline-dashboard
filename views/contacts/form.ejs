@@ -185,6 +185,32 @@
           class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500">
       </div>
       <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Contact Status</label>
+        <select name="contact_status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% (settingsOptions.contact_statuses || [{key:'active',label:'Active'}]).forEach(opt => { %>
+            <option value="<%= opt.key %>" <%= (isEdit ? (contact.contact_status || 'active') : 'active') === opt.key ? 'selected' : '' %>><%= opt.label || opt.key %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-gray-600 mb-1">Service Interests</label>
+        <div class="flex flex-wrap gap-2 mt-1">
+          <%
+            const contactStreams = (settingsOptions.service_streams || []);
+            const contactSelectedStreams = isEdit && contact.service_interests ? contact.service_interests.split(',') : [];
+          %>
+          <% contactStreams.forEach(svc => { %>
+            <label class="cursor-pointer">
+              <input type="checkbox" name="service_interests" value="<%= svc.key %>"
+                <%= contactSelectedStreams.includes(svc.key) ? 'checked' : '' %> class="peer sr-only">
+              <span class="peer-checked:bg-brand-100 peer-checked:text-brand-800 peer-checked:ring-1 peer-checked:ring-brand-500 inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 transition-all hover:bg-gray-200">
+                <%= svc.key %>
+              </span>
+            </label>
+          <% }) %>
+        </div>
+      </div>
+      <div>
         <label class="block text-sm font-medium text-gray-600 mb-1">Contact Owner</label>
         <select name="contact_owner_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
           <option value="">Unassigned</option>

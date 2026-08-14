@@ -114,14 +114,17 @@ router.get('/', (req, res, next) => {
     const dashboardUsers = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
 
     // --- Account Health ---
+    // Lifecycle counts read repeat_client_status (mig 349) — the old
+    // company_type IN ('lead','prospect') filters matched values the client
+    // form never offered, so these counters were structurally always 0.
     const activeClients = db.prepare(`
       SELECT COUNT(*) as count FROM clients
-      WHERE active = 1 AND company_type IN ('client', 'active_client')
+      WHERE active = 1 AND repeat_client_status IN ('active_first_time', 'repeat', 'key_account')
     `).get();
 
     const prospects = db.prepare(`
       SELECT COUNT(*) as count FROM clients
-      WHERE company_type IN ('lead', 'prospect')
+      WHERE repeat_client_status IN ('prospect', 'new_client')
     `).get();
 
     const sixtyDaysAgo = new Date(todayDate);
@@ -182,7 +185,7 @@ router.get('/', (req, res, next) => {
     // --- Conversion Tracking ---
     const leadsCreatedThisMonth = db.prepare(`
       SELECT COUNT(*) as count FROM clients
-      WHERE created_at >= ? AND company_type IN ('lead', 'prospect')
+      WHERE created_at >= ? AND repeat_client_status IN ('prospect', 'new_client')
     `).get(monthStart);
 
     const oppsCreatedThisMonth = db.prepare(`
