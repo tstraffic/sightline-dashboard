@@ -1,13 +1,13 @@
 <% locals.currentPage = 'projects' %>
 
 <%- include('../partials/page-header', { rail: true,
-  eyebrow: 'Planning',
-  title: 'Jobs',
-  subtitle: 'Job register',
+  eyebrow: 'Delivery',
+  title: 'Projects',
+  subtitle: 'Master Project Register — every active and completed Sightline project (brief §5.1)',
   // /jobs/new is the create form the FAB, the header quick-create menu and
   // this page's empty state all use — keep this button on the same one so
-  // "New Job" never opens two different forms depending on where you click.
-  actions: [{ label: '+ New Job', href: '/jobs/new', style: 'primary' }]
+  // "New Project" never opens two different forms depending on where you click.
+  actions: [{ label: '+ New Project', href: '/jobs/new', style: 'primary' }]
 }) %>
 
 <!-- Project Register -->
@@ -35,12 +35,42 @@
         </select>
       </div>
       <!-- Suburb -->
-      <div class="min-w-[160px]">
+      <div class="min-w-[140px]">
         <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Suburb</label>
         <select name="suburb" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
           <option value="">All Suburbs</option>
           <% suburbs.forEach(s => { %>
             <option value="<%= s %>" <%= filters.suburb === s ? 'selected' : '' %>><%= s %></option>
+          <% }) %>
+        </select>
+      </div>
+      <!-- Service stream -->
+      <div class="min-w-[110px]">
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Stream</label>
+        <select name="stream" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">All</option>
+          <% (settingsOptions.service_streams || []).forEach(s => { %>
+            <option value="<%= s.key %>" <%= filters.stream === s.key ? 'selected' : '' %>><%= s.key %></option>
+          <% }) %>
+        </select>
+      </div>
+      <!-- Owner -->
+      <div class="min-w-[150px]">
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Owner</label>
+        <select name="owner" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">Anyone</option>
+          <% (typeof users !== 'undefined' ? users : []).forEach(u => { %>
+            <option value="<%= u.id %>" <%= filters.owner == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <!-- Risk -->
+      <div class="min-w-[110px]">
+        <label class="block text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">Risk</label>
+        <select name="risk" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent">
+          <option value="">All</option>
+          <% ['green','amber','red'].forEach(r => { %>
+            <option value="<%= r %>" <%= filters.risk === r ? 'selected' : '' %>><%= r.charAt(0).toUpperCase() + r.slice(1) %></option>
           <% }) %>
         </select>
       </div>
@@ -62,9 +92,9 @@
       <div class="w-10 h-10 bg-brand-50 rounded-full flex items-center justify-center mx-auto mb-4">
         <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
       </div>
-      <h3 class="text-gray-900 font-semibold text-base mb-1">No jobs yet</h3>
-      <p class="text-gray-500 text-sm mb-1">Jobs track your traffic management work from tender through to closeout.</p>
-      <p class="text-gray-400 text-xs mb-4">Create your first job to start tracking crew allocations and compliance.</p>
+      <h3 class="text-gray-900 font-semibold text-base mb-1">No projects yet</h3>
+      <p class="text-gray-500 text-sm mb-1">Projects usually arrive by converting a won opportunity — the full CRM history comes across with them.</p>
+      <p class="text-gray-400 text-xs mb-4">You can also create one directly for migrated or ad-hoc work.</p>
       <a href="/jobs/new" class="inline-flex items-center gap-1.5 px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
         Create First Job
@@ -107,16 +137,16 @@
           <table class="w-full text-sm">
             <thead>
               <tr class="border-b border-gray-100 bg-gray-50/50">
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Job Number</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Suburb</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Project</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden sm:table-cell">Streams</th>
                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide">Status</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Stage</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden sm:table-cell">Health</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden sm:table-cell">Risk</th>
                 <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell">% Complete</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Start Date</th>
-                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell">PM</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden md:table-cell">Start</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden xl:table-cell">Client Deadline</th>
+                <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wide hidden lg:table-cell">Director</th>
                 <% if (typeof canViewAccounts !== 'undefined' && canViewAccounts) { %>
-                <th class="px-3 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wide hidden xl:table-cell">Budget</th>
+                <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wide hidden xl:table-cell">Fee / Invoiced</th>
                 <% } %>
               </tr>
             </thead>
@@ -145,6 +175,12 @@
                   <% if (job.project_name) { %>
                     <p class="text-xs text-gray-500 mt-0.5 truncate max-w-[260px]" title="<%= job.project_name %>"><%= job.project_name %></p>
                   <% } %>
+                  <% if (job.opportunity_number || job.proposal_ref) { %>
+                    <p class="text-[10px] font-mono text-gray-400 mt-0.5">
+                      <% if (job.opportunity_number) { %><a href="/opportunities/<%= job.opportunity_id %>" class="hover:text-brand-600"><%= job.opportunity_number %></a><% } %>
+                      <% if (job.proposal_ref) { %> · <a href="/proposals/<%= job.proposal_id %>" class="hover:text-brand-600"><%= job.proposal_ref %></a><% } %>
+                    </p>
+                  <% } %>
                   <% if (job.pending_tasks > 0 || job.pending_plans > 0 || job.overdue_tasks > 0 || job.overdue_compliance > 0) { %>
                     <div class="flex flex-wrap gap-1 mt-0.5">
                       <% if (job.overdue_tasks > 0) { %>
@@ -161,7 +197,16 @@
                     </div>
                   <% } %>
                 </td>
-                <td class="px-3 py-2 text-gray-600"><%= job.suburb || '-' %></td>
+                <td class="px-3 py-2 hidden sm:table-cell">
+                  <% if (job.service_streams) { %>
+                    <div class="flex flex-wrap gap-1">
+                      <% job.service_streams.split(',').filter(Boolean).forEach(s => { %>
+                        <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-mono font-bold bg-brand-50 text-brand-700 ring-1 ring-brand-600/20"><%= s %></span>
+                      <% }) %>
+                    </div>
+                    <% if (job.package_count) { %><p class="text-[10px] text-gray-400 mt-0.5"><%= job.package_count %> package<%= job.package_count !== 1 ? 's' : '' %></p><% } %>
+                  <% } else { %><span class="text-gray-300">—</span><% } %>
+                </td>
                 <td class="px-3 py-2">
                   <% if (isClosed) { %>
                     <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-widest bg-gray-800 text-white">
@@ -181,7 +226,6 @@
                     </span>
                   <% } %>
                 </td>
-                <td class="px-3 py-2 <%= isClosed ? 'text-gray-400' : 'text-gray-600' %> hidden md:table-cell"><%= job.stage || '-' %></td>
                 <td class="px-3 py-2 hidden sm:table-cell">
                   <% if (isClosed) { %>
                     <span class="text-xs text-gray-400">—</span>
@@ -211,18 +255,18 @@
                   </div>
                 </td>
                 <td class="px-3 py-2 text-gray-500 text-xs hidden md:table-cell"><%= job.start_date ? new Date(job.start_date).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : '-' %></td>
+                <td class="px-3 py-2 text-xs hidden xl:table-cell <%= !isClosed && job.client_deadline && job.client_deadline < new Date().toISOString().slice(0,10) ? 'text-red-600 font-semibold' : 'text-gray-500' %>">
+                  <%= job.client_deadline ? new Date(job.client_deadline).toLocaleDateString('en-AU', { day: '2-digit', month: 'short', year: 'numeric' }) : '-' %>
+                </td>
                 <td class="px-3 py-2 text-gray-600 hidden lg:table-cell"><%= job.pm_name || '-' %></td>
                 <% if (typeof canViewAccounts !== 'undefined' && canViewAccounts) { %>
-                <td class="px-3 py-2 text-center hidden xl:table-cell">
-                  <% if (!job.budget_contract) { %>
+                <td class="px-3 py-2 text-right hidden xl:table-cell">
+                  <% const totalContract = (job.contract_value || job.budget_contract || 0) + (job.variations_approved || 0); %>
+                  <% if (!totalContract) { %>
                     <span class="text-gray-400">—</span>
-                  <% } else {
-                    const budgetMargin = (job.budget_contract - (job.budget_spent || 0)) / job.budget_contract * 100;
-                  %>
-                    <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium <% if (budgetMargin > 20) { %>text-emerald-700 bg-emerald-50<% } else if (budgetMargin >= 0) { %>text-orange-700 bg-orange-50<% } else { %>text-red-700 bg-red-50<% } %>" title="Margin: <%= budgetMargin.toFixed(1) %>%">
-                      <span class="inline-block w-1.5 h-1.5 rounded-full <% if (budgetMargin > 20) { %>bg-emerald-500<% } else if (budgetMargin >= 0) { %>bg-orange-500<% } else { %>bg-red-500<% } %>"></span>
-                      <%= budgetMargin > 20 ? 'On track' : budgetMargin >= 0 ? 'Tight' : 'Over' %>
-                    </span>
+                  <% } else { %>
+                    <p class="text-xs font-medium text-gray-900 tabular-nums">$<%= totalContract.toLocaleString('en-AU') %></p>
+                    <p class="text-[10px] text-gray-400 tabular-nums">inv $<%= (job.invoiced_to_date || 0).toLocaleString('en-AU') %><%= job.invoice_status ? ' · ' + job.invoice_status.replace(/_/g,' ') : '' %></p>
                   <% } %>
                 </td>
                 <% } %>

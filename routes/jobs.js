@@ -569,6 +569,23 @@ router.get('/:id', (req, res) => {
     console.error('[Jobs] safety rollup failed for job', job.id, ':', e.message);
   }
 
+  // Sightline: service packages + CRM back-links for this project.
+  let servicePackages = [];
+  let crmLinks = null;
+  try {
+    servicePackages = db.prepare(`
+      SELECT sp.*, u.full_name AS owner_name FROM service_packages sp
+      LEFT JOIN users u ON sp.owner_id = u.id
+      WHERE sp.job_id = ? ORDER BY sp.package_ref
+    `).all(job.id);
+    crmLinks = {
+      opportunity: job.opportunity_id ? db.prepare('SELECT id, opportunity_number, title FROM opportunities WHERE id = ?').get(job.opportunity_id) : null,
+      proposal: job.proposal_id ? db.prepare('SELECT id, proposal_ref, fee, acceptance_reference FROM proposals WHERE id = ?').get(job.proposal_id) : null,
+    };
+  } catch (e) {
+    console.error('[Jobs] service packages/CRM links failed for job', job.id, ':', e.message);
+  }
+
   res.render('jobs/show', {
     title: job.job_number,
     job, tasks, complianceItems, subPlansByParent, deliveryDocs, accountsDocs,
@@ -578,6 +595,7 @@ router.get('/:id', (req, res) => {
     complianceTgsItems, allUsers, diaryAttachments, chatMembers,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
     swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
+    servicePackages, crmLinks,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });
@@ -666,6 +684,8 @@ router.post('/:id', (req, res) => {
         mintedCount = minted.length;
       }
     }
+
+    require('../lib/sightlineJobFields').applySightlineJobFields(db, req.params.id, b);
 
     if (mintedCount > 0) req.flash('success', `Job updated · added ${mintedCount} new monthly job(s).`);
     else req.flash('success', 'Job updated successfully.');

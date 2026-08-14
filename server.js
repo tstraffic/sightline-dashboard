@@ -451,6 +451,7 @@ app.use('/crm', requireLogin, requirePermission('crm'), require('./routes/crm'))
 app.use('/opportunities', requireLogin, requirePermission('crm'), require('./routes/opportunities'));
 app.use('/referrals', requireLogin, requirePermission('crm'), require('./routes/referrals'));
 app.use('/proposals', requireLogin, requirePermission('crm'), require('./routes/proposals'));
+app.use('/service-packages', requireLogin, requirePermission('projects'), require('./routes/service-packages'));
 app.use('/chat', requireLogin, require('./routes/chat'));
 app.use('/notifications', requireLogin, requirePermission('notifications'), require('./routes/notifications'));
 app.use('/admin/integrations', requireLogin, requirePermission('admin'), require('./routes/integrations'));

@@ -15806,6 +15806,71 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 352 error:', e.message); }
   }
 
+  // Migration 353: Master Project Register fields (brief §5.1) +
+  // service_packages (§5.2). Projects reuse the jobs table — everything
+  // platform-shaped (chat, tasks, budgets, documents, delete guards) hangs
+  // off jobs.id. Owner mapping: Project Director = the existing
+  // project_manager_id (notification/health logic reads it); commercial/
+  // technical/checker are new columns — the T&S owner columns
+  // (accounts/planning/ops) stay untouched for the hidden modules.
+  // Xero money numerics live on job_budgets (outstanding/remaining are
+  // DERIVED, never stored); workflow fields (PO/invoice status) live on
+  // jobs. service_streams is denormalised (comma keys, division_tags
+  // convention) — the service_packages table is the operational truth.
+  if (!isMigrationApplied.get(353)) {
+    try {
+      const jCols = db.prepare('PRAGMA table_info(jobs)').all().map(c => c.name);
+      const addJ = (col, ddl) => { if (!jCols.includes(col)) db.exec(`ALTER TABLE jobs ADD COLUMN ${ddl}`); };
+      addJ('end_client', "end_client TEXT DEFAULT ''");
+      addJ('lga', "lga TEXT DEFAULT ''");
+      addJ('project_type', "project_type TEXT DEFAULT ''");
+      addJ('service_streams', "service_streams TEXT DEFAULT ''");
+      addJ('commercial_lead_id', 'commercial_lead_id INTEGER REFERENCES users(id)');
+      addJ('technical_lead_id', 'technical_lead_id INTEGER REFERENCES users(id)');
+      addJ('checker_id', 'checker_id INTEGER REFERENCES users(id)');
+      addJ('internal_qa_date', 'internal_qa_date DATE');
+      addJ('client_deadline', 'client_deadline DATE');
+      addJ('actual_hours', 'actual_hours REAL DEFAULT 0');
+      addJ('po_reference', "po_reference TEXT DEFAULT ''");
+      addJ('po_status', "po_status TEXT DEFAULT ''");
+      addJ('invoice_status', "invoice_status TEXT DEFAULT ''");
+      addJ('xero_reference', "xero_reference TEXT DEFAULT ''");
+      addJ('current_action', "current_action TEXT DEFAULT ''");
+      addJ('blocker', "blocker TEXT DEFAULT ''");
+      addJ('next_action_date', 'next_action_date DATE');
+      addJ('opportunity_id', 'opportunity_id INTEGER REFERENCES opportunities(id)');
+      addJ('proposal_id', 'proposal_id INTEGER REFERENCES proposals(id)');
+
+      const bCols = db.prepare('PRAGMA table_info(job_budgets)').all().map(c => c.name);
+      if (!bCols.includes('invoiced_to_date')) db.exec('ALTER TABLE job_budgets ADD COLUMN invoiced_to_date REAL DEFAULT 0');
+      if (!bCols.includes('paid_to_date')) db.exec('ALTER TABLE job_budgets ADD COLUMN paid_to_date REAL DEFAULT 0');
+
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS service_packages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          package_ref TEXT UNIQUE NOT NULL,
+          job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+          service_stream TEXT NOT NULL,
+          scope TEXT DEFAULT '',
+          owner_id INTEGER REFERENCES users(id),
+          fee_allocation REAL DEFAULT 0,
+          budget_hours REAL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'not_started',
+          internal_due_date DATE,
+          client_due_date DATE,
+          dependencies TEXT DEFAULT '',
+          proposal_package_id INTEGER REFERENCES proposal_service_packages(id),
+          completion_date DATE,
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_service_packages_job ON service_packages(job_id);
+      `);
+      recordMigration.run(353, 'Sightline project register fields + job_budgets Xero numerics + service_packages');
+      console.log('Migration 353 applied: project register + service packages');
+    } catch (e) { console.error('Migration 353 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

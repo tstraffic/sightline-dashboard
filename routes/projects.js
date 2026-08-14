@@ -12,7 +12,11 @@ const { MONTH_NAMES, monthlyJobName, combinedMonthsJobName, firstOfMonth, parseS
 router.get('/', (req, res) => {
   const db = getDb();
   const { status, search, suburb } = req.query;
-  let query = `SELECT j.*, u.full_name as pm_name, bm.budget_contract, bm.total_spent as budget_spent,
+  let query = `SELECT j.*, u.full_name as pm_name, tl.full_name as tech_lead_name,
+    bm.budget_contract, bm.total_spent as budget_spent,
+    bm.invoiced_to_date, bm.paid_to_date, bm.variations_approved,
+    o.opportunity_number, p.proposal_ref,
+    (SELECT COUNT(*) FROM service_packages sp WHERE sp.job_id = j.id) as package_count,
     (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status != 'complete' AND t.deleted_at IS NULL) as pending_tasks,
     (SELECT COUNT(*) FROM tasks t WHERE t.job_id = j.id AND t.status != 'complete' AND t.deleted_at IS NULL AND t.due_date < date('now')) as overdue_tasks,
     (SELECT COUNT(*) FROM compliance c WHERE c.job_id = j.id AND c.status NOT IN ('approved')) as pending_plans,
@@ -20,9 +24,28 @@ router.get('/', (req, res) => {
     ${HEALTH_CALC_SQL} as calculated_health
     FROM jobs j
     LEFT JOIN users u ON j.project_manager_id = u.id
-    LEFT JOIN (SELECT b.job_id, b.contract_value as budget_contract, COALESCE((SELECT SUM(amount) FROM cost_entries ce WHERE ce.job_id = b.job_id), 0) as total_spent FROM job_budgets b) bm ON j.id = bm.job_id
+    LEFT JOIN users tl ON j.technical_lead_id = tl.id
+    LEFT JOIN opportunities o ON j.opportunity_id = o.id
+    LEFT JOIN proposals p ON j.proposal_id = p.id
+    LEFT JOIN (SELECT b.job_id, b.contract_value as budget_contract, b.invoiced_to_date, b.paid_to_date, b.variations_approved,
+      COALESCE((SELECT SUM(amount) FROM cost_entries ce WHERE ce.job_id = b.job_id), 0) as total_spent FROM job_budgets b) bm ON j.id = bm.job_id
     WHERE (j.parent_project_id IS NULL)`;
   const params = [];
+
+  // Master Project Register filters (brief §5.1)
+  const { stream, owner: ownerFilter, risk } = req.query;
+  if (stream) {
+    query += ` AND (',' || j.service_streams || ',') LIKE ?`;
+    params.push(`%,${stream},%`);
+  }
+  if (ownerFilter) {
+    query += ` AND (j.project_manager_id = ? OR j.commercial_lead_id = ? OR j.technical_lead_id = ?)`;
+    params.push(ownerFilter, ownerFilter, ownerFilter);
+  }
+  if (risk && ['green', 'amber', 'red'].includes(risk)) {
+    query += ` AND ${HEALTH_CALC_SQL} = ?`;
+    params.push(risk);
+  }
 
   if (status && status !== 'all') {
     query += ` AND j.status = ?`;
@@ -66,10 +89,12 @@ router.get('/', (req, res) => {
     return a.name.localeCompare(b.name);
   });
 
+  const users = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
   res.render('projects/index', {
     title: 'Project Register',
-    jobs, suburbs, filters: { status, search, suburb },
+    jobs, suburbs, filters: { status, search, suburb, stream, owner: ownerFilter, risk },
     clientGroups,
+    users,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });
@@ -460,6 +485,24 @@ router.get('/:id', (req, res) => {
 
   const viewMode = req.query.view || '';
 
+  // Sightline: service packages + CRM back-links (mirrors routes/jobs.js —
+  // the two URLs render the same template and must stay interchangeable).
+  let servicePackages = [];
+  let crmLinks = null;
+  try {
+    servicePackages = db.prepare(`
+      SELECT sp.*, u.full_name AS owner_name FROM service_packages sp
+      LEFT JOIN users u ON sp.owner_id = u.id
+      WHERE sp.job_id = ? ORDER BY sp.package_ref
+    `).all(job.id);
+    crmLinks = {
+      opportunity: job.opportunity_id ? db.prepare('SELECT id, opportunity_number, title FROM opportunities WHERE id = ?').get(job.opportunity_id) : null,
+      proposal: job.proposal_id ? db.prepare('SELECT id, proposal_ref, fee, acceptance_reference FROM proposals WHERE id = ?').get(job.proposal_id) : null,
+    };
+  } catch (e) {
+    console.error('[Projects] service packages/CRM links failed for job', job.id, ':', e.message);
+  }
+
   res.render('jobs/show', {
     title: job.job_number,
     job, tasks, complianceItems, subPlansByParent, deliveryDocs, accountsDocs,
@@ -469,6 +512,7 @@ router.get('/:id', (req, res) => {
     complianceTgsItems, allUsers, diaryAttachments, chatMembers, activities,
     finalPlans, finalPlanDocs, finalTrafficPlans, planFlags, planRevisions, viewMode,
     swmsForJob, riskAssessmentsForJob, auditsForJob, safetyRollup,
+    servicePackages, crmLinks,
     user: req.session.user,
     canViewAccounts: canViewAccounts(req.session.user)
   });
@@ -554,6 +598,8 @@ router.post('/:id', (req, res) => {
       }
     }
 
+    require('../lib/sightlineJobFields').applySightlineJobFields(db, req.params.id, b);
+
     if (mintedCount > 0) {
       req.flash('success', `Project updated · added ${mintedCount} new monthly job(s).`);
     } else {
@@ -608,6 +654,9 @@ const DELETE_CHILDREN = [
   'equipment_assignments', 'job_budgets', 'documents', 'job_documents',
   'traffic_plans', 'ctmps', 'compliance', 'site_diary_entries', 'defects',
   'plan_flags', 'corrective_actions',
+  // Sightline: packages are planning records that die with the project
+  // (the FK declares CASCADE, but delete explicitly like the rest).
+  'service_packages',
 ];
 
 router.post('/:id/delete', (req, res) => {

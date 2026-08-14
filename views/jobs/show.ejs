@@ -236,6 +236,7 @@
   // it's the universally-safe landing tab for any role that can reach the page.
   const TAB_PERMS = {
     overview: null,
+    packages: 'projects',
     diary: 'planning_diary',      tasks: 'ops_tasks',
     plans: 'planning_plans',      'final-plans': 'job_final_plans',
     safety: 'job_safety',         timesheets: 'ops_timesheets',
@@ -255,6 +256,11 @@
       focus:text-brand-700 focus:border-brand-500" onclick="activateTab(this)">Overview</a>
     <% } %>
 
+    <% if (showTab('packages')) { %>
+    <a href="#packages" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
+      text-gray-500 hover:text-gray-900 border-transparent hover:border-gray-300
+      focus:text-brand-700 focus:border-brand-500" onclick="activateTab(this)">Packages<% if (typeof servicePackages !== 'undefined' && servicePackages.length) { %> <span class="text-[10px] text-gray-400">(<%= servicePackages.length %>)</span><% } %></a>
+    <% } %>
     <% if (showTab('diary')) { %>
     <a href="#diary" data-tab="diary" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
       text-gray-500 hover:text-gray-900 border-transparent hover:border-gray-300
@@ -324,6 +330,22 @@
   <!-- Overview Tab -->
   <% if (showTab('overview')) { %>
   <div id="overview" class="tab-content">
+    <% if (typeof crmLinks !== 'undefined' && crmLinks && (crmLinks.opportunity || crmLinks.proposal)) { %>
+    <!-- CRM origin — full history is one click away (brief §3.4 continuity rule) -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm px-4 py-3 mb-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+      <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">CRM Origin</span>
+      <% if (crmLinks.opportunity) { %>
+        <a href="/opportunities/<%= crmLinks.opportunity.id %>" class="text-sm text-brand-600 hover:text-brand-700 font-medium">
+          <span class="font-mono text-xs"><%= crmLinks.opportunity.opportunity_number %></span> — <%= crmLinks.opportunity.title %>
+        </a>
+      <% } %>
+      <% if (crmLinks.proposal) { %>
+        <a href="/proposals/<%= crmLinks.proposal.id %>" class="text-sm text-brand-600 hover:text-brand-700 font-medium">
+          <span class="font-mono text-xs"><%= crmLinks.proposal.proposal_ref %></span><%= crmLinks.proposal.acceptance_reference ? ' · ref ' + crmLinks.proposal.acceptance_reference : '' %>
+        </a>
+      <% } %>
+    </div>
+    <% } %>
     <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">Job Summary</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1584,6 +1606,107 @@
 
   <!-- Site Diary Tab -->
   <% if (showTab('diary')) { %>
+  <!-- Service Packages Tab (brief §5.2) -->
+  <% if (showTab('packages')) { %>
+  <div id="packages" class="tab-content">
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-4">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Service Packages</h2>
+        <a href="/service-packages?job_id=<%= job.id %>" class="text-xs font-semibold text-brand-600 hover:text-brand-700">Open in register →</a>
+      </div>
+      <% const pkgs = (typeof servicePackages !== 'undefined' ? servicePackages : []); %>
+      <% if (!pkgs.length) { %>
+        <p class="p-4 text-sm text-gray-400">No service packages yet — add the project's discipline streams below.</p>
+      <% } else { %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-100">
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Package</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Scope</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Owner</th>
+              <th class="px-4 py-2 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fee</th>
+              <th class="px-4 py-2 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Hours</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Internal Due</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Client Due</th>
+              <th class="px-4 py-2 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% pkgs.forEach(pkg => { %>
+            <tr>
+              <td class="px-4 py-2.5"><span class="font-mono text-xs font-bold text-gray-900"><%= pkg.package_ref %></span></td>
+              <td class="px-4 py-2.5 text-gray-700"><%= pkg.scope || '—' %></td>
+              <td class="px-4 py-2.5 text-gray-600 text-xs"><%= pkg.owner_name || 'TBA' %></td>
+              <td class="px-4 py-2.5 text-right tabular-nums text-gray-900">$<%= (pkg.fee_allocation || 0).toLocaleString('en-AU') %></td>
+              <td class="px-4 py-2.5 text-right tabular-nums text-gray-500"><%= pkg.budget_hours || '—' %></td>
+              <td class="px-4 py-2.5 text-xs text-gray-500 tabular-nums"><%= pkg.internal_due_date || '—' %></td>
+              <td class="px-4 py-2.5 text-xs text-gray-500 tabular-nums"><%= pkg.client_due_date || '—' %></td>
+              <td class="px-4 py-2.5 text-center">
+                <form method="POST" action="/service-packages/<%= pkg.id %>" class="inline-flex items-center gap-1">
+                  <%- include('../partials/csrf') %>
+                  <input type="hidden" name="return_to" value="/jobs/<%= job.id %>#packages">
+                  <input type="hidden" name="owner_id" value="<%= pkg.owner_id || '' %>">
+                  <input type="hidden" name="internal_due_date" value="<%= pkg.internal_due_date || '' %>">
+                  <input type="hidden" name="client_due_date" value="<%= pkg.client_due_date || '' %>">
+                  <select name="status" onchange="this.form.submit()" class="px-2 py-1 bg-white border border-gray-200 rounded-lg text-xs text-gray-700 focus:outline-none focus:ring-2 focus:ring-brand-500">
+                    <% ['not_started','in_progress','on_hold','completed'].forEach(s => { %>
+                      <option value="<%= s %>" <%= pkg.status === s ? 'selected' : '' %>><%= s.replace(/_/g, ' ') %></option>
+                    <% }) %>
+                  </select>
+                </form>
+              </td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+
+    <!-- Add a package -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4">
+      <h3 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Add Package</h3>
+      <form method="POST" action="/service-packages" class="flex flex-wrap items-end gap-3">
+        <%- include('../partials/csrf') %>
+        <input type="hidden" name="job_id" value="<%= job.id %>">
+        <input type="hidden" name="return_to" value="/jobs/<%= job.id %>#packages">
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Stream</label>
+          <select name="service_stream" required class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">Select…</option>
+            <% (settingsOptions.service_streams || []).forEach(s => { %>
+              <option value="<%= s.key %>"><%= s.key %></option>
+            <% }) %>
+          </select>
+        </div>
+        <div class="flex-1 min-w-[200px]">
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Scope</label>
+          <input type="text" name="scope" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Fee $</label>
+          <input type="number" name="fee_allocation" min="0" step="50" class="w-28 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Hours</label>
+          <input type="number" name="budget_hours" min="0" step="0.5" class="w-24 px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+        </div>
+        <div>
+          <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Owner</label>
+          <select name="owner_id" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+            <option value="">TBA</option>
+            <% (typeof allUsers !== 'undefined' ? allUsers : []).forEach(u => { %>
+              <option value="<%= u.id %>"><%= u.full_name %></option>
+            <% }) %>
+          </select>
+        </div>
+        <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Add</button>
+      </form>
+    </div>
+  </div>
+  <% } %>
+
   <div id="diary" class="tab-content">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-semibold text-gray-900">Site Diary</h2>

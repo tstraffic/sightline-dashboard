@@ -1,0 +1,265 @@
+<% locals.currentPage = 'pipeline' %>
+<%
+  function money(v) { return '$' + (v || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: opportunity.opportunity_number + ' · ' + (opportunity.client_name || 'No account'),
+  title: 'Convert to Project',
+  subtitle: 'Controlled won-to-project conversion — validates the engagement, confirms the service packages, and preserves the full CRM history.',
+  actions: [{ label: 'Back to Opportunity', href: '/opportunities/' + opportunity.id, style: 'secondary' }]
+}) %>
+
+<!-- Validation checklist -->
+<div class="bg-white border <%= gateErrors.length ? 'border-red-200' : 'border-teal-200' %> rounded-xl shadow-sm p-4 sm:p-5 mb-5">
+  <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-3">Engagement Validation</h2>
+  <%
+    const checks = [
+      { label: 'Opportunity is Won', ok: opportunity.status === 'won' },
+      { label: 'Accepted proposal on file', ok: !!acceptedProposal, detail: acceptedProposal ? acceptedProposal.proposal_ref + (acceptedProposal.acceptance_reference ? ' · ref ' + acceptedProposal.acceptance_reference : '') : 'No accepted proposal' },
+      { label: 'Client organisation linked', ok: !!opportunity.client_id, detail: opportunity.client_name || '' },
+      { label: 'Fee agreed', ok: !!(acceptedProposal && acceptedProposal.fee > 0), detail: acceptedProposal ? money(acceptedProposal.fee) : '' },
+      { label: 'Expected start recorded', ok: !!opportunity.expected_start_date, detail: opportunity.expected_start_date ? formatDate(opportunity.expected_start_date) : 'Set below' },
+      { label: 'Service packages proposed', ok: proposalPackages.length > 0, detail: proposalPackages.length + ' package(s) from the accepted proposal' },
+    ];
+  %>
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+    <% checks.forEach(c => { %>
+    <div class="flex items-start gap-2 p-2 rounded-lg <%= c.ok ? 'bg-teal-50/50' : 'bg-red-50/60' %>">
+      <% if (c.ok) { %>
+        <svg class="w-4 h-4 text-teal-600 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7"/></svg>
+      <% } else { %>
+        <svg class="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+      <% } %>
+      <div class="min-w-0">
+        <p class="text-xs font-semibold <%= c.ok ? 'text-teal-900' : 'text-red-800' %>"><%= c.label %></p>
+        <% if (c.detail) { %><p class="text-[11px] <%= c.ok ? 'text-teal-700/70' : 'text-red-600/80' %> truncate"><%= c.detail %></p><% } %>
+      </div>
+    </div>
+    <% }) %>
+  </div>
+  <% if (gateErrors.length) { %>
+  <p class="text-xs text-red-600 font-medium mt-3">Resolve the failed checks above before converting — the conversion will refuse to run otherwise.</p>
+  <% } %>
+</div>
+
+<form method="POST" action="/opportunities/<%= opportunity.id %>/convert" class="space-y-5">
+  <%- include('../partials/csrf') %>
+
+  <!-- Engagement details -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Engagement</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Project Name</label>
+        <input type="text" name="project_name" value="<%= opportunity.site_name || opportunity.title %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Final Fee ($ ex GST) <span class="text-red-500">*</span></label>
+        <input type="number" name="final_fee" min="1" step="50" required value="<%= acceptedProposal ? acceptedProposal.fee : (opportunity.estimated_value || '') %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Start Date <span class="text-red-500">*</span></label>
+        <input type="date" name="start_date" required value="<%= opportunity.expected_start_date || '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Deadline</label>
+        <input type="date" name="client_deadline"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Primary Contact</label>
+        <select name="primary_contact_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select...</option>
+          <% contacts.forEach(ct => { %>
+            <option value="<%= ct.id %>" <%= opportunity.contact_id == ct.id ? 'selected' : '' %>><%= ct.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">PO / Engagement Ref</label>
+        <input type="text" name="po_reference" value="<%= acceptedProposal ? (acceptedProposal.acceptance_reference || '') : '' %>" placeholder="If provided"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">End Client</label>
+        <input type="text" name="end_client" value="<%= opportunity.end_client || '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Priority</label>
+        <select name="priority" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% ['low','normal','high','critical'].forEach(p => { %>
+            <option value="<%= p %>" <%= p === 'normal' ? 'selected' : '' %>><%= p.charAt(0).toUpperCase() + p.slice(1) %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Site Address</label>
+        <input type="text" name="site_address" value="<%= opportunity.site_address || '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Suburb</label>
+        <input type="text" name="suburb" value=""
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">LGA</label>
+        <input type="text" name="lga" value="<%= opportunity.lga || '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
+  <!-- Delivery owners -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Delivery Owners</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Project Director <span class="text-red-500">*</span></label>
+        <select name="project_manager_id" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select...</option>
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>" <%= opportunity.owner_id == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Commercial Lead</label>
+        <select name="commercial_lead_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Same as director</option>
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>" <%= opportunity.commercial_owner_id == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Technical Lead</label>
+        <select name="technical_lead_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Assign later</option>
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>"><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Checker</label>
+        <select name="checker_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Assign later</option>
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>"><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Service package confirmation (the brief's explicit confirmation step) -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest">Confirm Service Packages</h2>
+      <button type="button" onclick="addConvPkgRow()" class="text-xs font-semibold text-brand-600 hover:text-brand-700">+ Add package</button>
+    </div>
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm" id="conv-pkg-table">
+        <thead>
+          <tr class="border-b border-gray-100">
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Include</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Stream</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Scope</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Owner</th>
+            <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Fee $</th>
+            <th class="px-2 py-2 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest">Hours</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Internal Due</th>
+            <th class="px-2 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Client Due</th>
+          </tr>
+        </thead>
+        <tbody id="conv-pkg-rows" class="divide-y divide-gray-100">
+          <% proposalPackages.forEach((pkg, i) => { %>
+          <tr>
+            <td class="px-2 py-2"><input type="checkbox" name="pkg_include" value="<%= i %>" checked class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"></td>
+            <td class="px-2 py-2">
+              <input type="hidden" name="pkg_proposal_package_id" value="<%= pkg.id %>">
+              <select name="pkg_stream" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <% (settingsOptions.service_streams || []).forEach(s => { %>
+                  <option value="<%= s.key %>" <%= pkg.service_stream === s.key ? 'selected' : '' %>><%= s.key %></option>
+                <% }) %>
+              </select>
+            </td>
+            <td class="px-2 py-2"><input type="text" name="pkg_scope" value="<%= pkg.scope %>" class="w-full min-w-[180px] px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+            <td class="px-2 py-2">
+              <select name="pkg_owner" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+                <option value="">TBA</option>
+                <% users.forEach(u => { %><option value="<%= u.id %>"><%= u.full_name %></option><% }) %>
+              </select>
+            </td>
+            <td class="px-2 py-2"><input type="number" name="pkg_fee" value="<%= pkg.fee_allocation %>" min="0" step="50" class="w-24 px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums text-right focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+            <td class="px-2 py-2"><input type="number" name="pkg_hours" value="<%= pkg.budget_hours %>" min="0" step="0.5" class="w-20 px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums text-right focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+            <td class="px-2 py-2"><input type="date" name="pkg_internal_due" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+            <td class="px-2 py-2"><input type="date" name="pkg_client_due" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+          </tr>
+          <% }) %>
+        </tbody>
+      </table>
+    </div>
+    <p class="text-[10px] text-gray-400 mt-2">Included rows become Service Packages numbered per stream (e.g. ST-260041-DEV-01). Unticked rows are skipped.</p>
+  </div>
+
+  <!-- SharePoint -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">SharePoint Project Folder</h2>
+    <input type="url" name="sharepoint_url" placeholder="https://...sharepoint.com/sites/.../ST-26xxxx" value=""
+      class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    <p class="text-[10px] text-gray-400 mt-2">Create the standard project folder in SharePoint (00 Project Admin … 99 Archive) and paste its URL — automatic provisioning arrives with the Graph integration.</p>
+  </div>
+
+  <div class="flex items-center justify-end gap-3">
+    <a href="/opportunities/<%= opportunity.id %>" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Cancel</a>
+    <button type="submit" <%= gateErrors.length ? 'disabled' : '' %>
+      class="px-6 py-2 text-white text-sm font-medium rounded-lg transition-colors <%= gateErrors.length ? 'bg-gray-300 cursor-not-allowed' : 'bg-brand-600 hover:bg-brand-500' %>">
+      Create Project
+    </button>
+  </div>
+</form>
+
+<template id="conv-pkg-template">
+  <tr>
+    <td class="px-2 py-2"><input type="checkbox" name="pkg_include" checked class="w-4 h-4 rounded border-gray-300 text-brand-600 focus:ring-brand-500"></td>
+    <td class="px-2 py-2">
+      <input type="hidden" name="pkg_proposal_package_id" value="">
+      <select name="pkg_stream" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <% (settingsOptions.service_streams || []).forEach(s => { %>
+          <option value="<%= s.key %>"><%= s.key %></option>
+        <% }) %>
+      </select>
+    </td>
+    <td class="px-2 py-2"><input type="text" name="pkg_scope" class="w-full min-w-[180px] px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+    <td class="px-2 py-2">
+      <select name="pkg_owner" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">TBA</option>
+        <% users.forEach(u => { %><option value="<%= u.id %>"><%= u.full_name %></option><% }) %>
+      </select>
+    </td>
+    <td class="px-2 py-2"><input type="number" name="pkg_fee" min="0" step="50" class="w-24 px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums text-right focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+    <td class="px-2 py-2"><input type="number" name="pkg_hours" min="0" step="0.5" class="w-20 px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums text-right focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+    <td class="px-2 py-2"><input type="date" name="pkg_internal_due" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+    <td class="px-2 py-2"><input type="date" name="pkg_client_due" class="px-2 py-1.5 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"></td>
+  </tr>
+</template>
+
+<script>
+function addConvPkgRow() {
+  var tpl = document.getElementById('conv-pkg-template');
+  var rows = document.getElementById('conv-pkg-rows');
+  rows.appendChild(tpl.content.cloneNode(true));
+  // Re-index include checkboxes so pkg_include values match row positions.
+  rows.querySelectorAll('tr').forEach(function (tr, i) {
+    var cb = tr.querySelector('input[name="pkg_include"]');
+    if (cb) cb.value = i;
+  });
+}
+</script>

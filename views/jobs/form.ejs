@@ -401,6 +401,120 @@
     </div>
   </div>
 
+  <!-- Sightline delivery & commercial (brief §5.1) — applied via
+       lib/sightlineJobFields.js, gated on sightline_fields=1. -->
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Delivery &amp; Commercial</h2>
+    <input type="hidden" name="sightline_fields" value="1">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Service Streams</label>
+        <div class="flex flex-wrap gap-1.5 mt-1">
+          <% const slStreams = (settingsOptions.service_streams || []);
+             const slSelected = isEdit && job.service_streams ? job.service_streams.split(',') : []; %>
+          <% slStreams.forEach(s => { %>
+            <label class="cursor-pointer">
+              <input type="checkbox" name="service_streams" value="<%= s.key %>" <%= slSelected.includes(s.key) ? 'checked' : '' %> class="peer sr-only">
+              <span class="peer-checked:bg-brand-100 peer-checked:text-brand-800 peer-checked:ring-1 peer-checked:ring-brand-500 inline-flex items-center px-2 py-1 rounded text-[10px] font-mono font-bold bg-gray-100 text-gray-600 transition-all hover:bg-gray-200"><%= s.key %></span>
+            </label>
+          <% }) %>
+        </div>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">End Client</label>
+        <input type="text" name="end_client" value="<%= isEdit ? (job.end_client || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">LGA</label>
+        <input type="text" name="lga" value="<%= isEdit ? (job.lga || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Project Type</label>
+        <input type="text" name="project_type" value="<%= isEdit ? (job.project_type || '') : '' %>" placeholder="e.g. DA support, CTMP"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Commercial Lead</label>
+        <select name="commercial_lead_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">—</option>
+          <% users.forEach(u => { %><option value="<%= u.id %>" <%= isEdit && job.commercial_lead_id == u.id ? 'selected' : '' %>><%= u.full_name %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Technical Lead</label>
+        <select name="technical_lead_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">—</option>
+          <% users.forEach(u => { %><option value="<%= u.id %>" <%= isEdit && job.technical_lead_id == u.id ? 'selected' : '' %>><%= u.full_name %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Checker</label>
+        <select name="checker_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">—</option>
+          <% users.forEach(u => { %><option value="<%= u.id %>" <%= isEdit && job.checker_id == u.id ? 'selected' : '' %>><%= u.full_name %></option><% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Internal QA Date</label>
+        <input type="date" name="internal_qa_date" value="<%= isEdit ? (job.internal_qa_date || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Deadline</label>
+        <input type="date" name="client_deadline" value="<%= isEdit ? (job.client_deadline || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Actual Hours</label>
+        <input type="number" name="actual_hours" min="0" step="0.5" value="<%= isEdit ? (job.actual_hours || 0) : 0 %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm tabular-nums focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">PO Reference</label>
+        <input type="text" name="po_reference" value="<%= isEdit ? (job.po_reference || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">PO Status</label>
+        <select name="po_status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% [['',''],['not_required','Not required'],['awaited','Awaited'],['received','Received']].forEach(([v,l]) => { %>
+            <option value="<%= v %>" <%= isEdit && job.po_status === v ? 'selected' : '' %>><%= l || 'Unknown' %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Invoice Status</label>
+        <select name="invoice_status" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% [['','Not started'],['ready_to_invoice','Ready to invoice'],['partially_invoiced','Partially invoiced'],['invoiced','Invoiced'],['paid','Paid']].forEach(([v,l]) => { %>
+            <option value="<%= v %>" <%= isEdit && job.invoice_status === v ? 'selected' : '' %>><%= l %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Xero Reference</label>
+        <input type="text" name="xero_reference" value="<%= isEdit ? (job.xero_reference || '') : '' %>" placeholder="Invoice # / contact"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Next Action Date</label>
+        <input type="date" name="next_action_date" value="<%= isEdit ? (job.next_action_date || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Current Action</label>
+        <input type="text" name="current_action" value="<%= isEdit ? (job.current_action || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Blocker</label>
+        <input type="text" name="blocker" value="<%= isEdit ? (job.blocker || '') : '' %>" placeholder="What's stopping progress?"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
   <style>
     .bk2-month-chip {
       display: inline-flex; align-items: center; justify-content: center;

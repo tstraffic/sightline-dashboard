@@ -1,0 +1,127 @@
+<% locals.currentPage = 'service-packages' %>
+<%
+  function money(v) { return '$' + (v || 0).toLocaleString('en-AU', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  const STATUS_BADGE = {
+    not_started: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
+    in_progress: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+    on_hold: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    completed: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+  };
+  const today = new Date().toISOString().slice(0, 10);
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'Delivery',
+  title: 'Service Packages',
+  subtitle: 'Every discipline stream within every project — fees, hours, owners and due dates (brief §5.2).',
+}) %>
+
+<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-5">
+  <div class="stat-card">
+    <p class="stat-card-label">Packages</p>
+    <p class="stat-card-value <%= stats.total ? 'is-info' : 'is-muted' %>"><%= stats.total || 0 %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">In Progress</p>
+    <p class="stat-card-value <%= stats.in_progress ? 'is-info' : 'is-muted' %>"><%= stats.in_progress || 0 %></p>
+  </div>
+  <div class="stat-card <%= stats.overdue ? 'accent-amber' : '' %>">
+    <p class="stat-card-label">Overdue</p>
+    <p class="stat-card-value <%= stats.overdue ? 'is-critical' : 'is-muted' %>"><%= stats.overdue || 0 %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Completed</p>
+    <p class="stat-card-value <%= stats.completed ? 'is-good' : 'is-muted' %>"><%= stats.completed || 0 %></p>
+  </div>
+  <div class="stat-card">
+    <p class="stat-card-label">Allocated Fees</p>
+    <p class="stat-card-value <%= stats.total_fees ? 'is-info' : 'is-muted' %>"><%= money(stats.total_fees) %></p>
+  </div>
+</div>
+
+<form method="GET" action="/service-packages" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 mb-5">
+  <div class="flex flex-wrap items-end gap-3">
+    <div class="flex-1 min-w-[180px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Search</label>
+      <input type="text" name="search" value="<%= filters.search || '' %>" placeholder="Ref, scope, project..."
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Stream</label>
+      <select name="stream" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% (settingsOptions.service_streams || []).forEach(s => { %>
+          <option value="<%= s.key %>" <%= filters.stream === s.key ? 'selected' : '' %>><%= s.key %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
+      <select name="status" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% statuses.forEach(s => { %>
+          <option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= s.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()) %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Owner</label>
+      <select name="owner" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% users.forEach(u => { %>
+          <option value="<%= u.id %>" <%= filters.owner == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Filter</button>
+  </div>
+</form>
+
+<% if (!packages.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center">
+    <p class="text-gray-500 text-sm mb-1">No service packages yet.</p>
+    <p class="text-gray-400 text-xs">Packages are created when an opportunity converts to a project, or from a project's Packages tab.</p>
+  </div>
+<% } else { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100">
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Package</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Project</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Scope</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Owner</th>
+        <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden sm:table-cell">Fee</th>
+        <th class="px-3 py-2.5 text-right text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Hours</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Internal Due</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      <% packages.forEach(pkg => {
+        const isOverdue = pkg.status !== 'completed' && pkg.internal_due_date && pkg.internal_due_date < today;
+      %>
+      <tr class="hover:bg-gray-50">
+        <td class="px-3 py-2.5">
+          <span class="font-mono text-xs font-bold text-gray-900"><%= pkg.package_ref %></span>
+        </td>
+        <td class="px-3 py-2.5">
+          <a href="/jobs/<%= pkg.job_id %>" class="text-brand-600 hover:text-brand-700 font-medium hover:underline truncate block max-w-[200px]"><%= pkg.project_name || pkg.job_name %></a>
+          <p class="text-gray-400 text-[10px]"><%= pkg.client_name || '' %></p>
+        </td>
+        <td class="px-3 py-2.5 text-gray-600 hidden md:table-cell truncate max-w-[240px]"><%= pkg.scope || '—' %></td>
+        <td class="px-3 py-2.5 text-gray-600 text-xs hidden lg:table-cell"><%= pkg.owner_name || 'TBA' %></td>
+        <td class="px-3 py-2.5 text-right text-gray-900 tabular-nums hidden sm:table-cell"><%= money(pkg.fee_allocation) %></td>
+        <td class="px-3 py-2.5 text-right text-gray-500 tabular-nums hidden lg:table-cell"><%= pkg.budget_hours || '—' %></td>
+        <td class="px-3 py-2.5 text-xs tabular-nums <%= isOverdue ? 'text-red-600 font-semibold' : 'text-gray-500' %>">
+          <%= pkg.internal_due_date ? formatDateShort(pkg.internal_due_date) : '—' %>
+        </td>
+        <td class="px-3 py-2.5 text-center">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[pkg.status] || STATUS_BADGE.not_started %>"><%= pkg.status.replace(/_/g, ' ').toUpperCase() %></span>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>

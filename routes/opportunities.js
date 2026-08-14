@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getDb } = require('../db/database');
 const { logActivity } = require('../middleware/audit');
-const { generateOpportunityRef } = require('../lib/refNumbers');
+const { generateOpportunityRef, generateProjectNumber, generateServicePackageRef } = require('../lib/refNumbers');
 const { defaultProbability, validateStageTransition } = require('../lib/crmStages');
 const { sydneyToday } = require('../lib/sydney');
 
@@ -687,87 +687,231 @@ router.post('/:id/stage', (req, res) => {
   }
 });
 
-// Convert won opportunity to job
-router.post('/:id/convert', (req, res) => {
-  const db = getDb();
+// ============================================================
+// Won-to-project conversion (brief §3.4) — a CONTROLLED two-step flow:
+// GET renders a review page (validation checklist + engagement details +
+// package confirmation); POST re-validates and executes in ONE transaction.
+// Non-negotiable rule: no CRM history is discarded — activities, proposals
+// and referrals keep their opportunity FKs; the project links back via
+// jobs.opportunity_id/proposal_id and opportunities.related_job_id.
+// ============================================================
 
+function conversionContext(db, oppId) {
+  const opportunity = db.prepare(`
+    SELECT o.*, c.company_name AS client_name
+    FROM opportunities o
+    LEFT JOIN clients c ON o.client_id = c.id
+    WHERE o.id = ?
+  `).get(oppId);
+  if (!opportunity) return null;
+  const acceptedProposal = db.prepare(`
+    SELECT * FROM proposals WHERE opportunity_id = ? AND status = 'accepted' ORDER BY revision DESC LIMIT 1
+  `).get(oppId);
+  const proposalPackages = acceptedProposal
+    ? db.prepare('SELECT * FROM proposal_service_packages WHERE proposal_id = ? ORDER BY display_order, id').all(acceptedProposal.id)
+    : [];
+  const contacts = opportunity.client_id
+    ? db.prepare('SELECT id, full_name FROM client_contacts WHERE company_id = ? ORDER BY full_name').all(opportunity.client_id)
+    : [];
+  return { opportunity, acceptedProposal, proposalPackages, contacts };
+}
+
+function validateConversion(opportunity, acceptedProposal, b) {
+  const errors = [];
+  if (opportunity.status !== 'won') errors.push('The opportunity must be Won before conversion (move it to Won on the pipeline first).');
+  if (opportunity.related_job_id) errors.push('This opportunity has already been converted.');
+  if (!acceptedProposal) errors.push('An accepted proposal is required.');
+  if (!opportunity.client_id) errors.push('The opportunity must be linked to a client organisation.');
+  const fee = parseFloat(b && b.final_fee !== undefined ? b.final_fee : (acceptedProposal ? acceptedProposal.fee : opportunity.estimated_value));
+  if (!(fee > 0)) errors.push('A final fee greater than $0 is required.');
+  const start = (b && b.start_date) || opportunity.expected_start_date;
+  if (!start) errors.push('An expected start date is required.');
+  const director = b && b.project_manager_id;
+  if (b && !director) errors.push('A Project Director is required.');
+  return { errors, fee, start };
+}
+
+// Step 1 — review page.
+router.get('/:id/convert', (req, res, next) => {
   try {
-    const opportunity = db.prepare(`
-      SELECT o.*, c.company_name as client_name
-      FROM opportunities o
-      LEFT JOIN clients c ON o.client_id = c.id
-      WHERE o.id = ?
-    `).get(req.params.id);
-
-    if (!opportunity) {
+    const db = getDb();
+    const ctx = conversionContext(db, req.params.id);
+    if (!ctx) {
       req.flash('error', 'Opportunity not found.');
       return req.session.save(() => res.redirect('/opportunities'));
     }
+    if (ctx.opportunity.related_job_id) {
+      req.flash('error', 'This opportunity has already been converted.');
+      return req.session.save(() => res.redirect('/opportunities/' + req.params.id));
+    }
+    const { errors } = validateConversion(ctx.opportunity, ctx.acceptedProposal, null);
+    const users = db.prepare('SELECT id, full_name FROM users WHERE active = 1 ORDER BY full_name').all();
+    res.render('opportunities/convert', {
+      title: 'Convert ' + ctx.opportunity.opportunity_number,
+      currentPage: 'pipeline',
+      opportunity: ctx.opportunity,
+      acceptedProposal: ctx.acceptedProposal,
+      proposalPackages: ctx.proposalPackages,
+      contacts: ctx.contacts,
+      users,
+      gateErrors: errors,
+    });
+  } catch (err) { next(err); }
+});
 
-    // Set status to won if not already
-    if (opportunity.status !== 'won') {
-      db.prepare(`
-        UPDATE opportunities SET status = 'won', stage = 'won', updated_at = CURRENT_TIMESTAMP WHERE id = ?
-      `).run(opportunity.id);
+// Step 2 — execute.
+router.post('/:id/convert', (req, res) => {
+  const db = getDb();
+  const b = req.body;
+  try {
+    const ctx = conversionContext(db, req.params.id);
+    if (!ctx) {
+      req.flash('error', 'Opportunity not found.');
+      return req.session.save(() => res.redirect('/opportunities'));
+    }
+    const { opportunity, acceptedProposal, proposalPackages } = ctx;
+
+    // 1. Re-validate server-side — any failure means ZERO writes.
+    const { errors, fee, start } = validateConversion(opportunity, acceptedProposal, b);
+    const includeIdx = [].concat(b.pkg_include || []).map(Number);
+    const streams = [].concat(b.pkg_stream || []);
+    if (!includeIdx.length || !streams.length) errors.push('At least one service package must be confirmed.');
+    if (errors.length) {
+      req.flash('error', 'Conversion blocked: ' + errors.join(' '));
+      return req.session.save(() => res.redirect('/opportunities/' + req.params.id + '/convert'));
     }
 
-    // Auto-generate J-XXXX job number via shared sequence
-    const jobNumber = generateJobNumber();
+    const scopes = [].concat(b.pkg_scope || []);
+    const fees = [].concat(b.pkg_fee || []);
+    const hours = [].concat(b.pkg_hours || []);
+    const owners = [].concat(b.pkg_owner || []);
+    const internalDues = [].concat(b.pkg_internal_due || []);
+    const clientDues = [].concat(b.pkg_client_due || []);
+    const pkgProposalIds = [].concat(b.pkg_proposal_package_id || []);
 
-    const clientName = opportunity.client_name || '';
-    const today = new Date().toISOString().split('T')[0];
-    const jobName = `${jobNumber} | ${clientName} | ${opportunity.title}`;
+    const userId = req.session.user ? req.session.user.id : null;
+    let newJobId, jobNumber;
 
-    const jobResult = db.prepare(`
-      INSERT INTO jobs (
-        job_number, job_name, client, client_id, site_address, suburb,
-        status, stage, start_date, contract_value
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      jobNumber,
-      jobName,
-      clientName,
-      opportunity.client_id || null,
-      '',
-      '',
-      'won',
-      'prestart',
-      today,
-      opportunity.estimated_value || 0
-    );
+    const convert = db.transaction(() => {
+      // 2. ST-YY#### — collision-proof via ref_sequences.
+      jobNumber = generateProjectNumber();
 
-    const newJobId = jobResult.lastInsertRowid;
+      // 3. Project record — copy the agreed commercial and site facts.
+      const confirmedStreams = includeIdx.map(i => streams[i]).filter(Boolean);
+      const streamsCsv = [...new Set(confirmedStreams)].join(',');
+      const jobName = b.project_name || opportunity.site_name || opportunity.title;
+      const jobResult = db.prepare(`
+        INSERT INTO jobs (
+          job_number, job_name, project_name, client, client_id, end_client,
+          site_address, suburb, lga, status, stage, health, priority,
+          start_date, client_deadline, contract_value, estimated_hours,
+          project_manager_id, commercial_lead_id, technical_lead_id, checker_id,
+          service_streams, notes, sharepoint_url, po_reference, po_status,
+          opportunity_id, proposal_id, created_by_id
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'won', 'prestart', 'green', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        jobNumber, `${jobNumber} — ${jobName}`, jobName,
+        opportunity.client_name || '', opportunity.client_id,
+        b.end_client || opportunity.end_client || '',
+        b.site_address || opportunity.site_address || '', b.suburb || '',
+        b.lga || opportunity.lga || '',
+        b.priority || 'normal',
+        start, b.client_deadline || null,
+        fee,
+        includeIdx.reduce((sum, i) => sum + (parseFloat(hours[i]) || 0), 0) || null,
+        b.project_manager_id,
+        b.commercial_lead_id || null, b.technical_lead_id || null, b.checker_id || null,
+        streamsCsv,
+        opportunity.scope_summary || '',
+        b.sharepoint_url || '', b.po_reference || '', b.po_reference ? 'received' : '',
+        opportunity.id, acceptedProposal.id, userId
+      );
+      newJobId = jobResult.lastInsertRowid;
 
-    // Link opportunity to the new job
-    db.prepare(`
-      UPDATE opportunities SET related_job_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?
-    `).run(newJobId, opportunity.id);
+      // 4. Budget row — always exists for converted projects (register LEFT JOINs it).
+      db.prepare('INSERT INTO job_budgets (job_id, contract_value) VALUES (?, ?)').run(newJobId, fee);
+
+      // 5. Service packages from the confirmed rows.
+      const insPkg = db.prepare(`
+        INSERT INTO service_packages (package_ref, job_id, service_stream, scope, owner_id,
+          fee_allocation, budget_hours, internal_due_date, client_due_date, proposal_package_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      includeIdx.forEach(i => {
+        if (!streams[i]) return;
+        insPkg.run(
+          generateServicePackageRef(jobNumber, streams[i]), newJobId, streams[i],
+          scopes[i] || '', owners[i] || null,
+          parseFloat(fees[i]) || 0, parseFloat(hours[i]) || 0,
+          internalDues[i] || null, clientDues[i] || null,
+          pkgProposalIds[i] || null
+        );
+      });
+
+      // 6. Canonical link back — nothing on the CRM side is deleted or moved.
+      db.prepare('UPDATE opportunities SET related_job_id = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(newJobId, opportunity.id);
+
+      // 7. Client lifecycle transition + first engagement stamp.
+      if (opportunity.client_id) {
+        const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(opportunity.client_id);
+        if (client) {
+          const priorWon = db.prepare('SELECT COUNT(*) AS c FROM jobs WHERE client_id = ? AND id != ?').get(client.id, newJobId).c;
+          const newStatus = priorWon > 0 ? 'repeat'
+            : (['prospect', 'new_client'].includes(client.repeat_client_status) ? 'active_first_time' : client.repeat_client_status);
+          db.prepare(`
+            UPDATE clients SET repeat_client_status = ?,
+              first_engagement_date = COALESCE(first_engagement_date, ?),
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?
+          `).run(newStatus, sydneyToday(), client.id);
+        }
+      }
+
+      // 8. Referral attribution.
+      if (opportunity.referral_id) {
+        db.prepare("UPDATE referrals SET outcome = 'won', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(opportunity.referral_id);
+      }
+
+      // 9. Kickoff controls: a kickoff task for the director + CRM history entry.
+      db.prepare(`
+        INSERT INTO tasks (job_id, division, title, description, owner_id, due_date, status, priority, task_type, created_by)
+        VALUES (?, 'management', ?, ?, ?, ?, 'not_started', 'high', 'one_off', ?)
+      `).run(
+        newJobId, `Project kickoff — ${jobNumber}`,
+        `Confirm client inputs, standards, responsibilities, programme and QA requirements (lifecycle step 6). Converted from ${opportunity.opportunity_number}.`,
+        b.project_manager_id, start, userId
+      );
+      db.prepare(`
+        INSERT INTO crm_activities (activity_type, subject, notes, client_id, contact_id, opportunity_id,
+          owner_id, activity_date, is_completed, created_by_id)
+        VALUES ('follow_up', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 1, ?)
+      `).run(
+        `Converted to project ${jobNumber}`,
+        `Fee $${fee.toLocaleString('en-AU')} · accepted proposal ${acceptedProposal.proposal_ref}`,
+        opportunity.client_id, b.primary_contact_id || opportunity.contact_id || null, opportunity.id,
+        userId, userId
+      );
+    });
+    convert();
 
     logActivity({
-      user: req.session.user,
-      action: 'create',
-      entityType: 'job',
-      entityId: newJobId,
-      entityLabel: jobNumber,
-      details: `Converted from opportunity ${opportunity.opportunity_number}`,
-      ip: req.ip
+      user: req.session.user, action: 'create', entityType: 'job',
+      entityId: newJobId, entityLabel: jobNumber, jobId: newJobId, jobNumber,
+      details: `Converted from opportunity ${opportunity.opportunity_number} (proposal ${acceptedProposal.proposal_ref})`,
+      ip: req.ip,
     });
-
     logActivity({
-      user: req.session.user,
-      action: 'update',
-      entityType: 'opportunity',
-      entityId: parseInt(req.params.id),
-      entityLabel: opportunity.opportunity_number,
-      details: `Converted to job ${jobNumber}`,
-      ip: req.ip
+      user: req.session.user, action: 'update', entityType: 'opportunity',
+      entityId: parseInt(req.params.id), entityLabel: opportunity.opportunity_number,
+      details: `Converted to project ${jobNumber}`, ip: req.ip,
     });
 
-    req.flash('success', `Opportunity converted to job ${jobNumber} successfully.`);
+    req.flash('success', `Project ${jobNumber} created — CRM history preserved and linked.`);
     req.session.save(() => res.redirect('/jobs/' + newJobId));
   } catch (err) {
-    req.flash('error', 'Failed to convert opportunity: ' + err.message);
-    req.session.save(() => res.redirect('/opportunities/' + req.params.id));
+    console.error('Conversion error:', err);
+    req.flash('error', 'Conversion failed (no changes were saved): ' + err.message);
+    req.session.save(() => res.redirect('/opportunities/' + req.params.id + '/convert'));
   }
 });
 
