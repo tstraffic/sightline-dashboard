@@ -9,29 +9,35 @@ const { loginAs } = require('./helpers/setup');
 
 const PAGES = [
   '/dashboard',
-  '/jobs',
-  '/projects',
-  '/tasks',
-  '/compliance',
-  '/plans',
-  '/audits',
-  '/incidents',
-  '/equipment',
-  '/equipment/hire-dockets',
-  '/timesheets',
-  '/contacts',
-  '/crew',
+  // Sightline CRM (brief Phase 1)
   '/clients',
+  '/clients?view=crm',
+  '/contacts',
+  '/opportunities',
+  '/opportunities/pipeline',
+  '/opportunities/new',
+  '/proposals',
+  '/referrals',
+  '/referrals/new',
+  '/crm',
+  '/crm/activities',
+  '/crm/meetings',
+  // Delivery
+  '/projects',
+  '/jobs',
+  '/service-packages',
+  '/budgets',
+  // Shared
+  '/tasks',
   '/profile',
-  // Department hubs — probing all seven executes every registry statsFn
-  // (lib/departments.js) against a fresh schema.
-  '/departments/planning',
-  '/departments/safety',
+  '/settings',
+  // Hidden-but-alive T&S modules stay routable for admins (hide ≠ delete).
+  '/compliance',
+  '/timesheets',
+  '/crew',
+  // The two department hubs whose sidebar sections survive the Sightline trim.
   '/departments/operations',
   '/departments/finance',
-  '/departments/people',
-  '/departments/assets',
-  '/departments/reports',
 ];
 
 test.describe.configure({ mode: 'serial' });
@@ -45,5 +51,16 @@ test('smoke — every admin page renders after login', async ({ page }) => {
     // Just ensure we're not on the login page — specific page titles diverge
     // from URLs (e.g. /crew → "Workforce") and are easy to rename.
     await expect(page, `${url} should not show login title`).not.toHaveTitle(/^Login/i);
+  }
+});
+
+test('smoke — delisted department hubs are gated, not broken', async ({ page }) => {
+  await loginAs(page);
+  // Planning/safety/people/assets sections were delisted for Sightline, so
+  // sectionVisibleByKey gates their hubs. They must refuse cleanly (403 or
+  // a redirect elsewhere), never 500.
+  for (const url of ['/departments/planning', '/departments/safety', '/departments/people', '/departments/assets']) {
+    const res = await page.goto(url);
+    expect(res?.status(), `${url} should not 5xx`).toBeLessThan(500);
   }
 });

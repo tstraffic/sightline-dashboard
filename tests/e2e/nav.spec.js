@@ -39,7 +39,8 @@ test('messages lives in the header, not the sidebar', async ({ page }) => {
 
 test('Sightline destinations render; T&S modules are delisted', async ({ page }) => {
   await loginAs(page);
-  const sb = (href) => page.locator(`#sidebar a[href="${href}"]`);
+  // Scope to .sidebar-link — the sidebar logo is also an <a href="/dashboard">.
+  const sb = (href) => page.locator(`#sidebar a.sidebar-link[href="${href}"]`);
 
   // CRM + Delivery + Money links render exactly once.
   for (const href of ['/clients', '/contacts', '/opportunities/pipeline', '/opportunities',
@@ -62,7 +63,7 @@ test('Sightline destinations render; T&S modules are delisted', async ({ page })
 
 test('planning role sees the CRM section (crm permission widened)', async ({ page }) => {
   await loginAs(page, 'planning_user', 'password');
-  const sb = (href) => page.locator(`#sidebar a[href="${href}"]`);
+  const sb = (href) => page.locator(`#sidebar a.sidebar-link[href="${href}"]`);
   await expect(sb('/opportunities/pipeline')).toHaveCount(1);
   await expect(sb('/crm')).toHaveCount(1);
   // No admin section for planning.

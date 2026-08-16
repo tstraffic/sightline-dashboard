@@ -1,246 +1,64 @@
-# Atomis — Platform Context
+# Sightline Dashboard — Platform Context
 
 ## Overview
-Atomis is a multi-tenant operations platform. **T&S Traffic Control** (Sydney traffic management company) is the launch customer. The platform currently runs single-tenant against T&S's data; multi-tenancy migration is planned per `atomis-migration` v0.2. Two interfaces in a single codebase:
+This repo is **Sightline Traffic Engineers'** operating platform — a fork of the Atomis platform (`tstraffic/ts-dashboard`, which serves T&S Traffic Control). Sightline is an independent traffic engineering **consultancy** (development approvals and construction traffic — TIAs, swept paths, SIDRA modelling, CTMPs, ROL/approvals support), not a traffic control company.
 
-1. **Admin Dashboard** — Desktop + mobile responsive web app for office staff (management, operations, admin roles)
-2. **Worker Portal** ("Atomis Crew") — Mobile-first PWA for field crew members (under `/w/` prefix)
+The build implements **Phase 1 of the "Atomis Operating Platform, CRM & Systems Brief" v1.0** (source doc: OneDrive `7. General Team Folder/3. Suhail/`): CRM (organisations → contacts → opportunities → activities → referrals → proposals) → controlled won-to-project conversion → Master Project Register + Service Packages → manual Xero/SharePoint link fields → CRM dashboards + follow-up automations. Phases 2–3 (deliverables register, QA prepare/check/approve chains, document issue register, approvals register, variations, time/WIP, Client-360 key-account reviews, real Xero/SharePoint APIs) are **not built yet** — the schema leaves seams for them.
 
-**Domain**: `atomis.com.au` (purchased; wildcard DNS + per-tenant subdomains land in Phase 3 of the migration).
+- **GitHub repo**: `tstraffic/sightline-dashboard` (origin). Push to `main` deploys (Railway, once the service is connected).
+- **T&S modules are HIDDEN, NOT DELETED** — bookings, crew, worker portal, safety, fleet, payroll, quoting/rate-cards, compliance etc. keep their routes/tables/permissions but are delisted from `lib/sidebarNav.js`. To restore one, re-add its link there (full T&S registry is in this file's git history).
 
-## Tech Stack
-- **Backend**: Node.js, Express, EJS templates, express-ejs-layouts
-- **Database**: SQLite via better-sqlite3
-- **Frontend**: Tailwind CSS (CDN), vanilla JS
-- **Auth**: Admin = username/password (bcrypt). Worker = Employee ID + numeric PIN (bcrypt)
-- **Hosting**: Railway (auto-deploys from `main` branch)
-- **Email**: Resend HTTP API (env var `RESEND_API_KEY` or `SMTP_PASS` starting with `re_`)
-- **Push Notifications**: Web Push (VAPID) via `web-push` npm package
-- **Node path on this machine**: `PATH="/c/Program Files/nodejs:$PATH"` (required for all node/npm commands)
-- **GitHub repo**: `tstraffic/ts-dashboard` (origin)
-- **Live URL**: `https://tstc.up.railway.app`
+## Brand (Sightline Brand Guidelines v3.2 — consolidated docx in the same OneDrive folder)
+- **Palette**: Aubergine `#3E2632` (primary ground: sidebar, dark surfaces, PWA theme), Oxide `#A34652` (direction/emphasis ONLY — links, CTAs, active states; never a decorative wash; must not read as "error"), Carbon `#24272A` (text), Survey Grey `#657278` (secondary text), Mineral Dust `#E5E1DE` (supporting surfaces), Drawing Paper `#F8F6F2` (default background), Brass `#C9A15A` (1–3% accent, dark grounds; `#AB894C` on light, large/non-text only). Retired: `#B08D57`.
+- **GREEN IS PROHIBITED at brand level** (v3.1 rule). The Tailwind `brand` ramp is an Oxide ramp (50 `#FAF3F4` … 500 `#A34652` … 950 `#2E1418`). Semantic status greens (job health dots, `.is-good`, success flashes) are data semantics and stay. Danger red `#EF4444` stays distinct from Oxide.
+- **Type**: Hanken Grotesk 500 (headings), 400 (body); IBM Plex Mono (technical labels only — refs, revisions, eyebrows; caps + letterspacing OK; never body copy). Sentence case, no exclamation marks.
+- **Themes**: predominantly LIGHT — default theme `paper` (Drawing Paper); dark option `aubergine`. Registry in `views/layout.ejs` (`window.ATOMIS_THEMES`); legacy stored ids map by mode. Old skins in themes.css are unused.
+- **Marketing line** (the only one): "Designed for approval. Built for construction." (on the login page). Logo: `public/images/sightline-mark{,-reversed}.svg` (angled Aubergine/Oxide stripes — geometry locked, no third stripe, no brass in the mark); icons generated from the mark on an Aubergine tile.
 
-## Brand & Design System (Atomis)
-- **Brand = emerald**: brand-500 `#10B981`, brand-600 `#059669` (full 50–950 ramp in the inline Tailwind config, views/layout.ejs). Signal tones: amber `#FBBF24` warn, red `#EF4444` danger, blue `#60A5FA` info. (The old blue `#2B7FFF` era is gone — don't reintroduce it.)
-- **Type**: Bricolage Grotesque (display, `font-display`), Geist (body, `font-sans`), Geist Mono (technical voice — eyebrows, labels, timestamps; `font-mono`). Loaded via Google Fonts in layout.ejs.
-- **Theming is dark-first**: `body.dark-glass` is always on; light mode is the `:root[data-theme="light"]` override layer. 13 user-selectable themes (`window.ATOMIS_THEMES` in layout.ejs; skins re-tint surfaces via themes.css). `bg-white` cards auto-remap to frosted dark surfaces — new markup using `bg-white border border-gray-200 rounded-xl/2xl` gets both themes for free.
-- **Key CSS layers**: custom.css (tokens + dark-glass remaps) → themes.css (skins) → admin-fluid.css (view-transition motion) → admin-polish.css (§9 `.stat-card`, §11 page title/eyebrow, §12 `.chevron-rail`/`.chevron-rail-left` hazard striping, §13 `.lane-divider`, §17 dashboard devices: `.panel-header`, `.attn-row`, `.hero-board`). Reuse these before inventing new ones.
+## Tech stack (unchanged from the fork)
+Node/Express/EJS + express-ejs-layouts · SQLite via better-sqlite3 · Tailwind CDN (inline config in layout.ejs) · sessions in `data/sessions.db` · Resend email · web-push. Node path on Windows dev machines: `PATH="/c/Program Files/nodejs:$PATH"`.
 
-## Architecture
-- **Admin routes**: `/dashboard`, `/projects`, `/crew`, `/allocations`, `/profile`, etc. Protected by `req.session.user`
-- **Jobs live under TWO mounts**: `/projects` (routes/projects.js) owns the **register** (`views/projects/index.ejs`, client-grouped — the sidebar, both dept hubs and every "Jobs" link point here) and the **delete**; `/jobs` (routes/jobs.js) owns the **detail page** (`views/jobs/show.ejs`, which `/projects/:id` also renders), the **create/edit form** (`views/jobs/form.ejs` — `/projects/new` + `views/projects/form.ejs` are dead code, don't link them) and the per-job subroutes (diary, docs, close/reopen). `GET /jobs` redirects to `/projects` — there used to be a second register there (`views/jobs/index.ejs`, deleted) that only the edit breadcrumb reached. Keep every register/create link on `/projects` and `/jobs/new` respectively.
-- **Deleting a job** is only `POST /projects/:id/delete` (admin/management button on the job page). It REFUSES jobs carrying shifts, safety forms, dockets, timesheets, costs, incidents or child jobs and names them in the flash; otherwise it detaches every job reference and deletes the planning records in a transaction. `foreign_keys = ON` plus several `NO ACTION` FKs (bookings, safety_forms, toolbox_talks, opportunities, crm_activities, traffio_imports, parent_project_id) mean a bare `DELETE FROM jobs` always 500s — never add one. Migration 334 repaired `defects.linked_compliance_id`, which pointed at a dropped `_compliance_backup_72` and made SQLite fail to even PREPARE a job delete.
-- **Worker routes**: `/w/home`, `/w/jobs`, `/w/jobs/:id`, etc. Protected by `req.session.worker`
-- **Session isolation**: `req.session.worker` is separate from `req.session.user`. Both can coexist
-- **Layout override**: Admin uses `views/layout.ejs` (default). Worker uses `views/worker/layout.ejs` via `res.locals.layout`
-- **`blockWorkerFromAdmin`** middleware prevents worker-only sessions from accessing admin routes
-- **Permissions**: `middleware/auth.js` has `PERMISSIONS` object mapping modules to allowed roles
-- **Sidebar nav**: registry-driven from `lib/sidebarNav.js` (9 sections; section headers ARE the dept-hub links and keep the `sidebar-link` class so the drag-drop customiser's pathname-keyed layouts survive). Never register two hrefs differing only by query string — the customiser dedupes by pathname. Messages lives in the header (`#header-chat`, badge class `chat-unread-badge` live-updates via public/js/chat.js).
-- **Department hubs**: `/departments/:key` (planning, safety, operations, finance, people, assets, reports) — registry in `lib/departments.js`. **Hub access = sidebar section visibility**, delegated to `sidebarNav.sectionVisibleByKey()` (single source of truth; the old hand-synced `accessKeys` are gone). Module links = `moduleLinks(user, dept)`: the dept's `SECTIONS` links (icons + gates come from sidebarNav) plus per-dept `extraLinks`, hero href + duplicates filtered; the old hand-kept `quickLinks`/`visibleQuickLinks`/`linksFocus` are gone (reports sets `sectionLinks: false` and keeps curated `extraLinks` — its sidebar section is negated-gate based, don't reuse it). Needs panel = `needsKeys` (registry keys into `getNeedsYouNow`'s `opts.only`; `[]` = extras only, absent = no panel) + `needsExtras(db,user,today)` (rows must canAccess-check themselves). Meetings + notebook to-dos live in `dept_meetings`/`dept_meeting_todos` (migration 328; `dept_key` validated in app, not a CHECK). `recap_source`/`todos.source` columns are pre-provisioned so AI generation (last-meeting summary, todo extraction) can be added without schema changes — AI writes POST the existing `/sections` endpoint with `source='ai'`.
+- **Local dev**: `node scripts/dev-local.js` (keeps the SQLite DB OUTSIDE OneDrive at `%LOCALAPPDATA%\sightline-dev\sightline.db` — better-sqlite3 + OneDrive sync corrupts DBs). Plain `npm run dev` works if you set `DB_PATH` yourself. Login `admin/admin123` → forced password change on first login.
+- **Prod**: `start.sh` (litestream wrapper), `DB_PATH` on the Railway volume. Leave `SEED_T_AND_S_DATA` and `SEED_TEST_USERS` unset — the DB starts clean.
 
 ## Database
-- SQLite via better-sqlite3, file at `./data/tstraffic.db` (env `DB_PATH`)
-- 247+ migrations in `db/schema.js`, run on startup by `initializeDatabase()`. Each is gated by `isMigrationApplied(version)`; **new migrations must use the next unused version** (check the max first — duplicate versions silently skip).
-- Key tables: `users`, `jobs`, `crew_members`, `crew_allocations`, `tasks`, `incidents`, `notifications`, `push_subscriptions`, `system_config`, `invitations`, `compliance` (+ `compliance_documents`, `compliance_revisions`, `compliance_fees`, `compliance_extensions`, `compliance_rol_shifts`, `compliance_rol_conditions`), `activity_log`, `app_settings`
-- Migration 14 = Worker Portal auth columns on `crew_members`
-- Migration 29 = `push_subscriptions` table for Web Push
-- Migration 247 = Compliance council/ROL workflow (council_plan_type, job_date, itemised fees, extensions, ROL two-stage + PDF extraction, CTMP QA)
+- Migrations in `db/schema.js`, gated by `isMigrationApplied(version)`. **Max version = 354** — always check the current max before adding (duplicates silently skip). House pattern: try/catch that logs, `recordMigration.run(n, 'name')`, PRAGMA-guarded column adds, table-rebuild dance for CHECK changes (see 329/354).
+- **Sightline migrations**: 347 `ref_sequences` + org/contact refs · 348 CRM vocabulary (8 stages with default probability in `app_settings.metadata`, sectors, won/lost reasons, DEV/PAS/MOD/CON/APR streams, repeat-client statuses, referral channels) · 349 clients/contacts brief fields · 350 `referrals` · 351 opportunity brief fields · 352 `proposals` + `proposal_service_packages` · 353 jobs register fields + `job_budgets` invoiced/paid + `service_packages` · 354 notifications CHECK expanded for the CRM sweeps.
+- **Identifiers** (`lib/refNumbers.js`, backed by `ref_sequences`, self-heal loops, Sydney-year scopes): `ORG-000123`, `CON-000456`, `OPP-YY####`, `ST-YY####` (projects — `jobs.job_number`), `PROP-{opp#}-{rev}`, `{ST-…}-{STREAM}-{NN}` (service packages). Legacy `generateJobNumber()` (J-XXXX) still exists for hidden T&S paths.
+- **`notifications.type` has a live CHECK** — adding a notification type REQUIRES a table-rebuild migration (354 is the template) or inserts throw silently inside the engine's try/catch.
 
-## Two "plans" areas — don't confuse them
-- **Compliance / "Plans & Approvals"** (`/compliance`, `compliance` table, sidebar "Plans & Approvals") — **the module the team actually uses.** Parent plans → sub-plans with refs `TSCA` (council_permit), `TSROL` (rol), `TSTMP` (CTMP/tmp_approval), `TSTGS`, `TSSPA`, etc. Owner, status workflow, fees, dates, revisions live here. Council/ROL/CTMP features belong here. TGS↔ROL links are **many-to-many** via `compliance_tgs_rol_links` (mig 332) — `compliance.linked_rol_id` is retired (unread, unwritten; left in place because SQLite column drops rewrite the table). Sub-plan documents: attach-only via `POST /sub-plans/:id/documents` (no status change); `upload-submit` remains the explicit submission. The ROL parse routes accept `existing_doc_id` to read an already-attached PDF.
-- **Traffic Plans** (`/plans`, `traffic_plans` table) — a separate, lightly-used design-document register. (A council/ROL build landed here by mistake via PR #462; the real work is in Compliance.)
+## Sightline domain model (Phase 1)
+- **Organisations = `clients`** (also still the supplier/subbie directory via `company_type`). CRM lifecycle axis = `repeat_client_status` (prospect → new_client → active_first_time → repeat → key_account → dormant → inactive) — do NOT use `company_type` for lead/prospect states (an old bug did; it's fixed). Also: `key_account_tier`, `org_ref`, `referred_by_client_id`, `first_engagement_date` (stamped at first conversion), manual `xero_contact_id`/lifetime figures, `sharepoint_url`.
+- **Opportunities**: stage list is data (`app_settings` `opportunity_stages`; default probability in row `metadata` JSON). **Keys `won` and `lost` are load-bearing** (status derivation in routes/opportunities.js) — never rename them. Stage GATES are code: `lib/crmStages.js` (`proposal_sent` needs a sent proposal + value + owner + follow-up; `won` needs value + accepted proposal + expected start + owner), enforced on BOTH the edit POST and the kanban `/stage` endpoint (422 + toast + snap-back). Probability overrides demand `probability_override_reason`; `weighted_value` is stored and recomputed on every write path.
+- **Proposals** (`/proposals`): document-revision entity — draft-only editing, `/send` (requires follow-up date; creates the follow-up activity; advances the opportunity), `/revise` (rev+1, supersedes), `/accept` (captures acceptance/PO ref — the conversion needs it), `/decline`. Deliberately separate from the hidden T&S quoting module.
+- **Referrals** (`/referrals`): spawned from the opportunity form's referring-organisation fields or created directly; `outcome` syncs with the opportunity; thank-you stewardship toggle; attributed values are derived via joins, never stored.
+- **Won-to-project conversion** (`GET/POST /opportunities/:id/convert`): review page (validation checklist + package confirmation per brief §3.4) → one transaction: ST number, job row, `job_budgets` row, `service_packages` from confirmed rows, `related_job_id` write-back, client lifecycle transition, referral outcome, kickoff task + activity. **Non-negotiable: no CRM history is deleted or moved.** A Won opportunity left unconverted >1 day triggers the `won_unconverted` sweep.
+- **Projects = `jobs`** (everything platform-shaped hangs off `jobs.id`). Owner mapping: Project Director = `project_manager_id` (relabelled in views — notification/health logic reads it); `commercial_lead_id`/`technical_lead_id`/`checker_id` are Sightline columns (do not squat on `accounts/planning/ops` owner cols — hidden T&S logic reads those). `service_streams` is a denormalised CSV column (register filters read it); `service_packages` is the operational truth. Register = `/projects` (Master Project Register, §5.1); detail = `views/jobs/show.ejs` (Packages tab + CRM Origin panel; served by BOTH `/projects/:id` and `/jobs/:id` — keep their data assembly mirrored). Job-form Sightline fields apply via `lib/sightlineJobFields.js`, gated on `sightline_fields=1` so hidden T&S update paths can't blank them. **Never bare `DELETE FROM jobs`** — only the guarded `POST /projects/:id/delete`.
+- **Xero/SharePoint are manual in Phase 1**: money numerics on `job_budgets` (`invoiced_to_date`, `paid_to_date`; outstanding/remaining always DERIVED), workflow fields on `jobs` (`po_*`, `invoice_status`, `xero_reference`), URLs on clients/proposals/jobs. Real APIs are a later phase (QuickBooks code exists from T&S; `integrations.provider` CHECK needs a rebuild to admit `'xero'`).
+- **Automations** (`middleware/notifications.js`, 15-min sweep; blocks S1–S4 near the end): CRM follow-ups due/overdue, stale opportunities (`system_config` `crm_stale_days`, default 14), proposal follow-up + 7-day management escalation, won-unconverted. Prefs category `crm` in `lib/notificationPrefs.js`. Dashboard row `crm_followups_due` in `NEEDS_ROWS` (`routes/helpers/dashboard-queries.js`).
+- **CRM dashboard** (`/crm`): §3.7 KPI strip (proposal conversion, avg/median sales cycle, new clients, repeat + referral revenue, revenue by stream, dormant key clients, next actions due) ahead of the legacy BDM panels.
 
-## Key Middleware
-- `middleware/auth.js` — Admin auth (`requireLogin`, `requireRole`, `requirePermission`, `canAccess`)
-- `middleware/workerAuth.js` — Worker auth (`requireWorker`, `requireOwnData`, `blockWorkerFromAdmin`, `workerLocals`)
-- `middleware/compliance.js` — Ticket/licence/fatigue compliance checks
-- `middleware/notifications.js` — Notification generation engine + push integration
-- `middleware/audit.js` — Activity logging (`logActivity`)
-- `middleware/settings.js` — System settings
+## Navigation & permissions
+- Sidebar (`lib/sidebarNav.js`): 4 sections — **CRM** (key `sales`: Clients, Contacts, Pipeline, Opportunities, Proposals, Referrals, CRM Dashboard, Activities, CRM Meetings), **Delivery** (key `operations`: Projects, Service Packages), **Money** (key `finance`: Budgets & Costs), **Admin**. TOP_LINKS: Today/Tasks/Notes/Meetings. Legacy keys retained so pathname-keyed customiser layouts and `lib/departments.js` gating hold; hub links are delisted (operations/finance hubs remain URL-reachable; the other hubs 403 via `sectionVisibleByKey`). Never register two hrefs differing only by query string.
+- `crm` permission = `['admin','management','operations','planning','finance']`. New CRM-side mounts reuse `crm`; delivery-side reuse `projects`.
 
-## Key Services
-- `services/email.js` — Email sending (Resend HTTP API or SMTP fallback)
-- `services/emailTemplates.js` — Branded HTML email templates
-- `services/pushNotification.js` — Web Push (VAPID key management, subscription CRUD, sending)
-- `services/invitations.js` — Token-based invitations/password resets
+## Conventions that bite
+- Flash idiom: `req.flash(...)` then `req.session.save(() => res.redirect(...))` — or flashes vanish.
+- Every form needs `<%- include('../partials/csrf') %>` (the budget forms were missing it for months — every save silently bounced).
+- `logActivity` `action` is CHECK-constrained (`create|update|delete|…|approve|reject`) — never invent actions; `entity_type` is free text. Per-record trails: `SELECT FROM activity_log WHERE entity_type=? AND entity_id=?`.
+- Views: `<% locals.currentPage = 'x' %>` first line; `views/partials/page-header.ejs`; `.stat-card` grids; badge recipe `bg-x-50 text-x-700 ring-1 ring-x-600/20`; layout `title` param mandatory.
+- Dates: `lib/sydney.js` for anything user-facing or year-scoped (server clock is UTC).
 
-## Test Data
-- Admin: username `admin` / password `admin123` (**CHANGE THIS ON PRODUCTION**)
-- Worker: Employee ID `EMP-001` / PIN `1234` (John Smith, crew_member id=1)
+## Tests
+- `npm run test:e2e` (Playwright, port 3101, serial, `SEED_TEST_USERS=true`, always `loginAs` from `helpers/setup` — the seeded admin has a forced-password-change gate). Sightline specs: `smoke.spec.js` (page list reflects the trim; delisted hubs must 403-not-500), `nav.spec.js` (4 sections, no hub heads, T&S links absent), `crm-lifecycle.spec.js` (org → opp → gate 422 → proposal send/accept → won → conversion → register, per brief §12.2).
+- Some inherited T&S specs exercise hidden modules; they should still pass since routes/permissions are intact — if one asserts sidebar/hub presence, fix the spec, not the trim.
+- `npm run test:cross-tenant`, `npm run lint:tenant:ratchet` still apply.
 
----
+## Deployment (Railway — service to be created)
+New Railway service on this repo: volume mounted, `DB_PATH` pointing at it, `SESSION_SECRET`, `APP_BASE_URL`, `RESEND_API_KEY`/SMTP vars (`SMTP_FROM_NAME=Sightline Traffic Engineers`). Leave both seed gates unset. Change the admin password immediately (the gate forces it).
 
-## Completed Work
-
-### Compliance — council/ROL/CTMP workflow (completed)
-Extended the **Compliance** sub-plan module (`routes/compliance.js`, `views/compliance/_sub_plan_card.ejs`) for the council/ROL workflow:
-- **Type of Council Plan** (free-text) + **Job Date** on sub-plans (saved via upload-submit / `/sub-plans/:id/details`).
-- **Itemised fees** with description + amount + receipt (`compliance_fees`, `POST /sub-plans/:id/fees`) — alongside the legacy single council fee.
-- **Extension records** (`compliance_extensions`, `POST /sub-plans/:id/extensions`) for ROL/Council.
-- **CTMP QA status** on `tmp_approval` sub-plans (`POST /sub-plans/:id/qa`).
-- **ROL two-stage + PDF auto-extraction**: `services/rolParser.js` (pdfjs-dist) reads ROLA/issued-ROL PDFs → number, date+time range, shifts (gaps preserved → `compliance_rol_shifts`), conditions (`compliance_rol_conditions`, contact/late-start/no-works/long-weekend flagged as alerts). Parse-then-confirm via `views/compliance/rol-review.ejs`; alerts surface on the sub-plan card.
-- **Council/ROL reminders** (Job Date 7 + 2 days) in `generateNotifications()`.
-
-### UI Rebrand (completed)
-- Migrated all 52+ EJS views from dark to light enterprise theme
-- T&S brand colors throughout
-- Added compliance middleware, crew management views, settings system, enhanced allocation/incident routes
-
-### Worker Portal Sprint 1 (completed)
-- **Auth**: Employee ID + PIN login, logout, session management
-- **Home screen**: Time-based greeting, today's shift card, compliance alerts, quick actions
-- **My Jobs**: List view (today + 7 days grouped by date), job detail (supervisor, crew, site info)
-- **PWA foundation**: manifest.json, service worker (network-first caching), worker.css, worker.js
-- **Admin PIN management**: Set/reset/clear PIN from crew profile page, login tracking
-- **PR**: Merged via `claude/eloquent-booth` branch
-
-### Admin PWA + Mobile Responsive (completed)
-- **PWA**: `manifest-admin.json`, `admin-sw.js` service worker, offline page, meta tags
-- **Mobile sidebar**: Full-height overlay with scrollable nav, user avatar header, close button, swipe-to-close gesture, sign out pinned at bottom, backdrop blur animation
-- **Mobile header**: Sticky, compact 56px on mobile, profile avatar circle (initials), notification bell
-- **Responsive views**: Dashboard, jobs, crew, tasks views all responsive with hidden columns, stacked filters, touch-friendly buttons
-- **CSS**: `custom.css` with mobile touch targets (44px min), iOS zoom prevention, safe-area insets, tap feedback
-- **Service worker cache**: Versioned (`ts-admin-v3`), network-first for HTML, cache-first for assets
-
-### Push Notifications (completed)
-- **VAPID keys**: Auto-generated on startup, stored in `system_config` DB table
-- **Client flow**: Service worker registers → checks subscription → shows enable prompt after 3s → subscribes via Push API → saves to server
-- **Server**: `services/pushNotification.js` handles init, subscribe, send. Routes at `/notifications/push/*`
-- **Triggers**: Task creation/assignment/status change (`routes/tasks.js`), notification engine (`middleware/notifications.js`)
-- **Test button**: Profile page has "Send Test Notification" button + status indicator (Enabled/Not Enabled/Blocked/Not Supported)
-- **Push subscriptions DB**: `push_subscriptions` table (user_id, endpoint, p256dh, auth)
-
-### User Profile Page (completed)
-- **Route**: `/profile` (requireLogin only, all roles)
-- **Features**: Edit full name, email, notification preferences (toggle + frequency)
-- **Security**: Change password (current + new), send password reset link to own email
-- **Push section**: Shows push notification status, test notification button
-- **Header link**: Username in header is clickable → profile page. Avatar circle with initials on desktop.
-
-### Email System (completed)
-- **Resend HTTP API**: Replaces SMTP (Railway blocks ports 465/587)
-- **Env vars**: `RESEND_API_KEY` (or `SMTP_PASS` starting with `re_`), `SMTP_FROM_EMAIL`, `SMTP_FROM_NAME`, `APP_BASE_URL`
-- **Templates**: Branded HTML emails for password reset, notifications
-- **Fallback**: If key doesn't start with `re_`, falls back to nodemailer SMTP
-
----
-
-## File Structure (Admin — Key Files)
-
-```
-server.js                        — Express app setup, route registration
-db/schema.js                     — All migrations
-db/database.js                   — SQLite connection
-
-middleware/auth.js               — Admin auth + permissions
-middleware/notifications.js      — Notification generation engine
-middleware/compliance.js         — Compliance checks
-middleware/settings.js           — System settings
-
-routes/auth.js                   — Login/logout/forgot-password/reset
-routes/profile.js                — User profile (GET/POST + change password + reset email)
-routes/dashboard.js              — Main dashboard
-routes/notifications.js          — Notifications + push subscription endpoints
-routes/tasks.js                  — Tasks (with push notification triggers)
-routes/[module].js               — Other CRUD routes
-
-services/email.js                — Email sending (Resend/SMTP)
-services/pushNotification.js     — Web Push service
-services/invitations.js          — Token management
-
-views/layout.ejs                 — Admin layout (header + sidebar + main)
-views/partials/header.ejs        — Sticky header (hamburger, logo, bell, avatar, logout)
-views/partials/sidebar.ejs       — Sidebar nav (mobile overlay + desktop static)
-views/partials/footer.ejs        — Footer
-views/profile.ejs                — User profile page
-views/dashboard.ejs              — Dashboard
-views/[module]/*.ejs             — Module views
-
-public/css/custom.css            — Custom styles (mobile sidebar, touch targets, animations)
-public/js/app.js                 — Client JS (sidebar toggle, tabs, push subscription)
-public/js/admin-sw.js            — Admin service worker (caching + push handler)
-public/manifest-admin.json       — Admin PWA manifest
-public/offline.html              — Offline fallback page
-```
-
-## File Structure (Worker Portal)
-```
-middleware/workerAuth.js
-routes/worker/auth.js            — Login/logout
-routes/worker/home.js            — Home screen
-routes/worker/jobs.js            — Jobs list + detail
-views/worker/layout.ejs          — Mobile shell + bottom tab nav
-views/worker/login.ejs           — Standalone login page
-views/worker/home.ejs            — Home screen
-views/worker/jobs.ejs            — Jobs list
-views/worker/job-detail.ejs      — Job detail
-views/worker/error.ejs           — Error page
-public/manifest.json             — Worker PWA manifest
-public/css/worker.css
-public/js/worker.js
-public/js/worker-sw.js           — Worker service worker
-```
-
-## Bottom Tab Nav (Worker Portal)
-4 tabs: Home (house), Jobs (briefcase), Clock (clock), Profile (user)
-- Home + Jobs = Sprint 1 (done)
-- Clock = Sprint 2 (next)
-- Profile = Sprint 5 (future)
-
----
-
-## Upcoming Sprints
-
-### Sprint 2: Clock In/Out + Availability
-- **Clock In/Out system**: GPS-stamped clock in/out from worker portal, linked to crew_allocations
-- **Availability submission**: Workers can submit availability/unavailability for upcoming dates
-- **Database**: New tables or columns for clock events and availability records
-- **Views**: Clock in/out UI on worker home + dedicated clock page, availability calendar/form
-- **Admin side**: View clock events on allocation detail, availability visible on scheduling views
-
-### Sprint 3: Prestart/Fatigue Declaration + Incident Reporting
-- **Prestart checklist**: Workers complete a prestart safety checklist before starting work
-- **Fatigue declaration**: Workers declare fatigue status (integrates with existing fatigue compliance)
-- **Incident reporting**: Workers can submit incident reports from the field (photos, description, severity)
-- **Database**: New tables for prestarts, fatigue declarations; leverage existing incidents table
-- **Views**: Prestart form, fatigue declaration form, incident report form (all mobile-optimized)
-
-### Sprint 4: Timesheet Auto-Generation + Supervisor Approvals
-- **Timesheet auto-generation**: Generate timesheets from clock in/out data
-- **Supervisor approvals**: Supervisors can review and approve timesheets, prestarts
-- **Push to admin**: Approved timesheets flow into the existing admin timesheet system
-- **Views**: Timesheet review screens, approval workflows
-
-### Sprint 5: Mobile Polish + PWA Install + Notifications
-- **PWA install prompts**: Proper install flow with app icons and splash screens
-- **Push notifications**: Shift reminders, approval notifications
-- **Offline support**: Enhanced service worker for offline prestart/clock forms
-- **UI polish**: Animations, transitions, loading states, error recovery
-- **Performance**: Optimize queries, add indexes if needed
-
----
-
-## Environment Variables (Railway)
-```
-DATABASE_PATH=./data/database.sqlite
-SESSION_SECRET=<random-string>
-APP_BASE_URL=https://tstc.up.railway.app
-RESEND_API_KEY=re_xxxxxxxxxxxx       # or SMTP_PASS=re_xxxxxxxxxxxx
-SMTP_FROM_EMAIL=onboarding@resend.dev # change after domain verification
-SMTP_FROM_NAME=T&S Traffic Control
-# VAPID keys auto-generated and stored in system_config DB
-# Optional: VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY, VAPID_EMAIL
-# Native iOS push (APNs) — channel no-ops until set. See docs/APP_STORE.md
-# APNS_TEAM_ID, APNS_KEY_ID, APNS_KEY_BASE64, APNS_BUNDLE_ID=au.com.atomis.crew, APNS_ENV=production
-```
-
-## Native iOS app (Capacitor)
-- `mobile/` — Capacitor shell ("Atomis Crew", bundle id `au.com.atomis.crew`, SPM not CocoaPods). WKWebView loads the live portal via `server.url`; most updates ship by deploying `main`, no app release needed.
-- Server push is dual-channel: web-push (browsers/PWA) + APNs (`services/apns.js`, `worker_device_tokens` table, migration 303). `sendPushToCrew` fans out to both.
-- `public/js/worker-native.js` runs only inside the shell: APNs token registration, notification-tap deep links, Face ID lock.
-- Full build/submission runbook: `docs/APP_STORE.md`.
-
-## Known Issues / TODO
-- **Default admin password**: Still `admin/admin123` on production — needs changing
-- **Resend domain**: Using `onboarding@resend.dev` — need to verify `tstc.com.au` domain in Resend for custom from address
-- **iOS push**: Web-push limited (iOS 16.4+ Safari, must add to home screen). Native app (mobile/) uses APNs instead — needs APNS_* env vars on Railway once the Apple Developer account exists.
+## Known gaps / next phases
+- Phase 2 (brief §12.1): deliverables register + QA prepare/check/approve + document issue register + approvals register + variations + time/WIP + invoice-readiness workflow. Best in-repo precedents: the compliance module's status/QA/ready-for-invoice machinery and `lib/planStatus.js`.
+- Phase 3: Client-360 key-account reviews, capacity/utilisation, profitability, dormant-client prompts beyond the KPI, Outlook logging.
+- Real Xero (OAuth + contact/invoice sync) and SharePoint (Graph folder provisioning at conversion) integrations.
+- `views/clients/accounts.ejs` (`/clients?view=crm`) and parts of `routes/crm.js` still carry pre-Sightline assumptions worth a future tidy.
