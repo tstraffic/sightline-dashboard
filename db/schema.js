@@ -15923,6 +15923,86 @@ function runMigrations(db) {
     recordMigration.run(354, 'Expand notifications type CHECK: crm_follow_up_due, opportunity_stale, proposal_follow_up_due, won_unconverted');
   }
 
+  // Migration 355: Phase 2 foundations — one notifications CHECK rebuild
+  // admitting ALL delivery-control types up front (rebuilds are full table
+  // copies; never do two in one phase), plus the §5.15 time activity codes
+  // and the delivery/finance tuning knobs. correspondence_due has no sweep
+  // yet — admitted now to save a future rebuild.
+  if (!isMigrationApplied.get(355)) {
+    let needsExpand = true;
+    try {
+      const tableInfo = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='notifications'").get();
+      if (tableInfo && tableInfo.sql && tableInfo.sql.includes("'deliverable_due'")) needsExpand = false;
+    } catch (e) {}
+
+    if (needsExpand) {
+      db.exec('BEGIN TRANSACTION');
+      try {
+        const cols = db.prepare("PRAGMA table_info('notifications')").all();
+        const hasEmailSent = cols.some(c => c.name === 'email_sent_at');
+        const emailSentCol = hasEmailSent ? 'email_sent_at DATETIME,' : '';
+        const emailSentSelect = hasEmailSent ? ',email_sent_at' : '';
+
+        db.exec(`
+          CREATE TABLE notifications_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+            type TEXT NOT NULL CHECK(type IN ('overdue_task','expiring_compliance','missing_update','corrective_action_due','follow_up_due','equipment_overdue','critical_defect','rol_pending','ticket_expiry','equipment_inspection_due','induction_overdue','induction_reminder','over_budget','deadline_reminder','chat_message','weekly_summary','invoice_ready','plan_submitted','plan_tagged','audit_failed','repeat_offender','task_assigned','swms_expiring','sop_expiring','risk_assessment_expiring','cert_expiry','birthday_today','crm_follow_up_due','opportunity_stale','proposal_follow_up_due','won_unconverted','deliverable_due','qa_pending','approval_due','approval_expiring','client_input_overdue','variation_pending','correspondence_due','general')),
+            title TEXT NOT NULL,
+            message TEXT NOT NULL DEFAULT '',
+            link TEXT DEFAULT '',
+            job_id INTEGER REFERENCES jobs(id),
+            is_read INTEGER NOT NULL DEFAULT 0,
+            ${emailSentCol}
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+          );
+          INSERT INTO notifications_new (id, user_id, type, title, message, link, job_id, is_read${emailSentSelect}, created_at)
+            SELECT id, user_id, type, title, message, link, job_id, is_read${emailSentSelect}, created_at FROM notifications;
+          DROP TABLE notifications;
+          ALTER TABLE notifications_new RENAME TO notifications;
+          CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id);
+          CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(user_id, is_read);
+          CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type);
+        `);
+        db.exec('COMMIT');
+        console.log('Migration 355: Expanded notifications type CHECK for the Phase 2 delivery sweeps');
+      } catch (e) {
+        try { db.exec('ROLLBACK'); } catch (r) {}
+        console.error('Migration 355 error:', e.message);
+      }
+    }
+
+    // Seeds — outside the rebuild transaction, idempotent via OR IGNORE.
+    try {
+      const seedActivity = db.prepare(`
+        INSERT OR IGNORE INTO app_settings (category, key, label, color, display_order, is_active)
+        VALUES ('time_activity_codes', ?, ?, '', ?, 1)
+      `);
+      [
+        ['01', '01 Project Management'], ['02', '02 Site Inspection'],
+        ['03', '03 Research / Standards'], ['04', '04 Analysis'],
+        ['05', '05 CAD / Swept Paths'], ['06', '06 SIDRA / Modelling'],
+        ['07', '07 Report Writing'], ['08', '08 QA'],
+        ['09', '09 Client Changes'], ['10', '10 Authority Changes'],
+      ].forEach(([key, label], i) => seedActivity.run(key, label, i + 1));
+
+      const seedConfig = db.prepare(`
+        INSERT OR IGNORE INTO system_config (config_key, config_value, config_type, description)
+        VALUES (?, ?, 'number', ?)
+      `);
+      seedConfig.run('default_charge_rate', '180', 'Default charge-out rate $/hr for time entries (finance)');
+      seedConfig.run('qa_stale_days', '3', 'Days a prepared/checked revision can sit before the QA reminder fires');
+      seedConfig.run('approval_warning_days', '7', 'Days before an approval\'s requested decision date to start reminders');
+      seedConfig.run('approval_expiry_warning_days', '30', 'Days before an approved permit expires to start reminders');
+      seedConfig.run('variation_pending_days', '7', 'Days a submitted variation can await a decision before management is prompted');
+      // Phase 1's stale-opportunity sweep reads this with a hardcoded
+      // fallback of 14 — seeded here so it's editable at /settings/system.
+      seedConfig.run('crm_stale_days', '14', 'Days without activity before an open opportunity is flagged stale');
+      recordMigration.run(355, 'Phase 2 foundations: delivery notification types + time activity codes + delivery config knobs');
+      console.log('Migration 355 applied: Phase 2 vocab + config seeded');
+    } catch (e) { console.error('Migration 355 seed error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 

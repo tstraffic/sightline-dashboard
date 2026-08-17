@@ -18,9 +18,10 @@
       'Shift Rules': configs.filter(c => ['default_shift_hours', 'max_shift_length_hours', 'min_rest_between_shifts_hours'].includes(c.config_key)),
       'Compliance & Fatigue': configs.filter(c => ['fatigue_max_days', 'fatigue_window_days', 'ticket_expiry_warning_days'].includes(c.config_key)),
       'Email (SMTP)': configs.filter(c => ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from'].includes(c.config_key)),
+      'Delivery': configs.filter(c => ['qa_stale_days', 'approval_warning_days', 'approval_expiry_warning_days', 'variation_pending_days', 'crm_stale_days'].includes(c.config_key)),
     };
     if (canSeeCost) {
-      configGroups['Finance'] = configs.filter(c => ['internal_hourly_rate'].includes(c.config_key));
+      configGroups['Finance'] = configs.filter(c => ['internal_hourly_rate', 'default_charge_rate'].includes(c.config_key));
     }
 
     const fieldLabels = {
@@ -40,6 +41,12 @@
       smtp_pass: 'SMTP Password',
       smtp_from: 'From Address',
       internal_hourly_rate: 'Internal Labour Rate ($/hr)',
+      default_charge_rate: 'Default Charge-Out Rate ($/hr)',
+      qa_stale_days: 'QA Reminder After (days)',
+      approval_warning_days: 'Approval Decision Warning (days before)',
+      approval_expiry_warning_days: 'Approval Expiry Warning (days before)',
+      variation_pending_days: 'Variation Decision Prompt After (days)',
+      crm_stale_days: 'Stale Opportunity Threshold (days)',
     };
   %>
 
