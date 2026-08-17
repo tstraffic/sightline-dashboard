@@ -1,0 +1,100 @@
+<% locals.currentPage = 'correspondence' %>
+<% const isEdit = item !== null && typeof item !== 'undefined' && item %>
+
+<%- include('../partials/page-header', {
+  eyebrow: job.job_number + (job.project_name ? ' · ' + job.project_name : ''),
+  title: isEdit ? 'Edit ' + item.corr_ref : 'Log Correspondence',
+  subtitle: 'Material correspondence only — the reference, who said what, and the action it demands (brief §5.11).',
+  actions: [{ label: 'Back to Correspondence', href: '/correspondence' + (job.id ? '?job_id=' + job.id : ''), style: 'secondary' }]
+}) %>
+
+<form method="POST" action="<%= isEdit ? '/correspondence/' + item.id : '/correspondence' %>" class="space-y-5 max-w-3xl">
+  <%- include('../partials/csrf') %>
+  <% if (!isEdit) { %><input type="hidden" name="job_id" value="<%= job.id %>"><% } %>
+
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-4 sm:p-5">
+    <h2 class="text-xs font-bold text-gray-800 uppercase tracking-widest mb-4">Correspondence</h2>
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Subject <span class="text-red-500">*</span></label>
+        <input type="text" name="subject" required value="<%= isEdit ? item.subject : '' %>" placeholder="What is it about?"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Type</label>
+        <select name="corr_type" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <% types.forEach(t => { %>
+            <option value="<%= t %>" <%= isEdit && item.corr_type === t ? 'selected' : '' %>><%= typeLabels[t] %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Direction</label>
+        <select name="direction" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="inbound" <%= isEdit && item.direction === 'inbound' ? 'selected' : '' %>>Inbound (received)</option>
+          <option value="outbound" <%= isEdit && item.direction === 'outbound' ? 'selected' : '' %>>Outbound (sent)</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Date</label>
+        <input type="date" name="corr_date" value="<%= isEdit ? (item.corr_date || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Their Reference</label>
+        <input type="text" name="external_ref" value="<%= isEdit ? (item.external_ref || '') : '' %>" placeholder="Counterparty's ref number"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">From</label>
+        <input type="text" name="sender" value="<%= isEdit ? (item.sender || '') : '' %>" placeholder="Sender"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">To</label>
+        <input type="text" name="recipient" value="<%= isEdit ? (item.recipient || '') : '' %>" placeholder="Recipient"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Action Required</label>
+        <input type="text" name="action_required" value="<%= isEdit ? (item.action_required || '') : '' %>" placeholder="What must Sightline do about it? Leave blank if record-only."
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Responsible</label>
+        <select name="responsible_id" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">TBA</option>
+          <% users.forEach(u => { %>
+            <option value="<%= u.id %>" <%= (isEdit ? item.responsible_id : (user && user.id)) == u.id ? 'selected' : '' %>><%= u.full_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Response Due</label>
+        <input type="date" name="response_due" value="<%= isEdit ? (item.response_due || '') : '' %>"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div class="sm:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Link (SharePoint / email)</label>
+        <input type="url" name="link_url" value="<%= isEdit ? (item.link_url || '') : '' %>" placeholder="…/06 Correspondence/…"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+  </div>
+
+  <div class="flex items-center justify-between">
+    <% if (isEdit) { %>
+    <button type="submit" form="delete-corr" class="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 text-sm font-medium rounded-lg transition-colors">Delete</button>
+    <% } else { %><span></span><% } %>
+    <div class="flex items-center gap-3">
+      <a href="/correspondence<%= job.id ? '?job_id=' + job.id : '' %>" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 text-sm font-medium rounded-lg transition-colors">Cancel</a>
+      <button type="submit" class="px-6 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors"><%= isEdit ? 'Save' : 'Log It' %></button>
+    </div>
+  </div>
+</form>
+
+<% if (isEdit) { %>
+<form id="delete-corr" method="POST" action="/correspondence/<%= item.id %>/delete" onsubmit="return confirm('Delete this correspondence record?');">
+  <%- include('../partials/csrf') %>
+</form>
+<% } %>

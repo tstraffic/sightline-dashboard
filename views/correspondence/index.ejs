@@ -1,0 +1,140 @@
+<% locals.currentPage = 'correspondence' %>
+<%
+  const STATUS_BADGE = {
+    open: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    responded: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+    closed: 'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20',
+  };
+  const isDue = (i) => i.status === 'open' && i.response_due && i.response_due <= today;
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'Delivery',
+  title: 'Correspondence & RFIs',
+  subtitle: 'Material correspondence only — RFIs, instructions, authority comments and design changes that need action (brief §5.11).',
+}) %>
+
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+  <div class="stat-card">
+    <p class="stat-card-label">Logged</p>
+    <p class="stat-card-value <%= stats.total ? 'is-info' : 'is-muted' %>"><%= stats.total || 0 %></p>
+  </div>
+  <a href="/correspondence?status=open" class="stat-card hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Open</p>
+    <p class="stat-card-value <%= stats.open ? 'is-warn' : 'is-muted' %>"><%= stats.open || 0 %></p>
+  </a>
+  <div class="stat-card">
+    <p class="stat-card-label">Action Required</p>
+    <p class="stat-card-value <%= stats.action_required ? 'is-warn' : 'is-muted' %>"><%= stats.action_required || 0 %></p>
+  </div>
+  <a href="/correspondence?view=due" class="stat-card <%= stats.due ? 'accent-red' : '' %> hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Response Due</p>
+    <p class="stat-card-value <%= stats.due ? 'is-bad' : 'is-muted' %>"><%= stats.due || 0 %></p>
+  </a>
+</div>
+
+<form method="GET" action="/correspondence" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 mb-5">
+  <div class="flex flex-wrap items-end gap-3">
+    <div class="flex-1 min-w-[180px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Search</label>
+      <input type="text" name="search" value="<%= filters.search || '' %>" placeholder="Ref, subject, project..."
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Type</label>
+      <select name="corr_type" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% types.forEach(t => { %>
+          <option value="<%= t %>" <%= filters.corr_type === t ? 'selected' : '' %>><%= typeLabels[t] %></option>
+        <% }) %>
+      </select>
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
+      <select name="status" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% statuses.forEach(s => { %>
+          <option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= s.toUpperCase() %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Filter</button>
+  </div>
+</form>
+
+<% if (!items.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center">
+    <p class="text-gray-500 text-sm mb-1">No correspondence logged.</p>
+    <p class="text-gray-400 text-xs">Log material correspondence from a project's Inputs & Correspondence tab — not every email, just the ones that change scope, cost or programme.</p>
+  </div>
+<% } else { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100">
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ref</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Subject</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Project</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Type</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Responsible</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Response Due</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+        <th class="px-3 py-2.5"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      <% items.forEach(i => { %>
+      <tr class="hover:bg-gray-50 <%= isDue(i) ? 'bg-red-50/40' : '' %>">
+        <td class="px-3 py-2.5">
+          <a href="/correspondence/<%= i.id %>/edit" class="font-mono text-xs font-bold text-brand-600 hover:underline"><%= i.corr_ref %></a>
+          <% if (i.external_ref) { %><p class="font-mono text-[10px] text-gray-400"><%= i.external_ref %></p><% } %>
+        </td>
+        <td class="px-3 py-2.5">
+          <p class="text-gray-900 text-xs font-medium truncate max-w-[240px]"><%= i.subject %></p>
+          <% if (i.action_required) { %><p class="text-amber-700 text-[11px] truncate max-w-[240px]">→ <%= i.action_required %></p><% } %>
+        </td>
+        <td class="px-3 py-2.5">
+          <a href="/jobs/<%= i.job_id %>#inputs" class="text-brand-600 hover:text-brand-700 text-xs font-medium hover:underline"><%= i.job_number %></a>
+        </td>
+        <td class="px-3 py-2.5 hidden md:table-cell">
+          <span class="text-gray-600 text-[11px]"><%= typeLabels[i.corr_type] || i.corr_type %></span>
+          <span class="text-gray-400 text-[10px]"><%= i.direction === 'outbound' ? '↑ out' : '↓ in' %></span>
+        </td>
+        <td class="px-3 py-2.5 text-gray-500 text-xs hidden lg:table-cell"><%= i.responsible_name || '—' %></td>
+        <td class="px-3 py-2.5 text-xs tabular-nums <%= isDue(i) ? 'text-red-600 font-bold' : 'text-gray-500' %>">
+          <%= i.response_due ? formatDateShort(i.response_due) : '—' %><%= isDue(i) ? ' · due' : '' %>
+        </td>
+        <td class="px-3 py-2.5 text-center">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[i.status] || STATUS_BADGE.open %>"><%= i.status.toUpperCase() %></span>
+        </td>
+        <td class="px-3 py-2.5 text-right">
+          <div class="flex items-center justify-end gap-2">
+            <% if (i.status === 'open') { %>
+            <form method="POST" action="/correspondence/<%= i.id %>/status" class="inline"><%- include('../partials/csrf') %>
+              <input type="hidden" name="status" value="responded">
+              <input type="hidden" name="return_to" value="/correspondence<%= filters.job_id ? '?job_id=' + filters.job_id : '' %>">
+              <button type="submit" class="text-brand-600 hover:text-brand-700 text-xs font-semibold">Responded</button>
+            </form>
+            <% } %>
+            <% if (i.status !== 'closed') { %>
+            <form method="POST" action="/correspondence/<%= i.id %>/status" class="inline"><%- include('../partials/csrf') %>
+              <input type="hidden" name="status" value="closed">
+              <input type="hidden" name="return_to" value="/correspondence<%= filters.job_id ? '?job_id=' + filters.job_id : '' %>">
+              <button type="submit" class="text-gray-400 hover:text-gray-600 text-xs font-semibold">Close</button>
+            </form>
+            <% } else { %>
+            <form method="POST" action="/correspondence/<%= i.id %>/status" class="inline"><%- include('../partials/csrf') %>
+              <input type="hidden" name="status" value="open">
+              <input type="hidden" name="return_to" value="/correspondence<%= filters.job_id ? '?job_id=' + filters.job_id : '' %>">
+              <button type="submit" class="text-gray-400 hover:text-brand-600 text-xs font-semibold">Reopen</button>
+            </form>
+            <% } %>
+            <% if (i.link_url) { %><a href="<%= i.link_url %>" target="_blank" class="text-gray-400 hover:text-brand-600 text-xs">↗</a><% } %>
+          </div>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>

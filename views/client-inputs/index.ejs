@@ -1,0 +1,169 @@
+<% locals.currentPage = 'client-inputs' %>
+<%
+  const STATUS_BADGE = {
+    requested: 'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20',
+    received: 'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20',
+    inadequate: 'bg-red-50 text-red-700 ring-1 ring-red-600/20',
+    accepted: 'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20',
+  };
+  const isOverdue = (i) => ['requested','inadequate'].includes(i.status) && i.needed_by && i.needed_by < today;
+%>
+
+<%- include('../partials/page-header', {
+  eyebrow: 'Delivery',
+  title: 'Client Inputs',
+  subtitle: 'Required information from clients — and the evidence trail when a delay is client-caused (brief §5.10).',
+}) %>
+
+<div class="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
+  <div class="stat-card">
+    <p class="stat-card-label">Inputs Tracked</p>
+    <p class="stat-card-value <%= stats.total ? 'is-info' : 'is-muted' %>"><%= stats.total || 0 %></p>
+  </div>
+  <a href="/client-inputs?status=requested" class="stat-card hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Outstanding</p>
+    <p class="stat-card-value <%= stats.outstanding ? 'is-warn' : 'is-muted' %>"><%= stats.outstanding || 0 %></p>
+  </a>
+  <a href="/client-inputs?view=overdue" class="stat-card <%= stats.overdue ? 'accent-red' : '' %> hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Overdue</p>
+    <p class="stat-card-value <%= stats.overdue ? 'is-bad' : 'is-muted' %>"><%= stats.overdue || 0 %></p>
+    <p class="stat-card-sub">delivery risk</p>
+  </a>
+  <a href="/client-inputs?status=received" class="stat-card hover:ring-2 hover:ring-brand-200 transition-shadow">
+    <p class="stat-card-label">Awaiting Adequacy Check</p>
+    <p class="stat-card-value <%= stats.awaiting_adequacy ? 'is-info' : 'is-muted' %>"><%= stats.awaiting_adequacy || 0 %></p>
+  </a>
+</div>
+
+<!-- Inline add -->
+<details class="bg-white border border-gray-200 rounded-xl shadow-sm mb-5" <%= filters.job_id ? 'open' : '' %>>
+  <summary class="px-4 py-3 text-sm font-medium text-brand-600 cursor-pointer select-none hover:text-brand-700">+ Record a required input</summary>
+  <form method="POST" action="/client-inputs" class="px-4 pb-4 pt-1">
+    <%- include('../partials/csrf') %>
+    <input type="hidden" name="return_to" value="/client-inputs<%= filters.job_id ? '?job_id=' + filters.job_id : '' %>">
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 items-end">
+      <div class="lg:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Project <span class="text-red-500">*</span></label>
+        <select name="job_id" required class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-brand-500">
+          <option value="">Select…</option>
+          <% jobs.forEach(j => { %>
+            <option value="<%= j.id %>" <%= filters.job_id == j.id ? 'selected' : '' %>><%= j.job_number %> — <%= j.project_name || j.job_name %></option>
+          <% }) %>
+        </select>
+      </div>
+      <div class="lg:col-span-2">
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Required Input <span class="text-red-500">*</span></label>
+        <input type="text" name="item" required placeholder="e.g. architectural plans DA rev, survey, traffic counts"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Client Owner</label>
+        <input type="text" name="client_owner" placeholder="Who owes it"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+      <div>
+        <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Needed By</label>
+        <input type="date" name="needed_by"
+          class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+      </div>
+    </div>
+    <div class="mt-3 flex justify-end">
+      <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Record Input</button>
+    </div>
+  </form>
+</details>
+
+<form method="GET" action="/client-inputs" class="bg-white border border-gray-200 rounded-xl shadow-sm p-3 sm:p-4 mb-5">
+  <div class="flex flex-wrap items-end gap-3">
+    <div class="flex-1 min-w-[180px]">
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Search</label>
+      <input type="text" name="search" value="<%= filters.search || '' %>" placeholder="Item, owner, project..."
+        class="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+    </div>
+    <div>
+      <label class="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-0.5">Status</label>
+      <select name="status" class="px-3 py-2 bg-white border border-gray-300 rounded-lg text-gray-900 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="">All</option>
+        <% statuses.forEach(s => { %>
+          <option value="<%= s %>" <%= filters.status === s ? 'selected' : '' %>><%= s.toUpperCase() %></option>
+        <% }) %>
+      </select>
+    </div>
+    <button type="submit" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white text-sm font-medium rounded-lg transition-colors">Filter</button>
+  </div>
+</form>
+
+<% if (!inputs.length) { %>
+  <div class="bg-white border border-gray-200 rounded-xl shadow-sm p-10 text-center">
+    <p class="text-gray-500 text-sm mb-1">No client inputs tracked.</p>
+    <p class="text-gray-400 text-xs">Record what each project needs from the client — it's the evidence when their delay becomes yours.</p>
+  </div>
+<% } else { %>
+<div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-x-auto">
+  <table class="min-w-full text-sm">
+    <thead>
+      <tr class="border-b border-gray-100">
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Input</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Project</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden md:table-cell">Client Owner</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Needed By</th>
+        <th class="px-3 py-2.5 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest hidden lg:table-cell">Received</th>
+        <th class="px-3 py-2.5 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+        <th class="px-3 py-2.5"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y divide-gray-100">
+      <% inputs.forEach(i => { %>
+      <tr class="hover:bg-gray-50 <%= isOverdue(i) ? 'bg-red-50/40' : '' %>">
+        <td class="px-3 py-2.5">
+          <p class="text-gray-900 text-sm font-medium"><%= i.item %></p>
+          <% if (i.revision_note) { %><p class="text-red-600 text-[11px] mt-0.5"><%= i.revision_note %></p><% } %>
+          <% if (i.sharepoint_url) { %><a href="<%= i.sharepoint_url %>" target="_blank" class="text-brand-600 text-[11px] hover:underline">SharePoint ↗</a><% } %>
+        </td>
+        <td class="px-3 py-2.5">
+          <a href="/jobs/<%= i.job_id %>#inputs" class="text-brand-600 hover:text-brand-700 text-xs font-medium hover:underline"><%= i.job_number %></a>
+        </td>
+        <td class="px-3 py-2.5 text-gray-600 text-xs hidden md:table-cell"><%= i.client_owner || i.contact_name || '—' %></td>
+        <td class="px-3 py-2.5 text-xs tabular-nums <%= isOverdue(i) ? 'text-red-600 font-bold' : 'text-gray-500' %>">
+          <%= i.needed_by ? formatDateShort(i.needed_by) : '—' %><%= isOverdue(i) ? ' · overdue' : '' %>
+        </td>
+        <td class="px-3 py-2.5 text-gray-500 text-xs tabular-nums hidden lg:table-cell"><%= i.received_date ? formatDateShort(i.received_date) : '—' %></td>
+        <td class="px-3 py-2.5 text-center">
+          <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= STATUS_BADGE[i.status] || STATUS_BADGE.requested %>"><%= i.status.toUpperCase() %></span>
+        </td>
+        <td class="px-3 py-2.5 text-right">
+          <div class="flex items-center justify-end gap-2 flex-wrap">
+            <% if (['requested','inadequate'].includes(i.status)) { %>
+            <form method="POST" action="/client-inputs/<%= i.id %>/status" class="inline"><%- include('../partials/csrf') %>
+              <input type="hidden" name="status" value="received">
+              <input type="hidden" name="return_to" value="/client-inputs<%= filters.job_id ? '?job_id=' + filters.job_id : '' %>">
+              <button type="submit" class="text-brand-600 hover:text-brand-700 text-xs font-semibold">Received</button>
+            </form>
+            <% } %>
+            <% if (i.status === 'received') { %>
+            <form method="POST" action="/client-inputs/<%= i.id %>/status" class="inline"><%- include('../partials/csrf') %>
+              <input type="hidden" name="status" value="accepted">
+              <input type="hidden" name="return_to" value="/client-inputs<%= filters.job_id ? '?job_id=' + filters.job_id : '' %>">
+              <button type="submit" class="text-teal-700 hover:text-teal-800 text-xs font-semibold">Accept</button>
+            </form>
+            <form method="POST" action="/client-inputs/<%= i.id %>/status" class="inline-flex items-center gap-1"><%- include('../partials/csrf') %>
+              <input type="hidden" name="status" value="inadequate">
+              <input type="hidden" name="return_to" value="/client-inputs<%= filters.job_id ? '?job_id=' + filters.job_id : '' %>">
+              <input type="text" name="revision_note" required placeholder="What's wrong?" class="w-28 px-2 py-1 bg-white border border-gray-200 rounded text-[11px] focus:outline-none focus:ring-1 focus:ring-brand-500">
+              <button type="submit" class="text-gray-400 hover:text-red-600 text-xs font-semibold">Inadequate</button>
+            </form>
+            <% } %>
+            <% if (i.status === 'requested' || isAdmin) { %>
+            <form method="POST" action="/client-inputs/<%= i.id %>/delete" class="inline" onsubmit="return confirm('Delete this input record?')"><%- include('../partials/csrf') %>
+              <input type="hidden" name="return_to" value="/client-inputs<%= filters.job_id ? '?job_id=' + filters.job_id : '' %>">
+              <button type="submit" class="text-gray-300 hover:text-red-600 text-xs">✕</button>
+            </form>
+            <% } %>
+          </div>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+</div>
+<% } %>

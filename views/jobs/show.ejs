@@ -239,6 +239,7 @@
     packages: 'projects',
     deliverables: 'job_deliverables',
     approvals: 'job_approvals',
+    inputs: 'job_inputs',
     diary: 'planning_diary',      tasks: 'ops_tasks',
     plans: 'planning_plans',      'final-plans': 'job_final_plans',
     safety: 'job_safety',         timesheets: 'ops_timesheets',
@@ -272,6 +273,11 @@
     <a href="#approvals" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
       text-gray-500 hover:text-gray-900 border-transparent hover:border-gray-300
       focus:text-brand-700 focus:border-brand-500" onclick="activateTab(this)">Approvals<% if (typeof jobApprovals !== 'undefined' && jobApprovals.length) { %> <span class="text-[10px] text-gray-400">(<%= jobApprovals.length %>)</span><% } %></a>
+    <% } %>
+    <% if (showTab('inputs')) { %>
+    <a href="#inputs" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
+      text-gray-500 hover:text-gray-900 border-transparent hover:border-gray-300
+      focus:text-brand-700 focus:border-brand-500" onclick="activateTab(this)">Inputs & Correspondence<% if (typeof jobClientInputs !== 'undefined' && (jobClientInputs.length + (jobCorrespondence || []).length)) { %> <span class="text-[10px] text-gray-400">(<%= jobClientInputs.length + (jobCorrespondence || []).length %>)</span><% } %></a>
     <% } %>
     <% if (showTab('diary')) { %>
     <a href="#diary" data-tab="diary" class="px-4 py-3 text-sm font-medium border-b-2 transition-colors
@@ -1706,6 +1712,108 @@
               <td class="px-4 py-2.5 text-gray-500 text-xs tabular-nums"><%= a.expiry_date || '—' %></td>
               <td class="px-4 py-2.5 text-center"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= APPR_BADGE[a.status] || APPR_BADGE.not_submitted %>"><%= a.status.replace(/_/g,' ').toUpperCase() %></span></td>
               <td class="px-4 py-2.5 text-right"><a href="/approvals/<%= a.id %>/edit" class="text-gray-400 hover:text-brand-600 text-xs font-medium">Open</a></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+  </div>
+  <% } %>
+
+  <!-- Inputs & Correspondence Tab (brief §5.10 + §5.11) -->
+  <% if (showTab('inputs')) { %>
+  <div id="inputs" class="tab-content">
+    <% const cilist = (typeof jobClientInputs !== 'undefined') ? jobClientInputs : []; %>
+    <% const colist = (typeof jobCorrespondence !== 'undefined') ? jobCorrespondence : []; %>
+
+    <!-- Client inputs -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden mb-6">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-900">Client Inputs</h2>
+          <p class="text-[11px] text-gray-400">What the client owes this project — the evidence trail when their delay becomes ours (§5.10)</p>
+        </div>
+        <a href="/client-inputs?job_id=<%= job.id %>" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg transition-colors">Manage Inputs</a>
+      </div>
+      <% if (!cilist.length) { %>
+      <div class="p-6 text-center"><p class="text-gray-400 text-sm">No required inputs recorded.</p></div>
+      <% } else { %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-100">
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Input</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Client Owner</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Needed By</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Received</th>
+              <th class="px-4 py-2 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% const CI_BADGE = { requested:'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20', received:'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20', inadequate:'bg-red-50 text-red-700 ring-1 ring-red-600/20', accepted:'bg-teal-50 text-teal-700 ring-1 ring-teal-600/20' }; %>
+            <% cilist.forEach(ci => { %>
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2.5">
+                <p class="text-gray-900 text-xs font-medium"><%= ci.item %></p>
+                <% if (ci.revision_note) { %><p class="text-red-600 text-[11px]"><%= ci.revision_note %></p><% } %>
+              </td>
+              <td class="px-4 py-2.5 text-gray-600 text-xs"><%= ci.client_owner || '—' %></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs tabular-nums"><%= ci.needed_by || '—' %></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs tabular-nums"><%= ci.received_date || '—' %></td>
+              <td class="px-4 py-2.5 text-center"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= CI_BADGE[ci.status] || CI_BADGE.requested %>"><%= ci.status.toUpperCase() %></span></td>
+            </tr>
+            <% }) %>
+          </tbody>
+        </table>
+      </div>
+      <% } %>
+    </div>
+
+    <!-- Correspondence / RFIs -->
+    <div class="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+        <div>
+          <h2 class="text-sm font-semibold text-gray-900">Correspondence & RFIs</h2>
+          <p class="text-[11px] text-gray-400">Material correspondence only — RFIs, instructions, authority comments (§5.11)</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <a href="/correspondence?job_id=<%= job.id %>" class="text-brand-600 text-xs font-medium hover:underline">Register</a>
+          <a href="/correspondence/new?job_id=<%= job.id %>" class="px-3 py-1.5 bg-brand-600 hover:bg-brand-500 text-white text-xs font-medium rounded-lg transition-colors">Log Correspondence</a>
+        </div>
+      </div>
+      <% if (!colist.length) { %>
+      <div class="p-6 text-center"><p class="text-gray-400 text-sm">No material correspondence logged.</p></div>
+      <% } else { %>
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="border-b border-gray-100">
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Ref</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Subject</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Responsible</th>
+              <th class="px-4 py-2 text-left text-[10px] font-bold text-gray-400 uppercase tracking-widest">Response Due</th>
+              <th class="px-4 py-2 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest">Status</th>
+              <th class="px-4 py-2"></th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <% const CO_BADGE = { open:'bg-amber-50 text-amber-700 ring-1 ring-amber-600/20', responded:'bg-blue-50 text-blue-700 ring-1 ring-blue-600/20', closed:'bg-gray-50 text-gray-600 ring-1 ring-gray-600/20' }; %>
+            <% colist.forEach(co => { %>
+            <tr class="hover:bg-gray-50">
+              <td class="px-4 py-2.5">
+                <span class="font-mono text-xs font-bold text-gray-900"><%= co.corr_ref %></span>
+                <% if (co.external_ref) { %><p class="font-mono text-[10px] text-gray-400"><%= co.external_ref %></p><% } %>
+              </td>
+              <td class="px-4 py-2.5">
+                <p class="text-gray-700 text-xs truncate max-w-[240px]"><%= co.subject %></p>
+                <% if (co.action_required) { %><p class="text-amber-700 text-[11px] truncate max-w-[240px]">→ <%= co.action_required %></p><% } %>
+              </td>
+              <td class="px-4 py-2.5 text-gray-600 text-xs"><%= co.responsible_name || '—' %></td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs tabular-nums"><%= co.response_due || '—' %></td>
+              <td class="px-4 py-2.5 text-center"><span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold <%= CO_BADGE[co.status] || CO_BADGE.open %>"><%= co.status.toUpperCase() %></span></td>
+              <td class="px-4 py-2.5 text-right"><a href="/correspondence/<%= co.id %>/edit" class="text-gray-400 hover:text-brand-600 text-xs font-medium">Open</a></td>
             </tr>
             <% }) %>
           </tbody>

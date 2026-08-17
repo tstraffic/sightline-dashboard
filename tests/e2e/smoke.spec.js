@@ -29,6 +29,8 @@ const PAGES = [
   '/deliverables',
   '/approvals',
   '/variations',
+  '/client-inputs',
+  '/correspondence',
   '/budgets',
   // Shared
   '/tasks',

@@ -16154,6 +16154,58 @@ function runMigrations(db) {
     } catch (e) { console.error('Migration 358 error:', e.message); }
   }
 
+  // Migration 359: client inputs (brief §5.10) + correspondence/RFI (§5.11).
+  // client_inputs = required info + evidence of client-caused dependency
+  // (delays here flag delivery risk in the sweeps). correspondence = material
+  // correspondence only — {job}-COR-NNN internal refs plus the counterparty's
+  // external_ref; statuses are validated in routes, never column CHECKs.
+  if (!isMigrationApplied.get(359)) {
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS client_inputs (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+          item TEXT NOT NULL,
+          requested_date DATE,
+          contact_id INTEGER REFERENCES client_contacts(id),
+          client_owner TEXT DEFAULT '',
+          needed_by DATE,
+          status TEXT NOT NULL DEFAULT 'requested',
+          received_date DATE,
+          revision_note TEXT DEFAULT '',
+          sharepoint_url TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_client_inputs_job ON client_inputs(job_id);
+        CREATE TABLE IF NOT EXISTS correspondence (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          corr_ref TEXT UNIQUE NOT NULL,
+          external_ref TEXT DEFAULT '',
+          job_id INTEGER NOT NULL REFERENCES jobs(id) ON DELETE CASCADE,
+          corr_date DATE,
+          direction TEXT NOT NULL DEFAULT 'inbound',
+          sender TEXT DEFAULT '',
+          recipient TEXT DEFAULT '',
+          subject TEXT NOT NULL,
+          corr_type TEXT NOT NULL DEFAULT 'other',
+          action_required TEXT DEFAULT '',
+          responsible_id INTEGER REFERENCES users(id),
+          response_due DATE,
+          status TEXT NOT NULL DEFAULT 'open',
+          link_url TEXT DEFAULT '',
+          created_by INTEGER REFERENCES users(id),
+          created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+          updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_correspondence_job ON correspondence(job_id);
+      `);
+      recordMigration.run(359, 'Sightline client inputs + correspondence registers');
+      console.log('Migration 359 applied: client_inputs + correspondence tables');
+    } catch (e) { console.error('Migration 359 error:', e.message); }
+  }
+
   console.log('All migrations checked/applied.');
 }
 
